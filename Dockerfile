@@ -31,8 +31,5 @@ COPY nukelab.png ./nukelab.png
 # Copy the JupyterHub configuration file into the image
 COPY jupyterhub_config.py ./jupyterhub_config.py
 
-# Create the data directory for storage
-RUN mkdir /data
-
 # Start JupyterHub with the configuration file
 CMD ["jupyterhub"]
