@@ -9,6 +9,7 @@ services:
   nukelab:
     build: .
     image: nukelab
+    hostname: nin
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock # Docker socket
       - nukelab_data:/data

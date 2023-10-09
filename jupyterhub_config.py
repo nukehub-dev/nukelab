@@ -34,14 +34,18 @@ c.JupyterHub.log_level = "INFO"
 # Set the hub IP
 c.JupyterHub.hub_ip = "0.0.0.0"
 
+c.JupyterHub.allow_named_servers = True
+
 # Set the spawner
 c.DockerSpawner.network_name = "nukelab"
 c.DockerSpawner.remove = True
 c.JupyterHub.spawner_class = DockerSpawner
 notebook_dir = os.environ.get("DOCKER_NOTEBOOK_DIR") or "/home/nukelab/"
 c.DockerSpawner.notebook_dir = notebook_dir
-c.DockerSpawner.volumes = {"jupyterhub-user-{username}": notebook_dir}
+c.DockerSpawner.volumes = {"nukelab-user-{username}": notebook_dir}
 c.DockerSpawner.image = "nukelab-spawner"
+c.DockerSpawner.prefix = "nukelab"
+c.DockerSpawner.extra_create_kwargs = {"hostname": "nin"}
 
 # Set the database
-c.JupyterHub.db_url = "sqlite:///data/jupyterhub.sqlite"
+c.JupyterHub.db_url = "sqlite:///data/nukelab.sqlite"
