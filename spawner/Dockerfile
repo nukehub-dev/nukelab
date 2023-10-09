@@ -19,8 +19,9 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # but lacks all features (e.g., download as all possible file formats)
 ENV DEBIAN_FRONTEND noninteractive
 RUN apt-get update && \
-    apt-get upgrade -y && \
-    apt-get install -y --no-install-recommends \
+    apt-get upgrade --yes && \
+    apt-get install --yes --no-install-recommends \
+    sudo \
     bzip2 \
     ca-certificates \
     locales \
@@ -35,9 +36,9 @@ RUN apt-get update && \
 
 # Configure environment
 ENV CONDA_DIR=/opt/conda \
+    PATH="/opt/conda/bin:${PATH}" \
     SHELL=/bin/bash \
-    PATH="${CONDA_DIR}/bin:${PATH}" \
-    USER_NAME="${USER_NAME}" \
+    USER_NAME=${USER_NAME} \
     USER_ID=${USER_ID} \
     GROUP_ID=${GROUP_ID} \
     HOME="/home/${USER_NAME}" \
