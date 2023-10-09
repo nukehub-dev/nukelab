@@ -23,7 +23,7 @@ RUN npm install -g configurable-http-proxy
 RUN pip3 install jupyterhub pycurl
 
 # Install authenticators and spawners
-RUN pip3 install oauthenticator dockerspawner jupyterhub-nativeauthenticator
+RUN pip3 install oauthenticator dockerspawner
 
 # Copy nukelab into the image
 COPY nukelab.png ./nukelab.png

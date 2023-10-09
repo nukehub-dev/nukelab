@@ -3,7 +3,7 @@
 
 # Import modules
 from dockerspawner import DockerSpawner
-from nativeauthenticator import NativeAuthenticator
+from oauthenticator import GitHubOAuthenticator
 import os
 
 # Set the base URL
@@ -12,16 +12,14 @@ c.JupyterHub.base_url = "/nukelab/"
 # Set the logo
 c.JupyterHub.logo_file = "nukelab.png"
 
-
 # Set the authenticator
-c.JupyterHub.authenticator_class = NativeAuthenticator
+c.JupyterHub.authenticator_class = GitHubOAuthenticator
 c.GenericOAuthenticator.enable_auth_state = True
-c.NativeAuthenticator.create_system_users = True
+c.GitHubOAuthenticator.oauth_callback_url = os.environ['OAUTH_CALLBACK_URL']
 
 # Set the allowed users
 c.Authenticator.allowed_users = set()
-c.Authenticator.admin_users = {"tahmid"}
-c.NativeAuthenticator.open_signup = True
+c.Authenticator.admin_users = {"ahnaf-tahmid-chowdhury"}
 
 
 # Set the timeout to 300 seconds
@@ -40,12 +38,12 @@ c.JupyterHub.allow_named_servers = True
 c.DockerSpawner.network_name = "nukelab"
 c.DockerSpawner.remove = True
 c.JupyterHub.spawner_class = DockerSpawner
-notebook_dir = os.environ.get("DOCKER_NOTEBOOK_DIR") or "/home/nukelab/"
+notebook_dir = os.environ.get("DOCKER_NOTEBOOK_DIR") or "/home/nukelab/work/"
 c.DockerSpawner.notebook_dir = notebook_dir
 c.DockerSpawner.volumes = {"nukelab-user-{username}": notebook_dir}
 c.DockerSpawner.image = "nukelab-spawner"
 c.DockerSpawner.prefix = "nukelab"
-c.DockerSpawner.extra_create_kwargs = {"hostname": "nin"}
+c.DockerSpawner.extra_create_kwargs = {"hostname": "nin",}
 
 # Set the database
 c.JupyterHub.db_url = "sqlite:///data/nukelab.sqlite"

@@ -1,0 +1,10 @@
+# env
+#
+# Note: Be careful to keep the client secret private. Use caution
+#       with version control to prevent publicly exposing the secret.
+#
+# Rename this file to .env and fill in the values.
+
+export GITHUB_CLIENT_ID=
+export GITHUB_CLIENT_SECRET=
+export OAUTH_CALLBACK_URL=
