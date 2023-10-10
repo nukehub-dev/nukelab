@@ -29,7 +29,14 @@ RUN pip3 install oauthenticator dockerspawner jupyterhub-nativeauthenticator
 COPY nukelab.png ./nukelab.png
 
 # Copy the JupyterHub configuration file into the image
-COPY jupyterhub_config.py ./jupyterhub_config.py
+COPY jupyterhub/jupyterhub_config.py /jupyterhub_config.py
+
+#Copy favicon into the image
+COPY jupyterhub/favicon.ico /usr/local/share/jupyterhub/static/favicon.ico
+
+# Copy NukeLab templates file into the image
+Copy jupyterhub/templates /usr/local/share/jupyterhub/templates
+
 
 # Start JupyterHub with the configuration file
 CMD ["jupyterhub"]

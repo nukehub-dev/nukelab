@@ -174,6 +174,7 @@ RUN mamba install --yes \
     jupyter server --generate-config && \
     mamba clean --all -f -y && \
     npm cache clean --force && \
+    jupyter lab build --name='NukeLab' && \
     jupyter lab clean && \
     rm -rf "/home/${NB_USER}/.cache/yarn" && \
     fix-permissions "${CONDA_DIR}" && \

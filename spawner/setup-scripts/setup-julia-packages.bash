@@ -25,7 +25,7 @@ chmod -R go+rx "${CONDA_DIR}/share/jupyter"
 rm -rf "${HOME}/.local"
 fix-permissions "${JULIA_PKGDIR}" "${CONDA_DIR}/share/jupyter"
 
-# Install jupyter-pluto-proxy to get Pluto to work on JupyterHub
+# Install jupyter-pluto-proxy to get Pluto to work on Nukelab
 mamba install --yes \
     'jupyter-pluto-proxy' && \
     mamba clean --all -f -y && \
