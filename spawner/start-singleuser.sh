@@ -1,6 +1,5 @@
 #!/bin/bash
 # Copyright (c) Jupyter Development Team.
-# Copyright (c) NukeLab Development Team.
 # Distributed under the terms of the Modified BSD License.
 
 set -e

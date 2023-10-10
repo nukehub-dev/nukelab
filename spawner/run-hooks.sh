@@ -1,6 +1,5 @@
 #!/bin/bash
 # Copyright (c) Jupyter Development Team.
-# Copyright (c) NukeLab Development Team.
 # Distributed under the terms of the Modified BSD License.
 
 # The run-hooks.sh script looks for *.sh scripts to source
@@ -11,7 +10,7 @@ if [ "$#" -ne 1 ]; then
     return 1
 fi
 
-if [[ ! -d "${1}" ]]; then
+if [[ ! -d "${1}" ]] ; then
     echo "Directory ${1} doesn't exist or is not a directory"
     return 1
 fi
@@ -21,27 +20,27 @@ for f in "${1}/"*; do
     # Hadling a case when the directory is empty
     [ -e "${f}" ] || continue
     case "${f}" in
-    *.sh)
-        echo "Sourcing shell script: ${f}"
-        # shellcheck disable=SC1090
-        source "${f}"
-        # shellcheck disable=SC2181
-        if [ $? -ne 0 ]; then
-            echo "${f} has failed, continuing execution"
-        fi
-        ;;
-    *)
-        if [ -x "${f}" ]; then
-            echo "Running executable: ${f}"
-            "${f}"
+        *.sh)
+            echo "Sourcing shell script: ${f}"
+            # shellcheck disable=SC1090
+            source "${f}"
             # shellcheck disable=SC2181
-            if [ $? -ne 0 ]; then
+            if [ $? -ne 0 ] ; then
                 echo "${f} has failed, continuing execution"
             fi
-        else
-            echo "Ignoring non-executable: ${f}"
-        fi
-        ;;
+            ;;
+        *)
+            if [ -x "${f}" ] ; then
+                echo "Running executable: ${f}"
+                "${f}"
+                # shellcheck disable=SC2181
+                if [ $? -ne 0 ] ; then
+                    echo "${f} has failed, continuing execution"
+                fi
+            else
+                echo "Ignoring non-executable: ${f}"
+            fi
+            ;;
     esac
 done
 echo "Done running hooks in: ${1}"
