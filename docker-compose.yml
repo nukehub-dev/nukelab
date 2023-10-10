@@ -9,24 +9,27 @@ services:
   nukelab:
     build: .
     image: nukelab
-    hostname: nin
     environment:
+      - NUKELAB_ADMIN=${NUKELAB_ADMIN}
+      - DOCKER_NUKELAB_IMAGE=${DOCKER_NUKELAB_IMAGE}
+      - DOCKER_NUKELAB_DIR=${DOCKER_NUKELAB_DIR}
       - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
       - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
       - OAUTH_CALLBACK_URL=${OAUTH_CALLBACK_URL}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock # Docker socket
-      - nukelab_data:/data
+      - nukelab-data:/data
 
     ports:
       - "8000:8000" # Nukelab web server port
     networks:
-      - nukelab # Set the network
+      - nukelab-network # Set the network
 
 volumes:
-  nukelab_data:
+  nukelab-data:
+    name: nukelab-data
 
 # Define the networks
 networks:
-  nukelab:
-    name: nukelab # Set the network
+  nukelab-network:
+    name: nukelab-network

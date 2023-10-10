@@ -4,7 +4,9 @@
 #       with version control to prevent publicly exposing the secret.
 #
 # Rename this file to .env and fill in the values.
-
+export NUKELAB_ADMIN=nukelab
+export DOCKER_NUKELAB_IMAGE=jupyter/base-notebook:latest
+export DOCKER_NUKELAB_DIR=/home/nukelab/work
 export GITHUB_CLIENT_ID=
 export GITHUB_CLIENT_SECRET=
 export OAUTH_CALLBACK_URL=

@@ -22,5 +22,5 @@ docker build -t nukelab-spawner .
 cd $DIR
 
 # Build with docker-compose
-docker compose up --build
+docker compose build
 
