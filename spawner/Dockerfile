@@ -125,7 +125,6 @@ RUN set -x && \
 
 # Configure container startup
 ENTRYPOINT ["tini", "-g", "--"]
-CMD ["start.sh"]
 
 # Copy local files as late as possible to avoid cache busting
 COPY run-hooks.sh start.sh /usr/local/bin/
@@ -320,6 +319,9 @@ RUN pip install --no-cache-dir tensorflow && \
     fix-permissions "${CONDA_DIR}" && \
     fix-permissions "/home/${NB_USER}"
 
+WORKDIR ${HOME}
+
+
 ##################################################################
 #                        Data Science Notebook                   #
 ##################################################################
@@ -372,5 +374,207 @@ RUN mamba install --yes \
     'rpy2' \
     'unixodbc' && \
     mamba clean --all -f -y && \
+    fix-permissions "${CONDA_DIR}" && \
+    fix-permissions "/home/${NB_USER}"
+
+
+##################################################################
+#                             Nuclear Pack                       #
+##################################################################
+
+USER root
+
+ARG CI_JOBS=4
+ARG EMBREE_BRANCH="v3.6.1"
+ARG MOAB_BRANCH=5.4.0
+ARG DOUBLE_DOWN_BRANCH="v1.0.0"
+ARG GEANT4_BRANCH="v11.1.2"
+ARG DAGMC_BRANCH="v3.2.2"
+ARG OPENMC_BRANCH="v0.13.1"
+ARG PYNE_BRANCH="develop"
+ARG DOWNLOAD_GEANT4_DATA=OFF
+ARG DOWNLOAD_CROSS_SECTION_DATA=ON
+
+ENV MOAB_ROOT=/opt/moab \
+    EMBREE_ROOT=/opt/embree \
+    DOUBLE_DOWN_ROOT=/opt/double-down \
+    GEANT4_ROOT=/opt/geant4 \
+    DAGMC_ROOT=/opt/dagmc \
+    OPENMC_ROOT=/opt/openmc \
+    PYNE_ROOT=/opt/pyne 
+
+ENV GEANT4_DATA_DIR=${GEANT4_ROOT}/share/data \
+    OPENMC_CROSS_SECTIONS=${OPENMC_ROOT}/share/data/lib80x_hdf5/cross_sections.xml \
+    ENDFB70=${OPENMC_ROOT}/share/endfb70/cross_sections.xml \
+    ENDFB71=${OPENMC_ROOT}/share/data/endfb71/cross_sections.xml \
+    LIB80X=${OPENMC_ROOT}/share/data/lib80x_hdf5/cross_sections.xml 
+
+# Install dependencies
+RUN apt-get update --yes && \
+    apt-get install --yes --no-install-recommends \
+    software-properties-common \
+    g++ \
+    libblas-dev \
+    liblapack-dev \
+    libeigen3-dev \
+    libboost-dev && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+USER ${NB_UID}
+
+# Install python packages
+RUN mamba install --yes \
+    # DAGMC requires Cython<3
+    cmake \
+    hdf5 \
+    "cython<3" \
+    setuptools \
+    jinja2 \
+    progress \ 
+    future && \
+    mamba clean --all -f -y && \
+    # tables not available in conda, it is required by PyNE
+    pip install --no-cache-dir tables && \
+    fix-permissions "${CONDA_DIR}" && \
+    fix-permissions "/home/${NB_USER}"
+
+USER root
+
+ENV HDF5_ROOT=${CONDA_DIR}
+ENV LD_LIBRARY_PATH=${HDF5_ROOT}:${CONDA_DIR}/lib
+
+# Install MOAB from source
+RUN git clone -b ${MOAB_BRANCH} --depth 1 https://bitbucket.org/fathomteam/moab && \
+    cd moab && \
+    mkdir -p build && \
+    cd build && \
+    cmake ../ -DENABLE_HDF5=ON -DHDF5_ROOT=${HDF5_ROOT} \
+        -DBUILD_SHARED_LIBS=ON \
+        -DENABLE_PYMOAB=ON \
+        -DENABLE_BLASLAPACK=OFF \
+        -DENABLE_FORTRAN=OFF \
+        -DCMAKE_INSTALL_PREFIX=${MOAB_ROOT} && \
+    make -j${CI_JOBS} && make -j${CI_JOBS} install && \
+    cd ../.. && \
+    rm -rf moab && \
+    fix-permissions "${MOAB_ROOT}" && \
+    fix-permissions "/home/${NB_USER}"
+
+# Install Embree from source
+RUN git clone -b ${EMBREE_BRANCH} https://github.com/embree/embree && \
+    cd embree && \
+    mkdir -p build && \
+    cd build && \
+    cmake ../ -DCMAKE_INSTALL_PREFIX=${EMBREE_ROOT} \
+        -DEMBREE_TASKING_SYSTEM=INTERNAL \
+        -DEMBREE_ISPC_SUPPORT=OFF \
+        -DEMBREE_TUTORIALS=OFF \
+        -DEMBREE_TBB_ROOT=/usr && \
+    make -j${CI_JOBS} && make -j${CI_JOBS} install && \
+    cd ../.. && \
+    rm -rf embree && \
+    fix-permissions "${EMBREE_ROOT}" && \
+    fix-permissions "/home/${NB_USER}"
+
+# Performed after moab install as double-down requires moab
+RUN git clone -b ${DOUBLE_DOWN_BRANCH} https://github.com/pshriwise/double-down.git && \
+    cd double-down && \
+    mkdir -p build && \
+    cd build && \
+    cmake ../ -DMOAB_DIR=${MOAB_ROOT} \
+        -DCMAKE_INSTALL_PREFIX=${DOUBLE_DOWN_ROOT} \
+        -DEMBREE_DIR=${EMBREE_ROOT} && \
+    make -j${CI_JOBS} && make -j${CI_JOBS} install && \
+    cd ../.. && \
+    rm -rf double-down && \
+    fix-permissions "${DOUBLE_DOWN_ROOT}" && \
+    fix-permissions "/home/${NB_USER}"
+
+# Install Geant4 from source
+RUN mkdir -p geant4 && \
+    cd geant4 && \
+    wget https://github.com/Geant4/geant4/archive/refs/tags/${GEANT4_BRANCH}.tar.gz && \
+    tar -xzvf ${GEANT4_BRANCH}.tar.gz && \
+    cd $(tar tzf ${GEANT4_BRANCH}.tar.gz | head -1 | cut -f1 -d"/") && \
+    mkdir -p build && \
+    cd build && \
+    cmake ../ -DCMAKE_INSTALL_PREFIX=${GEANT4_ROOT} \
+        -DGEANT4_USE_QT=OFF \
+        -DGEANT4_USE_OPENGL_X11=OFF \
+        -DGEANT4_USE_SYSTEM_EXPAT=OFF \
+        -DGEANT4_BUILD_TLS_MODEL=global-dynamic \
+        -DGEANT4_BUILD_MULTITHREADED=ON \
+        -DGEANT4_INSTALL_DATA=${DOWNLOAD_GEANT4_DATA} \
+        -DGEANT4_INSTALL_DATADIR=${GEANT4_ROOT}/share/data \
+        -DGEANT4_INSTALL_DATA_TIMEOUT=0 && \
+    make -j${CI_JOBS} && make -j${CI_JOBS} install && \
+    cd ../../.. && \
+    rm -rf geant4 && \
+    fix-permissions "${GEANT4_ROOT}" && \
+    fix-permissions "/home/${NB_USER}"
+
+# Install DAGMC from source
+RUN git clone -b ${DAGMC_BRANCH} https://github.com/svalinn/DAGMC.git && \
+    cd DAGMC && \
+    mkdir -p build && \
+    cd build && \
+    cmake ../ -DMOAB_DIR=${MOAB_ROOT} \
+        -DMOAB_CMAKE_CONFIG=${MOAB_ROOT}/lib/cmake/MOAB \
+        -DCMAKE_INSTALL_PREFIX=${DAGMC_ROOT} \
+        # Fix GEANT4 V 11 NOT WORKING WITH DAGMC
+        -DBUILD_GEANT4=OFF \
+        -DGEANT4_DIR=${GEANT4_ROOT} \
+        -DGeant4_CMAKE_CONFIG=${GEANT4_ROOT}/lib/cmake/Geant4 \
+        -DBUILD_TALLY=ON \
+        -DBUILD_STATIC_LIBS=OFF \
+        -DDOUBLE_DOWN=ON \
+        -Ddd_ROOT=${DOUBLE_DOWN_ROOT} && \
+    make -j${CI_JOBS} && make -j${CI_JOBS} install && \
+    cd ../.. && \
+    rm -rf DAGMC && \
+    fix-permissions "${DAGMC_ROOT}" && \
+    fix-permissions "/home/${NB_USER}"
+
+COPY download_cross_sections.sh ${HOME}/download_cross_sections.sh
+
+# Install OpenMC from source
+RUN git clone -b ${OPENMC_BRANCH} https://github.com/openmc-dev/openmc.git && \
+    cd openmc && \
+    mkdir -p build && \
+    cd build && \
+    cmake ../ -DCMAKE_INSTALL_PREFIX=${OPENMC_ROOT} \
+    -DOPENMC_USE_DAGMC=ON \
+    -DDAGMC_ROOT=${DAGMC_ROOT} && \
+    make -j${CI_JOBS} && make -j${CI_JOBS} install && \
+    cd ../.. && \
+    rm -rf openmc && \
+    chmod +x download_cross_sections.sh && \
+    ./download_cross_sections.sh ${DOWNLOAD_CROSS_SECTION_DATA} ${OPENMC_ROOT}/share/data && \
+    rm download_cross_sections.sh && \
+    fix-permissions "${OPENMC_ROOT}" && \
+    fix-permissions "/home/${NB_USER}"
+
+# Install PyNE from source
+RUN git clone -b ${PYNE_BRANCH} https://github.com/pyne/pyne.git && \
+    cd pyne && \
+    python3 setup.py install --prefix ${PYNE_ROOT} \
+        --moab ${MOAB_ROOT} \
+        --dagmc ${DAGMC_ROOT} \
+        --clean && \
+    cd .. && \
+    rm -rf pyne && \
+    fix-permissions "${PYNE_ROOT}" && \
+    fix-permissions "/home/${NB_USER}"
+
+# Switch back to nukelab to avoid accidental container runs as root
+USER ${NB_UID}
+
+# Install different python packages
+RUN pip install --no-cache-dir \
+    yt \
+    tabulate \
+    requests \
+    geant4-pybind \
+    cad_to_openmc && \
     fix-permissions "${CONDA_DIR}" && \
     fix-permissions "/home/${NB_USER}"

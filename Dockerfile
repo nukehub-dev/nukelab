@@ -35,8 +35,7 @@ COPY jupyterhub/jupyterhub_config.py /jupyterhub_config.py
 COPY jupyterhub/favicon.ico /usr/local/share/jupyterhub/static/favicon.ico
 
 # Copy NukeLab templates file into the image
-Copy jupyterhub/templates /usr/local/share/jupyterhub/templates
-
+COPY jupyterhub/templates /usr/local/share/jupyterhub/templates
 
 # Start JupyterHub with the configuration file
 CMD ["jupyterhub"]
