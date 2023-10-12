@@ -395,20 +395,19 @@ ARG PYNE_BRANCH="develop"
 ARG DOWNLOAD_GEANT4_DATA=ON
 ARG DOWNLOAD_CROSS_SECTION_DATA=ON
 
-ENV MOAB_ROOT=/opt/moab \
-    EMBREE_ROOT=/opt/embree \
-    DOUBLE_DOWN_ROOT=/opt/double-down \
-    GEANT4_ROOT=/opt/geant4 \
-    DAGMC_ROOT=/opt/dagmc \
-    OPENMC_ROOT=/opt/openmc \
-    PYNE_ROOT=/opt/pyne 
+ENV MOAB_ROOT=${CONDA_DIR} \
+    EMBREE_ROOT=${CONDA_DIR} \
+    DOUBLE_DOWN_ROOT=${CONDA_DIR} \
+    GEANT4_ROOT=${CONDA_DIR} \
+    DAGMC_ROOT=${CONDA_DIR} \
+    OPENMC_ROOT=${CONDA_DIR} \
+    PYNE_ROOT=${CONDA_DIR} 
 
 ENV GEANT4_DATA_DIR=${GEANT4_ROOT}/share/data \
     OPENMC_CROSS_SECTIONS=${OPENMC_ROOT}/share/data/lib80x_hdf5/cross_sections.xml \
     ENDFB70=${OPENMC_ROOT}/share/endfb70/cross_sections.xml \
     ENDFB71=${OPENMC_ROOT}/share/data/endfb71/cross_sections.xml \
-    LIB80X=${OPENMC_ROOT}/share/data/lib80x_hdf5/cross_sections.xml \
-    PATH="${MOAB_ROOT}/bin:${EMBREE_ROOT}/bin:${DOUBLE_DOWN_ROOT}/bin:${GEANT4_ROOT}/bin:${DAGMC_ROOT}/bin:${OPENMC_ROOT}/bin:${PYNE_ROOT}/bin:${PATH}" 
+    LIB80X=${OPENMC_ROOT}/share/data/lib80x_hdf5/cross_sections.xml 
 
 # Install dependencies
 RUN apt-get update --yes && \
@@ -418,24 +417,26 @@ RUN apt-get update --yes && \
     libblas-dev \
     liblapack-dev \
     libeigen3-dev \
-    libboost-dev && \
+    libboost-dev \
+    xvfb \
+    libxft2 \
+    libxext6 \
+    libglu1-mesa && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 USER ${NB_UID}
 
 # Install python packages
 RUN mamba install --yes \
-    # DAGMC requires Cython<3
     cmake \
     hdf5 \
+    # DAGMC requires Cython<3
     "cython<3" \
     setuptools \
     jinja2 \
     progress \ 
     future && \
     mamba clean --all -f -y && \
-    # tables not available in conda, it is required by PyNE
-    pip install --no-cache-dir tables && \
     fix-permissions "${CONDA_DIR}" && \
     fix-permissions "/home/${NB_USER}"
 
@@ -574,10 +575,18 @@ USER ${NB_UID}
 
 # Install different python packages
 RUN pip install --no-cache-dir \
+    paramak \
+    cadquery \
+    jupyterview \
+    tables \
     yt \
     tabulate \
     requests \
+    gmsh \
     geant4-pybind \
+    cad_to_dagmc \
+    stellarmesh \
+    git+https://github.com/gumyr/build123d \
     cad_to_openmc && \
     fix-permissions "${CONDA_DIR}" && \
     fix-permissions "/home/${NB_USER}"
