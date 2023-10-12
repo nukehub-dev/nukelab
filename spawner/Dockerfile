@@ -392,7 +392,7 @@ ARG GEANT4_BRANCH="v11.1.2"
 ARG DAGMC_BRANCH="v3.2.2"
 ARG OPENMC_BRANCH="v0.13.1"
 ARG PYNE_BRANCH="develop"
-ARG DOWNLOAD_GEANT4_DATA=OFF
+ARG DOWNLOAD_GEANT4_DATA=ON
 ARG DOWNLOAD_CROSS_SECTION_DATA=ON
 
 ENV MOAB_ROOT=/opt/moab \
@@ -407,7 +407,8 @@ ENV GEANT4_DATA_DIR=${GEANT4_ROOT}/share/data \
     OPENMC_CROSS_SECTIONS=${OPENMC_ROOT}/share/data/lib80x_hdf5/cross_sections.xml \
     ENDFB70=${OPENMC_ROOT}/share/endfb70/cross_sections.xml \
     ENDFB71=${OPENMC_ROOT}/share/data/endfb71/cross_sections.xml \
-    LIB80X=${OPENMC_ROOT}/share/data/lib80x_hdf5/cross_sections.xml 
+    LIB80X=${OPENMC_ROOT}/share/data/lib80x_hdf5/cross_sections.xml \
+    PATH="${MOAB_ROOT}/bin:${EMBREE_ROOT}/bin:${DOUBLE_DOWN_ROOT}/bin:${GEANT4_ROOT}/bin:${DAGMC_ROOT}/bin:${OPENMC_ROOT}/bin:${PYNE_ROOT}/bin:${PATH}" 
 
 # Install dependencies
 RUN apt-get update --yes && \
