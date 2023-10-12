@@ -575,8 +575,9 @@ USER ${NB_UID}
 
 # Install different python packages
 RUN pip install --no-cache-dir \
-    paramak \
-    cadquery \
+    plasmapy \
+    #paramak \
+    #cadquery \
     jupyterview \
     tables \
     yt \
