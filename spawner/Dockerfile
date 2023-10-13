@@ -189,8 +189,7 @@ RUN mamba install --yes \
     jupyter_ai \
     jupyterlab-lsp \
     jupyter-resource-usage \
-    jupyter-cadquery \
-    jupyter-collaboration && \
+    jupyter-cadquery && \
     jupyter labextension disable @jupyterlab/extensionmanager-extension && \
     rm -rf "/home/${NB_USER}/.cache/yarn" && \
     fix-permissions "${CONDA_DIR}" && \
