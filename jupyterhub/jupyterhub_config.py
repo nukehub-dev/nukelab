@@ -15,7 +15,7 @@ c.JupyterHub.logo_file = "nukelab.png"
 
 # Set the authenticator
 c.JupyterHub.authenticator_class = NativeAuthenticator
-c.NativeAuthenticator.open_signup = False
+c.NativeAuthenticator.open_signup = True
 c.GenericOAuthenticator.enable_auth_state = True
 
 #c.JupyterHub.authenticator_class = GitHubOAuthenticator

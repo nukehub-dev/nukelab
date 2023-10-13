@@ -27,6 +27,7 @@ RUN apt-get update --yes && \
     #   the ubuntu base image is rebuilt too seldom sometimes (less than once a month)
     apt-get upgrade --yes && \
     apt-get install --yes --no-install-recommends \
+    build-essential \
     # - bzip2 is necessary to extract the micromamba executable.
     bzip2 \
     ca-certificates \
@@ -165,16 +166,32 @@ USER ${NB_UID}
 # Do all this in a single RUN command to avoid duplicating all of the
 # files across image layers when the permissions change
 WORKDIR /tmp
+
+# Install cadquery and gmsh first
 RUN mamba install --yes \
-    'jupyterlab' \
-    'notebook' \
-    'jupyterhub' \
-    'nbclassic' && \
+    gmsh \
+    cadquery && \
+    mamba clean --all -f -y && \
+    fix-permissions "${CONDA_DIR}" && \
+    fix-permissions "/home/${NB_USER}"
+
+RUN mamba install --yes \
+    jupyterlab \
+    notebook \
+    jupyterhub \
+    nbclassic && \
     jupyter server --generate-config && \
     mamba clean --all -f -y && \
     npm cache clean --force && \
     jupyter lab build --name='NukeLab' && \
     jupyter lab clean && \
+    pip install --no-cache-dir \ 
+    jupyter_ai \
+    jupyterlab-lsp \
+    jupyter-resource-usage \
+    jupyter-cadquery \
+    jupyter-collaboration && \
+    jupyter labextension disable @jupyterlab/extensionmanager-extension && \
     rm -rf "/home/${NB_USER}/.cache/yarn" && \
     fix-permissions "${CONDA_DIR}" && \
     fix-permissions "/home/${NB_USER}"
@@ -413,7 +430,6 @@ ENV GEANT4_DATA_DIR=${GEANT4_ROOT}/share/data \
 RUN apt-get update --yes && \
     apt-get install --yes --no-install-recommends \
     software-properties-common \
-    g++ \
     libblas-dev \
     liblapack-dev \
     libeigen3-dev \
@@ -433,7 +449,6 @@ RUN mamba install --yes \
     # DAGMC requires Cython<3
     "cython<3" \
     setuptools \
-    jinja2 \
     progress \ 
     future && \
     mamba clean --all -f -y && \
@@ -576,14 +591,11 @@ USER ${NB_UID}
 # Install different python packages
 RUN pip install --no-cache-dir \
     plasmapy \
-    #paramak \
-    #cadquery \
-    jupyterview \
+    #paramak \ Fix It using lower version of client
     tables \
     yt \
     tabulate \
     requests \
-    gmsh \
     geant4-pybind \
     cad_to_dagmc \
     stellarmesh \
