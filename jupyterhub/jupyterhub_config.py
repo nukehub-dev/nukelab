@@ -17,6 +17,9 @@ c.JupyterHub.logo_file = "nukelab.png"
 #c.JupyterHub.authenticator_class = NativeAuthenticator
 #c.NativeAuthenticator.open_signup = True
 
+# Shutdown
+c.JupyterHub.shutdown_on_logout = True
+
 # GitHubOAuthenticator
 c.JupyterHub.authenticator_class = GitHubOAuthenticator
 c.GitHubOAuthenticator.oauth_callback_url = os.environ['OAUTH_CALLBACK_URL']
