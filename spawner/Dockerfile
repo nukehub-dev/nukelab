@@ -189,8 +189,11 @@ RUN mamba install --yes \
     jupyter_ai \
     jupyterlab-lsp \
     jupyter-resource-usage \
-    jupyter-cadquery && \
+    jupyter-cadquery \
+    jupyterlab_materialdarker_theme && \
     jupyter labextension disable @jupyterlab/extensionmanager-extension && \
+    mkdir -p ~/.jupyter/lab/user-settings/@jupyterlab/apputils-extension/ && \
+    echo '{ "theme": "Material Darker" }' > ~/.jupyter/lab/user-settings/@jupyterlab/apputils-extension/themes.jupyterlab-settings && \
     rm -rf "/home/${NB_USER}/.cache/yarn" && \
     fix-permissions "${CONDA_DIR}" && \
     fix-permissions "/home/${NB_USER}"

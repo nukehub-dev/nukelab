@@ -4,7 +4,7 @@
 # Import modules
 from dockerspawner import DockerSpawner
 from nativeauthenticator import NativeAuthenticator
-#from oauthenticator import GitHubOAuthenticator
+from oauthenticator import GitHubOAuthenticator
 import os
 
 # Set the base URL
@@ -13,14 +13,16 @@ c.JupyterHub.base_url = "/nukelab/"
 # Set the logo
 c.JupyterHub.logo_file = "nukelab.png"
 
-# Set the authenticator
-c.JupyterHub.authenticator_class = NativeAuthenticator
-c.NativeAuthenticator.open_signup = True
-c.GenericOAuthenticator.enable_auth_state = True
+# NativeAuthenticator
+#c.JupyterHub.authenticator_class = NativeAuthenticator
+#c.NativeAuthenticator.open_signup = True
 
-#c.JupyterHub.authenticator_class = GitHubOAuthenticator
-#c.GitHubOAuthenticator.oauth_callback_url = os.environ['OAUTH_CALLBACK_URL']
-
+# GitHubOAuthenticator
+c.JupyterHub.authenticator_class = GitHubOAuthenticator
+c.GitHubOAuthenticator.oauth_callback_url = os.environ['OAUTH_CALLBACK_URL']
+c.GitHubOAuthenticator.allow_all = True
+c.GitHubOAuthenticator.delete_invalid_users = True
+c.GitHubOAuthenticator.custom_403_message = "Sorry, you are not currently authorized to use this NukeLab. Please contact <a href='mailto:tahmid@nse.mist.ac.bd' style='text-decoration: none;'>Ahnaf Tahmid Chowdhury</a>"
 
 # Allowed admins
 admin = os.environ.get("NUKELAB_ADMIN")
