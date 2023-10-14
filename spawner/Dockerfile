@@ -188,6 +188,7 @@ RUN mamba install --yes \
     pip install --no-cache-dir \ 
     jupyter_ai \
     jupyterlab-lsp \
+    jedi-language-server \
     jupyter-resource-usage \
     jupyter-cadquery \
     jupyterlab_materialdarker_theme && \
