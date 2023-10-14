@@ -580,9 +580,8 @@ RUN git clone -b ${PYNE_BRANCH} https://github.com/pyne/pyne.git && \
         --moab ${MOAB_ROOT} \
         --dagmc ${DAGMC_ROOT} \
         --clean && \
-    mkdir -p tmp && \
     nuc_data_make && \
-    cd ../.. && \
+    cd .. && \
     rm -rf pyne && \
     fix-permissions "${PYNE_ROOT}" && \
     fix-permissions "/home/${NB_USER}"
