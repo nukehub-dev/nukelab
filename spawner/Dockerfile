@@ -167,10 +167,9 @@ USER ${NB_UID}
 # files across image layers when the permissions change
 WORKDIR /tmp
 
-# Install cadquery and gmsh first
+# Install gmsh first
 RUN mamba install --yes \
-    gmsh \
-    cadquery && \
+    gmsh && \
     mamba clean --all -f -y && \
     fix-permissions "${CONDA_DIR}" && \
     fix-permissions "/home/${NB_USER}"
@@ -256,9 +255,6 @@ USER ${NB_UID}
 
 # Add R mimetype option to specify how the plot returns from R to the browser
 COPY --chown=${NB_UID}:${NB_GID} Rprofile.site /opt/conda/lib/R/etc/
-
-# Add setup scripts that may be used by downstream images or inherited images
-COPY setup-scripts/ /opt/setup-scripts/
 
 
 ##################################################################
@@ -356,18 +352,7 @@ RUN apt-get update --yes && \
     gcc && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Julia dependencies
-# install Julia packages in /opt/julia instead of ${HOME}
-ENV JULIA_DEPOT_PATH=/opt/julia \
-    JULIA_PKGDIR=/opt/julia
-
-# Setup Julia
-RUN /opt/setup-scripts/setup-julia.bash
-
 USER ${NB_UID}
-
-# Setup IJulia kernel & other packages
-RUN /opt/setup-scripts/setup-julia-packages.bash
 
 # R packages including IRKernel which gets installed globally.
 # r-e1071: dependency of the caret R package
@@ -410,7 +395,7 @@ ARG MOAB_BRANCH=5.4.0
 ARG DOUBLE_DOWN_BRANCH="v1.0.0"
 ARG GEANT4_BRANCH="v11.1.2"
 ARG DAGMC_BRANCH="v3.2.2"
-ARG OPENMC_BRANCH="v0.13.1"
+ARG OPENMC_BRANCH="v0.13.3"
 ARG PYNE_BRANCH="develop"
 ARG DOWNLOAD_GEANT4_DATA=ON
 ARG DOWNLOAD_CROSS_SECTION_DATA=ON
