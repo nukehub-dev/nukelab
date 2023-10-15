@@ -566,7 +566,9 @@ RUN git clone -b ${OPENMC_BRANCH} https://github.com/openmc-dev/openmc.git && \
     -DOPENMC_USE_DAGMC=ON \
     -DDAGMC_ROOT=${DAGMC_ROOT} && \
     make -j${CI_JOBS} && make -j${CI_JOBS} install && \
-    cd ../.. && \
+    cd .. && \
+    pip install --no-cache-dir . && \
+    cd .. && \
     rm -rf openmc && \
     chmod +x download_cross_sections.sh && \
     ./download_cross_sections.sh ${DOWNLOAD_CROSS_SECTION_DATA} ${OPENMC_ROOT}/share/data && \
