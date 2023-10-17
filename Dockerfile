@@ -20,7 +20,7 @@ RUN apt-get update && \
 RUN npm install -g configurable-http-proxy
 
 # Install JupyterHub and its dependencies
-RUN pip3 install jupyterhub pycurl
+RUN pip3 install jupyterhub pycurl jupyterhub-idle-culler
 
 # Install authenticators and spawners
 RUN pip3 install oauthenticator dockerspawner jupyterhub-nativeauthenticator

@@ -6,6 +6,7 @@ from dockerspawner import DockerSpawner
 from nativeauthenticator import NativeAuthenticator
 from oauthenticator import GitHubOAuthenticator
 import os
+import sys
 
 # Set the base URL
 c.JupyterHub.base_url = "/nukelab/"
@@ -18,7 +19,7 @@ c.JupyterHub.logo_file = "nukelab.png"
 #c.NativeAuthenticator.open_signup = True
 
 # Shutdown
-c.JupyterHub.shutdown_on_logout = True
+#c.JupyterHub.shutdown_on_logout = True
 
 # GitHubOAuthenticator
 c.JupyterHub.authenticator_class = GitHubOAuthenticator
@@ -51,9 +52,34 @@ c.DockerSpawner.notebook_dir = os.environ.get("DOCKER_NUKELAB_DIR")
 c.DockerSpawner.volumes = {"nukelab-user-{username}": os.environ.get("DOCKER_NUKELAB_DIR")}
 c.DockerSpawner.image = os.environ["DOCKER_NUKELAB_IMAGE"]
 c.DockerSpawner.prefix = "nukelab"
-c.DockerSpawner.extra_create_kwargs = {"hostname": "nin",}
+c.DockerSpawner.extra_create_kwargs = {"hostname": "NukeHub",}
 c.DockerSpawner.remove = True
 
 # Set the database
 c.JupyterHub.db_url = "sqlite:///data/nukelab.sqlite"
 c.JupyterHub.cookie_secret_file = "/data/jupyterhub_cookie_secret"
+
+# Idle culler
+c.JupyterHub.load_roles = [
+    {
+        "name": "jupyterhub-idle-culler-role",
+        "scopes": [
+            "list:users",
+            "read:users:activity",
+            "read:servers",
+            "delete:servers",
+        ],
+        # assignment of role's permissions to:
+        "services": ["jupyterhub-idle-culler-service"],
+    }
+]
+c.JupyterHub.services = [
+    {
+        "name": "jupyterhub-idle-culler-service",
+        "command": [
+            sys.executable,
+            "-m", "jupyterhub_idle_culler",
+            "--timeout=600",
+        ],
+    }
+]
