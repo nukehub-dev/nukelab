@@ -9,7 +9,7 @@ import os
 import sys
 
 # Set the base URL
-c.JupyterHub.base_url = "/nukelab/"
+#c.JupyterHub.base_url = "/nukelab/"
 
 # Set the logo
 c.JupyterHub.logo_file = "nukelab.png"
