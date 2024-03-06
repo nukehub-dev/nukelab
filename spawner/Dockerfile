@@ -610,3 +610,35 @@ RUN pip install --no-cache-dir \
         ipyvtklink && \
     fix-permissions "${CONDA_DIR}" && \
     fix-permissions "/home/${NB_USER}"
+
+RUN apt-get update --yes && \
+    apt-get install --yes --no-install-recommends \
+        libxt-dev \
+        libqt5x11extras5-dev \
+        qttools5-dev \
+        qtxmlpatterns5-dev-tools \
+        libqt5svg5-dev \
+        libqt5opengl5-dev && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+USER ${NB_UID}
+
+# Install ParaView  from source
+RUN cd paraview && \
+    mkdir -p build && \
+    cd build && \
+    cmake ../ \
+        -DCMAKE_INSTALL_PREFIX=${CONDA_DIR} \
+        -DCMAKE_INSTALL_RPATH:STRING=${CONDA_DIR}/lib \
+        -DPARAVIEW_USE_PYTHON=ON \
+        -DPARAVIEW_USE_MPI=ON \
+        -DPARAVIEW_ENABLE_VISITBRIDGE=ON \
+        -DPARAVIEW_ENABLE_XDMF3=ON \
+        -DPARAVIEW_PLUGIN_ENABLE_ParFlow=ON \
+        -DVTK_SMP_IMPLEMENTATION_TYPE=TBB \
+        -DCMAKE_BUILD_TYPE=Release && \
+    make -j6 && make -j6 install && \
+    cd ../.. && \
+    rm -rf iparaview-kernel && \
+    fix-permissions "${CONDA_DIR}" && \
+    fix-permissions "/home/${NB_USER}"
