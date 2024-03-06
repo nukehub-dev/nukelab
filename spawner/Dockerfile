@@ -8,7 +8,7 @@ ARG ROOT_CONTAINER=ubuntu:22.04
 
 FROM $ROOT_CONTAINER
 
-LABEL maintainer="NukeLab <nrms.mist.ac.bd>"
+LABEL maintainer="NukeLab <nukehub.org>"
 ARG NB_USER="nukelab"
 ARG NB_UID="1000"
 ARG NB_GID="100"
@@ -61,8 +61,8 @@ RUN chmod a+rx /usr/local/bin/fix-permissions
 # Enable prompt color in the skeleton .bashrc before creating the default NB_USER
 # hadolint ignore=SC2016
 RUN sed -i 's/^#force_color_prompt=yes/force_color_prompt=yes/' /etc/skel/.bashrc && \
-   # Add call to conda init script see https://stackoverflow.com/a/58081608/4413446
-   echo 'eval "$(command conda shell.bash hook 2> /dev/null)"' >> /etc/skel/.bashrc
+    # Add call to conda init script see https://stackoverflow.com/a/58081608/4413446
+    echo 'eval "$(command conda shell.bash hook 2> /dev/null)"' >> /etc/skel/.bashrc
 
 # Create NB_USER with name nukelab user with UID=1000 and in the 'users' group
 # and make sure these dirs are writable by the `users` group.
@@ -167,30 +167,25 @@ USER ${NB_UID}
 # files across image layers when the permissions change
 WORKDIR /tmp
 
-# Install gmsh first
 RUN mamba install --yes \
-    gmsh && \
-    mamba clean --all -f -y && \
-    fix-permissions "${CONDA_DIR}" && \
-    fix-permissions "/home/${NB_USER}"
-
-RUN mamba install --yes \
-    jupyterlab \
-    notebook \
-    jupyterhub \
-    nbclassic && \
+        jupyterlab \
+        notebook \
+        jupyterhub \
+        nbclassic \
+        xeus-cling \
+        jupyter-collaboration \
+        jupyter-ai && \
     jupyter server --generate-config && \
     mamba clean --all -f -y && \
     npm cache clean --force && \
     jupyter lab build --name='NukeLab' && \
     jupyter lab clean && \
     pip install --no-cache-dir \ 
-    jupyter_ai \
-    jupyterlab-lsp \
-    jedi-language-server \
-    jupyter-resource-usage \
-    jupyter-cadquery \
-    jupyterlab_materialdarker_theme && \
+        nbdime \
+        jupyterlab-lsp \
+        jedi-language-server \
+        jupyter-resource-usage \
+        jupyterlab_materialdarker_theme && \
     jupyter labextension disable @jupyterlab/extensionmanager-extension && \
     mkdir -p ~/.jupyter/lab/user-settings/@jupyterlab/apputils-extension/ && \
     echo '{ "theme": "Material Darker" }' > ~/.jupyter/lab/user-settings/@jupyterlab/apputils-extension/themes.jupyterlab-settings && \
@@ -226,25 +221,25 @@ HEALTHCHECK --interval=5s --timeout=3s --start-period=5s --retries=3 \
 # Install all OS dependencies for fully functional Server
 RUN apt-get update --yes && \
     apt-get install --yes --no-install-recommends \
-    # Common useful utilities
-    curl \
-    git \
-    nano-tiny \
-    tzdata \
-    unzip \
-    vim-tiny \
-    # git-over-ssh
-    openssh-client \
-    # less is needed to run help in R
-    # see: https://github.com/jupyter/docker-stacks/issues/1588
-    less \
-    # nbconvert dependencies
-    # https://nbconvert.readthedocs.io/en/latest/install.html#installing-tex
-    texlive-xetex \
-    texlive-fonts-recommended \
-    texlive-plain-generic \
-    # Enable clipboard on Linux host systems
-    xclip && \
+        # Common useful utilities
+        curl \
+        git \
+        nano-tiny \
+        tzdata \
+        unzip \
+        vim-tiny \
+        # git-over-ssh
+        openssh-client \
+        # less is needed to run help in R
+        # see: https://github.com/jupyter/docker-stacks/issues/1588
+        less \
+        # nbconvert dependencies
+        # https://nbconvert.readthedocs.io/en/latest/install.html#installing-tex
+        texlive-xetex \
+        texlive-fonts-recommended \
+        texlive-plain-generic \
+        # Enable clipboard on Linux host systems
+        xclip && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Create alternative for nano -> nano-tiny
@@ -252,9 +247,6 @@ RUN update-alternatives --install /usr/bin/nano nano /bin/nano-tiny 10
 
 # Switch back to nukelab to avoid accidental container runs as root
 USER ${NB_UID}
-
-# Add R mimetype option to specify how the plot returns from R to the browser
-COPY --chown=${NB_UID}:${NB_GID} Rprofile.site /opt/conda/lib/R/etc/
 
 
 ##################################################################
@@ -265,13 +257,13 @@ USER root
 
 RUN apt-get update --yes && \
     apt-get install --yes --no-install-recommends \
-    # for cython: https://cython.readthedocs.io/en/latest/src/quickstart/install.html
-    build-essential \
-    # for latex labels
-    cm-super \
-    dvipng \
-    # for matplotlib anim
-    ffmpeg && \
+        # for cython: https://cython.readthedocs.io/en/latest/src/quickstart/install.html
+        build-essential \
+        # for latex labels
+        cm-super \
+        dvipng \
+        # for matplotlib anim
+        ffmpeg && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 USER ${NB_UID}
@@ -282,36 +274,36 @@ RUN echo 'jupyterlab >=4.0.4' >> "${CONDA_DIR}/conda-meta/pinned" && \
 
 # Install Python 3 packages
 RUN mamba install --yes \
-    'altair' \
-    'beautifulsoup4' \
-    'bokeh' \
-    'bottleneck' \
-    'cloudpickle' \
-    'conda-forge::blas=*=openblas' \
-    'cython' \
-    'dask' \
-    'dill' \
-    'h5py' \
-    'ipympl'\
-    'ipywidgets' \
-    'jupyterlab-git' \
-    'matplotlib-base' \
-    'numba' \
-    'numexpr' \
-    'openpyxl' \
-    'pandas' \
-    'patsy' \
-    'protobuf' \
-    'pytables' \
-    'scikit-image' \
-    'scikit-learn' \
-    'scipy' \
-    'seaborn' \
-    'sqlalchemy' \
-    'statsmodels' \
-    'sympy' \
-    'widgetsnbextension'\
-    'xlrd' && \
+        'altair' \
+        'beautifulsoup4' \
+        'bokeh' \
+        'bottleneck' \
+        'cloudpickle' \
+        'conda-forge::blas=*=openblas' \
+        'cython' \
+        'dask' \
+        'dill' \
+        'h5py' \
+        'ipympl'\
+        'ipywidgets' \
+        'jupyterlab-git' \
+        'matplotlib-base' \
+        'numba' \
+        'numexpr' \
+        'openpyxl' \
+        'pandas' \
+        'patsy' \
+        'protobuf' \
+        'pytables' \
+        'scikit-image' \
+        'scikit-learn' \
+        'scipy' \
+        'seaborn' \
+        'sqlalchemy' \
+        'statsmodels' \
+        'sympy' \
+        'widgetsnbextension'\
+        'xlrd' && \
     mamba clean --all -f -y && \
     fix-permissions "${CONDA_DIR}" && \
     fix-permissions "/home/${NB_USER}"
@@ -339,64 +331,19 @@ WORKDIR ${HOME}
 
 
 ##################################################################
-#                        Data Science Notebook                   #
-##################################################################
-
-USER root
-
-# R pre-requisites
-RUN apt-get update --yes && \
-    apt-get install --yes --no-install-recommends \
-    fonts-dejavu \
-    gfortran \
-    gcc && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
-
-USER ${NB_UID}
-
-# R packages including IRKernel which gets installed globally.
-# r-e1071: dependency of the caret R package
-RUN mamba install --yes \
-    'r-base' \
-    'r-caret' \
-    'r-crayon' \
-    'r-devtools' \
-    'r-e1071' \
-    'r-forecast' \
-    'r-hexbin' \
-    'r-htmltools' \
-    'r-htmlwidgets' \
-    'r-irkernel' \
-    'r-nycflights13' \
-    'r-randomforest' \
-    'r-rcurl' \
-    'r-rmarkdown' \
-    'r-rodbc' \
-    'r-rsqlite' \
-    'r-shiny' \
-    'r-tidymodels' \
-    'r-tidyverse' \
-    'rpy2' \
-    'unixodbc' && \
-    mamba clean --all -f -y && \
-    fix-permissions "${CONDA_DIR}" && \
-    fix-permissions "/home/${NB_USER}"
-
-
-##################################################################
 #                             Nuclear Pack                       #
 ##################################################################
 
 USER root
 
 ARG CI_JOBS=4
-ARG EMBREE_BRANCH="v3.6.1"
-ARG MOAB_BRANCH=5.4.0
-ARG DOUBLE_DOWN_BRANCH="v1.0.0"
-ARG GEANT4_BRANCH="v11.1.2"
-ARG DAGMC_BRANCH="v3.2.2"
-ARG OPENMC_BRANCH="v0.13.3"
-ARG PYNE_BRANCH="develop"
+ARG EMBREE_BRANCH="v4.0.1"
+ARG MOAB_BRANCH="5.4.0"
+ARG DOUBLE_DOWN_BRANCH="v1.1.0"
+ARG GEANT4_BRANCH="v11.2.1"
+ARG DAGMC_BRANCH="v3.2.3"
+ARG OPENMC_BRANCH="v0.14.0"
+ARG PYNE_BRANCH="0.7.8"
 ARG DOWNLOAD_GEANT4_DATA=ON
 ARG DOWNLOAD_CROSS_SECTION_DATA=ON
 
@@ -417,29 +364,30 @@ ENV GEANT4_DATA_DIR=${GEANT4_ROOT}/share/data \
 # Install dependencies
 RUN apt-get update --yes && \
     apt-get install --yes --no-install-recommends \
-    software-properties-common \
-    libblas-dev \
-    liblapack-dev \
-    libeigen3-dev \
-    libboost-dev \
-    xvfb \
-    libxft2 \
-    libxext6 \
-    libglu1-mesa && \
+        gfortran \
+        software-properties-common \
+        libblas-dev \
+        liblapack-dev \
+        libeigen3-dev \
+        libboost-dev \
+        xvfb \
+        libxft2 \
+        libxext6 \
+        libglu1-mesa && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 USER ${NB_UID}
 
 # Install python packages
 RUN mamba install --yes \
-    cmake \
-    hdf5 \
-    # DAGMC requires Cython<3
-    "cython<3" \
-    setuptools \
-    progress \ 
-    future && \
-    mamba clean --all -f -y && \
+        cmake \
+        hdf5 \
+        gmsh \
+        "cython<3" \
+        setuptools \
+        progress \ 
+        future && \
+        mamba clean --all -f -y && \
     fix-permissions "${CONDA_DIR}" && \
     fix-permissions "/home/${NB_USER}"
 
@@ -526,10 +474,8 @@ RUN git clone -b ${DAGMC_BRANCH} https://github.com/svalinn/DAGMC.git && \
     cmake ../ -DMOAB_DIR=${MOAB_ROOT} \
         -DMOAB_CMAKE_CONFIG=${MOAB_ROOT}/lib/cmake/MOAB \
         -DCMAKE_INSTALL_PREFIX=${DAGMC_ROOT} \
-        # Fix GEANT4 V 11 NOT WORKING WITH DAGMC
-        -DBUILD_GEANT4=OFF \
+        -DBUILD_GEANT4=ON \
         -DGEANT4_DIR=${GEANT4_ROOT} \
-        -DGeant4_CMAKE_CONFIG=${GEANT4_ROOT}/lib/cmake/Geant4 \
         -DBUILD_TALLY=ON \
         -DBUILD_STATIC_LIBS=OFF \
         -DDOUBLE_DOWN=ON \
@@ -547,9 +493,10 @@ RUN git clone -b ${OPENMC_BRANCH} https://github.com/openmc-dev/openmc.git && \
     cd openmc && \
     mkdir -p build && \
     cd build && \
-    cmake ../ -DCMAKE_INSTALL_PREFIX=${OPENMC_ROOT} \
-    -DOPENMC_USE_DAGMC=ON \
-    -DDAGMC_ROOT=${DAGMC_ROOT} && \
+    cmake ../ \ 
+        -DCMAKE_INSTALL_PREFIX=${OPENMC_ROOT} \
+        -DOPENMC_USE_DAGMC=ON \
+        -DDAGMC_ROOT=${DAGMC_ROOT} && \
     make -j${CI_JOBS} && make -j${CI_JOBS} install && \
     cd .. && \
     pip install --no-cache-dir . && \
@@ -579,16 +526,87 @@ USER ${NB_UID}
 
 # Install different python packages
 RUN pip install --no-cache-dir \
-    plasmapy \
-    #paramak \ Fix It using lower version of client
-    tables \
-    yt \
-    tabulate \
-    requests \
-    geant4-pybind \
-    cad_to_dagmc \
-    stellarmesh \
-    git+https://github.com/gumyr/build123d \
-    cad_to_openmc && \
+        plasmapy \
+        #paramak \ Fix It using lower version of client
+        tables \
+        yt \
+        tabulate \
+        requests \
+        geant4-pybind \
+        cad_to_dagmc \
+        stellarmesh \
+        git+https://github.com/gumyr/build123d \
+        cad_to_openmc && \
+    fix-permissions "${CONDA_DIR}" && \
+    fix-permissions "/home/${NB_USER}"
+
+USER root
+
+RUN apt-get update --yes && \
+    apt-get install --yes --no-install-recommends \
+        ninja-build \
+        freeglut3-dev\
+        mesa-utils \
+        mesa-common-dev \
+        libopenmpi-dev \
+        libtbb-dev && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+USER ${NB_UID}
+
+# Install ParaView  from source
+RUN git clone -b v5.12.0 --recursive https://gitlab.kitware.com/paraview/paraview.git  && \
+    fix-permissions "${CONDA_DIR}" && \
+    fix-permissions "/home/${NB_USER}"
+
+USER root
+
+RUN apt-get update --yes && \
+    apt-get install --yes --no-install-recommends \
+        cmake \
+        libxml2-dev \
+        paraview-dev && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update --yes && \
+    apt-get install --yes --no-install-recommends \
+        python3-paraview \
+        python3-dev \
+        libavcodec-dev \
+        libavformat-dev \
+        libavutil-dev \
+        libswscale-dev \
+        libgl2ps-dev \
+        libpdal-dev \
+        libglew-dev \
+        libqt5opengl5-dev \
+        libutfcpp-dev \
+        libdouble-conversion-dev \
+        libfreetype6-dev \
+        libqt5svg5-dev \
+        libqt5x11extras5-dev \
+        qttools5-dev && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+USER ${NB_UID}
+
+# FIX: https://discourse.paraview.org/t/cannot-compile-iparaview-kernel/8902/5
+# Install IParaView Jupyter Kernel from source
+RUN git clone https://gitlab.kitware.com/paraview/plugins/iparaview-kernel.git && \
+    cd iparaview-kernel && \
+    mkdir -p build && \
+    cd build && \
+    /usr/bin/cmake ../ \
+        -DCMAKE_INSTALL_PREFIX=/home/${NB_USER}/.local/share/jupyter/kernels && \
+    make -j${CI_JOBS} && make -j${CI_JOBS} install && \
+    cd ../.. && \
+    rm -rf iparaview-kernel && \
+    fix-permissions "${CONDA_DIR}" && \
+    fix-permissions "/home/${NB_USER}"
+
+
+# Install different python packages
+RUN pip install --no-cache-dir \
+        ipyvtklink && \
     fix-permissions "${CONDA_DIR}" && \
     fix-permissions "/home/${NB_USER}"
