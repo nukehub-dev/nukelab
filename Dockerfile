@@ -37,5 +37,8 @@ COPY jupyterhub/favicon.ico /usr/local/share/jupyterhub/static/favicon.ico
 # Copy NukeLab templates file into the image
 COPY jupyterhub/templates /usr/local/share/jupyterhub/templates
 
+# Recent Bug
+RUN mkdir -p /etc/pki/tls/certs && ln -s /etc/ssl/certs/ca-certificates.crt /etc/pki/tls/certs/ca-bundle.crt
+
 # Start JupyterHub with the configuration file
 CMD ["jupyterhub"]
