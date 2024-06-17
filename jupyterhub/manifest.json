@@ -1,78 +1,24 @@
 {
+    "id": "/",
     "name": "NukeLab",
     "short_name": "NukeLab",
     "description": "Run nuclear physics simulations and analyses effortlessly in the cloud",
     "theme_color": "#000000",
     "background_color": "#000000",
-    "display": "fullscreen",
+    "display_override": ["fullscreen"],
+    "display": "standalone",
     "scope": "/",
     "start_url": "/",
     "icons": [
         {
-            "src": "logo.png",
-            "sizes": "16x16",
-            "type": "image/png"
-        },
-        {
-            "src": "logo.png",
-            "sizes": "32x32",
-            "type": "image/png"
-        },
-        {
-            "src": "logo.png",
-            "sizes": "72x72",
-            "type": "image/png"
-        },
-        {
-            "src": "logo.png",
-            "sizes": "96x96",
-            "type": "image/png"
-        },
-        {
-            "src": "logo.png",
-            "sizes": "120x120",
-            "type": "image/png"
-        },
-        {
-            "src": "logo.png",
-            "sizes": "128x128",
-            "type": "image/png"
-        },
-        {
-            "src": "logo.png",
-            "sizes": "144x144",
-            "type": "image/png"
-        },
-        {
-            "src": "logo.png",
-            "sizes": "152x152",
-            "type": "image/png"
-        },
-        {
-            "src": "logo.png",
-            "sizes": "180x180",
-            "type": "image/png"
-        },
-        {
-            "src": "logo.png",
-            "sizes": "192x192",
-            "type": "image/png"
-        },
-        {
-            "src": "logo.png",
-            "sizes": "384x384",
-            "type": "image/png"
+            "src": "logo.svg",
+            "sizes": "any",
+            "type": "image/svg+xml"
         },
         {
             "src": "logo.png",
             "sizes": "512x512",
             "type": "image/png"
-        },
-        {
-            "src": "logo.png",
-            "sizes": "512x512",
-            "type": "image/png",
-            "purpose": "maskable"
         }
     ]
 }

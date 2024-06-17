@@ -35,6 +35,7 @@ COPY jupyterhub/jupyterhub_config.py /jupyterhub_config.py
 COPY jupyterhub/favicon.ico /usr/local/share/jupyterhub/static/favicon.ico
 
 # Copy logo into the image
+COPY jupyterhub/logo.svg /usr/local/share/jupyterhub/static/logo.svg
 COPY jupyterhub/logo.png /usr/local/share/jupyterhub/static/logo.png
 
 # Copy manifest into the image
