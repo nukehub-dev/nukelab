@@ -36,6 +36,14 @@
         NukeLab
       {%- endblock title -%}
     </title>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "NuKeLab",
+        "url": "https://lab.nukehub.org"
+      }
+    </script>
     <meta http-equiv="X-UA-Compatible" content="chrome=1">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     {% block stylesheet %}
@@ -86,12 +94,24 @@
         xsrf_token: "{{ xsrf_token }}",
       };
 
-</script>
+    </script>
     {# djlint: on #}
     {% block meta %}
       <meta name="description" content="NukeLab">
       <meta name="keywords" content="NukeLab, NukeHub">
     {% endblock meta %}
+    <link rel="manifest" href="{{ static_url("manifest.json") }}">
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener("load", () => {
+                navigator.serviceWorker.register('{{ static_url("service-worker.js") }}').then(function(registration) {
+                    console.log('ServiceWorker registered');
+                  }).catch(function(err) {
+                    console.log('ServiceWorker error: ', err);
+                  });
+            })
+        }
+    </script> 
   </head>
   <body>
     <noscript>

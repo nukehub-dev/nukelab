@@ -34,6 +34,15 @@ COPY jupyterhub/jupyterhub_config.py /jupyterhub_config.py
 #Copy favicon into the image
 COPY jupyterhub/favicon.ico /usr/local/share/jupyterhub/static/favicon.ico
 
+# Copy logo into the image
+COPY jupyterhub/logo.png /usr/local/share/jupyterhub/static/logo.png
+
+# Copy manifest into the image
+COPY jupyterhub/manifest.json /usr/local/share/jupyterhub/static/manifest.json
+
+# Copy service-worker into the image
+COPY jupyterhub/service-worker.js /usr/local/share/jupyterhub/static/service-worker.js
+
 # Copy NukeLab templates file into the image
 COPY jupyterhub/templates /usr/local/share/jupyterhub/templates
 
