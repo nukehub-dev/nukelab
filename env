@@ -7,6 +7,7 @@
 export NUKELAB_ADMIN=nukelab
 export DOCKER_NUKELAB_IMAGE=jupyter/base-notebook:latest
 export DOCKER_NUKELAB_DIR=/home/nukelab/work
+export DOCKER_NUKELAB_HOST=
 export GITHUB_CLIENT_ID=
 export GITHUB_CLIENT_SECRET=
 export OAUTH_CALLBACK_URL=
