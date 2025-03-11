@@ -26,7 +26,7 @@ c.JupyterHub.authenticator_class = GitHubOAuthenticator
 c.GitHubOAuthenticator.oauth_callback_url = os.environ['OAUTH_CALLBACK_URL']
 c.GitHubOAuthenticator.allow_all = True
 c.GitHubOAuthenticator.delete_invalid_users = True
-c.GitHubOAuthenticator.custom_403_message = "Sorry, you are not currently authorized to use this NukeLab. Please contact <a href='mailto:tahmid@nse.mist.ac.bd' style='text-decoration: none;'>Ahnaf Tahmid Chowdhury</a>"
+c.GitHubOAuthenticator.custom_403_message = "Sorry, you are not currently authorized to use this NukeLab. Please contact <a href='mailto:admin@nukehub.org' style='text-decoration: none;'>NukeHub Admin</a>"
 
 # Allowed admins
 admin = os.environ.get("NUKELAB_ADMIN")

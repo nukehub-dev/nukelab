@@ -5,6 +5,14 @@
 {% block main %}
   <div class="container">
     <h1 class="sr-only">NukeLab Home Page</h1>
+    <div class="alert alert-warning text-center" role="alert">
+      <strong>Important Notice:</strong> We are transitioning from GitHub
+      authentication to NukeTalk authentication. Please ensure you connect with
+      <a href="https://talk.nukehub.org" class="text-decoration-none">NukeTalk</a>
+      to continue accessing your account. <br />During this process, user data may
+      be removed. We strongly recommend backing up your important data.
+      <br />Thank you for your understanding!
+    </div>
     <div class="row">
       <div class="text-center">
         {% if default_server.active %}<a id="stop" role="button" class="btn btn-lg btn-danger">Stop My Server</a>{% endif %}
