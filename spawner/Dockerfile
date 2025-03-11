@@ -10,6 +10,7 @@ ARG LAB_USER="nukelab"
 ARG LAB_UID="1000"
 ARG LAB_GID="100"
 
+# Work as root
 USER root
 WORKDIR /root
 ENV HOME=/root
@@ -39,7 +40,7 @@ ENV CONDA_DIR=/opt/conda \
     LANG=en_US.UTF-8 \
     LANGUAGE=en_US.UTF-8
 ENV PATH="${CONDA_DIR}/bin:${PATH}" \
-    LD_LIBRARY_PATH=/opt/conda/lib:$LD_LIBRARY_PATH \
+    LD_LIBRARY_PATH=/opt/conda/lib:$LD_LIBRARY_PATH
 
 # Install miniforge
 RUN wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh -O Miniforge3.sh && \
