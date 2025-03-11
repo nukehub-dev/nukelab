@@ -56,3 +56,10 @@ if "GEN_CERT" in os.environ:
 # Change default umask for all subprocesses of the Server if set in the environment
 if "NB_UMASK" in os.environ:
     os.umask(int(os.environ["NB_UMASK"], 8))
+c.ServerProxy.servers = {
+    "ide": {
+        "command": ["yarn", "--cwd", "/opt/nuke-ide", "start:browser", "-p", "{port}"],
+        "absolute_url": False
+    }
+}
+c.ServerApp.default_url = "/ide/"
