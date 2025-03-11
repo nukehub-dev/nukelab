@@ -292,7 +292,9 @@ RUN pip install --no-cache-dir \
         plasmapy \
         stellarmesh \
         cad_to_dagmc \
-        geant4-pybind
+        geant4-pybind \
+        git+https://github.com/proximafusion/vmecpp \
+        git+https://github.com/svalinn/pydagmc
 
 
 # Create a non-root user
@@ -313,7 +315,6 @@ USER ${LAB_UID}
 WORKDIR ${HOME}/work
 
 # Link .nuke-ide to the home directory to allow the user to store their nuke-ide settings
-RUN mkdir -p ${HOME}/work/.nuke-ide && \
-    ln -s ${HOME}/work/.nuke-ide ${HOME}/.nuke-ide
-
-CMD ["jupyterhub-singleuser"]
+CMD mkdir -p ${HOME}/work/.nuke-ide && \
+    ln -sfn ${HOME}/work/.nuke-ide ${HOME}/.nuke-ide && \
+    jupyterhub-singleuser
