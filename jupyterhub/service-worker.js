@@ -1,7 +1,12 @@
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open("nukelab-cache-v1").then((cache) => {
-      return cache.addAll(["/", "/manifest.json", "/logo.svg", "/logo.png"]);
+      return cache.addAll([
+        "/",
+        "/hub/static/manifest.json",
+        "/hub/static/logo.svg",
+        "/hub/static/logo.png",
+      ]);
     })
   );
 });
