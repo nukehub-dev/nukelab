@@ -314,7 +314,12 @@ RUN useradd --no-log-init \
 USER ${LAB_UID}
 WORKDIR ${HOME}/work
 
-# Link .nuke-ide to the home directory to allow the user to store their nuke-ide settings
-CMD mkdir -p ${HOME}/work/.nuke-ide && \
-    ln -sfn ${HOME}/work/.nuke-ide ${HOME}/.nuke-ide && \
-    jupyterhub-singleuser
+# Copy the entrypoint script and make it executable
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Set the entrypoint script
+ENTRYPOINT ["/entrypoint.sh"]
+
+# Default command to start JupyterHub
+CMD ["jupyterhub-singleuser"]
