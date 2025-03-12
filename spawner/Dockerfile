@@ -60,6 +60,7 @@ RUN mamba install --yes \
         pkg-config \
         nodejs \
         jupyterhub \
+        jupyterlab \
         jupyter_server \
         jupyter-server-proxy && \
     npm install -g yarn && \
@@ -79,7 +80,7 @@ RUN cd /opt && \
     git clone https://github.com/nukehub-dev/nuke-ide.git && \
     cd nuke-ide && \
     yarn && \
-    yarn get:plugins && \
+    yarn download:plugins && \
     yarn build:browser
 
 
@@ -87,7 +88,7 @@ RUN cd /opt && \
 #                             Nuclear Pack                       #
 ##################################################################
 
-ARG NUKE_PATH=/opt/nuke
+ARG NUKE_DIR=/opt/nuke
 ARG CI_JOBS=10
 ARG MOAB_BRANCH="5.5.1"
 ARG DOUBLE_DOWN_BRANCH="v1.1.0"
@@ -100,13 +101,13 @@ ARG PYNE_BRANCH="scikit-build-core"
 ARG DOWNLOAD_GEANT4_DATA=ON
 ARG DOWNLOAD_CROSS_SECTION_DATA=ON
 
-ENV MOAB_ROOT=${NUKE_PATH} \
-    DOUBLE_DOWN_ROOT=${NUKE_PATH} \
-    GEANT4_ROOT=${NUKE_PATH} \
-    DAGMC_ROOT=${NUKE_PATH} \
-    LIBMESH_ROOT=${NUKE_PATH}/libmesh \
-    OPENMC_ROOT=${NUKE_PATH} \
-    KDSOURCE_ROOT=${NUKE_PATH}
+ENV MOAB_ROOT=${NUKE_DIR} \
+    DOUBLE_DOWN_ROOT=${NUKE_DIR} \
+    GEANT4_ROOT=${NUKE_DIR} \
+    DAGMC_ROOT=${NUKE_DIR} \
+    LIBMESH_ROOT=${NUKE_DIR}/libmesh \
+    OPENMC_ROOT=${NUKE_DIR} \
+    KDSOURCE_ROOT=${NUKE_DIR}
 
 ENV GEANT4_DATA_DIR=${GEANT4_ROOT}/share/data \
     OPENMC_CROSS_SECTIONS=${OPENMC_ROOT}/share/data/lib80x_hdf5/cross_sections.xml \
@@ -137,13 +138,13 @@ RUN mamba install --yes \
         mcpl && \
         mamba clean --all -f -y
 
-# Create a Conda environment in ${NUKE_PATH}
-RUN conda create --yes -p ${NUKE_PATH} python=3.12 && \
+# Create a Conda environment in ${NUKE_DIR}
+RUN conda create --yes -p ${NUKE_DIR} python=3.12 && \
     conda clean --all -f -y && \
-    echo "conda activate ${NUKE_PATH}" >> /etc/profile.d/conda.sh
+    echo "conda activate ${NUKE_DIR}" >> /etc/profile.d/conda.sh
 
 # Set the shell to use the nuke conda environment
-SHELL ["conda", "run", "-p", "${NUKE_PATH}", "/bin/bash", "-c"]
+SHELL ["conda", "run", "-p", "${NUKE_DIR}", "/bin/bash", "-c"]
 
 # Install MOAB from source
 RUN git clone -b ${MOAB_BRANCH} --depth 1 https://bitbucket.org/fathomteam/moab && \
@@ -310,16 +311,16 @@ RUN useradd --no-log-init \
     mkdir -p ${HOME}/work && \
     chown -R ${LAB_UID}:${LAB_GID} ${HOME}
 
+# Copy the entrypoint script and make it executable
+COPY entrypoint.sh /etc/entrypoint.sh
+RUN chmod +x /etc/entrypoint.sh
+
+# Set the entrypoint script
+ENTRYPOINT ["/etc/entrypoint.sh"]
+
 # Start jupyter server as the non-root user
 USER ${LAB_UID}
 WORKDIR ${HOME}/work
-
-# Copy the entrypoint script and make it executable
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-
-# Set the entrypoint script
-ENTRYPOINT ["/entrypoint.sh"]
 
 # Default command to start JupyterHub
 CMD ["jupyterhub-singleuser"]
