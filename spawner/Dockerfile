@@ -324,4 +324,4 @@ WORKDIR ${HOME}/work
 ENTRYPOINT ["/etc/entrypoint.sh"]
 
 # Default command to start JupyterHub
-CMD ["jupyterhub-singleuser"]
+CMD ["conda", "run", "-p", "${NUKE_DIR}", "jupyterhub-singleuser"]

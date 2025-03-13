@@ -16,7 +16,5 @@ if [ "$(id -u)" -ne 0 ]; then
     chown -R $(id -u):$(id -g) "${HOME}/work/.nuke-ide"
 fi
 
-conda activate ${NUKE_DIR}
-
 # Execute the container's main process
 exec "$@"
