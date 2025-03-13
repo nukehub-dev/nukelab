@@ -290,6 +290,7 @@ Run git clone -b ${KDSOURCE_BRANCH} --recurse-submodules https://github.com/KDSo
 
 # Install different python packages
 RUN pip install --no-cache-dir \
+        paramak \
         plasmapy \
         stellarmesh \
         cad_to_dagmc \
@@ -315,12 +316,12 @@ RUN useradd --no-log-init \
 COPY entrypoint.sh /etc/entrypoint.sh
 RUN chmod +x /etc/entrypoint.sh
 
-# Set the entrypoint script
-ENTRYPOINT ["/etc/entrypoint.sh"]
-
 # Start jupyter server as the non-root user
 USER ${LAB_UID}
 WORKDIR ${HOME}/work
+
+# Set the entrypoint script
+ENTRYPOINT ["/etc/entrypoint.sh"]
 
 # Default command to start JupyterHub
 CMD ["jupyterhub-singleuser"]
