@@ -88,8 +88,11 @@ RUN cd /opt && \
 #                             Nuclear Pack                       #
 ##################################################################
 
-ARG NUKE_DIR=/opt/nuke
-ARG CI_JOBS=10
+# Set nuke directory
+ENV NUKE_DIR=/opt/nuke
+
+# Set build arguments
+ARG CI_JOBS=14
 ARG MOAB_BRANCH="5.5.1"
 ARG DOUBLE_DOWN_BRANCH="v1.1.0"
 ARG GEANT4_BRANCH="v11.3.0"
