@@ -17,4 +17,4 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 # Execute the container's main process
-exec "$@"
+exec conda run -p ${NUKE_DIR} "$@"
