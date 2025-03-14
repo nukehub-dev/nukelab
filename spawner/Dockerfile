@@ -60,8 +60,6 @@ RUN mamba install --yes \
         pkg-config \
         nodejs \
         jupyterhub \
-        jupyterlab \
-        jupyter_server \
         jupyter-server-proxy && \
     npm install -g yarn && \
     jupyter server --generate-config && \
@@ -83,6 +81,8 @@ RUN cd /opt && \
     yarn download:plugins && \
     yarn build:browser
 
+# Set theia webview endpoint (required for notebook output rendering)
+ENV THEIA_WEBVIEW_EXTERNAL_ENDPOINT={{hostname}}
 
 ##################################################################
 #                             Nuclear Pack                       #
