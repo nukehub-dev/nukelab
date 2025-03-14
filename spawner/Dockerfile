@@ -60,7 +60,8 @@ RUN mamba install --yes \
         pkg-config \
         nodejs \
         jupyterhub \
-        jupyter-server-proxy && \
+        jupyter-server-proxy \
+        xeus-cling && \
     npm install -g yarn && \
     jupyter server --generate-config && \
     mamba clean --all -f -y && \
