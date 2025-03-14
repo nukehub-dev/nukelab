@@ -15,6 +15,7 @@ import sys
 c.JupyterHub.logo_file = "nukelab.png"
 
 # NativeAuthenticator
+#c.Authenticator.allow_all = True
 #c.JupyterHub.authenticator_class = NativeAuthenticator
 #c.NativeAuthenticator.open_signup = True
 
