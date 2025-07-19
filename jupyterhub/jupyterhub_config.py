@@ -1,12 +1,8 @@
-# Copyright (c) NukeLab Development Team.
-# Distributed under the terms of the Modified BSD License.
-
 # Import modules
-from dockerspawner import DockerSpawner
-from nativeauthenticator import NativeAuthenticator
-from oauthenticator import GitHubOAuthenticator
 import os
 import sys
+from dockerspawner import DockerSpawner
+from oauthenticator.generic import GenericOAuthenticator
 
 # Set the base URL
 #c.JupyterHub.base_url = "/nukelab/"
@@ -14,20 +10,24 @@ import sys
 # Set the logo
 c.JupyterHub.logo_file = "nukelab.png"
 
-# NativeAuthenticator
+# GenericOAuthenticator
+c.JupyterHub.authenticator_class = GenericOAuthenticator
+c.GenericOAuthenticator.login_service = "NukeHub"
+c.GenericOAuthenticator.client_id = os.environ['OAUTH_CLIENT_ID']
+c.GenericOAuthenticator.client_secret = os.environ['OAUTH_CLIENT_SECRET']
+c.GenericOAuthenticator.oauth_callback_url = os.environ['OAUTH_CALLBACK_URL']
+c.GenericOAuthenticator.authorize_url = os.environ['OAUTH_AUTHORIZE_URL']
+c.GenericOAuthenticator.token_url = os.environ['OAUTH_TOKEN_URL']
+c.GenericOAuthenticator.userdata_url = os.environ['OAUTH_USERDATA_URL']
+c.GenericOAuthenticator.username_key = os.environ.get("OAUTH_USERNAME_KEY", "preferred_username")
+c.GenericOAuthenticator.scope = os.environ.get("OAUTH_SCOPES", "openid email profile").split()
+c.GenericOAuthenticator.custom_403_message = "Sorry, you are not currently authorized to use this NukeLab. Please contact <a href='mailto:admin@nukehub.org' style='text-decoration: none;'>NukeHub Admin</a>"
+
+# NativeAuthenticator (Testing purposes, uncomment if needed)
+#from nativeauthenticator import NativeAuthenticator
 #c.Authenticator.allow_all = True
 #c.JupyterHub.authenticator_class = NativeAuthenticator
 #c.NativeAuthenticator.open_signup = True
-
-# Shutdown
-#c.JupyterHub.shutdown_on_logout = True
-
-# GitHubOAuthenticator
-c.JupyterHub.authenticator_class = GitHubOAuthenticator
-c.GitHubOAuthenticator.oauth_callback_url = os.environ['OAUTH_CALLBACK_URL']
-c.GitHubOAuthenticator.allow_all = True
-c.GitHubOAuthenticator.delete_invalid_users = True
-c.GitHubOAuthenticator.custom_403_message = "Sorry, you are not currently authorized to use this NukeLab. Please contact <a href='mailto:admin@nukehub.org' style='text-decoration: none;'>NukeHub Admin</a>"
 
 # Allowed admins
 admin = os.environ.get("NUKELAB_ADMIN")

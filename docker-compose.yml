@@ -10,9 +10,14 @@ services:
       - NUKELAB_ADMIN=${NUKELAB_ADMIN}
       - DOCKER_NUKELAB_IMAGE=${DOCKER_NUKELAB_IMAGE}
       - DOCKER_NUKELAB_DIR=${DOCKER_NUKELAB_DIR}
-      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
-      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
+      - OAUTH_CLIENT_ID=${OAUTH_CLIENT_ID}
+      - OAUTH_CLIENT_SECRET=${OAUTH_CLIENT_SECRET}
+      - OAUTH_AUTHORIZE_URL=${OAUTH_AUTHORIZE_URL}
+      - OAUTH_TOKEN_URL=${OAUTH_TOKEN_URL}
+      - OAUTH_USERDATA_URL=${OAUTH_USERDATA_URL}
       - OAUTH_CALLBACK_URL=${OAUTH_CALLBACK_URL}
+      - OAUTH_USERNAME_KEY=${OAUTH_USERNAME_KEY}
+      - OAUTH_SCOPE=${OAUTH_SCOPE}
     volumes:
       - ${DOCKER_NUKELAB_HOST:-/var/run/docker.sock}:/var/run/docker.sock # socket
       - nukelab-data:/data # data
@@ -20,7 +25,8 @@ services:
     ports:
       - "8000:8000" # Nukelab web server port
     networks:
-      - nukelab-network # Set the network
+      - shared-services # Use the shared services network
+      - nukelab-network # Use the nukelab network for internal communication
 
 volumes:
   nukelab-data:
@@ -28,5 +34,8 @@ volumes:
 
 # Define the networks
 networks:
+  shared-services:
+    external: true # Use an external network for shared services
+    name: shared-services
   nukelab-network:
     name: nukelab-network
