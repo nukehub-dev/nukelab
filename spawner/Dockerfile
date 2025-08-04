@@ -281,7 +281,7 @@ RUN git clone -b ${PYNE_BRANCH} https://github.com/pyne/pyne.git && \
     rm -rf pyne
 
 # Install KDSource from source
-Run git clone -b ${KDSOURCE_BRANCH} --recurse-submodules https://github.com/KDSource/KDSource.git && \
+RUN git clone -b ${KDSOURCE_BRANCH} --recurse-submodules https://github.com/KDSource/KDSource.git && \
     cd KDSource && \
     mkdir -p build && \
     cd build && \
