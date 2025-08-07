@@ -24,10 +24,12 @@ c.GenericOAuthenticator.scope = os.environ.get("OAUTH_SCOPES", "openid email pro
 c.GenericOAuthenticator.custom_403_message = "Sorry, you are not currently authorized to use this NukeLab. Please contact <a href='mailto:admin@nukehub.org' style='text-decoration: none;'>NukeHub Admin</a>"
 
 # NativeAuthenticator (Testing purposes, uncomment if needed)
-#from nativeauthenticator import NativeAuthenticator
-#c.Authenticator.allow_all = True
-#c.JupyterHub.authenticator_class = NativeAuthenticator
-#c.NativeAuthenticator.open_signup = True
+""" 
+from nativeauthenticator import NativeAuthenticator
+c.Authenticator.allow_all = True
+c.JupyterHub.authenticator_class = NativeAuthenticator
+c.NativeAuthenticator.open_signup = True
+"""
 
 # Allowed admins
 admin = os.environ.get("NUKELAB_ADMIN")
