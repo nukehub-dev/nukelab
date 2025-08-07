@@ -1,0 +1,53 @@
+{% block scripts %}
+  <script src="{{static_url("components/bootstrap/dist/js/bootstrap.bundle.min.js") }}"
+          type="text/javascript"
+          charset="utf-8"></script>
+  <script src="{{static_url("components/requirejs/require.js") }}"
+          type="text/javascript"
+          charset="utf-8"></script>
+  <script src="{{static_url("components/jquery/dist/jquery.min.js") }}"
+          type="text/javascript"
+          charset="utf-8"></script>
+  <script src="{{static_url("js/darkmode.js") }}"
+          type="text/javascript"
+          charset="utf-8"></script>
+{% endblock scripts %}
+{# djlint js formatting doesn't handle template blocks in js #}
+{# djlint: off #}
+<script type="text/javascript">
+  require.config({
+    {% if version_hash %}
+    urlArgs: "v={{version_hash}}",
+    {% endif %}
+    baseUrl: '{{static_url("js", include_version=False)}}',
+    paths: {
+      components: '../components',
+      jquery: '../components/jquery/dist/jquery.min',
+      moment: "../components/moment/moment",
+    },
+  });
+
+  window.jhdata = {
+    base_url: "{{base_url}}",
+    prefix: "{{prefix}}",
+    {% if user %}
+    {#- Autoescaping in templates is turned on in NukeLab, #}
+    {#-  need `| safe` to prevent escaping #}
+    {#- `https://github.com/pallets/markupsafe/blob/2.1.4/src/markupsafe/_native.py#L6` #}
+    user: "{{ user.json_escaped_name | safe }}",
+    {% endif %}
+    {% if admin_access %}
+    admin_access: true,
+    {% else %}
+    admin_access: false,
+    {% endif %}
+    {% if not no_spawner_check and user and user.spawner.options_form %}
+    options_form: true,
+    {% else %}
+    options_for: false,
+    {% endif %}
+    xsrf_token: "{{ xsrf_token }}",
+  };
+
+</script>
+{# djlint: on #}

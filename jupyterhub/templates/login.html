@@ -9,16 +9,26 @@
     <div id="login-main" class="container">
       {% block login_container %}
       <div class="intro-text text-center my-4">
+        <img src="{{ static_url('logo.svg') }}" alt="NukeLab Logo" class="mb-4" style="max-width: 200px;">
         <h2 class="mb-3">Welcome to NukeLab</h2>
         <p class="lead mb-4">Run nuclear physics simulations and analyses effortlessly in the cloud.</p>
       </div>
-      <div class="alert alert-warning text-center" role="alert">
-        <strong>Important Notice:</strong> We are transitioning from GitHub
-        authentication to NukeTalk authentication. Please ensure you connect with
-        <a href="https://talk.nukehub.org" class="text-decoration-none">NukeTalk</a>
-        to continue accessing your account. <br />During this process, user data may
-        be removed. We strongly recommend backing up your important data.
-        <br />Thank you for your understanding!
+      <div class="row text-center mt-4">
+        <div class="col-md-4">
+          <i class="fas fa-cloud fa-3x mb-3"></i>
+          <h3>Cloud-Powered Simulations</h3>
+          <p>Run complex nuclear physics simulations directly in your browser, no setup required.</p>
+        </div>
+        <div class="col-md-4">
+          <i class="fas fa-tools fa-3x mb-3"></i>
+          <h3>Comprehensive Toolset</h3>
+          <p>Access a full suite of pre-installed software, including Geant4, OpenMC, and PyNE.</p>
+        </div>
+        <div class="col-md-4">
+          <i class="fas fa-users fa-3x mb-3"></i>
+          <h3>Seamless Collaboration</h3>
+          <p>Share your work, collaborate with colleagues, and accelerate your research.</p>
+        </div>
       </div>
         {% if custom_html %}
           {{ custom_html | safe }}
@@ -110,18 +120,10 @@
           </form>
         {% endif %}
       {% endblock login_container %}
-      <div class="bg-body-tertiary small position-fixed bottom-0 start-0 w-100 p-3">
-        <div class="container">
-          <p>For More Details: <a href="https://nukehub.org/nuke-lab" class="text-decoration-none">nukehub.org/nuke-lab</a></p>
-          <p>Get Community Support: <a href="https://talk.nukehub.org" class="text-decoration-none">talk.nukehub.org</a></p>
-          <p>Privacy Policy: <a href="https://nukehub.org/privacy-policy" class="text-decoration-none">nukehub.org/privacy-policy</a></p>
-          <p>Terms of Service: <a href="https://nukehub.org/terms-of-service" class="text-decoration-none">nukehub.org/terms-of-service</a></p>
-          <p>Powered By: <a href="https://www.mist.ac.bd/" class="text-decoration-none">mist.ac.bd</a></p>
-        </div>
-      </div>      
     </div>
   {% endblock login %}
 {% endblock main %}
+
 {% block script %}
   {{ super() }}
   <script>
