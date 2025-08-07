@@ -50,6 +50,7 @@ RUN wget https://github.com/conda-forge/miniforge/releases/latest/download/Minif
 
 # Install basic dependencies using mamba
 RUN mamba install --yes \
+        "jupyterhub==5.3.0" \
         gcc \  
         gxx \
         gfortran \
@@ -59,7 +60,7 @@ RUN mamba install --yes \
         autoconf \
         pkg-config \
         nodejs \
-        jupyterhub \
+        jupyterlab \
         jupyter-server-proxy \
         xeus-cling && \
     npm install -g yarn && \
