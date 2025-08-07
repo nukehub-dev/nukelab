@@ -55,7 +55,7 @@ RUN mamba install --yes \
         gfortran \
         binutils \
         make \
-        cmake \
+        "cmake<4" \
         autoconf \
         pkg-config \
         nodejs && \
