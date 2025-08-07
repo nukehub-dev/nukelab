@@ -25,7 +25,8 @@ RUN apt-get update && \
     git \
     wget \
     ca-certificates \
-    locales && \
+    locales \
+    file && \
     apt-get clean && rm -rf /var/lib/apt/lists/* && \
     echo "en_US.UTF-8 UTF-8" > /etc/locale.gen && \
     locale-gen
@@ -50,10 +51,9 @@ RUN wget https://github.com/conda-forge/miniforge/releases/latest/download/Minif
 
 # Install basic dependencies using mamba
 RUN mamba install --yes \
-        gcc \  
-        gxx \
-        gfortran \
-        binutils \
+        c-compiler \
+        cxx-compiler \
+        fortran-compiler \
         make \
         "cmake<4" \
         autoconf \
@@ -64,7 +64,7 @@ RUN mamba install --yes \
 # Set JupyterHub version
 ARG JUPYTERHUB_VERSION=5.3.0
 
-# Install JupyterHub, JupyterLab, and other Jupyter-related packages
+# Install Jupyter Environment
 RUN mamba install --yes \
         "jupyterhub==${JUPYTERHUB_VERSION}" \
         jupyterlab \
@@ -124,7 +124,7 @@ ENV GEANT4_DATA_DIR=${GEANT4_ROOT}/share/data \
     OPENMC_CROSS_SECTIONS=${OPENMC_ROOT}/share/data/lib80x_hdf5/cross_sections.xml \
     ENDFB70=${OPENMC_ROOT}/share/endfb70/cross_sections.xml \
     ENDFB71=${OPENMC_ROOT}/share/data/endfb71/cross_sections.xml \
-    LIB80X=${OPENMC_ROOT}/share/data/lib80x_hdf5/cross_sections.xml 
+    LIB80X=${OPENMC_ROOT}/share/data/lib80x_hdf5/cross_sections.xml
 
 # Install essential tools
 RUN mamba install --yes \
@@ -255,7 +255,7 @@ RUN git clone -b ${OPENMC_BRANCH} https://github.com/openmc-dev/openmc.git && \
     cd openmc && \
     mkdir -p build && \
     cd build && \
-    cmake ../ \ 
+    cmake ../ \
         -DCMAKE_INSTALL_PREFIX=${OPENMC_ROOT} \
         -DHDF5_VERSION="1.14.0" \
         -DOPENMC_USE_OPENMP=ON \
