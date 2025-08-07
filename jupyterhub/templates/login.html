@@ -8,28 +8,7 @@
   {% block login %}
     <div id="login-main" class="container">
       {% block login_container %}
-      <div class="intro-text text-center my-4">
-        <img src="{{ static_url('logo.svg') }}" alt="NukeLab Logo" class="mb-4" style="max-width: 200px;">
-        <h2 class="mb-3">Welcome to NukeLab</h2>
-        <p class="lead mb-5">Run nuclear physics simulations and analyses effortlessly in the cloud.</p>
-      </div>
-      <div class="row text-center mt-4">
-        <div class="col-md-4">
-          <i class="fas fa-cloud fa-3x mb-3"></i>
-          <h3>Cloud-Powered <br> Simulations</h3>
-          <p>Run complex nuclear physics simulations directly in your browser, no setup required.</p>
-        </div>
-        <div class="col-md-4">
-          <i class="fas fa-tools fa-3x mb-3"></i>
-          <h3>Comprehensive <br> Toolset</h3>
-          <p>Access a full suite of pre-installed software, including Geant4, OpenMC, and PyNE.</p>
-        </div>
-        <div class="col-md-4">
-          <i class="fas fa-users fa-3x mb-3"></i>
-          <h3>Seamless <br> Collaboration</h3>
-          <p>Share your work, collaborate with colleagues, and accelerate your research.</p>
-        </div>
-      </div>
+      {% include "components/welcome.html" %}
         <div class="signin-wrapper mt-5 mb-5">
         {% if custom_html %}
           {{ custom_html | safe }}
