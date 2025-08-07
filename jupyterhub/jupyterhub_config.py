@@ -12,6 +12,7 @@ c.JupyterHub.logo_file = "nukelab.png"
 
 # GenericOAuthenticator
 c.JupyterHub.authenticator_class = GenericOAuthenticator
+c.GenericOAuthenticator.allow_all = True
 c.GenericOAuthenticator.login_service = "NukeHub"
 c.GenericOAuthenticator.client_id = os.environ['OAUTH_CLIENT_ID']
 c.GenericOAuthenticator.client_secret = os.environ['OAUTH_CLIENT_SECRET']
