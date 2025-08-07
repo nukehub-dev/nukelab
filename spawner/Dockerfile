@@ -39,7 +39,7 @@ ENV CONDA_DIR=/opt/conda \
     LC_ALL=en_US.UTF-8 \
     LANG=en_US.UTF-8 \
     LANGUAGE=en_US.UTF-8
-ENV PATH="${CONDA_DIR}/bin:${PATH}" \
+ENV PATH=${CONDA_DIR}/bin:${PATH} \
     LD_LIBRARY_PATH=/opt/conda/lib
 
 # Install miniforge
@@ -50,7 +50,6 @@ RUN wget https://github.com/conda-forge/miniforge/releases/latest/download/Minif
 
 # Install basic dependencies using mamba
 RUN mamba install --yes \
-        "jupyterhub==5.3.0" \
         gcc \  
         gxx \
         gfortran \
@@ -59,11 +58,18 @@ RUN mamba install --yes \
         cmake \
         autoconf \
         pkg-config \
-        nodejs \
+        nodejs && \
+    npm install -g yarn
+
+# Set JupyterHub version
+ARG JUPYTERHUB_VERSION=5.3.0
+
+# Install JupyterHub, JupyterLab, and other Jupyter-related packages
+RUN mamba install --yes \
+        "jupyterhub==${JUPYTERHUB_VERSION}" \
         jupyterlab \
         jupyter-server-proxy \
         xeus-cling && \
-    npm install -g yarn && \
     jupyter server --generate-config && \
     mamba clean --all -f -y && \
     npm cache clean --force
