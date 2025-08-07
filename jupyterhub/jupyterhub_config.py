@@ -19,7 +19,7 @@ c.GenericOAuthenticator.oauth_callback_url = os.environ['OAUTH_CALLBACK_URL']
 c.GenericOAuthenticator.authorize_url = os.environ['OAUTH_AUTHORIZE_URL']
 c.GenericOAuthenticator.token_url = os.environ['OAUTH_TOKEN_URL']
 c.GenericOAuthenticator.userdata_url = os.environ['OAUTH_USERDATA_URL']
-c.GenericOAuthenticator.username_key = os.environ.get("OAUTH_USERNAME_KEY", "preferred_username")
+c.GenericOAuthenticator.username_claim = os.environ.get("OAUTH_USERNAME_CLAIM", "preferred_username")
 c.GenericOAuthenticator.scope = os.environ.get("OAUTH_SCOPES", "openid email profile").split()
 c.GenericOAuthenticator.custom_403_message = "Sorry, you are not currently authorized to use this NukeLab. Please contact <a href='mailto:admin@nukehub.org' style='text-decoration: none;'>NukeHub Admin</a>"
 

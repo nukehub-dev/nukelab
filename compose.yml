@@ -16,7 +16,7 @@ services:
       - OAUTH_TOKEN_URL=${OAUTH_TOKEN_URL}
       - OAUTH_USERDATA_URL=${OAUTH_USERDATA_URL}
       - OAUTH_CALLBACK_URL=${OAUTH_CALLBACK_URL}
-      - OAUTH_USERNAME_KEY=${OAUTH_USERNAME_KEY}
+      - OAUTH_USERNAME_CLAIM=${OAUTH_USERNAME_CLAIM}
       - OAUTH_SCOPE=${OAUTH_SCOPE}
     volumes:
       - ${DOCKER_NUKELAB_HOST:-/var/run/docker.sock}:/var/run/docker.sock # socket

@@ -26,7 +26,7 @@ RUN npm install -g configurable-http-proxy && \
 RUN python3 -m venv $VENV && \
     $VENV/bin/pip install --upgrade pip && \
     $VENV/bin/pip install --no-cache-dir \
-        jupyterhub \
+        "jupyterhub==5.3.0" \
         pycurl \
         jupyterhub-idle-culler \
         oauthenticator dockerspawner \

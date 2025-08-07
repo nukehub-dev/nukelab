@@ -14,5 +14,5 @@ export OAUTH_AUTHORIZE_URL=
 export OAUTH_TOKEN_URL=
 export OAUTH_USERDATA_URL=
 export OAUTH_CALLBACK_URL=
-export OAUTH_USERNAME_KEY=preferred_username
+export OAUTH_USERNAME_CLAIM=preferred_username
 export OAUTH_SCOPE=openid profile email
