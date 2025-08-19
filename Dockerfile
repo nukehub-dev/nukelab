@@ -2,20 +2,20 @@
 # Distributed under the terms of the BSD-2-Clause license.
 
 # Use the Debian image as a base
-ARG BASE_IMAGE=debian:12
+ARG BASE_IMAGE=debian:13
 FROM $BASE_IMAGE
 
 # Define the virtual environment path
 ARG VENV=/opt/jupyterhub-venv
 
 # Install OS dependencies
-RUN apt-get update && \ 
+RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    python3-venv \
-    nodejs \
-    npm \
-    libssl-dev \
-    libcurl4-openssl-dev && \
+        python3-venv \
+        nodejs \
+        npm \
+        libssl-dev \
+        libcurl4-openssl-dev && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install configurable-http-proxy for JupyterHub
@@ -29,7 +29,8 @@ RUN python3 -m venv $VENV && \
         "jupyterhub==5.3.0" \
         pycurl \
         jupyterhub-idle-culler \
-        oauthenticator dockerspawner \
+        dockerspawner \
+        oauthenticator \
         jupyterhub-nativeauthenticator
 
 # Add virtual environment to PATH
