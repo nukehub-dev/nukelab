@@ -77,8 +77,6 @@ RUN apt-get update && \
         libxft-dev \
         libxext-dev \
         libglu1-mesa-dev \
-        # Security and Networking
-        libsecret-1-dev \
         # Supporting Applications and Runtimes
         ffmpeg \
         gmsh && \
