@@ -6,6 +6,7 @@ services:
   nukelab:
     build: .
     image: nukelab
+    container_name: nukelab
     environment:
       - NUKELAB_ADMIN=${NUKELAB_ADMIN}
       - DOCKER_NUKELAB_IMAGE=${DOCKER_NUKELAB_IMAGE}
