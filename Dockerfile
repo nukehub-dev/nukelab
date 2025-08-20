@@ -37,23 +37,13 @@ RUN python3 -m venv $VENV && \
 ENV PATH="$VENV/bin:$PATH"
 
 # Copy nukelab logo into the root directory
-COPY nukelab.png ./nukelab.png
+COPY jupyterhub/nukelab.png ./nukelab.png
 
 # Copy the JupyterHub configuration file into the root directory
 COPY jupyterhub/jupyterhub_config.py ./jupyterhub_config.py
 
 # Copy favicon into the virtual environment
-COPY jupyterhub/favicon.ico $VENV/share/jupyterhub/static/favicon.ico
-
-# Copy logos into the virtual environment
-COPY jupyterhub/logo.svg $VENV/share/jupyterhub/static/logo.svg
-COPY jupyterhub/logo.png $VENV/share/jupyterhub/static/logo.png
-
-# Copy manifest into the virtual environment
-COPY jupyterhub/manifest.json $VENV/share/jupyterhub/static/manifest.json
-
-# Copy service-worker into the virtual environment
-COPY jupyterhub/service-worker.js $VENV/share/jupyterhub/static/service-worker.js
+COPY jupyterhub/static $VENV/share/jupyterhub/static/
 
 # Copy templates folder into the virtual environment
 COPY jupyterhub/templates $VENV/share/jupyterhub/templates
