@@ -1,6 +1,7 @@
 # Import modules
 import os
 import sys
+import datetime
 from dockerspawner import DockerSpawner
 from oauthenticator.generic import GenericOAuthenticator
 
@@ -9,6 +10,11 @@ from oauthenticator.generic import GenericOAuthenticator
 
 # Set the logo
 c.JupyterHub.logo_file = "nukelab.png"
+
+# Pass the function to the template variables.
+c.JupyterHub.template_vars = {
+    'current_year': datetime.datetime.now().year,
+}
 
 # GenericOAuthenticator
 c.JupyterHub.authenticator_class = GenericOAuthenticator
