@@ -305,6 +305,7 @@ RUN git clone -b ${KDSOURCE_BRANCH} --recurse-submodules https://github.com/KDSo
 
 # Install remaining Python packages from PyPI and GitHub
 RUN pip install --no-cache-dir \
+        --extra-index-url https://shimwell.github.io/wheels moab \
         mcpl \
         ncrystal \
         paramak \
