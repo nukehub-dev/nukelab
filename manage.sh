@@ -44,10 +44,15 @@ fi
 case "$1" in
     build)
         cd $DIR/spawner
-        echo "Building with ${CONTAINER_ENGINE}"
-        ${CONTAINER_ENGINE} build -t nukelab-spawner .
+        echo "Building Spawner with ${CONTAINER_ENGINE}"
+
+        # Add --format docker flag if using podman
+        BUILD_ARGS=""
+        if [ "$CONTAINER_ENGINE" == "podman" ]; then
+            BUILD_ARGS="--format docker"
+        fi
+        ${CONTAINER_ENGINE} build ${BUILD_ARGS} -t nukelab-spawner .        
         cd $DIR
-        echo "Building with ${COMPOSE_COMMAND}"
         ${COMPOSE_COMMAND} build
         ;;
     run)
