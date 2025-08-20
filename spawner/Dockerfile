@@ -179,8 +179,7 @@ RUN git clone -b ${MOAB_BRANCH} --depth 1 https://bitbucket.org/fathomteam/moab 
         -DCMAKE_INSTALL_PREFIX=${MOAB_ROOT} \
         -DENABLE_HDF5=ON \
         -DBUILD_SHARED_LIBS=ON \
-        -DENABLE_PYMOAB=ON \
-        -DPYTHON_EXECUTABLE=${NUKE_DIR}/bin/python && \
+        -DENABLE_PYMOAB=OFF && \
     make -j${CI_JOBS} && make install && \
     pip uninstall --yes cython && \
     rm -rf ${HOME}/moab
