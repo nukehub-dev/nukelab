@@ -63,6 +63,17 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSessi
             headers={"WWW-Authenticate": "Bearer"},
         )
     
+    # Update login tracking
+    user.last_login = datetime.utcnow()
+    user.login_count += 1
+    
+    # Update security tracking
+    security = user.security or {}
+    security["last_login_at"] = datetime.utcnow().isoformat()
+    user.security = security
+    
+    await db.commit()
+    
     access_token = create_access_token(data={"sub": user.username})
     return {"access_token": access_token, "token_type": "bearer"}
 
@@ -76,4 +87,11 @@ async def get_me(current_user: User = Depends(get_current_user)):
         "full_name": current_user.full_name,
         "role": current_user.role,
         "credit_balance": current_user.credit_balance,
+        "profile": current_user.profile or {},
+        "preferences": current_user.preferences or {},
+        "is_active": current_user.is_active,
+        "is_verified": current_user.is_verified,
+        "login_count": current_user.login_count,
+        "last_login": current_user.last_login.isoformat() if current_user.last_login else None,
+        "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
     }

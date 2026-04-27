@@ -8,15 +8,39 @@ CREATE TABLE IF NOT EXISTS users (
     full_name VARCHAR(255),
     password_hash VARCHAR(255),
     role VARCHAR(50) DEFAULT 'user' NOT NULL,
+    
+    -- Credits & Quotas
     credit_balance INTEGER DEFAULT 500,
     daily_allowance INTEGER DEFAULT 500,
     last_credit_reset TIMESTAMP WITH TIME ZONE,
+    
+    -- Profile (flexible JSONB for extensibility)
+    profile JSONB DEFAULT '{}',
+    
+    -- Preferences (app-specific settings)
+    preferences JSONB DEFAULT '{}',
+    
+    -- Security tracking
+    security JSONB DEFAULT '{}',
+    
+    -- Status
     is_active BOOLEAN DEFAULT true,
     is_verified BOOLEAN DEFAULT false,
+    email_verified_at TIMESTAMP WITH TIME ZONE,
+    
+    -- Audit
     last_login TIMESTAMP WITH TIME ZONE,
+    last_ip_address INET,
+    login_count INTEGER DEFAULT 0,
+    
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Create GIN indexes for JSONB columns (fast querying)
+CREATE INDEX IF NOT EXISTS idx_users_profile ON users USING GIN (profile);
+CREATE INDEX IF NOT EXISTS idx_users_preferences ON users USING GIN (preferences);
+CREATE INDEX IF NOT EXISTS idx_users_security ON users USING GIN (security);
 
 -- Roles table
 CREATE TABLE IF NOT EXISTS roles (
