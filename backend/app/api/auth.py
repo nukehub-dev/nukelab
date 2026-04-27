@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm, HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,10 +9,44 @@ from sqlalchemy import select
 from app.config import settings
 from app.db.session import get_db
 from app.models.user import User
+from app.models.api_token import ApiToken
 
 router = APIRouter()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+
+
+class CustomHTTPBearer(HTTPBearer):
+    """Custom HTTP Bearer that accepts both 'Bearer' and 'Token' schemes"""
+    async def __call__(self, request: Request):
+        authorization = request.headers.get("Authorization")
+        if not authorization:
+            if self.auto_error:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Not authenticated",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            return None
+        
+        # Support both "Bearer <token>" and "Token <token>"
+        scheme = ""
+        token = ""
+        if " " in authorization:
+            scheme, token = authorization.split(" ", 1)
+        
+        if scheme.lower() not in ["bearer", "token"]:
+            if self.auto_error:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid authentication scheme",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            return None
+        
+        return token
+
+
+security_scheme = CustomHTTPBearer(auto_error=True)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -30,25 +64,61 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     return jwt.encode(to_encode, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
-async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)):
+async def get_current_user(token: str = Depends(security_scheme), db: AsyncSession = Depends(get_db)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    
+    # Get the original authorization header to determine scheme
+    # We need to check if this was a "Token" or "Bearer" request
+    # Since security_scheme strips the scheme, we need to look at the raw header
+    # But we don't have access to the request here... 
+    # Alternative: try JWT first, if that fails, try API token
+    
+    # Try JWT first
+    user = None
     try:
         payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
         username: str = payload.get("sub")
-        if username is None:
-            raise credentials_exception
+        if username:
+            result = await db.execute(select(User).where(User.username == username))
+            user = result.scalar_one_or_none()
     except JWTError:
-        raise credentials_exception
+        pass
     
-    result = await db.execute(select(User).where(User.username == username))
-    user = result.scalar_one_or_none()
-    if user is None:
-        raise credentials_exception
-    return user
+    if user:
+        return user
+    
+    # Try API token
+    result = await db.execute(
+        select(ApiToken).where(
+            ApiToken.is_active == True,
+            ApiToken.revoked_at == None
+        )
+    )
+    api_tokens = result.scalars().all()
+    
+    for api_token in api_tokens:
+        if verify_password(token, api_token.token_hash):
+            # Check expiration
+            if api_token.expires_at and api_token.expires_at < datetime.utcnow():
+                raise credentials_exception
+            
+            # Update usage
+            api_token.last_used_at = datetime.utcnow()
+            api_token.usage_count += 1
+            await db.commit()
+            
+            # Return the associated user
+            result = await db.execute(select(User).where(User.id == api_token.user_id))
+            user = result.scalar_one_or_none()
+            if user and user.is_active:
+                return user
+            raise credentials_exception
+    
+    raise credentials_exception
 
 
 @router.post("/login")

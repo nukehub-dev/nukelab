@@ -732,10 +732,24 @@ class User(BaseModel):
     daily_allowance: int          # Daily credit allowance
     last_credit_reset: datetime   # Last daily reset timestamp
     
+    # Profile (flexible JSONB - extensible user info)
+    profile: dict                 # avatar, timezone, phone, department, organization
+    
+    # Preferences (app-specific settings)
+    preferences: dict             # theme, language, default_environment, default_plan
+    
+    # Security tracking (audit & protection)
+    security: dict                # mfa_enabled, last_ip, failed_attempts, locked_until
+    
+    # Audit
+    login_count: int              # Total successful logins
+    last_login: datetime
+    last_ip_address: str          # Last login IP
+    email_verified_at: datetime   # Email verification timestamp
+    
     # Status
     is_active: bool
     is_verified: bool
-    last_login: datetime
     created_at: datetime
     updated_at: datetime
 ```
@@ -775,6 +789,27 @@ class Server(BaseModel):
     last_activity: datetime
     expires_at: datetime  # Based on max_runtime
     created_at: datetime
+```
+
+#### API Token
+
+```python
+class ApiToken(BaseModel):
+    id: UUID
+    user_id: UUID
+    name: str                   # "VS Code", "CI/CD", etc.
+    token_hash: str             # bcrypt hash of the token
+    scopes: list[str]           # ["servers:read", "servers:start"]
+    
+    # Usage tracking
+    last_used_at: datetime
+    usage_count: int
+    
+    # Lifecycle
+    created_at: datetime
+    expires_at: datetime        # Optional expiration
+    revoked_at: datetime        # If manually revoked
+    is_active: bool
 ```
 
 #### Environment Template
@@ -929,6 +964,22 @@ POST   /api/auth/logout             # Logout
 POST   /api/auth/refresh            # Refresh token
 GET    /api/auth/me                 # Current user
 POST   /api/auth/oauth/callback     # NukeHub Auth OAuth callback
+```
+
+#### API Tokens
+
+```
+GET    /api/tokens                  # List user's API tokens
+POST   /api/tokens                  # Create new token (returns token once)
+GET    /api/tokens/{id}             # Get token details (without hash)
+DELETE /api/tokens/{id}             # Revoke token
+POST   /api/tokens/{id}/regenerate  # Regenerate token
+GET    /api/tokens/{id}/usage       # Get token usage statistics
+```
+
+**Token Authentication:**
+```
+Authorization: Token <api-token>
 ```
 
 #### Users

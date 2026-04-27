@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
-from app.api import auth, users, servers
+from app.api import auth, users, servers, tokens
 from app.db.base import Base
 from app.db.session import engine
 
@@ -28,6 +28,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(users.router, prefix="/users", tags=["users"])
 app.include_router(servers.router, prefix="/servers", tags=["servers"])
+app.include_router(tokens.router, prefix="/tokens", tags=["tokens"])
 
 
 @app.on_event("startup")

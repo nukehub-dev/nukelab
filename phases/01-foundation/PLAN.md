@@ -188,6 +188,22 @@ Phase 1 establishes the foundational infrastructure for NukeLab Platform v2.0. W
     - [ ] JWT validation middleware
     - [ ] Permission checking middleware
 
+- [x] **API Token Infrastructure** (Bonus — Foundation for Phase 2)
+  - [x] `backend/app/models/api_token.py` — SQLAlchemy model with user relationship
+  - [x] `database/init/01-schema.sql` — `api_tokens` table with hash, scopes, expiration
+  - [x] `backend/app/api/tokens.py` — Token management endpoints
+    - [x] `GET /api/tokens` — List tokens
+    - [x] `POST /api/tokens` — Create token (returns token once)
+    - [x] `GET /api/tokens/{id}` — Get token details
+    - [x] `DELETE /api/tokens/{id}` — Revoke token
+    - [x] `POST /api/tokens/{id}/regenerate` — Rotate token
+    - [x] `GET /api/tokens/{id}/usage` — Usage statistics
+  - [x] Dual authentication in `get_current_user()`
+    - [x] JWT tokens: `Authorization: Bearer <jwt>`
+    - [x] API tokens: `Authorization: Token <token>`
+  - [x] Token usage tracking (last_used_at, usage_count)
+  - [x] Integration with `backend/app/main.py`
+
 ### Day 5-7: User Management & RBAC
 
 #### Tasks
@@ -415,13 +431,19 @@ Phase 1 establishes the foundational infrastructure for NukeLab Platform v2.0. W
 
 #### Testing Checklist
 
-- [ ] Admin can log in via local auth
-- [ ] Admin sees dashboard
-- [ ] Admin can spawn dev environment
-- [ ] NukeIDE accessible at `/user/admin/{server-id}`
-- [ ] JWT auth works for container access
-- [ ] Server stop/start works
-- [ ] All services communicate properly
+**Test Results**: See `phases/01-foundation/TEST-RESULTS.md` for full details
+
+- [x] Admin can log in via local auth
+- [x] Admin can spawn dev environment
+- [x] Server stop works
+- [x] Server delete works
+- [x] JWT auth works for API access
+- [x] API token auth works (`Authorization: Token <token>`)
+- [x] Token creation, usage tracking, and revocation work
+- [ ] Admin sees dashboard (Frontend not complete)
+- [ ] NukeIDE accessible at `/user/admin/{server-id}` (Traefik routing issue with Podman)
+- [ ] Server start works (Not implemented — stub only)
+- [x] All core services communicate properly
 
 ---
 
@@ -438,13 +460,18 @@ By end of Phase 1, the following should be functional:
 - [ ] Celery worker (basic setup)
 
 ### Features Working
-- [ ] Admin login (local auth)
+- [x] Admin login (local auth)
 - [ ] Dashboard UI
 - [ ] User profile management
 - [ ] Basic RBAC (roles enforced)
 - [ ] Server spawn (dev environment only)
 - [ ] NukeIDE container access
 - [ ] Container lifecycle (start/stop)
+- [x] **API Token System** (Bonus)
+  - [x] Token creation with scopes
+  - [x] Dual auth (JWT + API tokens)
+  - [x] Token usage tracking
+  - [x] Token revocation and regeneration
 
 ### Documentation
 - [ ] `README.md` with quick start
@@ -491,6 +518,7 @@ Then the container stops gracefully
 - **Container Registry**: Local builds only. Push to registry in Phase 6.
 - **SSL**: Self-signed certificates for development. Production certificates in Phase 6.
 - **Monitoring**: Basic logging only. Full monitoring in Phase 4.
+- **API Token Infrastructure**: Added as bonus work to provide foundation for Phase 2 (User Management & RBAC). The basic auth flow is complete — full UI and scope-based permissions will be built in Phase 2.
 
 ---
 
