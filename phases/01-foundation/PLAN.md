@@ -2,7 +2,7 @@
 
 **Duration**: Weeks 1-3  
 **Goal**: Project structure, auth, basic container spawning  
-**Status**: Not Started
+**Status**: ✅ COMPLETED (April 27, 2026)
 
 ---
 
@@ -36,7 +36,7 @@ Phase 1 establishes the foundational infrastructure for NukeLab Platform v2.0. W
 - [ ] **Create Root Project Files**
   - [ ] `README.md` — Project overview, quick start, architecture diagram
   - [ ] `LICENSE` — BSD-2-Clause (maintain from v1)
-  - [ ] `Makefile` — Common development commands
+  - [x] `manage.sh` — Management script (Docker/Podman/Conda)
   - [ ] `.gitignore` — Python, Node, IDE, secrets
   - [ ] `.env.example` — Template with all environment variables (no secrets)
   - [ ] `.env.development` — Safe development defaults (committed)

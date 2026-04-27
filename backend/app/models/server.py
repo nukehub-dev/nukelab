@@ -1,0 +1,39 @@
+import uuid
+from datetime import datetime
+from sqlalchemy import Column, String, DateTime, Float, Integer, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID
+from app.db.base import Base
+
+class Server(Base):
+    __tablename__ = "servers"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(255), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
+    environment_id = Column(UUID(as_uuid=True), nullable=True)
+    plan_id = Column(UUID(as_uuid=True), nullable=True)
+    
+    # Docker
+    container_id = Column(String(255), nullable=True)
+    image = Column(String(255), nullable=True)
+    status = Column(String(50), default="pending", nullable=False)
+    
+    # Resources
+    allocated_cpu = Column(Float, default=1.0)
+    allocated_memory = Column(String(50), default="2g")
+    allocated_disk = Column(String(50), default="10g")
+    allocated_gpu = Column(Integer, default=0)
+    
+    # Networking
+    internal_port = Column(Integer, default=3000)
+    external_url = Column(String(500), nullable=True)
+    
+    # Timestamps
+    started_at = Column(DateTime, nullable=True)
+    stopped_at = Column(DateTime, nullable=True)
+    last_activity = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<Server {self.name} ({self.status})>"

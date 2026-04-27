@@ -6,7 +6,7 @@ BEGIN
         VALUES (
             'admin',
             'admin@nukelab.local',
-            '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.VTtYA.qGZvKG6', -- admin123
+            '$2b$12$TIn0jQXTtQATiISE8wuw4.3aHA3ikPWYy3VXuWRNM6rZGAp6YP3.e',
             'super_admin',
             true,
             999999

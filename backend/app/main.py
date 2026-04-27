@@ -10,6 +10,9 @@ app = FastAPI(
     description="NukeLab Platform v2.0 API",
     version="2.0.0",
     debug=settings.app_debug,
+    root_path="/api",
+    docs_url="/docs",
+    openapi_url="/openapi.json",
 )
 
 # CORS

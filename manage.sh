@@ -8,6 +8,42 @@ set -e
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 cd "$DIR"
 
+# Determine which environment file to load
+# Priority: .env.development (dev) > .env (production)
+load_env_file() {
+    local env_file="$1"
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        # Skip comments and empty lines
+        [[ "$line" =~ ^#.*$ ]] && continue
+        [[ -z "$line" ]] && continue
+        # Export the variable
+        export "$line"
+    done < "$env_file"
+}
+
+# Determine which environment file to load
+# Priority: .env (production/local override) > .env.development (dev defaults)
+if [ -f .env ]; then
+    echo "Loading environment from .env"
+    load_env_file .env
+    ENV_FILE=".env"
+elif [ -f .env.development ]; then
+    echo "Loading development environment from .env.development"
+    load_env_file .env.development
+    ENV_FILE=".env.development"
+else
+    echo "ERROR: No environment file found."
+    echo ""
+    echo "For development:"
+    echo "  cp .env.example .env.development"
+    echo ""
+    echo "For production:"
+    echo "  cp .env.example .env"
+    echo "  # Edit .env with your production secrets"
+    echo ""
+    exit 1
+fi
+
 # Detect container engine
 if command -v podman &> /dev/null; then
     CONTAINER_ENGINE=podman
@@ -75,10 +111,15 @@ fi
 start() {
     echo "Starting NukeLab services..."
     $COMPOSE_COMMAND -f docker-compose.yml up -d
+    
+    # Get APP_URL from environment or use default
+    APP_URL=${APP_URL:-http://localhost:8080}
+    
     echo "Services started!"
-    echo "  Frontend: http://localhost"
-    echo "  API: http://localhost/api"
-    echo "  Traefik Dashboard: http://localhost:8080"
+    echo "  Frontend: $APP_URL"
+    echo "  API: $APP_URL/api"
+    echo "  API Docs: $APP_URL/api/docs"
+    echo "  Traefik Dashboard: http://localhost:8090"
 }
 
 stop() {
@@ -141,6 +182,26 @@ conda_run() {
     conda activate nukelab-backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 }
 
+build_base() {
+    echo "Building base environment image..."
+    ./scripts/build-base.sh
+}
+
+build_dev() {
+    echo "Building dev environment image..."
+    ./scripts/build-dev.sh
+}
+
+build_all_envs() {
+    echo "Building all environment images..."
+    ./scripts/build-all.sh
+}
+
+generate_certs() {
+    echo "Generating SSL certificates..."
+    ./scripts/generate-certs.sh
+}
+
 help() {
     cat << EOF
 NukeLab Platform v2.0 - Management Script
@@ -155,13 +216,20 @@ Container Commands:
   logs         Show logs (use: ./manage.sh logs [service])
   status       Show running containers
 
-Conda Commands:
+Environment Commands:
+  build-base   Build base environment image
+  build-dev    Build dev environment image
+  build-all    Build all environment images
+
+Utility Commands:
+  certs        Generate self-signed SSL certificates
   conda-setup  Create/update Conda environment for backend
   conda-run    Run backend using Conda (for local development)
 
 Examples:
   ./manage.sh start
   ./manage.sh logs backend
+  ./manage.sh build-all
   ./manage.sh conda-setup
 
 EOF
@@ -193,6 +261,18 @@ case "${1:-help}" in
         ;;
     conda-run)
         conda_run
+        ;;
+    build-base)
+        build_base
+        ;;
+    build-dev)
+        build_dev
+        ;;
+    build-all)
+        build_all_envs
+        ;;
+    certs)
+        generate_certs
         ;;
     help|--help|-h)
         help

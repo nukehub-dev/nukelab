@@ -1,11 +1,11 @@
-# Environment files with secrets
+# Environment files (all local configs)
 .env
 .env.local
 .env.production
+.env.development
 
-# But allow example and development templates
+# But allow example template
 !.env.example
-!.env.development
 
 # Python
 __pycache__/

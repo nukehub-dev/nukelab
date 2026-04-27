@@ -12,40 +12,61 @@ Multi-user scientific computing platform with granular RBAC, real-time monitorin
 - **Optional**: Conda (for local Python development)
 - 10GB+ free disk space
 
-### Setup
+### Environment Files
 
-1. **Clone and configure:**
-   ```bash
-   git clone https://github.com/nukehub-dev/nukelab.git
-   cd nukelab
-   git checkout new
-   cp .env.development .env
-   ```
+| File | Purpose | Committed |
+|------|---------|-----------|
+| `.env.example` | Template with all variables | ✅ Yes |
+| `.env.development` | Development config | ❌ No (ignored) |
+| `.env` | Production secrets | ❌ No (ignored) |
 
-2. **Start services:**
-   ```bash
-   ./manage.sh start
-   ```
-   
-   Or manually:
-   ```bash
-   # Docker
-   docker-compose up -d
-   
-   # Podman
-   podman-compose up -d
-   ```
+### Development Setup
 
-3. **Access the application:**
-   - Frontend: http://localhost
-   - API Docs: http://localhost/api/docs
-   - Traefik Dashboard: http://localhost:8080
+```bash
+# Clone repository
+git clone https://github.com/nukehub-dev/nukelab.git
+cd nukelab
+git checkout new
 
-4. **Login with default admin:**
-   - Username: `admin`
-   - Password: `admin123`
+# Create development environment file
+cp .env.example .env.development
 
-### Using Conda for Development
+# Start services
+./manage.sh start
+```
+
+**Access points:**
+- Frontend: http://localhost:8080
+- API: http://localhost:8080/api
+- API Docs: http://localhost:8080/api/docs
+- Traefik Dashboard: http://localhost:8090
+
+**Default login:**
+- Username: `admin`
+- Password: `admin123`
+
+### Production Setup
+
+```bash
+cp .env.example .env
+# Edit .env with your production secrets
+vim .env
+
+# Start services
+./manage.sh start
+```
+
+### Manual Start (without manage.sh)
+
+```bash
+# Docker
+docker-compose up -d
+
+# Podman
+podman-compose up -d
+```
+
+## Using Conda for Development
 
 If you prefer using Conda instead of Docker for the backend:
 
@@ -61,7 +82,7 @@ uvicorn app.main:app --reload --port 8000
 
 The `environment.yml` in `backend/` defines all Python dependencies.
 
-### Using Podman
+## Using Podman
 
 The project automatically detects Podman and configures the correct socket path. Just run:
 
@@ -71,10 +92,10 @@ The project automatically detects Podman and configures the correct socket path.
 
 The script will:
 - Auto-detect Podman vs Docker
-- Set the correct socket path (`/run/podman/podman.sock`)
+- Set the correct socket path (`/run/user/1000/podman/podman.sock`)
 - Use `podman-compose` if available
 
-### Development Mode
+## Development Mode
 
 For full local development with hot reload:
 

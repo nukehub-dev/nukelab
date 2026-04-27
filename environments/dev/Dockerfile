@@ -1,20 +1,17 @@
 FROM nukelab-base:latest
 
-# Clone and build NukeIDE
-RUN git clone https://github.com/nukehub-dev/nuke-ide.git /opt/nuke-ide \
-    && cd /opt/nuke-ide \
-    && yarn install \
-    && yarn build:browser
+# Install nginx
+RUN apt-get update && apt-get install -y nginx \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy nginx configuration
+# Create simple test page
+RUN echo '<!DOCTYPE html><html><head><title>NukeLab</title></head><body><h1>NukeIDE Test Environment</h1><p>Server is running!</p></body></html>' > /var/www/html/index.html
+
+# Copy nginx config
 COPY nginx.conf /etc/nginx/nginx.conf
-
-# Copy startup script
-COPY startup.sh /opt/nukelab/startup.sh
-RUN chmod +x /opt/nukelab/startup.sh
 
 # Expose port
 EXPOSE 80
 
-# Start services
-CMD ["/opt/nukelab/startup.sh"]
+# Start nginx
+CMD ["nginx", "-g", "daemon off;"]

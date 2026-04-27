@@ -1,0 +1,26 @@
+api:
+  insecure: true
+  dashboard: true
+
+providers:
+  docker:
+    exposedByDefault: false
+    network: nukelab-network
+
+entryPoints:
+  web:
+    address: ":80"
+  websecure:
+    address: ":443"
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: admin@nukelab.local
+      storage: /letsencrypt/acme.json
+      tlsChallenge: {}
+
+log:
+  level: INFO
+
+accessLog: {}

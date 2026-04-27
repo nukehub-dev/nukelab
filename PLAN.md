@@ -1697,7 +1697,7 @@ nukelab/
 │
 ├── docker-compose.yml               # Development stack
 ├── docker-compose.prod.yml          # Production stack
-├── Makefile                         # Common commands
+
 ├── README.md                        # Project documentation
 └── .env.example                     # Environment template
 ```
