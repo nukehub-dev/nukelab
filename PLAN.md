@@ -63,6 +63,23 @@ NukeLab v2.0 is a ground-up rebuild of the multi-user scientific computing platf
 | **Background Workers** | Celery | Server cleanup, notifications, report generation, scheduled tasks |
 | **User Environments** | NukeIDE + Nginx | Theia IDE with built-in JWT validation proxy |
 
+### 2.2 Hardware Constraints
+
+Current infrastructure is limited and requires careful resource management:
+
+| Server | CPU | Memory | Disk | Role |
+|--------|-----|--------|------|------|
+| **Main Server** | 32 cores | 64GB RAM | 1TB HDD | Primary compute + system services |
+| **Contabo VPS** | 6 cores | 12GB RAM | 200GB SSD | Secondary compute / backup |
+| **Total Available** | ~34 cores | ~68GB RAM | ~1.1TB | After system reservation |
+
+**Implications:**
+- Credit system required to prevent resource monopolization
+- Queue-based scheduling when resources unavailable
+- Auto-culling of idle servers essential
+- Plans must respect total available resources
+- Horizontal scaling needed for growth (Phase 6)
+
 ---
 
 ## 3. Technology Stack Decisions
@@ -212,42 +229,308 @@ branding:
   icon: "atom"
 ```
 
-### 4.3 Real-Time Resource Monitoring
+### 4.3 Server Plans (Resource Tiers)
 
-#### Metrics Collected
+Server Plans define resource allocations independent of environment templates. Users select both an **environment** (what tools are installed) and a **plan** (how much resources they get).
 
-- **CPU**: Usage percentage, throttling events
-- **Memory**: Used, available, cache, swap
-- **Disk**: I/O throughput, space usage
-- **Network**: RX/TX bytes, packets, errors
-- **GPU**: Utilization, memory, temperature (if available)
-- **Processes**: Count, zombie processes
+#### Predefined Plans
 
-#### Architecture
+| Plan | CPU | Memory | Disk | GPU | Description |
+|------|-----|--------|------|-----|-------------|
+| `nano` | 0.5 | 1Gi | 10Gi | 0 | Minimal testing |
+| `micro` | 1 | 2Gi | 20Gi | 0 | Light workloads |
+| `small` | 2 | 4Gi | 50Gi | 0 | Standard development |
+| `medium` | 4 | 8Gi | 100Gi | 0 | Standard simulations |
+| `large` | 8 | 16Gi | 200Gi | 0 | Heavy simulations |
+| `xlarge` | 16 | 32Gi | 500Gi | 0 | Parallel processing |
+| `gpu-small` | 4 | 16Gi | 100Gi | 1 | GPU-accelerated (T4) |
+| `gpu-large` | 8 | 32Gi | 200Gi | 1 | GPU-accelerated (A100) |
+
+#### Plan Properties
+
+```yaml
+name: "medium"
+description: "Standard simulation tier"
+resources:
+  cpu: 4
+  memory: "8Gi"
+  disk: "100Gi"
+  gpu: 0
+features:
+  max_runtime: "24h"           # Auto-stop after 24 hours
+  idle_timeout: "1h"           # Stop after 1 hour idle
+  allow_scheduling: true       # Can schedule start/stop
+  allow_snapshots: true        # Can create snapshots
+  priority: "normal"           # Scheduling priority
+restrictions:
+  min_role: "user"            # Minimum role required
+  max_per_user: 3             # Max servers with this plan
+  requires_approval: false    # Admin approval needed
+pricing:
+  credits_per_hour: 10        # If using credit system
+```
+
+#### Plan Selection Flow
 
 ```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│  Docker Stats   │────►│  FastAPI WS     │────►│  Next.js        │
-│  API (async)    │     │  Endpoint       │     │  Dashboard      │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-         │                                               │
-         ▼                                               ▼
-┌─────────────────┐                            ┌─────────────────┐
-│  PostgreSQL     │                            │  Recharts/D3.js │
-│  (time-series)  │                            │  Visualization  │
-└─────────────────┘                            └─────────────────┘
+User spawns server:
+  1. Select Environment (neutronics, multiphysics, etc.)
+  2. Select Plan (nano, small, medium, large, etc.)
+  3. Optional: Customize resources within plan limits
+  4. Optional: Select duration / schedule
+  5. Confirm and spawn
 ```
 
-#### Features
+#### Custom Plans per User
 
-- Live dashboard updates every 1-2 seconds via WebSocket
-- Historical data retention (configurable: 7d, 30d, 90d)
-- Per-user and global views
-- Resource quota alerts (email, Slack, webhook)
-- Top consumers leaderboard
-- Export to CSV/PDF
+Admins can assign custom resource limits to specific users:
 
-### 4.4 Audit & Compliance
+```yaml
+user: "john.doe"
+custom_plan:
+  cpu: 32
+  memory: "64Gi"
+  disk: "1Ti"
+  gpu: 2
+  max_runtime: "72h"
+  reason: "PhD research - parallel OpenMC simulations"
+approved_by: "admin"
+approved_at: "2026-04-27T10:00:00Z"
+expires_at: "2026-12-31T23:59:59Z"
+```
+
+#### Plan Inheritance
+
+```
+Default Plan (system default)
+  └── Role Default Plan (override per role)
+       └── Group Plan (override per group)
+            └── User Custom Plan (override per user)
+                 └── Server Override (one-time override)
+```
+
+### 4.4 Credit System
+
+With limited hardware resources (38 CPU total, 76GB RAM), a credit system ensures fair usage and prevents resource monopolization.
+
+#### Credit Model
+
+```
+Credits = Resource × Time × Plan Multiplier
+
+Example:
+  small plan (2 CPU, 4GB) running for 1 hour:
+    Base cost: 10 credits/hour
+    
+  medium plan (4 CPU, 8GB) running for 1 hour:
+    Base cost: 20 credits/hour
+    
+  large plan (8 CPU, 16GB) running for 1 hour:
+    Base cost: 40 credits/hour
+```
+
+#### Credit Sources
+
+| Source | Amount | Frequency | Description |
+|--------|--------|-----------|-------------|
+| **Daily Allowance** | 100-1000 | Daily | Based on role (guest:100, user:500, admin:unlimited) |
+| **One-time Grant** | Variable | Once | Welcome bonus for new users |
+| **Admin Grant** | Any | Anytime | Manual credit allocation |
+| **Task Rewards** | Variable | On completion | Completing tutorials, bug reports, etc. |
+| **Purchase** | Variable | Anytime | If monetization enabled (future) |
+
+#### Credit Consumption
+
+| Plan | CPU | Memory | Cost/hour | Daily Allowance Coverage |
+|------|-----|--------|-----------|------------------------|
+| `nano` | 0.5 | 1Gi | 5 credits | 20 hours/day |
+| `micro` | 1 | 2Gi | 10 credits | 10 hours/day |
+| `small` | 2 | 4Gi | 20 credits | 5 hours/day |
+| `medium` | 4 | 8Gi | 40 credits | 2.5 hours/day |
+| `large` | 8 | 16Gi | 80 credits | 1.25 hours/day |
+| `xlarge` | 16 | 32Gi | 160 credits | 0.6 hours/day |
+
+#### Credit Limits & Alerts
+
+```yaml
+user_credit_settings:
+  daily_allowance: 500
+  max_balance: 5000        # Cap to prevent hoarding
+  rollover: false          # Use it or lose it (daily reset)
+  alert_thresholds:
+    warning: 100           # Alert at 100 credits remaining
+    critical: 20           # Alert at 20 credits remaining
+    
+server_constraints:
+  min_credits_to_start: 20  # Need at least 1 hour of small plan
+  stop_on_depletion: true   # Auto-stop when credits run out
+  warn_before_stop: 10      # Warn 10 minutes before auto-stop
+```
+
+#### Credit Ledger
+
+Immutable transaction history:
+
+```python
+class CreditTransaction(BaseModel):
+    id: UUID
+    timestamp: datetime
+    user_id: UUID
+    amount: int           # Positive = credit, Negative = debit
+    balance_after: int
+    type: str             # "daily_allowance", "server_usage", "admin_grant", "purchase"
+    description: str
+    server_id: UUID       # If server usage
+    plan_id: UUID         # If server usage
+    actor_id: UUID        # Who initiated (system, admin, etc.)
+```
+
+#### Resource-Aware Scheduling
+
+With limited hardware, we need smart scheduling:
+
+```
+Total Hardware:
+  Main Server: 32 CPU, 64GB RAM, 1TB HDD
+  Contabo: 6 CPU, 12GB RAM, 200GB SSD
+  
+Reserved for System:
+  - Traefik, FastAPI, PostgreSQL, Redis: ~4 CPU, 8GB RAM
+  
+Available for User Servers:
+  - ~34 CPU, 68GB RAM
+  
+Smart Scheduling:
+  1. Check if requested resources fit
+  2. If not, queue the request (FIFO with priority)
+  3. Notify user of queue position
+  4. Auto-start when resources free up
+  5. Respect plan priority (higher plans get priority)
+```
+
+### 4.5 User Preferences & Defaults
+
+Users can save default preferences to streamline server spawning.
+
+#### Preference Categories
+
+```yaml
+server_defaults:
+  environment_id: "uuid"        # Default environment
+  plan_id: "uuid"               # Default plan
+  custom_resources:             # Optional overrides
+    cpu: 4
+    memory: "8Gi"
+    disk: "100Gi"
+  auto_start: false             # Auto-start on login
+  idle_timeout: "1h"            # Preferred idle timeout
+  
+display_preferences:
+  theme: "dark"                 # dark, light, system
+  language: "en"                # UI language
+  timezone: "UTC"               # For scheduling display
+  date_format: "YYYY-MM-DD"
+  
+notification_preferences:
+  email_enabled: true
+  email_address: "user@example.com"
+  notify_on:
+    server_ready: true
+    server_stopped: true
+    low_credits: true
+    queue_position: true
+    maintenance: true
+  
+accessibility:
+  reduce_motion: false
+  high_contrast: false
+  font_size: "medium"           # small, medium, large
+```
+
+#### User Preferences Model
+
+```python
+class UserPreferences(BaseModel):
+    user_id: UUID
+    
+    # Server defaults
+    default_environment_id: Optional[UUID]
+    default_plan_id: Optional[UUID]
+    default_custom_resources: Optional[dict]
+    auto_start_servers: bool
+    preferred_idle_timeout: str
+    
+    # Display
+    theme: str                    # "dark", "light", "system"
+    language: str                 # "en", "es", "fr", etc.
+    timezone: str
+    
+    # Notifications
+    email_notifications: bool
+    email_address: Optional[str]
+    notification_settings: dict   # JSON object for granular control
+    
+    # Accessibility
+    accessibility_settings: dict
+    
+    updated_at: datetime
+```
+
+#### Simplified Spawn Flow
+
+With saved preferences:
+
+```
+User clicks "New Server":
+  ┌─────────────────────────────┐
+  │  Server Spawn Dialog         │
+  │                             │
+  │  Environment: [neutronics ▼]│ ← Pre-filled from preferences
+  │  Plan:        [medium ▼]    │ ← Pre-filled from preferences
+  │  Resources:   [4 CPU, 8GB]  │ ← From plan (editable)
+  │                             │
+  │  [Advanced Options ▼]       │
+  │  Duration:    [2 hours]     │
+  │  Auto-start:  [✓]           │
+  │                             │
+  │  Cost: 80 credits           │
+  │                             │
+  │  [Spawn Server] [Save as Default]
+  └─────────────────────────────┘
+```
+
+#### One-Click Spawn
+
+For power users:
+- "Quick Spawn" button uses saved defaults immediately
+- Keyboard shortcut: `Ctrl/Cmd + N` for instant spawn with defaults
+- Recent servers list for rapid restart
+
+### 4.6 Real-Time Resource Monitoring
+
+#### Global Resource Pool
+
+```yaml
+resource_pools:
+  main_pool:
+    total_cpu: 32
+    total_memory: "64Gi"
+    total_disk: "1Ti"
+    reserved_for_system: "20%"
+    
+  contabo_pool:
+    total_cpu: 6
+    total_memory: "12Gi"
+    total_disk: "200Gi"
+    reserved_for_system: "10%"
+    
+scheduling_policy:
+  default: "best-fit"      # Use server with best fit
+  fallback: "queue"        # Queue if no fit
+  priority_weighting: true # Higher plans get priority
+```
+
+### 4.7 Audit & Compliance
 
 #### Audit Log Schema
 
@@ -286,7 +569,7 @@ CREATE TABLE audit_logs (
 
 ### 5.1 Dual Auth Strategy
 
-#### Production: Keycloak (NukeHub)
+#### Production: NukeHub Auth (OAuth2)
 
 ```
 User Browser
@@ -295,10 +578,10 @@ User Browser
 Next.js Frontend
     │
     ▼
-Keycloak Login (auth.nukehub.org)
+NukeHub Auth Login (auth.nukehub.org)
     │
     ▼
-JWT Token (signed by Keycloak)
+JWT Token (signed by NukeHub Auth)
     │
     ▼
 FastAPI validates JWT
@@ -334,14 +617,14 @@ Same RBAC system
 #### Configuration
 
 ```env
-# Auth mode: "keycloak" | "local"
+# Auth mode: "nukehub" | "local"
 AUTH_MODE=local
 
-# Keycloak settings (production)
-KEYCLOAK_URL=https://auth.nukehub.org
-KEYCLOAK_REALM=nukehub
-KEYCLOAK_CLIENT_ID=nukelab-platform
-KEYCLOAK_CLIENT_SECRET=xxx
+# NukeHub Auth settings (production)
+OAUTH_URL=https://auth.nukehub.org
+OAUTH_REALM=nukehub
+OAUTH_CLIENT_ID=nukelab-platform
+OAUTH_CLIENT_SECRET=xxx
 
 # Local auth settings (development)
 LOCAL_AUTH_ENABLED=true
@@ -444,6 +727,11 @@ class User(BaseModel):
     max_gpu: int
     max_servers: int
     
+    # Credits
+    credit_balance: int           # Current credit balance
+    daily_allowance: int          # Daily credit allowance
+    last_credit_reset: datetime   # Last daily reset timestamp
+    
     # Status
     is_active: bool
     is_verified: bool
@@ -460,17 +748,22 @@ class Server(BaseModel):
     name: str
     user_id: UUID
     environment_id: UUID
+    plan_id: UUID
     
     # Docker
     container_id: str
     image: str
     status: ServerStatus  # pending, starting, running, stopping, stopped, error
     
-    # Resources
-    allocated_cpu: int
+    # Resources (from plan, can be overridden)
+    allocated_cpu: float
     allocated_memory: str
     allocated_disk: str
     allocated_gpu: int
+    
+    # Limits (from plan)
+    max_runtime: str
+    idle_timeout: str
     
     # Networking
     internal_port: int  # Theia port (3000)
@@ -480,6 +773,7 @@ class Server(BaseModel):
     started_at: datetime
     stopped_at: datetime
     last_activity: datetime
+    expires_at: datetime  # Based on max_runtime
     created_at: datetime
 ```
 
@@ -516,6 +810,69 @@ class Environment(BaseModel):
     created_at: datetime
 ```
 
+#### Plan (Resource Tier)
+
+```python
+class Plan(BaseModel):
+    id: UUID
+    name: str  # e.g., "small", "medium", "large"
+    description: str
+    
+    # Resources
+    cpu: float  # Can be fractional (0.5 for nano)
+    memory: str  # e.g., "8Gi"
+    disk: str    # e.g., "100Gi"
+    gpu: int
+    
+    # Features
+    max_runtime: str     # e.g., "24h"
+    idle_timeout: str    # e.g., "1h"
+    allow_scheduling: bool
+    allow_snapshots: bool
+    priority: str        # "low", "normal", "high"
+    
+    # Restrictions
+    min_role: str        # Minimum role required
+    max_per_user: int    # Max servers per user with this plan
+    requires_approval: bool
+    
+    # Metadata
+    is_active: bool
+    is_default: bool     # Default plan for new users
+    display_order: int
+    created_at: datetime
+    updated_at: datetime
+```
+
+#### User Preferences
+
+```python
+class UserPreferences(BaseModel):
+    user_id: UUID
+    
+    # Server defaults
+    default_environment_id: Optional[UUID]
+    default_plan_id: Optional[UUID]
+    default_custom_resources: Optional[dict]
+    auto_start_servers: bool = False
+    preferred_idle_timeout: str = "1h"
+    
+    # Display
+    theme: str = "system"         # "dark", "light", "system"
+    language: str = "en"          # "en", "es", "fr", etc.
+    timezone: str = "UTC"
+    
+    # Notifications
+    email_notifications: bool = True
+    email_address: Optional[str]
+    notification_settings: dict = {}  # Granular notification control
+    
+    # Accessibility
+    accessibility_settings: dict = {}
+    
+    updated_at: datetime
+```
+
 #### Audit Log
 
 ```python
@@ -537,6 +894,23 @@ class AuditLog(BaseModel):
     error_message: str
 ```
 
+#### Credit Transaction
+
+```python
+class CreditTransaction(BaseModel):
+    id: UUID
+    timestamp: datetime
+    user_id: UUID
+    amount: int              # Positive = credit, Negative = debit
+    balance_after: int
+    type: str                # "daily_allowance", "server_usage", "admin_grant", "purchase", "refund"
+    description: str
+    server_id: UUID          # If related to server usage
+    plan_id: UUID            # If related to plan
+    actor_id: UUID           # Who initiated (system, admin, user)
+    metadata: dict           # Additional context
+```
+
 ### 6.2 Database Schema
 
 See `backend/database/schema.sql` for full schema with indexes, constraints, and foreign keys.
@@ -554,7 +928,7 @@ POST   /api/auth/login              # Local login
 POST   /api/auth/logout             # Logout
 POST   /api/auth/refresh            # Refresh token
 GET    /api/auth/me                 # Current user
-POST   /api/auth/keycloak/callback  # Keycloak OAuth callback
+POST   /api/auth/oauth/callback     # NukeHub Auth OAuth callback
 ```
 
 #### Users
@@ -569,6 +943,9 @@ POST   /api/users/{id}/disable      # Disable/enable user
 POST   /api/users/{id}/impersonate  # Impersonate user (super_admin only)
 GET    /api/users/{id}/servers      # Get user's servers
 GET    /api/users/{id}/resources    # Get user's resource usage
+GET    /api/users/{id}/preferences  # Get user preferences
+PUT    /api/users/{id}/preferences  # Update user preferences
+POST   /api/users/{id}/preferences/reset  # Reset to defaults
 ```
 
 #### Servers
@@ -593,6 +970,29 @@ POST   /api/environments            # Create environment
 GET    /api/environments/{id}       # Get environment
 PUT    /api/environments/{id}       # Update environment
 DELETE /api/environments/{id}       # Delete environment
+```
+
+#### Plans
+
+```
+GET    /api/plans                   # List available plans
+POST   /api/plans                   # Create plan (admin)
+GET    /api/plans/{id}              # Get plan details
+PUT    /api/plans/{id}              # Update plan (admin)
+DELETE /api/plans/{id}              # Delete plan (admin)
+GET    /api/plans/{id}/users        # Get users on this plan
+POST   /api/users/{id}/plan         # Assign custom plan to user
+```
+
+#### Credits
+
+```
+GET    /api/credits/balance          # Get current balance
+GET    /api/credits/transactions      # Get transaction history
+POST   /api/credits/grant            # Grant credits (admin)
+POST   /api/credits/deduct           # Deduct credits (admin)
+GET    /api/credits/usage            # Get usage statistics
+POST   /api/credits/reset-daily      # Trigger daily reset (system)
 ```
 
 #### Monitoring
@@ -704,7 +1104,7 @@ GET    /api/system/stats            # Platform statistics
 
 - [ ] **Authentication System**
   - [ ] Local auth: bcrypt password hashing, JWT generation
-  - [ ] Keycloak auth: OAuth2 flow, JWT validation
+  - [ ] NukeHub Auth: OAuth2 flow, JWT validation
   - [ ] Auth middleware for FastAPI
   - [ ] Permission checking decorators
   - [ ] Role-based route guards
@@ -796,16 +1196,35 @@ Then the container stops gracefully
   - [ ] Change password
   - [ ] View own servers and usage
 
+- [ ] **User Preferences**
+  - [ ] Preferences model (defaults, display, notifications)
+  - [ ] Preferences API (get, update, reset)
+  - [ ] Settings page UI
+  - [ ] Default environment/plan selection
+  - [ ] Theme/language/timezone settings
+  - [ ] Notification preferences
+  - [ ] Quick spawn with saved defaults
+
+- [ ] **Credit System**
+  - [ ] Credit balance model and ledger
+  - [ ] Daily allowance system (automated reset)
+  - [ ] Credit consumption on server usage
+  - [ ] Credit grant/deduct (admin)
+  - [ ] Low credit alerts and auto-stop
+  - [ ] Credit transaction history
+
 - [ ] **Admin Dashboard**
   - [ ] User management table
   - [ ] Role assignment UI
   - [ ] Permission matrix editor
   - [ ] User activity timeline
+  - [ ] Credit management (grant/deduct/view)
   - [ ] Server management table
   - [ ] Bulk actions (start all, stop all, delete all)
 
 - [ ] **Server Lifecycle**
   - [ ] Start/stop/restart/delete servers
+  - [ ] Credit check before start
   - [ ] Server status polling
   - [ ] Server logs viewer
   - [ ] Server detail page
@@ -823,12 +1242,17 @@ Then the container stops gracefully
 Given I am an admin
 When I create a new user with role "moderator"
 Then the user can log in
+And the user receives 500 daily credits
 And the user can create other users
 But the user cannot access other users' servers
 
 Given I am a regular user
 When I try to access admin dashboard
 Then I get a 403 Forbidden error
+
+Given I have 20 credits remaining
+When I try to start a server costing 40 credits/hour
+Then I get an error: "Insufficient credits"
 ```
 
 ---
@@ -846,17 +1270,33 @@ Then I get a 403 Forbidden error
   - [ ] Environment-specific branding
   - [ ] Environment activation/deactivation
 
+- [ ] **Server Plans**
+  - [ ] Plan CRUD API (admin)
+  - [ ] Plan builder UI (admin)
+  - [ ] Plan selection in spawn form
+  - [ ] Plan restrictions enforcement (role, approval)
+  - [ ] Custom plans per user (admin override)
+  - [ ] Plan usage tracking
+
 - [ ] **Resource Quotas**
-  - [ ] Quota model (per-user, per-role)
+  - [ ] Quota model (per-user, per-role, per-plan)
   - [ ] Quota enforcement on spawn
   - [ ] Quota usage tracking
   - [ ] Quota exceeded alerts
 
 - [ ] **Resource Limits**
-  - [ ] Docker container limits (CPU, memory)
+  - [ ] Docker container limits (CPU, memory) from plan
   - [ ] Disk quota enforcement
   - [ ] GPU allocation (if available)
   - [ ] Limit overrides for admins
+
+- [ ] **Hardware Resource Scheduling**
+  - [ ] Global resource pool tracking (38 CPU, 76GB total)
+  - [ ] Resource availability check before spawn
+  - [ ] Queue system when resources unavailable
+  - [ ] Priority-based scheduling (plan priority)
+  - [ ] Server migration between hosts (future)
+  - [ ] Auto-stop idle servers to free resources
 
 - [ ] **Volume Management**
   - [ ] Persistent user volumes
@@ -873,21 +1313,27 @@ Then I get a 403 Forbidden error
 #### Deliverables
 
 - [ ] Multiple environments available (dev, neutronics, multiphysics, visualization, base)
-  - [ ] Users can choose environment when spawning
-  - [ ] Resource quotas enforced
-  - [ ] Admin can create/modify environments
+- [ ] Multiple plans available (nano, micro, small, medium, large, xlarge, gpu-small, gpu-large)
+  - [ ] Users can choose environment AND plan when spawning
+  - [ ] Resource quotas enforced per plan
+  - [ ] Admin can create/modify environments and plans
 
 #### Success Criteria
 
 ```gherkin
 Given I am a user
-When I spawn a server with "neutronics" environment
+When I spawn a server with "neutronics" environment and "small" plan
 Then the container has OpenMC and DAGMC installed
-And the container has 4 CPU and 8GB RAM allocated
+And the container has 2 CPU and 4GB RAM allocated
 
-Given I have reached my server limit (max_servers=3)
-When I try to spawn a 4th server
-Then I get an error: "Server limit reached"
+Given I am a user
+When I spawn a server with "neutronics" environment and "large" plan
+Then the container has OpenMC and DAGMC installed
+And the container has 8 CPU and 16GB RAM allocated
+
+Given I have reached my server limit for "small" plan (max_per_user=3)
+When I try to spawn a 4th "small" server
+Then I get an error: "Plan limit reached for small"
 ```
 
 ---
@@ -920,7 +1366,6 @@ Then I get an error: "Server limit reached"
 - [ ] **Alerting System**
   - [ ] Alert rules (quota thresholds, container crashes)
   - [ ] Email notifications (SMTP integration)
-  - [ ] Slack/Discord webhooks
   - [ ] In-app notifications
   - [ ] Alert history and acknowledgment
 
@@ -946,7 +1391,7 @@ Then I see CPU and memory usage updating every second
 
 Given a user exceeds their memory quota
 When the threshold is crossed
-Then the admin receives a Slack notification
+Then the admin receives an email notification
 And the user receives an in-app warning
 ```
 
@@ -984,7 +1429,6 @@ And the user receives an in-app warning
 
 - [ ] **Notifications**
   - [ ] Webhook configuration
-  - [ ] Slack/Discord integration
   - [ ] Email templates
   - [ ] In-app notification center
 
@@ -1112,12 +1556,15 @@ nukelab/
 │   │   │   │   ├── servers/         # Server management
 │   │   │   │   ├── environments/    # Environment templates
 │   │   │   │   ├── monitoring/      # Real-time monitoring
+│   │   │   │   ├── credits/         # Credit management
 │   │   │   │   ├── audit/           # Audit logs
 │   │   │   │   └── settings/        # Platform settings
 │   │   │   ├── user/                # User pages
 │   │   │   │   ├── profile/         # User profile
 │   │   │   │   ├── servers/         # My servers
-│   │   │   │   └── usage/           # My resource usage
+│   │   │   │   ├── usage/           # My resource usage
+│   │   │   │   ├── credits/         # My credit balance/history
+│   │   │   │   └── settings/        # User preferences & defaults
 │   │   │   └── page.tsx             # Dashboard home
 │   │   ├── api/                     # Next.js API routes (auth proxy)
 │   │   └── layout.tsx               # Root layout
@@ -1144,8 +1591,10 @@ nukelab/
 │   │   ├── users.py                 # User endpoints
 │   │   ├── servers.py               # Server endpoints
 │   │   ├── environments.py          # Environment endpoints
+│   │   ├── plans.py                 # Plan endpoints
 │   │   ├── monitoring.py            # Monitoring endpoints
 │   │   ├── audit.py                 # Audit endpoints
+│   │   ├── preferences.py           # User preferences endpoints
 │   │   └── system.py                # System endpoints
 │   ├── core/                        # Core modules
 │   │   ├── __init__.py
@@ -1158,14 +1607,20 @@ nukelab/
 │   │   ├── user_service.py          # User business logic
 │   │   ├── server_service.py        # Server/container management
 │   │   ├── environment_service.py   # Environment management
+│   │   ├── plan_service.py          # Plan management
 │   │   ├── monitoring_service.py    # Metrics collection
 │   │   ├── audit_service.py         # Audit logging
+│   │   ├── credit_service.py        # Credit management
+│   │   ├── preferences_service.py   # User preferences
 │   │   └── notification_service.py  # Notifications
 │   ├── models/                      # Pydantic models
 │   │   ├── __init__.py
 │   │   ├── user.py
 │   │   ├── server.py
 │   │   ├── environment.py
+│   │   ├── plan.py
+│   │   ├── credit.py
+│   │   ├── preferences.py
 │   │   └── audit.py
 │   ├── db/                          # Database
 │   │   ├── __init__.py
@@ -1516,17 +1971,17 @@ DATABASE_POOL_SIZE=20
 REDIS_URL=redis://localhost:6379/0
 
 # Auth
-AUTH_MODE=local  # local, keycloak
+AUTH_MODE=local  # local, nukehub
 JWT_SECRET=your-secret-key
 JWT_ALGORITHM=HS256
 JWT_EXPIRE_MINUTES=15
 JWT_REFRESH_EXPIRE_DAYS=7
 
-# Keycloak (production)
-KEYCLOAK_URL=https://auth.nukehub.org
-KEYCLOAK_REALM=nukehub
-KEYCLOAK_CLIENT_ID=nukelab-platform
-KEYCLOAK_CLIENT_SECRET=xxx
+# NukeHub Auth (production)
+OAUTH_URL=https://auth.nukehub.org
+OAUTH_REALM=nukehub
+OAUTH_CLIENT_ID=nukelab-platform
+OAUTH_CLIENT_SECRET=xxx
 
 # Docker
 DOCKER_SOCKET=/var/run/docker.sock
@@ -1565,7 +2020,7 @@ DEFAULT_MAX_SERVERS=3
 | **Server** | Running container instance for a user |
 | **RBAC** | Role-Based Access Control |
 | **Traefik** | Cloud-native reverse proxy and load balancer |
-| **Keycloak** | Open-source identity and access management |
+| **NukeHub Auth** | OAuth2 identity and access management provider |
 
 ---
 
@@ -1578,8 +2033,13 @@ DEFAULT_MAX_SERVERS=3
 | 2026-04-27 | Traefik v3 over Nginx | Dynamic routing, K8s ready | Approved |
 | 2026-04-27 | PostgreSQL 18 | Latest stable, JSONB performance | Approved |
 | 2026-04-27 | Nginx auth agent in containers | Self-contained auth, fast | Approved |
-| 2026-04-27 | Local auth for dev | Easy testing without Keycloak | Approved |
+| 2026-04-27 | Local auth for dev | Easy testing without NukeHub Auth | Approved |
 | 2026-04-27 | Separate dev environment | Fast builds for testing | Approved |
+| 2026-04-27 | Server Plans separate from Environments | Flexible resource allocation per environment | Approved |
+| 2026-04-27 | Credit system | Fair resource allocation on limited hardware (38 CPU, 76GB) | Approved |
+| 2026-04-27 | Queue-based scheduling | Handle resource scarcity gracefully | Approved |
+| 2026-04-27 | Daily credit allowance with no rollover | Prevent hoarding, encourage fair use | Approved |
+| 2026-04-27 | User Preferences/Defaults | Save default environment/plan/settings per user | Approved |
 
 ---
 

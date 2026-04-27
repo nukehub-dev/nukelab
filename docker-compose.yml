@@ -1,0 +1,159 @@
+version: "3.8"
+
+services:
+  # Reverse Proxy
+  traefik:
+    image: traefik:v3.1
+    command:
+      - --api.insecure=true
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.letsencrypt.acme.tlschallenge=true
+      - --certificatesresolvers.letsencrypt.acme.email=${TRAEFIK_ACME_EMAIL:-admin@nukelab.local}
+      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+      - --log.level=INFO
+      - --accesslog=true
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"  # Traefik dashboard
+    volumes:
+      - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:ro
+      - ./certs:/certs:ro
+      - letsencrypt:/letsencrypt
+    networks:
+      - nukelab-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.rule=Host(`traefik.localhost`)"
+      - "traefik.http.routers.traefik.service=api@internal"
+
+  # Database
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${DATABASE_USER:-nukelab}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-nukelab123}
+      POSTGRES_DB: ${DATABASE_NAME:-nukelab}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d
+    networks:
+      - nukelab-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-nukelab}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Cache & Message Broker
+  redis:
+    image: redis:7-alpine
+    networks:
+      - nukelab-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      - APP_ENV=${APP_ENV:-development}
+      - APP_DEBUG=${APP_DEBUG:-true}
+      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://nukelab:nukelab123@postgres:5432/nukelab}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - AUTH_MODE=${AUTH_MODE:-local}
+      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret}
+      - LOCAL_AUTH_ENABLED=${LOCAL_AUTH_ENABLED:-true}
+      - DEV_MODE=${DEV_MODE:-true}
+      - DEV_ADMIN_USER=${DEV_ADMIN_USER:-admin}
+      - DEV_ADMIN_PASSWORD=${DEV_ADMIN_PASSWORD:-admin123}
+      - DOCKER_SOCKET=${DOCKER_SOCKET:-/var/run/docker.sock}
+      - DOCKER_NETWORK=${DOCKER_NETWORK:-nukelab-network}
+    volumes:
+      - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+      - ./backend:/app
+    networks:
+      - nukelab-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.backend.rule=PathPrefix(`/api`)"
+      - "traefik.http.services.backend.loadbalancer.server.port=8000"
+      - "traefik.http.middlewares.backend-strip.stripprefix.prefixes=/api"
+      - "traefik.http.routers.backend.middlewares=backend-strip"
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    environment:
+      - NEXT_PUBLIC_API_URL=${APP_URL:-http://localhost:8000}/api
+      - NEXT_PUBLIC_APP_NAME=${APP_NAME:-NukeLab}
+    networks:
+      - nukelab-network
+    depends_on:
+      - backend
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=PathPrefix(`/`)"
+      - "traefik.http.services.frontend.loadbalancer.server.port=3000"
+      - "traefik.http.routers.frontend.priority=1"
+
+  # Celery Worker
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: celery -A app.worker worker --loglevel=info
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://nukelab:nukelab123@postgres:5432/nukelab}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret}
+    volumes:
+      - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+    networks:
+      - nukelab-network
+    depends_on:
+      - redis
+      - postgres
+
+  # Celery Beat (Scheduler)
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: celery -A app.worker beat --loglevel=info
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://nukelab:nukelab123@postgres:5432/nukelab}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+    volumes:
+      - ./backend:/app
+    networks:
+      - nukelab-network
+    depends_on:
+      - redis
+      - postgres
+
+volumes:
+  postgres-data:
+    name: nukelab-postgres-data
+  letsencrypt:
+    name: nukelab-letsencrypt
+
+networks:
+  nukelab-network:
+    name: nukelab-network
+    driver: bridge
