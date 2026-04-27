@@ -43,7 +43,7 @@ fi
 # Main script logic
 case "$1" in
     build)
-        cd $DIR/spawner
+        cd $DIR/environments/default
         echo "Building Spawner with ${CONTAINER_ENGINE}"
 
         # Add --format docker flag if using podman
