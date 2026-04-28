@@ -1,0 +1,313 @@
+"""
+User service for business logic.
+"""
+
+import uuid
+from datetime import datetime
+from typing import List, Optional, Dict, Any
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, and_, or_, func
+from sqlalchemy.orm import selectinload
+from fastapi import HTTPException, status
+
+from app.api.auth import get_password_hash
+from app.core.roles import is_valid_role, VALID_ROLES
+from app.models.user import User
+
+
+class UserService:
+    """User business logic"""
+    
+    def __init__(self, db: AsyncSession):
+        self.db = db
+    
+    async def get_by_id(self, user_id: str) -> Optional[User]:
+        """Get user by ID"""
+        result = await self.db.execute(
+            select(User).where(User.id == uuid.UUID(user_id))
+        )
+        return result.scalar_one_or_none()
+    
+    async def get_by_username(self, username: str) -> Optional[User]:
+        """Get user by username"""
+        result = await self.db.execute(
+            select(User).where(User.username == username)
+        )
+        return result.scalar_one_or_none()
+    
+    async def get_by_email(self, email: str) -> Optional[User]:
+        """Get user by email"""
+        result = await self.db.execute(
+            select(User).where(User.email == email)
+        )
+        return result.scalar_one_or_none()
+    
+    async def list_users(
+        self,
+        role: Optional[str] = None,
+        status: Optional[str] = None,
+        search: Optional[str] = None,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        page: int = 1,
+        limit: int = 20
+    ) -> Dict[str, Any]:
+        """List users with filtering and pagination"""
+        
+        # Build query
+        query = select(User)
+        
+        # Apply filters
+        if role and role != "all":
+            query = query.where(User.role == role)
+        
+        if status:
+            if status == "active":
+                query = query.where(User.is_active == True)
+            elif status == "disabled":
+                query = query.where(User.is_active == False)
+        
+        if search:
+            search_filter = or_(
+                User.username.ilike(f"%{search}%"),
+                User.email.ilike(f"%{search}%"),
+                User.full_name.ilike(f"%{search}%")
+            )
+            query = query.where(search_filter)
+        
+        # Get total count
+        count_query = select(func.count()).select_from(query.subquery())
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar()
+        
+        # Apply sorting
+        sort_column = getattr(User, sort_by, User.created_at)
+        if sort_order == "desc":
+            query = query.order_by(sort_column.desc())
+        else:
+            query = query.order_by(sort_column.asc())
+        
+        # Apply pagination
+        offset = (page - 1) * limit
+        query = query.offset(offset).limit(limit)
+        
+        result = await self.db.execute(query)
+        users = result.scalars().all()
+        
+        return {
+            "users": users,
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total,
+                "total_pages": (total + limit - 1) // limit
+            }
+        }
+    
+    async def create_user(
+        self,
+        username: str,
+        email: str,
+        password: str,
+        role: str = "user",
+        full_name: Optional[str] = None,
+        credits: int = 500,
+        created_by: Optional[User] = None
+    ) -> User:
+        """Create a new user"""
+        
+        # Validate role
+        if not is_valid_role(role):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid role. Must be one of: {', '.join(VALID_ROLES)}"
+            )
+        
+        # Check username uniqueness
+        existing = await self.get_by_username(username)
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Username already exists"
+            )
+        
+        # Check email uniqueness
+        existing = await self.get_by_email(email)
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Email already exists"
+            )
+        
+        # Create user
+        user = User(
+            username=username,
+            email=email,
+            password_hash=get_password_hash(password),
+            role=role,
+            full_name=full_name,
+            credit_balance=credits,
+            daily_allowance=credits,
+            is_active=True,
+            is_verified=True,
+        )
+        
+        self.db.add(user)
+        await self.db.commit()
+        await self.db.refresh(user)
+        
+        return user
+    
+    async def update_user(
+        self,
+        user_id: str,
+        data: Dict[str, Any],
+        updated_by: Optional[User] = None
+    ) -> User:
+        """Update user"""
+        user = await self.get_by_id(user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        # Update allowed fields
+        allowed_fields = ["full_name", "email", "profile", "preferences"]
+        
+        # Only admins can update role
+        if "role" in data and updated_by and updated_by.role in ["admin", "super_admin"]:
+            if is_valid_role(data["role"]):
+                user.role = data["role"]
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid role"
+                )
+        
+        # Only admins can update credits
+        if "credit_balance" in data and updated_by and updated_by.role in ["admin", "super_admin"]:
+            user.credit_balance = data["credit_balance"]
+        
+        for field in allowed_fields:
+            if field in data:
+                setattr(user, field, data[field])
+        
+        user.updated_at = datetime.utcnow()
+        await self.db.commit()
+        await self.db.refresh(user)
+        
+        return user
+    
+    async def delete_user(self, user_id: str) -> None:
+        """Hard delete user"""
+        user = await self.get_by_id(user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        await self.db.delete(user)
+        await self.db.commit()
+    
+    async def disable_user(
+        self,
+        user_id: str,
+        disabled: bool = True,
+        reason: Optional[str] = None
+    ) -> User:
+        """Enable or disable user"""
+        user = await self.get_by_id(user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        user.is_active = not disabled
+        
+        # Update security tracking
+        security = user.security or {}
+        if disabled:
+            security["disabled_reason"] = reason
+            security["disabled_at"] = datetime.utcnow().isoformat()
+        else:
+            security.pop("disabled_reason", None)
+            security.pop("disabled_at", None)
+        
+        user.security = security
+        await self.db.commit()
+        await self.db.refresh(user)
+        
+        return user
+    
+    async def change_password(
+        self,
+        user_id: str,
+        current_password: str,
+        new_password: str
+    ) -> bool:
+        """Change user password"""
+        from app.api.auth import verify_password
+        
+        user = await self.get_by_id(user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        # Verify current password
+        if not verify_password(current_password, user.password_hash):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Current password is incorrect"
+            )
+        
+        # Update password
+        user.password_hash = get_password_hash(new_password)
+        
+        # Update security tracking
+        security = user.security or {}
+        security["password_changed_at"] = datetime.utcnow().isoformat()
+        user.security = security
+        
+        await self.db.commit()
+        return True
+    
+    async def get_user_stats(self, user_id: str) -> Dict[str, Any]:
+        """Get user statistics"""
+        from app.models.server import Server
+        
+        user = await self.get_by_id(user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        # Count servers
+        result = await self.db.execute(
+            select(func.count()).where(Server.user_id == user.id)
+        )
+        server_count = result.scalar()
+        
+        result = await self.db.execute(
+            select(func.count()).where(
+                and_(Server.user_id == user.id, Server.status == "running")
+            )
+        )
+        running_count = result.scalar()
+        
+        return {
+            "user_id": str(user.id),
+            "server_count": server_count,
+            "running_servers": running_count,
+            "credit_balance": user.credit_balance,
+            "daily_allowance": user.daily_allowance,
+            "role": user.role,
+            "is_active": user.is_active,
+            "created_at": user.created_at.isoformat() if user.created_at else None,
+            "last_login": user.last_login.isoformat() if user.last_login else None,
+        }

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
-from app.api import auth, users, servers, tokens
+from app.api import auth, users, servers, tokens, credits, admin
 from app.db.base import Base
 from app.db.session import engine
 
@@ -29,6 +29,8 @@ app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(users.router, prefix="/users", tags=["users"])
 app.include_router(servers.router, prefix="/servers", tags=["servers"])
 app.include_router(tokens.router, prefix="/tokens", tags=["tokens"])
+app.include_router(credits.router, prefix="/credits", tags=["credits"])
+app.include_router(admin.router, prefix="/admin", tags=["admin"])
 
 
 @app.on_event("startup")
