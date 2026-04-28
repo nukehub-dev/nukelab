@@ -19,7 +19,7 @@ interface AuthState {
   error: string | null;
   
   // Actions
-  setUser: (user: User) => void;
+  setUser: (user: Partial<User>) => void;
   setToken: (token: string) => void;
   setError: (error: string | null) => void;
   setLoading: (loading: boolean) => void;
@@ -40,7 +40,9 @@ export const useAuthStore = create<AuthState>()(
       isLoading: false,
       error: null,
       
-      setUser: (user) => set({ user }),
+      setUser: (user) => set((state) => ({
+        user: state.user ? { ...state.user, ...user } : (user as User)
+      })),
       setToken: (token) => set({ token }),
       setError: (error) => set({ error }),
       setLoading: (loading) => set({ isLoading: loading }),

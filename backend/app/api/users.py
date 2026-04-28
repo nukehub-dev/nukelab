@@ -13,6 +13,7 @@ from app.dependencies import require_permissions, PermissionChecker
 from app.db.session import get_db
 from app.models.user import User
 from app.services.user_service import UserService
+from app.services.activity_service import ActivityService
 
 router = APIRouter()
 
@@ -128,6 +129,16 @@ async def create_user(
         full_name=request.full_name,
         credits=request.credits,
         created_by=current_user
+    )
+    
+    # Log activity
+    activity_service = ActivityService(db)
+    await activity_service.log(
+        action="user_created",
+        target_type="user",
+        target_id=str(user.id),
+        actor_id=str(current_user.id),
+        details={"username": user.username, "role": user.role}
     )
     
     return serialize_user(user)
