@@ -26,9 +26,21 @@ class Permission:
     RESOURCES_READ_OWN = "resources:read_own"
     RESOURCES_READ_ALL = "resources:read_all"
     
-    # Environment/Plan management
-    ENVIRONMENTS_MANAGE = "environments:manage"
-    PLANS_MANAGE = "plans:manage"
+    # Environment management
+    ENVIRONMENT_CREATE = "environment:create"
+    ENVIRONMENT_READ = "environment:read"
+    ENVIRONMENT_UPDATE = "environment:update"
+    ENVIRONMENT_DELETE = "environment:delete"
+    
+    # Plan management
+    PLAN_CREATE = "plan:create"
+    PLAN_READ = "plan:read"
+    PLAN_UPDATE = "plan:update"
+    PLAN_DELETE = "plan:delete"
+    
+    # Quota management
+    QUOTA_READ = "quota:read"
+    QUOTA_UPDATE = "quota:update"
     
     # Credit management
     CREDITS_READ = "credits:read"
@@ -61,8 +73,16 @@ class Permission:
             cls.SERVERS_MANAGE,
             cls.RESOURCES_READ_OWN,
             cls.RESOURCES_READ_ALL,
-            cls.ENVIRONMENTS_MANAGE,
-            cls.PLANS_MANAGE,
+            cls.ENVIRONMENT_CREATE,
+            cls.ENVIRONMENT_READ,
+            cls.ENVIRONMENT_UPDATE,
+            cls.ENVIRONMENT_DELETE,
+            cls.PLAN_CREATE,
+            cls.PLAN_READ,
+            cls.PLAN_UPDATE,
+            cls.PLAN_DELETE,
+            cls.QUOTA_READ,
+            cls.QUOTA_UPDATE,
             cls.CREDITS_READ,
             cls.CREDITS_GRANT,
             cls.CREDITS_DEDUCT,

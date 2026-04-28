@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
-from app.api import auth, users, servers, tokens, credits, admin, preferences
+from app.api import auth, users, servers, tokens, credits, admin, preferences, environments, plans, quotas
 from app.db.base import Base
 from app.db.session import engine
 
@@ -32,6 +32,9 @@ app.include_router(tokens.router, prefix="/tokens", tags=["tokens"])
 app.include_router(credits.router, prefix="/credits", tags=["credits"])
 app.include_router(admin.router, prefix="/admin", tags=["admin"])
 app.include_router(preferences.router, prefix="/preferences", tags=["preferences"])
+app.include_router(environments.router, prefix="/environments", tags=["environments"])
+app.include_router(plans.router, prefix="/plans", tags=["plans"])
+app.include_router(quotas.router, prefix="/quotas", tags=["quotas"])
 
 
 @app.on_event("startup")
@@ -39,6 +42,13 @@ async def startup():
     # Create tables
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    
+    # Seed default data
+    try:
+        from app.db.seed import seed_all
+        await seed_all()
+    except Exception as e:
+        print(f"Warning: Failed to seed data: {e}")
 
 
 @app.get("/")

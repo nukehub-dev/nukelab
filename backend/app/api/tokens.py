@@ -138,6 +138,35 @@ async def revoke_token(
     return None
 
 
+@router.delete("/{token_id}/permanent", status_code=status.HTTP_204_NO_CONTENT)
+async def permanently_delete_token(
+    token_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Permanently delete an API token from the database"""
+    result = await db.execute(
+        select(ApiToken).where(
+            and_(
+                ApiToken.id == token_id,
+                ApiToken.user_id == current_user.id
+            )
+        )
+    )
+    token = result.scalar_one_or_none()
+    
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Token not found"
+        )
+    
+    await db.delete(token)
+    await db.commit()
+    
+    return None
+
+
 @router.post("/{token_id}/regenerate", response_model=TokenCreateResponse)
 async def regenerate_token(
     token_id: str,

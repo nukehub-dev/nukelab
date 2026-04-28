@@ -18,6 +18,10 @@ AsyncSessionLocal = sessionmaker(
 Base = declarative_base()
 
 
+# Export async_session for seed scripts
+async_session = AsyncSessionLocal
+
+
 async def get_db():
     async with AsyncSessionLocal() as session:
         try:

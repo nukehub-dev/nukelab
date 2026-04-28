@@ -12,7 +12,8 @@ import {
   Settings, 
   Shield,
   LogOut,
-  User
+  User,
+  Key
 } from 'lucide-react';
 
 export default function DashboardLayout({
@@ -43,11 +44,14 @@ export default function DashboardLayout({
     { name: 'Profile', href: '/dashboard/profile', icon: User },
     { name: 'Servers', href: '/dashboard/servers', icon: Server },
     { name: 'Credits', href: '/dashboard/credits', icon: CreditCard },
+    { name: 'API Tokens', href: '/dashboard/tokens', icon: Key },
   ];
 
   const adminNavigation = [
     { name: 'Admin', href: '/dashboard/admin', icon: Shield },
     { name: 'Users', href: '/dashboard/admin/users', icon: Users },
+    { name: 'Environments', href: '/dashboard/admin/environments', icon: Server },
+    { name: 'Plans', href: '/dashboard/admin/plans', icon: CreditCard },
     { name: 'Settings', href: '/dashboard/settings', icon: Settings },
   ];
 

@@ -2,6 +2,9 @@
 
 Multi-user scientific computing platform with granular RBAC, real-time monitoring, and credit-based resource management.
 
+**Status**: Active Development (Phases 1-3 Complete)  
+**Last Updated**: April 28, 2026
+
 ## Quick Start
 
 ### Prerequisites
@@ -167,10 +170,70 @@ nukelab/
 - **Task Queue**: Celery
 - **Container Engine**: Docker or Podman
 
+## API Endpoints
+
+The platform exposes 52+ REST API endpoints. Auto-generated docs available at `/api/docs`.
+
+### Authentication
+- `POST /api/auth/login` - User login (returns JWT token)
+- `GET /api/auth/me` - Get current user profile
+
+### Users
+- `GET /api/users/` - List users (admin/moderator)
+- `POST /api/users/` - Create user (admin/moderator)
+- `GET /api/users/{id}` - Get user details
+- `PUT /api/users/{id}` - Update user profile
+- `DELETE /api/users/{id}` - Delete user (admin)
+- `POST /api/users/{id}/disable` - Disable/enable user with reason
+
+### Servers
+- `GET /api/servers/` - List user's servers
+- `POST /api/servers/` - Spawn new server
+- `POST /api/servers/{id}/start` - Start server
+- `POST /api/servers/{id}/stop` - Stop server
+- `POST /api/servers/{id}/restart` - Restart server
+- `DELETE /api/servers/{id}` - Delete server
+
+### Environments
+- `GET /api/environments/` - List environment templates
+- `POST /api/environments/` - Create environment (admin)
+- `PUT /api/environments/{id}` - Update environment (admin)
+- `DELETE /api/environments/{id}` - Deactivate environment (admin)
+- `DELETE /api/environments/{id}/permanent` - Permanently delete (admin)
+- `POST /api/environments/{id}/activate` - Activate environment (admin)
+- `POST /api/environments/{id}/clone` - Clone environment (admin)
+
+### Plans
+- `GET /api/plans/` - List server plans
+- `POST /api/plans/` - Create plan (admin)
+- `PUT /api/plans/{id}` - Update plan (admin)
+- `DELETE /api/plans/{id}` - Deactivate plan (admin)
+- `DELETE /api/plans/{id}/permanent` - Permanently delete (admin)
+- `POST /api/plans/{id}/activate` - Activate plan (admin)
+
+### Credits
+- `GET /api/credits/` - Get current user credits
+- `GET /api/credits/history` - Credit transaction history
+- `POST /api/credits/users/{id}/grant` - Grant credits (admin)
+- `POST /api/credits/users/{id}/deduct` - Deduct credits (admin)
+
+### Quotas
+- `GET /api/quotas/` - Get current user's resource quota
+- `POST /api/quotas/check` - Check if spawn is allowed
+
+### Admin
+- `GET /api/admin/stats` - Dashboard statistics
+- `GET /api/admin/users` - Admin user listing
+- `POST /api/admin/credits/grant-bulk` - Bulk credit grant
+- `GET /api/admin/activity` - Activity logs
+
 ## Documentation
 
 - [Phase 1 Plan](phases/01-foundation/PLAN.md)
+- [Phase 2 Plan](phases/02-user-management/PLAN.md)
+- [Phase 3 Plan](phases/03-environment-resource-management/PLAN.md)
 - [Full Architecture Plan](PLAN.md)
+- [Phase Review Report](phases/REVIEW-REPORT.md)
 
 ## License
 

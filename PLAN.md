@@ -1,7 +1,7 @@
 # NukeLab Platform v2.0 — Architecture & Implementation Plan
 
-**Status**: Draft v1.0  
-**Last Updated**: April 27, 2026  
+**Status**: In Development - Phases 1-3 Complete  
+**Last Updated**: April 28, 2026  
 **Target Timeline**: 6+ months  
 **Tech Stack**: Next.js 16, FastAPI, PostgreSQL 18, Redis, Traefik v3, Docker/Podman
 
@@ -1228,57 +1228,57 @@ Then the container stops gracefully
 
 #### Tasks
 
-- [ ] **RBAC Implementation**
-  - [ ] Role model with permission matrix
-  - [ ] Permission checking middleware
-  - [ ] Route-level permission decorators
-  - [ ] Frontend permission hooks/components
+- [x] **RBAC Implementation**
+  - [x] Role model with permission matrix
+  - [x] Permission checking middleware
+  - [x] Route-level permission decorators
+  - [x] Frontend permission hooks/components
 
-- [ ] **User CRUD**
-  - [ ] Create user (admin/moderator)
-  - [ ] Read user list with filters (role, status, search)
-  - [ ] Update user (profile, role, quotas)
-  - [ ] Delete/disable user
-  - [ ] Bulk operations
+- [x] **User CRUD**
+  - [x] Create user (admin/moderator)
+  - [x] Read user list with filters (role, status, search)
+  - [x] Update user (profile, role, quotas)
+  - [x] Delete/disable user
+  - [ ] Bulk operations (Phase 5)
 
-- [ ] **User Profile**
-  - [ ] View own profile
-  - [ ] Edit own profile
-  - [ ] Change password
-  - [ ] View own servers and usage
+- [x] **User Profile**
+  - [x] View own profile
+  - [x] Edit own profile
+  - [x] Change password
+  - [x] View own servers and usage
 
-- [ ] **User Preferences**
-  - [ ] Preferences model (defaults, display, notifications)
-  - [ ] Preferences API (get, update, reset)
-  - [ ] Settings page UI
-  - [ ] Default environment/plan selection
-  - [ ] Theme/language/timezone settings
-  - [ ] Notification preferences
-  - [ ] Quick spawn with saved defaults
+- [x] **User Preferences**
+  - [x] Preferences model (defaults, display, notifications)
+  - [x] Preferences API (get, update, reset)
+  - [x] Settings page UI
+  - [x] Default environment/plan selection
+  - [x] Theme/language/timezone settings
+  - [ ] Notification preferences (Phase 5)
+  - [ ] Quick spawn with saved defaults (Phase 5)
 
-- [ ] **Credit System**
-  - [ ] Credit balance model and ledger
-  - [ ] Daily allowance system (automated reset)
-  - [ ] Credit consumption on server usage
-  - [ ] Credit grant/deduct (admin)
-  - [ ] Low credit alerts and auto-stop
-  - [ ] Credit transaction history
+- [x] **Credit System**
+  - [x] Credit balance model and ledger
+  - [x] Daily allowance system (automated reset)
+  - [ ] Credit consumption on server usage (Phase 5)
+  - [x] Credit grant/deduct (admin)
+  - [ ] Low credit alerts and auto-stop (Phase 5)
+  - [x] Credit transaction history
 
-- [ ] **Admin Dashboard**
-  - [ ] User management table
-  - [ ] Role assignment UI
-  - [ ] Permission matrix editor
-  - [ ] User activity timeline
-  - [ ] Credit management (grant/deduct/view)
-  - [ ] Server management table
-  - [ ] Bulk actions (start all, stop all, delete all)
+- [x] **Admin Dashboard**
+  - [x] User management table
+  - [x] Role assignment UI
+  - [ ] Permission matrix editor (Phase 5)
+  - [ ] User activity timeline (Phase 5)
+  - [x] Credit management (grant/deduct/view)
+  - [x] Server management table
+  - [ ] Bulk actions (start all, stop all, delete all) (Phase 5)
 
 - [ ] **Server Lifecycle**
-  - [ ] Start/stop/restart/delete servers
-  - [ ] Credit check before start
-  - [ ] Server status polling
-  - [ ] Server logs viewer
-  - [ ] Server detail page
+  - [x] Start/stop/restart/delete servers (API ready, UI basic)
+  - [x] Credit check before start
+  - [ ] Server status polling (Phase 4)
+  - [ ] Server logs viewer (Phase 4)
+  - [ ] Server detail page (Phase 5)
 
 #### Deliverables
 
@@ -1314,52 +1314,52 @@ Then I get an error: "Insufficient credits"
 
 #### Tasks
 
-- [ ] **Environment Template System**
-  - [ ] Environment CRUD API
-  - [ ] Environment builder UI (admin)
-  - [ ] Environment selection in spawn form
-  - [ ] Environment-specific branding
-  - [ ] Environment activation/deactivation
+- [x] **Environment Template System**
+  - [x] Environment CRUD API
+  - [x] Environment builder UI (admin)
+  - [ ] Environment selection in spawn form (Phase 5)
+  - [x] Environment-specific branding
+  - [x] Environment activation/deactivation
 
-- [ ] **Server Plans**
-  - [ ] Plan CRUD API (admin)
-  - [ ] Plan builder UI (admin)
-  - [ ] Plan selection in spawn form
-  - [ ] Plan restrictions enforcement (role, approval)
-  - [ ] Custom plans per user (admin override)
-  - [ ] Plan usage tracking
+- [x] **Server Plans**
+  - [x] Plan CRUD API (admin)
+  - [x] Plan builder UI (admin)
+  - [ ] Plan selection in spawn form (Phase 5)
+  - [x] Plan restrictions enforcement (role, approval)
+  - [ ] Custom plans per user (admin override) (Phase 5)
+  - [ ] Plan usage tracking (Phase 5)
 
-- [ ] **Resource Quotas**
-  - [ ] Quota model (per-user, per-role, per-plan)
-  - [ ] Quota enforcement on spawn
-  - [ ] Quota usage tracking
-  - [ ] Quota exceeded alerts
+- [x] **Resource Quotas**
+  - [x] Quota model (per-user)
+  - [x] Quota enforcement on spawn
+  - [x] Quota usage tracking
+  - [ ] Quota exceeded alerts (Phase 4)
 
 - [ ] **Resource Limits**
-  - [ ] Docker container limits (CPU, memory) from plan
-  - [ ] Disk quota enforcement
-  - [ ] GPU allocation (if available)
-  - [ ] Limit overrides for admins
+  - [ ] Docker container limits (CPU, memory) from plan (Phase 5)
+  - [ ] Disk quota enforcement (Phase 5)
+  - [ ] GPU allocation (if available) (Phase 5)
+  - [ ] Limit overrides for admins (Phase 5)
 
 - [ ] **Hardware Resource Scheduling**
-  - [ ] Global resource pool tracking (38 CPU, 76GB total)
-  - [ ] Resource availability check before spawn
-  - [ ] Queue system when resources unavailable
-  - [ ] Priority-based scheduling (plan priority)
+  - [ ] Global resource pool tracking (Phase 5)
+  - [x] Resource availability check before spawn
+  - [ ] Queue system when resources unavailable (Phase 5)
+  - [x] Priority-based scheduling (plan priority)
   - [ ] Server migration between hosts (future)
-  - [ ] Auto-stop idle servers to free resources
+  - [ ] Auto-stop idle servers to free resources (Phase 4)
 
 - [ ] **Volume Management**
-  - [ ] Persistent user volumes
-  - [ ] Shared workspace volumes
-  - [ ] Volume backup/restore
-  - [ ] Volume quota enforcement
+  - [ ] Persistent user volumes (Phase 5)
+  - [ ] Shared workspace volumes (Phase 5)
+  - [ ] Volume backup/restore (Phase 5)
+  - [ ] Volume quota enforcement (Phase 5)
 
 - [ ] **Environment Images**
-  - [ ] Build system for environment images
-  - [ ] Image registry integration
-  - [ ] Image versioning
-  - [ ] Base image updates
+  - [ ] Build system for environment images (Phase 5)
+  - [ ] Image registry integration (Phase 5)
+  - [ ] Image versioning (Phase 5)
+  - [ ] Base image updates (Phase 5)
 
 #### Deliverables
 
