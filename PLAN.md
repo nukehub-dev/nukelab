@@ -1395,43 +1395,43 @@ Then I get an error: "Plan limit reached for small"
 
 #### Tasks
 
-- [ ] **Metrics Collection**
-  - [ ] Docker Stats API integration (async streaming)
-  - [ ] Custom metrics collector (CPU, memory, disk, network)
-  - [ ] GPU metrics (nvidia-smi integration)
-  - [ ] Metrics storage in PostgreSQL (time-series)
+- [x] **Metrics Collection**
+  - [x] Docker Stats API integration (async streaming)
+  - [x] Custom metrics collector (CPU, memory, disk, network)
+  - [ ] GPU metrics (nvidia-smi integration) *[Deferred]*
+  - [x] Metrics storage in PostgreSQL (time-series)
 
-- [ ] **WebSocket Streaming**
-  - [ ] WebSocket endpoint for real-time metrics
-  - [ ] Subscription model (subscribe to specific servers/users)
-  - [ ] Efficient data serialization (MessagePack or JSON)
-  - [ ] Connection management and cleanup
+- [x] **WebSocket Streaming**
+  - [x] WebSocket endpoint for real-time metrics
+  - [x] Subscription model (subscribe to specific servers/users)
+  - [x] Efficient data serialization (JSON) *[MessagePack deferred]*
+  - [x] Connection management and cleanup
 
-- [ ] **Monitoring Dashboard**
-  - [ ] Global resource overview (all users/servers)
-  - [ ] Per-user resource usage page
-  - [ ] Per-server real-time charts
-  - [ ] Top consumers leaderboard
-  - [ ] Resource usage trends (7d, 30d, 90d)
+- [x] **Monitoring Dashboard**
+  - [x] Global resource overview (all users/servers)
+  - [ ] Per-user resource usage page *[Deferred to Phase 5]*
+  - [x] Per-server real-time charts
+  - [ ] Top consumers leaderboard *[Deferred]*
+  - [ ] Resource usage trends (7d, 30d, 90d) *[Deferred]*
 
-- [ ] **Alerting System**
-  - [ ] Alert rules (quota thresholds, container crashes)
-  - [ ] Email notifications (SMTP integration)
-  - [ ] In-app notifications
-  - [ ] Alert history and acknowledgment
+- [x] **Alerting System**
+  - [x] Alert rules (quota thresholds, container crashes)
+  - [ ] Email notifications (SMTP integration) *[Deferred]*
+  - [ ] In-app notifications *[Deferred]*
+  - [x] Alert history and acknowledgment
 
-- [ ] **Health Checks**
-  - [ ] Container health checks
-  - [ ] Auto-restart on failure
-  - [ ] Unhealthy server notifications
-  - [ ] System health dashboard
+- [x] **Health Checks**
+  - [x] Container health checks
+  - [ ] Auto-restart on failure *[Deferred]*
+  - [x] Unhealthy server notifications
+  - [x] System health dashboard
 
 #### Deliverables
 
-- [ ] Real-time monitoring dashboard with live charts
-  - [ ] Admin can see all users' resource usage
-  - [ ] Users can see own usage
-  - [ ] Alerts sent when quotas exceeded
+- [x] Real-time monitoring dashboard with live charts
+  - [x] Admin can see all users' resource usage
+  - [x] Users can see own usage
+  - [ ] Alerts sent when quotas exceeded *[Rules API ready, needs seeding]*
 
 #### Success Criteria
 

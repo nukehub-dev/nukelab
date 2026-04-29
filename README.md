@@ -2,8 +2,8 @@
 
 Multi-user scientific computing platform with granular RBAC, real-time monitoring, and credit-based resource management.
 
-**Status**: Active Development (Phases 1-3 Complete)  
-**Last Updated**: April 28, 2026
+**Status**: Active Development (Phases 1-4 Complete)  
+**Last Updated**: April 29, 2026
 
 ## Quick Start
 
@@ -220,6 +220,17 @@ The platform exposes 52+ REST API endpoints. Auto-generated docs available at `/
 ### Quotas
 - `GET /api/quotas/` - Get current user's resource quota
 - `POST /api/quotas/check` - Check if spawn is allowed
+
+### Metrics & Monitoring
+- `GET /api/metrics/system/latest` - Latest system metrics
+- `GET /api/metrics/system` - System metrics history
+- `GET /api/metrics/servers/{id}` - Server metrics history
+- `GET /api/metrics/servers/{id}/latest` - Latest server metrics
+- `GET /api/metrics/alerts/rules` - List alert rules
+- `POST /api/metrics/alerts/rules` - Create alert rule
+- `GET /api/metrics/alerts/history` - Alert history
+- `GET /api/metrics/health/summary` - Health summary
+- `WS /ws` - Real-time metrics WebSocket
 
 ### Admin
 - `GET /api/admin/stats` - Dashboard statistics

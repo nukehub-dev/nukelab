@@ -17,6 +17,7 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  isHydrated: boolean;
   
   // Actions
   setUser: (user: Partial<User>) => void;
@@ -31,6 +32,19 @@ interface AuthState {
   isSuperAdmin: () => boolean;
 }
 
+// Cookie helpers
+const setCookie = (token: string) => {
+  if (typeof document !== 'undefined') {
+    document.cookie = `nukelab_token=${token}; path=/; max-age=86400; SameSite=Lax`;
+  }
+};
+
+const clearCookie = () => {
+  if (typeof document !== 'undefined') {
+    document.cookie = 'nukelab_token=; path=/; max-age=0; SameSite=Lax';
+  }
+};
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
@@ -39,29 +53,41 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       isLoading: false,
       error: null,
+      isHydrated: false,
       
       setUser: (user) => set((state) => ({
         user: state.user ? { ...state.user, ...user } : (user as User)
       })),
-      setToken: (token) => set({ token }),
+      
+      setToken: (token) => {
+        setCookie(token);
+        set({ token });
+      },
+      
       setError: (error) => set({ error }),
       setLoading: (loading) => set({ isLoading: loading }),
       
-      login: (token, user) => set({
-        token,
-        user,
-        isAuthenticated: true,
-        error: null,
-        isLoading: false
-      }),
+      login: (token, user) => {
+        setCookie(token);
+        set({
+          token,
+          user,
+          isAuthenticated: true,
+          error: null,
+          isLoading: false
+        });
+      },
       
-      logout: () => set({
-        user: null,
-        token: null,
-        isAuthenticated: false,
-        error: null,
-        isLoading: false
-      }),
+      logout: () => {
+        clearCookie();
+        set({
+          user: null,
+          token: null,
+          isAuthenticated: false,
+          error: null,
+          isLoading: false
+        });
+      },
       
       isAdmin: () => {
         const { user } = get();
@@ -75,7 +101,16 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'auth-storage',
-      partialize: (state) => ({ token: state.token, user: state.user, isAuthenticated: state.isAuthenticated })
+      partialize: (state) => ({ 
+        user: state.user, 
+        isAuthenticated: state.isAuthenticated,
+        token: state.token
+      }),
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          state.isHydrated = true;
+        }
+      }
     }
   )
 );

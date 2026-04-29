@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     # Security
     jwt_secret: str = "change-me"
     jwt_algorithm: str = "HS256"
-    jwt_expire_minutes: int = 15
+    jwt_expire_minutes: int = 1440  # 24 hours
     jwt_refresh_expire_days: int = 7
     
     # Auth

@@ -1,9 +1,10 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
-from app.api import auth, users, servers, tokens, credits, admin, preferences, environments, plans, quotas
+from app.api import auth, users, servers, tokens, credits, admin, preferences, environments, plans, quotas, metrics
 from app.db.base import Base
 from app.db.session import engine
+from app.websocket.metrics_socket import manager
 
 app = FastAPI(
     title=settings.app_name,
@@ -35,6 +36,13 @@ app.include_router(preferences.router, prefix="/preferences", tags=["preferences
 app.include_router(environments.router, prefix="/environments", tags=["environments"])
 app.include_router(plans.router, prefix="/plans", tags=["plans"])
 app.include_router(quotas.router, prefix="/quotas", tags=["quotas"])
+app.include_router(metrics.router, prefix="/metrics", tags=["metrics"])
+
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    """WebSocket endpoint for real-time metrics"""
+    await manager.handle_connection(websocket)
 
 
 @app.on_event("startup")
@@ -49,6 +57,13 @@ async def startup():
         await seed_all()
     except Exception as e:
         print(f"Warning: Failed to seed data: {e}")
+    
+    # Start Redis listener for metrics broadcasting
+    try:
+        import asyncio
+        asyncio.create_task(manager.start_redis_listener())
+    except Exception as e:
+        print(f"Warning: Failed to start Redis listener: {e}")
 
 
 @app.get("/")

@@ -17,6 +17,26 @@ celery_app.conf.update(
     task_track_started=True,
     task_time_limit=3600,
     worker_prefetch_multiplier=1,
+    worker_pool='threads',
+    worker_concurrency=4,
+    beat_schedule={
+        'collect-container-metrics': {
+            'task': 'app.tasks.collect_container_metrics',
+            'schedule': 5.0,  # Every 5 seconds
+        },
+        'collect-system-metrics': {
+            'task': 'app.tasks.collect_system_metrics',
+            'schedule': 60.0,  # Every 60 seconds
+        },
+        'check-container-health': {
+            'task': 'app.tasks.check_container_health',
+            'schedule': 30.0,  # Every 30 seconds
+        },
+        'evaluate-alert-rules': {
+            'task': 'app.tasks.evaluate_alert_rules',
+            'schedule': 60.0,  # Every 60 seconds
+        },
+    },
 )
 
 # Discover tasks automatically

@@ -121,3 +121,10 @@ async def get_docker_client():
     if not docker_client.client:
         await docker_client.connect()
     return docker_client
+
+
+async def get_fresh_docker_client():
+    """Get a fresh Docker client instance (for Celery workers)."""
+    client = DockerClient()
+    await client.connect()
+    return client

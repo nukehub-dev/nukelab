@@ -13,7 +13,8 @@ import {
   Shield,
   LogOut,
   User,
-  Key
+  Key,
+  Activity
 } from 'lucide-react';
 
 export default function DashboardLayout({
@@ -22,18 +23,28 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const { user, isAuthenticated, logout, isAdmin } = useAuthStore();
+  const { user, isAuthenticated, logout, isAdmin, isHydrated, token } = useAuthStore();
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    // Only redirect after hydration is complete
+    if (isHydrated && !isAuthenticated && !token) {
       router.push('/login');
     }
-  }, [isAuthenticated, router]);
+  }, [isHydrated, isAuthenticated, token, router]);
 
   const handleLogout = () => {
     logout();
     router.push('/login');
   };
+
+  // Show nothing while hydrating to avoid flash of unauthenticated state
+  if (!isHydrated) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return null;
@@ -49,6 +60,7 @@ export default function DashboardLayout({
 
   const adminNavigation = [
     { name: 'Admin', href: '/dashboard/admin', icon: Shield },
+    { name: 'Monitoring', href: '/dashboard/admin/monitoring', icon: Activity },
     { name: 'Users', href: '/dashboard/admin/users', icon: Users },
     { name: 'Environments', href: '/dashboard/admin/environments', icon: Server },
     { name: 'Plans', href: '/dashboard/admin/plans', icon: CreditCard },

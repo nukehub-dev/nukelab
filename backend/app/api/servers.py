@@ -20,9 +20,8 @@ router = APIRouter()
 
 class ServerCreateRequest(BaseModel):
     name: str
-    environment: str = "dev"
-    cpu: float = 1.0
-    memory: str = "2g"
+    plan_id: str
+    environment_id: str
 
 
 class ServerResponse(BaseModel):
@@ -46,6 +45,96 @@ async def get_server_with_permission_check(
     result = await db.execute(
         select(Server).where(Server.id == server_id)
     )
+    server = result.scalar_one_or_none()
+    
+    if not server:
+        raise HTTPException(status_code=404, detail="Server not found")
+    
+    if require_ownership and str(server.user_id) != str(current_user.id):
+        checker = PermissionChecker(current_user)
+        checker.require(Permission.SERVERS_MANAGE)
+    
+    return server
+
+
+@router.post("/", response_model=ServerResponse)
+async def create_server(
+    request: ServerCreateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create and spawn a new server using a plan and environment template."""
+    from app.services.quota_service import QuotaService
+    from app.services.plan_service import PlanService
+    from app.services.environment_service import EnvironmentService
+    import uuid
+    
+    checker = PermissionChecker(current_user)
+    checker.require(Permission.SERVERS_START)
+    
+    # Validate plan exists and user can use it
+    plan_service = PlanService(db)
+    plan = await plan_service.get_by_id(request.plan_id)
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    
+    # Check role-based plan access
+    if plan.allowed_roles and current_user.role not in plan.allowed_roles:
+        raise HTTPException(status_code=403, detail="Plan not available for your role")
+    
+    if not plan.is_active:
+        raise HTTPException(status_code=400, detail="Plan is not active")
+    
+    # Validate environment exists
+    env_service = EnvironmentService(db)
+    environment = await env_service.get_by_id(request.environment_id)
+    if not environment:
+        raise HTTPException(status_code=404, detail="Environment not found")
+    
+    # Check quota before spawning
+    quota_service = QuotaService(db)
+    quota_check = await quota_service.check_spawn_allowed(
+        user_id=str(current_user.id),
+        plan_id=request.plan_id
+    )
+    
+    if not quota_check["allowed"]:
+        raise HTTPException(status_code=429, detail=quota_check["reason"])
+    
+    try:
+        # Spawn the container using plan resources + environment image
+        server = await spawner.spawn(
+            user_id=str(current_user.id),
+            username=current_user.username,
+            server_name=request.name,
+            environment=environment.slug,
+            cpu=plan.cpu_limit,
+            memory=plan.memory_limit,
+            disk=plan.disk_limit,
+        )
+        
+        # Store plan reference
+        server.plan_id = uuid.UUID(request.plan_id)
+        
+        # Save to database
+        db.add(server)
+        await db.commit()
+        await db.refresh(server)
+        
+        return ServerResponse(
+            id=str(server.id),
+            name=server.name,
+            status=server.status,
+            external_url=server.external_url,
+            created_at=server.created_at.isoformat() if server.created_at else None,
+        )
+        
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to spawn server: {str(e)}"
+        )
     server = result.scalar_one_or_none()
     
     if not server:

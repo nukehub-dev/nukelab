@@ -148,6 +148,71 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSessi
     return {"access_token": access_token, "token_type": "bearer"}
 
 
+@router.get("/verify")
+async def verify_auth(request: Request, db: AsyncSession = Depends(get_db)):
+    """Verify authentication for nginx auth_request module.
+    
+    Returns 200 with X-User-Id header if valid, 401 otherwise.
+    """
+    authorization = request.headers.get("Authorization", "")
+    token = ""
+    
+    if " " in authorization:
+        scheme, token = authorization.split(" ", 1)
+        if scheme.lower() not in ["bearer", "token"]:
+            raise HTTPException(status_code=401, detail="Invalid scheme")
+    elif authorization:
+        token = authorization
+    else:
+        # Try cookie
+        cookie_token = request.cookies.get("nukelab_token")
+        if cookie_token:
+            token = cookie_token
+        else:
+            raise HTTPException(status_code=401, detail="Missing token")
+    
+    # Try JWT
+    try:
+        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+        username: str = payload.get("sub")
+        if username:
+            result = await db.execute(select(User).where(User.username == username))
+            user = result.scalar_one_or_none()
+            if user and user.is_active:
+                from fastapi.responses import Response
+                return Response(
+                    status_code=200,
+                    headers={"X-User-Id": str(user.id)}
+                )
+    except JWTError:
+        pass
+    
+    # Try API token
+    result = await db.execute(
+        select(ApiToken).where(
+            ApiToken.is_active == True,
+            ApiToken.revoked_at == None
+        )
+    )
+    api_tokens = result.scalars().all()
+    
+    for api_token in api_tokens:
+        if verify_password(token, api_token.token_hash):
+            if api_token.expires_at and api_token.expires_at < datetime.utcnow():
+                raise HTTPException(status_code=401, detail="Token expired")
+            
+            result = await db.execute(select(User).where(User.id == api_token.user_id))
+            user = result.scalar_one_or_none()
+            if user and user.is_active:
+                from fastapi.responses import Response
+                return Response(
+                    status_code=200,
+                    headers={"X-User-Id": str(user.id)}
+                )
+    
+    raise HTTPException(status_code=401, detail="Invalid token")
+
+
 @router.get("/me")
 async def get_me(current_user: User = Depends(get_current_user)):
     return {

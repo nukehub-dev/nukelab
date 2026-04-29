@@ -7,3 +7,8 @@ from app.models.environment_template import EnvironmentTemplate
 from app.models.server_plan import ServerPlan
 from app.models.resource_quota import ResourceQuota
 from app.models.server_queue import ServerQueue
+from app.models.server_metric import ServerMetric
+from app.models.system_metric import SystemMetric
+from app.models.alert_rule import AlertRule
+from app.models.alert_history import AlertHistory
+from app.models.health_check import HealthCheck

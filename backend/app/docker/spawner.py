@@ -41,7 +41,9 @@ class ServerSpawner:
             "traefik.enable": "true",
             f"traefik.http.routers.server-{server_id}.rule": f"PathPrefix(`{route_prefix}`)",
             f"traefik.http.routers.server-{server_id}.service": f"server-{server_id}",
+            f"traefik.http.routers.server-{server_id}.middlewares": f"server-{server_id}-strip@docker",
             f"traefik.http.services.server-{server_id}.loadbalancer.server.port": "80",
+            f"traefik.http.middlewares.server-{server_id}-strip.stripprefix.prefixes": route_prefix,
             "nukelab.server.id": server_id,
             "nukelab.user.id": user_id,
             "nukelab.user.name": username,
@@ -66,8 +68,9 @@ class ServerSpawner:
                 try:
                     await docker.pull_image(image)
                 except Exception:
-                    # Fallback to base image if specific env not built
-                    image = "nukelab-base:latest"
+                    # Fallback to dev image if specific env not built
+                    # (nukelab-dev has nginx and stays running)
+                    image = "nukelab-dev:latest"
             
             # Create container
             container = await docker.create_container(
