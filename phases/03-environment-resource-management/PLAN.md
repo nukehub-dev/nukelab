@@ -247,7 +247,7 @@ Before spawn:
 
 ## Deliverables
 
-- [ ] Multiple environments available (dev, neutronics, multiphysics, visualization, base)
+- [ ] Admin can create custom environment templates with Docker images, packages, and env vars
 - [ ] Multiple plans available (nano, micro, small, medium, large, xlarge)
 - [ ] Users can choose environment AND plan when spawning
 - [ ] Resource quotas enforced per plan
@@ -262,13 +262,13 @@ Before spawn:
 
 ```gherkin
 Given I am a user
-When I spawn a server with "neutronics" environment and "small" plan
-Then the container has OpenMC and DAGMC installed
+When I spawn a server with an environment template and "small" plan
+Then the container has the environment's tools installed
 And the container has 2 CPU and 4GB RAM allocated
 
 Given I am a user
-When I spawn a server with "neutronics" environment and "large" plan
-Then the container has OpenMC and DAGMC installed
+When I spawn a server with an environment template and "large" plan
+Then the container has the environment's tools installed
 And the container has 8 CPU and 16GB RAM allocated
 
 Given I have reached my server limit for "small" plan (max_per_user=3)

@@ -41,7 +41,7 @@ async def get_my_credits(
     
     return {
         "user_id": str(current_user.id),
-        "balance": current_user.credit_balance,
+        "balance": current_user.nuke_balance,
         "daily_allowance": current_user.daily_allowance,
         "summary": summary
     }

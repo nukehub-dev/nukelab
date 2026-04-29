@@ -108,7 +108,7 @@ async def get_admin_stats(
         select(func.count()).where(
             and_(
                 User.is_active == True,
-                User.credit_balance <= 100
+                User.nuke_balance <= 100
             )
         )
     )
@@ -164,7 +164,7 @@ async def admin_list_users(
                 "email": u.email,
                 "full_name": u.full_name,
                 "role": u.role,
-                "credit_balance": u.credit_balance,
+                "nuke_balance": u.nuke_balance,
                 "is_active": u.is_active,
                 "last_login": u.last_login.isoformat() if u.last_login else None,
                 "created_at": u.created_at.isoformat() if u.created_at else None,
@@ -323,7 +323,7 @@ async def admin_credit_summary(
     
     # Total credits in system
     total_credits_result = await db.execute(
-        select(func.sum(User.credit_balance)).where(User.is_active == True)
+        select(func.sum(User.nuke_balance)).where(User.is_active == True)
     )
     total_credits = total_credits_result.scalar() or 0
     
@@ -351,7 +351,7 @@ async def admin_credit_summary(
     # Top users by balance
     top_users_result = await db.execute(
         select(User).where(User.is_active == True)
-        .order_by(desc(User.credit_balance))
+        .order_by(desc(User.nuke_balance))
         .limit(10)
     )
     top_users = top_users_result.scalars().all()
@@ -364,7 +364,7 @@ async def admin_credit_summary(
             {
                 "id": str(u.id),
                 "username": u.username,
-                "credit_balance": u.credit_balance
+                "nuke_balance": u.nuke_balance
             }
             for u in top_users
         ]

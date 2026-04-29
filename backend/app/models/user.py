@@ -17,10 +17,10 @@ class User(Base):
     password_hash = Column(String(255), nullable=True)
     role = Column(String(50), default="user", nullable=False)
     
-    # Credits & Quotas
-    credit_balance = Column(Integer, default=500)
-    daily_allowance = Column(Integer, default=500)
-    last_credit_reset = Column(DateTime, nullable=True)
+    # NUKE Currency & Quotas
+    nuke_balance = Column(Integer, default=100)
+    daily_allowance = Column(Integer, default=100)
+    last_nuke_reset = Column(DateTime, nullable=True)
     
     # Avatar
     avatar_url = Column(String(500), nullable=True)
@@ -90,7 +90,7 @@ class User(Base):
             "display_name": self.display_name,
             "avatar_url": self.get_avatar_url(),
             "role": self.role,
-            "credit_balance": self.credit_balance,
+            "nuke_balance": self.nuke_balance,
             "profile": self.profile or {},
             "preferences": self.preferences or {},
             "is_active": self.is_active,

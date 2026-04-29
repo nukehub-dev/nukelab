@@ -221,7 +221,7 @@ async def get_me(current_user: User = Depends(get_current_user)):
         "email": current_user.email,
         "full_name": current_user.full_name,
         "role": current_user.role,
-        "credit_balance": current_user.credit_balance,
+        "nuke_balance": current_user.nuke_balance,
         "profile": current_user.profile or {},
         "preferences": current_user.preferences or {},
         "is_active": current_user.is_active,

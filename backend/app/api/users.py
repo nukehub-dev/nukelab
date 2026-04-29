@@ -38,7 +38,7 @@ class UserUpdateRequest(BaseModel):
     role: Optional[str] = None
     profile: Optional[dict] = None
     preferences: Optional[dict] = None
-    credit_balance: Optional[int] = None
+    nuke_balance: Optional[int] = None
 
 
 class UserResponse(BaseModel):
@@ -50,7 +50,7 @@ class UserResponse(BaseModel):
     display_name: str
     avatar_url: str
     role: str
-    credit_balance: int
+    nuke_balance: int
     is_active: bool
     is_verified: bool
     last_login: Optional[str]
@@ -83,7 +83,7 @@ def serialize_user(user: User) -> dict:
         "display_name": user.display_name,
         "avatar_url": user.get_avatar_url(),
         "role": user.role,
-        "credit_balance": user.credit_balance,
+        "nuke_balance": user.nuke_balance,
         "is_active": user.is_active,
         "is_verified": user.is_verified,
         "last_login": user.last_login.isoformat() if user.last_login else None,
@@ -195,7 +195,7 @@ async def update_user(
         checker.require(Permission.USERS_UPDATE)
     else:
         # Regular users can't update their own role or credits
-        if request.role is not None or request.credit_balance is not None:
+        if request.role is not None or request.nuke_balance is not None:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Cannot update role or credit balance"
@@ -219,8 +219,8 @@ async def update_user(
         update_data["preferences"] = request.preferences
     if request.role is not None:
         update_data["role"] = request.role
-    if request.credit_balance is not None:
-        update_data["credit_balance"] = request.credit_balance
+    if request.nuke_balance is not None:
+        update_data["nuke_balance"] = request.nuke_balance
     
     user = await service.update_user(user_id, update_data, updated_by=current_user)
     return serialize_user(user)

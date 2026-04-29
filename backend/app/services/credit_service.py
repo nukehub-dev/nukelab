@@ -23,7 +23,7 @@ class CreditService:
     async def get_balance(self, user_id: str) -> int:
         """Get user's current credit balance"""
         result = await self.db.execute(
-            select(User.credit_balance).where(User.id == uuid.UUID(user_id))
+            select(User.nuke_balance).where(User.id == uuid.UUID(user_id))
         )
         balance = result.scalar_one_or_none()
         return balance if balance is not None else 0
@@ -103,7 +103,7 @@ class CreditService:
             select(User).where(User.id == uuid.UUID(user_id))
         )
         user = result.scalar_one()
-        user.credit_balance = new_balance
+        user.nuke_balance = new_balance
         
         # Create transaction record
         transaction = CreditTransaction(
@@ -230,9 +230,9 @@ class CreditService:
             select(User).where(
                 and_(
                     User.is_active == True,
-                    User.credit_balance <= threshold
+                    User.nuke_balance <= threshold
                 )
-            ).order_by(User.credit_balance.asc())
+            ).order_by(User.nuke_balance.asc())
         )
         users = result.scalars().all()
         
@@ -240,7 +240,7 @@ class CreditService:
             {
                 "id": str(u.id),
                 "username": u.username,
-                "credit_balance": u.credit_balance,
+                "nuke_balance": u.nuke_balance,
                 "daily_allowance": u.daily_allowance,
                 "email": u.email,
             }

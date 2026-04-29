@@ -14,7 +14,7 @@ NukeLab v2.0 is a ground-up rebuild of the multi-user scientific computing platf
 **Key Improvements over v1.0:**
 - Granular role-based access control (6+ roles, 20+ permissions)
 - Real-time per-container resource monitoring (CPU, memory, disk, GPU)
-- Multiple environment templates (neutronics, multiphysics, visualization, base)
+- Admin-configurable environment templates with Docker images, packages, env vars
 - Modern Vite + React 19 admin dashboard with live metrics
 - Audit logging for compliance
 - WebSocket-native architecture
@@ -204,36 +204,35 @@ system:maintenance    - Enable/disable maintenance mode
 
 ### 4.2 Environment Templates
 
-#### Predefined Environments
-
-| Environment | Description | Tools Included |
-|-------------|-------------|----------------|
-| `neutronics` | Monte Carlo neutron transport | OpenMC, DAGMC, NJOY, PyNE, cross-sections |
-| `multiphysics` | Multi-physics simulations | MOAB, LibMesh, OpenMC, additional physics codes |
-| `visualization` | Post-processing and visualization | ParaView, Trame, Python plotting libraries |
-| `base` | Minimal environment | Python 3.12, basic scientific Python stack |
+Environment templates are **admin-created** Docker images that define what tools and libraries are available in a server container. Unlike predefined hardcoded environments, admins can create, update, clone, and delete environments through the admin panel.
 
 #### Environment Properties
 
 ```yaml
-name: "neutronics"
-description: "Monte Carlo neutron transport environment"
-image: "nukelab/environments:neutronics-v1.0"
-default_resources:
-  cpu: 4
-  memory: "8Gi"
-  disk: "50Gi"
-  gpu: 0
-max_resources:
-  cpu: 16
-  memory: "64Gi"
-  disk: "500Gi"
-  gpu: 1
-startup_script: "/opt/nukelab/startup.sh"
-branding:
-  color: "#2563eb"
-  icon: "atom"
+name: "Scientific Computing"
+slug: "sci-compute"
+description: "Python + Jupyter + common scientific libraries"
+image: "nukelab/scientific:latest"
+dockerfile: "# Optional: custom Dockerfile"
+packages: ["jupyter", "numpy", "pandas", "matplotlib", "scipy"]
+environment_variables:
+  JUPYTER_ENABLE_LAB: "yes"
+volumes: ["/data:/data:ro"]
+ports: [3000, 8888]
+icon: "🧪"
+color: "#3B82F6"
+category: "scientific"
+is_public: true
+created_by: "admin-id"
 ```
+
+#### Admin CRUD Operations
+
+- **Create**: Admins create environments with name, slug, Docker image, packages, env vars, ports
+- **Clone**: Duplicate existing environment as template for new variations
+- **Update**: Modify packages, env vars, ports, metadata
+- **Deactivate/Activate**: Soft-disable without deleting (prevents new servers from using it)
+- **Delete**: Permanent removal (only if no active servers use it)
 
 ### 4.3 Server Plans (Resource Tiers)
 
@@ -241,16 +240,12 @@ Server Plans define resource allocations independent of environment templates. U
 
 #### Predefined Plans
 
-| Plan | CPU | Memory | Disk | GPU | Description |
-|------|-----|--------|------|-----|-------------|
-| `nano` | 0.5 | 1Gi | 10Gi | 0 | Minimal testing |
-| `micro` | 1 | 2Gi | 20Gi | 0 | Light workloads |
-| `small` | 2 | 4Gi | 50Gi | 0 | Standard development |
-| `medium` | 4 | 8Gi | 100Gi | 0 | Standard simulations |
-| `large` | 8 | 16Gi | 200Gi | 0 | Heavy simulations |
-| `xlarge` | 16 | 32Gi | 500Gi | 0 | Parallel processing |
-| `gpu-small` | 4 | 16Gi | 100Gi | 1 | GPU-accelerated (T4) |
-| `gpu-large` | 8 | 32Gi | 200Gi | 1 | GPU-accelerated (A100) |
+| Plan | CPU | Memory | Disk | GPU | Max/User | Description |
+|------|-----|--------|------|-----|----------|-------------|
+| `small` | 2 | 4GB | 20GB | 0 | 4 | Development, Jupyter notebooks, light analysis |
+| `medium` | 4 | 8GB | 50GB | 0 | 3 | Standard simulations, data processing |
+| `large` | 8 | 16GB | 100GB | 0 | 2 | Heavy simulations, parallel CPU workloads |
+| `xlarge` | 16 | 32GB | 200GB | 0 | 1 | Maximum resources — admin approval required |
 
 #### Plan Properties
 
@@ -273,15 +268,15 @@ restrictions:
   max_per_user: 3             # Max servers with this plan
   requires_approval: false    # Admin approval needed
 pricing:
-  credits_per_hour: 10        # If using credit system
+  nukes_per_hour: 1          # Cost in NUKE currency
 ```
 
 #### Plan Selection Flow
 
 ```
 User spawns server:
-  1. Select Environment (neutronics, multiphysics, etc.)
-  2. Select Plan (nano, small, medium, large, etc.)
+  1. Select Environment (from admin-created templates)
+  2. Select Plan (small, medium, large, xlarge)
   3. Optional: Customize resources within plan limits
   4. Optional: Select duration / schedule
   5. Confirm and spawn
@@ -299,7 +294,7 @@ custom_plan:
   disk: "1Ti"
   gpu: 2
   max_runtime: "72h"
-  reason: "PhD research - parallel OpenMC simulations"
+  reason: "PhD research - parallel simulations"
 approved_by: "admin"
 approved_at: "2026-04-27T10:00:00Z"
 expires_at: "2026-12-31T23:59:59Z"
@@ -315,70 +310,71 @@ Default Plan (system default)
                  └── Server Override (one-time override)
 ```
 
-### 4.4 Credit System
+### 4.4 NUKE Currency System
 
-With limited hardware resources (38 CPU total, 76GB RAM), a credit system ensures fair usage and prevents resource monopolization.
+With limited hardware resources (38 CPU total, 76GB RAM), a NUKE-based currency system ensures fair usage and prevents resource monopolization.
 
-#### Credit Model
+#### NUKE Model
 
 ```
-Credits = Resource × Time × Plan Multiplier
+NUKE = Resource × Time × Plan Multiplier
 
 Example:
   small plan (2 CPU, 4GB) running for 1 hour:
-    Base cost: 10 credits/hour
+    Base cost: 1 NUKE/hour
     
   medium plan (4 CPU, 8GB) running for 1 hour:
-    Base cost: 20 credits/hour
+    Base cost: 2 NUKE/hour
     
   large plan (8 CPU, 16GB) running for 1 hour:
-    Base cost: 40 credits/hour
+    Base cost: 4 NUKE/hour
+
+  xlarge plan (16 CPU, 32GB) running for 1 hour:
+    Base cost: 8 NUKE/hour
 ```
 
-#### Credit Sources
+#### NUKE Sources
 
 | Source | Amount | Frequency | Description |
 |--------|--------|-----------|-------------|
 | **Daily Allowance** | 100-1000 | Daily | Based on role (guest:100, user:500, admin:unlimited) |
 | **One-time Grant** | Variable | Once | Welcome bonus for new users |
-| **Admin Grant** | Any | Anytime | Manual credit allocation |
+| **Admin Grant** | Any | Anytime | Manual NUKE allocation |
 | **Task Rewards** | Variable | On completion | Completing tutorials, bug reports, etc. |
 | **Purchase** | Variable | Anytime | If monetization enabled (future) |
 
-#### Credit Consumption
+#### NUKE Consumption
 
-| Plan | CPU | Memory | Cost/hour | Daily Allowance Coverage |
-|------|-----|--------|-----------|------------------------|
-| `nano` | 0.5 | 1Gi | 5 credits | 20 hours/day |
-| `micro` | 1 | 2Gi | 10 credits | 10 hours/day |
-| `small` | 2 | 4Gi | 20 credits | 5 hours/day |
-| `medium` | 4 | 8Gi | 40 credits | 2.5 hours/day |
-| `large` | 8 | 16Gi | 80 credits | 1.25 hours/day |
-| `xlarge` | 16 | 32Gi | 160 credits | 0.6 hours/day |
+| Plan | CPU | Memory | Cost/hour (NUKE) | Daily Allowance Coverage |
+|------|-----|--------|-----------------|------------------------|
+| `small` | 2 | 4GB | 1 NUKE | 100 hours/day |
+| `medium` | 4 | 8GB | 2 NUKE | 50 hours/day |
+| `large` | 8 | 16GB | 4 NUKE | 25 hours/day |
+| `xlarge` | 16 | 32GB | 8 NUKE | 12.5 hours/day |
 
-#### Credit Limits & Alerts
+#### NUKE Limits & Alerts
 
 ```yaml
-user_credit_settings:
+user_nuke_settings:
   daily_allowance: 500
   max_balance: 5000        # Cap to prevent hoarding
   rollover: false          # Use it or lose it (daily reset)
   alert_thresholds:
-    warning: 100           # Alert at 100 credits remaining
-    critical: 20           # Alert at 20 credits remaining
+    warning: 100           # Alert at 100 NUKE remaining
+    critical: 20           # Alert at 20 NUKE remaining
     
 server_constraints:
-  min_credits_to_start: 20  # Need at least 1 hour of small plan
-  stop_on_depletion: true   # Auto-stop when credits run out
-  warn_before_stop: 10      # Warn 10 minutes before auto-stop
+  min_nukes_to_start: 1    # Need at least 1 hour of small plan
+  stop_on_depletion: true  # Auto-stop when NUKE runs out
+  warn_before_stop: 10     # Warn 10 minutes before auto-stop
 ```
 
-#### Credit Ledger
+#### NUKE Ledger
 
 Immutable transaction history:
 
 ```python
-class CreditTransaction(BaseModel):
+class NukeTransaction(BaseModel):
     id: UUID
     timestamp: datetime
     user_id: UUID
@@ -491,7 +487,7 @@ User clicks "New Server":
   ┌─────────────────────────────┐
   │  Server Spawn Dialog         │
   │                             │
-  │  Environment: [neutronics ▼]│ ← Pre-filled from preferences
+  │  Environment: [my-env ▼]    │ ← Pre-filled from preferences
   │  Plan:        [medium ▼]    │ ← Pre-filled from preferences
   │  Resources:   [4 CPU, 8GB]  │ ← From plan (editable)
   │                             │
@@ -499,7 +495,7 @@ User clicks "New Server":
   │  Duration:    [2 hours]     │
   │  Auto-start:  [✓]           │
   │                             │
-  │  Cost: 80 credits           │
+  │  Cost: 2 NUKE/hour          │
   │                             │
   │  [Spawn Server] [Save as Default]
   └─────────────────────────────┘
@@ -733,10 +729,10 @@ class User(BaseModel):
     max_gpu: int
     max_servers: int
     
-    # Credits
-    credit_balance: int           # Current credit balance
-    daily_allowance: int          # Daily credit allowance
-    last_credit_reset: datetime   # Last daily reset timestamp
+    # NUKE Currency
+    nuke_balance: int             # Current NUKE balance
+    daily_allowance: int          # Daily NUKE allowance
+    last_nuke_reset: datetime     # Last daily reset timestamp
     
     # Profile (flexible JSONB - extensible user info)
     profile: dict                 # avatar, timezone, phone, department, organization
@@ -860,7 +856,7 @@ class Plan(BaseModel):
     description: str
     
     # Resources
-    cpu: float  # Can be fractional (0.5 for nano)
+    cpu: float  # Whole CPUs only (2, 4, 8, 16)
     memory: str  # e.g., "8Gi"
     disk: str    # e.g., "100Gi"
     gpu: int
@@ -1041,15 +1037,15 @@ GET    /api/plans/{id}/users        # Get users on this plan
 POST   /api/users/{id}/plan         # Assign custom plan to user
 ```
 
-#### Credits
+#### NUKE Currency
 
 ```
-GET    /api/credits/balance          # Get current balance
-GET    /api/credits/transactions      # Get transaction history
-POST   /api/credits/grant            # Grant credits (admin)
-POST   /api/credits/deduct           # Deduct credits (admin)
-GET    /api/credits/usage            # Get usage statistics
-POST   /api/credits/reset-daily      # Trigger daily reset (system)
+GET    /api/credits/balance          # Get current NUKE balance
+GET    /api/credits/transactions      # Get NUKE transaction history
+POST   /api/credits/grant            # Grant NUKE (admin)
+POST   /api/credits/deduct           # Deduct NUKE (admin)
+GET    /api/credits/usage            # Get NUKE usage statistics
+POST   /api/credits/reset-daily      # Trigger daily NUKE reset (system)
 ```
 
 #### Monitoring
@@ -1262,13 +1258,13 @@ Then the container stops gracefully
   - [ ] Notification preferences (Phase 5)
   - [ ] Quick spawn with saved defaults (Phase 5)
 
-- [x] **Credit System**
-  - [x] Credit balance model and ledger
+- [x] **NUKE Currency System**
+  - [x] NUKE balance model and ledger
   - [x] Daily allowance system (automated reset)
-  - [ ] Credit consumption on server usage (Phase 5)
-  - [x] Credit grant/deduct (admin)
-  - [ ] Low credit alerts and auto-stop (Phase 5)
-  - [x] Credit transaction history
+  - [ ] NUKE consumption on server usage (Phase 5)
+  - [x] NUKE grant/deduct (admin)
+  - [ ] Low NUKE alerts and auto-stop (Phase 5)
+  - [x] NUKE transaction history
 
 - [x] **Admin Dashboard**
   - [x] User management table
@@ -1299,7 +1295,7 @@ Then the container stops gracefully
 Given I am an admin
 When I create a new user with role "moderator"
 Then the user can log in
-And the user receives 500 daily credits
+And the user receives 500 daily NUKE
 And the user can create other users
 But the user cannot access other users' servers
 
@@ -1307,9 +1303,9 @@ Given I am a regular user
 When I try to access admin dashboard
 Then I get a 403 Forbidden error
 
-Given I have 20 credits remaining
-When I try to start a server costing 40 credits/hour
-Then I get an error: "Insufficient credits"
+Given I have 1 NUKE remaining
+When I try to start a server costing 2 NUKE/hour
+Then I get an error: "Insufficient NUKE"
 ```
 
 ---
@@ -1369,8 +1365,8 @@ Then I get an error: "Insufficient credits"
 
 #### Deliverables
 
-- [ ] Multiple environments available (dev, neutronics, multiphysics, visualization, base)
-- [ ] Multiple plans available (nano, micro, small, medium, large, xlarge, gpu-small, gpu-large)
+- [ ] Admin can create custom environment templates (Docker image, packages, env vars, ports)
+- [ ] Multiple plans available (small, medium, large, xlarge)
   - [ ] Users can choose environment AND plan when spawning
   - [ ] Resource quotas enforced per plan
   - [ ] Admin can create/modify environments and plans
@@ -1379,13 +1375,13 @@ Then I get an error: "Insufficient credits"
 
 ```gherkin
 Given I am a user
-When I spawn a server with "neutronics" environment and "small" plan
-Then the container has OpenMC and DAGMC installed
+When I spawn a server with an environment template and "small" plan
+Then the container has the environment's configured tools installed
 And the container has 2 CPU and 4GB RAM allocated
 
 Given I am a user
-When I spawn a server with "neutronics" environment and "large" plan
-Then the container has OpenMC and DAGMC installed
+When I spawn a server with an environment template and "large" plan
+Then the container has the environment's configured tools installed
 And the container has 8 CPU and 16GB RAM allocated
 
 Given I have reached my server limit for "small" plan (max_per_user=3)
@@ -1717,22 +1713,10 @@ nukelab/
 │   ├── migrations/                  # Alembic migrations
 │   └── seeds/                       # Seed data
 │
-├── environments/                     # Environment Images
-│   ├── base/                        # Base image (shared layers)
+├── environments/                     # Example Environment Dockerfiles (admin-created)
+│   ├── base/                        # Base image template
 │   │   └── Dockerfile
-│   ├── dev/                         # Development environment
-│   │   ├── Dockerfile
-│   │   ├── nginx.conf               # Nginx auth proxy config
-│   │   └── startup.sh               # Container startup script
-│   ├── neutronics/                  # Neutronics environment
-│   │   ├── Dockerfile
-│   │   ├── nginx.conf
-│   │   └── startup.sh
-│   ├── multiphysics/                # Multiphysics environment
-│   │   ├── Dockerfile
-│   │   ├── nginx.conf
-│   │   └── startup.sh
-│   └── visualization/               # Visualization environment
+│   └── dev/                         # Development environment template
 │       ├── Dockerfile
 │       ├── nginx.conf
 │       └── startup.sh
@@ -2099,9 +2083,9 @@ DEFAULT_MAX_SERVERS=3
 | 2026-04-27 | Local auth for dev | Easy testing without NukeHub Auth | Approved |
 | 2026-04-27 | Separate dev environment | Fast builds for testing | Approved |
 | 2026-04-27 | Server Plans separate from Environments | Flexible resource allocation per environment | Approved |
-| 2026-04-27 | Credit system | Fair resource allocation on limited hardware (38 CPU, 76GB) | Approved |
+| 2026-04-27 | NUKE currency system | Fair resource allocation on limited hardware (38 CPU, 76GB) | Approved |
 | 2026-04-27 | Queue-based scheduling | Handle resource scarcity gracefully | Approved |
-| 2026-04-27 | Daily credit allowance with no rollover | Prevent hoarding, encourage fair use | Approved |
+| 2026-04-27 | Daily NUKE allowance with no rollover | Prevent hoarding, encourage fair use | Approved |
 | 2026-04-27 | User Preferences/Defaults | Save default environment/plan/settings per user | Approved |
 
 ---

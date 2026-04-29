@@ -17,9 +17,9 @@ class TestUserDashboard:
         assert response.status_code == 200
         data = response.json()
         assert "my_servers" in data
-        assert "my_credits" in data
+        assert "my_nukes" in data
         assert "recent_activity" in data
-        assert data["my_credits"]["balance"] == test_user.credit_balance
+        assert data["my_nukes"]["balance"] == test_user.nuke_balance
 
     @pytest.mark.asyncio
     async def test_dashboard_server_counts(self, client, user_token):

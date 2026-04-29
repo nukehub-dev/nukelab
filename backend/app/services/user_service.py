@@ -152,7 +152,7 @@ class UserService:
             first_name=first_name,
             last_name=last_name,
             avatar_url=avatar_url,
-            credit_balance=credits,
+            nuke_balance=credits,
             daily_allowance=credits,
             is_active=True,
             is_verified=True,
@@ -193,8 +193,8 @@ class UserService:
                 )
         
         # Only admins can update credits
-        if "credit_balance" in data and updated_by and updated_by.role in ["admin", "super_admin"]:
-            user.credit_balance = data["credit_balance"]
+        if "nuke_balance" in data and updated_by and updated_by.role in ["admin", "super_admin"]:
+            user.nuke_balance = data["nuke_balance"]
         
         for field in allowed_fields:
             if field in data:
@@ -311,7 +311,7 @@ class UserService:
             "user_id": str(user.id),
             "server_count": server_count,
             "running_servers": running_count,
-            "credit_balance": user.credit_balance,
+            "nuke_balance": user.nuke_balance,
             "daily_allowance": user.daily_allowance,
             "role": user.role,
             "is_active": user.is_active,

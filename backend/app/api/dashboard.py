@@ -51,8 +51,8 @@ async def get_dashboard(
             "stopped": total_servers - running_servers,
             "pending": 0  # TODO: Add pending status count
         },
-        "my_credits": {
-            "balance": current_user.credit_balance,
+        "my_nukes": {
+            "balance": current_user.nuke_balance,
             "daily_allowance": current_user.daily_allowance,
             "hourly_cost": 0,  # TODO: Calculate from active servers
             "estimated_hours_left": 0  # TODO: Calculate
@@ -85,16 +85,16 @@ async def get_dashboard(
         active_servers_result = await db.execute(active_servers_query)
         active_servers = active_servers_result.scalar()
         
-        # Total credits
-        total_credits_query = select(func.sum(User.credit_balance)).select_from(User)
-        total_credits_result = await db.execute(total_credits_query)
-        total_credits = total_credits_result.scalar() or 0
+        # Total nukes
+        total_nukes_query = select(func.sum(User.nuke_balance)).select_from(User)
+        total_nukes_result = await db.execute(total_nukes_query)
+        total_nukes = total_nukes_result.scalar() or 0
         
         dashboard_data["platform_stats"] = {
             "total_users": total_users,
             "total_servers": all_servers,
             "active_servers": active_servers,
-            "total_credits": total_credits,
+            "total_nukes": total_nukes,
             "system_health": "healthy"  # TODO: Implement health check
         }
     

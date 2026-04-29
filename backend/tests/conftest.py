@@ -149,7 +149,7 @@ async def test_user(db_session):
         role="user",
         is_active=True,
         is_verified=True,
-        credit_balance=100,
+        nuke_balance=100,
     )
     db_session.add(user)
     await db_session.commit()
@@ -170,7 +170,7 @@ async def admin_user(db_session):
         role="admin",
         is_active=True,
         is_verified=True,
-        credit_balance=500,
+        nuke_balance=500,
     )
     db_session.add(user)
     await db_session.commit()
