@@ -57,6 +57,7 @@ Thumbs.db
 *.sqlite
 *.sqlite3
 postgres-data/
+celerybeat-schedule
 
 # Logs
 logs/

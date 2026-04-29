@@ -12,3 +12,4 @@ from app.models.system_metric import SystemMetric
 from app.models.alert_rule import AlertRule
 from app.models.alert_history import AlertHistory
 from app.models.health_check import HealthCheck
+from app.models.notification import Notification

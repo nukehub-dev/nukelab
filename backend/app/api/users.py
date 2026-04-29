@@ -24,13 +24,17 @@ class UserCreateRequest(BaseModel):
     email: str = Field(..., max_length=255)
     password: str = Field(..., min_length=6)
     role: str = Field(default="user")
-    full_name: Optional[str] = Field(default=None, max_length=255)
+    first_name: Optional[str] = Field(default=None, max_length=255)
+    last_name: Optional[str] = Field(default=None, max_length=255)
+    avatar_url: Optional[str] = Field(default=None, max_length=500)
     credits: int = Field(default=500, ge=0)
 
 
 class UserUpdateRequest(BaseModel):
-    full_name: Optional[str] = Field(default=None, max_length=255)
+    first_name: Optional[str] = Field(default=None, max_length=255)
+    last_name: Optional[str] = Field(default=None, max_length=255)
     email: Optional[str] = Field(default=None, max_length=255)
+    avatar_url: Optional[str] = Field(default=None, max_length=500)
     role: Optional[str] = None
     profile: Optional[dict] = None
     preferences: Optional[dict] = None
@@ -41,7 +45,10 @@ class UserResponse(BaseModel):
     id: str
     username: str
     email: str
-    full_name: Optional[str]
+    first_name: Optional[str]
+    last_name: Optional[str]
+    display_name: str
+    avatar_url: str
     role: str
     credit_balance: int
     is_active: bool
@@ -71,7 +78,10 @@ def serialize_user(user: User) -> dict:
         "id": str(user.id),
         "username": user.username,
         "email": user.email,
-        "full_name": user.full_name,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "display_name": user.display_name,
+        "avatar_url": user.get_avatar_url(),
         "role": user.role,
         "credit_balance": user.credit_balance,
         "is_active": user.is_active,
@@ -126,7 +136,9 @@ async def create_user(
         email=request.email,
         password=request.password,
         role=request.role,
-        full_name=request.full_name,
+        first_name=request.first_name,
+        last_name=request.last_name,
+        avatar_url=request.avatar_url,
         credits=request.credits,
         created_by=current_user
     )
@@ -193,10 +205,14 @@ async def update_user(
     
     # Build update data
     update_data = {}
-    if request.full_name is not None:
-        update_data["full_name"] = request.full_name
+    if request.first_name is not None:
+        update_data["first_name"] = request.first_name
+    if request.last_name is not None:
+        update_data["last_name"] = request.last_name
     if request.email is not None:
         update_data["email"] = request.email
+    if request.avatar_url is not None:
+        update_data["avatar_url"] = request.avatar_url
     if request.profile is not None:
         update_data["profile"] = request.profile
     if request.preferences is not None:
@@ -350,10 +366,14 @@ async def update_my_profile(
     service = UserService(db)
     
     update_data = {}
-    if request.full_name is not None:
-        update_data["full_name"] = request.full_name
+    if request.first_name is not None:
+        update_data["first_name"] = request.first_name
+    if request.last_name is not None:
+        update_data["last_name"] = request.last_name
     if request.email is not None:
         update_data["email"] = request.email
+    if request.avatar_url is not None:
+        update_data["avatar_url"] = request.avatar_url
     if request.profile is not None:
         update_data["profile"] = request.profile
     if request.preferences is not None:

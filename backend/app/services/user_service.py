@@ -71,7 +71,8 @@ class UserService:
             search_filter = or_(
                 User.username.ilike(f"%{search}%"),
                 User.email.ilike(f"%{search}%"),
-                User.full_name.ilike(f"%{search}%")
+                User.first_name.ilike(f"%{search}%"),
+                User.last_name.ilike(f"%{search}%")
             )
             query = query.where(search_filter)
         
@@ -110,7 +111,10 @@ class UserService:
         email: str,
         password: str,
         role: str = "user",
-        full_name: Optional[str] = None,
+        first_name: Optional[str] = None,
+        last_name: Optional[str] = None,
+        avatar_url: Optional[str] = None,
+        use_gravatar: bool = True,
         credits: int = 500,
         created_by: Optional[User] = None
     ) -> User:
@@ -145,11 +149,14 @@ class UserService:
             email=email,
             password_hash=get_password_hash(password),
             role=role,
-            full_name=full_name,
+            first_name=first_name,
+            last_name=last_name,
+            avatar_url=avatar_url,
             credit_balance=credits,
             daily_allowance=credits,
             is_active=True,
             is_verified=True,
+            preferences={"use_gravatar": use_gravatar},
         )
         
         self.db.add(user)
@@ -173,7 +180,7 @@ class UserService:
             )
         
         # Update allowed fields
-        allowed_fields = ["full_name", "email", "profile", "preferences"]
+        allowed_fields = ["first_name", "last_name", "email", "avatar_url", "profile", "preferences"]
         
         # Only admins can update role
         if "role" in data and updated_by and updated_by.role in ["admin", "super_admin"]:

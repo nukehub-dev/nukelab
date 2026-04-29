@@ -1,4 +1,5 @@
 import uuid
+import hashlib
 from datetime import datetime
 from sqlalchemy import Column, String, Boolean, DateTime, Integer, JSON
 from sqlalchemy.dialects.postgresql import UUID, INET
@@ -11,7 +12,8 @@ class User(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     username = Column(String(255), unique=True, nullable=False, index=True)
     email = Column(String(255), unique=True, nullable=False)
-    full_name = Column(String(255), nullable=True)
+    first_name = Column(String(255), nullable=True)
+    last_name = Column(String(255), nullable=True)
     password_hash = Column(String(255), nullable=True)
     role = Column(String(50), default="user", nullable=False)
     
@@ -20,12 +22,15 @@ class User(Base):
     daily_allowance = Column(Integer, default=500)
     last_credit_reset = Column(DateTime, nullable=True)
     
+    # Avatar
+    avatar_url = Column(String(500), nullable=True)
+    
     # Profile (flexible JSONB)
-    # Stores: avatar, timezone, phone, department, organization, etc.
+    # Stores: timezone, phone, department, organization, etc.
     profile = Column(JSON, default=dict)
     
     # Preferences (app-specific settings)
-    # Stores: theme, language, default_environment, default_plan, notifications
+    # Stores: theme, accent_color, oled_mode, language, default_environment, default_plan, notifications
     preferences = Column(JSON, default=dict)
     
     # Security tracking
@@ -47,9 +52,32 @@ class User(Base):
     
     # Relationships
     api_tokens = relationship("ApiToken", back_populates="user", cascade="all, delete-orphan")
+    notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<User {self.username}>"
+    
+    @property
+    def display_name(self):
+        """Return full name or username"""
+        if self.first_name or self.last_name:
+            parts = [p for p in [self.first_name, self.last_name] if p]
+            return " ".join(parts)
+        return self.username
+    
+    def get_gravatar_url(self, size=200, default="identicon"):
+        """Generate Gravatar URL from email"""
+        email_hash = hashlib.md5(self.email.lower().strip().encode()).hexdigest()
+        return f"https://www.gravatar.com/avatar/{email_hash}?s={size}&d={default}&r=pg"
+    
+    def get_avatar_url(self, size=200):
+        """Get avatar URL (Gravatar or custom)"""
+        prefs = self.preferences or {}
+        use_gravatar = prefs.get('use_gravatar', True)
+        
+        if self.avatar_url and not use_gravatar:
+            return self.avatar_url
+        return self.get_gravatar_url(size=size)
     
     def to_dict(self):
         """Serialize user to dictionary"""
@@ -57,7 +85,10 @@ class User(Base):
             "id": str(self.id),
             "username": self.username,
             "email": self.email,
-            "full_name": self.full_name,
+            "first_name": self.first_name,
+            "last_name": self.last_name,
+            "display_name": self.display_name,
+            "avatar_url": self.get_avatar_url(),
             "role": self.role,
             "credit_balance": self.credit_balance,
             "profile": self.profile or {},

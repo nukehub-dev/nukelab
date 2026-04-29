@@ -1,0 +1,128 @@
+"""
+Health and Status API endpoints.
+"""
+
+import asyncio
+import time
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
+import redis.asyncio as redis
+import psutil
+
+from app.api.auth import get_current_user
+from app.core.permissions import Permission
+from app.dependencies import require_permissions
+from app.db.session import get_db
+from app.config import settings
+
+router = APIRouter()
+
+
+@router.get("/")
+async def health_check():
+    """Basic health check"""
+    return {"status": "healthy", "timestamp": time.time()}
+
+
+@router.get("/detailed")
+async def detailed_health_check(
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(require_permissions(Permission.ADMIN_ACCESS))
+):
+    """Detailed health check with service status"""
+    
+    health_data = {
+        "status": "healthy",
+        "timestamp": time.time(),
+        "services": {},
+        "resources": {}
+    }
+    
+    # Database check
+    try:
+        start = time.time()
+        await db.execute(text("SELECT 1"))
+        db_latency = (time.time() - start) * 1000
+        health_data["services"]["database"] = {
+            "status": "healthy",
+            "latency_ms": round(db_latency, 2)
+        }
+    except Exception as e:
+        health_data["services"]["database"] = {
+            "status": "unhealthy",
+            "error": str(e)
+        }
+        health_data["status"] = "degraded"
+    
+    # Redis check
+    try:
+        start = time.time()
+        redis_client = redis.from_url(settings.redis_url)
+        await redis_client.ping()
+        redis_latency = (time.time() - start) * 1000
+        await redis_client.close()
+        health_data["services"]["redis"] = {
+            "status": "healthy",
+            "latency_ms": round(redis_latency, 2)
+        }
+    except Exception as e:
+        health_data["services"]["redis"] = {
+            "status": "unhealthy",
+            "error": str(e)
+        }
+        health_data["status"] = "degraded"
+    
+    # Docker check
+    try:
+        from app.docker.client import docker_client
+        version = await docker_client.version()
+        health_data["services"]["docker"] = {
+            "status": "healthy",
+            "version": version.get("Version", "unknown")
+        }
+    except Exception as e:
+        health_data["services"]["docker"] = {
+            "status": "unhealthy",
+            "error": str(e)
+        }
+        health_data["status"] = "degraded"
+    
+    # System resources
+    try:
+        health_data["resources"] = {
+            "cpu_percent": psutil.cpu_percent(interval=0.1),
+            "memory_percent": psutil.virtual_memory().percent,
+            "disk_percent": psutil.disk_usage('/').percent,
+            "load_average": psutil.getloadavg()
+        }
+    except Exception:
+        health_data["resources"] = {
+            "cpu_percent": 0,
+            "memory_percent": 0,
+            "disk_percent": 0
+        }
+    
+    return health_data
+
+
+@router.get("/status")
+async def platform_status():
+    """Get platform status and feature flags"""
+    return {
+        "version": "2.0.0",
+        "features": {
+            "auth_mode": settings.auth_mode,
+            "registration_enabled": True,  # TODO: Add to settings
+            "credit_system_enabled": True,
+            "websocket_enabled": True,
+            "gravatar_enabled": True,
+            "themes_enabled": True,
+            "notifications_enabled": True
+        },
+        "limits": {
+            "max_servers_per_user": 10,  # TODO: Add to settings
+            "max_file_upload_size": 10485760,  # 10MB
+            "api_rate_limit": 1000  # requests per hour
+        }
+    }

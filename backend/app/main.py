@@ -1,7 +1,11 @@
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
-from app.api import auth, users, servers, tokens, credits, admin, preferences, environments, plans, quotas, metrics
+from app.api import (
+    auth, users, servers, tokens, credits, admin, 
+    preferences, environments, plans, quotas, metrics,
+    notifications, dashboard, bulk, health
+)
 from app.db.base import Base
 from app.db.session import engine
 from app.websocket.metrics_socket import manager
@@ -37,6 +41,10 @@ app.include_router(environments.router, prefix="/environments", tags=["environme
 app.include_router(plans.router, prefix="/plans", tags=["plans"])
 app.include_router(quotas.router, prefix="/quotas", tags=["quotas"])
 app.include_router(metrics.router, prefix="/metrics", tags=["metrics"])
+app.include_router(notifications.router, prefix="/notifications", tags=["notifications"])
+app.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
+app.include_router(bulk.router, prefix="/bulk", tags=["bulk"])
+app.include_router(health.router, prefix="/health", tags=["health"])
 
 
 @app.websocket("/ws")

@@ -3,19 +3,19 @@
 **Status**: In Development - Phases 1-3 Complete  
 **Last Updated**: April 28, 2026  
 **Target Timeline**: 6+ months  
-**Tech Stack**: Next.js 16, FastAPI, PostgreSQL 18, Redis, Traefik v3, Docker/Podman
+**Tech Stack**: Vite + React 19 SPA, FastAPI, PostgreSQL 18, Redis, Traefik v3, Docker/Podman
 
 ---
 
 ## 1. Executive Summary
 
-NukeLab v2.0 is a ground-up rebuild of the multi-user scientific computing platform, replacing JupyterHub with a custom industrial-grade orchestration layer. The platform provides granular RBAC, real-time resource monitoring, multi-environment support, and a modern Next.js management interface.
+NukeLab v2.0 is a ground-up rebuild of the multi-user scientific computing platform, replacing JupyterHub with a custom industrial-grade orchestration layer. The platform provides granular RBAC, real-time resource monitoring, multi-environment support, and a modern Vite + React 19 SPA management interface.
 
 **Key Improvements over v1.0:**
 - Granular role-based access control (6+ roles, 20+ permissions)
 - Real-time per-container resource monitoring (CPU, memory, disk, GPU)
 - Multiple environment templates (neutronics, multiphysics, visualization, base)
-- Modern Next.js admin dashboard with live metrics
+- Modern Vite + React 19 admin dashboard with live metrics
 - Audit logging for compliance
 - WebSocket-native architecture
 - Kubernetes migration path
@@ -30,7 +30,7 @@ NukeLab v2.0 is a ground-up rebuild of the multi-user scientific computing platf
 │                                                                  │
 │  ┌────────────┐  ┌────────────┐  ┌──────────────────────────┐   │
 │  │ /app/*     │  │ /api/*     │  │ /user/{username}/*       │   │
-│  │ → Next.js  │  │ → FastAPI  │  │ → NukeIDE Container      │   │
+  │  │ → Vite SPA  │  │ → FastAPI  │  │ → NukeIDE Container      │   │
 │  │   Frontend │  │   Backend  │  │   (Nginx + Theia)        │   │
 │  └────────────┘  └────────────┘  └──────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
@@ -38,8 +38,8 @@ NukeLab v2.0 is a ground-up rebuild of the multi-user scientific computing platf
         ┌─────────────────────┼─────────────────────┐
         ▼                     ▼                     ▼
 ┌──────────────┐    ┌──────────────────┐    ┌──────────────┐
-│  Next.js 16  │    │  FastAPI Backend │    │  PostgreSQL  │
-│  App Router  │◄──►│  + WebSocket     │    │  18 + Redis  │
+│  Vite + React  │    │  FastAPI Backend │    │  PostgreSQL  │
+│  19 SPA      │◄──►│  + WebSocket     │    │  18 + Redis  │
 │  Tailwind    │    │  + Docker SDK    │    │              │
 └──────────────┘    └──────────────────┘    └──────────────┘
                               │
@@ -56,7 +56,7 @@ NukeLab v2.0 is a ground-up rebuild of the multi-user scientific computing platf
 | Component | Technology | Purpose |
 |-----------|-----------|---------|
 | **Reverse Proxy** | Traefik v3 | Dynamic routing, TLS termination, WebSocket proxying, rate limiting |
-| **Frontend** | Next.js 16 (App Router) | Admin dashboard, user portal, real-time monitoring UI |
+| **Frontend** | Vite + React 19 SPA | Admin dashboard, user portal, real-time monitoring UI |
 | **Backend API** | FastAPI | Auth, user/server management, Docker orchestration, metrics collection |
 | **Database** | PostgreSQL 18 | Users, roles, permissions, environments, servers, audit logs, metrics history |
 | **Cache/Queue** | Redis | Sessions, pub/sub, Celery broker, real-time message bus |
@@ -97,26 +97,32 @@ Current infrastructure is limited and requires careful resource management:
 
 **Decision**: FastAPI is optimal for an I/O-bound platform making frequent Docker API calls and maintaining many concurrent WebSocket connections.
 
-### 3.2 Why Next.js 16 App Router?
+### 3.2 Why Vite + React 19 SPA + TanStack Router + TanStack Query?
 
-| Factor | Next.js 16 App Router | React SPA (Vite) |
-|--------|----------------------|------------------|
+| Factor | Next.js 16 App Router | Vite + React 19 SPA |
+|--------|----------------------|---------------------|
 | **SSR/SSG** | Built-in Server Components | Client-side only |
-| **API Routes** | Built-in (can proxy to FastAPI) | Requires separate backend |
-| **Real-time** | Server-Sent Events + WebSocket support | WebSocket only |
-| **Performance** | Turbopack stable, 2-5x faster builds | Full bundle download |
-| **Caching** | Cache Components, explicit caching control | Manual caching |
-| **React Compiler** | Automatic memoization, fewer re-renders | Manual optimization |
-| **SEO** | Excellent | Poor |
+| **Runtime** | Requires Node.js server | Static files only |
+| **Real-time** | Server-Sent Events + WebSocket | Native WebSocket |
+| **Build Speed** | Turbopack stable | Vite HMR, near-instant |
+| **Caching** | Aggressive server caching | No server cache fights |
+| **State Management** | React Server Components complexity | TanStack Query handles async |
+| **SEO** | Excellent | Poor (irrelevant for dashboard) |
+| **Resource Usage** | Higher RAM/CPU for SSR | Minimal runtime footprint |
 
-**Decision**: Next.js 16 App Router provides:
-- **Turbopack** (stable): 2-5x faster production builds, up to 10x faster Fast Refresh
-- **Cache Components**: Explicit, opt-in caching model with Partial Prerendering (PPR)
-- **React Compiler** (stable): Automatic memoization with zero manual code changes
-- **Enhanced Routing**: Layout deduplication, incremental prefetching, faster navigation
-- **React 19.2**: View Transitions, Activity API, improved concurrent features
+**Decision**: Vite + React 19 SPA + TanStack Router + TanStack Query
 
-This makes Next.js 16 significantly faster and more efficient for our real-time dashboard requirements.
+**Why**: The platform is an authenticated, real-time dashboard heavily reliant on WebSockets and live Docker state. Server-Side Rendering (SSR) provides zero SEO benefit here and consumes valuable hardware resources. A Vite SPA compiles to static files, requiring no Node.js runtime, freeing up maximum RAM for the user simulation containers.
+
+**Key Benefits**:
+- **Zero Server Runtime**: Compiled static assets served by Nginx or Traefik directly — no Node.js process consuming RAM
+- **TanStack Query**: Robust polling, caching, and WebSocket state management without fighting Next.js's aggressive server caching
+- **TanStack Router**: Type-safe routing with first-class search params, layout routes, and data loading
+- **React 19**: Native View Transitions, Activity API, improved concurrent features, automatic memoization
+- **Vite Ecosystem**: Instant HMR, optimized builds, mature plugin ecosystem
+- **Hardware Efficiency**: On our 64GB RAM constraint, every megabyte counts — eliminating the Node.js frontend runtime saves resources for user containers
+
+**Trade-off Accepted**: No SSR/SSG. For an authenticated admin dashboard, SEO is irrelevant. All data is dynamic and user-specific anyway.
 
 ### 3.3 Why Traefik v3 over Nginx?
 
@@ -575,7 +581,7 @@ CREATE TABLE audit_logs (
 User Browser
     │
     ▼
-Next.js Frontend
+Vite React Frontend
     │
     ▼
 NukeHub Auth Login (auth.nukehub.org)
@@ -599,7 +605,7 @@ Check permissions against RBAC
 User Browser
     │
     ▼
-Next.js Login Form
+React Login Form
     │
     ▼
 FastAPI Local Auth Endpoint
@@ -1135,7 +1141,7 @@ GET    /api/system/stats            # Platform statistics
 
 - [ ] **Project Structure**
   - [ ] Initialize monorepo structure
-  - [ ] `frontend/` — Next.js 16 with TypeScript, Tailwind, shadcn/ui
+  - [ ] `frontend/` — Vite + React 19 with TypeScript, Tailwind, shadcn/ui
   - [ ] `backend/` — FastAPI with asyncpg, Pydantic, Docker SDK
   - [ ] `database/` — PostgreSQL 18 schema and migrations
   - [ ] `environments/` — Environment Dockerfiles
@@ -1189,7 +1195,7 @@ GET    /api/system/stats            # Platform statistics
 
 - [ ] **Traefik Configuration**
   - [ ] Dynamic Docker provider
-  - [ ] Route: `/app/*` → Next.js
+  - [ ] Route: `/app/*` → Vite SPA (static files served by Nginx)
   - [ ] Route: `/api/*` → FastAPI
   - [ ] Route: `/user/{username}` → user containers
   - [ ] WebSocket upgrade handling
@@ -1598,36 +1604,41 @@ Then the deployment completes with zero downtime
 
 ```
 nukelab/
-├── frontend/                          # Next.js 16 Application
-│   ├── app/                          # App Router
-│   │   ├── (auth)/                   # Auth routes (login, register)
-│   │   ├── (dashboard)/              # Dashboard routes
-│   │   │   ├── admin/               # Admin pages
-│   │   │   │   ├── users/           # User management
-│   │   │   │   ├── servers/         # Server management
-│   │   │   │   ├── environments/    # Environment templates
-│   │   │   │   ├── monitoring/      # Real-time monitoring
-│   │   │   │   ├── credits/         # Credit management
-│   │   │   │   ├── audit/           # Audit logs
-│   │   │   │   └── settings/        # Platform settings
-│   │   │   ├── user/                # User pages
-│   │   │   │   ├── profile/         # User profile
-│   │   │   │   ├── servers/         # My servers
-│   │   │   │   ├── usage/           # My resource usage
-│   │   │   │   ├── credits/         # My credit balance/history
-│   │   │   │   └── settings/        # User preferences & defaults
-│   │   │   └── page.tsx             # Dashboard home
-│   │   ├── api/                     # Next.js API routes (auth proxy)
-│   │   └── layout.tsx               # Root layout
-│   ├── components/                  # React components
-│   │   ├── ui/                      # shadcn/ui components
-│   │   ├── layout/                  # Layout components
-│   │   ├── monitoring/              # Monitoring charts
-│   │   └── forms/                   # Form components
-│   ├── hooks/                       # Custom React hooks
-│   ├── lib/                         # Utilities
-│   ├── types/                       # TypeScript types
-│   └── public/                      # Static assets
+├── frontend/                          # Vite + React 19 SPA
+│   ├── src/
+│   │   ├── routes/                   # TanStack Router file-based routes
+│   │   │   ├── __root.tsx            # Root layout
+│   │   │   ├── index.tsx             # Dashboard home
+│   │   │   ├── login.tsx             # Auth page
+│   │   │   ├── servers/
+│   │   │   │   ├── index.tsx         # Server list
+│   │   │   │   └── $serverId/
+│   │   │   │       ├── index.tsx     # Server detail
+│   │   │   │       └── metrics.tsx   # Server metrics
+│   │   │   ├── environments/
+│   │   │   ├── users/
+│   │   │   ├── admin/
+│   │   │   ├── monitoring/
+│   │   │   ├── credits/
+│   │   │   ├── audit/
+│   │   │   └── settings/
+│   │   ├── components/               # React components
+│   │   │   ├── ui/                   # shadcn/ui primitives
+│   │   │   ├── actions/              # Semantic action buttons
+│   │   │   ├── data/                 # Data display (tables, cards)
+│   │   │   ├── layout/               # Layout components
+│   │   │   ├── feedback/             # Toasts, alerts, skeletons
+│   │   │   ├── charts/               # Recharts wrappers
+│   │   │   └── animations/           # Reusable animation components
+│   │   ├── hooks/                    # Custom React hooks
+│   │   ├── lib/                      # Utilities, API client
+│   │   ├── stores/                   # Zustand stores
+│   │   ├── types/                    # TypeScript types
+│   │   └── styles/                   # Global styles, themes
+│   ├── public/                       # Static assets
+│   ├── index.html
+│   ├── vite.config.ts
+│   └── package.json
 │
 ├── backend/                          # FastAPI Application
 │   ├── app/                         # Main application
@@ -1787,7 +1798,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.frontend.rule=PathPrefix(`/app`)"
-      - "traefik.http.services.frontend.loadbalancer.server.port=3000"
+      - "traefik.http.services.frontend.loadbalancer.server.port=80"
     networks:
       - nukelab
 
@@ -2080,7 +2091,8 @@ DEFAULT_MAX_SERVERS=3
 | Date | Decision | Rationale | Status |
 |------|----------|-----------|--------|
 | 2026-04-27 | FastAPI over Django | Better async/WS performance | Approved |
-| 2026-04-27 | Next.js 16 over 14 | Turbopack stable, Cache Components, React Compiler | Approved |
+| 2026-04-27 | Next.js 16 over 14 | Turbopack stable, Cache Components, React Compiler | **Revised** |
+| 2026-04-29 | Vite + React 19 SPA over Next.js | Zero Node.js runtime, RAM savings, TanStack ecosystem | Approved |
 | 2026-04-27 | Traefik v3 over Nginx | Dynamic routing, K8s ready | Approved |
 | 2026-04-27 | PostgreSQL 18 | Latest stable, JSONB performance | Approved |
 | 2026-04-27 | Nginx auth agent in containers | Self-contained auth, fast | Approved |
