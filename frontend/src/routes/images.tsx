@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { Image } from 'lucide-react';
-import { PageHeader } from '../components/layout/page-header';
+import { Image, Layers, HardDrive, Tag } from 'lucide-react';
+import { PlaceholderPage } from '../components/layout/placeholder-page';
 
 export const Route = createFileRoute('/images')({
   component: ImagesPage,
@@ -8,15 +8,17 @@ export const Route = createFileRoute('/images')({
 
 function ImagesPage() {
   return (
-    <div className="min-h-screen">
-      <PageHeader title="Images" subtitle="Manage container images" icon={Image} />
-      <div className="p-6 lg:p-10">
-        <div className="bubble p-8 text-center">
-          <Image className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-          <h2 className="text-xl font-semibold mb-2">Images</h2>
-          <p className="text-muted-foreground">Image management coming in Phase 2</p>
-        </div>
-      </div>
-    </div>
+    <PlaceholderPage
+      title="Images"
+      subtitle="Manage container images"
+      icon={Image}
+      description="Container image registry management and version control."
+      stats={[
+        { title: 'Total Images', value: 156, icon: Image, iconColor: 'text-blue-400', bgColor: 'bg-blue-500/10' },
+        { title: 'Layers', value: '2.4K', icon: Layers, iconColor: 'text-amber-400', bgColor: 'bg-amber-500/10' },
+        { title: 'Storage', value: '12.5 GB', icon: HardDrive, iconColor: 'text-rose-400', bgColor: 'bg-rose-500/10' },
+        { title: 'Versions', value: 48, icon: Tag, iconColor: 'text-violet-400', bgColor: 'bg-violet-500/10' },
+      ]}
+    />
   );
 }

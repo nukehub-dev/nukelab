@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { Server } from 'lucide-react';
-import { PageHeader } from '../components/layout/page-header';
+import { Server, Activity, Cpu, MemoryStick } from 'lucide-react';
+import { PlaceholderPage } from '../components/layout/placeholder-page';
 
 export const Route = createFileRoute('/servers')({
   component: ServersPage,
@@ -8,15 +8,17 @@ export const Route = createFileRoute('/servers')({
 
 function ServersPage() {
   return (
-    <div className="min-h-screen">
-      <PageHeader title="Servers" subtitle="Manage your simulation servers" icon={Server} />
-      <div className="p-6 lg:p-10">
-        <div className="bubble p-8 text-center">
-          <Server className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-          <h2 className="text-xl font-semibold mb-2">Servers</h2>
-          <p className="text-muted-foreground">Server management coming in Phase 2</p>
-        </div>
-      </div>
-    </div>
+    <PlaceholderPage
+      title="Servers"
+      subtitle="Manage your simulation servers"
+      icon={Server}
+      description="Server management interface with real-time status monitoring and deployment controls."
+      stats={[
+        { title: 'Active Servers', value: 12, icon: Server, iconColor: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
+        { title: 'CPU Usage', value: '67%', icon: Cpu, iconColor: 'text-amber-400', bgColor: 'bg-amber-500/10' },
+        { title: 'Memory', value: '42.3 GB', icon: MemoryStick, iconColor: 'text-rose-400', bgColor: 'bg-rose-500/10' },
+        { title: 'Uptime', value: '99.9%', icon: Activity, iconColor: 'text-blue-400', bgColor: 'bg-blue-500/10' },
+      ]}
+    />
   );
 }

@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { Users } from 'lucide-react';
-import { PageHeader } from '../components/layout/page-header';
+import { Users, Shield, UserCheck, UserX } from 'lucide-react';
+import { PlaceholderPage } from '../components/layout/placeholder-page';
 
 export const Route = createFileRoute('/users')({
   component: UsersPage,
@@ -8,15 +8,17 @@ export const Route = createFileRoute('/users')({
 
 function UsersPage() {
   return (
-    <div className="min-h-screen">
-      <PageHeader title="Users" subtitle="Manage platform users" icon={Users} />
-      <div className="p-6 lg:p-10">
-        <div className="bubble p-8 text-center">
-          <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-          <h2 className="text-xl font-semibold mb-2">Users</h2>
-          <p className="text-muted-foreground">User management coming in Phase 2</p>
-        </div>
-      </div>
-    </div>
+    <PlaceholderPage
+      title="Users"
+      subtitle="Manage platform users"
+      icon={Users}
+      description="User management with role-based access control and activity tracking."
+      stats={[
+        { title: 'Total Users', value: 48, icon: Users, iconColor: 'text-blue-400', bgColor: 'bg-blue-500/10' },
+        { title: 'Active', value: 42, icon: UserCheck, iconColor: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
+        { title: 'Admins', value: 3, icon: Shield, iconColor: 'text-amber-400', bgColor: 'bg-amber-500/10' },
+        { title: 'Inactive', value: 6, icon: UserX, iconColor: 'text-gray-400', bgColor: 'bg-gray-500/10' },
+      ]}
+    />
   );
 }

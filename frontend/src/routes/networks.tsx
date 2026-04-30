@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { Network } from 'lucide-react';
-import { PageHeader } from '../components/layout/page-header';
+import { Network, Globe, Shield, Activity } from 'lucide-react';
+import { PlaceholderPage } from '../components/layout/placeholder-page';
 
 export const Route = createFileRoute('/networks')({
   component: NetworksPage,
@@ -8,15 +8,17 @@ export const Route = createFileRoute('/networks')({
 
 function NetworksPage() {
   return (
-    <div className="min-h-screen">
-      <PageHeader title="Networks" subtitle="Manage container networks" icon={Network} />
-      <div className="p-6 lg:p-10">
-        <div className="bubble p-8 text-center">
-          <Network className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-          <h2 className="text-xl font-semibold mb-2">Networks</h2>
-          <p className="text-muted-foreground">Network management coming in Phase 2</p>
-        </div>
-      </div>
-    </div>
+    <PlaceholderPage
+      title="Networks"
+      subtitle="Manage container networks"
+      icon={Network}
+      description="Network configuration, ingress rules, and service mesh management."
+      stats={[
+        { title: 'Networks', value: 8, icon: Network, iconColor: 'text-blue-400', bgColor: 'bg-blue-500/10' },
+        { title: 'Subnets', value: 12, icon: Globe, iconColor: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
+        { title: 'Ingress Rules', value: 24, icon: Shield, iconColor: 'text-amber-400', bgColor: 'bg-amber-500/10' },
+        { title: 'Traffic', value: '1.2Gbps', icon: Activity, iconColor: 'text-violet-400', bgColor: 'bg-violet-500/10' },
+      ]}
+    />
   );
 }

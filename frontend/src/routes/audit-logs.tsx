@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { FileText } from 'lucide-react';
-import { PageHeader } from '../components/layout/page-header';
+import { FileText, Shield, AlertTriangle, Activity } from 'lucide-react';
+import { PlaceholderPage } from '../components/layout/placeholder-page';
 
 export const Route = createFileRoute('/audit-logs')({
   component: AuditLogsPage,
@@ -8,15 +8,17 @@ export const Route = createFileRoute('/audit-logs')({
 
 function AuditLogsPage() {
   return (
-    <div className="min-h-screen">
-      <PageHeader title="Audit Logs" subtitle="System audit trail" icon={FileText} />
-      <div className="p-6 lg:p-10">
-        <div className="bubble p-8 text-center">
-          <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-          <h2 className="text-xl font-semibold mb-2">Audit Logs</h2>
-          <p className="text-muted-foreground">Audit log management coming in Phase 2</p>
-        </div>
-      </div>
-    </div>
+    <PlaceholderPage
+      title="Audit Logs"
+      subtitle="Platform activity monitoring"
+      icon={FileText}
+      description="Comprehensive audit trail for all platform activities and security events."
+      stats={[
+        { title: 'Total Events', value: '12.5K', icon: FileText, iconColor: 'text-blue-400', bgColor: 'bg-blue-500/10' },
+        { title: 'Security', value: 48, icon: Shield, iconColor: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
+        { title: 'Warnings', value: 12, icon: AlertTriangle, iconColor: 'text-amber-400', bgColor: 'bg-amber-500/10' },
+        { title: 'Today', value: 234, icon: Activity, iconColor: 'text-violet-400', bgColor: 'bg-violet-500/10' },
+      ]}
+    />
   );
 }

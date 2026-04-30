@@ -100,13 +100,21 @@ parse_args() {
 load_env_file() {
     local env_file="$1"
     while IFS= read -r line || [[ -n "$line" ]]; do
-        if [[ "$line" =~ ^#.*$ ]]; then
+        # Skip pure comment lines
+        if [[ "$line" =~ ^[[:space:]]*#.*$ ]]; then
             continue
         fi
-        if [[ -z "$line" ]]; then
+        # Skip empty lines
+        if [[ -z "${line// /}" ]]; then
             continue
         fi
-        export "$line" 2>/dev/null || true
+        # Strip inline comments: remove everything from first # onwards
+        local cleaned="${line%%#*}"
+        # Trim trailing whitespace
+        while [[ "$cleaned" == *[[:space:]] ]]; do
+            cleaned="${cleaned%[[:space:]]}"
+        done
+        export "$cleaned" 2>/dev/null || true
     done < "$env_file"
 }
 
