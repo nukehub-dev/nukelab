@@ -1,285 +1,414 @@
 #!/bin/bash
 
-# Copyright (c) NukeLab Development Team.
-# Distributed under the terms of the BSD-2-Clause License.
+# NukeLab Platform v2.0 — Unified Management Script
+# Usage: ./manage.sh <command> [target] [flags]
+#
+# Examples:
+#   ./manage.sh start                    # Start production stack (containers)
+#   ./manage.sh start --dev              # Start dev stack (backend containers + Vite)
+#   ./manage.sh start backend --conda    # Start backend via Conda (no containers)
+#   ./manage.sh stop                     # Stop everything
+#   ./manage.sh stop frontend            # Stop only frontend dev server
+#   ./manage.sh build                    # Build all containers
+#   ./manage.sh build frontend           # Build only frontend container
+#   ./manage.sh restart backend          # Restart backend only
+#   ./manage.sh status                   # Show status of everything
+#   ./manage.sh logs backend             # Stream backend logs
+#   ./manage.sh install                  # Install all dependencies
+#   ./manage.sh install frontend         # Install only frontend deps
+#   ./manage.sh reset                    # ⚠️ Reset everything
 
-set -e
+set -euo pipefail
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+# ─── Colors ────────────────────────────────────────────────────────────────
+RED=$'\033[0;31m'
+GREEN=$'\033[0;32m'
+YELLOW=$'\033[1;33m'
+BLUE=$'\033[0;34m'
+MAGENTA=$'\033[0;35m'
+CYAN=$'\033[0;36m'
+BOLD=$'\033[1m'
+DIM=$'\033[2m'
+RESET=$'\033[0m'
+
+# ─── Setup ─────────────────────────────────────────────────────────────────
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" > /dev/null 2>&1 && pwd)"
 cd "$DIR"
+FRONTEND_PID_FILE="$DIR/.frontend.pid"
+COMPOSE_FILE="$DIR/docker-compose.yml"
 
-# Determine which environment file to load
-# Priority: .env.development (dev) > .env (production)
+# ─── Helpers ───────────────────────────────────────────────────────────────
+log()   { echo -e "${BLUE}▶${RESET} $*"; }
+info()  { echo -e "${CYAN}ℹ${RESET}  $*"; }
+ok()    { echo -e "${GREEN}✓${RESET}  $*"; }
+warn()  { echo -e "${YELLOW}⚠${RESET}  $*"; }
+err()   { echo -e "${RED}✗${RESET}  $*" >&2; }
+die()   { err "$*"; exit 1; }
+step()  { echo -e "\n${BOLD}${MAGENTA}▸${RESET} ${BOLD}$*${RESET}"; }
+
+# ─── Argument Parsing ──────────────────────────────────────────────────────
+# Globals set by parse_args()
+CMD=""
+TARGET=""
+USE_DEV_MODE=false
+USE_CONDA_MODE=false
+
+parse_args() {
+    CMD="${1:-help}"
+    shift || true
+
+    # Parse remaining args
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            backend|frontend|all)
+                TARGET="$1"
+                ;;
+            --dev|-d)
+                USE_DEV_MODE=true
+                ;;
+            --conda|-c)
+                USE_CONDA_MODE=true
+                ;;
+            --help|-h)
+                print_help
+                exit 0
+                ;;
+            *)
+                die "Unknown argument: $1\nRun './manage.sh help' for usage."
+                ;;
+        esac
+        shift
+    done
+
+    # Defaults
+    [[ -z "$TARGET" ]] && TARGET="all"
+}
+
+# ─── Environment ───────────────────────────────────────────────────────────
 load_env_file() {
     local env_file="$1"
     while IFS= read -r line || [[ -n "$line" ]]; do
-        # Skip comments and empty lines
         [[ "$line" =~ ^#.*$ ]] && continue
         [[ -z "$line" ]] && continue
-        # Export the variable
-        export "$line"
+        export "$line" 2>/dev/null || true
     done < "$env_file"
 }
 
-# Determine which environment file to load
-# Priority: .env (production/local override) > .env.development (dev defaults)
-if [ -f .env ]; then
-    echo "Loading environment from .env"
-    load_env_file .env
-    ENV_FILE=".env"
-elif [ -f .env.development ]; then
-    echo "Loading development environment from .env.development"
-    load_env_file .env.development
-    ENV_FILE=".env.development"
-else
-    echo "ERROR: No environment file found."
-    echo ""
-    echo "For development:"
-    echo "  cp .env.example .env.development"
-    echo ""
-    echo "For production:"
-    echo "  cp .env.example .env"
-    echo "  # Edit .env with your production secrets"
-    echo ""
-    exit 1
-fi
-
-# Detect container engine
-if command -v podman &> /dev/null; then
-    CONTAINER_ENGINE=podman
-    echo "Using Podman as container engine"
-elif command -v docker &> /dev/null; then
-    CONTAINER_ENGINE=docker
-    echo "Using Docker as container engine"
-else
-    echo "ERROR: Neither podman nor docker found. Please install one of them."
-    exit 1
-fi
-
-# Detect compose command
-if command -v podman-compose &> /dev/null; then
-    COMPOSE_COMMAND="podman-compose"
-    echo "Using podman-compose"
-elif command -v docker-compose &> /dev/null; then
-    COMPOSE_COMMAND="docker-compose"
-    echo "Using docker-compose"
-elif $CONTAINER_ENGINE compose version &> /dev/null; then
-    COMPOSE_COMMAND="$CONTAINER_ENGINE compose"
-    echo "Using $CONTAINER_ENGINE compose"
-else
-    echo "ERROR: No compose command found. Please install docker-compose or podman-compose."
-    exit 1
-fi
-
-# Set socket path for Podman
-if [ "$CONTAINER_ENGINE" == "podman" ]; then
-    # Try to get socket from podman info (works for both rootless and rootful)
-    SOCK_PATH=$(podman info --format '{{.Host.RemoteSocket.Path}}' 2>/dev/null || echo "")
-    
-    if [ -n "$SOCK_PATH" ]; then
-        export DOCKER_SOCKET="$SOCK_PATH"
-        echo "Podman socket (from podman info): $SOCK_PATH"
-    elif [ -n "$XDG_RUNTIME_DIR" ] && [ -S "$XDG_RUNTIME_DIR/podman/podman.sock" ]; then
-        # Rootless podman (default for non-root users)
-        export DOCKER_SOCKET="$XDG_RUNTIME_DIR/podman/podman.sock"
-        echo "Podman socket (rootless): $DOCKER_SOCKET"
-    elif [ -S "/run/podman/podman.sock" ]; then
-        # Rootful podman (running as root)
-        export DOCKER_SOCKET="/run/podman/podman.sock"
-        echo "Podman socket (rootful): $DOCKER_SOCKET"
+init_env() {
+    if [ -f .env ]; then
+        log "Loading ${BOLD}.env${RESET}"
+        load_env_file .env
+    elif [ -f .env.development ]; then
+        log "Loading ${BOLD}.env.development${RESET}"
+        load_env_file .env.development
     else
-        # Fallback - use XDG_RUNTIME_DIR if available
-        if [ -n "$XDG_RUNTIME_DIR" ]; then
-            export DOCKER_SOCKET="$XDG_RUNTIME_DIR/podman/podman.sock"
-        else
-            export DOCKER_SOCKET="/run/podman/podman.sock"
-        fi
-        echo "WARNING: Podman socket not found, using fallback: $DOCKER_SOCKET"
-        echo "Make sure Podman is running: podman machine start (macOS/Win) or systemctl --user start podman.socket (Linux)"
+        die "No environment file found.\n\n  cp .env.example .env.development"
+    fi
+}
+
+# ─── Container Engine ──────────────────────────────────────────────────────
+detect_engine() {
+    if command -v podman > /dev/null 2>&1; then
+        CONTAINER_ENGINE=podman
+        info "Podman detected"
+    elif command -v docker > /dev/null 2>&1; then
+        CONTAINER_ENGINE=docker
+        info "Docker detected"
+    else
+        die "Neither podman nor docker found"
+    fi
+
+    if command -v podman-compose > /dev/null 2>&1; then
+        COMPOSE="podman-compose"
+    elif command -v docker-compose > /dev/null 2>&1; then
+        COMPOSE="docker-compose"
+    elif $CONTAINER_ENGINE compose version > /dev/null 2>&1; then
+        COMPOSE="$CONTAINER_ENGINE compose"
+    else
+        die "No compose command found"
+    fi
+}
+
+setup_podman_socket() {
+    [ "$CONTAINER_ENGINE" != "podman" ] && return
+    SOCK=$(podman info --format '{{.Host.RemoteSocket.Path}}' 2>/dev/null || true)
+    if [ -n "$SOCK" ]; then
+        export DOCKER_SOCKET="$SOCK"
+    elif [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -S "$XDG_RUNTIME_DIR/podman/podman.sock" ]; then
+        export DOCKER_SOCKET="$XDG_RUNTIME_DIR/podman/podman.sock"
+    else
+        export DOCKER_SOCKET="/run/podman/podman.sock"
     fi
     export DOCKER_NUKELAB_HOST="$DOCKER_SOCKET"
-else
-    export DOCKER_SOCKET="/var/run/docker.sock"
-fi
-
-# Conda check
-if command -v conda &> /dev/null; then
-    echo "Conda detected: $(conda --version)"
-fi
-
-# Functions
-start() {
-    echo "Starting NukeLab services..."
-    $COMPOSE_COMMAND -f docker-compose.yml up -d
-    
-    # Get APP_URL from environment or use default
-    APP_URL=${APP_URL:-http://localhost:8080}
-    
-    echo "Services started!"
-    echo "  Frontend: $APP_URL"
-    echo "  API: $APP_URL/api"
-    echo "  API Docs: $APP_URL/api/docs"
-    echo "  Traefik Dashboard: http://localhost:8090"
 }
 
-stop() {
-    echo "Stopping NukeLab services..."
-    $COMPOSE_COMMAND -f docker-compose.yml down
+# ─── Frontend Process Utils ────────────────────────────────────────────────
+is_frontend_running() {
+    [ -f "$FRONTEND_PID_FILE" ] && kill -0 "$(cat "$FRONTEND_PID_FILE")" 2>/dev/null
 }
 
-restart() {
-    stop
-    start
-}
-
-build() {
-    echo "Building NukeLab services..."
-    $COMPOSE_COMMAND -f docker-compose.yml build
-}
-
-logs() {
-    $COMPOSE_COMMAND -f docker-compose.yml logs -f "$@"
-}
-
-status() {
-    $COMPOSE_COMMAND -f docker-compose.yml ps
-}
-
-conda_setup() {
-    if ! command -v conda &> /dev/null; then
-        echo "ERROR: Conda not found. Please install Anaconda or Miniconda."
-        exit 1
+kill_frontend() {
+    if is_frontend_running; then
+        local pid=$(cat "$FRONTEND_PID_FILE")
+        log "Stopping frontend (PID: $pid)..."
+        kill "$pid" 2>/dev/null || true
+        rm -f "$FRONTEND_PID_FILE"
+        ok "Frontend stopped"
     fi
-    
-    echo "Setting up Conda environment for backend..."
-    cd backend
-    
-    if conda env list | grep -q "nukelab-backend"; then
-        echo "Environment 'nukelab-backend' already exists. Updating..."
-        conda env update -f environment.yml --prune
+}
+
+# ─── Health Check ──────────────────────────────────────────────────────────
+wait_for_backend() {
+    local url="${APP_URL:-http://localhost:8080}/api/health"
+    local waited=0
+    step "Waiting for backend..."
+    while ! curl -sf "$url" > /dev/null 2>&1; do
+        sleep 2
+        waited=$((waited + 2))
+        [ "$waited" -ge 60 ] && { warn "Timeout, continuing..."; return 1; }
+        printf "."
+    done
+    ok "Backend ready (${waited}s)"
+}
+
+# ─── Command Implementations ───────────────────────────────────────────────
+
+cmd_start() {
+    if $USE_CONDA_MODE; then
+        # Conda mode: backend via conda, no containers
+        if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
+            die "--conda only works with backend target. Use:\n  ./manage.sh start backend --conda"
+        fi
+        step "Starting backend with Conda..."
+        command -v conda > /dev/null 2>&1 || die "Conda not found"
+        conda env list | grep -q "nukelab-backend" || die "Run: ./manage.sh install backend"
+        cd "$DIR/backend"
+        conda run -n nukelab-backend uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+        return
+    fi
+
+    if $USE_DEV_MODE; then
+        # Dev mode: backend containers + local Vite
+        step "Starting development stack..."
+        
+        # Stop frontend container if running (we use Vite dev server instead)
+        $COMPOSE -f "$COMPOSE_FILE" stop frontend 2>/dev/null || true
+        
+        if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
+            log "Starting backend containers..."
+            $COMPOSE -f "$COMPOSE_FILE" up -d traefik postgres redis backend celery-worker celery-beat
+            wait_for_backend
+        fi
+        
+        if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
+            command -v npm > /dev/null 2>&1 || die "npm not found"
+            [ -d "$DIR/frontend/node_modules" ] || die "Run: ./manage.sh install frontend"
+            
+            log "Starting Vite dev server..."
+            cd "$DIR/frontend"
+            npm run dev &
+            echo $! > "$FRONTEND_PID_FILE"
+            ok "Frontend started on ${CYAN}http://localhost:5173${RESET}"
+        fi
+        
+        echo ""
+        ok "Development stack running!"
+        echo -e "  Frontend: ${CYAN}http://localhost:5173${RESET} ${DIM}(Vite dev)${RESET}"
+        echo -e "  API:      ${CYAN}http://localhost:8080/api${RESET}"
+        echo -e "  Traefik:  ${CYAN}http://localhost:8090${RESET}"
+        echo -e "\n  ${YELLOW}Ctrl+C to stop${RESET}"
+        
+        trap 'echo ""; step "Shutting down..."; kill_frontend; $COMPOSE -f "$COMPOSE_FILE" down; ok "Goodbye!"; exit 0' INT TERM
+        wait
     else
-        echo "Creating Conda environment 'nukelab-backend'..."
-        conda env create -f environment.yml
+        # Production mode: everything in containers
+        step "Starting production stack..."
+        
+        if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
+            log "Starting backend services..."
+            $COMPOSE -f "$COMPOSE_FILE" up -d traefik postgres redis backend celery-worker celery-beat
+        fi
+        
+        if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
+            log "Starting frontend container..."
+            $COMPOSE -f "$COMPOSE_FILE" up -d frontend
+        fi
+        
+        ok "Stack running!"
+        echo -e "  URL: ${CYAN}http://localhost:8080${RESET}"
+        echo -e "  API: ${CYAN}http://localhost:8080/api${RESET}"
+    fi
+}
+
+cmd_stop() {
+    step "Stopping services..."
+    
+    if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
+        kill_frontend
+        $COMPOSE -f "$COMPOSE_FILE" stop frontend 2>/dev/null || true
     fi
     
-    echo "Conda environment ready!"
-    echo "Activate with: conda activate nukelab-backend"
-}
-
-conda_run() {
-    if ! command -v conda &> /dev/null; then
-        echo "ERROR: Conda not found."
-        exit 1
+    if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
+        $COMPOSE -f "$COMPOSE_FILE" stop traefik postgres redis backend celery-worker celery-beat 2>/dev/null || true
     fi
     
-    if ! conda env list | grep -q "nukelab-backend"; then
-        echo "Conda environment not found. Run './manage.sh conda-setup' first."
-        exit 1
+    ok "Stopped"
+}
+
+cmd_restart() {
+    cmd_stop
+    sleep 2
+    cmd_start
+}
+
+cmd_build() {
+    step "Building..."
+    
+    if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
+        log "Building backend containers..."
+        $COMPOSE -f "$COMPOSE_FILE" build backend celery-worker celery-beat
     fi
     
-    echo "Starting backend with Conda environment..."
-    cd backend
-    conda activate nukelab-backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+    if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
+        log "Building frontend container..."
+        $COMPOSE -f "$COMPOSE_FILE" build frontend
+    fi
+    
+    ok "Build complete"
 }
 
-build_base() {
-    echo "Building base environment image..."
-    ./scripts/build-base.sh
+cmd_status() {
+    step "Container Status"
+    $COMPOSE -f "$COMPOSE_FILE" ps
+    
+    echo ""
+    if is_frontend_running; then
+        ok "Frontend dev: ${CYAN}http://localhost:5173${RESET} ${DIM}(PID: $(cat "$FRONTEND_PID_FILE"))${RESET}"
+    else
+        info "Frontend dev: ${DIM}not running${RESET}"
+    fi
 }
 
-build_dev() {
-    echo "Building dev environment image..."
-    ./scripts/build-dev.sh
+cmd_logs() {
+    local service="${TARGET:-}"
+    [[ "$service" = "all" ]] && service=""
+    $COMPOSE -f "$COMPOSE_FILE" logs -f ${service:-}
 }
 
-build_all_envs() {
-    echo "Building all environment images..."
-    ./scripts/build-all.sh
+cmd_install() {
+    if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
+        step "Installing frontend dependencies..."
+        command -v npm > /dev/null 2>&1 || die "npm not found"
+        cd "$DIR/frontend"
+        npm install
+        ok "Frontend dependencies installed"
+    fi
+    
+    if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
+        step "Installing backend dependencies..."
+        command -v conda > /dev/null 2>&1 || die "Conda not found"
+        cd "$DIR/backend"
+        if conda env list | grep -q "nukelab-backend"; then
+            conda env update -f environment.yml --prune
+        else
+            conda env create -f environment.yml
+        fi
+        ok "Backend environment ready"
+    fi
 }
 
-generate_certs() {
-    echo "Generating SSL certificates..."
-    ./scripts/generate-certs.sh
+cmd_reset() {
+    step "${RED}${BOLD}WARNING:${RESET} This deletes ALL data and containers!"
+    read -rp "Type 'yes' to confirm: " confirm
+    [[ "$confirm" = "yes" ]] || { info "Aborted."; exit 0; }
+    
+    log "Stopping everything..."
+    kill_frontend
+    $COMPOSE -f "$COMPOSE_FILE" down -v --remove-orphans 2>/dev/null || true
+    $CONTAINER_ENGINE volume rm nukelab-postgres-data nukelab-letsencrypt 2>/dev/null || true
+    ok "Reset complete"
 }
 
-help() {
-    cat << EOF
-NukeLab Platform v2.0 - Management Script
+# ─── Help ──────────────────────────────────────────────────────────────────
+print_help() {
+    cat <<-EOF
+${BOLD}${CYAN}NukeLab v2.0${RESET} — Management Script
 
-Usage: ./manage.sh [command]
+${BOLD}Usage:${RESET} ./manage.sh <command> [target] [flags]
 
-Container Commands:
-  start        Start all services (detached)
-  stop         Stop all services
-  restart      Restart all services
-  build        Build/rebuild all containers
-  logs         Show logs (use: ./manage.sh logs [service])
-  status       Show running containers
+${BOLD}${MAGENTA}Commands:${RESET}
+  ${GREEN}start${RESET}     [target] [--dev] [--conda]  Start services
+  ${GREEN}stop${RESET}      [target]                    Stop services
+  ${GREEN}restart${RESET}   [target] [--dev] [--conda]  Restart services
+  ${GREEN}build${RESET}     [target]                    Build containers
+  ${GREEN}status${RESET}                                Show status
+  ${GREEN}logs${RESET}      [service]                   Stream logs
+  ${GREEN}install${RESET}   [target]                    Install dependencies
+  ${GREEN}reset${RESET}                                 Delete all data
 
-Environment Commands:
-  build-base   Build base environment image
-  build-dev    Build dev environment image
-  build-all    Build all environment images
+${BOLD}Targets:${RESET} ${DIM}(optional, default: all)${RESET}
+  backend    Backend services only
+  frontend   Frontend only
+  all        Everything ${DIM}(default)${RESET}what 
 
-Utility Commands:
-  certs        Generate self-signed SSL certificates
-  conda-setup  Create/update Conda environment for backend
-  conda-run    Run backend using Conda (for local development)
+${BOLD}Flags:${RESET}
+  --dev, -d      Development mode: containers + local Vite dev server
+  --conda, -c    Use Conda instead of containers for backend
 
-Examples:
-  ./manage.sh start
-  ./manage.sh logs backend
-  ./manage.sh build-all
-  ./manage.sh conda-setup
+${BOLD}Examples:${RESET}
+  ./manage.sh start                      # Production: all containers
+  ./manage.sh start --dev                # Dev: backend containers + Vite
+  ./manage.sh start backend --conda      # Backend via Conda, no containers
+  ./manage.sh stop frontend              # Stop only frontend
+  ./manage.sh build backend              # Build backend image only
+  ./manage.sh restart                    # Restart everything
+  ./manage.sh logs backend               # Stream backend logs
+  ./manage.sh install                    # Install all deps
+  ./manage.sh install frontend           # Install only frontend deps
+  ./manage.sh status                     # Check what's running
 
 EOF
 }
 
-# Main
-case "${1:-help}" in
-    start)
-        start
-        ;;
-    stop)
-        stop
-        ;;
-    restart)
-        restart
-        ;;
-    build)
-        build
-        ;;
-    logs)
-        shift
-        logs "$@"
-        ;;
-    status)
-        status
-        ;;
-    conda-setup)
-        conda_setup
-        ;;
-    conda-run)
-        conda_run
-        ;;
-    build-base)
-        build_base
-        ;;
-    build-dev)
-        build_dev
-        ;;
-    build-all)
-        build_all_envs
-        ;;
-    certs)
-        generate_certs
-        ;;
-    help|--help|-h)
-        help
-        ;;
-    *)
-        echo "Unknown command: $1"
-        help
-        exit 1
-        ;;
-esac
+# ─── Main ──────────────────────────────────────────────────────────────────
+main() {
+    parse_args "$@"
+
+    # Commands that don't need env/engine
+    case "$CMD" in
+        help|--help|-h)
+            print_help
+            exit 0
+            ;;
+    esac
+
+    # Init env and engine for most commands
+    case "$CMD" in
+        start|stop|restart|build|status|logs|reset)
+            init_env
+            detect_engine
+            setup_podman_socket
+            ;;
+        install)
+            # Only init env if installing backend
+            if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
+                init_env
+            fi
+            ;;
+    esac
+
+    # Dispatch
+    case "$CMD" in
+        start)      cmd_start ;;
+        stop)       cmd_stop ;;
+        restart)    cmd_restart ;;
+        build)      cmd_build ;;
+        status)     cmd_status ;;
+        logs)       cmd_logs ;;
+        install)    cmd_install ;;
+        reset)      cmd_reset ;;
+        *)          die "Unknown command: $CMD\nRun './manage.sh help' for usage." ;;
+    esac
+}
+
+main "$@"
