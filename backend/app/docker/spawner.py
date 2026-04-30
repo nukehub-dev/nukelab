@@ -37,6 +37,7 @@ class ServerSpawner:
         
         # Traefik labels for dynamic routing
         route_prefix = f"/user/{username}/{server_name}"
+        public_url = getattr(settings, 'public_url', 'http://localhost:8080').rstrip('/')
         labels = {
             "traefik.enable": "true",
             f"traefik.http.routers.server-{server_id}.rule": f"PathPrefix(`{route_prefix}`)",
@@ -97,7 +98,7 @@ class ServerSpawner:
                 allocated_cpu=cpu,
                 allocated_memory=memory,
                 allocated_disk=disk,
-                external_url=route_prefix,
+                external_url=f"{public_url}{route_prefix}",
                 started_at=datetime.utcnow(),
                 created_at=datetime.utcnow(),
             )

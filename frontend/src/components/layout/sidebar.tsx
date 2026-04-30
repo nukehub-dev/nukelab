@@ -223,6 +223,7 @@ export function Sidebar() {
             <button
               onClick={() => {
                 localStorage.removeItem('nukelab-token');
+                document.cookie = 'nukelab_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
                 window.location.href = '/login';
               }}
               className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm hover:bg-sidebar-accent transition-colors text-red-400"
@@ -360,6 +361,7 @@ export function Sidebar() {
                   <button
                     onClick={() => {
                       localStorage.removeItem('nukelab-token');
+                      document.cookie = 'nukelab_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
                       window.location.href = '/login';
                     }}
                     className="flex items-center gap-2 w-full px-4 py-3 rounded-xl text-sm hover:bg-muted transition-colors text-red-400"

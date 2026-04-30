@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_debug: bool = True
     app_url: str = "http://localhost:8000"
+    public_url: str = "http://localhost:8080"  # Traefik/public-facing URL
     
     # Security
     jwt_secret: str = "change-me"

@@ -505,7 +505,10 @@ function UsersPage() {
                 >
                   <option value="user">User</option>
                   <option value="moderator">Moderator</option>
+                  <option value="support">Support</option>
+                  <option value="guest">Guest</option>
                   {canDeleteUsers && <option value="admin">Admin</option>}
+                  {canDeleteUsers && <option value="super_admin">Super Admin</option>}
                 </select>
               </div>
               {canDeleteUsers && (

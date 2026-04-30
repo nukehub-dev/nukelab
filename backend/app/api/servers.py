@@ -135,18 +135,6 @@ async def create_server(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to spawn server: {str(e)}"
         )
-    server = result.scalar_one_or_none()
-    
-    if not server:
-        raise HTTPException(status_code=404, detail="Server not found")
-    
-    checker = PermissionChecker(current_user)
-    
-    # Check ownership or admin permission
-    if require_ownership and str(server.user_id) != str(current_user.id):
-        checker.require_any([Permission.SERVERS_READ_ALL, Permission.SERVERS_MANAGE])
-    
-    return server
 
 
 @router.get("/")
@@ -181,47 +169,6 @@ async def list_servers(
             for s in servers
         ]
     }
-
-
-@router.post("/", response_model=ServerResponse)
-async def create_server(
-    request: ServerCreateRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Create and spawn a new server. Requires servers:start permission."""
-    checker = PermissionChecker(current_user)
-    checker.require(Permission.SERVERS_START)
-    
-    try:
-        # Spawn the container
-        server = await spawner.spawn(
-            user_id=str(current_user.id),
-            username=current_user.username,
-            server_name=request.name,
-            environment=request.environment,
-            cpu=request.cpu,
-            memory=request.memory,
-        )
-        
-        # Save to database
-        db.add(server)
-        await db.commit()
-        await db.refresh(server)
-        
-        return ServerResponse(
-            id=str(server.id),
-            name=server.name,
-            status=server.status,
-            external_url=server.external_url,
-            created_at=server.created_at.isoformat() if server.created_at else None,
-        )
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to spawn server: {str(e)}"
-        )
 
 
 @router.get("/{server_id}")

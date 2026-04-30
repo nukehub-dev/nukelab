@@ -16,6 +16,8 @@ ROLE_PERMISSIONS = {
         Permission.USERS_UPDATE,
         Permission.USERS_DELETE,
         Permission.SERVERS_READ_ALL,
+        Permission.SERVERS_START,
+        Permission.SERVERS_STOP,
         Permission.SERVERS_MANAGE,
         Permission.RESOURCES_READ_ALL,
         Permission.ENVIRONMENT_CREATE,

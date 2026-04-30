@@ -154,8 +154,8 @@ export function DataTableToolbar<TData>({
                     </div>
                     {table.getAllLeafColumns()
                       .filter((column) => {
-                        const header = column.columnDef.header as string;
-                        return header && header.trim() !== '';
+                        const header = column.columnDef.header;
+                        return typeof header === 'string' && header.trim() !== '';
                       })
                       .map((column) => (
                         <button

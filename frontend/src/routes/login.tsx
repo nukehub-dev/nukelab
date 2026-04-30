@@ -47,6 +47,9 @@ function LoginPage() {
 
       localStorage.setItem('nukelab-token', data.access_token);
       
+      // Set cookie for server nginx auth (must match backend cookie name)
+      document.cookie = `nukelab_token=${data.access_token}; path=/; SameSite=Lax`;
+      
       // Navigate to dashboard after login
       navigate({ to: '/' });
     } catch (err) {

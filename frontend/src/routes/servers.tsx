@@ -8,6 +8,7 @@ import { DataTable } from '../components/data/data-table';
 import { StatusBadge } from '../components/data/status-badge';
 import { useServers, useServerActions } from '../hooks/use-servers';
 import { useEnvironments } from '../hooks/use-environments';
+import { usePlans } from '../hooks/use-plans';
 import { useDataTable } from '../hooks/use-data-table';
 import { formatDate } from '../lib/utils';
 import type { Server as ServerType } from '../types/api';
@@ -21,6 +22,7 @@ function ServersPage() {
   const { data: servers = [], isLoading, isError, error } = useServers();
   const { createServer, startServer, stopServer, restartServer, deleteServer } = useServerActions();
   const { data: envData } = useEnvironments({ is_active: true, limit: 100 });
+  const { data: plansData } = usePlans({ is_active: true, limit: 100 });
   
   const {
     state: tableState,
@@ -37,11 +39,12 @@ function ServersPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deployForm, setDeployForm] = useState({
     name: '',
-    plan_id: 'basic',
+    plan_id: '',
     environment_id: '',
   });
 
   const environments = envData?.data || [];
+  const plans = plansData?.data || [];
 
   // Client-side filtering and sorting for now since API doesn't support it fully
   const filteredServers = servers.filter((server) => {
@@ -82,7 +85,7 @@ function ServersPage() {
       environment_id: deployForm.environment_id,
     });
     setDialogOpen(false);
-    setDeployForm({ name: '', plan_id: 'basic', environment_id: '' });
+    setDeployForm({ name: '', plan_id: '', environment_id: '' });
   };
 
   const columns: ColumnDef<ServerType>[] = [
@@ -387,10 +390,12 @@ function ServersPage() {
                 onChange={(e) => setDeployForm({ ...deployForm, plan_id: e.target.value })}
                 className="w-full px-3 py-2 rounded-lg border border-input bg-input/80 text-sm focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none"
               >
-                <option value="basic">Basic (2 CPU / 4GB)</option>
-                <option value="standard">Standard (4 CPU / 8GB)</option>
-                <option value="premium">Premium (8 CPU / 16GB)</option>
-                <option value="ultra">Ultra (16 CPU / 32GB)</option>
+                <option value="">Select a plan...</option>
+                {plans.map((plan) => (
+                  <option key={plan.id} value={plan.id}>
+                    {plan.name} ({plan.cpu_limit} CPU / {plan.memory_limit})
+                  </option>
+                ))}
               </select>
             </div>
             <div className="space-y-2"
