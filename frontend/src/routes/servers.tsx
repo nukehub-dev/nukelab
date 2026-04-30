@@ -1,5 +1,5 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { Server, Activity, Cpu, MemoryStick, Play, Square, RotateCcw, Trash2, ExternalLink } from 'lucide-react';
+import { createFileRoute, Link } from '@tanstack/react-router';
+import { Server, Activity, Cpu, MemoryStick, Play, Square, RotateCcw, Trash2, ExternalLink, Eye } from 'lucide-react';
 import { useState } from 'react';
 import { type ColumnDef, type SortingState, type ColumnFiltersState, type VisibilityState } from '@tanstack/react-table';
 import { motion } from 'framer-motion';
@@ -134,6 +134,14 @@ function ServersPage() {
         const server = row.original;
         return (
           <div className="flex items-center gap-1">
+            <Link
+              to="/servers/$serverId"
+              params={{ serverId: server.id }}
+              className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
+              title="View Details"
+            >
+              <Eye className="w-4 h-4" />
+            </Link>
             {server.status === 'stopped' && (
               <motion.button
                 onClick={() => startServer.mutate(server.id)}

@@ -15,6 +15,7 @@ import { StatCard } from '../components/data/stat-card';
 
 import { useDashboard } from '../hooks/use-dashboard';
 import { SkeletonCard } from '../components/feedback/skeleton';
+import { MetricsDashboard } from '../components/charts/metrics-dashboard';
 import { formatDate } from '../lib/utils';
 
 export const Route = createFileRoute('/')({
@@ -125,6 +126,15 @@ function DashboardPage() {
                   <StatCard {...stat} />
                 </motion.div>
               ))}
+        </motion.div>
+
+        {/* Real-Time Metrics Dashboard */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.35 }}
+        >
+          <MetricsDashboard />
         </motion.div>
 
         {/* Quick Actions */}
