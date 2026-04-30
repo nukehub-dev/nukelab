@@ -12,8 +12,22 @@ export function useServers() {
   });
 }
 
+interface CreateServerData {
+  name: string;
+  plan_id: string;
+  environment_id: string;
+}
+
 export function useServerActions() {
   const queryClient = useQueryClient();
+
+  const createServer = useMutation({
+    mutationFn: (data: CreateServerData) =>
+      api.post<Server>('/servers/', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['servers'] });
+    },
+  });
 
   const startServer = useMutation({
     mutationFn: (serverId: string) =>
@@ -48,6 +62,7 @@ export function useServerActions() {
   });
 
   return {
+    createServer,
     startServer,
     stopServer,
     restartServer,

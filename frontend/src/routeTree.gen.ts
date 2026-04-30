@@ -13,6 +13,7 @@ import { Route as VolumesRouteImport } from './routes/volumes'
 import { Route as UsersRouteImport } from './routes/users'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ServersRouteImport } from './routes/servers'
+import { Route as PlansRouteImport } from './routes/plans'
 import { Route as NetworksRouteImport } from './routes/networks'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ImagesRouteImport } from './routes/images'
@@ -40,6 +41,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const ServersRoute = ServersRouteImport.update({
   id: '/servers',
   path: '/servers',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PlansRoute = PlansRouteImport.update({
+  id: '/plans',
+  path: '/plans',
   getParentRoute: () => rootRouteImport,
 } as any)
 const NetworksRoute = NetworksRouteImport.update({
@@ -90,6 +96,7 @@ export interface FileRoutesByFullPath {
   '/images': typeof ImagesRoute
   '/login': typeof LoginRoute
   '/networks': typeof NetworksRoute
+  '/plans': typeof PlansRoute
   '/servers': typeof ServersRouteWithChildren
   '/settings': typeof SettingsRoute
   '/users': typeof UsersRoute
@@ -104,6 +111,7 @@ export interface FileRoutesByTo {
   '/images': typeof ImagesRoute
   '/login': typeof LoginRoute
   '/networks': typeof NetworksRoute
+  '/plans': typeof PlansRoute
   '/servers': typeof ServersRouteWithChildren
   '/settings': typeof SettingsRoute
   '/users': typeof UsersRoute
@@ -119,6 +127,7 @@ export interface FileRoutesById {
   '/images': typeof ImagesRoute
   '/login': typeof LoginRoute
   '/networks': typeof NetworksRoute
+  '/plans': typeof PlansRoute
   '/servers': typeof ServersRouteWithChildren
   '/settings': typeof SettingsRoute
   '/users': typeof UsersRoute
@@ -135,6 +144,7 @@ export interface FileRouteTypes {
     | '/images'
     | '/login'
     | '/networks'
+    | '/plans'
     | '/servers'
     | '/settings'
     | '/users'
@@ -149,6 +159,7 @@ export interface FileRouteTypes {
     | '/images'
     | '/login'
     | '/networks'
+    | '/plans'
     | '/servers'
     | '/settings'
     | '/users'
@@ -163,6 +174,7 @@ export interface FileRouteTypes {
     | '/images'
     | '/login'
     | '/networks'
+    | '/plans'
     | '/servers'
     | '/settings'
     | '/users'
@@ -178,6 +190,7 @@ export interface RootRouteChildren {
   ImagesRoute: typeof ImagesRoute
   LoginRoute: typeof LoginRoute
   NetworksRoute: typeof NetworksRoute
+  PlansRoute: typeof PlansRoute
   ServersRoute: typeof ServersRouteWithChildren
   SettingsRoute: typeof SettingsRoute
   UsersRoute: typeof UsersRoute
@@ -212,6 +225,13 @@ declare module '@tanstack/react-router' {
       path: '/servers'
       fullPath: '/servers'
       preLoaderRoute: typeof ServersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/plans': {
+      id: '/plans'
+      path: '/plans'
+      fullPath: '/plans'
+      preLoaderRoute: typeof PlansRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/networks': {
@@ -293,6 +313,7 @@ const rootRouteChildren: RootRouteChildren = {
   ImagesRoute: ImagesRoute,
   LoginRoute: LoginRoute,
   NetworksRoute: NetworksRoute,
+  PlansRoute: PlansRoute,
   ServersRoute: ServersRouteWithChildren,
   SettingsRoute: SettingsRoute,
   UsersRoute: UsersRoute,

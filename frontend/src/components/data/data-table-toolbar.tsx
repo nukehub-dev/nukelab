@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search,
   X,
   Filter,
-  Columns,
+  Eye,
   List,
   LayoutGrid,
+  ChevronDown,
+  Check,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import type { Table } from '@tanstack/react-table';
@@ -53,6 +55,22 @@ export function DataTableToolbar<TData>({
 }: DataTableToolbarProps<TData>) {
   const [showFilters, setShowFilters] = useState(false);
   const [showColumnMenu, setShowColumnMenu] = useState(false);
+  const [openFilterKey, setOpenFilterKey] = useState<string | null>(null);
+  const filterRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  // Close filter dropdowns on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (openFilterKey) {
+        const ref = filterRefs.current[openFilterKey];
+        if (ref && !ref.contains(event.target as Node)) {
+          setOpenFilterKey(null);
+        }
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [openFilterKey]);
 
   return (
     <div className="space-y-3">
@@ -114,8 +132,8 @@ export function DataTableToolbar<TData>({
                 showColumnMenu && 'bg-primary/10 border-primary/30 text-primary'
               )}
             >
-              <Columns className="w-4 h-4" />
-              Columns
+              <Eye className="w-4 h-4" />
+              View
             </button>
 
             <AnimatePresence>
@@ -129,24 +147,31 @@ export function DataTableToolbar<TData>({
                     initial={{ opacity: 0, y: 10, scale: 0.95 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    className="absolute right-0 mt-2 w-48 p-2 bg-popover border border-border rounded-xl shadow-lg z-50"
+                    className="absolute right-0 mt-2 w-48 p-2 bg-popover border border-border rounded-xl shadow-lg z-50 space-y-1"
                   >
-                    <div className="space-y-1">
-                      {table.getAllLeafColumns().map((column) => (
-                        <label
-                          key={column.id}
-                          className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-accent cursor-pointer text-sm"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={column.getIsVisible()}
-                            onChange={column.getToggleVisibilityHandler()}
-                            className="rounded border-border"
-                          />
-                          <span>{column.columnDef.header as string}</span>
-                        </label>
-                      ))}
+                    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      Toggle columns
                     </div>
+                    {table.getAllLeafColumns()
+                      .filter((column) => {
+                        const header = column.columnDef.header as string;
+                        return header && header.trim() !== '';
+                      })
+                      .map((column) => (
+                        <button
+                          key={column.id}
+                          onClick={() => column.toggleVisibility()}
+                          className={cn(
+                            'w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors',
+                            column.getIsVisible()
+                              ? 'text-foreground'
+                              : 'text-muted-foreground'
+                          )}
+                        >
+                          <Check className={cn('w-4 h-4', column.getIsVisible() ? 'opacity-100' : 'opacity-0')} />
+                          <span>{column.columnDef.header as string}</span>
+                        </button>
+                      ))}
                   </motion.div>
                 </>
               )}
@@ -158,7 +183,7 @@ export function DataTableToolbar<TData>({
             onClick={onViewToggle}
             className={cn(
               'h-9 px-3 rounded-lg border border-border/50 text-sm font-medium',
-              'transition-colors hover:bg-accent flex items-center gap-2 md:hidden',
+              'transition-colors hover:bg-accent flex items-center gap-2',
               isMobileView && 'bg-primary/10 border-primary/30 text-primary'
             )}
           >
@@ -184,38 +209,89 @@ export function DataTableToolbar<TData>({
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className="overflow-hidden"
           >
             <div className="flex flex-wrap items-center gap-2 p-3 rounded-lg border border-border/50 bg-muted/30">
-              {filters.map((filter) => (
-                <div key={filter.key} className="relative">
-                  <select
-                    value={
-                      (table.getColumn(filter.key)?.getFilterValue() as string) || ''
-                    }
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      const column = table.getColumn(filter.key);
-                      if (column) {
-                        column.setFilterValue(value || undefined);
-                      }
-                    }}
-                    className={cn(
-                      'h-8 px-3 pr-8 rounded-lg border border-border/50 bg-background',
-                      'text-sm focus:outline-none focus:ring-2 focus:ring-ring/50',
-                      'appearance-none cursor-pointer'
-                    )}
+              {filters.map((filter) => {
+                const currentValue = (table.getColumn(filter.key)?.getFilterValue() as string) || '';
+                const selectedOption = filter.options.find((opt) => opt.value === currentValue);
+                const isOpen = openFilterKey === filter.key;
+                
+                return (
+                  <div
+                    key={filter.key}
+                    ref={(el) => { filterRefs.current[filter.key] = el; }}
+                    className="relative"
                   >
-                    <option value="">{filter.label}</option>
-                    {filter.options.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                  <Filter className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
-                </div>
-              ))}
+                    <button
+                      onClick={() => setOpenFilterKey(isOpen ? null : filter.key)}
+                      className={cn(
+                        'relative h-8 px-3 pr-8 rounded-lg border text-sm font-medium',
+                        'transition-colors flex items-center gap-2',
+                        currentValue
+                          ? 'bg-primary/10 border-primary/30 text-primary'
+                          : 'border-border/50 bg-background hover:bg-accent'
+                      )}
+                    >
+                      <span>{selectedOption ? selectedOption.label : filter.label}</span>
+                      <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                    </button>
+                    
+                    <AnimatePresence>
+                      {isOpen && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-40"
+                            onClick={() => setOpenFilterKey(null)}
+                          />
+                          <motion.div
+                            initial={{ opacity: 0, y: 4, scale: 0.95 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 4, scale: 0.95 }}
+                            transition={{ duration: 0.1 }}
+                            className="absolute left-0 top-full mt-1 min-w-[160px] p-1.5 bg-popover border border-border rounded-xl shadow-lg z-50 space-y-1"
+                          >
+                            <button
+                              onClick={() => {
+                                const column = table.getColumn(filter.key);
+                                if (column) column.setFilterValue(undefined);
+                                setOpenFilterKey(null);
+                              }}
+                              className={cn(
+                                'w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors',
+                                !currentValue
+                                  ? 'bg-primary/10 text-primary'
+                                  : 'hover:bg-accent text-foreground'
+                              )}
+                            >
+                              <Check className={cn('w-4 h-4', !currentValue ? 'opacity-100' : 'opacity-0')} />
+                              <span>All {filter.label}s</span>
+                            </button>
+                            {filter.options.map((opt) => (
+                              <button
+                                key={opt.value}
+                                onClick={() => {
+                                  const column = table.getColumn(filter.key);
+                                  if (column) column.setFilterValue(opt.value);
+                                  setOpenFilterKey(null);
+                                }}
+                                className={cn(
+                                  'w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors',
+                                  currentValue === opt.value
+                                    ? 'bg-primary/10 text-primary'
+                                    : 'hover:bg-accent text-foreground'
+                                )}
+                              >
+                                <Check className={cn('w-4 h-4', currentValue === opt.value ? 'opacity-100' : 'opacity-0')} />
+                                <span>{opt.label}</span>
+                              </button>
+                            ))}
+                          </motion.div>
+                        </>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                );
+              })}
 
               {table.getState().columnFilters.length > 0 && (
                 <button

@@ -10,6 +10,7 @@ import {
   Pause,
   Download,
   RefreshCw,
+  Plus,
 } from 'lucide-react';
 
 export type ActionVariant = 'default' | 'outline' | 'ghost' | 'destructive';
@@ -91,6 +92,13 @@ export const ACTION_CONFIGS: Record<string, ActionConfig> = {
     variant: 'ghost',
     tone: 'default',
     loadingLabel: 'Refreshing...',
+  },
+  create: {
+    label: 'Create',
+    icon: Plus,
+    variant: 'default',
+    tone: 'primary',
+    loadingLabel: 'Creating...',
   },
 };
 

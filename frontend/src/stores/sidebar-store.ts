@@ -19,7 +19,7 @@ export const useSidebarStore = create<SidebarState>()(
       isPinned: true,
       isMobileOpen: false,
       toggle: () => set((state) => ({ isOpen: !state.isOpen })),
-      togglePin: () => set((state) => ({ isPinned: !state.isPinned, isOpen: !state.isPinned ? true : state.isOpen })),
+      togglePin: () => set((state) => ({ isPinned: !state.isPinned })),
       setOpen: (open) => set({ isOpen: open }),
       setMobileOpen: (open) => set({ isMobileOpen: open }),
       closeMobile: () => set({ isMobileOpen: false }),

@@ -1,5 +1,6 @@
-import { motion } from 'framer-motion';
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, Check } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 interface DataTablePaginationProps {
@@ -23,6 +24,18 @@ export function DataTablePagination({
   const endItem = Math.min(page * limit, totalCount);
 
   const limitOptions = [10, 20, 50, 100];
+  const [showLimitDropdown, setShowLimitDropdown] = useState(false);
+  const limitRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (limitRef.current && !limitRef.current.contains(event.target as Node)) {
+        setShowLimitDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   return (
     <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-4">
@@ -112,17 +125,56 @@ export function DataTablePagination({
           </motion.button>
         </div>
 
-        <select
-          value={limit}
-          onChange={(e) => onLimitChange(Number(e.target.value))}
-          className="h-8 rounded-lg border border-border/50 bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring/50"
-        >
-          {limitOptions.map((opt) => (
-            <option key={opt} value={opt}>
-              {opt} / page
-            </option>
-          ))}
-        </select>
+        <div ref={limitRef} className="relative">
+          <button
+            onClick={() => setShowLimitDropdown(!showLimitDropdown)}
+            className={cn(
+              'relative h-8 px-3 pr-8 rounded-lg border text-sm font-medium',
+              'transition-colors flex items-center gap-2',
+              'border-border/50 bg-background hover:bg-accent'
+            )}
+          >
+            <span>{limit} / page</span>
+            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+          </button>
+
+          <AnimatePresence>
+            {showLimitDropdown && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setShowLimitDropdown(false)}
+                />
+                <motion.div
+                  initial={{ opacity: 0, y: 4, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 4, scale: 0.95 }}
+                  transition={{ duration: 0.1 }}
+                            className="absolute right-0 bottom-full mb-1 min-w-[120px] p-1.5 bg-popover border border-border rounded-xl shadow-lg z-50 space-y-1"
+                >
+                  {limitOptions.map((opt) => (
+                      <button
+                      key={opt}
+                      onClick={() => {
+                        onLimitChange(opt);
+                        setShowLimitDropdown(false);
+                      }}
+                      className={cn(
+                        'w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors whitespace-nowrap',
+                        limit === opt
+                          ? 'bg-primary/10 text-primary'
+                          : 'hover:bg-accent text-foreground'
+                      )}
+                    >
+                      <Check className={cn('w-4 h-4 shrink-0', limit === opt ? 'opacity-100' : 'opacity-0')} />
+                      <span>{opt} / page</span>
+                    </button>
+                  ))}
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
     </div>
   );

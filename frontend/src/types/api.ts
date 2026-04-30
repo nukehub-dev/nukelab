@@ -53,6 +53,27 @@ export interface Environment {
   color?: string;
 }
 
+export interface Plan {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  category: string;
+  cpu_limit: number;
+  memory_limit: string;
+  disk_limit: string;
+  gpu_limit: number;
+  max_servers_per_user: number;
+  cost_per_hour: number;
+  cooldown_seconds: number;
+  requires_approval: boolean;
+  allowed_roles: string[];
+  is_active: boolean;
+  priority: number;
+  created_at: string;
+  updated_at?: string;
+}
+
 export interface ApiError {
   detail: string;
 }

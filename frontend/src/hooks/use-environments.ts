@@ -37,8 +37,53 @@ export function useEnvironments(params: EnvironmentsQueryParams = {}) {
   });
 }
 
+interface CreateEnvironmentData {
+  name: string;
+  slug: string;
+  image: string;
+  description?: string;
+  category?: string;
+  icon?: string;
+  color?: string;
+  is_public?: boolean;
+}
+
+interface UpdateEnvironmentData {
+  name?: string;
+  image?: string;
+  description?: string;
+  category?: string;
+  icon?: string;
+  color?: string;
+  is_public?: boolean;
+}
+
 export function useEnvironmentActions() {
   const queryClient = useQueryClient();
+
+  const createEnvironment = useMutation({
+    mutationFn: (data: CreateEnvironmentData) =>
+      api.post<{ success: boolean; data: Environment }>('/environments/', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['environments'] });
+    },
+  });
+
+  const updateEnvironment = useMutation({
+    mutationFn: ({ envId, data }: { envId: string; data: UpdateEnvironmentData }) =>
+      api.put<{ success: boolean; data: Environment }>(`/environments/${envId}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['environments'] });
+    },
+  });
+
+  const deleteEnvironment = useMutation({
+    mutationFn: (envId: string) =>
+      api.delete<{ success: boolean }>(`/environments/${envId}/permanent`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['environments'] });
+    },
+  });
 
   const activateEnvironment = useMutation({
     mutationFn: (envId: string) =>
@@ -56,8 +101,20 @@ export function useEnvironmentActions() {
     },
   });
 
+  const cloneEnvironment = useMutation({
+    mutationFn: ({ envId, name, slug }: { envId: string; name: string; slug: string }) =>
+      api.post<{ success: boolean; data: Environment }>(`/environments/${envId}/clone`, { name, slug }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['environments'] });
+    },
+  });
+
   return {
+    createEnvironment,
+    updateEnvironment,
+    deleteEnvironment,
     activateEnvironment,
     deactivateEnvironment,
+    cloneEnvironment,
   };
 }

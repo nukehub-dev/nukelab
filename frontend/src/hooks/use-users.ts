@@ -41,8 +41,42 @@ export function useUsers(params: UsersQueryParams = {}) {
   });
 }
 
+interface CreateUserData {
+  username: string;
+  email: string;
+  password: string;
+  role?: string;
+  first_name?: string;
+  last_name?: string;
+  credits?: number;
+}
+
+interface UpdateUserData {
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  role?: string;
+  nuke_balance?: number;
+}
+
 export function useUserActions() {
   const queryClient = useQueryClient();
+
+  const createUser = useMutation({
+    mutationFn: (data: CreateUserData) =>
+      api.post<User>('/users/', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
+  });
+
+  const updateUser = useMutation({
+    mutationFn: ({ userId, data }: { userId: string; data: UpdateUserData }) =>
+      api.put<User>(`/users/${userId}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
+  });
 
   const disableUser = useMutation({
     mutationFn: ({ userId, disabled }: { userId: string; disabled: boolean }) =>
@@ -60,6 +94,8 @@ export function useUserActions() {
   });
 
   return {
+    createUser,
+    updateUser,
     disableUser,
     deleteUser,
   };

@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useNavigate } from '@tanstack/react-router';
+import { useAuthStore } from '../stores/auth-store';
 
 export function useAuthGuard(requireAuth = true) {
   const navigate = useNavigate();
@@ -23,5 +24,7 @@ export function isAuthenticated(): boolean {
 
 export function logout(): void {
   localStorage.removeItem('nukelab-token');
+  // Clear auth store user
+  useAuthStore.getState().setUser(null);
   window.location.href = '/login';
 }

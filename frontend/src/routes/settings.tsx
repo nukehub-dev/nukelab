@@ -1,12 +1,25 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { Settings, Palette, Bell, Shield, Construction } from 'lucide-react';
+import { useEffect } from 'react';
 import { ResourcePageLayout } from '../components/layout/resource-page-layout';
+import { useAuthStore } from '../stores/auth-store';
 
 export const Route = createFileRoute('/settings')({
   component: SettingsPage,
 });
 
 function SettingsPage() {
+  const navigate = useNavigate();
+  const isAdmin = useAuthStore((state) => state.isAdmin());
+
+  useEffect(() => {
+    if (!isAdmin) {
+      navigate({ to: '/' });
+    }
+  }, [isAdmin, navigate]);
+
+  if (!isAdmin) return null;
+
   return (
     <ResourcePageLayout
       title="Settings"

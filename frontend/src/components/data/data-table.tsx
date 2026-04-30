@@ -91,7 +91,7 @@ export function DataTable<TData>({
   mobileCardRenderer,
   enableRowSelection = true,
 }: DataTableProps<TData>) {
-  const [showMobile, setShowMobile] = useState(false);
+  const [showMobile, setShowMobile] = useState(true);
 
   const table = useReactTable({
     data,
@@ -169,9 +169,12 @@ export function DataTable<TData>({
       ) : (
         <>
           {/* Desktop Table */}
-          <div className={cn('hidden md:block overflow-hidden rounded-xl border border-border/50')} >
-            <div className="overflow-x-auto">
-              <table className="w-full caption-bottom text-sm">
+          <div className={cn(showMobile && 'hidden')}>
+            <div 
+              className="rounded-xl border border-border/50 overflow-x-auto relative"
+              style={{ WebkitOverflowScrolling: 'touch' }}
+            >
+              <table className="w-full caption-bottom text-sm whitespace-nowrap" style={{ minWidth: 'max-content' }}>
                 <thead className="bg-muted/50 sticky top-0 z-10">
                   {table.getHeaderGroups().map((headerGroup) => (
                     <tr key={headerGroup.id} className="border-b border-border/50 transition-colors">
@@ -179,7 +182,7 @@ export function DataTable<TData>({
                         <th
                           key={header.id}
                           className={cn(
-                            'h-10 px-4 text-left align-middle font-medium text-muted-foreground',
+                            'h-10 px-2 sm:px-4 text-left align-middle font-medium text-muted-foreground',
                             header.column.getCanSort() && 'cursor-pointer select-none hover:text-foreground'
                           )}
                           style={{ width: header.getSize() }}
@@ -224,7 +227,7 @@ export function DataTable<TData>({
                         {row.getVisibleCells().map((cell) => (
                           <td
                             key={cell.id}
-                            className="p-4 align-middle"
+                            className="p-2 sm:p-4 align-middle whitespace-nowrap"
                           >
                             {flexRender(cell.column.columnDef.cell, cell.getContext())}
                           </td>
@@ -234,11 +237,13 @@ export function DataTable<TData>({
                   </AnimatePresence>
                 </tbody>
               </table>
+            {/* Scroll indicator for mobile */}
+            <div className="md:hidden absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background/80 to-transparent pointer-events-none" />
             </div>
           </div>
 
           {/* Mobile Cards */}
-          <div className={cn('md:hidden', !showMobile && 'hidden md:block')} >
+          <div className={cn(!showMobile && 'hidden')} >
             <DataTableMobile
               rows={table.getRowModel().rows}
               cardRenderer={mobileCardRenderer}

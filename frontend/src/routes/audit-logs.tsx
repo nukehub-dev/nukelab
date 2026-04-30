@@ -1,12 +1,25 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { FileText, Shield, AlertTriangle, Activity, Construction } from 'lucide-react';
+import { useEffect } from 'react';
 import { ResourcePageLayout } from '../components/layout/resource-page-layout';
+import { useAuthStore } from '../stores/auth-store';
 
 export const Route = createFileRoute('/audit-logs')({
   component: AuditLogsPage,
 });
 
 function AuditLogsPage() {
+  const navigate = useNavigate();
+  const isAdmin = useAuthStore((state) => state.isAdmin());
+
+  useEffect(() => {
+    if (!isAdmin) {
+      navigate({ to: '/' });
+    }
+  }, [isAdmin, navigate]);
+
+  if (!isAdmin) return null;
+
   return (
     <ResourcePageLayout
       title="Audit Logs"
