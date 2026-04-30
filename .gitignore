@@ -68,5 +68,8 @@ certs/*.pem
 certs/*.key
 !certs/.gitkeep
 
+# Runtime PID files
+.frontend.pid
+
 # Docker volumes
 volumes/

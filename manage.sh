@@ -11,6 +11,11 @@
 #   ./manage.sh stop frontend            # Stop only frontend dev server
 #   ./manage.sh build                    # Build all containers
 #   ./manage.sh build frontend           # Build only frontend container
+#   ./manage.sh update                   # Pull latest images and rebuild
+#   ./manage.sh clean                    # Remove dangling images/volumes
+#   ./manage.sh shell backend            # Open shell in backend container
+#   ./manage.sh db-migrate               # Run database migrations
+#   ./manage.sh test                     # Run tests
 #   ./manage.sh restart backend          # Restart backend only
 #   ./manage.sh status                   # Show status of everything
 #   ./manage.sh logs backend             # Stream backend logs
@@ -47,17 +52,16 @@ die()   { err "$*"; exit 1; }
 step()  { echo -e "\n${BOLD}${MAGENTA}▸${RESET} ${BOLD}$*${RESET}"; }
 
 # ─── Argument Parsing ──────────────────────────────────────────────────────
-# Globals set by parse_args()
 CMD=""
 TARGET=""
 USE_DEV_MODE=false
 USE_CONDA_MODE=false
+EXTRA_ARGS=()
 
 parse_args() {
     CMD="${1:-help}"
     shift || true
 
-    # Parse remaining args
     while [[ $# -gt 0 ]]; do
         case "$1" in
             backend|frontend|all)
@@ -73,23 +77,35 @@ parse_args() {
                 print_help
                 exit 0
                 ;;
+            --*)
+                EXTRA_ARGS+=("$1")
+                ;;
             *)
-                die "Unknown argument: $1\nRun './manage.sh help' for usage."
+                if [[ -z "$TARGET" ]]; then
+                    TARGET="$1"
+                else
+                    EXTRA_ARGS+=("$1")
+                fi
                 ;;
         esac
         shift
     done
 
-    # Defaults
-    [[ -z "$TARGET" ]] && TARGET="all"
+    if [[ -z "$TARGET" ]]; then
+        TARGET="all"
+    fi
 }
 
 # ─── Environment ───────────────────────────────────────────────────────────
 load_env_file() {
     local env_file="$1"
     while IFS= read -r line || [[ -n "$line" ]]; do
-        [[ "$line" =~ ^#.*$ ]] && continue
-        [[ -z "$line" ]] && continue
+        if [[ "$line" =~ ^#.*$ ]]; then
+            continue
+        fi
+        if [[ -z "$line" ]]; then
+            continue
+        fi
         export "$line" 2>/dev/null || true
     done < "$env_file"
 }
@@ -131,14 +147,26 @@ detect_engine() {
 
 setup_podman_socket() {
     [ "$CONTAINER_ENGINE" != "podman" ] && return
-    SOCK=$(podman info --format '{{.Host.RemoteSocket.Path}}' 2>/dev/null || true)
-    if [ -n "$SOCK" ]; then
-        export DOCKER_SOCKET="$SOCK"
-    elif [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -S "$XDG_RUNTIME_DIR/podman/podman.sock" ]; then
-        export DOCKER_SOCKET="$XDG_RUNTIME_DIR/podman/podman.sock"
-    else
-        export DOCKER_SOCKET="/run/podman/podman.sock"
+
+    # If DOCKER_SOCKET is set but doesn't exist, override it
+    if [ -n "${DOCKER_SOCKET:-}" ] && [ ! -S "$DOCKER_SOCKET" ]; then
+        warn "DOCKER_SOCKET=$DOCKER_SOCKET not found, auto-detecting..."
+        unset DOCKER_SOCKET
     fi
+
+    # Auto-detect if not set
+    if [ -z "${DOCKER_SOCKET:-}" ]; then
+        SOCK=$(podman info --format '{{.Host.RemoteSocket.Path}}' 2>/dev/null || true)
+        if [ -n "$SOCK" ]; then
+            export DOCKER_SOCKET="$SOCK"
+        elif [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -S "$XDG_RUNTIME_DIR/podman/podman.sock" ]; then
+            export DOCKER_SOCKET="$XDG_RUNTIME_DIR/podman/podman.sock"
+        else
+            export DOCKER_SOCKET="/run/podman/podman.sock"
+        fi
+        info "Using Podman socket: $DOCKER_SOCKET"
+    fi
+
     export DOCKER_NUKELAB_HOST="$DOCKER_SOCKET"
 }
 
@@ -155,6 +183,15 @@ kill_frontend() {
         rm -f "$FRONTEND_PID_FILE"
         ok "Frontend stopped"
     fi
+}
+
+# ─── Backend Detection ─────────────────────────────────────────────────────
+is_backend_container_running() {
+    $COMPOSE -f "$COMPOSE_FILE" ps 2>/dev/null | grep -q 'Up .*nukelab-backend'
+}
+
+has_conda_env() {
+    command -v conda > /dev/null 2>&1 && conda env list | grep -q "nukelab-backend"
 }
 
 # ─── Health Check ──────────────────────────────────────────────────────────
@@ -175,7 +212,6 @@ wait_for_backend() {
 
 cmd_start() {
     if $USE_CONDA_MODE; then
-        # Conda mode: backend via conda, no containers
         if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
             die "--conda only works with backend target. Use:\n  ./manage.sh start backend --conda"
         fi
@@ -188,10 +224,7 @@ cmd_start() {
     fi
 
     if $USE_DEV_MODE; then
-        # Dev mode: backend containers + local Vite
         step "Starting development stack..."
-        
-        # Stop frontend container if running (we use Vite dev server instead)
         $COMPOSE -f "$COMPOSE_FILE" stop frontend 2>/dev/null || true
         
         if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
@@ -203,7 +236,6 @@ cmd_start() {
         if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
             command -v npm > /dev/null 2>&1 || die "npm not found"
             [ -d "$DIR/frontend/node_modules" ] || die "Run: ./manage.sh install frontend"
-            
             log "Starting Vite dev server..."
             cd "$DIR/frontend"
             npm run dev &
@@ -221,7 +253,6 @@ cmd_start() {
         trap 'echo ""; step "Shutting down..."; kill_frontend; $COMPOSE -f "$COMPOSE_FILE" down; ok "Goodbye!"; exit 0' INT TERM
         wait
     else
-        # Production mode: everything in containers
         step "Starting production stack..."
         
         if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
@@ -277,6 +308,106 @@ cmd_build() {
     ok "Build complete"
 }
 
+cmd_update() {
+    step "Updating NukeLab..."
+    
+    log "Pulling latest images..."
+    $COMPOSE -f "$COMPOSE_FILE" pull
+    
+    log "Rebuilding containers..."
+    $COMPOSE -f "$COMPOSE_FILE" build --no-cache
+    
+    ok "Update complete! Run './manage.sh restart' to apply changes."
+}
+
+cmd_pull() {
+    step "Pulling latest images..."
+    $COMPOSE -f "$COMPOSE_FILE" pull
+    ok "Images pulled"
+}
+
+cmd_remove() {
+    step "Removing containers..."
+    
+    if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
+        kill_frontend
+        $COMPOSE -f "$COMPOSE_FILE" rm -f frontend 2>/dev/null || true
+        ok "Frontend container removed"
+    fi
+    
+    if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
+        $COMPOSE -f "$COMPOSE_FILE" rm -f traefik postgres redis backend celery-worker celery-beat 2>/dev/null || true
+        ok "Backend containers removed"
+    fi
+}
+
+cmd_clean() {
+    step "Cleaning up..."
+    
+    log "Removing stopped containers..."
+    $CONTAINER_ENGINE container prune -f 2>/dev/null || true
+    
+    log "Removing dangling images..."
+    $CONTAINER_ENGINE image prune -f 2>/dev/null || true
+    
+    log "Removing dangling volumes..."
+    $CONTAINER_ENGINE volume prune -f 2>/dev/null || true
+    
+    log "Removing build cache..."
+    $CONTAINER_ENGINE builder prune -f 2>/dev/null || true
+    
+    ok "Cleanup complete"
+}
+
+cmd_shell() {
+    local service="${TARGET:-backend}"
+    if [[ "$service" = "all" ]]; then
+        service="backend"
+    fi
+    
+    step "Opening shell in ${BOLD}$service${RESET}..."
+    
+    case "$service" in
+        backend)
+            $COMPOSE -f "$COMPOSE_FILE" exec backend /bin/bash || \
+            $COMPOSE -f "$COMPOSE_FILE" exec backend /bin/sh
+            ;;
+        postgres)
+            $COMPOSE -f "$COMPOSE_FILE" exec postgres psql -U "${DATABASE_USER:-nukelab}" -d "${DATABASE_NAME:-nukelab}"
+            ;;
+        redis)
+            $COMPOSE -f "$COMPOSE_FILE" exec redis redis-cli
+            ;;
+        frontend)
+            $COMPOSE -f "$COMPOSE_FILE" exec frontend /bin/sh
+            ;;
+        *)
+            $COMPOSE -f "$COMPOSE_FILE" exec "$service" /bin/sh
+            ;;
+    esac
+}
+
+cmd_exec() {
+    local service="${TARGET:-backend}"
+    if [[ "$service" = "all" ]]; then
+        service="backend"
+    fi
+    
+    if [ ${#EXTRA_ARGS[@]} -eq 0 ]; then
+        die "Usage: ./manage.sh exec <service> <command>\nExample: ./manage.sh exec backend ls -la"
+    fi
+    
+    $COMPOSE -f "$COMPOSE_FILE" exec "$service" "${EXTRA_ARGS[@]}"
+}
+
+cmd_logs() {
+    local service="${TARGET:-}"
+    if [[ "$service" = "all" ]]; then
+        service=""
+    fi
+    $COMPOSE -f "$COMPOSE_FILE" logs -f ${service:-}
+}
+
 cmd_status() {
     step "Container Status"
     $COMPOSE -f "$COMPOSE_FILE" ps
@@ -287,12 +418,6 @@ cmd_status() {
     else
         info "Frontend dev: ${DIM}not running${RESET}"
     fi
-}
-
-cmd_logs() {
-    local service="${TARGET:-}"
-    [[ "$service" = "all" ]] && service=""
-    $COMPOSE -f "$COMPOSE_FILE" logs -f ${service:-}
 }
 
 cmd_install() {
@@ -317,6 +442,74 @@ cmd_install() {
     fi
 }
 
+cmd_test() {
+    if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
+        step "Running frontend tests..."
+        cd "$DIR/frontend"
+        [ -d "node_modules" ] || die "Run: ./manage.sh install frontend"
+        npm run test 2>/dev/null || npm run lint || warn "No test script found"
+    fi
+    
+    if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
+        step "Running backend tests..."
+        cd "$DIR/backend"
+        
+        if $USE_CONDA_MODE; then
+            # User explicitly wants Conda
+            has_conda_env || die "Conda env 'nukelab-backend' not found. Run: ./manage.sh install backend"
+            conda run -n nukelab-backend pytest ${EXTRA_ARGS[@]:-} || warn "Tests failed or not configured"
+        elif is_backend_container_running; then
+            # Backend is running in containers, run tests there
+            $COMPOSE -f "$COMPOSE_FILE" exec backend pytest ${EXTRA_ARGS[@]:-} || warn "Tests failed or not configured"
+        elif has_conda_env; then
+            # Fall back to Conda
+            conda run -n nukelab-backend pytest ${EXTRA_ARGS[@]:-} || warn "Tests failed or not configured"
+        else
+            die "Backend not running. Start it first:\n  ./manage.sh start backend\nOr install Conda env:\n  ./manage.sh install backend"
+        fi
+    fi
+}
+
+cmd_db_migrate() {
+    step "Running database migrations..."
+    
+    if $USE_CONDA_MODE; then
+        # User explicitly wants Conda
+        has_conda_env || die "Conda env 'nukelab-backend' not found. Run: ./manage.sh install backend"
+        cd "$DIR/backend"
+        conda run -n nukelab-backend alembic upgrade head
+    elif is_backend_container_running; then
+        # Backend is running in containers, run migrations there
+        $COMPOSE -f "$COMPOSE_FILE" exec backend alembic upgrade head
+    elif has_conda_env; then
+        # Fall back to Conda
+        cd "$DIR/backend"
+        conda run -n nukelab-backend alembic upgrade head
+    else
+        die "Backend not running. Start it first:\n  ./manage.sh start backend\nOr install Conda env:\n  ./manage.sh install backend"
+    fi
+    
+    ok "Migrations applied"
+}
+
+cmd_db_shell() {
+    step "Opening database shell..."
+    $COMPOSE -f "$COMPOSE_FILE" exec postgres psql -U "${DATABASE_USER:-nukelab}" -d "${DATABASE_NAME:-nukelab}"
+}
+
+cmd_backup() {
+    local backup_dir="$DIR/backups"
+    local timestamp=$(date +%Y%m%d_%H%M%S)
+    local backup_file="$backup_dir/nukelab_backup_$timestamp.sql"
+    
+    mkdir -p "$backup_dir"
+    step "Creating backup..."
+    
+    $COMPOSE -f "$COMPOSE_FILE" exec -T postgres pg_dump -U "${DATABASE_USER:-nukelab}" "${DATABASE_NAME:-nukelab}" > "$backup_file"
+    
+    ok "Backup created: ${CYAN}$backup_file${RESET}"
+}
+
 cmd_reset() {
     step "${RED}${BOLD}WARNING:${RESET} This deletes ALL data and containers!"
     read -rp "Type 'yes' to confirm: " confirm
@@ -336,36 +529,61 @@ ${BOLD}${CYAN}NukeLab v2.0${RESET} — Management Script
 
 ${BOLD}Usage:${RESET} ./manage.sh <command> [target] [flags]
 
-${BOLD}${MAGENTA}Commands:${RESET}
-  ${GREEN}start${RESET}     [target] [--dev] [--conda]  Start services
-  ${GREEN}stop${RESET}      [target]                    Stop services
-  ${GREEN}restart${RESET}   [target] [--dev] [--conda]  Restart services
-  ${GREEN}build${RESET}     [target]                    Build containers
-  ${GREEN}status${RESET}                                Show status
-  ${GREEN}logs${RESET}      [service]                   Stream logs
-  ${GREEN}install${RESET}   [target]                    Install dependencies
-  ${GREEN}reset${RESET}                                 Delete all data
+${BOLD}${MAGENTA}Quick Start:${RESET}
+  ${GREEN}start${RESET}      [target] [--dev]         Start services
+  ${GREEN}stop${RESET}       [target]                  Stop services
+  ${GREEN}restart${RESET}    [target] [--dev]         Restart services
+  ${GREEN}status${RESET}                               Show status
+
+${BOLD}Build & Deploy:${RESET}
+  ${GREEN}build${RESET}      [target]                  Build containers
+  ${GREEN}update${RESET}                               Pull images & rebuild
+  ${GREEN}pull${RESET}                                 Pull latest base images
+
+${BOLD}Maintenance:${RESET}
+  ${GREEN}clean${RESET}                                Remove dangling images/volumes
+  ${GREEN}remove${RESET}     [target]                  Remove containers (keep data)
+  ${GREEN}reset${RESET}                                ⚠️ Delete ALL data & containers
+
+${BOLD}Development:${RESET}
+  ${GREEN}shell${RESET}      [service]                 Open shell in container
+  ${GREEN}exec${RESET}       [service] [command]       Execute command in container
+  ${GREEN}logs${RESET}       [service]                 Stream logs
+  ${GREEN}install${RESET}    [target]                  Install dependencies
+
+${BOLD}Database:${RESET}
+  ${GREEN}db-migrate${RESET}                           Run Alembic migrations
+  ${GREEN}db-shell${RESET}                             Open PostgreSQL shell
+  ${GREEN}backup${RESET}                               Create database backup
+
+${BOLD}Testing:${RESET}
+  ${GREEN}test${RESET}       [target]                  Run tests
 
 ${BOLD}Targets:${RESET} ${DIM}(optional, default: all)${RESET}
-  backend    Backend services only
-  frontend   Frontend only
-  all        Everything ${DIM}(default)${RESET}what 
+  backend    Backend services (api, workers, db, redis, traefik)
+  frontend   Frontend service
+  all        Everything ${DIM}(default)${RESET}
 
 ${BOLD}Flags:${RESET}
-  --dev, -d      Development mode: containers + local Vite dev server
+  --dev, -d      Development mode: backend containers + local Vite dev server
   --conda, -c    Use Conda instead of containers for backend
 
 ${BOLD}Examples:${RESET}
   ./manage.sh start                      # Production: all containers
   ./manage.sh start --dev                # Dev: backend containers + Vite
-  ./manage.sh start backend --conda      # Backend via Conda, no containers
+  ./manage.sh start backend --conda      # Backend via Conda
   ./manage.sh stop frontend              # Stop only frontend
   ./manage.sh build backend              # Build backend image only
-  ./manage.sh restart                    # Restart everything
-  ./manage.sh logs backend               # Stream backend logs
-  ./manage.sh install                    # Install all deps
-  ./manage.sh install frontend           # Install only frontend deps
-  ./manage.sh status                     # Check what's running
+  ./manage.sh shell backend              # Shell into backend container
+  ./manage.sh exec backend python -v     # Run command in backend
+  ./manage.sh logs backend -f            # Stream backend logs
+  ./manage.sh db-migrate                 # Run migrations (auto-detect)
+  ./manage.sh db-migrate --conda         # Run migrations via Conda
+  ./manage.sh backup                     # Backup database
+  ./manage.sh test                       # Run all tests (auto-detect)
+  ./manage.sh test backend --conda       # Run backend tests via Conda
+  ./manage.sh clean                      # Clean up dangling resources
+  ./manage.sh update                     # Update all images
 
 EOF
 }
@@ -374,7 +592,6 @@ EOF
 main() {
     parse_args "$@"
 
-    # Commands that don't need env/engine
     case "$CMD" in
         help|--help|-h)
             print_help
@@ -382,32 +599,39 @@ main() {
             ;;
     esac
 
-    # Init env and engine for most commands
     case "$CMD" in
-        start|stop|restart|build|status|logs|reset)
+        start|stop|restart|build|update|pull|remove|clean|status|logs|reset|shell|exec|db-migrate|db-shell|backup)
             init_env
             detect_engine
             setup_podman_socket
             ;;
-        install)
-            # Only init env if installing backend
+        install|test)
             if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
                 init_env
             fi
             ;;
     esac
 
-    # Dispatch
     case "$CMD" in
-        start)      cmd_start ;;
-        stop)       cmd_stop ;;
-        restart)    cmd_restart ;;
-        build)      cmd_build ;;
-        status)     cmd_status ;;
-        logs)       cmd_logs ;;
-        install)    cmd_install ;;
-        reset)      cmd_reset ;;
-        *)          die "Unknown command: $CMD\nRun './manage.sh help' for usage." ;;
+        start)       cmd_start ;;
+        stop)        cmd_stop ;;
+        restart)     cmd_restart ;;
+        build)       cmd_build ;;
+        update)      cmd_update ;;
+        pull)        cmd_pull ;;
+        remove|rm)   cmd_remove ;;
+        clean)       cmd_clean ;;
+        shell)       cmd_shell ;;
+        exec)        cmd_exec ;;
+        status)      cmd_status ;;
+        logs)        cmd_logs ;;
+        install)     cmd_install ;;
+        test)        cmd_test ;;
+        db-migrate)  cmd_db_migrate ;;
+        db-shell)    cmd_db_shell ;;
+        backup)      cmd_backup ;;
+        reset)       cmd_reset ;;
+        *)           die "Unknown command: $CMD\nRun './manage.sh help' for usage." ;;
     esac
 }
 
