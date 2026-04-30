@@ -1831,22 +1831,22 @@ frontend/
 - [x] Set up AnimatePresence wrapper for route transitions
 
 ### Phase 2: Design System (Week 2)
-- [ ] Build primitive components (Button, Card, Input, Dialog) with animations
-- [ ] Implement glassmorphism utilities (bubble, bubble-outline)
-- [ ] Create semantic action button system with ripple + state animations
-- [ ] Build status badge component with pulse + state transitions
-- [ ] Create stat card component with CountUp + sparkline animations
-- [ ] Implement custom scrollbars
-- [ ] Build reusable animation wrappers (FadeIn, SlideUp, ScaleIn, StaggerContainer)
-- [ ] Create loading skeletons with shimmer effect
+- [x] Build primitive components (Button, Card, Input, Dialog) with animations
+- [x] Implement glassmorphism utilities (bubble, bubble-outline)
+- [x] Create semantic action button system with ripple + state animations
+- [x] Build status badge component with pulse + state transitions
+- [x] Create stat card component with CountUp + sparkline animations
+- [x] Implement custom scrollbars
+- [x] Build reusable animation wrappers (FadeIn, SlideUp, ScaleIn, StaggerContainer)
+- [x] Create loading skeletons with shimmer effect
 
 ### Phase 3: Data Components (Week 3)
-- [ ] Build data table with TanStack Table
-- [ ] Add server-side pagination, sorting, filtering
-- [ ] Implement row selection and bulk actions
-- [ ] Create mobile card view for tables
-- [ ] Build page header with floating header behavior
-- [ ] Create resource page layout
+- [x] Build data table with TanStack Table
+- [x] Add server-side pagination, sorting, filtering
+- [x] Implement row selection and bulk actions
+- [x] Create mobile card view for tables
+- [x] Build page header with floating header behavior
+- [x] Create resource page layout
 
 ### Phase 4: Visualization (Week 4)
 - [ ] Set up Recharts with theme integration
@@ -1878,7 +1878,7 @@ frontend/
 - [ ] Wire up API endpoints with TanStack Query
 - [ ] Implement WebSocket integration for real-time data
 - [ ] Performance optimization (code splitting, lazy loading)
-- [ ] Remove old Next.js frontend
+- [x] Remove old Next.js frontend
 - [ ] Update deployment scripts for static files
 
 ---

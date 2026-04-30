@@ -20,6 +20,7 @@ import {
   Command,
   Menu,
   X,
+  LogOut,
 } from 'lucide-react';
 import { useSidebarStore } from '../../stores/sidebar-store';
 import { useThemeStore } from '../../stores/theme-store';
@@ -245,6 +246,18 @@ export function Sidebar() {
               </div>
 
               {/* Theme picker */}
+              {/* Logout */}
+              <button
+                onClick={() => {
+                  localStorage.removeItem('nukelab-token');
+                  window.location.href = '/login';
+                }}
+                className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm hover:bg-sidebar-accent transition-colors text-red-400"
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="flex-1 text-left">Log Out</span>
+              </button>
+
               <div className="relative">
                 <button
                   onClick={() => setShowThemePicker(!showThemePicker)}

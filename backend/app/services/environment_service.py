@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func
+from sqlalchemy import select, and_, or_, func
 from fastapi import HTTPException, status
 
 from app.models.environment_template import EnvironmentTemplate

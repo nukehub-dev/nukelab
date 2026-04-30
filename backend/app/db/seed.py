@@ -6,8 +6,41 @@ Run this after database initialization.
 
 import asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from app.db.session import async_session
 from app.services.plan_service import PlanService
+from app.models.user import User
+from app.api.auth import get_password_hash
+from app.config import settings
+
+
+async def seed_admin_user(db: AsyncSession):
+    """Seed dev admin user if in dev mode"""
+    if not settings.dev_mode:
+        return
+    
+    result = await db.execute(
+        select(User).where(User.username == settings.dev_admin_user)
+    )
+    existing = result.scalar_one_or_none()
+    
+    if existing:
+        print(f"  Admin user exists: {settings.dev_admin_user}")
+        return
+    
+    admin = User(
+        username=settings.dev_admin_user,
+        email=f"{settings.dev_admin_user}@nukelab.local",
+        password_hash=get_password_hash(settings.dev_admin_password),
+        role="admin",
+        is_active=True,
+        is_verified=True,
+        nuke_balance=10000,
+        daily_allowance=1000,
+    )
+    db.add(admin)
+    await db.commit()
+    print(f"✓ Created admin user: {settings.dev_admin_user}")
 
 
 async def seed_plans(db: AsyncSession):
@@ -80,8 +113,11 @@ async def seed_plans(db: AsyncSession):
 
 
 async def seed_all():
-    """Seed default data (plans only — environments are admin-created)"""
+    """Seed default data (plans + dev admin)"""
     async with async_session() as db:
+        print("Seeding admin user...")
+        await seed_admin_user(db)
+        
         print("Seeding plans...")
         await seed_plans(db)
         

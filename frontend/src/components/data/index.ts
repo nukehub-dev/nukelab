@@ -1,3 +1,7 @@
 export { StatCard } from './stat-card';
 export { StatusBadge } from './status-badge';
 export { MetricSparkline } from './metric-sparkline';
+export { DataTable } from './data-table';
+export { DataTablePagination } from './data-table-pagination';
+export { DataTableToolbar } from './data-table-toolbar';
+export { DataTableMobile } from './data-table-mobile';

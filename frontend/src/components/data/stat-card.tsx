@@ -64,7 +64,7 @@ function AnimatedNumber({
   return <span>{formatNumber(displayValue)}</span>;
 }
 
-interface StatCardProps {
+export interface StatCardProps {
   title: string;
   value: string | number;
   subtitle?: string;

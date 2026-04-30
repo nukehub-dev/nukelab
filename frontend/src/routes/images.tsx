@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { Image, Layers, HardDrive, Tag } from 'lucide-react';
-import { PlaceholderPage } from '../components/layout/placeholder-page';
+import { Image, Layers, HardDrive, Tag, Construction } from 'lucide-react';
+import { ResourcePageLayout } from '../components/layout/resource-page-layout';
 
 export const Route = createFileRoute('/images')({
   component: ImagesPage,
@@ -8,17 +8,24 @@ export const Route = createFileRoute('/images')({
 
 function ImagesPage() {
   return (
-    <PlaceholderPage
+    <ResourcePageLayout
       title="Images"
       subtitle="Manage container images"
       icon={Image}
-      description="Container image registry management and version control."
       stats={[
-        { title: 'Total Images', value: 156, icon: Image, iconColor: 'text-blue-400', bgColor: 'bg-blue-500/10' },
-        { title: 'Layers', value: '2.4K', icon: Layers, iconColor: 'text-amber-400', bgColor: 'bg-amber-500/10' },
-        { title: 'Storage', value: '12.5 GB', icon: HardDrive, iconColor: 'text-rose-400', bgColor: 'bg-rose-500/10' },
-        { title: 'Versions', value: 48, icon: Tag, iconColor: 'text-violet-400', bgColor: 'bg-violet-500/10' },
+        { title: 'Total Images', value: 0, icon: Image, iconColor: 'text-blue-400', bgColor: 'bg-blue-500/10' },
+        { title: 'Layers', value: '0', icon: Layers, iconColor: 'text-amber-400', bgColor: 'bg-amber-500/10' },
+        { title: 'Storage', value: '0 GB', icon: HardDrive, iconColor: 'text-rose-400', bgColor: 'bg-rose-500/10' },
+        { title: 'Versions', value: 0, icon: Tag, iconColor: 'text-violet-400', bgColor: 'bg-violet-500/10' },
       ]}
-    />
+    >
+      <div className="bubble p-12 text-center">
+        <Construction className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+        <h2 className="text-lg font-semibold mb-2">Coming Soon</h2>
+        <p className="text-muted-foreground">
+          Image registry management is under development. Check back soon for updates.
+        </p>
+      </div>
+    </ResourcePageLayout>
   );
 }
