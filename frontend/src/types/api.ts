@@ -14,6 +14,7 @@ export interface Server {
   status: 'running' | 'stopped' | 'pending' | 'error';
   external_url: string;
   user_id?: string;
+  username?: string;
   created_at: string;
   container_id?: string;
   allocated_cpu?: number;

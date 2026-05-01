@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 from sqlalchemy import Column, String, DateTime, Float, Integer, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 from app.db.base import Base
 
 class Server(Base):
@@ -27,6 +28,9 @@ class Server(Base):
     # Networking
     internal_port = Column(Integer, default=3000)
     external_url = Column(String(500), nullable=True)
+    
+    # Relationships
+    user = relationship("User", back_populates="servers")
     
     # Timestamps
     started_at = Column(DateTime, nullable=True)

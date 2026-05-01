@@ -143,18 +143,19 @@ async def list_servers(
     db: AsyncSession = Depends(get_db)
 ):
     """List servers. Users see own servers, admins see all."""
+    from sqlalchemy.orm import joinedload
     checker = PermissionChecker(current_user)
     
     if checker.is_admin():
-        # Admin sees all servers
-        result = await db.execute(select(Server))
+        # Admin sees all servers with user info
+        result = await db.execute(select(Server).options(joinedload(Server.user)))
     else:
         # User sees only own servers
         result = await db.execute(
-            select(Server).where(Server.user_id == current_user.id)
+            select(Server).where(Server.user_id == current_user.id).options(joinedload(Server.user))
         )
     
-    servers = result.scalars().all()
+    servers = result.unique().scalars().all()
     
     return {
         "servers": [
@@ -164,6 +165,7 @@ async def list_servers(
                 "status": s.status,
                 "external_url": s.external_url,
                 "user_id": str(s.user_id),
+                "username": s.user.username if s.user else None,
                 "created_at": s.created_at.isoformat() if s.created_at else None,
             }
             for s in servers

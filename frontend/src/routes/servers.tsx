@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { Server, Activity, Cpu, MemoryStick, Play, Square, RotateCcw, Trash2, ExternalLink, Eye } from 'lucide-react';
+import { Server, Activity, Cpu, MemoryStick, Play, Square, RotateCcw, Trash2, ExternalLink, Eye, Users } from 'lucide-react';
 import { useState } from 'react';
 import { type ColumnDef, type SortingState, type ColumnFiltersState, type VisibilityState } from '@tanstack/react-table';
 import { motion } from 'framer-motion';
@@ -10,6 +10,7 @@ import { useServers, useServerActions } from '../hooks/use-servers';
 import { useEnvironments } from '../hooks/use-environments';
 import { usePlans } from '../hooks/use-plans';
 import { useDataTable } from '../hooks/use-data-table';
+import { useAuthStore } from '../stores/auth-store';
 import { formatDate } from '../lib/utils';
 import type { Server as ServerType } from '../types/api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '../components/ui/dialog';
@@ -23,7 +24,8 @@ function ServersPage() {
   const { createServer, startServer, stopServer, restartServer, deleteServer } = useServerActions();
   const { data: envData } = useEnvironments({ is_active: true, limit: 100 });
   const { data: plansData } = usePlans({ is_active: true, limit: 100 });
-  
+  const isAdmin = useAuthStore((state) => state.isAdmin());
+   
   const {
     state: tableState,
     setPage,
@@ -35,6 +37,7 @@ function ServersPage() {
   const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+  const [selectedUserFilter, setSelectedUserFilter] = useState<string>('');
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deployForm, setDeployForm] = useState({
@@ -45,17 +48,32 @@ function ServersPage() {
 
   const environments = envData?.data || [];
   const plans = plansData?.data || [];
-
+  
+  // Derive unique users from servers for the filter dropdown
+  const uniqueUsers = Array.from(new Map(
+    servers.filter(s => s.user_id && s.username).map(s => [s.user_id, { id: s.user_id, username: s.username }])
+  ).values());
+  
   // Client-side filtering and sorting for now since API doesn't support it fully
   const filteredServers = servers.filter((server) => {
+    let matches = true;
+    
     if (tableState.search) {
       const search = tableState.search.toLowerCase();
-      return (
+      const userName = server.username?.toLowerCase() || '';
+      matches = matches && (
         server.name.toLowerCase().includes(search) ||
-        server.status.toLowerCase().includes(search)
+        server.status.toLowerCase().includes(search) ||
+        userName.includes(search)
       );
     }
-    return true;
+    
+    // Filter by selected user
+    if (selectedUserFilter && server.user_id !== selectedUserFilter) {
+      matches = false;
+    }
+    
+    return matches;
   });
 
   const sortedServers = [...filteredServers].sort((a, b) => {
@@ -68,6 +86,14 @@ function ServersPage() {
     if (aVal > bVal) return sort.desc ? -1 : 1;
     return 0;
   });
+
+  // Group servers by user for admin view
+  const serversByUser = sortedServers.reduce((acc, server) => {
+    const userId = server.user_id || 'unknown';
+    if (!acc[userId]) acc[userId] = [];
+    acc[userId].push(server);
+    return acc;
+  }, {} as Record<string, ServerType[]>);
 
   // Client-side pagination
   const pageCount = Math.ceil(sortedServers.length / tableState.limit) || 1;
@@ -131,6 +157,24 @@ function ServersPage() {
         );
       },
     },
+    ...(isAdmin ? [{
+      accessorKey: 'username' as const,
+      header: 'Owner',
+      cell: ({ row }: { row: { original: ServerType } }) => {
+        const username = row.original.username;
+        return (
+          <div className="flex items-center gap-2"
+          >
+            <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs font-medium"
+            >
+              {username?.slice(0, 2).toUpperCase() || '??'}
+            </div>
+            <span className="text-sm"
+            >{username || 'Unknown'}</span>
+          </div>
+        );
+      },
+    } as ColumnDef<ServerType>] : []),
     {
       accessorKey: 'external_url',
       header: 'URL',
@@ -292,6 +336,13 @@ function ServersPage() {
         >{server.name}</div>
         <StatusBadge status={server.status as 'running' | 'stopped' | 'pending' | 'error'} pulse={server.status === 'running'} />
       </div>
+      {isAdmin && server.username && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground"
+        >
+          <Users className="w-3.5 h-3.5" />
+          {server.username}
+        </div>
+      )}
       <div className="text-sm text-muted-foreground"
       >
         Created: {formatDate(server.created_at)}
@@ -324,6 +375,8 @@ function ServersPage() {
           },
         ]}
       >
+
+        {/* Servers Table - Always paginated flat view for performance */}
         <DataTable
           columns={columns}
           data={paginatedServers}
@@ -350,7 +403,7 @@ function ServersPage() {
           bulkActions={bulkActions}
           filters={filters}
           searchable
-          searchPlaceholder="Search servers..."
+          searchPlaceholder="Search..."
           mobileCardRenderer={mobileCardRenderer}
         />
       </ResourcePageLayout>
