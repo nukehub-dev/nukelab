@@ -162,7 +162,6 @@ async def admin_list_users(
                 "id": str(u.id),
                 "username": u.username,
                 "email": u.email,
-                "full_name": u.full_name,
                 "role": u.role,
                 "nuke_balance": u.nuke_balance,
                 "is_active": u.is_active,
@@ -473,4 +472,72 @@ async def admin_system_health(
         "status": "healthy",
         "database": db_status,
         "timestamp": datetime.utcnow().isoformat()
+    }
+
+
+# ========== Audit Log Export ==========
+
+@router.get("/activity/export")
+async def export_activity_logs(
+    format: str = Query("json", regex="^(json|csv)$"),
+    user_id: Optional[str] = Query(None),
+    action: Optional[str] = Query(None),
+    target_type: Optional[str] = Query(None),
+    from_date: Optional[datetime] = Query(None),
+    to_date: Optional[datetime] = Query(None),
+    limit: int = Query(1000, ge=1, le=10000),
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    db: AsyncSession = Depends(get_db)
+):
+    """Export activity logs (admin only)"""
+    from app.api.auth import get_current_user
+    
+    query = select(ActivityLog)
+    
+    if user_id:
+        query = query.where(ActivityLog.actor_id == user_id)
+    if action:
+        query = query.where(ActivityLog.action == action)
+    if target_type:
+        query = query.where(ActivityLog.target_type == target_type)
+    if from_date:
+        query = query.where(ActivityLog.created_at >= from_date)
+    if to_date:
+        query = query.where(ActivityLog.created_at <= to_date)
+    
+    query = query.order_by(desc(ActivityLog.created_at)).limit(limit)
+    
+    result = await db.execute(query)
+    logs = result.scalars().all()
+    
+    if format == "csv":
+        import csv
+        import io
+        
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["id", "actor_id", "action", "target_type", "target_id", "ip_address", "created_at"])
+        
+        for log in logs:
+            writer.writerow([
+                str(log.id),
+                str(log.actor_id) if log.actor_id else "",
+                log.action,
+                log.target_type,
+                str(log.target_id) if log.target_id else "",
+                str(log.ip_address) if log.ip_address else "",
+                log.created_at.isoformat() if log.created_at else ""
+            ])
+        
+        from fastapi.responses import StreamingResponse
+        
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=activity_logs.csv"}
+        )
+    
+    return {
+        "logs": [log.to_dict() for log in logs],
+        "count": len(logs)
     }

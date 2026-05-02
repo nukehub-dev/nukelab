@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     app_url: str = "http://localhost:8000"
     public_url: str = "http://localhost:8080"  # Traefik/public-facing URL
     
+    # System State
+    maintenance_mode: bool = False
+    maintenance_message: str = "System under maintenance"
+    
     # Security
     jwt_secret: str = "change-me"
     jwt_algorithm: str = "HS256"
@@ -29,6 +33,10 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "postgresql+asyncpg://nukelab:nukelab123@postgres:5432/nukelab"
     database_pool_size: int = 10
+    
+    # Rate Limiting
+    rate_limit_per_minute: int = 60
+    rate_limit_auth_per_minute: int = 10
     
     # Redis
     redis_url: str = "redis://redis:6379/0"

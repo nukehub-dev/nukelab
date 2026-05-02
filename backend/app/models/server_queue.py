@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Text, DateTime, Integer, ForeignKey
+from sqlalchemy import Column, String, Text, DateTime, Integer, Float, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.base import Base
 
@@ -18,6 +18,11 @@ class ServerQueue(Base):
     
     # Server name (pre-generated)
     server_name = Column(String(255), nullable=False)
+    
+    # Requested resources (in case plan changes)
+    requested_cpu = Column(Float, nullable=True)
+    requested_memory = Column(String(20), nullable=True)
+    requested_disk = Column(String(20), nullable=True)
     
     # Timestamps
     requested_at = Column(DateTime, default=datetime.utcnow)
@@ -41,6 +46,11 @@ class ServerQueue(Base):
             "status": self.status,
             "priority": self.priority,
             "server_name": self.server_name,
+            "requested_resources": {
+                "cpu": self.requested_cpu,
+                "memory": self.requested_memory,
+                "disk": self.requested_disk,
+            },
             "requested_at": self.requested_at.isoformat() if self.requested_at else None,
             "scheduled_at": self.scheduled_at.isoformat() if self.scheduled_at else None,
             "started_at": self.started_at.isoformat() if self.started_at else None,

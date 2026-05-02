@@ -1,14 +1,19 @@
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, WebSocket, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from app.config import settings
 from app.api import (
     auth, users, servers, tokens, credits, admin, 
     preferences, environments, plans, quotas, metrics,
-    notifications, dashboard, bulk, health
+    notifications, dashboard, bulk, health, system
 )
 from app.db.base import Base
 from app.db.session import engine
 from app.websocket.metrics_socket import manager
+
+limiter = Limiter(key_func=get_remote_address)
 
 app = FastAPI(
     title=settings.app_name,
@@ -19,6 +24,13 @@ app = FastAPI(
     docs_url="/docs",
     openapi_url="/openapi.json",
 )
+
+@app.exception_handler(429)
+async def rate_limit_exceeded_handler(request: Request, exc):
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Rate limit exceeded"}
+    )
 
 # CORS
 app.add_middleware(
@@ -45,6 +57,7 @@ app.include_router(notifications.router, prefix="/notifications", tags=["notific
 app.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
 app.include_router(bulk.router, prefix="/bulk", tags=["bulk"])
 app.include_router(health.router, prefix="/health", tags=["health"])
+app.include_router(system.router, prefix="/system", tags=["system"])
 
 
 @app.websocket("/ws")

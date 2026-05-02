@@ -6,10 +6,14 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from app.config import settings
 from app.db.session import get_db
 from app.models.user import User
 from app.models.api_token import ApiToken
+
+limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -122,7 +126,8 @@ async def get_current_user(token: str = Depends(security_scheme), db: AsyncSessi
 
 
 @router.post("/login")
-async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
+@limiter.limit("10/minute")
+async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.username == form_data.username))
     user = result.scalar_one_or_none()
     
@@ -219,7 +224,7 @@ async def get_me(current_user: User = Depends(get_current_user)):
         "id": str(current_user.id),
         "username": current_user.username,
         "email": current_user.email,
-        "full_name": current_user.full_name,
+        "full_name": current_user.display_name,
         "role": current_user.role,
         "nuke_balance": current_user.nuke_balance,
         "profile": current_user.profile or {},

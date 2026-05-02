@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, DateTime, Float, Integer, ForeignKey
+from sqlalchemy import Column, String, DateTime, Float, Integer, ForeignKey, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.db.base import Base
@@ -28,6 +28,16 @@ class Server(Base):
     # Networking
     internal_port = Column(Integer, default=3000)
     external_url = Column(String(500), nullable=True)
+    
+    # Health tracking
+    health_status = Column(String(20), default="unknown")
+    health_check_config = Column(JSON, default=dict)
+    last_health_check = Column(DateTime, nullable=True)
+    
+    # State tracking
+    status_reason = Column(String(255), nullable=True)
+    stopped_by = Column(String(50), nullable=True)
+    stop_reason = Column(String(255), nullable=True)
     
     # Relationships
     user = relationship("User", back_populates="servers")

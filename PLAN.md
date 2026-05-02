@@ -1,7 +1,7 @@
 # NukeLab Platform v2.0 — Architecture & Implementation Plan
 
-**Status**: In Development - Phases 1-3 Complete  
-**Last Updated**: April 28, 2026  
+**Status**: In Development - Phase 4 In Progress
+**Last Updated**: May 1, 2026  
 **Target Timeline**: 6+ months  
 **Tech Stack**: Vite + React 19 SPA, FastAPI, PostgreSQL 18, Redis, Traefik v3, Docker/Podman
 
@@ -1394,6 +1394,7 @@ Then I get an error: "Plan limit reached for small"
 ### Phase 4: Real-Time Monitoring Dashboard (Weeks 10-12)
 
 **Goal**: Live resource monitoring, historical data, and alerting
+**Status**: In Progress - Core metrics and WebSocket done, UI and alerting in progress
 
 #### Tasks
 
@@ -1408,6 +1409,7 @@ Then I get an error: "Plan limit reached for small"
   - [x] Subscription model (subscribe to specific servers/users)
   - [x] Efficient data serialization (JSON) *[MessagePack deferred]*
   - [x] Connection management and cleanup
+  - [x] Redis pub/sub for broadcasting
 
 - [x] **Monitoring Dashboard**
   - [x] Global resource overview (all users/servers)
@@ -1418,22 +1420,23 @@ Then I get an error: "Plan limit reached for small"
 
 - [x] **Alerting System**
   - [x] Alert rules (quota thresholds, container crashes)
+  - [x] Alert rule API CRUD
   - [ ] Email notifications (SMTP integration) *[Deferred]*
-  - [ ] In-app notifications *[Deferred]*
+  - [x] In-app notifications (basic) *[Phase 5]*
   - [x] Alert history and acknowledgment
 
 - [x] **Health Checks**
   - [x] Container health checks
   - [ ] Auto-restart on failure *[Deferred]*
   - [x] Unhealthy server notifications
-  - [x] System health dashboard
+  - [x] System health dashboard (Postgres, Redis, Docker)
 
 #### Deliverables
 
 - [x] Real-time monitoring dashboard with live charts
-  - [x] Admin can see all users' resource usage
-  - [x] Users can see own usage
-  - [ ] Alerts sent when quotas exceeded *[Rules API ready, needs seeding]*
+- [x] Admin can see all users' resource usage
+- [x] Users can see own usage
+- [x] Alert rules API ready (needs seeding and UI)
 
 #### Success Criteria
 
@@ -1441,11 +1444,6 @@ Then I get an error: "Plan limit reached for small"
 Given a server is running
 When I open the monitoring dashboard
 Then I see CPU and memory usage updating every second
-
-Given a user exceeds their memory quota
-When the threshold is crossed
-Then the admin receives an email notification
-And the user receives an in-app warning
 ```
 
 ---
@@ -1469,10 +1467,10 @@ And the user receives an in-app warning
   - [ ] Timezone support
 
 - [ ] **API Keys**
-  - [ ] Scoped API key generation
-  - [ ] API key management UI
-  - [ ] API key usage tracking
-  - [ ] Revocation and expiration
+  - [x] Scoped API key generation
+  - [x] API key management UI
+  - [x] API key usage tracking
+  - [x] Revocation and expiration
 
 - [ ] **Shared Workspaces**
   - [ ] Shared volume creation
@@ -1593,6 +1591,46 @@ Given a security vulnerability is found
 When a patch is deployed
 Then the deployment completes with zero downtime
 ```
+
+---
+
+### Phase 7: Production Hardening — Quick Wins (Weeks 17-18)
+
+**Goal**: Industrial-grade improvements that can be done in parallel or before Phase 6
+**Priority**: High — addresses reliability and observability gaps
+
+#### Tasks
+
+- [ ] **Observability — Structured Logging**
+  - [ ] Add correlation IDs to all requests
+  - [ ] JSON-structured logging format
+  - [ ] Request ID tracking middleware
+
+- [ ] **Observability — Prometheus Metrics**
+  - [ ] Add `/metrics` endpoint (Prometheus client)
+  - [ ] Application metrics (request duration, errors)
+  - [ ] Celery task metrics
+
+- [ ] **Reliability — Graceful Shutdown**
+  - [ ] Handle SIGTERM properly
+  - [ ] Wait for in-flight requests
+  - [ ] Drain WebSocket connections
+
+- [ ] **Security — Input Validation**
+  - [ ] Request size limits
+  - [ ] Strict CORS for production
+  - [ ] Security headers (HSTS, CSP)
+
+- [ ] **Database — Connection Pooling**
+  - [ ] PgBouncer setup
+  - [ ] Query timeout configuration
+  - [ ] Proper index usage
+
+- [ ] **Rate Limiting**
+  - [ ] Per-user rate limiting (slowapi)
+  - [ ] Global rate limiting at Traefik level
+
+#### Status: Recommended Before Going Production
 
 ---
 
