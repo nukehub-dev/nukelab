@@ -3,6 +3,8 @@ import { motion } from 'framer-motion';
 import { Command, LogIn, AlertCircle } from 'lucide-react';
 import { useState } from 'react';
 
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
+
 
 export const Route = createFileRoute('/login')({
   component: LoginPage,
@@ -25,7 +27,7 @@ function LoginPage() {
       formData.append('username', username);
       formData.append('password', password);
 
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch(`${API_BASE}/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',

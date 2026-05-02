@@ -1,9 +1,28 @@
 # NukeLab Platform v2.0 — Architecture & Implementation Plan
 
-**Status**: In Development - Phase 4 In Progress
-**Last Updated**: May 1, 2026  
+**Status**: In Development - Phase 4 (Monitoring) In Progress
+**Last Updated**: May 2, 2026  
 **Target Timeline**: 6+ months  
 **Tech Stack**: Vite + React 19 SPA, FastAPI, PostgreSQL 18, Redis, Traefik v3, Docker/Podman
+
+---
+
+## Recent Updates (May 2026)
+
+### New Features Implemented
+- **System Config API** (`/api/system/config`, `/api/system/stats`)
+- **Maintenance Mode** — Toggle platform on/off with 503 response
+- **Audit Log Export** — CSV/JSON export (`/api/admin/activity/export`)
+- **Rate Limiting** — slowapi integration (10/minute on login)
+
+### Model Updates
+- **ServerPlan** — Added `max_runtime`, `idle_timeout`, `allow_scheduling`, `allow_snapshots`
+- **Server** — Added `health_status`, `health_check_config`, `last_health_check`, `status_reason`, `stopped_by`, `stop_reason`
+- **ServerQueue** — Added `requested_cpu`, `requested_memory`, `requested_disk`
+
+### Tests
+- 57 tests passing (was 29)
+- New test files: `test_system.py`, `test_plans.py`, `test_credits.py`, `test_environments.py`, `test_auth.py`
 
 ---
 

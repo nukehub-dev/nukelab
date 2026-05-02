@@ -70,17 +70,45 @@ services:
       dockerfile: Dockerfile
     container_name: nukelab-backend
     environment:
+      - APP_NAME=${APP_NAME:-NukeLab}
       - APP_ENV=${APP_ENV:-development}
       - APP_DEBUG=${APP_DEBUG:-true}
-      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://nukelab:nukelab123@postgres:5432/nukelab}
-      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - APP_URL=${APP_URL:-http://localhost:8080}
+      - PUBLIC_URL=${APP_URL:-http://localhost:8080}
+      - APP_TIMEZONE=${APP_TIMEZONE:-UTC}
+      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-change-in-production-min-32-chars}
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+      - JWT_EXPIRE_MINUTES=${JWT_EXPIRE_MINUTES:-15}
+      - JWT_REFRESH_EXPIRE_DAYS=${JWT_REFRESH_EXPIRE_DAYS:-7}
+      - SESSION_SECRET=${SESSION_SECRET:-dev-session-secret-change-in-production}
+      - SESSION_MAX_AGE=${SESSION_MAX_AGE:-86400}
+      - SESSION_SECURE=${SESSION_SECURE:-false}
+      - SESSION_HTTPONLY=${SESSION_HTTPONLY:-true}
+      - SESSION_SAMESITE=${SESSION_SAMESITE:-lax}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://localhost:8000}
+      - CORS_ALLOW_CREDENTIALS=${CORS_ALLOW_CREDENTIALS:-true}
+      - RATE_LIMIT_ENABLED=${RATE_LIMIT_ENABLED:-false}
+      - RATE_LIMIT_REQUESTS=${RATE_LIMIT_REQUESTS:-100}
+      - RATE_LIMIT_WINDOW=${RATE_LIMIT_WINDOW:-60}
       - AUTH_MODE=${AUTH_MODE:-local}
-      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret}
       - LOCAL_AUTH_ENABLED=${LOCAL_AUTH_ENABLED:-true}
+      - LOCAL_AUTH_BCRYPT_ROUNDS=${LOCAL_AUTH_BCRYPT_ROUNDS:-12}
       - DEV_MODE=${DEV_MODE:-true}
       - DEV_ADMIN_USER=${DEV_ADMIN_USER:-admin}
       - DEV_ADMIN_PASSWORD=${DEV_ADMIN_PASSWORD:-admin123}
+      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://nukelab:nukelab123@postgres:5432/nukelab}
+      - DATABASE_POOL_SIZE=${DATABASE_POOL_SIZE:-10}
+      - DATABASE_POOL_MAX_OVERFLOW=${DATABASE_POOL_MAX_OVERFLOW:-10}
+      - DATABASE_POOL_TIMEOUT=${DATABASE_POOL_TIMEOUT:-30}
+      - DATABASE_ECHO=${DATABASE_ECHO:-false}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_DB=${REDIS_DB:-0}
+      - DOCKER_SOCKET=${DOCKER_SOCKET:-/var/run/docker.sock}
       - DOCKER_NETWORK=${DOCKER_NETWORK:-nukelab-network}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_FORMAT=${LOG_FORMAT:-json}
+      - DEV_RELOAD=${DEV_RELOAD:-true}
     volumes:
       - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:Z
       - ./backend:/app:Z
@@ -103,6 +131,9 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: nukelab-frontend
+    environment:
+      - VITE_API_URL=${VITE_API_URL:-/api}
+      - VITE_WS_URL=${VITE_WS_URL:-/ws}
     networks:
       - nukelab-network
     depends_on:

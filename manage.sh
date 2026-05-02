@@ -245,6 +245,9 @@ cmd_start() {
             command -v npm > /dev/null 2>&1 || die "npm not found"
             [ -d "$DIR/frontend/node_modules" ] || die "Run: ./manage.sh install frontend"
             log "Starting Vite dev server..."
+
+            init_env
+
             cd "$DIR/frontend"
             npm run dev &
             echo $! > "$FRONTEND_PID_FILE"
