@@ -270,7 +270,7 @@ function PlansPage() {
             <Tooltip content="Edit">
               <motion.button
                 onClick={() => openEditDialog(plan)}
-                className="inline-flex p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
+                className="inline-flex p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors cursor-pointer"
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
               >
@@ -282,7 +282,7 @@ function PlansPage() {
                 <motion.button
                   onClick={() => deactivatePlan.mutate(plan.id)}
                   disabled={deactivatePlan.isPending}
-                  className="inline-flex p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-colors"
+                  className="inline-flex p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-colors cursor-pointer"
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
                 >
@@ -294,7 +294,7 @@ function PlansPage() {
                 <motion.button
                   onClick={() => activatePlan.mutate(plan.id)}
                   disabled={activatePlan.isPending}
-                  className="inline-flex p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-colors"
+                  className="inline-flex p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-colors cursor-pointer"
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
                 >
@@ -310,11 +310,11 @@ function PlansPage() {
                   }
                 }}
                 disabled={deletePlan.isPending}
-                className="inline-flex p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
-              >
-                <Trash2 className="w-4 h-4" />
+                  className="inline-flex p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors cursor-pointer"
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                >
+                  <Trash2 className="w-4 h-4" />
               </motion.button>
             </Tooltip>
           </div>

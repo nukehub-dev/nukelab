@@ -208,7 +208,7 @@ function ServersPage() {
               <Link
                 to="/servers/$serverId"
                 params={{ serverId: server.id }}
-                className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex"
+                className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex cursor-pointer"
               >
                 <Eye className="w-4 h-4" />
               </Link>
@@ -218,7 +218,7 @@ function ServersPage() {
                 <motion.button
                   onClick={() => startServer.mutate(server.id)}
                   disabled={startServer.isPending}
-                  className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-colors inline-flex"
+                  className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-colors inline-flex cursor-pointer"
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
                 >
@@ -231,7 +231,7 @@ function ServersPage() {
                 <motion.button
                   onClick={() => stopServer.mutate(server.id)}
                   disabled={stopServer.isPending}
-                  className="p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-colors inline-flex"
+                  className="p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-colors inline-flex cursor-pointer"
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
                 >
@@ -243,11 +243,11 @@ function ServersPage() {
               <motion.button
                 onClick={() => restartServer.mutate(server.id)}
                 disabled={restartServer.isPending}
-                className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex"
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
-              >
-                <RotateCcw className="w-4 h-4" />
+                  className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex cursor-pointer"
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                >
+                  <RotateCcw className="w-4 h-4" />
               </motion.button>
             </Tooltip>
             <Tooltip content="Delete">
@@ -258,11 +258,11 @@ function ServersPage() {
                   }
                 }}
                 disabled={deleteServer.isPending}
-                className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors inline-flex"
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
-              >
-                <Trash2 className="w-4 h-4" />
+                  className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors inline-flex cursor-pointer"
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                >
+                  <Trash2 className="w-4 h-4" />
               </motion.button>
             </Tooltip>
           </div>

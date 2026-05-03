@@ -122,19 +122,20 @@ export function DataTableToolbar<TData>({
             </button>
           )}
 
-          {/* Column Visibility */}
-          <div className="relative">
-            <button
-              onClick={() => setShowColumnMenu(!showColumnMenu)}
-              className={cn(
-                'h-9 px-3 rounded-lg border border-border/50 text-sm font-medium',
-                'transition-colors hover:bg-accent flex items-center gap-2',
-                showColumnMenu && 'bg-primary/10 border-primary/30 text-primary'
-              )}
-            >
-              <Eye className="w-4 h-4" />
-              View
-            </button>
+          {/* Column Visibility - hidden in card view */}
+          {!isMobileView && (
+            <div className="relative">
+              <button
+                onClick={() => setShowColumnMenu(!showColumnMenu)}
+                className={cn(
+                  'h-9 px-3 rounded-lg border border-border/50 text-sm font-medium',
+                  'transition-colors hover:bg-accent flex items-center gap-2',
+                  showColumnMenu && 'bg-primary/10 border-primary/30 text-primary'
+                )}
+              >
+                <Eye className="w-4 h-4" />
+                View
+              </button>
 
             <AnimatePresence>
               {showColumnMenu && (
@@ -177,6 +178,7 @@ export function DataTableToolbar<TData>({
               )}
             </AnimatePresence>
           </div>
+          )}
 
           {/* View Toggle */}
           <button

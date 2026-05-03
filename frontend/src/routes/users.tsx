@@ -249,7 +249,7 @@ function UsersPage() {
             <Tooltip content="Edit">
               <motion.button
                 onClick={() => openEditDialog(user)}
-                className="inline-flex p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
+                className="inline-flex p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors cursor-pointer"
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
               >
@@ -265,7 +265,7 @@ function UsersPage() {
                     }
                   }}
                   disabled={deleteUser.isPending}
-                  className="inline-flex p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
+                  className="inline-flex p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors cursor-pointer"
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
                 >

@@ -221,7 +221,7 @@ function EnvironmentsPage() {
             <Tooltip content="Edit">
               <motion.button
                 onClick={() => openEditDialog(env)}
-                className="inline-flex p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
+                className="inline-flex p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors cursor-pointer"
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
               >
@@ -233,7 +233,7 @@ function EnvironmentsPage() {
                 <motion.button
                   onClick={() => deactivateEnvironment.mutate(env.id)}
                   disabled={deactivateEnvironment.isPending}
-                  className="inline-flex p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-colors"
+                  className="inline-flex p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-colors cursor-pointer"
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
                 >
@@ -245,7 +245,7 @@ function EnvironmentsPage() {
                 <motion.button
                   onClick={() => activateEnvironment.mutate(env.id)}
                   disabled={activateEnvironment.isPending}
-                  className="inline-flex p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-colors"
+                  className="inline-flex p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-colors cursor-pointer"
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
                 >
@@ -263,7 +263,7 @@ function EnvironmentsPage() {
                   }
                 }}
                 disabled={cloneEnvironment.isPending}
-                className="inline-flex p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
+                className="inline-flex p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors cursor-pointer"
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
               >
@@ -278,11 +278,11 @@ function EnvironmentsPage() {
                   }
                 }}
                 disabled={deleteEnvironment.isPending}
-                className="inline-flex p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
-              >
-                <Trash2 className="w-4 h-4" />
+                  className="inline-flex p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors cursor-pointer"
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                >
+                  <Trash2 className="w-4 h-4" />
               </motion.button>
             </Tooltip>
           </div>
