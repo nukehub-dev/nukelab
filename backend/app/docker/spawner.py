@@ -85,6 +85,7 @@ class ServerSpawner:
                 network=settings.docker_network,
                 cpu_limit=cpu,
                 memory_limit=memory,
+                disk_limit=disk,
             )
             
             # Start container

@@ -111,6 +111,7 @@ services:
     volumes:
       - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:Z
       - ./backend:/app:Z
+      - /var/lib/lxcfs:/var/lib/lxcfs:ro
     networks:
       - nukelab-network
     depends_on:
