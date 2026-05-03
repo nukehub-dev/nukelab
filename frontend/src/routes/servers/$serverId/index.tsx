@@ -468,7 +468,7 @@ function ServerDetailPage() {
               <span className="flex items-center gap-1"
               >
                 <Clock className="w-3.5 h-3.5" />
-                {formatDate(server.created_at)}
+                {formatDate(server.created_at || '')}
               </span>
             </div>
             {server.started_at && (
@@ -477,7 +477,7 @@ function ServerDetailPage() {
                 <span className="text-muted-foreground"
                 >Started</span>
                 <span
-                >{formatDate(server.started_at)}</span>
+                >{formatDate(server.started_at || '')}</span>
               </div>
             )}
           </div>
@@ -498,7 +498,7 @@ function ServerDetailPage() {
                 <span className="text-muted-foreground"
                 >Memory</span>
                 <span className="font-mono"
-                >{server.allocated_memory} GB</span>
+                >{server.allocated_memory}</span>
               </div>
             )}
             {server.external_url && (

@@ -35,6 +35,10 @@ export function useServerActions() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['servers'] });
     },
+    onError: (error: Error) => {
+      console.error('Failed to start server:', error.message);
+      alert(`Failed to start server: ${error.message}`);
+    },
   });
 
   const stopServer = useMutation({
@@ -42,6 +46,10 @@ export function useServerActions() {
       api.post<{ message: string }>(`/servers/${serverId}/stop`, {}),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['servers'] });
+    },
+    onError: (error: Error) => {
+      console.error('Failed to stop server:', error.message);
+      alert(`Failed to stop server: ${error.message}`);
     },
   });
 
@@ -51,6 +59,10 @@ export function useServerActions() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['servers'] });
     },
+    onError: (error: Error) => {
+      console.error('Failed to restart server:', error.message);
+      alert(`Failed to restart server: ${error.message}`);
+    },
   });
 
   const deleteServer = useMutation({
@@ -58,6 +70,10 @@ export function useServerActions() {
       api.delete<{ message: string }>(`/servers/${serverId}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['servers'] });
+    },
+    onError: (error: Error) => {
+      console.error('Failed to delete server:', error.message);
+      alert(`Failed to delete server: ${error.message}`);
     },
   });
 

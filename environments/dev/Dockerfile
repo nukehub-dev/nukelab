@@ -1,17 +1,16 @@
 FROM nukelab-base:latest
 
-# Install nginx
-RUN apt-get update && apt-get install -y nginx \
+# Install nginx and ttyd (web terminal)
+RUN apt-get update && apt-get install -y nginx ttyd \
     && rm -rf /var/lib/apt/lists/*
-
-# Create simple test page
-RUN echo '<!DOCTYPE html><html><head><title>NukeLab</title></head><body><h1>NukeIDE Test Environment</h1><p>Server is running!</p></body></html>' > /var/www/html/index.html
 
 # Copy nginx config
 COPY nginx.conf /etc/nginx/nginx.conf
 
-# Expose port
+# Expose port 80 (nginx proxies to ttyd internally)
 EXPOSE 80
 
-# Start nginx
-CMD ["nginx", "-g", "daemon off;"]
+# Start nginx and ttyd (writable)
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
+CMD ["/start.sh"]

@@ -20,6 +20,8 @@ class ServerSpawner:
         username: str,
         server_name: str,
         environment: str = "dev",
+        environment_id: Optional[str] = None,
+        image: Optional[str] = None,
         cpu: float = 1.0,
         memory: str = "2g",
         disk: str = "10g",
@@ -32,8 +34,9 @@ class ServerSpawner:
         server_id = str(uuid.uuid4())
         container_name = f"nukelab-server-{username}-{server_name}"
         
-        # Determine image
-        image = f"nukelab-environments-{environment}:latest"
+        # Determine image - use provided image or default to naming convention
+        if not image:
+            image = f"nukelab-environments-{environment}:latest"
         
         # Traefik labels for dynamic routing
         route_prefix = f"/user/{username}/{server_name}"
@@ -92,6 +95,7 @@ class ServerSpawner:
                 id=uuid.UUID(server_id),
                 name=server_name,
                 user_id=uuid.UUID(user_id),
+                environment_id=uuid.UUID(environment_id) if environment_id else None,
                 container_id=container.id,
                 image=image,
                 status="running",
@@ -113,6 +117,16 @@ class ServerSpawner:
             except:
                 pass
             raise Exception(f"Failed to spawn server: {str(e)}")
+    
+    async def start(self, container_id: str) -> bool:
+        """Start a server container"""
+        docker = await self._get_docker()
+        try:
+            await docker.start_container(container_id)
+            return True
+        except Exception as e:
+            print(f"Error starting container: {e}")
+            return False
     
     async def stop(self, container_id: str) -> bool:
         """Stop a server container"""

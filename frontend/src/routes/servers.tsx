@@ -37,7 +37,7 @@ function ServersPage() {
   const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
-  const [selectedUserFilter, setSelectedUserFilter] = useState<string>('');
+  const [selectedUserFilter] = useState<string>('');
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deployForm, setDeployForm] = useState({
@@ -48,11 +48,6 @@ function ServersPage() {
 
   const environments = envData?.data || [];
   const plans = plansData?.data || [];
-  
-  // Derive unique users from servers for the filter dropdown
-  const uniqueUsers = Array.from(new Map(
-    servers.filter(s => s.user_id && s.username).map(s => [s.user_id, { id: s.user_id, username: s.username }])
-  ).values());
   
   // Client-side filtering and sorting for now since API doesn't support it fully
   const filteredServers = servers.filter((server) => {
@@ -86,14 +81,6 @@ function ServersPage() {
     if (aVal > bVal) return sort.desc ? -1 : 1;
     return 0;
   });
-
-  // Group servers by user for admin view
-  const serversByUser = sortedServers.reduce((acc, server) => {
-    const userId = server.user_id || 'unknown';
-    if (!acc[userId]) acc[userId] = [];
-    acc[userId].push(server);
-    return acc;
-  }, {} as Record<string, ServerType[]>);
 
   // Client-side pagination
   const pageCount = Math.ceil(sortedServers.length / tableState.limit) || 1;
@@ -179,18 +166,27 @@ function ServersPage() {
       accessorKey: 'external_url',
       header: 'URL',
       cell: ({ row }) => {
+        const server = row.original;
         const url = row.getValue('external_url') as string;
         if (!url) return <span className="text-muted-foreground">—</span>;
+        
+        const handleOpen = async (e: React.MouseEvent) => {
+          e.preventDefault();
+          if (server.status !== 'running') {
+            await startServer.mutateAsync(server.id);
+          }
+          window.open(url, '_blank', 'noopener,noreferrer');
+        };
+        
         return (
-          <a
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-primary hover:underline"
+          <button
+            onClick={handleOpen}
+            disabled={startServer.isPending}
+            className="inline-flex items-center gap-1 text-primary hover:underline disabled:opacity-50"
           >
             <ExternalLink className="w-3.5 h-3.5" />
-            Open
-          </a>
+            {server.status !== 'running' ? 'Start & Open' : 'Open'}
+          </button>
         );
       },
     },
@@ -271,7 +267,12 @@ function ServersPage() {
   ];
 
   const activeServers = servers.filter((s) => s.status === 'running').length;
-  const totalMemory = servers.reduce((acc, s) => acc + (s.allocated_memory || 0), 0);
+  const parseMemory = (mem: string | undefined) => {
+    if (!mem) return 0;
+    const match = mem.match(/^(\d+)/);
+    return match ? parseInt(match[1]) : 0;
+  };
+  const totalMemory = servers.reduce((acc, s) => acc + parseMemory(s.allocated_memory), 0);
 
   const stats = [
     { title: 'Active Servers', value: activeServers, icon: Server, iconColor: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
@@ -345,18 +346,23 @@ function ServersPage() {
       )}
       <div className="text-sm text-muted-foreground"
       >
-        Created: {formatDate(server.created_at)}
+        Created: {formatDate(server.created_at || '')}
       </div>
       {server.external_url && (
-        <a
-          href={server.external_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+        <button
+          onClick={async (e) => {
+            e.preventDefault();
+            if (server.status !== 'running') {
+              await startServer.mutateAsync(server.id);
+            }
+            window.open(server.external_url, '_blank', 'noopener,noreferrer');
+          }}
+          disabled={startServer.isPending}
+          className="inline-flex items-center gap-1 text-sm text-primary hover:underline disabled:opacity-50"
         >
           <ExternalLink className="w-3.5 h-3.5" />
-          Open Server
-        </a>
+          {server.status !== 'running' ? 'Start & Open' : 'Open Server'}
+        </button>
       )}
     </div>
   );

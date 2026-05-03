@@ -58,11 +58,13 @@ class DockerClient:
         
         if cpu_limit:
             config["HostConfig"]["NanoCpus"] = int(cpu_limit * 1e9)
+            cpus = ",".join(str(i) for i in range(int(cpu_limit)))
+            config["HostConfig"]["CpusetCpus"] = cpus
         
         if memory_limit:
-            # Parse memory limit (e.g., "512m", "1g")
             memory_bytes = self._parse_memory(memory_limit)
             config["HostConfig"]["Memory"] = memory_bytes
+            config["HostConfig"]["MemorySwap"] = memory_bytes
         
         container = await self.client.containers.create(config, name=name)
         return container

@@ -12,14 +12,17 @@ export interface Server {
   id: string;
   name: string;
   status: 'running' | 'stopped' | 'pending' | 'error';
-  external_url: string;
+  external_url?: string;
   user_id?: string;
   username?: string;
-  created_at: string;
+  created_at?: string;
   container_id?: string;
   allocated_cpu?: number;
-  allocated_memory?: number;
+  allocated_memory?: string;
+  health_status?: string;
+  status_reason?: string;
   started_at?: string;
+  stopped_at?: string;
 }
 
 export interface User {

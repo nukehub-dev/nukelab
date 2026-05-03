@@ -36,7 +36,7 @@ class Server(Base):
     
     # State tracking
     status_reason = Column(String(255), nullable=True)
-    stopped_by = Column(String(50), nullable=True)
+    stopped_by = Column(UUID(as_uuid=True), nullable=True)
     stop_reason = Column(String(255), nullable=True)
     
     # Relationships

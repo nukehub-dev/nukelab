@@ -59,6 +59,13 @@ class MetricsCollector:
                 if not server_id or not container_id:
                     print(f"Metrics collector: Skipping container {container_id[:12]} - missing server_id or container_id")
                     continue
+                
+                async with AsyncSessionLocal() as db:
+                    result = await db.execute(select(Server).where(Server.id == server_id))
+                    server = result.scalar_one_or_none()
+                    if not server:
+                        print(f"Metrics collector: Skipping container {container_id[:12]} - server {server_id} not found in database")
+                        continue
                     
                 await self._collect_container_metrics(container_id, server_id)
             except Exception as e:

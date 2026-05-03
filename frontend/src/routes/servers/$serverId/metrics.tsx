@@ -135,7 +135,7 @@ function ServerMetricsPage() {
               <span className="text-muted-foreground"
               >Created</span>
               <span
-              >{formatDate(server.created_at)}</span>
+              >{formatDate(server.created_at || '')}</span>
             </div>
             {server.started_at && (
               <div className="flex justify-between text-sm"
@@ -143,7 +143,7 @@ function ServerMetricsPage() {
                 <span className="text-muted-foreground"
                 >Last Started</span>
                 <span
-                >{formatDate(server.started_at)}</span>
+                >{formatDate(server.started_at || '')}</span>
               </div>
             )}
           </div>
