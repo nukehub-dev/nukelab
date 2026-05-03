@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { Users, Shield, UserCheck, UserX, Mail, Calendar, Pencil, Trash2 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ResourcePageLayout } from '../components/layout/resource-page-layout';
 import { DataTable } from '../components/data/data-table';
 import { StatusBadge } from '../components/data/status-badge';
@@ -36,6 +36,7 @@ function UsersPage() {
     setLimit,
     setSort,
     setSearch,
+    setFilter,
   } = useDataTable({ defaultLimit: 20 });
 
   const [sorting, setSorting] = useState<SortingState>([
@@ -44,6 +45,28 @@ function UsersPage() {
   const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+
+  // Sync React Table column filters with API filter state
+  const prevColumnFiltersRef = useRef<ColumnFiltersState>([]);
+  useEffect(() => {
+    const currentIds = new Set(columnFilters.map(f => f.id));
+    
+    // Add/update filters
+    columnFilters.forEach((filter) => {
+      if (filter.value !== undefined && filter.value !== null) {
+        setFilter(filter.id, String(filter.value));
+      }
+    });
+    
+    // Remove filters that no longer exist
+    prevColumnFiltersRef.current.forEach((filter) => {
+      if (!currentIds.has(filter.id)) {
+        setFilter(filter.id, null);
+      }
+    });
+    
+    prevColumnFiltersRef.current = columnFilters;
+  }, [columnFilters, setFilter]);
 
   const { data, isLoading, isError, error } = useUsers({
     role: tableState.filters.role as string,
@@ -348,7 +371,7 @@ function UsersPage() {
           <div className="text-sm text-muted-foreground"
           >{user.email}</div>
         </div>
-        <StatusBadge status={user.is_active ? 'running' : 'stopped'} />
+        <StatusBadge status={user.is_active ? 'running' : 'stopped'} label={user.is_active ? 'Active' : 'Disabled'} />
       </div>
       <div className="flex items-center justify-between text-sm"
       >
@@ -356,10 +379,40 @@ function UsersPage() {
         >
           {user.role}
         </span>
-        <span className="text-muted-foreground"
+        <div className="flex items-center gap-3"
         >
-          Credits: {user.nuke_balance.toLocaleString()}
-        </span>
+          <span className="text-muted-foreground"
+          >
+            Credits: {user.nuke_balance.toLocaleString()}
+          </span>
+          {canManageUsers && (
+            <div className="flex items-center gap-1">
+              <Tooltip content="Edit">
+                <button
+                  onClick={() => openEditDialog(user)}
+                  className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex cursor-pointer"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+              </Tooltip>
+              {canDeleteUsers && (
+                <Tooltip content="Delete">
+                  <button
+                    onClick={() => {
+                      if (confirm(`Are you sure you want to delete ${user.username}?`)) {
+                        deleteUser.mutate(user.id);
+                      }
+                    }}
+                    disabled={deleteUser.isPending}
+                    className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors inline-flex cursor-pointer"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </Tooltip>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

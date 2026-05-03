@@ -27,7 +27,7 @@ async def list_plans(
     service = PlanService(db)
     result = await service.list_plans(
         category=category,
-        is_active=is_active if is_active is not None else True,
+        is_active=is_active,
         user_role=current_user.role,
         page=page,
         limit=limit

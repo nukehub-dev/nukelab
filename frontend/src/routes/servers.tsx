@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { Server, Activity, Cpu, MemoryStick, Play, Square, RotateCcw, Trash2, ExternalLink, Eye, Users } from 'lucide-react';
 import { Tooltip } from '../components/ui/tooltip';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { type ColumnDef, type SortingState, type ColumnFiltersState, type VisibilityState } from '@tanstack/react-table';
 import { motion } from 'framer-motion';
 import { ResourcePageLayout } from '../components/layout/resource-page-layout';
@@ -32,6 +32,7 @@ function ServersPage() {
     setPage,
     setLimit,
     setSearch,
+    setFilter,
   } = useDataTable({ defaultLimit: 10 });
 
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -39,6 +40,26 @@ function ServersPage() {
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const [selectedUserFilter] = useState<string>('');
+
+  // Sync React Table column filters with client-side filter state
+  const prevColumnFiltersRef = useRef<ColumnFiltersState>([]);
+  useEffect(() => {
+    const currentIds = new Set(columnFilters.map(f => f.id));
+
+    columnFilters.forEach((filter) => {
+      if (filter.value !== undefined && filter.value !== null) {
+        setFilter(filter.id, String(filter.value));
+      }
+    });
+
+    prevColumnFiltersRef.current.forEach((filter) => {
+      if (!currentIds.has(filter.id)) {
+        setFilter(filter.id, null);
+      }
+    });
+
+    prevColumnFiltersRef.current = columnFilters;
+  }, [columnFilters, setFilter]);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deployForm, setDeployForm] = useState({
@@ -66,6 +87,12 @@ function ServersPage() {
     
     // Filter by selected user
     if (selectedUserFilter && server.user_id !== selectedUserFilter) {
+      matches = false;
+    }
+    
+    // Filter by status
+    const statusFilter = tableState.filters.status;
+    if (statusFilter && server.status !== statusFilter) {
       matches = false;
     }
     
@@ -354,22 +381,79 @@ function ServersPage() {
       >
         Created: {formatDate(server.created_at || '')}
       </div>
-      {server.external_url && (
-        <button
-          onClick={async (e) => {
-            e.preventDefault();
-            if (server.status !== 'running') {
-              await startServer.mutateAsync(server.id);
-            }
-            window.open(server.external_url, '_blank', 'noopener,noreferrer');
-          }}
-          disabled={startServer.isPending}
-          className="inline-flex items-center gap-1 text-sm text-primary hover:underline disabled:opacity-50"
-        >
-          <ExternalLink className="w-3.5 h-3.5" />
-          {server.status !== 'running' ? 'Start & Open' : 'Open Server'}
-        </button>
-      )}
+      <div className="flex items-center justify-between pt-1">
+        {server.external_url && (
+          <button
+            onClick={async (e) => {
+              e.preventDefault();
+              if (server.status !== 'running') {
+                await startServer.mutateAsync(server.id);
+              }
+              window.open(server.external_url, '_blank', 'noopener,noreferrer');
+            }}
+            disabled={startServer.isPending}
+            className="inline-flex items-center gap-1 text-sm text-primary hover:underline disabled:opacity-50 cursor-pointer"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            {server.status !== 'running' ? 'Start & Open' : 'Open Server'}
+          </button>
+        )}
+        <div className="flex items-center gap-1 ml-auto">
+          <Tooltip content="View Details">
+            <Link
+              to="/servers/$serverId"
+              params={{ serverId: server.id }}
+              className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex cursor-pointer"
+            >
+              <Eye className="w-4 h-4" />
+            </Link>
+          </Tooltip>
+          {server.status === 'stopped' && (
+            <Tooltip content="Start">
+              <button
+                onClick={() => startServer.mutate(server.id)}
+                disabled={startServer.isPending}
+                className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-colors inline-flex cursor-pointer"
+              >
+                <Play className="w-4 h-4" />
+              </button>
+            </Tooltip>
+          )}
+          {server.status === 'running' && (
+            <Tooltip content="Stop">
+              <button
+                onClick={() => stopServer.mutate(server.id)}
+                disabled={stopServer.isPending}
+                className="p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-colors inline-flex cursor-pointer"
+              >
+                <Square className="w-4 h-4" />
+              </button>
+            </Tooltip>
+          )}
+          <Tooltip content="Restart">
+            <button
+              onClick={() => restartServer.mutate(server.id)}
+              disabled={restartServer.isPending}
+              className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex cursor-pointer"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
+          </Tooltip>
+          <Tooltip content="Delete">
+            <button
+              onClick={() => {
+                if (confirm('Are you sure you want to delete this server?')) {
+                  deleteServer.mutate(server.id);
+                }
+              }}
+              disabled={deleteServer.isPending}
+              className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors inline-flex cursor-pointer"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </Tooltip>
+        </div>
+      </div>
     </div>
   );
 

@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { CreditCard, Cpu, MemoryStick, HardDrive, CheckCircle2, XCircle, Pencil, Trash2 } from 'lucide-react';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { ResourcePageLayout } from '../components/layout/resource-page-layout';
 import { DataTable } from '../components/data/data-table';
 import { StatusBadge } from '../components/data/status-badge';
@@ -27,6 +27,7 @@ function PlansPage() {
     setLimit,
     setSort,
     setSearch,
+    setFilter,
   } = useDataTable({ defaultLimit: 20 });
 
   const [sorting, setSorting] = useState<SortingState>([
@@ -35,6 +36,28 @@ function PlansPage() {
   const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+
+  // Sync React Table column filters with API filter state
+  const prevColumnFiltersRef = useRef<ColumnFiltersState>([]);
+  useEffect(() => {
+    const currentIds = new Set(columnFilters.map(f => f.id));
+    
+    // Add/update filters
+    columnFilters.forEach((filter) => {
+      if (filter.value !== undefined && filter.value !== null) {
+        setFilter(filter.id, String(filter.value));
+      }
+    });
+    
+    // Remove filters that no longer exist
+    prevColumnFiltersRef.current.forEach((filter) => {
+      if (!currentIds.has(filter.id)) {
+        setFilter(filter.id, null);
+      }
+    });
+    
+    prevColumnFiltersRef.current = columnFilters;
+  }, [columnFilters, setFilter]);
 
   const { data, isLoading, isError, error } = usePlans({
     category: tableState.filters.category as string,
@@ -391,10 +414,61 @@ function PlansPage() {
         <span className="text-muted-foreground"
         >{plan.cpu_limit} CPU · {plan.memory_limit} RAM</span>
       </div>
-      <div className="text-sm text-muted-foreground"
-      >
-        {plan.cost_per_hour} nukes/hr
+      {canManagePlans ? (
+        <div className="flex items-center justify-between pt-1">
+          <span className="text-sm text-muted-foreground">
+            {plan.cost_per_hour} nukes/hr
+          </span>
+          <div className="flex items-center gap-1">
+          <Tooltip content="Edit">
+            <button
+              onClick={() => openEditDialog(plan)}
+              className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex cursor-pointer"
+            >
+              <Pencil className="w-4 h-4" />
+            </button>
+          </Tooltip>
+          {plan.is_active ? (
+            <Tooltip content="Deactivate">
+              <button
+                onClick={() => deactivatePlan.mutate(plan.id)}
+                disabled={deactivatePlan.isPending}
+                className="p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-colors inline-flex cursor-pointer"
+              >
+                <XCircle className="w-4 h-4" />
+              </button>
+            </Tooltip>
+          ) : (
+            <Tooltip content="Activate">
+              <button
+                onClick={() => activatePlan.mutate(plan.id)}
+                disabled={activatePlan.isPending}
+                className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-colors inline-flex cursor-pointer"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+              </button>
+            </Tooltip>
+          )}
+          <Tooltip content="Delete">
+            <button
+              onClick={() => {
+                if (confirm(`Are you sure you want to delete ${plan.name}?`)) {
+                  deletePlan.mutate(plan.id);
+                }
+              }}
+              disabled={deletePlan.isPending}
+              className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors inline-flex cursor-pointer"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </Tooltip>
+        </div>
       </div>
+      ) : (
+        <div className="text-sm text-muted-foreground pt-1">
+          {plan.cost_per_hour} nukes/hr
+        </div>
+      )}
     </div>
   );
 

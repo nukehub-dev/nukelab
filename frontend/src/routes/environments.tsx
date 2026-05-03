@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { Boxes, Layers, GitBranch, CheckCircle2, XCircle, Copy, Pencil, Trash2 } from 'lucide-react';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { ResourcePageLayout } from '../components/layout/resource-page-layout';
 import { DataTable } from '../components/data/data-table';
 import { StatusBadge } from '../components/data/status-badge';
@@ -27,6 +27,7 @@ function EnvironmentsPage() {
     setLimit,
     setSort,
     setSearch,
+    setFilter,
   } = useDataTable({ defaultLimit: 20 });
 
   const [sorting, setSorting] = useState<SortingState>([
@@ -35,6 +36,28 @@ function EnvironmentsPage() {
   const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+
+  // Sync React Table column filters with API filter state
+  const prevColumnFiltersRef = useRef<ColumnFiltersState>([]);
+  useEffect(() => {
+    const currentIds = new Set(columnFilters.map(f => f.id));
+    
+    // Add/update filters
+    columnFilters.forEach((filter) => {
+      if (filter.value !== undefined && filter.value !== null) {
+        setFilter(filter.id, String(filter.value));
+      }
+    });
+    
+    // Remove filters that no longer exist
+    prevColumnFiltersRef.current.forEach((filter) => {
+      if (!currentIds.has(filter.id)) {
+        setFilter(filter.id, null);
+      }
+    });
+    
+    prevColumnFiltersRef.current = columnFilters;
+  }, [columnFilters, setFilter]);
 
   const { data, isLoading, isError, error } = useEnvironments({
     category: tableState.filters.category as string,
@@ -363,10 +386,74 @@ function EnvironmentsPage() {
           </span>
         )}
       </div>
-      <div className="text-xs text-muted-foreground"
-      >
-        Created: {formatDate(env.created_at)}
+      <div className="flex items-center justify-between pt-1">
+        <span className="text-xs text-muted-foreground">
+          Created: {formatDate(env.created_at)}
+        </span>
+        <div className="flex items-center gap-1">
+        {canManageEnvironments && (
+          <>
+            <Tooltip content="Edit">
+              <button
+                onClick={() => openEditDialog(env)}
+                className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex cursor-pointer"
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+            </Tooltip>
+            {env.is_active ? (
+              <Tooltip content="Deactivate">
+                <button
+                  onClick={() => deactivateEnvironment.mutate(env.id)}
+                  disabled={deactivateEnvironment.isPending}
+                  className="p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-colors inline-flex cursor-pointer"
+                >
+                  <XCircle className="w-4 h-4" />
+                </button>
+              </Tooltip>
+            ) : (
+              <Tooltip content="Activate">
+                <button
+                  onClick={() => activateEnvironment.mutate(env.id)}
+                  disabled={activateEnvironment.isPending}
+                  className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-colors inline-flex cursor-pointer"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                </button>
+              </Tooltip>
+            )}
+            <Tooltip content="Clone">
+              <button
+                onClick={() => {
+                  const name = prompt('New environment name:', `${env.name} (Copy)`);
+                  const slug = prompt('New slug:', `${env.slug}-copy`);
+                  if (name && slug) {
+                    cloneEnvironment.mutate({ envId: env.id, name, slug });
+                  }
+                }}
+                disabled={cloneEnvironment.isPending}
+                className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex cursor-pointer"
+              >
+                <Copy className="w-4 h-4" />
+              </button>
+            </Tooltip>
+            <Tooltip content="Delete">
+              <button
+                onClick={() => {
+                  if (confirm(`Are you sure you want to delete ${env.name}?`)) {
+                    deleteEnvironment.mutate(env.id);
+                  }
+                }}
+                disabled={deleteEnvironment.isPending}
+                className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors inline-flex cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </Tooltip>
+          </>
+        )}
       </div>
+    </div>
     </div>
   );
 
