@@ -12,6 +12,7 @@ import type { Plan } from '../types/api';
 import type { ColumnDef, ColumnFiltersState, VisibilityState, SortingState } from '@tanstack/react-table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '../components/ui/dialog';
 import { motion } from 'framer-motion';
+import { Tooltip } from '../components/ui/tooltip';
 
 export const Route = createFileRoute('/plans')({
   component: PlansPage,
@@ -266,52 +267,56 @@ function PlansPage() {
         return (
           <div className="flex items-center gap-1"
           >
-            <motion.button
-              onClick={() => openEditDialog(plan)}
-              className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              title="Edit"
-            >
-              <Pencil className="w-4 h-4" />
-            </motion.button>
+            <Tooltip content="Edit">
+              <motion.button
+                onClick={() => openEditDialog(plan)}
+                className="inline-flex p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+              >
+                <Pencil className="w-4 h-4" />
+              </motion.button>
+            </Tooltip>
             {plan.is_active ? (
-              <motion.button
-                onClick={() => deactivatePlan.mutate(plan.id)}
-                disabled={deactivatePlan.isPending}
-                className="p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-colors"
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
-                title="Deactivate"
-              >
-                <XCircle className="w-4 h-4" />
-              </motion.button>
+              <Tooltip content="Deactivate">
+                <motion.button
+                  onClick={() => deactivatePlan.mutate(plan.id)}
+                  disabled={deactivatePlan.isPending}
+                  className="inline-flex p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-colors"
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                >
+                  <XCircle className="w-4 h-4" />
+                </motion.button>
+              </Tooltip>
             ) : (
+              <Tooltip content="Activate">
+                <motion.button
+                  onClick={() => activatePlan.mutate(plan.id)}
+                  disabled={activatePlan.isPending}
+                  className="inline-flex p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-colors"
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                </motion.button>
+              </Tooltip>
+            )}
+            <Tooltip content="Delete">
               <motion.button
-                onClick={() => activatePlan.mutate(plan.id)}
-                disabled={activatePlan.isPending}
-                className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-colors"
+                onClick={() => {
+                  if (confirm(`Are you sure you want to delete ${plan.name}?`)) {
+                    deletePlan.mutate(plan.id);
+                  }
+                }}
+                disabled={deletePlan.isPending}
+                className="inline-flex p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
-                title="Activate"
               >
-                <CheckCircle2 className="w-4 h-4" />
+                <Trash2 className="w-4 h-4" />
               </motion.button>
-            )}
-            <motion.button
-              onClick={() => {
-                if (confirm(`Are you sure you want to delete ${plan.name}?`)) {
-                  deletePlan.mutate(plan.id);
-                }
-              }}
-              disabled={deletePlan.isPending}
-              className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              title="Delete"
-            >
-              <Trash2 className="w-4 h-4" />
-            </motion.button>
+            </Tooltip>
           </div>
         );
       },

@@ -12,6 +12,7 @@ import type { Environment as EnvironmentType } from '../types/api';
 import type { ColumnDef, ColumnFiltersState, VisibilityState, SortingState } from '@tanstack/react-table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '../components/ui/dialog';
 import { motion } from 'framer-motion';
+import { Tooltip } from '../components/ui/tooltip';
 
 export const Route = createFileRoute('/environments')({
   component: EnvironmentsPage,
@@ -217,68 +218,73 @@ function EnvironmentsPage() {
         return (
           <div className="flex items-center gap-1"
           >
-            <motion.button
-              onClick={() => openEditDialog(env)}
-              className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              title="Edit"
-            >
-              <Pencil className="w-4 h-4" />
-            </motion.button>
+            <Tooltip content="Edit">
+              <motion.button
+                onClick={() => openEditDialog(env)}
+                className="inline-flex p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+              >
+                <Pencil className="w-4 h-4" />
+              </motion.button>
+            </Tooltip>
             {env.is_active ? (
-              <motion.button
-                onClick={() => deactivateEnvironment.mutate(env.id)}
-                disabled={deactivateEnvironment.isPending}
-                className="p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-colors"
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
-                title="Deactivate"
-              >
-                <XCircle className="w-4 h-4" />
-              </motion.button>
+              <Tooltip content="Deactivate">
+                <motion.button
+                  onClick={() => deactivateEnvironment.mutate(env.id)}
+                  disabled={deactivateEnvironment.isPending}
+                  className="inline-flex p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-colors"
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                >
+                  <XCircle className="w-4 h-4" />
+                </motion.button>
+              </Tooltip>
             ) : (
+              <Tooltip content="Activate">
+                <motion.button
+                  onClick={() => activateEnvironment.mutate(env.id)}
+                  disabled={activateEnvironment.isPending}
+                  className="inline-flex p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-colors"
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                </motion.button>
+              </Tooltip>
+            )}
+            <Tooltip content="Clone">
               <motion.button
-                onClick={() => activateEnvironment.mutate(env.id)}
-                disabled={activateEnvironment.isPending}
-                className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-colors"
+                onClick={() => {
+                  const name = prompt('New name:', env.name + ' Copy');
+                  const slug = prompt('New slug:', env.slug + '-copy');
+                  if (name && slug) {
+                    cloneEnvironment.mutate({ envId: env.id, name, slug });
+                  }
+                }}
+                disabled={cloneEnvironment.isPending}
+                className="inline-flex p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
-                title="Activate"
               >
-                <CheckCircle2 className="w-4 h-4" />
+                <Copy className="w-4 h-4" />
               </motion.button>
-            )}
-            <motion.button
-              onClick={() => {
-                const name = prompt('New name:', env.name + ' Copy');
-                const slug = prompt('New slug:', env.slug + '-copy');
-                if (name && slug) {
-                  cloneEnvironment.mutate({ envId: env.id, name, slug });
-                }
-              }}
-              disabled={cloneEnvironment.isPending}
-              className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              title="Clone"
-            >
-              <Copy className="w-4 h-4" />
-            </motion.button>
-            <motion.button
-              onClick={() => {
-                if (confirm(`Are you sure you want to delete ${env.name}?`)) {
-                  deleteEnvironment.mutate(env.id);
-                }
-              }}
-              disabled={deleteEnvironment.isPending}
-              className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              title="Delete"
-            >
-              <Trash2 className="w-4 h-4" />
-            </motion.button>
+            </Tooltip>
+            <Tooltip content="Delete">
+              <motion.button
+                onClick={() => {
+                  if (confirm(`Are you sure you want to delete ${env.name}?`)) {
+                    deleteEnvironment.mutate(env.id);
+                  }
+                }}
+                disabled={deleteEnvironment.isPending}
+                className="inline-flex p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+              >
+                <Trash2 className="w-4 h-4" />
+              </motion.button>
+            </Tooltip>
           </div>
         );
       },

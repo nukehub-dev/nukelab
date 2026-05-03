@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { Server, Activity, Cpu, MemoryStick, Play, Square, RotateCcw, Trash2, ExternalLink, Eye, Users } from 'lucide-react';
+import { Tooltip } from '../components/ui/tooltip';
 import { useState } from 'react';
 import { type ColumnDef, type SortingState, type ColumnFiltersState, type VisibilityState } from '@tanstack/react-table';
 import { motion } from 'framer-motion';
@@ -203,62 +204,67 @@ function ServersPage() {
         return (
           <div className="flex items-center gap-1"
           >
-            <Link
-              to="/servers/$serverId"
-              params={{ serverId: server.id }}
-              className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
-              title="View Details"
-            >
-              <Eye className="w-4 h-4" />
-            </Link>
-            {server.status === 'stopped' && (
-              <motion.button
-                onClick={() => startServer.mutate(server.id)}
-                disabled={startServer.isPending}
-                className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-colors"
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
-                title="Start"
+            <Tooltip content="View Details">
+              <Link
+                to="/servers/$serverId"
+                params={{ serverId: server.id }}
+                className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex"
               >
-                <Play className="w-4 h-4" />
-              </motion.button>
+                <Eye className="w-4 h-4" />
+              </Link>
+            </Tooltip>
+            {server.status === 'stopped' && (
+              <Tooltip content="Start">
+                <motion.button
+                  onClick={() => startServer.mutate(server.id)}
+                  disabled={startServer.isPending}
+                  className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-colors inline-flex"
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                >
+                  <Play className="w-4 h-4" />
+                </motion.button>
+              </Tooltip>
             )}
             {server.status === 'running' && (
+              <Tooltip content="Stop">
+                <motion.button
+                  onClick={() => stopServer.mutate(server.id)}
+                  disabled={stopServer.isPending}
+                  className="p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-colors inline-flex"
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                >
+                  <Square className="w-4 h-4" />
+                </motion.button>
+              </Tooltip>
+            )}
+            <Tooltip content="Restart">
               <motion.button
-                onClick={() => stopServer.mutate(server.id)}
-                disabled={stopServer.isPending}
-                className="p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-colors"
+                onClick={() => restartServer.mutate(server.id)}
+                disabled={restartServer.isPending}
+                className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex"
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
-                title="Stop"
               >
-                <Square className="w-4 h-4" />
+                <RotateCcw className="w-4 h-4" />
               </motion.button>
-            )}
-            <motion.button
-              onClick={() => restartServer.mutate(server.id)}
-              disabled={restartServer.isPending}
-              className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              title="Restart"
-            >
-              <RotateCcw className="w-4 h-4" />
-            </motion.button>
-            <motion.button
-              onClick={() => {
-                if (confirm('Are you sure you want to delete this server?')) {
-                  deleteServer.mutate(server.id);
-                }
-              }}
-              disabled={deleteServer.isPending}
-              className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              title="Delete"
-            >
-              <Trash2 className="w-4 h-4" />
-            </motion.button>
+            </Tooltip>
+            <Tooltip content="Delete">
+              <motion.button
+                onClick={() => {
+                  if (confirm('Are you sure you want to delete this server?')) {
+                    deleteServer.mutate(server.id);
+                  }
+                }}
+                disabled={deleteServer.isPending}
+                className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors inline-flex"
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+              >
+                <Trash2 className="w-4 h-4" />
+              </motion.button>
+            </Tooltip>
           </div>
         );
       },

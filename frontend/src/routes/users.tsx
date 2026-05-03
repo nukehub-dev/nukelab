@@ -12,6 +12,7 @@ import type { User as UserType } from '../types/api';
 import type { ColumnDef, ColumnFiltersState, VisibilityState, SortingState } from '@tanstack/react-table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '../components/ui/dialog';
 import { motion } from 'framer-motion';
+import { Tooltip } from '../components/ui/tooltip';
 
 export const Route = createFileRoute('/users')({
   component: UsersPage,
@@ -245,30 +246,32 @@ function UsersPage() {
         return (
           <div className="flex items-center gap-1"
           >
-            <motion.button
-              onClick={() => openEditDialog(user)}
-              className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              title="Edit"
-            >
-              <Pencil className="w-4 h-4" />
-            </motion.button>
-            {canDeleteUsers && (
+            <Tooltip content="Edit">
               <motion.button
-                onClick={() => {
-                  if (confirm(`Are you sure you want to delete ${user.username}?`)) {
-                    deleteUser.mutate(user.id);
-                  }
-                }}
-                disabled={deleteUser.isPending}
-                className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
+                onClick={() => openEditDialog(user)}
+                className="inline-flex p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
-                title="Delete"
               >
-                <Trash2 className="w-4 h-4" />
+                <Pencil className="w-4 h-4" />
               </motion.button>
+            </Tooltip>
+            {canDeleteUsers && (
+              <Tooltip content="Delete">
+                <motion.button
+                  onClick={() => {
+                    if (confirm(`Are you sure you want to delete ${user.username}?`)) {
+                      deleteUser.mutate(user.id);
+                    }
+                  }}
+                  disabled={deleteUser.isPending}
+                  className="inline-flex p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </motion.button>
+              </Tooltip>
             )}
           </div>
         );

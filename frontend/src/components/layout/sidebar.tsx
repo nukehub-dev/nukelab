@@ -25,6 +25,7 @@ import { useSidebarStore } from '../../stores/sidebar-store';
 import { useThemeStore } from '../../stores/theme-store';
 import { useAuthStore } from '../../stores/auth-store';
 import { cn } from '../../lib/utils';
+import { Tooltip } from '../ui/tooltip';
 import { THEME_VALUES, THEME_PREVIEWS } from '../../types/theme';
 
 interface NavItem {
@@ -144,14 +145,15 @@ export function Sidebar() {
               NukeLab
             </span>
           </div>
-          <button
-            onClick={togglePin}
-            className="p-1.5 rounded-md transition-colors hover:bg-sidebar-accent shrink-0"
-            title={isPinned ? 'Unpin sidebar' : 'Pin sidebar'}
-            style={{ marginLeft: isOpen ? 8 : 0, opacity: isOpen ? 1 : 0, transition: 'all 0.3s ease' }}
-          >
-            <Pin className={cn("w-4 h-4", isPinned && "fill-current")} />
-          </button>
+          <Tooltip content={isPinned ? 'Unpin sidebar' : 'Pin sidebar'} position="right">
+            <button
+              onClick={togglePin}
+              className="p-1.5 rounded-md transition-colors hover:bg-sidebar-accent shrink-0"
+              style={{ marginLeft: isOpen ? 8 : 0, opacity: isOpen ? 1 : 0, transition: 'all 0.3s ease' }}
+            >
+              <Pin className={cn("w-4 h-4", isPinned && "fill-current")} />
+            </button>
+          </Tooltip>
         </div>
 
         {/* Navigation */}
@@ -167,31 +169,53 @@ export function Sidebar() {
               <ul className="space-y-1">
                 {group.items.map((item) => (
                   <li key={item.href}>
-                    <Link
-                      to={item.href}
-                      className={cn(
-                        "flex items-center py-2 rounded-lg text-sm font-medium transition-all duration-300",
-                        "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                        isActive(item.href)
-                          ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                          : "text-sidebar-foreground/80"
-                      )}
-                      title={!isOpen ? item.label : undefined}
-                      style={{
-                        paddingLeft: isOpen ? 11 : 11,
-                        paddingRight: isOpen ? 11 : 11,
-                        marginLeft: isOpen ? 4 : 10,
-                        marginRight: isOpen ? 4 : 10,
-                      }}
-                    >
-                      <item.icon className={cn("w-5 h-5 shrink-0", isActive(item.href) && "text-primary")} />
-                      <span
-                        className="truncate whitespace-nowrap overflow-hidden transition-all duration-300"
-                        style={{ maxWidth: isOpen ? 200 : 0, opacity: isOpen ? 1 : 0, marginLeft: isOpen ? 12 : 0 }}
+                    {isOpen ? (
+                      <Link
+                        to={item.href}
+                        className={cn(
+                          "flex items-center py-2 rounded-lg text-sm font-medium transition-all duration-300",
+                          "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                          isActive(item.href)
+                            ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                            : "text-sidebar-foreground/80"
+                        )}
+                        style={{
+                          paddingLeft: 11,
+                          paddingRight: 11,
+                          marginLeft: 4,
+                          marginRight: 4,
+                        }}
                       >
-                        {item.label}
-                      </span>
-                    </Link>
+                        <item.icon className={cn("w-5 h-5 shrink-0", isActive(item.href) && "text-primary")} />
+                        <span
+                          className="truncate whitespace-nowrap overflow-hidden transition-all duration-300"
+                          style={{ maxWidth: 200, opacity: 1, marginLeft: 12 }}
+                        >
+                          {item.label}
+                        </span>
+                      </Link>
+                    ) : (
+                      <Tooltip content={item.label} position="right">
+                        <Link
+                          to={item.href}
+                          className={cn(
+                            "flex items-center py-2 rounded-lg text-sm font-medium transition-all duration-300",
+                            "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                            isActive(item.href)
+                              ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                              : "text-sidebar-foreground/80"
+                          )}
+                          style={{
+                            paddingLeft: 11,
+                            paddingRight: 11,
+                            marginLeft: 10,
+                            marginRight: 10,
+                          }}
+                        >
+                          <item.icon className={cn("w-5 h-5 shrink-0", isActive(item.href) && "text-primary")} />
+                        </Link>
+                      </Tooltip>
+                    )}
                   </li>
                 ))}
               </ul>
