@@ -21,6 +21,7 @@ import { Route as EnvironmentsRouteImport } from './routes/environments'
 import { Route as AuditLogsRouteImport } from './routes/audit-logs'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ServersServerIdIndexRouteImport } from './routes/servers/$serverId/index'
+import { Route as UserUsernameServerNameRouteImport } from './routes/user.$username.$serverName'
 import { Route as ServersServerIdMetricsRouteImport } from './routes/servers/$serverId/metrics'
 
 const VolumesRoute = VolumesRouteImport.update({
@@ -83,6 +84,11 @@ const ServersServerIdIndexRoute = ServersServerIdIndexRouteImport.update({
   path: '/$serverId/',
   getParentRoute: () => ServersRoute,
 } as any)
+const UserUsernameServerNameRoute = UserUsernameServerNameRouteImport.update({
+  id: '/user/$username/$serverName',
+  path: '/user/$username/$serverName',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ServersServerIdMetricsRoute = ServersServerIdMetricsRouteImport.update({
   id: '/$serverId/metrics',
   path: '/$serverId/metrics',
@@ -102,6 +108,7 @@ export interface FileRoutesByFullPath {
   '/users': typeof UsersRoute
   '/volumes': typeof VolumesRoute
   '/servers/$serverId/metrics': typeof ServersServerIdMetricsRoute
+  '/user/$username/$serverName': typeof UserUsernameServerNameRoute
   '/servers/$serverId/': typeof ServersServerIdIndexRoute
 }
 export interface FileRoutesByTo {
@@ -117,6 +124,7 @@ export interface FileRoutesByTo {
   '/users': typeof UsersRoute
   '/volumes': typeof VolumesRoute
   '/servers/$serverId/metrics': typeof ServersServerIdMetricsRoute
+  '/user/$username/$serverName': typeof UserUsernameServerNameRoute
   '/servers/$serverId': typeof ServersServerIdIndexRoute
 }
 export interface FileRoutesById {
@@ -133,6 +141,7 @@ export interface FileRoutesById {
   '/users': typeof UsersRoute
   '/volumes': typeof VolumesRoute
   '/servers/$serverId/metrics': typeof ServersServerIdMetricsRoute
+  '/user/$username/$serverName': typeof UserUsernameServerNameRoute
   '/servers/$serverId/': typeof ServersServerIdIndexRoute
 }
 export interface FileRouteTypes {
@@ -150,6 +159,7 @@ export interface FileRouteTypes {
     | '/users'
     | '/volumes'
     | '/servers/$serverId/metrics'
+    | '/user/$username/$serverName'
     | '/servers/$serverId/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -165,6 +175,7 @@ export interface FileRouteTypes {
     | '/users'
     | '/volumes'
     | '/servers/$serverId/metrics'
+    | '/user/$username/$serverName'
     | '/servers/$serverId'
   id:
     | '__root__'
@@ -180,6 +191,7 @@ export interface FileRouteTypes {
     | '/users'
     | '/volumes'
     | '/servers/$serverId/metrics'
+    | '/user/$username/$serverName'
     | '/servers/$serverId/'
   fileRoutesById: FileRoutesById
 }
@@ -195,6 +207,7 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   UsersRoute: typeof UsersRoute
   VolumesRoute: typeof VolumesRoute
+  UserUsernameServerNameRoute: typeof UserUsernameServerNameRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -283,6 +296,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ServersServerIdIndexRouteImport
       parentRoute: typeof ServersRoute
     }
+    '/user/$username/$serverName': {
+      id: '/user/$username/$serverName'
+      path: '/user/$username/$serverName'
+      fullPath: '/user/$username/$serverName'
+      preLoaderRoute: typeof UserUsernameServerNameRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/servers/$serverId/metrics': {
       id: '/servers/$serverId/metrics'
       path: '/$serverId/metrics'
@@ -318,6 +338,7 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   UsersRoute: UsersRoute,
   VolumesRoute: VolumesRoute,
+  UserUsernameServerNameRoute: UserUsernameServerNameRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

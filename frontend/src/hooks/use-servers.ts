@@ -12,6 +12,23 @@ export function useServers() {
   });
 }
 
+export function useServerByPath(username: string, serverName: string) {
+  return useQuery({
+    queryKey: ['server-by-path', username, serverName],
+    queryFn: async () => {
+      const response = await api.get<Server>(`/servers/by-path/${username}/${serverName}`);
+      return response;
+    },
+    enabled: !!username && !!serverName,
+    retry: (failureCount, error) => {
+      if (error instanceof Error && error.message.includes('404')) {
+        return false;
+      }
+      return failureCount < 2;
+    },
+  });
+}
+
 interface CreateServerData {
   name: string;
   plan_id: string;

@@ -197,15 +197,19 @@ function ServersPage() {
         const server = row.original;
         const url = row.getValue('external_url') as string;
         if (!url) return <span className="text-muted-foreground">—</span>;
-        
+
+        const gatewayUrl = server.username
+          ? `/user/${server.username}/${server.name}`
+          : url;
+
         const handleOpen = async (e: React.MouseEvent) => {
           e.preventDefault();
           if (server.status !== 'running') {
             await startServer.mutateAsync(server.id);
           }
-          window.open(url, '_blank', 'noopener,noreferrer');
+          window.open(gatewayUrl, '_blank', 'noopener,noreferrer');
         };
-        
+
         return (
           <button
             onClick={handleOpen}
@@ -389,7 +393,10 @@ function ServersPage() {
               if (server.status !== 'running') {
                 await startServer.mutateAsync(server.id);
               }
-              window.open(server.external_url, '_blank', 'noopener,noreferrer');
+              const gatewayUrl = server.username
+                ? `/user/${server.username}/${server.name}`
+                : server.external_url;
+              window.open(gatewayUrl, '_blank', 'noopener,noreferrer');
             }}
             disabled={startServer.isPending}
             className="inline-flex items-center gap-1 text-sm text-primary hover:underline disabled:opacity-50 cursor-pointer"

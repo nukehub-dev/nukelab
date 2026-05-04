@@ -226,7 +226,7 @@ async def get_server(
 ):
     """Get server details. Users can view own, admins can view any."""
     server = await get_server_with_permission_check(server_id, current_user, db)
-    
+
     if server.container_id:
         try:
             actual = await spawner.get_status(server.container_id)
@@ -239,7 +239,7 @@ async def get_server(
             await db.commit()
         except Exception:
             pass
-    
+
     return {
         "id": str(server.id),
         "name": server.name,
@@ -253,6 +253,63 @@ async def get_server(
         "started_at": server.started_at.isoformat() if server.started_at else None,
         "stopped_at": server.stopped_at.isoformat() if server.stopped_at else None,
         "user_id": str(server.user_id),
+    }
+
+
+@router.get("/by-path/{username}/{server_name}")
+async def get_server_by_path(
+    username: str,
+    server_name: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get server by username and server name. Used by server gateway page."""
+    from sqlalchemy.orm import joinedload
+
+    result = await db.execute(
+        select(Server).join(User).where(
+            User.username == username,
+            Server.name == server_name
+        ).options(joinedload(Server.user))
+    )
+    server = result.scalar_one_or_none()
+
+    if not server:
+        raise HTTPException(status_code=404, detail="Server not found")
+
+    # Permission check - users can only access their own unless admin
+    if str(server.user_id) != str(current_user.id):
+        checker = PermissionChecker(current_user)
+        checker.require(Permission.SERVERS_MANAGE)
+
+    # Sync status with actual container state
+    if server.container_id:
+        try:
+            actual = await spawner.get_status(server.container_id)
+            if actual == "running" and server.status != "running":
+                server.status = "running"
+                server.started_at = datetime.utcnow()
+            elif actual in ("stopped", "paused", "exited") and server.status == "running":
+                server.status = "stopped"
+                server.stopped_at = datetime.utcnow()
+            await db.commit()
+        except Exception:
+            pass
+
+    return {
+        "id": str(server.id),
+        "name": server.name,
+        "status": server.status,
+        "container_id": server.container_id,
+        "external_url": server.external_url,
+        "allocated_cpu": server.allocated_cpu,
+        "allocated_memory": server.allocated_memory,
+        "health_status": server.health_status,
+        "status_reason": server.status_reason,
+        "started_at": server.started_at.isoformat() if server.started_at else None,
+        "stopped_at": server.stopped_at.isoformat() if server.stopped_at else None,
+        "user_id": str(server.user_id),
+        "username": server.user.username if server.user else None,
     }
 
 
@@ -384,23 +441,26 @@ async def stop_server(
 ):
     """Stop a server."""
     server = await get_server_with_permission_check(server_id, current_user, db)
-    
+
     checker = PermissionChecker(current_user)
     checker.require(Permission.SERVERS_STOP)
-    
+
     # Check if trying to stop someone else's server
     if str(server.user_id) != str(current_user.id):
         checker.require(Permission.SERVERS_MANAGE)
-    
+
     if server.container_id:
         try:
             actual_status = await spawner.get_status(server.container_id)
             if actual_status == "stopped" or actual_status == "unknown":
                 server.status = "stopped"
+                server.container_id = None
                 await db.commit()
                 return {"message": "Server already stopped", "server_id": server_id, "status": "stopped"}
-            
-            await spawner.stop(server.container_id)
+
+            # Delete container to remove Traefik route so frontend catch-all handles it
+            await spawner.delete(server.container_id)
+            server.container_id = None
             server.status = "stopped"
             server.stopped_at = datetime.utcnow()
             await db.commit()
@@ -410,7 +470,7 @@ async def stop_server(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to stop server: {str(e)}"
             )
-    
+
     server.status = "stopped"
     await db.commit()
     return {"message": "Server stopped", "server_id": server_id, "status": "stopped"}
