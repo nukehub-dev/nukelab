@@ -17,9 +17,31 @@ interface UseWebSocketOptions {
   maxReconnectAttempts?: number;
 }
 
+function getDefaultWebSocketUrl(): string {
+  const apiUrl = import.meta.env.VITE_API_URL as string | undefined;
+
+  if (apiUrl) {
+    // VITE_API_URL is set (e.g. http://localhost:8000/api)
+    // Convert to WebSocket URL: ws://localhost:8000/ws
+    const httpUrl = apiUrl.replace(/\/+$/, ''); // trim trailing slashes
+    const wsProtocol = httpUrl.startsWith('https:') ? 'wss:' : 'ws:';
+    const rest = httpUrl.replace(/^https?:/, '');
+    // Remove any /api suffix since the WS endpoint is at /ws
+    const hostPart = rest.replace(/\/api$/, '');
+    return `${wsProtocol}${hostPart}/ws`;
+  }
+
+  // Development fallback: when running via Vite dev server (port 5173),
+  // connect directly to the backend on port 8080 (Traefik/proxy)
+  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const host = isLocalhost ? 'localhost:8080' : window.location.host;
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${host}/ws`;
+}
+
 export function useWebSocket(options: UseWebSocketOptions = {}) {
   const {
-    url = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`,
+    url = getDefaultWebSocketUrl(),
     autoConnect = true,
     reconnectInterval = 3000,
     maxReconnectAttempts = 5,

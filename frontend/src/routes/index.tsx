@@ -14,8 +14,11 @@ import { FloatingHeader } from '../components/layout/floating-header';
 import { StatCard } from '../components/data/stat-card';
 
 import { useDashboard } from '../hooks/use-dashboard';
+import { useServers } from '../hooks/use-servers';
+import { useAuthStore } from '../stores/auth-store';
 import { SkeletonCard } from '../components/feedback/skeleton';
 import { MetricsDashboard } from '../components/charts/metrics-dashboard';
+import { UserServerMetrics } from '../components/charts/user-server-metrics';
 import { formatDate } from '../lib/utils';
 
 export const Route = createFileRoute('/')({
@@ -24,6 +27,8 @@ export const Route = createFileRoute('/')({
 
 function DashboardPage() {
   const { data: dashboard, isLoading, isError, error } = useDashboard();
+  const { data: servers = [] } = useServers();
+  const isAdmin = useAuthStore((state) => state.isAdmin());
 
   const stats = dashboard ? [
     { 
@@ -134,7 +139,21 @@ function DashboardPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.35 }}
         >
-          <MetricsDashboard />
+          {isAdmin && (
+            <>
+              <h2 className="text-lg font-semibold mb-4">System Metrics</h2>
+              <MetricsDashboard />
+            </>
+          )}
+
+          {(!isAdmin || servers.some((s) => s.status === 'running')) && (
+            <div className={isAdmin ? 'mt-8' : ''}>
+              <h2 className="text-lg font-semibold mb-4">
+                {isAdmin ? 'My Running Servers' : 'Your Running Servers'}
+              </h2>
+              <UserServerMetrics servers={servers} />
+            </div>
+          )}
         </motion.div>
 
         {/* Quick Actions */}

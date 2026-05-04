@@ -39,10 +39,11 @@ class SystemMetricsCollector:
         except Exception:
             net_io = None
 
-        # Docker stats
+        # Docker stats - count only server containers with nukelab.server.id label
         docker_containers_running = 0
         docker_containers_total = 0
         docker_images_total = 0
+        active_servers_count = 0
         docker = None
         try:
             docker = await get_fresh_docker_client()
@@ -51,6 +52,15 @@ class SystemMetricsCollector:
             docker_containers_running = sum(
                 1 for c in containers if c.get('State') == 'running'
             )
+            # Count actual nukelab servers (containers with nukelab.server.id label)
+            for container in containers:
+                try:
+                    container_info = await container.show()
+                    labels = container_info.get('Config', {}).get('Labels', {}) or {}
+                    if labels.get('nukelab.server.id'):
+                        active_servers_count += 1
+                except Exception:
+                    pass
             images = await docker.client.images.list()
             docker_images_total = len(images)
         except Exception:
@@ -61,6 +71,43 @@ class SystemMetricsCollector:
                     await docker.client.close()
                 except Exception:
                     pass
+
+        # Calculate network throughput rate (bytes/sec) by comparing with previous reading
+        network_rx_rate = 0
+        network_tx_rate = 0
+        try:
+            # Try to get previous values from a simple cache file
+            import os
+            cache_file = '/tmp/nukelab_network_cache.json'
+            prev_data = None
+            if os.path.exists(cache_file):
+                try:
+                    with open(cache_file, 'r') as f:
+                        prev_data = json.load(f)
+                except Exception:
+                    pass
+
+            if prev_data and net_io:
+                time_diff = (datetime.utcnow() - datetime.fromisoformat(prev_data['timestamp'])).total_seconds()
+                if time_diff > 0:
+                    rx_diff = net_io.bytes_recv - prev_data.get('rx_bytes', 0)
+                    tx_diff = net_io.bytes_sent - prev_data.get('tx_bytes', 0)
+                    # Handle counter reset (if system rebooted)
+                    if rx_diff >= 0:
+                        network_rx_rate = max(0, rx_diff / time_diff)
+                    if tx_diff >= 0:
+                        network_tx_rate = max(0, tx_diff / time_diff)
+
+            # Save current values
+            if net_io:
+                with open(cache_file, 'w') as f:
+                    json.dump({
+                        'timestamp': datetime.utcnow().isoformat(),
+                        'rx_bytes': net_io.bytes_recv,
+                        'tx_bytes': net_io.bytes_sent,
+                    }, f)
+        except Exception:
+            pass
 
         data = {
             'host': 'localhost',
@@ -78,25 +125,63 @@ class SystemMetricsCollector:
             'disk_percent': (disk.used / disk.total) * 100 if disk.total else 0,
             'disk_read_bytes': disk_io.read_bytes if disk_io else 0,
             'disk_write_bytes': disk_io.write_bytes if disk_io else 0,
-            'network_rx_bytes': net_io.bytes_recv if net_io else 0,
-            'network_tx_bytes': net_io.bytes_sent if net_io else 0,
+            # Network throughput rates (bytes/sec)
+            'network_rx_bytes': int(network_rx_rate),
+            'network_tx_bytes': int(network_tx_rate),
+            # Cumulative counters (for reference)
+            'network_rx_total': net_io.bytes_recv if net_io else 0,
+            'network_tx_total': net_io.bytes_sent if net_io else 0,
+            # Server counts
+            'active_servers': active_servers_count,
+            'total_servers': docker_containers_running,
             'docker_containers_running': docker_containers_running,
             'docker_containers_total': docker_containers_total,
             'docker_images_total': docker_images_total,
             'collected_at': datetime.utcnow(),
         }
 
-        # Persist to DB
-        async with AsyncSessionLocal() as db:
-            try:
-                metric = SystemMetric(**data)
-                db.add(metric)
-                await db.commit()
-            except Exception as e:
-                await db.rollback()
-                print(f"Error persisting system metrics: {e}")
-            finally:
-                await db.close()
+        # Persist to DB using a fresh engine to avoid asyncpg conflicts in Celery threads
+        from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+        from sqlalchemy.orm import sessionmaker
+
+        engine = None
+        db = None
+        try:
+            engine = create_async_engine(
+                settings.database_url,
+                echo=False,
+                future=True,
+                pool_size=1,
+                max_overflow=0,
+            )
+            AsyncSessionLocalFresh = sessionmaker(
+                engine,
+                class_=AsyncSession,
+                expire_on_commit=False,
+            )
+            db = AsyncSessionLocalFresh()
+            metric = SystemMetric(**data)
+            db.add(metric)
+            await db.commit()
+            print(f"System metrics persisted to database")
+        except Exception as e:
+            print(f"Error persisting system metrics: {e}")
+            if db:
+                try:
+                    await db.rollback()
+                except Exception:
+                    pass
+        finally:
+            if db:
+                try:
+                    await db.close()
+                except Exception:
+                    pass
+            if engine:
+                try:
+                    await engine.dispose()
+                except Exception:
+                    pass
 
         # Broadcast via Redis
         try:

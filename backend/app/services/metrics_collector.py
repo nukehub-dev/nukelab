@@ -4,10 +4,7 @@ from datetime import datetime
 from typing import Dict, List, Optional
 import aiodocker
 from app.docker.client import get_fresh_docker_client
-from app.db.session import AsyncSessionLocal
-from app.models.server import Server
 from app.models.server_metric import ServerMetric
-from sqlalchemy import select
 import redis.asyncio as redis
 from app.config import settings
 
@@ -60,13 +57,6 @@ class MetricsCollector:
                     print(f"Metrics collector: Skipping container {container_id[:12]} - missing server_id or container_id")
                     continue
                 
-                async with AsyncSessionLocal() as db:
-                    result = await db.execute(select(Server).where(Server.id == server_id))
-                    server = result.scalar_one_or_none()
-                    if not server:
-                        print(f"Metrics collector: Skipping container {container_id[:12]} - server {server_id} not found in database")
-                        continue
-                    
                 await self._collect_container_metrics(container_id, server_id)
             except Exception as e:
                 container_id = getattr(container, '_id', 'unknown')
@@ -191,6 +181,7 @@ class MetricsCollector:
         """Save metrics to database using a fresh engine"""
         from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
         from sqlalchemy.orm import sessionmaker
+        from sqlalchemy.exc import IntegrityError
         from app.config import settings
         
         engine = None
@@ -216,6 +207,10 @@ class MetricsCollector:
             db.add(metric)
             await db.commit()
             print(f"Metrics collector: Saved metric to database for server {metrics['server_id']}")
+        except IntegrityError:
+            # Server no longer exists in database (e.g., deleted but container still running)
+            # Silently skip - metrics are still broadcast via Redis
+            pass
         except Exception as e:
             print(f"Metrics collector: Error during persist: {e}")
             if db:

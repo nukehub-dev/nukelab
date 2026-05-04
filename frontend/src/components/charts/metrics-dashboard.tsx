@@ -33,15 +33,59 @@ interface SystemMetrics {
   total_disk_usage: number;
   total_disk: number;
   network_throughput: number;
+  // Raw fields from backend
+  cpu_percent?: number;
+  memory_used?: number;
+  memory_total?: number;
+  memory_percent?: number;
+  disk_used?: number;
+  disk_total?: number;
+  disk_percent?: number;
+  network_rx_bytes?: number;
+  network_tx_bytes?: number;
+  docker_containers_running?: number;
+  docker_containers_total?: number;
 }
 
-const MAX_HISTORY_POINTS = 30;
+const MAX_HISTORY_POINTS = 60;
+const STORAGE_KEY = 'nukelab_metrics_history';
+const STORAGE_MAX_AGE_MS = 30 * 60 * 1000; // 30 minutes
+
+interface StoredMetrics {
+  timestamp: number;
+  cpuHistory: MetricDataPoint[];
+  memoryHistory: MetricDataPoint[];
+  networkHistory: MetricDataPoint[];
+  diskHistory: MetricDataPoint[];
+}
+
+function loadStoredMetrics(): StoredMetrics | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw) as StoredMetrics;
+    if (Date.now() - data.timestamp > STORAGE_MAX_AGE_MS) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+function saveStoredMetrics(data: StoredMetrics) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch {
+    // ignore storage errors
+  }
+}
 
 function useMetricHistory() {
-  const [cpuHistory, setCpuHistory] = useState<MetricDataPoint[]>([]);
-  const [memoryHistory, setMemoryHistory] = useState<MetricDataPoint[]>([]);
-  const [networkHistory, setNetworkHistory] = useState<MetricDataPoint[]>([]);
-  const [diskHistory, setDiskHistory] = useState<MetricDataPoint[]>([]);
+  const stored = loadStoredMetrics();
+
+  const [cpuHistory, setCpuHistory] = useState<MetricDataPoint[]>(stored?.cpuHistory ?? []);
+  const [memoryHistory, setMemoryHistory] = useState<MetricDataPoint[]>(stored?.memoryHistory ?? []);
+  const [networkHistory, setNetworkHistory] = useState<MetricDataPoint[]>(stored?.networkHistory ?? []);
+  const [diskHistory, setDiskHistory] = useState<MetricDataPoint[]>(stored?.diskHistory ?? []);
 
   const addPoint = useCallback((
     cpu: number,
@@ -68,6 +112,17 @@ function useMetricHistory() {
       return next.slice(-MAX_HISTORY_POINTS);
     });
   }, []);
+
+  // Persist to localStorage whenever history changes
+  useEffect(() => {
+    saveStoredMetrics({
+      timestamp: Date.now(),
+      cpuHistory,
+      memoryHistory,
+      networkHistory,
+      diskHistory,
+    });
+  }, [cpuHistory, memoryHistory, networkHistory, diskHistory]);
 
   return {
     cpuHistory,
@@ -181,28 +236,38 @@ export function MetricsDashboard() {
   useEffect(() => {
     const unsubscribe = onMessage((message) => {
       if (message.event === 'metrics:system') {
-        const raw = message.data as Partial<SystemMetrics>;
+        const raw = message.data as Partial<SystemMetrics & {
+          cpu_percent?: number;
+          memory_used?: number;
+          memory_total?: number;
+          memory_percent?: number;
+          disk_used?: number;
+          disk_total?: number;
+          disk_percent?: number;
+          network_rx_bytes?: number;
+          network_tx_bytes?: number;
+        }>;
         
-        // Defensive: coerce all fields to valid numbers
+        // Handle both old aggregated field names and new host metric field names
         const data: SystemMetrics = {
-          total_servers: Number(raw.total_servers) || 0,
+          total_servers: Number(raw.total_servers ?? raw.docker_containers_running) || 0,
           active_servers: Number(raw.active_servers) || 0,
-          total_cpu_usage: Number(raw.total_cpu_usage) || 0,
-          total_memory_usage: Number(raw.total_memory_usage) || 0,
-          total_memory: Number(raw.total_memory) || 0,
-          total_disk_usage: Number(raw.total_disk_usage) || 0,
-          total_disk: Number(raw.total_disk) || 0,
-          network_throughput: Number(raw.network_throughput) || 0,
+          total_cpu_usage: Number(raw.total_cpu_usage ?? raw.cpu_percent) || 0,
+          total_memory_usage: Number(raw.total_memory_usage ?? raw.memory_used) || 0,
+          total_memory: Number(raw.total_memory ?? raw.memory_total) || 0,
+          total_disk_usage: Number(raw.total_disk_usage ?? raw.disk_used) || 0,
+          total_disk: Number(raw.total_disk ?? raw.disk_total) || 0,
+          network_throughput: Number(raw.network_throughput ?? raw.network_rx_bytes) || 0,
         };
         
         setSystemMetrics(data);
         
         const memoryPercent = data.total_memory > 0
           ? (data.total_memory_usage / data.total_memory) * 100
-          : 0;
+          : Number(raw.memory_percent) || 0;
         const diskPercent = data.total_disk > 0
           ? (data.total_disk_usage / data.total_disk) * 100
-          : 0;
+          : Number(raw.disk_percent) || 0;
         
         addPoint(
           data.total_cpu_usage,
@@ -210,20 +275,30 @@ export function MetricsDashboard() {
           data.network_throughput,
           diskPercent
         );
-      } else if (message.event === 'metrics:server') {
-        const raw = message.data as Partial<ServerMetrics & { server_id: string }>;
+      } else if (message.event === 'metrics:server' || message.event === 'metrics:all') {
+        const raw = message.data as Partial<ServerMetrics & {
+          server_id: string;
+          cpu_percent?: number;
+          memory_percent?: number;
+          memory_used?: number;
+          disk_read_bytes?: number;
+          disk_write_bytes?: number;
+          network_rx_bytes?: number;
+          network_tx_bytes?: number;
+        }>;
         if (!raw.server_id) return;
-        
+
+        // Map backend field names to frontend field names
         const data: ServerMetrics = {
-          cpu_usage: Number(raw.cpu_usage) || 0,
-          memory_usage: Number(raw.memory_usage) || 0,
+          cpu_usage: Number(raw.cpu_usage ?? raw.cpu_percent) || 0,
+          memory_usage: Number(raw.memory_usage ?? raw.memory_percent ?? raw.memory_used) || 0,
           memory_total: Number(raw.memory_total) || 0,
-          disk_usage: Number(raw.disk_usage) || 0,
+          disk_usage: Number(raw.disk_usage ?? raw.disk_read_bytes) || 0,
           disk_total: Number(raw.disk_total) || 0,
-          network_rx: Number(raw.network_rx) || 0,
-          network_tx: Number(raw.network_tx) || 0,
+          network_rx: Number(raw.network_rx ?? raw.network_rx_bytes) || 0,
+          network_tx: Number(raw.network_tx ?? raw.network_tx_bytes) || 0,
         };
-        
+
         setServerMetrics((prev) => ({
           ...prev,
           [raw.server_id!]: data,
@@ -316,7 +391,7 @@ export function MetricsDashboard() {
           title="Network"
           value={systemMetrics
             ? `${formatBytes(systemMetrics.network_throughput)}/s`
-            : `${latestNetwork.toFixed(1)} MB/s`
+            : `${formatBytes(latestNetwork)}/s`
           }
           subtitle="Throughput"
           icon={Network}
@@ -434,7 +509,7 @@ export function MetricsDashboard() {
           </div>
           <div className="flex flex-col items-center">
             <GaugeChart
-              value={Math.min(latestNetwork / 10, 100)}
+              value={Math.min(latestNetwork / 1048576, 100)}
               max={100}
               label="Network"
               size={120}
