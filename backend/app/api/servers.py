@@ -30,6 +30,7 @@ class ServerResponse(BaseModel):
     name: str
     status: str
     container_id: str | None = None
+    volume_name: str | None = None
     external_url: str | None = None
     allocated_cpu: float | None = None
     allocated_memory: str | None = None
@@ -138,6 +139,7 @@ async def create_server(
             name=server.name,
             status=server.status,
             container_id=server.container_id,
+            volume_name=server.volume_name,
             external_url=server.external_url,
             allocated_cpu=server.allocated_cpu,
             allocated_memory=server.allocated_memory,
@@ -202,6 +204,7 @@ async def list_servers(
                 "name": s.name,
                 "status": s.status,
                 "container_id": s.container_id,
+                "volume_name": s.volume_name,
                 "external_url": s.external_url,
                 "allocated_cpu": s.allocated_cpu,
                 "allocated_memory": s.allocated_memory,
@@ -245,6 +248,7 @@ async def get_server(
         "name": server.name,
         "status": server.status,
         "container_id": server.container_id,
+        "volume_name": server.volume_name,
         "external_url": server.external_url,
         "allocated_cpu": server.allocated_cpu,
         "allocated_memory": server.allocated_memory,
@@ -301,6 +305,7 @@ async def get_server_by_path(
         "name": server.name,
         "status": server.status,
         "container_id": server.container_id,
+        "volume_name": server.volume_name,
         "external_url": server.external_url,
         "allocated_cpu": server.allocated_cpu,
         "allocated_memory": server.allocated_memory,
@@ -356,10 +361,12 @@ async def start_server(
                     cpu=plan.cpu_limit if plan else server.allocated_cpu,
                     memory=plan.memory_limit if plan else server.allocated_memory,
                     disk=plan.disk_limit if plan else server.allocated_disk,
+                    volume_name=server.volume_name,
                 )
                 
                 server.container_id = new_server.container_id
                 server.image = new_server.image
+                server.volume_name = new_server.volume_name
                 server.status = "running"
                 server.started_at = datetime.utcnow()
                 server.external_url = new_server.external_url
@@ -412,10 +419,12 @@ async def start_server(
                 cpu=plan.cpu_limit,
                 memory=plan.memory_limit,
                 disk=plan.disk_limit,
+                volume_name=server.volume_name,
             )
             
             server.container_id = new_server.container_id
             server.image = new_server.image
+            server.volume_name = new_server.volume_name
             server.status = "running"
             server.external_url = new_server.external_url
             server.started_at = datetime.utcnow()
@@ -516,10 +525,12 @@ async def restart_server(
                     cpu=plan.cpu_limit if plan else server.allocated_cpu,
                     memory=plan.memory_limit if plan else server.allocated_memory,
                     disk=plan.disk_limit if plan else server.allocated_disk,
+                    volume_name=server.volume_name,
                 )
                 
                 server.container_id = new_server.container_id
                 server.image = new_server.image
+                server.volume_name = new_server.volume_name
                 server.status = "running"
                 server.started_at = datetime.utcnow()
                 server.external_url = new_server.external_url

@@ -14,6 +14,20 @@ class ServerSpawner:
             self.docker = await get_docker_client()
         return self.docker
     
+    async def _ensure_volume(self, volume_name: str):
+        """Create a named Docker volume if it doesn't exist."""
+        docker = await self._get_docker()
+        try:
+            await docker.client.volumes.get(volume_name)
+        except Exception:
+            await docker.client.volumes.create({
+                "Name": volume_name,
+                "Labels": {
+                    "nukelab.managed": "true",
+                }
+            })
+            print(f"Created volume: {volume_name}")
+
     async def spawn(
         self,
         user_id: str,
@@ -26,13 +40,19 @@ class ServerSpawner:
         memory: str = "2g",
         disk: str = "10g",
         env_vars: Optional[dict] = None,
+        volume_name: Optional[str] = None,
     ) -> Server:
-        """Spawn a new server container"""
+        """Spawn a new server container with persistent volume"""
         docker = await self._get_docker()
         
         # Generate unique IDs
         server_id = str(uuid.uuid4())
         container_name = f"nukelab-server-{username}-{server_name}"
+        
+        # Create or reuse persistent volume
+        if not volume_name:
+            volume_name = f"nukelab-server-{username}-{server_name}-data"
+        await self._ensure_volume(volume_name)
         
         # Determine image - use provided image or default to naming convention
         if not image:
@@ -62,6 +82,11 @@ class ServerSpawner:
             **(env_vars or {}),
         }
         
+        # Mount volume to user's home directory
+        volumes = {
+            volume_name: f"/home/{username}"
+        }
+        
         try:
             # Check if image exists locally first, then try to pull
             try:
@@ -86,6 +111,7 @@ class ServerSpawner:
                 cpu_limit=cpu,
                 memory_limit=memory,
                 disk_limit=disk,
+                volumes=volumes,
             )
             
             # Start container
@@ -99,6 +125,7 @@ class ServerSpawner:
                 environment_id=uuid.UUID(environment_id) if environment_id else None,
                 container_id=container.id,
                 image=image,
+                volume_name=volume_name,
                 status="running",
                 allocated_cpu=cpu,
                 allocated_memory=memory,

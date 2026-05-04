@@ -17,6 +17,7 @@ class Server(Base):
     # Docker
     container_id = Column(String(255), nullable=True)
     image = Column(String(255), nullable=True)
+    volume_name = Column(String(255), nullable=True)
     status = Column(String(50), default="pending", nullable=False)
     
     # Resources
