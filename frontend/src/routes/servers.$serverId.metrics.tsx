@@ -1,10 +1,10 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Activity, Clock } from 'lucide-react';
-import { ResourceTimeline } from '../../../components/charts/resource-timeline';
-import { useServers } from '../../../hooks/use-servers';
-import { formatDate } from '../../../lib/utils';
-import { springs } from '../../../lib/animations';
+import { ResourceTimeline } from '../components/charts/resource-timeline';
+import { useServers } from '../hooks/use-servers';
+import { formatDate } from '../lib/utils';
+import { springs } from '../lib/animations';
 
 export const Route = createFileRoute('/servers/$serverId/metrics')({
   component: ServerMetricsPage,

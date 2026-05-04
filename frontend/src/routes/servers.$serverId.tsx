@@ -15,16 +15,16 @@ import {
   RotateCcw,
   Trash2,
 } from 'lucide-react';
-import { useWebSocket } from '../../../hooks/use-websocket';
-import { MetricsAreaChart } from '../../../components/charts/area-chart';
-import { GaugeChart } from '../../../components/charts/gauge-chart';
-import { MetricSparkline } from '../../../components/data/metric-sparkline';
-import { StatusBadge } from '../../../components/data/status-badge';
-import { useServers, useServerActions } from '../../../hooks/use-servers';
-import { formatDate, formatBytes, cn } from '../../../lib/utils';
-import { springs } from '../../../lib/animations';
+import { useWebSocket } from '../hooks/use-websocket';
+import { MetricsAreaChart } from '../components/charts/area-chart';
+import { GaugeChart } from '../components/charts/gauge-chart';
+import { MetricSparkline } from '../components/data/metric-sparkline';
+import { StatusBadge } from '../components/data/status-badge';
+import { useServers, useServerActions } from '../hooks/use-servers';
+import { formatDate, formatBytes, cn } from '../lib/utils';
+import { springs } from '../lib/animations';
 
-export const Route = createFileRoute('/servers/$serverId/')({
+export const Route = createFileRoute('/servers/$serverId')({
   component: ServerDetailPage,
 });
 
@@ -68,23 +68,20 @@ function ServerDetailPage() {
       if (message.event === 'metrics:server') {
         const data = message.data as {
           server_id: string;
-          cpu_usage?: number;
-          memory_usage?: number;
-          memory_total?: number;
-          disk_usage?: number;
-          disk_total?: number;
-          network_rx?: number;
-          network_tx?: number;
+          cpu_percent?: number;
+          memory_percent?: number;
+          disk_read_bytes?: number;
+          disk_write_bytes?: number;
+          network_rx_bytes?: number;
+          network_tx_bytes?: number;
         };
 
         if (data.server_id !== serverId) return;
 
-        const cpu = Number(data.cpu_usage) || 0;
-        const memoryTotal = Number(data.memory_total) || 1;
-        const memory = ((Number(data.memory_usage) || 0) / memoryTotal) * 100;
-        const diskTotal = Number(data.disk_total) || 1;
-        const disk = ((Number(data.disk_usage) || 0) / diskTotal) * 100;
-        const network = (Number(data.network_rx) || 0) + (Number(data.network_tx) || 0);
+        const cpu = Number(data.cpu_percent) || 0;
+        const memory = Number(data.memory_percent) || 0;
+        const disk = (Number(data.disk_read_bytes) || 0) + (Number(data.disk_write_bytes) || 0);
+        const network = (Number(data.network_rx_bytes) || 0) + (Number(data.network_tx_bytes) || 0);
 
         const timestamp = new Date().toLocaleTimeString();
 
