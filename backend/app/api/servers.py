@@ -10,6 +10,7 @@ from sqlalchemy import select, and_
 
 from app.api.auth import get_current_user
 from app.core.permissions import Permission
+from app.core.security import has_any_permission
 from app.dependencies import PermissionChecker
 from app.db.session import get_db
 from app.models.user import User
@@ -172,7 +173,7 @@ async def list_servers(
     from sqlalchemy.orm import joinedload
     checker = PermissionChecker(current_user)
     
-    if checker.is_admin():
+    if checker.is_admin() or has_any_permission(current_user, [Permission.SERVERS_READ_ALL]):
         result = await db.execute(select(Server).options(joinedload(Server.user)))
     else:
         result = await db.execute(
@@ -356,9 +357,12 @@ async def start_server(
                 plan_service = PlanService(db)
                 plan = await plan_service.get_by_id(str(server.plan_id)) if server.plan_id else None
                 
+                # Get server owner's username, not current user's
+                server_owner = server.user if hasattr(server, 'user') and server.user else current_user
+                
                 new_server = await spawner.spawn(
                     user_id=str(server.user_id),
-                    username=current_user.username,
+                    username=server_owner.username,
                     server_name=server.name,
                     environment=environment.slug if environment else "dev",
                     environment_id=str(server.environment_id) if server.environment_id else None,
@@ -415,16 +419,23 @@ async def start_server(
             raise HTTPException(status_code=404, detail="Plan not found")
         
         try:
+            # Get server owner's username via explicit query to avoid lazy loading issues
+            from sqlalchemy import select as sa_select
+            from app.models.user import User
+            result = await db.execute(sa_select(User).where(User.id == server.user_id))
+            server_owner = result.scalar_one_or_none()
+            owner_username = server_owner.username if server_owner else current_user.username
+            
             new_server = await spawner.spawn(
                 user_id=str(server.user_id),
-                username=current_user.username,
+                username=owner_username,
                 server_name=server.name,
-                environment=environment.slug,
-                environment_id=str(server.environment_id),
-                image=environment.image,
-                cpu=plan.cpu_limit,
-                memory=plan.memory_limit,
-                disk=plan.disk_limit,
+                environment=environment.slug if environment else "dev",
+                environment_id=str(server.environment_id) if server.environment_id else None,
+                image=environment.image if environment else None,
+                cpu=plan.cpu_limit if plan else server.allocated_cpu,
+                memory=plan.memory_limit if plan else server.allocated_memory,
+                disk=plan.disk_limit if plan else server.allocated_disk,
                 volume_name=server.volume_name,
                 server_id=str(server.id),
             )
@@ -522,9 +533,16 @@ async def restart_server(
                 plan_service = PlanService(db)
                 plan = await plan_service.get_by_id(str(server.plan_id)) if server.plan_id else None
                 
+                # Get server owner's username via explicit query to avoid lazy loading issues
+                from sqlalchemy import select as sa_select
+                from app.models.user import User
+                result = await db.execute(sa_select(User).where(User.id == server.user_id))
+                server_owner = result.scalar_one_or_none()
+                owner_username = server_owner.username if server_owner else current_user.username
+                
                 new_server = await spawner.spawn(
                     user_id=str(server.user_id),
-                    username=current_user.username,
+                    username=owner_username,
                     server_name=server.name,
                     environment=environment.slug if environment else "dev",
                     environment_id=str(server.environment_id) if server.environment_id else None,

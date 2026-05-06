@@ -32,6 +32,7 @@ function DashboardPage() {
   const { data: dashboard, isLoading, isError, error } = useDashboard();
   const { data: servers = [] } = useServers();
   const isAdmin = useAuthStore((state) => state.isAdmin());
+  const isModerator = useAuthStore((state) => state.isModerator());
   const currentUser = useAuthStore((state) => state.user);
   const userId = currentUser?.id;
 
@@ -141,7 +142,7 @@ function DashboardPage() {
         </section>
 
         {/* System Metrics (Admin Only) */}
-        {isAdmin && (
+        {isModerator && (
           <section className="space-y-4">
             <div className="flex items-center gap-2">
               <HardDrive className="w-4 h-4 text-primary" />

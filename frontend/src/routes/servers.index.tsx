@@ -25,6 +25,7 @@ function ServersPage() {
   const { data: envData } = useEnvironments({ is_active: true, limit: 100 });
   const { data: plansData } = usePlans({ is_active: true, limit: 100 });
   const isAdmin = useAuthStore((state) => state.isAdmin());
+  const canViewAllServers = useAuthStore((state) => state.canViewAllServers());
    
   const {
     state: tableState,
@@ -391,7 +392,7 @@ function ServersPage() {
         >{server.name}</div>
         <StatusBadge status={server.status as 'running' | 'stopped' | 'pending' | 'error'} pulse={server.status === 'running'} />
       </div>
-      {isAdmin && server.username && (
+          {canViewAllServers && server.username && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground"
         >
           <Users className="w-3.5 h-3.5" />
