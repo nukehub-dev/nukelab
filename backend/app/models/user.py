@@ -17,6 +17,10 @@ class User(Base):
     password_hash = Column(String(255), nullable=True)
     role = Column(String(50), default="user", nullable=False)
     
+    # OAuth tracking
+    oauth_provider = Column(String(50), nullable=True)
+    oauth_id = Column(String(255), nullable=True)
+    
     # NUKE Currency & Quotas
     nuke_balance = Column(Integer, default=100)
     daily_allowance = Column(Integer, default=100)

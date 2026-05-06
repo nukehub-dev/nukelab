@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     app_debug: bool = True
     app_url: str = "http://localhost:8000"
     public_url: str = "http://localhost:8080"
+    frontend_url: str = ""  # Defaults to public_url if not set
     app_timezone: str = "UTC"
 
     maintenance_mode: bool = False
@@ -30,8 +31,7 @@ class Settings(BaseSettings):
     rate_limit_requests: int = 100
     rate_limit_window: int = 60
 
-    auth_mode: str = "local"
-    local_auth_enabled: bool = True
+    auth_mode: str = "local"  # local | oauth | both
     local_auth_bcrypt_rounds: int = 12
 
     dev_mode: bool = True
@@ -42,7 +42,17 @@ class Settings(BaseSettings):
     oauth_client_id: str = ""
     oauth_client_secret: str = ""
     oauth_discovery_url: str = ""
+    oauth_authorize_url: str = ""
+    oauth_token_url: str = ""
+    oauth_userdata_url: str = ""
+    oauth_logout_url: str = ""
     oauth_callback_url: str = ""
+    oauth_scope: str = "openid profile email"
+    oauth_username_claim: str = "preferred_username"
+    oauth_email_claim: str = "email"
+    oauth_name_claim: str = "name"
+    oauth_picture_claim: str = "picture"
+    oauth_pkce_enabled: bool = True
 
     database_url: str = "postgresql+asyncpg://nukelab:nukelab123@postgres:5432/nukelab"
     database_pool_size: int = 10

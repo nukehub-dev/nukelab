@@ -233,6 +233,12 @@ cmd_start() {
 
     if $USE_DEV_MODE; then
         step "Starting development stack..."
+        
+        # In dev mode, frontend runs on Vite dev server (port 5173)
+        # This tells the backend where to redirect after OAuth login
+        export FRONTEND_URL="${FRONTEND_URL:-http://localhost:5173}"
+        info "FRONTEND_URL=$FRONTEND_URL"
+        
         $COMPOSE -f "$COMPOSE_FILE" stop frontend 2>/dev/null || true
         
         if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then

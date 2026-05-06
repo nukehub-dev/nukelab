@@ -109,10 +109,14 @@ async def detailed_health_check(
 @router.get("/status")
 async def platform_status():
     """Get platform status and feature flags"""
+    from app.services.oauth_service import oauth_service
+    
     return {
         "version": "2.0.0",
         "features": {
             "auth_mode": settings.auth_mode,
+            "oauth_enabled": oauth_service.is_configured and settings.auth_mode in ("oauth", "both"),
+            "oauth_provider_name": settings.oauth_provider_name if oauth_service.is_configured else None,
             "registration_enabled": True,  # TODO: Add to settings
             "credit_system_enabled": True,
             "websocket_enabled": True,
