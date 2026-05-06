@@ -3,7 +3,6 @@ import { Server, Activity, Cpu, MemoryStick, Play, Square, RotateCcw, Trash2, Ex
 import { Tooltip } from '../components/ui/tooltip';
 import { useState, useEffect, useRef } from 'react';
 import { type ColumnDef, type SortingState, type ColumnFiltersState, type VisibilityState } from '@tanstack/react-table';
-import { motion } from 'framer-motion';
 import { ResourcePageLayout } from '../components/layout/resource-page-layout';
 import { DataTable } from '../components/data/data-table';
 import { StatusBadge } from '../components/data/status-badge';
@@ -22,7 +21,7 @@ export const Route = createFileRoute('/servers/')({
 
 function ServersPage() {
   const { data: servers = [], isLoading, isError, error } = useServers();
-  const { createServer, startServer, stopServer, restartServer, deleteServer } = useServerActions();
+  const { createServer, startServer, stopServer, restartServer, deleteServer, isOperationPending } = useServerActions();
   const { data: envData } = useEnvironments({ is_active: true, limit: 100 });
   const { data: plansData } = usePlans({ is_active: true, limit: 100 });
   const isAdmin = useAuthStore((state) => state.isAdmin());
@@ -120,13 +119,19 @@ function ServersPage() {
   const handleDeploy = (e: React.FormEvent) => {
     e.preventDefault();
     if (!deployForm.environment_id) return;
-    createServer.mutate({
-      name: deployForm.name,
-      plan_id: deployForm.plan_id,
-      environment_id: deployForm.environment_id,
-    });
-    setDialogOpen(false);
-    setDeployForm({ name: '', plan_id: '', environment_id: '' });
+    createServer.mutate(
+      {
+        name: deployForm.name,
+        plan_id: deployForm.plan_id,
+        environment_id: deployForm.environment_id,
+      },
+      {
+        onSuccess: () => {
+          setDialogOpen(false);
+          setDeployForm({ name: '', plan_id: '', environment_id: '' });
+        },
+      }
+    );
   };
 
   const columns: ColumnDef<ServerType>[] = [
@@ -210,14 +215,16 @@ function ServersPage() {
           window.open(gatewayUrl, '_blank', 'noopener,noreferrer');
         };
 
+        const anyPending = isOperationPending(server.id);
+
         return (
           <button
             onClick={handleOpen}
-            disabled={startServer.isPending}
-            className="inline-flex items-center gap-1 text-primary hover:underline disabled:opacity-50"
+            disabled={anyPending}
+            className="inline-flex items-center gap-1 text-primary hover:underline disabled:opacity-50 cursor-pointer"
           >
             <ExternalLink className="w-3.5 h-3.5" />
-            {server.status !== 'running' ? 'Start & Open' : 'Open'}
+            {isOperationPending(server.id, 'start') ? 'Starting...' : server.status !== 'running' ? 'Start & Open' : 'Open'}
           </button>
         );
       },
@@ -245,56 +252,66 @@ function ServersPage() {
               </Link>
             </Tooltip>
             {server.status === 'stopped' && (
-              <Tooltip content="Start">
-                <motion.button
+              <Tooltip content={isOperationPending(server.id, 'start') ? 'Starting...' : 'Start'}>
+                <button
                   onClick={() => startServer.mutate(server.id)}
-                  disabled={startServer.isPending}
-                  className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-colors inline-flex cursor-pointer"
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
+                  disabled={isOperationPending(server.id, 'start')}
+                  className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-all duration-100 inline-flex cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
                 >
-                  <Play className="w-4 h-4" />
-                </motion.button>
+                  {isOperationPending(server.id, 'start') ? (
+                    <RotateCcw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Play className="w-4 h-4" />
+                  )}
+                </button>
               </Tooltip>
             )}
             {server.status === 'running' && (
-              <Tooltip content="Stop">
-                <motion.button
-                  onClick={() => stopServer.mutate(server.id)}
-                  disabled={stopServer.isPending}
-                  className="p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-colors inline-flex cursor-pointer"
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                >
-                  <Square className="w-4 h-4" />
-                </motion.button>
-              </Tooltip>
+              <>
+                <Tooltip content={isOperationPending(server.id, 'stop') ? 'Stopping...' : 'Stop'}>
+                  <button
+                    onClick={() => stopServer.mutate(server.id)}
+                    disabled={isOperationPending(server.id, 'stop')}
+                    className="p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-all duration-100 inline-flex cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
+                  >
+                    {isOperationPending(server.id, 'stop') ? (
+                      <RotateCcw className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Square className="w-4 h-4" />
+                    )}
+                  </button>
+                </Tooltip>
+                <Tooltip content={isOperationPending(server.id, 'restart') ? 'Restarting...' : 'Restart'}>
+                  <button
+                    onClick={() => restartServer.mutate(server.id)}
+                    disabled={isOperationPending(server.id, 'restart')}
+                    className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-all duration-100 inline-flex cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
+                  >
+                    {isOperationPending(server.id, 'restart') ? (
+                      <RotateCcw className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <RotateCcw className="w-4 h-4" />
+                    )}
+                  </button>
+                </Tooltip>
+              </>
             )}
-            <Tooltip content="Restart">
-              <motion.button
-                onClick={() => restartServer.mutate(server.id)}
-                disabled={restartServer.isPending}
-                  className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex cursor-pointer"
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                >
-                  <RotateCcw className="w-4 h-4" />
-              </motion.button>
-            </Tooltip>
-            <Tooltip content="Delete">
-              <motion.button
+            <Tooltip content={isOperationPending(server.id, 'delete') ? 'Deleting...' : 'Delete'}>
+              <button
                 onClick={() => {
                   if (confirm('Are you sure you want to delete this server?')) {
                     deleteServer.mutate(server.id);
                   }
                 }}
-                disabled={deleteServer.isPending}
-                  className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors inline-flex cursor-pointer"
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                >
+                disabled={isOperationPending(server.id, 'delete')}
+                className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-all duration-100 inline-flex cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
+              >
+                {isOperationPending(server.id, 'delete') ? (
+                  <RotateCcw className="w-4 h-4 animate-spin" />
+                ) : (
                   <Trash2 className="w-4 h-4" />
-              </motion.button>
+                )}
+              </button>
             </Tooltip>
           </div>
         );
@@ -398,11 +415,11 @@ function ServersPage() {
                 : server.external_url;
               window.open(gatewayUrl, '_blank', 'noopener,noreferrer');
             }}
-            disabled={startServer.isPending}
+            disabled={isOperationPending(server.id)}
             className="inline-flex items-center gap-1 text-sm text-primary hover:underline disabled:opacity-50 cursor-pointer"
           >
             <ExternalLink className="w-3.5 h-3.5" />
-            {server.status !== 'running' ? 'Start & Open' : 'Open Server'}
+            {isOperationPending(server.id, 'start') ? 'Starting...' : server.status !== 'running' ? 'Start & Open' : 'Open Server'}
           </button>
         )}
         <div className="flex items-center gap-1 ml-auto">
@@ -416,47 +433,65 @@ function ServersPage() {
             </Link>
           </Tooltip>
           {server.status === 'stopped' && (
-            <Tooltip content="Start">
+            <Tooltip content={isOperationPending(server.id, 'start') ? 'Starting...' : 'Start'}>
               <button
                 onClick={() => startServer.mutate(server.id)}
-                disabled={startServer.isPending}
-                className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-colors inline-flex cursor-pointer"
+                disabled={isOperationPending(server.id, 'start')}
+                className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-all duration-100 inline-flex cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
               >
-                <Play className="w-4 h-4" />
+                {isOperationPending(server.id, 'start') ? (
+                  <RotateCcw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Play className="w-4 h-4" />
+                )}
               </button>
             </Tooltip>
           )}
           {server.status === 'running' && (
-            <Tooltip content="Stop">
-              <button
-                onClick={() => stopServer.mutate(server.id)}
-                disabled={stopServer.isPending}
-                className="p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-colors inline-flex cursor-pointer"
-              >
-                <Square className="w-4 h-4" />
-              </button>
-            </Tooltip>
+            <>
+              <Tooltip content={isOperationPending(server.id, 'stop') ? 'Stopping...' : 'Stop'}>
+                <button
+                  onClick={() => stopServer.mutate(server.id)}
+                  disabled={isOperationPending(server.id, 'stop')}
+                  className="p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-all duration-100 inline-flex cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
+                >
+                  {isOperationPending(server.id, 'stop') ? (
+                    <RotateCcw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Square className="w-4 h-4" />
+                  )}
+                </button>
+              </Tooltip>
+              <Tooltip content={isOperationPending(server.id, 'restart') ? 'Restarting...' : 'Restart'}>
+                <button
+                  onClick={() => restartServer.mutate(server.id)}
+                  disabled={isOperationPending(server.id, 'restart')}
+                  className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-all duration-100 inline-flex cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
+                >
+                  {isOperationPending(server.id, 'restart') ? (
+                    <RotateCcw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <RotateCcw className="w-4 h-4" />
+                  )}
+                </button>
+              </Tooltip>
+            </>
           )}
-          <Tooltip content="Restart">
-            <button
-              onClick={() => restartServer.mutate(server.id)}
-              disabled={restartServer.isPending}
-              className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex cursor-pointer"
-            >
-              <RotateCcw className="w-4 h-4" />
-            </button>
-          </Tooltip>
-          <Tooltip content="Delete">
+          <Tooltip content={isOperationPending(server.id, 'delete') ? 'Deleting...' : 'Delete'}>
             <button
               onClick={() => {
                 if (confirm('Are you sure you want to delete this server?')) {
                   deleteServer.mutate(server.id);
                 }
               }}
-              disabled={deleteServer.isPending}
-              className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors inline-flex cursor-pointer"
+              disabled={isOperationPending(server.id, 'delete')}
+              className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-all duration-100 inline-flex cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
             >
-              <Trash2 className="w-4 h-4" />
+              {isOperationPending(server.id, 'delete') ? (
+                <RotateCcw className="w-4 h-4 animate-spin" />
+              ) : (
+                <Trash2 className="w-4 h-4" />
+              )}
             </button>
           </Tooltip>
         </div>
@@ -583,7 +618,7 @@ function ServersPage() {
               <button
                 type="submit"
                 disabled={createServer.isPending || !deployForm.environment_id}
-                className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+                className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 cursor-pointer"
               >
                 {createServer.isPending ? 'Deploying...' : 'Deploy'}
               </button>

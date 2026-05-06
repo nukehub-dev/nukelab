@@ -55,7 +55,7 @@ export function DataTableMobile<TData>({
                     <button
                       onClick={() => toggleRow(rowId)}
                       className={cn(
-                        'w-5 h-5 rounded border flex items-center justify-center transition-colors',
+                        'w-5 h-5 rounded border flex items-center justify-center transition-colors cursor-pointer',
                         isSelected
                           ? 'bg-primary border-primary'
                           : 'border-border bg-background'
@@ -103,7 +103,7 @@ export function DataTableMobile<TData>({
                   <button
                     onClick={() => toggleRow(rowId)}
                     className={cn(
-                      'w-5 h-5 rounded border flex items-center justify-center transition-colors shrink-0',
+                      'w-5 h-5 rounded border flex items-center justify-center transition-colors shrink-0 cursor-pointer',
                       isSelected
                         ? 'bg-primary border-primary'
                         : 'border-border bg-background'

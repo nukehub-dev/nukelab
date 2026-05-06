@@ -20,6 +20,7 @@ export interface Server {
   volume_name?: string;
   allocated_cpu?: number;
   allocated_memory?: string;
+  allocated_disk?: string;
   health_status?: string;
   status_reason?: string;
   started_at?: string;

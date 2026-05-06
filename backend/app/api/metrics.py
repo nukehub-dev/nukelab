@@ -66,6 +66,7 @@ async def get_server_metrics(
     from_date: Optional[datetime] = Query(None),
     to_date: Optional[datetime] = Query(None),
     interval: str = Query("1m"),
+    limit: int = Query(60, ge=1, le=500),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -98,8 +99,13 @@ async def get_server_metrics(
     result = await db.execute(query)
     metrics = result.scalars().all()
 
+    # If limit is specified and we have more metrics than limit, subsample evenly
+    if limit and len(metrics) > limit:
+        step = len(metrics) / limit
+        metrics = [metrics[int(i * step)] for i in range(limit)]
+
     return {
-        "metrics": [m.to_dict() for m in metrics],
+        "metrics": [m.to_dict() for m in reversed(metrics)],
         "count": len(metrics),
         "from": from_date.isoformat(),
         "to": to_date.isoformat(),
@@ -143,10 +149,11 @@ async def get_server_latest_metrics(
 async def get_system_metrics(
     from_date: Optional[datetime] = Query(None),
     to_date: Optional[datetime] = Query(None),
+    limit: int = Query(60, ge=1, le=500),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get system-level metrics (admin only)"""
+    """Get system-level metrics history (admin only)"""
     checker = PermissionChecker(current_user)
     checker.require_any([Permission.ADMIN_ACCESS, Permission.SERVERS_MANAGE])
 
@@ -165,8 +172,13 @@ async def get_system_metrics(
     result = await db.execute(query)
     metrics = result.scalars().all()
 
+    # Subsample if exceeding limit
+    if limit and len(metrics) > limit:
+        step = len(metrics) / limit
+        metrics = [metrics[int(i * step)] for i in range(limit)]
+
     return {
-        "metrics": [m.to_dict() for m in metrics],
+        "metrics": [m.to_dict() for m in reversed(metrics)],
         "count": len(metrics),
     }
 

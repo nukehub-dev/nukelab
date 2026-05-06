@@ -148,7 +148,7 @@ export function Sidebar() {
           <Tooltip content={isPinned ? 'Unpin sidebar' : 'Pin sidebar'} position="right">
             <button
               onClick={togglePin}
-              className="p-1.5 rounded-md transition-colors hover:bg-sidebar-accent shrink-0"
+              className="p-1.5 rounded-md transition-colors hover:bg-sidebar-accent shrink-0 cursor-pointer"
               style={{ marginLeft: isOpen ? 8 : 0, opacity: isOpen ? 1 : 0, transition: 'all 0.3s ease' }}
             >
               <Pin className={cn("w-4 h-4", isPinned && "fill-current")} />
@@ -232,13 +232,13 @@ export function Sidebar() {
             <div className="flex items-center justify-between">
               <span className="text-sm text-sidebar-foreground/80">Theme</span>
               <div className="flex items-center gap-1 bg-sidebar-accent rounded-lg p-1">
-                <button onClick={() => setDarkMode(true)} className={cn("p-1.5 rounded-md transition-colors", isDark && !isOled && "bg-background text-foreground")}>
+                <button onClick={() => setDarkMode(true)} className={cn("p-1.5 rounded-md transition-colors cursor-pointer", isDark && !isOled && "bg-background text-foreground")}>
                   <Moon className="w-4 h-4" />
                 </button>
-                <button onClick={() => setDarkMode(false)} className={cn("p-1.5 rounded-md transition-colors", !isDark && "bg-background text-foreground")}>
+                <button onClick={() => setDarkMode(false)} className={cn("p-1.5 rounded-md transition-colors cursor-pointer", !isDark && "bg-background text-foreground")}>
                   <Sun className="w-4 h-4" />
                 </button>
-                <button onClick={() => { setDarkMode(true); setOledMode(!isOled); }} className={cn("p-1.5 rounded-md transition-colors", isOled && "bg-background text-foreground")}>
+                <button onClick={() => { setDarkMode(true); setOledMode(!isOled); }} className={cn("p-1.5 rounded-md transition-colors cursor-pointer", isOled && "bg-background text-foreground")}>
                   <Monitor className="w-4 h-4" />
                 </button>
               </div>
@@ -250,7 +250,7 @@ export function Sidebar() {
                 document.cookie = 'nukelab_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
                 window.location.href = '/login';
               }}
-              className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm hover:bg-sidebar-accent transition-colors text-red-400"
+              className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm hover:bg-sidebar-accent transition-colors text-red-400 cursor-pointer"
             >
               <LogOut className="w-4 h-4" />
               <span className="flex-1 text-left">Log Out</span>
@@ -259,7 +259,7 @@ export function Sidebar() {
             <div className="relative">
               <button
                 onClick={() => setShowThemePicker(!showThemePicker)}
-                className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm hover:bg-sidebar-accent transition-colors"
+                className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm hover:bg-sidebar-accent transition-colors cursor-pointer"
               >
                 <Palette className="w-4 h-4" />
                 <span className="flex-1 text-left capitalize">{theme} Theme</span>
@@ -271,7 +271,7 @@ export function Sidebar() {
                       <button
                         key={t}
                         onClick={() => { setTheme(t); setShowThemePicker(false); }}
-                        className={cn("p-2 rounded-lg border-2 transition-all", theme === t ? "border-primary" : "border-transparent hover:border-border")}
+                        className={cn("p-2 rounded-lg border-2 transition-all cursor-pointer", theme === t ? "border-primary" : "border-transparent hover:border-border")}
                       >
                         <div className="w-full h-6 rounded-md mb-1" style={{ backgroundColor: THEME_PREVIEWS[t].dark.primary }} />
                         <span className="text-[10px] capitalize block text-center">{t}</span>
@@ -287,10 +287,10 @@ export function Sidebar() {
             className="flex flex-col items-center gap-2 transition-all duration-300"
             style={{ maxHeight: !isOpen ? 100 : 0, opacity: !isOpen ? 1 : 0, overflow: 'hidden' }}
           >
-            <button onClick={() => setDarkMode(!isDark)} className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors">
+            <button onClick={() => setDarkMode(!isDark)} className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors cursor-pointer">
               {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
-            <button onClick={() => { const idx = THEME_VALUES.indexOf(theme); setTheme(THEME_VALUES[(idx + 1) % THEME_VALUES.length]); }} className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors">
+            <button onClick={() => { const idx = THEME_VALUES.indexOf(theme); setTheme(THEME_VALUES[(idx + 1) % THEME_VALUES.length]); }} className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors cursor-pointer">
               <Palette className="w-4 h-4" />
             </button>
           </div>
@@ -306,7 +306,7 @@ export function Sidebar() {
                 key={item.href}
                 to={item.href}
                 className={cn(
-                  "flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all duration-200",
+                  "flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all duration-100",
                   isActive(item.href)
                     ? "bg-primary/10 text-primary"
                     : "text-muted-foreground hover:text-foreground"
@@ -319,7 +319,7 @@ export function Sidebar() {
             <button
               onClick={() => setShowMore(true)}
               className={cn(
-                "flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all duration-200",
+                "flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all duration-100 cursor-pointer",
                 showMore ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"
               )}
             >
@@ -358,7 +358,7 @@ export function Sidebar() {
                           to={item.href}
                           onClick={() => setShowMore(false)}
                           className={cn(
-                            "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200",
+                            "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-100",
                             isActive(item.href)
                               ? "bg-muted text-foreground shadow-sm"
                               : "text-foreground/80 hover:bg-muted/50"
@@ -376,9 +376,9 @@ export function Sidebar() {
                   <div className="flex items-center justify-between px-3">
                     <span className="text-sm text-muted-foreground">Theme</span>
                     <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-                      <button onClick={() => setDarkMode(true)} className={cn("p-1.5 rounded-md transition-colors", isDark && !isOled && "bg-background text-foreground")}><Moon className="w-4 h-4" /></button>
-                      <button onClick={() => setDarkMode(false)} className={cn("p-1.5 rounded-md transition-colors", !isDark && "bg-background text-foreground")}><Sun className="w-4 h-4" /></button>
-                      <button onClick={() => { setDarkMode(true); setOledMode(!isOled); }} className={cn("p-1.5 rounded-md transition-colors", isOled && "bg-background text-foreground")}><Monitor className="w-4 h-4" /></button>
+                      <button onClick={() => setDarkMode(true)} className={cn("p-1.5 rounded-md transition-colors cursor-pointer", isDark && !isOled && "bg-background text-foreground")}><Moon className="w-4 h-4" /></button>
+                      <button onClick={() => setDarkMode(false)} className={cn("p-1.5 rounded-md transition-colors cursor-pointer", !isDark && "bg-background text-foreground")}><Sun className="w-4 h-4" /></button>
+                      <button onClick={() => { setDarkMode(true); setOledMode(!isOled); }} className={cn("p-1.5 rounded-md transition-colors cursor-pointer", isOled && "bg-background text-foreground")}><Monitor className="w-4 h-4" /></button>
                     </div>
                   </div>
                   
@@ -388,7 +388,7 @@ export function Sidebar() {
                       document.cookie = 'nukelab_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
                       window.location.href = '/login';
                     }}
-                    className="flex items-center gap-2 w-full px-4 py-3 rounded-xl text-sm hover:bg-muted transition-colors text-red-400"
+                    className="flex items-center gap-2 w-full px-4 py-3 rounded-xl text-sm hover:bg-muted transition-colors text-red-400 cursor-pointer"
                   >
                     <LogOut className="w-4 h-4" />
                     <span>Log Out</span>

@@ -38,9 +38,7 @@ class MetricsCollector:
             containers = await docker.list_containers(
                 filters={"status": ["running"], "label": ["nukelab.server.id"]}
             )
-            print(f"Metrics collector: Found {len(containers)} containers with nukelab.server.id label")
-        except Exception as e:
-            print(f"Error listing containers: {e}")
+        except Exception:
             return
 
         for container in containers:
@@ -51,16 +49,12 @@ class MetricsCollector:
                 labels = container_info.get('Config', {}).get('Labels', {}) or {}
                 server_id = labels.get('nukelab.server.id')
                 
-                print(f"Metrics collector: Processing container {container_id[:12]} for server {server_id}")
-                
                 if not server_id or not container_id:
-                    print(f"Metrics collector: Skipping container {container_id[:12]} - missing server_id or container_id")
                     continue
                 
                 await self._collect_container_metrics(container_id, server_id)
-            except Exception as e:
-                container_id = getattr(container, '_id', 'unknown')
-                print(f"Error collecting metrics for {container_id}: {e}")
+            except Exception:
+                pass
         
         # Close docker client after all processing is done
         if docker and docker.client:
@@ -73,33 +67,20 @@ class MetricsCollector:
         """Collect metrics for a single container"""
         docker = None
         try:
-            print(f"Metrics collector: Step 1 - Getting docker client...")
             docker = await get_fresh_docker_client()
-            print(f"Metrics collector: Step 2 - Getting container {container_id[:12]}...")
             container = await docker.client.containers.get(container_id)
-            print(f"Metrics collector: Step 3 - Getting stats...")
             stats_list = await container.stats(stream=False)
-            print(f"Metrics collector: Got stats for container {container_id[:12]}")
             
             # stats() returns a list with one dict item when stream=False
             stats = stats_list[0] if isinstance(stats_list, list) and stats_list else stats_list
             if not isinstance(stats, dict):
-                print(f"Metrics collector: Unexpected stats format: {type(stats)}")
                 return
 
-            print(f"Metrics collector: Step 4 - Parsing stats...")
             metrics = self._parse_docker_stats(stats, server_id, container_id)
-            print(f"Metrics collector: Parsed metrics - CPU: {metrics['cpu_percent']}%, Memory: {metrics['memory_percent']}%")
-
-            print(f"Metrics collector: Step 5 - Persisting metrics...")
             await self._persist_metrics(metrics)
-            print(f"Metrics collector: Step 6 - Broadcasting metrics...")
             await self._broadcast_metrics(metrics)
-            print(f"Metrics collector: Saved and broadcast metrics for server {server_id}")
-        except Exception as e:
-            import traceback
-            print(f"Error collecting metrics for container {container_id}: {e}")
-            print(f"Traceback: {traceback.format_exc()}")
+        except Exception:
+            pass
         finally:
             if docker and docker.client:
                 try:

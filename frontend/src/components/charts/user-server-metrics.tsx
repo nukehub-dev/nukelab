@@ -7,37 +7,7 @@ import { formatBytes } from '../../lib/utils';
 import { springs } from '../../lib/animations';
 import type { Server as ServerType } from '../../types/api';
 
-const USER_METRICS_STORAGE_KEY = 'nukelab_user_server_metrics';
-const USER_METRICS_MAX_AGE_MS = 30 * 60 * 1000; // 30 minutes
 
-interface StoredUserMetrics {
-  timestamp: number;
-  metrics: Record<string, ServerMetricData>;
-}
-
-function loadStoredUserMetrics(): Record<string, ServerMetricData> | null {
-  try {
-    const raw = localStorage.getItem(USER_METRICS_STORAGE_KEY);
-    if (!raw) return null;
-    const data = JSON.parse(raw) as StoredUserMetrics;
-    if (Date.now() - data.timestamp > USER_METRICS_MAX_AGE_MS) return null;
-    return data.metrics;
-  } catch {
-    return null;
-  }
-}
-
-function saveStoredUserMetrics(metrics: Record<string, ServerMetricData>) {
-  try {
-    const data: StoredUserMetrics = {
-      timestamp: Date.now(),
-      metrics,
-    };
-    localStorage.setItem(USER_METRICS_STORAGE_KEY, JSON.stringify(data));
-  } catch {
-    // ignore storage errors
-  }
-}
 
 interface ServerMetricData {
   cpu_percent: number;
@@ -170,14 +140,7 @@ export function UserServerMetrics({ servers }: UserServerMetricsProps) {
   const { isConnected, subscribe, unsubscribe, onMessage } = useWebSocket({ autoConnect: true });
   const subscribedRef = useRef<Set<string>>(new Set());
 
-  const [serverMetrics, setServerMetrics] = useState<Record<string, ServerMetricData>>(() => {
-    return loadStoredUserMetrics() ?? {};
-  });
-
-  // Persist metrics to localStorage
-  useEffect(() => {
-    saveStoredUserMetrics(serverMetrics);
-  }, [serverMetrics]);
+  const [serverMetrics, setServerMetrics] = useState<Record<string, ServerMetricData>>({});
 
   // Subscribe to each running server
   useEffect(() => {

@@ -41,7 +41,7 @@ export function ShortcutsModal() {
                 </div>
                 <button
                   onClick={() => setIsOpen(false)}
-                  className="p-1 rounded-md hover:bg-muted transition-colors"
+                  className="p-1 rounded-md hover:bg-muted transition-colors cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>

@@ -47,28 +47,26 @@ export function DataTablePagination({
 
       <div className="flex items-center gap-2">
         <div className="flex items-center gap-1">
-          <motion.button
+          <button
             onClick={() => onPageChange(1)}
             disabled={page <= 1}
             className={cn(
               'p-2 rounded-lg border border-border/50 transition-colors',
               'hover:bg-accent disabled:opacity-50 disabled:pointer-events-none'
             )}
-            whileTap={{ scale: 0.95 }}
           >
             <ChevronsLeft className="w-4 h-4" />
-          </motion.button>
-          <motion.button
+          </button>
+          <button
             onClick={() => onPageChange(page - 1)}
             disabled={page <= 1}
             className={cn(
               'p-2 rounded-lg border border-border/50 transition-colors',
               'hover:bg-accent disabled:opacity-50 disabled:pointer-events-none'
             )}
-            whileTap={{ scale: 0.95 }}
           >
             <ChevronLeft className="w-4 h-4" />
-          </motion.button>
+          </button>
 
           <div className="flex items-center gap-1 px-2">
             {Array.from({ length: Math.min(5, pageCount) }, (_, i) => {
@@ -84,45 +82,42 @@ export function DataTablePagination({
               }
 
               return (
-                <motion.button
+                <button
                   key={pageNum}
                   onClick={() => onPageChange(pageNum)}
                   className={cn(
-                    'min-w-[2rem] h-8 px-2 rounded-lg text-sm font-medium transition-colors',
+                    'min-w-[2rem] h-8 px-2 rounded-lg text-sm font-medium transition-colors cursor-pointer',
                     page === pageNum
                       ? 'bg-primary text-primary-foreground'
                       : 'hover:bg-accent border border-border/50'
                   )}
-                  whileTap={{ scale: 0.95 }}
                 >
                   {pageNum}
-                </motion.button>
+                </button>
               );
             })}
           </div>
 
-          <motion.button
+          <button
             onClick={() => onPageChange(page + 1)}
             disabled={page >= pageCount}
             className={cn(
               'p-2 rounded-lg border border-border/50 transition-colors',
               'hover:bg-accent disabled:opacity-50 disabled:pointer-events-none'
             )}
-            whileTap={{ scale: 0.95 }}
           >
             <ChevronRight className="w-4 h-4" />
-          </motion.button>
-          <motion.button
+          </button>
+          <button
             onClick={() => onPageChange(pageCount)}
             disabled={page >= pageCount}
             className={cn(
               'p-2 rounded-lg border border-border/50 transition-colors',
               'hover:bg-accent disabled:opacity-50 disabled:pointer-events-none'
             )}
-            whileTap={{ scale: 0.95 }}
           >
             <ChevronsRight className="w-4 h-4" />
-          </motion.button>
+          </button>
         </div>
 
         <div ref={limitRef} className="relative">
@@ -130,7 +125,7 @@ export function DataTablePagination({
             onClick={() => setShowLimitDropdown(!showLimitDropdown)}
             className={cn(
               'relative h-8 px-3 pr-8 rounded-lg border text-sm font-medium',
-              'transition-colors flex items-center gap-2',
+              'transition-colors flex items-center gap-2 cursor-pointer',
               'border-border/50 bg-background hover:bg-accent'
             )}
           >
@@ -160,7 +155,7 @@ export function DataTablePagination({
                         setShowLimitDropdown(false);
                       }}
                       className={cn(
-                        'w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors whitespace-nowrap',
+                        'w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors whitespace-nowrap cursor-pointer',
                         limit === opt
                           ? 'bg-primary/10 text-primary'
                           : 'hover:bg-accent text-foreground'

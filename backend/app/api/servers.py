@@ -34,6 +34,7 @@ class ServerResponse(BaseModel):
     external_url: str | None = None
     allocated_cpu: float | None = None
     allocated_memory: str | None = None
+    allocated_disk: str | None = None
     health_status: str | None = None
     status_reason: str | None = None
     user_id: str | None = None
@@ -143,6 +144,7 @@ async def create_server(
             external_url=server.external_url,
             allocated_cpu=server.allocated_cpu,
             allocated_memory=server.allocated_memory,
+            allocated_disk=server.allocated_disk,
             health_status=server.health_status,
             status_reason=server.status_reason,
             user_id=str(server.user_id),
@@ -208,6 +210,7 @@ async def list_servers(
                 "external_url": s.external_url,
                 "allocated_cpu": s.allocated_cpu,
                 "allocated_memory": s.allocated_memory,
+                "allocated_disk": s.allocated_disk,
                 "health_status": s.health_status,
                 "status_reason": s.status_reason,
                 "user_id": str(s.user_id),
@@ -252,6 +255,7 @@ async def get_server(
         "external_url": server.external_url,
         "allocated_cpu": server.allocated_cpu,
         "allocated_memory": server.allocated_memory,
+        "allocated_disk": server.allocated_disk,
         "health_status": server.health_status,
         "status_reason": server.status_reason,
         "started_at": server.started_at.isoformat() if server.started_at else None,
@@ -309,6 +313,7 @@ async def get_server_by_path(
         "external_url": server.external_url,
         "allocated_cpu": server.allocated_cpu,
         "allocated_memory": server.allocated_memory,
+        "allocated_disk": server.allocated_disk,
         "health_status": server.health_status,
         "status_reason": server.status_reason,
         "started_at": server.started_at.isoformat() if server.started_at else None,
@@ -362,6 +367,7 @@ async def start_server(
                     memory=plan.memory_limit if plan else server.allocated_memory,
                     disk=plan.disk_limit if plan else server.allocated_disk,
                     volume_name=server.volume_name,
+                    server_id=str(server.id),
                 )
                 
                 server.container_id = new_server.container_id
@@ -420,6 +426,7 @@ async def start_server(
                 memory=plan.memory_limit,
                 disk=plan.disk_limit,
                 volume_name=server.volume_name,
+                server_id=str(server.id),
             )
             
             server.container_id = new_server.container_id
@@ -526,6 +533,7 @@ async def restart_server(
                     memory=plan.memory_limit if plan else server.allocated_memory,
                     disk=plan.disk_limit if plan else server.allocated_disk,
                     volume_name=server.volume_name,
+                    server_id=str(server.id),
                 )
                 
                 server.container_id = new_server.container_id
@@ -582,3 +590,48 @@ async def delete_server(
     await db.commit()
     
     return {"message": "Server deleted", "server_id": server_id}
+
+
+@router.post("/{server_id}/test-metric")
+async def test_metric(
+    server_id: str,
+    current_user: User = Depends(get_current_user),
+):
+    """Send a test metric via Redis pub/sub to verify WebSocket pipeline."""
+    import json
+    import redis.asyncio as redis_client
+    from app.config import settings
+    from app.websocket.metrics_socket import connections
+    
+    r = redis_client.from_url(settings.redis_url)
+    
+    test_metric = {
+        "server_id": server_id,
+        "cpu_percent": 50.0,
+        "memory_percent": 75.0,
+        "disk_read_bytes": 1024,
+        "disk_write_bytes": 2048,
+        "network_rx_bytes": 1000,
+        "network_tx_bytes": 2000,
+        "test": True,
+    }
+    
+    # Publish to specific channel
+    await r.publish(f"metrics:server:{server_id}", json.dumps(test_metric))
+    # Also publish to global
+    await r.publish("metrics:all", json.dumps(test_metric))
+    
+    # Check active WebSocket connections
+    room = f"server:{server_id}"
+    active_connections = len(connections.get(room, set()))
+    all_rooms = list(connections.keys())
+    
+    await r.close()
+    
+    return {
+        "message": "Test metric published",
+        "server_id": server_id,
+        "active_ws_connections": active_connections,
+        "all_rooms": all_rooms,
+        "metric": test_metric,
+    }

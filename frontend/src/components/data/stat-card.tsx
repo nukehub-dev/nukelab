@@ -112,9 +112,9 @@ export function StatCard({
     return (
       <motion.div
         className="bubble p-4 hover-lift cursor-default group"
-        whileHover={{ y: -4, transition: { type: 'spring', stiffness: 300, damping: 20 } }}
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
+        whileHover={{ y: -2, transition: { type: 'spring', stiffness: 300, damping: 20 } }}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
         transition={{ type: 'spring', stiffness: 120, damping: 14 }}
       >
         <div className="flex items-center justify-between">
@@ -133,13 +133,9 @@ export function StatCard({
               )}
             </p>
           </div>
-          <motion.div
-            className={cn("p-2.5 rounded-lg", bgColor)}
-            whileHover={{ scale: 1.1 }}
-            transition={{ type: 'spring', stiffness: 400, damping: 17 }}
-          >
+          <div className={cn("p-2.5 rounded-lg", bgColor)}>
             <Icon className={cn("w-4 h-4", iconColor)} />
-          </motion.div>
+          </div>
         </div>
       </motion.div>
     );
@@ -148,14 +144,14 @@ export function StatCard({
   return (
     <motion.div
       className="bubble p-5 hover-lift cursor-default group relative overflow-hidden"
-      whileHover={{ y: -4, transition: { type: 'spring', stiffness: 300, damping: 20 } }}
-      initial={{ opacity: 0, scale: 0.95, y: 20 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
+      whileHover={{ y: -2, transition: { type: 'spring', stiffness: 300, damping: 20 } }}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
       transition={{ type: 'spring', stiffness: 120, damping: 14 }}
     >
       {/* Hover tint overlay */}
       <div 
-        className="pointer-events-none absolute inset-0 bg-gradient-to-br from-current/5 via-transparent to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+        className="pointer-events-none absolute inset-0 bg-gradient-to-br from-current/5 via-transparent to-transparent opacity-0 transition-opacity duration-200 group-hover:opacity-100"
         style={{ color: 'var(--primary)' }}
       />
       
@@ -211,17 +207,15 @@ export function StatCard({
             </div>
           )}
         </div>
-        <motion.div
+        <div
           className={cn(
-            "flex items-center justify-center w-10 h-10 rounded-full transition-colors duration-300",
+            "flex items-center justify-center w-10 h-10 rounded-full transition-all duration-200",
             bgColor,
-            "group-hover:bg-primary/10"
+            "group-hover:bg-primary/10 group-hover:-translate-y-[1px]"
           )}
-          whileHover={{ scale: 1.1, rotate: 5 }}
-          transition={{ type: 'spring', stiffness: 400, damping: 17 }}
         >
-          <Icon className={cn("w-5 h-5 transition-transform duration-300 group-hover:scale-110", iconColor)} />
-        </motion.div>
+          <Icon className={cn("w-5 h-5", iconColor)} />
+        </div>
       </div>
     </motion.div>
   );

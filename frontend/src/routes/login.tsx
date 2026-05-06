@@ -122,7 +122,7 @@ function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 active:scale-[0.98] transition-all duration-200 disabled:opacity-50 disabled:pointer-events-none"
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 hover:brightness-110 hover:-translate-y-[1px] hover:-translate-y-[1px] active:translate-y-[1px] transition-all duration-100 disabled:opacity-50 disabled:pointer-events-none"
             >
               {loading ? (
                 <motion.span

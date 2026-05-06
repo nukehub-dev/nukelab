@@ -17,18 +17,24 @@ interface UseWebSocketOptions {
   maxReconnectAttempts?: number;
 }
 
+function getToken(): string {
+  return localStorage.getItem('nukelab-token') || '';
+}
+
 function getDefaultWebSocketUrl(): string {
   const apiUrl = import.meta.env.VITE_API_URL as string | undefined;
+  const token = getToken();
 
   if (apiUrl) {
     // VITE_API_URL is set (e.g. http://localhost:8000/api)
-    // Convert to WebSocket URL: ws://localhost:8000/ws
+    // Convert to WebSocket URL: ws://localhost:8000/api/ws
     const httpUrl = apiUrl.replace(/\/+$/, ''); // trim trailing slashes
     const wsProtocol = httpUrl.startsWith('https:') ? 'wss:' : 'ws:';
     const rest = httpUrl.replace(/^https?:/, '');
-    // Remove any /api suffix since the WS endpoint is at /ws
+    // Keep the /api prefix since the WS endpoint is at /api/ws
     const hostPart = rest.replace(/\/api$/, '');
-    return `${wsProtocol}${hostPart}/ws`;
+    const baseUrl = `${wsProtocol}${hostPart}/api/ws`;
+    return token ? `${baseUrl}?token=${encodeURIComponent(token)}` : baseUrl;
   }
 
   // Development fallback: when running via Vite dev server (port 5173),
@@ -36,7 +42,8 @@ function getDefaultWebSocketUrl(): string {
   const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
   const host = isLocalhost ? 'localhost:8080' : window.location.host;
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${protocol}//${host}/ws`;
+  const baseUrl = `${protocol}//${host}/api/ws`;
+  return token ? `${baseUrl}?token=${encodeURIComponent(token)}` : baseUrl;
 }
 
 export function useWebSocket(options: UseWebSocketOptions = {}) {
@@ -67,10 +74,12 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     setError(null);
 
     try {
+      console.log('[WS] Connecting to:', url);
       const ws = new WebSocket(url);
       wsRef.current = ws;
 
       ws.onopen = () => {
+        console.log('[WS] Connected');
         isConnectingRef.current = false;
         setIsConnected(true);
         setIsConnecting(false);
@@ -81,6 +90,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
       ws.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data) as WebSocketMessage;
+          console.log('[WS] Received:', message.event);
           handlersRef.current.forEach((handler) => {
             try {
               handler(message);
@@ -93,13 +103,15 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
         }
       };
 
-      ws.onerror = () => {
+      ws.onerror = (e) => {
+        console.error('[WS] Error:', e);
         isConnectingRef.current = false;
         setError('WebSocket connection error');
         setIsConnecting(false);
       };
 
-      ws.onclose = () => {
+      ws.onclose = (e) => {
+        console.log('[WS] Closed. Code:', e.code, 'Reason:', e.reason, 'Clean:', e.wasClean);
         isConnectingRef.current = false;
         setIsConnected(false);
         setIsConnecting(false);
@@ -107,6 +119,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
 
         if (shouldReconnectRef.current && reconnectAttemptsRef.current < maxReconnectAttempts) {
           reconnectAttemptsRef.current += 1;
+          console.log('[WS] Reconnecting in', reconnectInterval, 'ms. Attempt:', reconnectAttemptsRef.current);
           reconnectTimerRef.current = setTimeout(() => {
             connect();
           }, reconnectInterval);

@@ -15,7 +15,11 @@ class SystemMetricsCollector:
     async def collect(self) -> Dict:
         """Collect current system metrics"""
 
-        # CPU
+        # CPU - call twice: first to initialize, second to get actual value
+        # psutil.cpu_percent returns 0.0 on first call in a new process
+        psutil.cpu_percent(interval=None)
+        import time
+        time.sleep(0.5)  # Short delay for measurement
         cpu_percent = psutil.cpu_percent(interval=None)
         cpu_count = psutil.cpu_count()
         try:
@@ -72,6 +76,42 @@ class SystemMetricsCollector:
                 except Exception:
                     pass
 
+        # Calculate disk I/O rate (bytes/sec) by comparing with previous reading
+        disk_read_rate = 0
+        disk_write_rate = 0
+        try:
+            import os
+            disk_cache_file = '/tmp/nukelab_disk_cache.json'
+            disk_prev_data = None
+            if os.path.exists(disk_cache_file):
+                try:
+                    with open(disk_cache_file, 'r') as f:
+                        disk_prev_data = json.load(f)
+                except Exception:
+                    pass
+
+            if disk_prev_data and disk_io:
+                time_diff = (datetime.utcnow() - datetime.fromisoformat(disk_prev_data['timestamp'])).total_seconds()
+                if time_diff > 0:
+                    read_diff = disk_io.read_bytes - disk_prev_data.get('read_bytes', 0)
+                    write_diff = disk_io.write_bytes - disk_prev_data.get('write_bytes', 0)
+                    # Handle counter reset (if system rebooted)
+                    if read_diff >= 0:
+                        disk_read_rate = max(0, read_diff / time_diff)
+                    if write_diff >= 0:
+                        disk_write_rate = max(0, write_diff / time_diff)
+
+            # Save current values
+            if disk_io:
+                with open(disk_cache_file, 'w') as f:
+                    json.dump({
+                        'timestamp': datetime.utcnow().isoformat(),
+                        'read_bytes': disk_io.read_bytes,
+                        'write_bytes': disk_io.write_bytes,
+                    }, f)
+        except Exception:
+            pass
+
         # Calculate network throughput rate (bytes/sec) by comparing with previous reading
         network_rx_rate = 0
         network_tx_rate = 0
@@ -123,17 +163,13 @@ class SystemMetricsCollector:
             'disk_used': disk.used,
             'disk_total': disk.total,
             'disk_percent': (disk.used / disk.total) * 100 if disk.total else 0,
-            'disk_read_bytes': disk_io.read_bytes if disk_io else 0,
-            'disk_write_bytes': disk_io.write_bytes if disk_io else 0,
+            # Disk I/O rates (bytes/sec)
+            'disk_read_bytes': int(disk_read_rate),
+            'disk_write_bytes': int(disk_write_rate),
             # Network throughput rates (bytes/sec)
             'network_rx_bytes': int(network_rx_rate),
             'network_tx_bytes': int(network_tx_rate),
-            # Cumulative counters (for reference)
-            'network_rx_total': net_io.bytes_recv if net_io else 0,
-            'network_tx_total': net_io.bytes_sent if net_io else 0,
             # Server counts
-            'active_servers': active_servers_count,
-            'total_servers': docker_containers_running,
             'docker_containers_running': docker_containers_running,
             'docker_containers_total': docker_containers_total,
             'docker_images_total': docker_images_total,
@@ -163,9 +199,8 @@ class SystemMetricsCollector:
             metric = SystemMetric(**data)
             db.add(metric)
             await db.commit()
-            print(f"System metrics persisted to database")
-        except Exception as e:
-            print(f"Error persisting system metrics: {e}")
+        except Exception:
+            pass
             if db:
                 try:
                     await db.rollback()
@@ -185,16 +220,14 @@ class SystemMetricsCollector:
 
         # Broadcast via Redis
         try:
-            print(f"Broadcasting system metrics to Redis...")
             redis_client = redis.from_url(settings.redis_url)
-            result = await redis_client.publish(
+            await redis_client.publish(
                 "metrics:system",
                 json.dumps(data, default=str)
             )
-            print(f"Redis publish result: {result} subscribers notified")
             await redis_client.close()
-        except Exception as e:
-            print(f"Error broadcasting system metrics: {e}")
+        except Exception:
+            pass
 
         return data
 

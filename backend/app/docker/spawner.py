@@ -41,12 +41,13 @@ class ServerSpawner:
         disk: str = "10g",
         env_vars: Optional[dict] = None,
         volume_name: Optional[str] = None,
+        server_id: Optional[str] = None,
     ) -> Server:
         """Spawn a new server container with persistent volume"""
         docker = await self._get_docker()
         
-        # Generate unique IDs
-        server_id = str(uuid.uuid4())
+        # Use existing server ID or generate new one
+        server_id = server_id or str(uuid.uuid4())
         container_name = f"nukelab-server-{username}-{server_name}"
         
         # Create or reuse persistent volume
