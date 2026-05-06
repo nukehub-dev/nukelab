@@ -55,26 +55,36 @@ export function useServerActions() {
   }, []);
 
   // Watch servers data and clear pending ops when status matches target
+  // Use interval to check since queryClient reference is stable
   useEffect(() => {
-    const servers = queryClient.getQueryData<Server[]>(['servers']);
-    if (!servers) return;
+    const checkPendingOps = () => {
+      const servers = queryClient.getQueryData<Server[]>(['servers']);
+      if (!servers) return;
 
-    setPendingOps((prev) =>
-      prev.filter((op) => {
-        if (op.targetStatus === 'deleted') {
-          // Remove if server no longer exists
-          return servers.some((s) => s.id === op.serverId);
-        }
-        const server = servers.find((s) => s.id === op.serverId);
-        if (!server) return false;
-        // For restart, also clear if status is running (restart completed)
-        if (op.type === 'restart' && server.status === 'running') {
-          return false;
-        }
-        // Keep pending if status doesn't match target yet
-        return server.status !== op.targetStatus;
-      })
-    );
+      setPendingOps((prev) =>
+        prev.filter((op) => {
+          if (op.targetStatus === 'deleted') {
+            // Remove if server no longer exists
+            return servers.some((s) => s.id === op.serverId);
+          }
+          const server = servers.find((s) => s.id === op.serverId);
+          if (!server) return false;
+          // For restart, also clear if status is running (restart completed)
+          if (op.type === 'restart' && server.status === 'running') {
+            return false;
+          }
+          // Keep pending if status doesn't match target yet
+          return server.status !== op.targetStatus;
+        })
+      );
+    };
+
+    // Check immediately
+    checkPendingOps();
+    
+    // Then check every second until all pending ops are cleared
+    const interval = setInterval(checkPendingOps, 1000);
+    return () => clearInterval(interval);
   }, [queryClient]);
 
   // Auto-clear restart operations after timeout (docker restart is fast)
