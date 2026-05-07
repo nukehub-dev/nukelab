@@ -1,4 +1,5 @@
-import type { ApplicationTheme } from '../types/theme';
+import type { ApplicationTheme, AccentColor } from '../types/theme';
+import { ACCENT_COLORS } from '../types/theme';
 
 const DEFAULT_ACCENT = 'oklch(0.541 0.281 293.009)';
 
@@ -23,8 +24,9 @@ export function applyOledMode(isOled: boolean): void {
   document.documentElement.classList.toggle('oled', isOled);
 }
 
-export function applyAccentColor(color: string): void {
-  const resolved = color === 'default' ? DEFAULT_ACCENT : color;
+export function applyAccentColor(color: AccentColor): void {
+  const accentDef = ACCENT_COLORS.find(c => c.value === color);
+  const resolved = accentDef ? accentDef.color : DEFAULT_ACCENT;
 
   document.documentElement.style.setProperty('--primary', resolved);
   document.documentElement.style.setProperty('--primary-foreground', getContrastingForeground(resolved));

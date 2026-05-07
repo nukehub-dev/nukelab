@@ -26,7 +26,7 @@ import { useThemeStore } from '../../stores/theme-store';
 import { useAuthStore } from '../../stores/auth-store';
 import { cn } from '../../lib/utils';
 import { Tooltip } from '../ui/tooltip';
-import { THEME_VALUES, THEME_PREVIEWS } from '../../types/theme';
+import { THEME_VALUES, THEME_PREVIEWS, ACCENT_COLORS } from '../../types/theme';
 
 interface NavItem {
   label: string;
@@ -107,7 +107,7 @@ function canAccessItem(item: NavItem, userRole: string): boolean {
 export function Sidebar() {
   const location = useLocation();
   const { isOpen, isPinned, togglePin, setOpen } = useSidebarStore();
-  const { theme, isDark, isOled, setTheme, setDarkMode, setOledMode } = useThemeStore();
+  const { theme, isDark, isOled, accentColor, setTheme, setDarkMode, setOledMode, setAccentColor } = useThemeStore();
   const user = useAuthStore((state) => state.user);
   const [showMore, setShowMore] = useState(false);
   const [showThemePicker, setShowThemePicker] = useState(false);
@@ -266,6 +266,26 @@ export function Sidebar() {
               <span className="flex-1 text-left">Log Out</span>
             </button>
 
+            <div className="space-y-2">
+              <span className="text-sm text-sidebar-foreground/80">Accent Color</span>
+              <div className="flex items-center gap-2">
+                {ACCENT_COLORS.map((c) => (
+                  <button
+                    key={c.value}
+                    onClick={() => setAccentColor(c.value)}
+                    className={cn(
+                      "w-7 h-7 rounded-full transition-all cursor-pointer ring-2",
+                      accentColor === c.value
+                        ? "ring-primary ring-offset-2 ring-offset-sidebar"
+                        : "ring-transparent hover:ring-border"
+                    )}
+                    style={{ backgroundColor: c.color }}
+                    title={c.label}
+                  />
+                ))}
+              </div>
+            </div>
+
             <div className="relative">
               <button
                 onClick={() => setShowThemePicker(!showThemePicker)}
@@ -408,6 +428,26 @@ export function Sidebar() {
                   ))}
                   
                   <div className="pt-4 border-t border-border/50 space-y-3">
+                    <div className="space-y-2 px-3">
+                      <span className="text-sm text-muted-foreground">Accent Color</span>
+                      <div className="flex items-center gap-2">
+                        {ACCENT_COLORS.map((c) => (
+                          <button
+                            key={c.value}
+                            onClick={() => setAccentColor(c.value)}
+                            className={cn(
+                              "w-8 h-8 rounded-full transition-all cursor-pointer ring-2",
+                              accentColor === c.value
+                                ? "ring-primary ring-offset-2 ring-offset-background"
+                                : "ring-transparent hover:ring-border"
+                            )}
+                            style={{ backgroundColor: c.color }}
+                            title={c.label}
+                          />
+                        ))}
+                      </div>
+                    </div>
+
                     <div className="flex items-center justify-between px-3">
                       <span className="text-sm text-muted-foreground">Theme</span>
                       <div className="flex items-center gap-1 bg-muted rounded-lg p-1">

@@ -18,6 +18,16 @@ export interface ThemePreview {
   dark: { background: string; sidebar: string; card: string; border: string; foreground: string; primary: string };
 }
 
+export type AccentColor = 'default' | 'purple' | 'blue' | 'red' | 'green';
+
+export const ACCENT_COLORS: { value: AccentColor; label: string; color: string }[] = [
+  { value: 'default', label: 'Orange', color: 'oklch(0.70 0.18 55)' },
+  { value: 'purple', label: 'Purple', color: 'oklch(0.627 0.233 303.896)' },
+  { value: 'blue', label: 'Blue', color: 'oklch(0.773 0.127 231.134)' },
+  { value: 'red', label: 'Red', color: 'oklch(0.608 0.209 27.019)' },
+  { value: 'green', label: 'Green', color: 'oklch(0.65 0.17 145)' },
+];
+
 export const THEME_PREVIEWS: Record<ApplicationTheme, ThemePreview> = {
   default: {
     light: { background: '#fafafa', sidebar: '#f3f4f6', card: '#ffffff', border: '#d4d4d8', foreground: '#18181b', primary: '#8b5cf6' },

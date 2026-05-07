@@ -1,17 +1,17 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { ApplicationTheme } from '../types/theme';
+import type { ApplicationTheme, AccentColor } from '../types/theme';
 import { applyTheme, applyDarkMode, applyOledMode, applyAccentColor } from '../lib/theme';
 
 interface ThemeState {
   theme: ApplicationTheme;
   isDark: boolean;
   isOled: boolean;
-  accentColor: string;
+  accentColor: AccentColor;
   setTheme: (theme: ApplicationTheme) => void;
   setDarkMode: (isDark: boolean) => void;
   setOledMode: (isOled: boolean) => void;
-  setAccentColor: (color: string) => void;
+  setAccentColor: (color: AccentColor) => void;
 }
 
 export const useThemeStore = create<ThemeState>()(
