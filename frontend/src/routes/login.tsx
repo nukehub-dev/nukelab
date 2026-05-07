@@ -327,7 +327,7 @@ function LoginCard({ error, hasLocal, hasOAuth, authMethods, handleOAuth, handle
           <div className="space-y-4">
             <button
               onClick={handleOAuth}
-              className="w-full flex items-center justify-center gap-3 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-base hover:bg-primary/90 active:scale-[0.98] transition-all duration-150 cursor-pointer shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 hover:-translate-y-0.5"
+              className="w-full flex items-center justify-center gap-3 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-base hover:bg-primary/90 active:scale-[0.98] transition-all duration-150 shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 hover:-translate-y-0.5"
             >
               <ExternalLink className="w-5 h-5" />
               Sign in with {authMethods.find(m => m.type === 'oauth')?.name || 'OAuth'}
@@ -346,7 +346,7 @@ function LoginCard({ error, hasLocal, hasOAuth, authMethods, handleOAuth, handle
             {hasOAuth && hasLocal && (
               <button
                 onClick={handleOAuth}
-                className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-lg bg-secondary hover:bg-secondary/80 border border-border/50 text-secondary-foreground font-medium text-sm active:scale-[0.98] transition-all duration-150 cursor-pointer hover:-translate-y-0.5"
+                className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-lg bg-secondary hover:bg-secondary/80 border border-border/50 text-secondary-foreground font-medium text-sm active:scale-[0.98] transition-all duration-150 hover:-translate-y-0.5"
               >
                 <ExternalLink className="w-4 h-4" />
                 Sign in with {authMethods.find(m => m.type === 'oauth')?.name || 'OAuth'}
@@ -394,7 +394,7 @@ function LoginCard({ error, hasLocal, hasOAuth, authMethods, handleOAuth, handle
                     <button
                       type="button"
                       onClick={() => setShowPass(!showPass)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-muted-foreground transition-colors p-0.5 cursor-pointer"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-muted-foreground transition-colors p-0.5"
                       tabIndex={-1}
                     >
                       {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -405,7 +405,7 @@ function LoginCard({ error, hasLocal, hasOAuth, authMethods, handleOAuth, handle
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 active:scale-[0.98] transition-all duration-150 disabled:opacity-50 disabled:pointer-events-none shadow-lg shadow-primary/20 cursor-pointer hover:-translate-y-0.5"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 active:scale-[0.98] transition-all duration-150 disabled:opacity-50 disabled:pointer-events-none shadow-lg shadow-primary/20 hover:-translate-y-0.5"
                 >
                   {loading ? (
                     <motion.span animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>
@@ -425,7 +425,7 @@ function LoginCard({ error, hasLocal, hasOAuth, authMethods, handleOAuth, handle
             {hasLocal && (
               <p className="text-center text-xs text-muted-foreground pt-2">
                 Don't have an account?{' '}
-                <span className="text-primary font-medium cursor-pointer hover:underline">Contact your administrator</span>
+                <span className="text-primary font-medium hover:underline">Contact your administrator</span>
               </p>
             )}
           </>

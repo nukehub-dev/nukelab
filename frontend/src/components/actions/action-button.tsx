@@ -58,7 +58,7 @@ export function ActionButton({
       onClick={onClick}
       disabled={disabled || loading}
       className={cn(
-        'inline-flex items-center justify-center rounded-lg font-medium whitespace-nowrap cursor-pointer',
+        'inline-flex items-center justify-center rounded-lg font-medium whitespace-nowrap',
         'transition-all duration-100 hover:-translate-y-[1px] active:translate-y-[1px]',
         'disabled:pointer-events-none disabled:opacity-50',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',

@@ -86,7 +86,7 @@ export function DataTablePagination({
                   key={pageNum}
                   onClick={() => onPageChange(pageNum)}
                   className={cn(
-                    'min-w-[2rem] h-8 px-2 rounded-lg text-sm font-medium transition-colors cursor-pointer',
+                    'min-w-[2rem] h-8 px-2 rounded-lg text-sm font-medium transition-colors',
                     page === pageNum
                       ? 'bg-primary text-primary-foreground'
                       : 'hover:bg-accent border border-border/50'
@@ -125,7 +125,7 @@ export function DataTablePagination({
             onClick={() => setShowLimitDropdown(!showLimitDropdown)}
             className={cn(
               'relative h-8 px-3 pr-8 rounded-lg border text-sm font-medium',
-              'transition-colors flex items-center gap-2 cursor-pointer',
+              'transition-colors flex items-center gap-2',
               'border-border/50 bg-background hover:bg-accent'
             )}
           >
@@ -155,7 +155,7 @@ export function DataTablePagination({
                         setShowLimitDropdown(false);
                       }}
                       className={cn(
-                        'w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors whitespace-nowrap cursor-pointer',
+                        'w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors whitespace-nowrap',
                         limit === opt
                           ? 'bg-primary/10 text-primary'
                           : 'hover:bg-accent text-foreground'

@@ -163,7 +163,7 @@ export function Sidebar() {
           <Tooltip content={isPinned ? 'Unpin sidebar' : 'Pin sidebar'} position="right">
             <button
               onClick={togglePin}
-              className="p-1.5 rounded-md transition-colors hover:bg-sidebar-accent shrink-0 cursor-pointer"
+              className="p-1.5 rounded-md transition-colors hover:bg-sidebar-accent shrink-0"
               style={{ marginLeft: isOpen ? 8 : 0, opacity: isOpen ? 1 : 0, transition: 'all 0.3s ease' }}
             >
               <Pin className={cn("w-4 h-4", isPinned && "fill-current")} />
@@ -247,13 +247,13 @@ export function Sidebar() {
             <div className="flex items-center justify-between">
               <span className="text-sm text-sidebar-foreground/80">Theme</span>
               <div className="flex items-center gap-1 bg-sidebar-accent rounded-lg p-1">
-                <button onClick={() => setDarkMode(true)} className={cn("p-1.5 rounded-md transition-colors cursor-pointer", isDark && !isOled && "bg-background text-foreground")}>
+                <button onClick={() => setDarkMode(true)} className={cn("p-1.5 rounded-md transition-colors", isDark && !isOled && "bg-background text-foreground")}>
                   <Moon className="w-4 h-4" />
                 </button>
-                <button onClick={() => setDarkMode(false)} className={cn("p-1.5 rounded-md transition-colors cursor-pointer", !isDark && "bg-background text-foreground")}>
+                <button onClick={() => setDarkMode(false)} className={cn("p-1.5 rounded-md transition-colors", !isDark && "bg-background text-foreground")}>
                   <Sun className="w-4 h-4" />
                 </button>
-                <button onClick={() => { setDarkMode(true); setOledMode(!isOled); }} className={cn("p-1.5 rounded-md transition-colors cursor-pointer", isOled && "bg-background text-foreground")}>
+                <button onClick={() => { setDarkMode(true); setOledMode(!isOled); }} className={cn("p-1.5 rounded-md transition-colors", isOled && "bg-background text-foreground")}>
                   <Monitor className="w-4 h-4" />
                 </button>
               </div>
@@ -265,7 +265,7 @@ export function Sidebar() {
                 document.cookie = 'nukelab_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
                 window.location.href = '/login';
               }}
-              className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm hover:bg-sidebar-accent transition-colors text-red-400 cursor-pointer"
+              className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm hover:bg-sidebar-accent transition-colors text-red-400"
             >
               <LogOut className="w-4 h-4" />
               <span className="flex-1 text-left">Log Out</span>
@@ -276,7 +276,7 @@ export function Sidebar() {
             className="flex flex-col items-center gap-2 transition-all duration-300"
             style={{ maxHeight: !isOpen ? 100 : 0, opacity: !isOpen ? 1 : 0, overflow: 'hidden' }}
           >
-            <button onClick={() => setDarkMode(!isDark)} className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors cursor-pointer">
+            <button onClick={() => setDarkMode(!isDark)} className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors">
               {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
             <button 
@@ -285,7 +285,7 @@ export function Sidebar() {
                 document.cookie = 'nukelab_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
                 window.location.href = '/login';
               }} 
-              className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors text-red-400 cursor-pointer"
+              className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors text-red-400"
             >
               <LogOut className="w-4 h-4" />
             </button>
@@ -316,7 +316,7 @@ export function Sidebar() {
           {/* Center NukeLab Button - extends above dock */}
           <button
             onClick={() => setShowMore(true)}
-            className="relative mx-1 flex items-center justify-center w-15 h-15 rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/40 cursor-pointer transition-shadow duration-200 hover:shadow-primary/60 hover:shadow-xl"
+            className="relative mx-1 flex items-center justify-center w-15 h-15 rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/40 transition-shadow duration-200 hover:shadow-primary/60 hover:shadow-xl"
           >
             <NukeLabLogo size={35} className="text-primary-foreground" />
             {/* Glow effect */}
@@ -400,7 +400,7 @@ export function Sidebar() {
                         document.cookie = 'nukelab_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
                         window.location.href = '/login';
                       }}
-                      className="flex items-center gap-2 w-full px-4 py-3 rounded-xl text-sm hover:bg-muted transition-colors text-red-400 cursor-pointer"
+                      className="flex items-center gap-2 w-full px-4 py-3 rounded-xl text-sm hover:bg-muted transition-colors text-red-400"
                     >
                       <LogOut className="w-4 h-4" />
                       <span>Log Out</span>

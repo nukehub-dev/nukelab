@@ -244,7 +244,7 @@ function EnvironmentsPage() {
             <Tooltip content="Edit">
               <motion.button
                 onClick={() => openEditDialog(env)}
-                className="inline-flex p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors cursor-pointer"
+                className="inline-flex p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
                 
                 
               >
@@ -256,7 +256,7 @@ function EnvironmentsPage() {
                 <motion.button
                   onClick={() => deactivateEnvironment.mutate(env.id)}
                   disabled={deactivateEnvironment.isPending}
-                  className="inline-flex p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-colors cursor-pointer"
+                  className="inline-flex p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-colors"
                   
                   
                 >
@@ -268,7 +268,7 @@ function EnvironmentsPage() {
                 <motion.button
                   onClick={() => activateEnvironment.mutate(env.id)}
                   disabled={activateEnvironment.isPending}
-                  className="inline-flex p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-colors cursor-pointer"
+                  className="inline-flex p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-colors"
                   
                   
                 >
@@ -286,7 +286,7 @@ function EnvironmentsPage() {
                   }
                 }}
                 disabled={cloneEnvironment.isPending}
-                className="inline-flex p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors cursor-pointer"
+                className="inline-flex p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
                 
                 
               >
@@ -301,7 +301,7 @@ function EnvironmentsPage() {
                   }
                 }}
                 disabled={deleteEnvironment.isPending}
-                  className="inline-flex p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors cursor-pointer"
+                  className="inline-flex p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
                   
                   
                 >
@@ -396,7 +396,7 @@ function EnvironmentsPage() {
             <Tooltip content="Edit">
               <button
                 onClick={() => openEditDialog(env)}
-                className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex cursor-pointer"
+                className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex"
               >
                 <Pencil className="w-4 h-4" />
               </button>
@@ -406,7 +406,7 @@ function EnvironmentsPage() {
                 <button
                   onClick={() => deactivateEnvironment.mutate(env.id)}
                   disabled={deactivateEnvironment.isPending}
-                  className="p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-colors inline-flex cursor-pointer"
+                  className="p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-colors inline-flex"
                 >
                   <XCircle className="w-4 h-4" />
                 </button>
@@ -416,7 +416,7 @@ function EnvironmentsPage() {
                 <button
                   onClick={() => activateEnvironment.mutate(env.id)}
                   disabled={activateEnvironment.isPending}
-                  className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-colors inline-flex cursor-pointer"
+                  className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-colors inline-flex"
                 >
                   <CheckCircle2 className="w-4 h-4" />
                 </button>
@@ -432,7 +432,7 @@ function EnvironmentsPage() {
                   }
                 }}
                 disabled={cloneEnvironment.isPending}
-                className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex cursor-pointer"
+                className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex"
               >
                 <Copy className="w-4 h-4" />
               </button>
@@ -445,7 +445,7 @@ function EnvironmentsPage() {
                   }
                 }}
                 disabled={deleteEnvironment.isPending}
-                className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors inline-flex cursor-pointer"
+                className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors inline-flex"
               >
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -612,14 +612,14 @@ function EnvironmentsPage() {
               <button
                 type="button"
                 onClick={() => setDialogOpen(false)}
-                className="px-4 py-2 rounded-lg border border-input text-sm font-medium hover:bg-accent transition-colors cursor-pointer"
+                className="px-4 py-2 rounded-lg border border-input text-sm font-medium hover:bg-accent transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={createEnvironment.isPending || updateEnvironment.isPending}
-                className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 cursor-pointer"
+                className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
               >
                 {editingEnv ? 'Update' : 'Create'}
               </button>

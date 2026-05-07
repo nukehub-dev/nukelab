@@ -182,7 +182,7 @@ function ServerDetailPage() {
             <button
               onClick={() => startServer.mutate(server.id)}
               disabled={isOperationPending(server.id, 'start')}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-all duration-100 text-sm font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-all duration-100 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
             >
               {isOperationPending(server.id, 'start') ? (
                 <RotateCcw className="w-4 h-4 animate-spin" />
@@ -197,7 +197,7 @@ function ServerDetailPage() {
               <button
                 onClick={() => stopServer.mutate(server.id)}
                 disabled={isOperationPending(server.id, 'stop')}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-all duration-100 text-sm font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-all duration-100 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
               >
                 {isOperationPending(server.id, 'stop') ? (
                   <RotateCcw className="w-4 h-4 animate-spin" />
@@ -209,7 +209,7 @@ function ServerDetailPage() {
               <button
                 onClick={() => restartServer.mutate(server.id)}
                 disabled={isOperationPending(server.id, 'restart')}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-all duration-100 text-sm font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-all duration-100 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
               >
                 {isOperationPending(server.id, 'restart') ? (
                   <RotateCcw className="w-4 h-4 animate-spin" />
@@ -227,7 +227,7 @@ function ServerDetailPage() {
               }
             }}
             disabled={isOperationPending(server.id, 'delete')}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/20 transition-all duration-100 text-sm font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/20 transition-all duration-100 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
           >
             {isOperationPending(server.id, 'delete') ? (
               <RotateCcw className="w-4 h-4 animate-spin" />

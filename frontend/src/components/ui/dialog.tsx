@@ -121,7 +121,7 @@ const DialogClose = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttribut
     <button
       ref={ref}
       className={cn(
-        'absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 cursor-pointer',
+        'absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         'disabled:pointer-events-none',
         className

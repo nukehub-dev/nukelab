@@ -93,7 +93,7 @@ export function DataTableToolbar<TData>({
             {globalFilter && (
               <button
                 onClick={() => onGlobalFilterChange('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md hover:bg-accent cursor-pointer"
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md hover:bg-accent"
               >
                 <X className="w-3.5 h-3.5 text-muted-foreground" />
               </button>
@@ -108,7 +108,7 @@ export function DataTableToolbar<TData>({
             onClick={() => setShowFilters(!showFilters)}
             className={cn(
               'h-9 px-3 rounded-lg border border-border/50 text-sm font-medium',
-              'transition-colors hover:bg-accent flex items-center gap-2 cursor-pointer',
+              'transition-colors hover:bg-accent flex items-center gap-2',
               showFilters && 'bg-primary/10 border-primary/30 text-primary'
             )}
           >
@@ -129,7 +129,7 @@ export function DataTableToolbar<TData>({
                 onClick={() => setShowColumnMenu(!showColumnMenu)}
                 className={cn(
                   'h-9 px-3 rounded-lg border border-border/50 text-sm font-medium',
-                  'transition-colors hover:bg-accent flex items-center gap-2 cursor-pointer',
+                  'transition-colors hover:bg-accent flex items-center gap-2',
                   showColumnMenu && 'bg-primary/10 border-primary/30 text-primary'
                 )}
               >
@@ -163,7 +163,7 @@ export function DataTableToolbar<TData>({
                           key={column.id}
                           onClick={() => column.toggleVisibility()}
                           className={cn(
-                            'w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors cursor-pointer',
+                            'w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors',
                             column.getIsVisible()
                               ? 'text-foreground'
                               : 'text-muted-foreground'
@@ -185,7 +185,7 @@ export function DataTableToolbar<TData>({
             onClick={onViewToggle}
             className={cn(
               'h-9 px-3 rounded-lg border border-border/50 text-sm font-medium',
-              'transition-colors hover:bg-accent flex items-center gap-2 cursor-pointer',
+              'transition-colors hover:bg-accent flex items-center gap-2',
               isMobileView && 'bg-primary/10 border-primary/30 text-primary'
             )}
           >
@@ -228,7 +228,7 @@ export function DataTableToolbar<TData>({
                       onClick={() => setOpenFilterKey(isOpen ? null : filter.key)}
                       className={cn(
                         'relative h-8 px-3 pr-8 rounded-lg border text-sm font-medium',
-                        'transition-colors flex items-center gap-2 cursor-pointer',
+                        'transition-colors flex items-center gap-2',
                         currentValue
                           ? 'bg-primary/10 border-primary/30 text-primary'
                           : 'border-border/50 bg-background hover:bg-accent'
@@ -259,7 +259,7 @@ export function DataTableToolbar<TData>({
                                 setOpenFilterKey(null);
                               }}
                               className={cn(
-                                'w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors cursor-pointer',
+                                'w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors',
                                 !currentValue
                                   ? 'bg-primary/10 text-primary'
                                   : 'hover:bg-accent text-foreground'
@@ -277,7 +277,7 @@ export function DataTableToolbar<TData>({
                                   setOpenFilterKey(null);
                                 }}
                                 className={cn(
-                                  'w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors cursor-pointer',
+                                  'w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors',
                                   currentValue === opt.value
                                     ? 'bg-primary/10 text-primary'
                                     : 'hover:bg-accent text-foreground'
@@ -298,7 +298,7 @@ export function DataTableToolbar<TData>({
               {table.getState().columnFilters.length > 0 && (
               <button
                 onClick={() => table.resetColumnFilters()}
-                className="h-8 px-3 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer"
+                className="h-8 px-3 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
               >
                   Clear filters
                 </button>
@@ -327,7 +327,7 @@ export function DataTableToolbar<TData>({
                   onClick={() => action.onClick(selectedIds)}
                   className={cn(
                     'h-8 px-3 rounded-lg text-sm font-medium flex items-center gap-2',
-                    'transition-all duration-100 cursor-pointer active:translate-y-[1px]',
+                    'transition-all duration-100 active:translate-y-[1px]',
                     action.variant === 'destructive'
                       ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90 hover:brightness-110'
                       : 'bg-primary text-primary-foreground hover:bg-primary/90 hover:brightness-110'
@@ -339,7 +339,7 @@ export function DataTableToolbar<TData>({
               ))}
               <button
                 onClick={() => table.toggleAllRowsSelected(false)}
-                className="h-8 px-3 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer"
+                className="h-8 px-3 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
               >
                 Clear
               </button>

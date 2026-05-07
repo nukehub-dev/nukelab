@@ -222,7 +222,7 @@ function ServersPage() {
           <button
             onClick={handleOpen}
             disabled={anyPending}
-            className="inline-flex items-center gap-1 text-primary hover:underline disabled:opacity-50 cursor-pointer"
+            className="inline-flex items-center gap-1 text-primary hover:underline disabled:opacity-50"
           >
             <ExternalLink className="w-3.5 h-3.5" />
             {isOperationPending(server.id, 'start') ? 'Starting...' : server.status !== 'running' ? 'Start & Open' : 'Open'}
@@ -247,7 +247,7 @@ function ServersPage() {
               <Link
                 to="/servers/$serverId"
                 params={{ serverId: server.id }}
-                className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex cursor-pointer"
+                className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex"
               >
                 <Eye className="w-4 h-4" />
               </Link>
@@ -257,7 +257,7 @@ function ServersPage() {
                 <button
                   onClick={() => startServer.mutate(server.id)}
                   disabled={isOperationPending(server.id, 'start')}
-                  className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-all duration-100 inline-flex cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
+                  className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-all duration-100 inline-flex disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
                 >
                   {isOperationPending(server.id, 'start') ? (
                     <RotateCcw className="w-4 h-4 animate-spin" />
@@ -273,7 +273,7 @@ function ServersPage() {
                   <button
                     onClick={() => stopServer.mutate(server.id)}
                     disabled={isOperationPending(server.id, 'stop')}
-                    className="p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-all duration-100 inline-flex cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
+                    className="p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-all duration-100 inline-flex disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
                   >
                     {isOperationPending(server.id, 'stop') ? (
                       <RotateCcw className="w-4 h-4 animate-spin" />
@@ -286,7 +286,7 @@ function ServersPage() {
                   <button
                     onClick={() => restartServer.mutate(server.id)}
                     disabled={isOperationPending(server.id, 'restart')}
-                    className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-all duration-100 inline-flex cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
+                    className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-all duration-100 inline-flex disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
                   >
                     {isOperationPending(server.id, 'restart') ? (
                       <RotateCcw className="w-4 h-4 animate-spin" />
@@ -305,7 +305,7 @@ function ServersPage() {
                   }
                 }}
                 disabled={isOperationPending(server.id, 'delete')}
-                className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-all duration-100 inline-flex cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
+                className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-all duration-100 inline-flex disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
               >
                 {isOperationPending(server.id, 'delete') ? (
                   <RotateCcw className="w-4 h-4 animate-spin" />
@@ -417,7 +417,7 @@ function ServersPage() {
               window.open(gatewayUrl, '_blank', 'noopener,noreferrer');
             }}
             disabled={isOperationPending(server.id)}
-            className="inline-flex items-center gap-1 text-sm text-primary hover:underline disabled:opacity-50 cursor-pointer"
+            className="inline-flex items-center gap-1 text-sm text-primary hover:underline disabled:opacity-50"
           >
             <ExternalLink className="w-3.5 h-3.5" />
             {isOperationPending(server.id, 'start') ? 'Starting...' : server.status !== 'running' ? 'Start & Open' : 'Open Server'}
@@ -428,7 +428,7 @@ function ServersPage() {
             <Link
               to="/servers/$serverId"
               params={{ serverId: server.id }}
-              className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex cursor-pointer"
+              className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex"
             >
               <Eye className="w-4 h-4" />
             </Link>
@@ -438,7 +438,7 @@ function ServersPage() {
               <button
                 onClick={() => startServer.mutate(server.id)}
                 disabled={isOperationPending(server.id, 'start')}
-                className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-all duration-100 inline-flex cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
+                className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-all duration-100 inline-flex disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
               >
                 {isOperationPending(server.id, 'start') ? (
                   <RotateCcw className="w-4 h-4 animate-spin" />
@@ -454,7 +454,7 @@ function ServersPage() {
                 <button
                   onClick={() => stopServer.mutate(server.id)}
                   disabled={isOperationPending(server.id, 'stop')}
-                  className="p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-all duration-100 inline-flex cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
+                  className="p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-all duration-100 inline-flex disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
                 >
                   {isOperationPending(server.id, 'stop') ? (
                     <RotateCcw className="w-4 h-4 animate-spin" />
@@ -467,7 +467,7 @@ function ServersPage() {
                 <button
                   onClick={() => restartServer.mutate(server.id)}
                   disabled={isOperationPending(server.id, 'restart')}
-                  className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-all duration-100 inline-flex cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
+                  className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-all duration-100 inline-flex disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
                 >
                   {isOperationPending(server.id, 'restart') ? (
                     <RotateCcw className="w-4 h-4 animate-spin" />
@@ -486,7 +486,7 @@ function ServersPage() {
                 }
               }}
               disabled={isOperationPending(server.id, 'delete')}
-              className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-all duration-100 inline-flex cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
+              className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-all duration-100 inline-flex disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
             >
               {isOperationPending(server.id, 'delete') ? (
                 <RotateCcw className="w-4 h-4 animate-spin" />
@@ -619,7 +619,7 @@ function ServersPage() {
               <button
                 type="submit"
                 disabled={createServer.isPending || !deployForm.environment_id}
-                className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 cursor-pointer"
+                className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
               >
                 {createServer.isPending ? 'Deploying...' : 'Deploy'}
               </button>

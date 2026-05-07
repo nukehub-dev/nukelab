@@ -61,7 +61,7 @@ function ToastItem({ toast }: { toast: Toast }) {
           {toast.action && (
             <button
               onClick={toast.action.onClick}
-              className="mt-2 text-xs font-medium underline underline-offset-2 hover:opacity-80 cursor-pointer"
+              className="mt-2 text-xs font-medium underline underline-offset-2 hover:opacity-80"
             >
               {toast.action.label}
             </button>

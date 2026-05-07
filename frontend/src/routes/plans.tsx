@@ -293,7 +293,7 @@ function PlansPage() {
             <Tooltip content="Edit">
               <motion.button
                 onClick={() => openEditDialog(plan)}
-                className="inline-flex p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors cursor-pointer"
+                className="inline-flex p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
                 
                 
               >
@@ -305,7 +305,7 @@ function PlansPage() {
                 <motion.button
                   onClick={() => deactivatePlan.mutate(plan.id)}
                   disabled={deactivatePlan.isPending}
-                  className="inline-flex p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-colors cursor-pointer"
+                  className="inline-flex p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-colors"
                   
                   
                 >
@@ -317,7 +317,7 @@ function PlansPage() {
                 <motion.button
                   onClick={() => activatePlan.mutate(plan.id)}
                   disabled={activatePlan.isPending}
-                  className="inline-flex p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-colors cursor-pointer"
+                  className="inline-flex p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-colors"
                   
                   
                 >
@@ -333,7 +333,7 @@ function PlansPage() {
                   }
                 }}
                 disabled={deletePlan.isPending}
-                  className="inline-flex p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors cursor-pointer"
+                  className="inline-flex p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
                   
                   
                 >
@@ -423,7 +423,7 @@ function PlansPage() {
           <Tooltip content="Edit">
             <button
               onClick={() => openEditDialog(plan)}
-              className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex cursor-pointer"
+              className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex"
             >
               <Pencil className="w-4 h-4" />
             </button>
@@ -433,7 +433,7 @@ function PlansPage() {
               <button
                 onClick={() => deactivatePlan.mutate(plan.id)}
                 disabled={deactivatePlan.isPending}
-                className="p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-colors inline-flex cursor-pointer"
+                className="p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-colors inline-flex"
               >
                 <XCircle className="w-4 h-4" />
               </button>
@@ -443,7 +443,7 @@ function PlansPage() {
               <button
                 onClick={() => activatePlan.mutate(plan.id)}
                 disabled={activatePlan.isPending}
-                className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-colors inline-flex cursor-pointer"
+                className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-colors inline-flex"
               >
                 <CheckCircle2 className="w-4 h-4" />
               </button>
@@ -457,7 +457,7 @@ function PlansPage() {
                 }
               }}
               disabled={deletePlan.isPending}
-              className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors inline-flex cursor-pointer"
+              className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors inline-flex"
             >
               <Trash2 className="w-4 h-4" />
             </button>
@@ -699,14 +699,14 @@ function PlansPage() {
               <button
                 type="button"
                 onClick={() => setDialogOpen(false)}
-                className="px-4 py-2 rounded-lg border border-input text-sm font-medium hover:bg-accent transition-colors cursor-pointer"
+                className="px-4 py-2 rounded-lg border border-input text-sm font-medium hover:bg-accent transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={createPlan.isPending || updatePlan.isPending}
-                className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 cursor-pointer"
+                className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
               >
                 {editingPlan ? 'Update' : 'Create'}
               </button>

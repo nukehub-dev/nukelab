@@ -182,7 +182,7 @@ function ServerGatewayPage() {
 
               <button
                 onClick={handleManualOpen}
-                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 transition-colors cursor-pointer"
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 transition-colors"
               >
                 <ExternalLink className="w-4 h-4" />
                 Open Server

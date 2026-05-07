@@ -532,6 +532,19 @@ html.light {
   --glass-shadow-color: oklch(0 0 0 / 0.15);
 }
 
+/* Global cursor styles for interactive elements */
+button, a, [role="button"], [role="switch"], input[type="submit"], input[type="button"], input[type="reset"], label {
+  cursor: pointer;
+}
+
+button:disabled, a:disabled, [role="button"]:disabled, [aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+input, textarea, select {
+  cursor: text;
+}
+
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

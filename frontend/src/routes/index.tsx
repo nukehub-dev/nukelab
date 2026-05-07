@@ -74,7 +74,7 @@ function DashboardPage() {
             <p className="text-destructive font-medium">{error?.message || 'Failed to load dashboard data'}</p>
             <button
               onClick={() => window.location.reload()}
-              className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors cursor-pointer"
+              className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
             >
               Retry
             </button>
