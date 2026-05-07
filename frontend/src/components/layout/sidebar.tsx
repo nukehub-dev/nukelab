@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation } from '@tanstack/react-router';
+import { AnimatePresence, motion } from 'framer-motion';
 
 import {
   LayoutDashboard,
@@ -17,10 +18,9 @@ import {
   Moon,
   Monitor,
   Palette,
-  Command,
   LogOut,
-  MoreHorizontal,
 } from 'lucide-react';
+import { NukeLabLogo } from '../logo';
 import { useSidebarStore } from '../../stores/sidebar-store';
 import { useThemeStore } from '../../stores/theme-store';
 import { useAuthStore } from '../../stores/auth-store';
@@ -71,6 +71,16 @@ const navGroups: NavGroup[] = [
 const dockItems = [
   { label: 'Dashboard', icon: LayoutDashboard, href: '/' },
   { label: 'Servers', icon: Server, href: '/servers' },
+  { label: 'Environments', icon: Boxes, href: '/environments' },
+  { label: 'Plans', icon: CreditCard, href: '/plans' },
+];
+
+const leftDockItems = [
+  { label: 'Dashboard', icon: LayoutDashboard, href: '/' },
+  { label: 'Servers', icon: Server, href: '/servers' },
+];
+
+const rightDockItems = [
   { label: 'Environments', icon: Boxes, href: '/environments' },
   { label: 'Plans', icon: CreditCard, href: '/plans' },
 ];
@@ -135,8 +145,8 @@ export function Sidebar() {
         {/* Header */}
         <div className="flex items-center h-14 px-4 border-b border-sidebar-border/50 shrink-0">
           <div className="flex items-center gap-3 flex-1 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shrink-0">
-              <Command className="w-5 h-5 text-primary-foreground" />
+            <div className="w-8 h-8 flex items-center justify-center shrink-0">
+              <NukeLabLogo size={32} className="text-primary" />
             </div>
             <span 
               className="font-bold text-lg tracking-tight truncate whitespace-nowrap overflow-hidden transition-all duration-300"
@@ -298,107 +308,133 @@ export function Sidebar() {
       </aside>
 
       {/* Mobile Bottom Dock */}
-      <nav className="fixed bottom-4 left-4 right-4 z-40 lg:hidden">
-        <div className="bg-background/80 backdrop-blur-xl border border-border/50 rounded-2xl shadow-lg shadow-black/20 px-2 py-2">
-          <div className="flex items-center justify-around">
-            {visibleDockItems.map((item) => (
-              <Link
-                key={item.href}
-                to={item.href}
-                className={cn(
-                  "flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all duration-100",
-                  isActive(item.href)
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <item.icon className="w-5 h-5" />
-                <span className="text-[10px] font-medium">{item.label}</span>
-              </Link>
-            ))}
-            <button
-              onClick={() => setShowMore(true)}
+      <nav className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 lg:hidden">
+        <div className="relative flex items-center bg-background/80 backdrop-blur-xl border border-border/50 rounded-full shadow-lg shadow-black/20 px-2 h-14">
+          {/* Left items */}
+          {visibleDockItems.filter(item => leftDockItems.some(l => l.href === item.href)).map((item) => (
+            <Link
+              key={item.href}
+              to={item.href}
               className={cn(
-                "flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all duration-100 cursor-pointer",
-                showMore ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground"
+                "flex items-center gap-1.5 px-3 h-full rounded-full transition-colors duration-150",
+                isActive(item.href)
+                  ? "text-primary"
+                  : "text-muted-foreground hover:text-foreground"
               )}
             >
-              <MoreHorizontal className="w-5 h-5" />
-              <span className="text-[10px] font-medium">More</span>
-            </button>
-          </div>
+              <item.icon className="w-5 h-5" />
+              <span className="text-[10px] font-medium hidden sm:inline">{item.label}</span>
+            </Link>
+          ))}
+
+          {/* Center NukeLab Button - extends above dock */}
+          <button
+            onClick={() => setShowMore(true)}
+            className="relative mx-1 flex items-center justify-center w-15 h-15 rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/40 cursor-pointer transition-shadow duration-200 hover:shadow-primary/60 hover:shadow-xl"
+          >
+            <NukeLabLogo size={35} className="text-primary-foreground" />
+            {/* Glow effect */}
+            <div className="absolute inset-0 rounded-full bg-primary/20 blur-md -z-10" />
+          </button>
+
+          {/* Right items */}
+          {visibleDockItems.filter(item => rightDockItems.some(r => r.href === item.href)).map((item) => (
+            <Link
+              key={item.href}
+              to={item.href}
+              className={cn(
+                "flex items-center gap-1.5 px-3 h-full rounded-full transition-colors duration-150",
+                isActive(item.href)
+                  ? "text-primary"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <item.icon className="w-5 h-5" />
+              <span className="text-[10px] font-medium hidden sm:inline">{item.label}</span>
+            </Link>
+          ))}
         </div>
       </nav>
 
       {/* Mobile More Menu */}
-      {showMore && (
-        <>
-          <div
-            className="fixed inset-0 bg-black/60 z-50 lg:hidden backdrop-blur-sm"
-            onClick={() => setShowMore(false)}
-          />
-          <div
-            className="fixed bottom-0 left-0 right-0 z-[60] lg:hidden"
-          >
-            <div className="bg-background/95 backdrop-blur-xl rounded-t-3xl border border-border/50 shadow-2xl">
-              <div className="flex justify-center pt-3 pb-1">
-                <div className="w-12 h-1.5 rounded-full bg-muted-foreground/30" />
-              </div>
-              
-              <div className="px-6 py-4 space-y-6 max-h-[60vh] overflow-y-auto scrollbar-hide">
-                {visibleNavGroups.map((group) => (
-                  <div key={group.label}>
-                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-3 mb-3">
-                      {group.label}
-                    </h3>
-                    <div className="space-y-1">
-                      {group.items.map((item) => (
-                        <Link
-                          key={item.href}
-                          to={item.href}
-                          onClick={() => setShowMore(false)}
-                          className={cn(
-                            "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-100",
-                            isActive(item.href)
-                              ? "bg-muted text-foreground shadow-sm"
-                              : "text-foreground/80 hover:bg-muted/50"
-                          )}
-                        >
-                          <item.icon className={cn("w-5 h-5 shrink-0", isActive(item.href) && "text-primary")} />
-                          <span>{item.label}</span>
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
-                ))}
+      <AnimatePresence>
+        {showMore && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 bg-black/60 z-50 lg:hidden backdrop-blur-sm"
+              onClick={() => setShowMore(false)}
+            />
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="fixed bottom-0 left-0 right-0 z-[60] lg:hidden"
+            >
+              <div className="bg-background/95 backdrop-blur-xl rounded-t-3xl border border-border/50 shadow-2xl">
+                <div className="flex justify-center pt-3 pb-1">
+                  <div className="w-12 h-1.5 rounded-full bg-muted-foreground/30" />
+                </div>
                 
-                <div className="pt-4 border-t border-border/50 space-y-3">
-                  <div className="flex items-center justify-between px-3">
-                    <span className="text-sm text-muted-foreground">Theme</span>
-                    <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-                      <button onClick={() => setDarkMode(true)} className={cn("p-1.5 rounded-md transition-colors cursor-pointer", isDark && !isOled && "bg-background text-foreground")}><Moon className="w-4 h-4" /></button>
-                      <button onClick={() => setDarkMode(false)} className={cn("p-1.5 rounded-md transition-colors cursor-pointer", !isDark && "bg-background text-foreground")}><Sun className="w-4 h-4" /></button>
-                      <button onClick={() => { setDarkMode(true); setOledMode(!isOled); }} className={cn("p-1.5 rounded-md transition-colors cursor-pointer", isOled && "bg-background text-foreground")}><Monitor className="w-4 h-4" /></button>
+                <div className="px-6 py-4 space-y-6 max-h-[60vh] overflow-y-auto scrollbar-hide">
+                  {visibleNavGroups.map((group) => (
+                    <div key={group.label}>
+                      <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-3 mb-3">
+                        {group.label}
+                      </h3>
+                      <div className="space-y-1">
+                        {group.items.map((item) => (
+                          <Link
+                            key={item.href}
+                            to={item.href}
+                            onClick={() => setShowMore(false)}
+                            className={cn(
+                              "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-100",
+                              isActive(item.href)
+                                ? "bg-muted text-foreground shadow-sm"
+                                : "text-foreground/80 hover:bg-muted/50"
+                            )}
+                          >
+                            <item.icon className={cn("w-5 h-5 shrink-0", isActive(item.href) && "text-primary")} />
+                            <span>{item.label}</span>
+                          </Link>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  ))}
                   
-                  <button
-                    onClick={() => {
-                      localStorage.removeItem('nukelab-token');
-                      document.cookie = 'nukelab_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-                      window.location.href = '/login';
-                    }}
-                    className="flex items-center gap-2 w-full px-4 py-3 rounded-xl text-sm hover:bg-muted transition-colors text-red-400 cursor-pointer"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    <span>Log Out</span>
-                  </button>
+                  <div className="pt-4 border-t border-border/50 space-y-3">
+                    <div className="flex items-center justify-between px-3">
+                      <span className="text-sm text-muted-foreground">Theme</span>
+                      <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+                        <button onClick={() => setDarkMode(true)} className={cn("p-1.5 rounded-md transition-colors cursor-pointer", isDark && !isOled && "bg-background text-foreground")}><Moon className="w-4 h-4" /></button>
+                        <button onClick={() => setDarkMode(false)} className={cn("p-1.5 rounded-md transition-colors cursor-pointer", !isDark && "bg-background text-foreground")}><Sun className="w-4 h-4" /></button>
+                        <button onClick={() => { setDarkMode(true); setOledMode(!isOled); }} className={cn("p-1.5 rounded-md transition-colors cursor-pointer", isOled && "bg-background text-foreground")}><Monitor className="w-4 h-4" /></button>
+                      </div>
+                    </div>
+                    
+                    <button
+                      onClick={() => {
+                        localStorage.removeItem('nukelab-token');
+                        document.cookie = 'nukelab_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+                        window.location.href = '/login';
+                      }}
+                      className="flex items-center gap-2 w-full px-4 py-3 rounded-xl text-sm hover:bg-muted transition-colors text-red-400 cursor-pointer"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      <span>Log Out</span>
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
-        </>
-      )}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       <style>{`
         .scrollbar-hide {

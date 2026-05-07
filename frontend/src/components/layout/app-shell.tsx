@@ -4,6 +4,7 @@ import { useThemeStore } from '../../stores/theme-store';
 import { useSidebarStore } from '../../stores/sidebar-store';
 import { useCurrentUser } from '../../hooks/use-current-user';
 import { useGlobalShortcuts } from '../../hooks/use-keyboard-shortcuts';
+import { useFavicon } from '../../lib/favicon';
 import { Sidebar } from './sidebar';
 import { ToastProvider } from '../feedback/toast';
 import { ShortcutsModal } from '../feedback/shortcuts-modal';
@@ -18,6 +19,9 @@ export function AppShell() {
   const location = useLocation();
   const isLoginPage = location.pathname === '/login';
   const isDashboard = location.pathname === '/';
+
+  // Dynamic favicon with theme color
+  useFavicon();
 
   // Global keyboard shortcuts
   useGlobalShortcuts();
@@ -77,7 +81,7 @@ export function AppShell() {
         <motion.main
           className={cn(
             'flex-1 min-h-screen transition-all duration-300 ease-out overflow-x-hidden',
-            'pl-0 lg:pl-[5.5rem]',
+            'pl-0 lg:pl-[5.5rem] pb-24 lg:pb-0',
             isOpen && 'lg:pl-[17rem]'
           )}
         >

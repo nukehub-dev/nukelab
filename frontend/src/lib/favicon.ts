@@ -1,17 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
-  <style>
-    .logo { fill: currentColor; }
-    @media (prefers-color-scheme: dark) {
-      .bg { fill: #0a0a0a; }
-      .logo { fill: currentColor; }
-    }
-    @media (prefers-color-scheme: light) {
-      .bg { fill: #ffffff; }
-      .logo { fill: currentColor; }
-    }
-  </style>
-  <rect class="bg" width="256" height="256" rx="48"/>
-  <g class="logo" color="#f37524" transform="matrix(0.7,0,0,0.7,38.4,38.4)">
+import { useEffect } from 'react';
+
+// NukeLab logo SVG paths (same as logo.tsx)
+const LOGO_PATHS = `
+  <g transform="matrix(0.7,0,0,0.7,38.4,38.4)">
     <g fill="currentColor" fill-rule="nonzero" stroke="none">
       <g transform="matrix(0.25,0,0,0.25,-0.16216,-0.29601)">
         <g transform="matrix(3.13459,0,0,3.16815,-1119.1055,-1093.7635)">
@@ -28,4 +19,59 @@
       </g>
     </g>
   </g>
-</svg>
+`;
+
+function getPrimaryColor(): string {
+  return getComputedStyle(document.documentElement).getPropertyValue('--primary').trim() || '#f37524';
+}
+
+function generateFaviconDataUrl(color: string): string {
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+      <rect width="256" height="256" rx="48" fill="var(--background, #0a0a0a)"/>
+      <g style="color: ${color}">
+        ${LOGO_PATHS}
+      </g>
+    </svg>
+  `.trim();
+  
+  const encoded = encodeURIComponent(svg)
+    .replace(/'/g, '%27')
+    .replace(/"/g, '%22');
+  
+  return `data:image/svg+xml,${encoded}`;
+}
+
+export function updateFavicon(): void {
+  const color = getPrimaryColor();
+  const dataUrl = generateFaviconDataUrl(color);
+  
+  let link: HTMLLinkElement | null = document.querySelector("link[rel*='icon']");
+  if (!link) {
+    link = document.createElement('link');
+    link.rel = 'icon';
+    link.type = 'image/svg+xml';
+    document.head.appendChild(link);
+  }
+  
+  link.href = dataUrl;
+}
+
+export function useFavicon(): void {
+  useEffect(() => {
+    // Initial update
+    updateFavicon();
+    
+    // Watch for CSS variable changes
+    const observer = new MutationObserver(() => {
+      updateFavicon();
+    });
+    
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['style'],
+    });
+    
+    return () => observer.disconnect();
+  }, []);
+}
