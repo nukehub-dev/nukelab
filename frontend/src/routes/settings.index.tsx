@@ -72,10 +72,11 @@ function SettingsIndexPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.1, duration: 0.4 }}
+            className="h-full"
           >
             <Link
               to={category.href}
-              className="group flex items-start gap-4 p-5 rounded-xl bg-card/50 border border-border/50 hover:border-primary/30 hover:bg-card/80 transition-all duration-200"
+              className="group flex items-start gap-4 p-5 rounded-xl bg-card/50 border border-border/50 hover:border-primary/30 hover:bg-card/80 transition-all duration-200 h-full"
             >
               <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shrink-0", category.color)}>
                 <category.icon className="w-5 h-5" />
@@ -87,7 +88,7 @@ function SettingsIndexPage() {
                     <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">Admin</span>
                   )}
                 </div>
-                <p className="text-sm text-muted-foreground mt-1">{category.description}</p>
+                <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{category.description}</p>
               </div>
               <ChevronRight className="w-5 h-5 text-muted-foreground/50 group-hover:text-muted-foreground group-hover:translate-x-0.5 transition-all shrink-0 mt-1" />
             </Link>

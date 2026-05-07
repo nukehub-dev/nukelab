@@ -5,7 +5,7 @@ import { useThemeStore } from '../stores/theme-store';
 import { useSidebarStore } from '../stores/sidebar-store';
 import { THEME_VALUES, THEME_PREVIEWS, ACCENT_COLORS } from '../types/theme';
 import { cn } from '../lib/utils';
-import { Switch } from '../components/ui/switch';
+import { Tooltip } from '../components/ui/tooltip';
 
 export const Route = createFileRoute('/settings/appearance')({
   component: AppearanceSettingsPage,
@@ -23,7 +23,7 @@ function AppearanceSettingsPage() {
     setAccentColor 
   } = useThemeStore();
   
-  const { isPinned, togglePin } = useSidebarStore();
+  const { mode, setMode } = useSidebarStore();
 
   return (
     <div className="space-y-10 pb-10">
@@ -82,30 +82,30 @@ function AppearanceSettingsPage() {
         <SettingsSection title="Accent Color" description="Select an accent color to customize the appearance.">
           <div className="flex items-center gap-4">
             {ACCENT_COLORS.map((c) => (
-              <motion.button
-                key={c.value}
-                whileHover={{ scale: 1.15 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setAccentColor(c.value)}
-                className={cn(
-                  "relative w-12 h-12 rounded-full transition-all ring-2 ring-offset-2 ring-offset-background",
-                  accentColor === c.value
-                    ? "ring-primary"
-                    : "ring-transparent hover:ring-border"
-                )}
-                style={{ backgroundColor: c.color }}
-                title={c.label}
-              >
-                {accentColor === c.value && (
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    className="absolute inset-0 flex items-center justify-center"
-                  >
-                    <Check className="w-6 h-6 text-white drop-shadow-md" />
-                  </motion.div>
-                )}
-              </motion.button>
+              <Tooltip key={c.value} content={c.label}>
+                <motion.button
+                  whileHover={{ scale: 1.15 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setAccentColor(c.value)}
+                  className={cn(
+                    "relative w-12 h-12 rounded-full transition-all ring-2 ring-offset-2 ring-offset-background",
+                    accentColor === c.value
+                      ? "ring-primary"
+                      : "ring-transparent hover:ring-border"
+                  )}
+                  style={{ backgroundColor: c.color }}
+                >
+                  {accentColor === c.value && (
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      className="absolute inset-0 flex items-center justify-center"
+                    >
+                      <Check className="w-6 h-6 text-white drop-shadow-md" />
+                    </motion.div>
+                  )}
+                </motion.button>
+              </Tooltip>
             ))}
           </div>
         </SettingsSection>
@@ -159,21 +159,7 @@ function AppearanceSettingsPage() {
               </div>
             </div>
 
-            {/* OLED Mode */}
-            <div className="flex items-center justify-between py-5 last:pb-0">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <Monitor className="w-4 h-4 text-muted-foreground" />
-                  <h3 className="text-base font-semibold">OLED Mode</h3>
-                </div>
-                <p className="text-sm text-muted-foreground">Use true-black backgrounds for OLED displays</p>
-              </div>
-              <Switch
-                checked={isOled}
-                onCheckedChange={setOledMode}
-                disabled={!isDark}
-              />
-            </div>
+
           </div>
         </SettingsSection>
 
@@ -184,14 +170,45 @@ function AppearanceSettingsPage() {
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <Sidebar className="w-4 h-4 text-muted-foreground" />
-                  <h3 className="text-base font-semibold">Pin Sidebar</h3>
+                  <h3 className="text-base font-semibold">Sidebar Behavior</h3>
                 </div>
-                <p className="text-sm text-muted-foreground">Keep sidebar permanently expanded</p>
+                <p className="text-sm text-muted-foreground">Choose how the sidebar behaves</p>
               </div>
-              <Switch
-                checked={isPinned}
-                onCheckedChange={togglePin}
-              />
+              <div className="flex items-center gap-2 p-1 bg-muted rounded-xl shrink-0">
+                <button
+                  onClick={() => setMode('collapsed')}
+                  className={cn(
+                    "px-4 py-2 rounded-lg text-sm font-medium transition-all",
+                    mode === 'collapsed'
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  Collapsed
+                </button>
+                <button
+                  onClick={() => setMode('auto')}
+                  className={cn(
+                    "px-4 py-2 rounded-lg text-sm font-medium transition-all",
+                    mode === 'auto'
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  Auto
+                </button>
+                <button
+                  onClick={() => setMode('expanded')}
+                  className={cn(
+                    "px-4 py-2 rounded-lg text-sm font-medium transition-all",
+                    mode === 'expanded'
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  Expanded
+                </button>
+              </div>
             </div>
           </div>
         </SettingsSection>

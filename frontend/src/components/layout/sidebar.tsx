@@ -14,11 +14,13 @@ import {
   Settings,
   FileText,
   CreditCard,
-  Pin,
   Sun,
   Moon,
   Monitor,
   LogOut,
+  Pin,
+  PanelLeftClose,
+  PanelLeft,
 } from 'lucide-react';
 import { NukeLabLogo } from '../logo';
 import { useSidebarStore } from '../../stores/sidebar-store';
@@ -112,12 +114,13 @@ function canAccessItem(item: NavItem, userRole: string): boolean {
 
 export function Sidebar() {
   const location = useLocation();
-  const { isOpen, isPinned, togglePin, setOpen } = useSidebarStore();
+  const { isOpen, mode, setOpen, setMode } = useSidebarStore();
   const { isDark, isOled, setDarkMode, setOledMode } = useThemeStore();
   const user = useAuthStore((state) => state.user);
   const [showMore, setShowMore] = useState(false);
 
   const userRole = user?.role ?? 'guest';
+  const isAuto = mode === 'auto';
 
   const isActive = (href: string) => {
     if (href === '/') return location.pathname === '/';
@@ -144,29 +147,63 @@ export function Sidebar() {
           "transition-[width] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] overflow-hidden"
         )}
         style={{ width: isOpen ? 256 : 64 }}
-        onMouseEnter={() => { if (!isPinned) setOpen(true); }}
-        onMouseLeave={() => { if (!isPinned) setOpen(false); }}
+        onMouseEnter={() => { if (isAuto) setOpen(true); }}
+        onMouseLeave={() => { if (isAuto) setOpen(false); }}
       >
         {/* Header */}
-        <div className="flex items-center h-14 px-4 border-b border-sidebar-border/50 shrink-0">
-          <div className="flex items-center gap-3 flex-1 min-w-0">
+        <div className="flex items-center h-14 px-4 border-b border-sidebar-border/50 shrink-0 gap-3">
+          {!isOpen ? (
+            <Tooltip content={
+              mode === 'collapsed' ? 'Enable auto-expand' :
+              mode === 'auto' ? 'Expand sidebar' :
+              'Collapse sidebar'
+            } position="right">
+              <button
+                onClick={() => {
+                  const modes = ['collapsed', 'auto', 'expanded'] as const;
+                  const nextIndex = (modes.indexOf(mode) + 1) % modes.length;
+                  setMode(modes[nextIndex]);
+                }}
+                className="w-8 h-8 flex items-center justify-center shrink-0 rounded-lg transition-colors relative group hover:bg-sidebar-accent cursor-pointer"
+              >
+                <span className="absolute inset-0 flex items-center justify-center group-hover:opacity-0 transition-opacity">
+                  <NukeLabLogo size={32} className="text-primary" />
+                </span>
+                <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  {mode === 'expanded' && <PanelLeftClose className="w-5 h-5 text-primary" />}
+                  {mode === 'auto' && <Pin className="w-5 h-5 text-primary" />}
+                  {mode === 'collapsed' && <PanelLeft className="w-5 h-5 text-primary" />}
+                </span>
+              </button>
+            </Tooltip>
+          ) : (
             <div className="w-8 h-8 flex items-center justify-center shrink-0">
               <NukeLabLogo size={32} className="text-primary" />
             </div>
-            <span 
-              className="font-bold text-lg tracking-tight truncate whitespace-nowrap overflow-hidden transition-all duration-300"
-              style={{ maxWidth: isOpen ? 200 : 0, opacity: isOpen ? 1 : 0 }}
-            >
-              NukeLab
-            </span>
-          </div>
-          <Tooltip content={isPinned ? 'Unpin sidebar' : 'Pin sidebar'} position="right">
+          )}
+          <span
+            className="font-bold text-lg tracking-tight truncate whitespace-nowrap overflow-hidden transition-all duration-300 flex-1"
+            style={{ maxWidth: isOpen ? 200 : 0, opacity: isOpen ? 1 : 0 }}
+          >
+            NukeLab
+          </span>
+          <Tooltip content={
+            mode === 'expanded' ? 'Collapse sidebar' :
+            mode === 'auto' ? 'Expand sidebar' :
+            'Enable auto-expand'
+          } position="right">
             <button
-              onClick={togglePin}
+              onClick={() => {
+                const modes = ['collapsed', 'auto', 'expanded'] as const;
+                const nextIndex = (modes.indexOf(mode) + 1) % modes.length;
+                setMode(modes[nextIndex]);
+              }}
               className="p-1.5 rounded-md transition-colors hover:bg-sidebar-accent shrink-0"
-              style={{ marginLeft: isOpen ? 8 : 0, opacity: isOpen ? 1 : 0, transition: 'all 0.3s ease' }}
+              style={{ opacity: isOpen ? 1 : 0, transition: 'all 0.3s ease' }}
             >
-              <Pin className={cn("w-4 h-4", isPinned && "fill-current")} />
+              {mode === 'expanded' && <PanelLeftClose className="w-4 h-4" />}
+              {mode === 'auto' && <Pin className="w-4 h-4" />}
+              {mode === 'collapsed' && <PanelLeft className="w-4 h-4" />}
             </button>
           </Tooltip>
         </div>
@@ -276,19 +313,23 @@ export function Sidebar() {
             className="flex flex-col items-center gap-2 transition-all duration-300"
             style={{ maxHeight: !isOpen ? 100 : 0, opacity: !isOpen ? 1 : 0, overflow: 'hidden' }}
           >
-            <button onClick={() => setDarkMode(!isDark)} className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors">
-              {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-            </button>
-            <button 
-              onClick={() => {
-                localStorage.removeItem('nukelab-token');
-                document.cookie = 'nukelab_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-                window.location.href = '/login';
-              }} 
-              className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors text-red-400"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
+            <Tooltip content={isDark ? 'Switch to light mode' : 'Switch to dark mode'} position="right">
+              <button onClick={() => setDarkMode(!isDark)} className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors">
+                {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              </button>
+            </Tooltip>
+            <Tooltip content="Log Out" position="right">
+              <button 
+                onClick={() => {
+                  localStorage.removeItem('nukelab-token');
+                  document.cookie = 'nukelab_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+                  window.location.href = '/login';
+                }} 
+                className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors text-red-400"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </Tooltip>
           </div>
         </div>
       </aside>
