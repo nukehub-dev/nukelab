@@ -20,7 +20,12 @@ import { Route as ImagesRouteImport } from './routes/images'
 import { Route as EnvironmentsRouteImport } from './routes/environments'
 import { Route as AuditLogsRouteImport } from './routes/audit-logs'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as SettingsIndexRouteImport } from './routes/settings.index'
 import { Route as ServersIndexRouteImport } from './routes/servers.index'
+import { Route as SettingsUsersRouteImport } from './routes/settings.users'
+import { Route as SettingsNotificationsRouteImport } from './routes/settings.notifications'
+import { Route as SettingsAuthenticationRouteImport } from './routes/settings.authentication'
+import { Route as SettingsAppearanceRouteImport } from './routes/settings.appearance'
 import { Route as ServersServerIdRouteImport } from './routes/servers.$serverId'
 import { Route as UserUsernameServerNameRouteImport } from './routes/user.$username.$serverName'
 import { Route as ServersServerIdMetricsRouteImport } from './routes/servers.$serverId.metrics'
@@ -80,10 +85,35 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SettingsIndexRoute = SettingsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const ServersIndexRoute = ServersIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => ServersRoute,
+} as any)
+const SettingsUsersRoute = SettingsUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsNotificationsRoute = SettingsNotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsAuthenticationRoute = SettingsAuthenticationRouteImport.update({
+  id: '/authentication',
+  path: '/authentication',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsAppearanceRoute = SettingsAppearanceRouteImport.update({
+  id: '/appearance',
+  path: '/appearance',
+  getParentRoute: () => SettingsRoute,
 } as any)
 const ServersServerIdRoute = ServersServerIdRouteImport.update({
   id: '/$serverId',
@@ -110,11 +140,16 @@ export interface FileRoutesByFullPath {
   '/networks': typeof NetworksRoute
   '/plans': typeof PlansRoute
   '/servers': typeof ServersRouteWithChildren
-  '/settings': typeof SettingsRoute
+  '/settings': typeof SettingsRouteWithChildren
   '/users': typeof UsersRoute
   '/volumes': typeof VolumesRoute
   '/servers/$serverId': typeof ServersServerIdRouteWithChildren
+  '/settings/appearance': typeof SettingsAppearanceRoute
+  '/settings/authentication': typeof SettingsAuthenticationRoute
+  '/settings/notifications': typeof SettingsNotificationsRoute
+  '/settings/users': typeof SettingsUsersRoute
   '/servers/': typeof ServersIndexRoute
+  '/settings/': typeof SettingsIndexRoute
   '/servers/$serverId/metrics': typeof ServersServerIdMetricsRoute
   '/user/$username/$serverName': typeof UserUsernameServerNameRoute
 }
@@ -126,11 +161,15 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/networks': typeof NetworksRoute
   '/plans': typeof PlansRoute
-  '/settings': typeof SettingsRoute
   '/users': typeof UsersRoute
   '/volumes': typeof VolumesRoute
   '/servers/$serverId': typeof ServersServerIdRouteWithChildren
+  '/settings/appearance': typeof SettingsAppearanceRoute
+  '/settings/authentication': typeof SettingsAuthenticationRoute
+  '/settings/notifications': typeof SettingsNotificationsRoute
+  '/settings/users': typeof SettingsUsersRoute
   '/servers': typeof ServersIndexRoute
+  '/settings': typeof SettingsIndexRoute
   '/servers/$serverId/metrics': typeof ServersServerIdMetricsRoute
   '/user/$username/$serverName': typeof UserUsernameServerNameRoute
 }
@@ -144,11 +183,16 @@ export interface FileRoutesById {
   '/networks': typeof NetworksRoute
   '/plans': typeof PlansRoute
   '/servers': typeof ServersRouteWithChildren
-  '/settings': typeof SettingsRoute
+  '/settings': typeof SettingsRouteWithChildren
   '/users': typeof UsersRoute
   '/volumes': typeof VolumesRoute
   '/servers/$serverId': typeof ServersServerIdRouteWithChildren
+  '/settings/appearance': typeof SettingsAppearanceRoute
+  '/settings/authentication': typeof SettingsAuthenticationRoute
+  '/settings/notifications': typeof SettingsNotificationsRoute
+  '/settings/users': typeof SettingsUsersRoute
   '/servers/': typeof ServersIndexRoute
+  '/settings/': typeof SettingsIndexRoute
   '/servers/$serverId/metrics': typeof ServersServerIdMetricsRoute
   '/user/$username/$serverName': typeof UserUsernameServerNameRoute
 }
@@ -167,7 +211,12 @@ export interface FileRouteTypes {
     | '/users'
     | '/volumes'
     | '/servers/$serverId'
+    | '/settings/appearance'
+    | '/settings/authentication'
+    | '/settings/notifications'
+    | '/settings/users'
     | '/servers/'
+    | '/settings/'
     | '/servers/$serverId/metrics'
     | '/user/$username/$serverName'
   fileRoutesByTo: FileRoutesByTo
@@ -179,11 +228,15 @@ export interface FileRouteTypes {
     | '/login'
     | '/networks'
     | '/plans'
-    | '/settings'
     | '/users'
     | '/volumes'
     | '/servers/$serverId'
+    | '/settings/appearance'
+    | '/settings/authentication'
+    | '/settings/notifications'
+    | '/settings/users'
     | '/servers'
+    | '/settings'
     | '/servers/$serverId/metrics'
     | '/user/$username/$serverName'
   id:
@@ -200,7 +253,12 @@ export interface FileRouteTypes {
     | '/users'
     | '/volumes'
     | '/servers/$serverId'
+    | '/settings/appearance'
+    | '/settings/authentication'
+    | '/settings/notifications'
+    | '/settings/users'
     | '/servers/'
+    | '/settings/'
     | '/servers/$serverId/metrics'
     | '/user/$username/$serverName'
   fileRoutesById: FileRoutesById
@@ -214,7 +272,7 @@ export interface RootRouteChildren {
   NetworksRoute: typeof NetworksRoute
   PlansRoute: typeof PlansRoute
   ServersRoute: typeof ServersRouteWithChildren
-  SettingsRoute: typeof SettingsRoute
+  SettingsRoute: typeof SettingsRouteWithChildren
   UsersRoute: typeof UsersRoute
   VolumesRoute: typeof VolumesRoute
   UserUsernameServerNameRoute: typeof UserUsernameServerNameRoute
@@ -299,12 +357,47 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/settings/': {
+      id: '/settings/'
+      path: '/'
+      fullPath: '/settings/'
+      preLoaderRoute: typeof SettingsIndexRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/servers/': {
       id: '/servers/'
       path: '/'
       fullPath: '/servers/'
       preLoaderRoute: typeof ServersIndexRouteImport
       parentRoute: typeof ServersRoute
+    }
+    '/settings/users': {
+      id: '/settings/users'
+      path: '/users'
+      fullPath: '/settings/users'
+      preLoaderRoute: typeof SettingsUsersRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/notifications': {
+      id: '/settings/notifications'
+      path: '/notifications'
+      fullPath: '/settings/notifications'
+      preLoaderRoute: typeof SettingsNotificationsRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/authentication': {
+      id: '/settings/authentication'
+      path: '/authentication'
+      fullPath: '/settings/authentication'
+      preLoaderRoute: typeof SettingsAuthenticationRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/appearance': {
+      id: '/settings/appearance'
+      path: '/appearance'
+      fullPath: '/settings/appearance'
+      preLoaderRoute: typeof SettingsAppearanceRouteImport
+      parentRoute: typeof SettingsRoute
     }
     '/servers/$serverId': {
       id: '/servers/$serverId'
@@ -355,6 +448,26 @@ const ServersRouteChildren: ServersRouteChildren = {
 const ServersRouteWithChildren =
   ServersRoute._addFileChildren(ServersRouteChildren)
 
+interface SettingsRouteChildren {
+  SettingsAppearanceRoute: typeof SettingsAppearanceRoute
+  SettingsAuthenticationRoute: typeof SettingsAuthenticationRoute
+  SettingsNotificationsRoute: typeof SettingsNotificationsRoute
+  SettingsUsersRoute: typeof SettingsUsersRoute
+  SettingsIndexRoute: typeof SettingsIndexRoute
+}
+
+const SettingsRouteChildren: SettingsRouteChildren = {
+  SettingsAppearanceRoute: SettingsAppearanceRoute,
+  SettingsAuthenticationRoute: SettingsAuthenticationRoute,
+  SettingsNotificationsRoute: SettingsNotificationsRoute,
+  SettingsUsersRoute: SettingsUsersRoute,
+  SettingsIndexRoute: SettingsIndexRoute,
+}
+
+const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
+  SettingsRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuditLogsRoute: AuditLogsRoute,
@@ -364,7 +477,7 @@ const rootRouteChildren: RootRouteChildren = {
   NetworksRoute: NetworksRoute,
   PlansRoute: PlansRoute,
   ServersRoute: ServersRouteWithChildren,
-  SettingsRoute: SettingsRoute,
+  SettingsRoute: SettingsRouteWithChildren,
   UsersRoute: UsersRoute,
   VolumesRoute: VolumesRoute,
   UserUsernameServerNameRoute: UserUsernameServerNameRoute,

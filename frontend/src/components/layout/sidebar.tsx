@@ -17,7 +17,6 @@ import {
   Sun,
   Moon,
   Monitor,
-  Palette,
   LogOut,
 } from 'lucide-react';
 import { NukeLabLogo } from '../logo';
@@ -26,7 +25,7 @@ import { useThemeStore } from '../../stores/theme-store';
 import { useAuthStore } from '../../stores/auth-store';
 import { cn } from '../../lib/utils';
 import { Tooltip } from '../ui/tooltip';
-import { THEME_VALUES, THEME_PREVIEWS, ACCENT_COLORS } from '../../types/theme';
+
 
 interface NavItem {
   label: string;
@@ -59,10 +58,15 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
+    label: 'Preferences',
+    items: [
+      { label: 'Settings', icon: Settings, href: '/settings' },
+    ],
+  },
+  {
     label: 'Administration',
     items: [
       { label: 'Users', icon: Users, href: '/users', requiredRole: 'moderator' },
-      { label: 'Settings', icon: Settings, href: '/settings', requiredRole: 'admin' },
       { label: 'Audit Logs', icon: FileText, href: '/audit-logs', requiredRole: 'admin' },
     ],
   },
@@ -107,10 +111,9 @@ function canAccessItem(item: NavItem, userRole: string): boolean {
 export function Sidebar() {
   const location = useLocation();
   const { isOpen, isPinned, togglePin, setOpen } = useSidebarStore();
-  const { theme, isDark, isOled, accentColor, setTheme, setDarkMode, setOledMode, setAccentColor } = useThemeStore();
+  const { isDark, isOled, setDarkMode, setOledMode } = useThemeStore();
   const user = useAuthStore((state) => state.user);
   const [showMore, setShowMore] = useState(false);
-  const [showThemePicker, setShowThemePicker] = useState(false);
 
   const userRole = user?.role ?? 'guest';
 
@@ -265,52 +268,6 @@ export function Sidebar() {
               <LogOut className="w-4 h-4" />
               <span className="flex-1 text-left">Log Out</span>
             </button>
-
-            <div className="space-y-2">
-              <span className="text-sm text-sidebar-foreground/80">Accent Color</span>
-              <div className="flex items-center gap-2">
-                {ACCENT_COLORS.map((c) => (
-                  <button
-                    key={c.value}
-                    onClick={() => setAccentColor(c.value)}
-                    className={cn(
-                      "w-7 h-7 rounded-full transition-all cursor-pointer ring-2",
-                      accentColor === c.value
-                        ? "ring-primary ring-offset-2 ring-offset-sidebar"
-                        : "ring-transparent hover:ring-border"
-                    )}
-                    style={{ backgroundColor: c.color }}
-                    title={c.label}
-                  />
-                ))}
-              </div>
-            </div>
-
-            <div className="relative">
-              <button
-                onClick={() => setShowThemePicker(!showThemePicker)}
-                className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm hover:bg-sidebar-accent transition-colors cursor-pointer"
-              >
-                <Palette className="w-4 h-4" />
-                <span className="flex-1 text-left capitalize">{theme} Theme</span>
-              </button>
-              {showThemePicker && (
-                <div className="absolute bottom-full left-0 right-0 mb-2 p-3 bg-popover border border-border rounded-xl shadow-lg z-50">
-                  <div className="grid grid-cols-4 gap-2">
-                    {THEME_VALUES.map((t) => (
-                      <button
-                        key={t}
-                        onClick={() => { setTheme(t); setShowThemePicker(false); }}
-                        className={cn("p-2 rounded-lg border-2 transition-all cursor-pointer", theme === t ? "border-primary" : "border-transparent hover:border-border")}
-                      >
-                        <div className="w-full h-6 rounded-md mb-1" style={{ backgroundColor: THEME_PREVIEWS[t].dark.primary }} />
-                        <span className="text-[10px] capitalize block text-center">{t}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
           </div>
 
           <div 
@@ -320,8 +277,15 @@ export function Sidebar() {
             <button onClick={() => setDarkMode(!isDark)} className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors cursor-pointer">
               {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
-            <button onClick={() => { const idx = THEME_VALUES.indexOf(theme); setTheme(THEME_VALUES[(idx + 1) % THEME_VALUES.length]); }} className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors cursor-pointer">
-              <Palette className="w-4 h-4" />
+            <button 
+              onClick={() => {
+                localStorage.removeItem('nukelab-token');
+                document.cookie = 'nukelab_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+                window.location.href = '/login';
+              }} 
+              className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors text-red-400 cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -427,36 +391,7 @@ export function Sidebar() {
                     </div>
                   ))}
                   
-                  <div className="pt-4 border-t border-border/50 space-y-3">
-                    <div className="space-y-2 px-3">
-                      <span className="text-sm text-muted-foreground">Accent Color</span>
-                      <div className="flex items-center gap-2">
-                        {ACCENT_COLORS.map((c) => (
-                          <button
-                            key={c.value}
-                            onClick={() => setAccentColor(c.value)}
-                            className={cn(
-                              "w-8 h-8 rounded-full transition-all cursor-pointer ring-2",
-                              accentColor === c.value
-                                ? "ring-primary ring-offset-2 ring-offset-background"
-                                : "ring-transparent hover:ring-border"
-                            )}
-                            style={{ backgroundColor: c.color }}
-                            title={c.label}
-                          />
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between px-3">
-                      <span className="text-sm text-muted-foreground">Theme</span>
-                      <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-                        <button onClick={() => setDarkMode(true)} className={cn("p-1.5 rounded-md transition-colors cursor-pointer", isDark && !isOled && "bg-background text-foreground")}><Moon className="w-4 h-4" /></button>
-                        <button onClick={() => setDarkMode(false)} className={cn("p-1.5 rounded-md transition-colors cursor-pointer", !isDark && "bg-background text-foreground")}><Sun className="w-4 h-4" /></button>
-                        <button onClick={() => { setDarkMode(true); setOledMode(!isOled); }} className={cn("p-1.5 rounded-md transition-colors cursor-pointer", isOled && "bg-background text-foreground")}><Monitor className="w-4 h-4" /></button>
-                      </div>
-                    </div>
-                    
+                  <div className="pt-4 border-t border-border/50">
                     <button
                       onClick={() => {
                         localStorage.removeItem('nukelab-token');
