@@ -41,6 +41,7 @@ export interface User {
   is_verified: boolean;
   last_login?: string;
   created_at?: string;
+  preferences?: Record<string, any>;
 }
 
 export interface Environment {

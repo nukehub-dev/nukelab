@@ -10,6 +10,7 @@ import {
   Network,
   HardDrive,
   Users,
+  UserCircle,
   Settings,
   FileText,
   CreditCard,
@@ -60,6 +61,7 @@ const navGroups: NavGroup[] = [
   {
     label: 'Preferences',
     items: [
+      { label: 'Profile', icon: UserCircle, href: '/profile' },
       { label: 'Settings', icon: Settings, href: '/settings' },
     ],
   },
