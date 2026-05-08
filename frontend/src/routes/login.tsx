@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LogIn, AlertCircle, ExternalLink, Cloud, Wrench, Users, Eye, EyeOff } from 'lucide-react';
+import { LogIn, AlertCircle, ExternalLink, Cloud, Wrench, Users, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { NukeLabLogo } from '../components/logo';
 
@@ -408,9 +408,7 @@ function LoginCard({ error, hasLocal, hasOAuth, authMethods, handleOAuth, handle
                   className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 active:scale-[0.98] transition-all duration-150 disabled:opacity-50 disabled:pointer-events-none shadow-lg shadow-primary/20 hover:-translate-y-0.5"
                 >
                   {loading ? (
-                    <motion.span animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>
-                      <LogIn className="w-4 h-4" />
-                    </motion.span>
+                    <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
                     <>
                       <LogIn className="w-4 h-4" />
