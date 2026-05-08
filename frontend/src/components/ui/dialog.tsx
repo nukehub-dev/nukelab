@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { cn } from '../../lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
-import { modalOverlayVariants, modalContentVariants } from '../../lib/animations';
+import { modalOverlayVariants } from '../../lib/animations';
 import { X } from 'lucide-react';
 
 interface DialogProps {
@@ -31,22 +31,34 @@ function Dialog({ open, onOpenChange, children }: DialogProps) {
         <>
           {/* Overlay */}
           <motion.div
-            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
             variants={modalOverlayVariants}
             initial="hidden"
             animate="visible"
             exit="exit"
             onClick={() => onOpenChange(false)}
           />
-          {/* Content */}
+          {/* Mobile: Bottom Sheet */}
           <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none"
-            variants={modalContentVariants}
-            initial="hidden"
-            animate="visible"
-            exit="exit"
+            className="fixed inset-x-0 bottom-0 z-50 max-h-[90vh] rounded-t-2xl bg-card/95 backdrop-blur-xl border-t border-border/50 overflow-hidden sm:opacity-0 sm:pointer-events-none"
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            exit={{ y: '100%' }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
           >
-            <div className="pointer-events-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="h-full overflow-y-auto">
+              {children}
+            </div>
+          </motion.div>
+          {/* Desktop: Right Drawer */}
+          <motion.div
+            className="fixed inset-y-0 right-0 z-50 w-[420px] max-w-full bg-card/95 backdrop-blur-xl border-l border-border/50 overflow-hidden opacity-0 pointer-events-none sm:opacity-100 sm:pointer-events-auto"
+            initial={{ x: '100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '100%' }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+          >
+            <div className="h-full overflow-y-auto">
               {children}
             </div>
           </motion.div>
@@ -60,10 +72,7 @@ const DialogContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTML
   ({ className, children, ...props }, ref) => (
     <div
       ref={ref}
-      className={cn(
-        'relative bg-popover border border-border rounded-xl shadow-lg p-6 w-full max-w-lg',
-        className
-      )}
+      className={cn('relative p-6', className)}
       {...props}
     >
       {children}
@@ -76,7 +85,7 @@ const DialogHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLD
   ({ className, ...props }, ref) => (
     <div
       ref={ref}
-      className={cn('flex flex-col space-y-1.5 text-center sm:text-left', className)}
+      className={cn('flex flex-col space-y-1.5 pr-10', className)}
       {...props}
     />
   )
@@ -109,7 +118,7 @@ const DialogFooter = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLD
   ({ className, ...props }, ref) => (
     <div
       ref={ref}
-      className={cn('flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2 mt-6', className)}
+      className={cn('flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-2 mt-6 pt-6 border-t border-border/50', className)}
       {...props}
     />
   )

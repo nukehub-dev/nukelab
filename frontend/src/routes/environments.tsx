@@ -11,6 +11,10 @@ import { formatDate } from '../lib/utils';
 import type { Environment as EnvironmentType } from '../types/api';
 import type { ColumnDef, ColumnFiltersState, VisibilityState, SortingState } from '@tanstack/react-table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '../components/ui/dialog';
+import { Input } from '../components/ui/input';
+import { Button } from '../components/ui/button';
+import { Select, SelectItem } from '../components/ui/select';
+import { Textarea } from '../components/ui/textarea';
 import { motion } from 'framer-motion';
 import { Tooltip } from '../components/ui/tooltip';
 
@@ -511,7 +515,7 @@ function EnvironmentsPage() {
       {canManageEnvironments && (
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}
       >
-        <DialogContent className="max-w-md"
+        <DialogContent
         >
           <DialogHeader>
             <DialogTitle>{editingEnv ? 'Edit Environment' : 'Create Environment'}</DialogTitle>
@@ -519,18 +523,17 @@ function EnvironmentsPage() {
               {editingEnv ? 'Update environment details.' : 'Create a new environment template.'}
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4 mt-4"
+          <form id="env-form" onSubmit={handleSubmit} className="space-y-4 mt-4" noValidate
           >
             <div className="space-y-2"
             >
               <label className="text-sm font-medium"
               >Name *</label>
-              <input
+              <Input
                 type="text"
                 required
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-input bg-input/80 text-sm focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none"
                 placeholder="Ubuntu 22.04"
               />
             </div>
@@ -539,12 +542,11 @@ function EnvironmentsPage() {
               >
                 <label className="text-sm font-medium"
                 >Slug *</label>
-                <input
+                <Input
                   type="text"
                   required
                   value={formData.slug}
                   onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-input bg-input/80 text-sm focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none"
                   placeholder="ubuntu-2204"
                 />
               </div>
@@ -553,12 +555,11 @@ function EnvironmentsPage() {
             >
               <label className="text-sm font-medium"
               >Docker Image *</label>
-              <input
+              <Input
                 type="text"
                 required
                 value={formData.image}
                 onChange={(e) => setFormData({ ...formData, image: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-input bg-input/80 text-sm focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none"
                 placeholder="ubuntu:22.04"
               />
             </div>
@@ -566,10 +567,9 @@ function EnvironmentsPage() {
             >
               <label className="text-sm font-medium"
               >Description</label>
-              <textarea
+              <Textarea
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-input bg-input/80 text-sm focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none resize-none"
                 rows={3}
                 placeholder="Optional description..."
               />
@@ -580,12 +580,11 @@ function EnvironmentsPage() {
               >
                 <label className="text-sm font-medium"
                 >Category</label>
-                <input
+                <Input
                   type="text"
                   list="env-categories"
                   value={formData.category}
                   onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-input bg-input/80 text-sm focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none"
                   placeholder="e.g. simulation, development"
                 />
                 <datalist id="env-categories">
@@ -598,33 +597,24 @@ function EnvironmentsPage() {
               >
                 <label className="text-sm font-medium"
                 >Visibility</label>
-                <select
+                <Select
                   value={String(formData.is_public)}
-                  onChange={(e) => setFormData({ ...formData, is_public: e.target.value === 'true' })}
-                  className="w-full px-3 py-2 rounded-lg border border-input bg-input/80 text-sm focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none"
+                  onChange={(value) => setFormData({ ...formData, is_public: value === 'true' })}
                 >
-                  <option value="true">Public</option>
-                  <option value="false">Private</option>
-                </select>
+                  <SelectItem value="true">Public</SelectItem>
+                  <SelectItem value="false">Private</SelectItem>
+                </Select>
               </div>
             </div>
-            <DialogFooter>
-              <button
-                type="button"
-                onClick={() => setDialogOpen(false)}
-                className="px-4 py-2 rounded-lg border border-input text-sm font-medium hover:bg-accent transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={createEnvironment.isPending || updateEnvironment.isPending}
-                className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
-              >
-                {editingEnv ? 'Update' : 'Create'}
-              </button>
-            </DialogFooter>
           </form>
+          <DialogFooter>
+            <Button variant="outline" type="button" onClick={() => setDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" form="env-form" loading={createEnvironment.isPending || updateEnvironment.isPending}>
+              {editingEnv ? 'Update' : 'Create'}
+            </Button>
+          </DialogFooter>
           <DialogClose onClick={() => setDialogOpen(false)} />
         </DialogContent>
       </Dialog>

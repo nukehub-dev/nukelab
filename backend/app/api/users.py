@@ -84,6 +84,7 @@ def serialize_user(user: User) -> dict:
         "avatar_url": user.get_avatar_url(),
         "role": user.role,
         "nuke_balance": user.nuke_balance,
+        "preferences": user.preferences or {},
         "is_active": user.is_active,
         "is_verified": user.is_verified,
         "last_login": user.last_login.isoformat() if user.last_login else None,

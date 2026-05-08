@@ -11,6 +11,10 @@ import { formatDate } from '../lib/utils';
 import type { Plan } from '../types/api';
 import type { ColumnDef, ColumnFiltersState, VisibilityState, SortingState } from '@tanstack/react-table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '../components/ui/dialog';
+import { Input } from '../components/ui/input';
+import { Button } from '../components/ui/button';
+import { Textarea } from '../components/ui/textarea';
+import { Checkbox } from '../components/ui/checkbox';
 import { motion } from 'framer-motion';
 import { Tooltip } from '../components/ui/tooltip';
 
@@ -526,7 +530,7 @@ function PlansPage() {
       {canManagePlans && (
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}
       >
-        <DialogContent className="max-w-lg"
+        <DialogContent
         >
           <DialogHeader>
             <DialogTitle>{editingPlan ? 'Edit Plan' : 'Create Plan'}</DialogTitle>
@@ -534,7 +538,7 @@ function PlansPage() {
               {editingPlan ? 'Update plan details.' : 'Create a new server plan.'}
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4 mt-4"
+          <form id="plans-form" onSubmit={handleSubmit} className="space-y-4 mt-4" noValidate
           >
             <div className="grid grid-cols-2 gap-4"
             >
@@ -542,12 +546,11 @@ function PlansPage() {
               >
                 <label className="text-sm font-medium"
                 >Name *</label>
-                <input
+                <Input
                   type="text"
                   required
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-input bg-input/80 text-sm focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none"
                   placeholder="Basic"
                 />
               </div>
@@ -556,12 +559,11 @@ function PlansPage() {
                 >
                   <label className="text-sm font-medium"
                   >Slug *</label>
-                  <input
+                  <Input
                     type="text"
                     required
                     value={formData.slug}
                     onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-input bg-input/80 text-sm focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none"
                     placeholder="basic"
                   />
                 </div>
@@ -571,10 +573,9 @@ function PlansPage() {
             >
               <label className="text-sm font-medium"
               >Description</label>
-              <textarea
+              <Textarea
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-input bg-input/80 text-sm focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none resize-none"
                 rows={2}
                 placeholder="Optional description..."
               />
@@ -585,35 +586,32 @@ function PlansPage() {
               >
                 <label className="text-sm font-medium"
                 >CPU Limit</label>
-                <input
+                <Input
                   type="number"
                   step="0.5"
                   min={0.5}
                   value={formData.cpu_limit}
                   onChange={(e) => setFormData({ ...formData, cpu_limit: parseFloat(e.target.value) || 1 })}
-                  className="w-full px-3 py-2 rounded-lg border border-input bg-input/80 text-sm focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none"
                 />
               </div>
               <div className="space-y-2"
               >
                 <label className="text-sm font-medium"
                 >Memory</label>
-                <input
+                <Input
                   type="text"
                   value={formData.memory_limit}
                   onChange={(e) => setFormData({ ...formData, memory_limit: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-input bg-input/80 text-sm focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none"
                   placeholder="2g"
                 />
               </div>
               <div className="space-y-2"
               >
                 <label className="text-sm font-medium">Disk</label>
-                <input
+                <Input
                   type="text"
                   value={formData.disk_limit}
                   onChange={(e) => setFormData({ ...formData, disk_limit: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-input bg-input/80 text-sm focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none"
                   placeholder="10g"
                 />
               </div>
@@ -623,34 +621,31 @@ function PlansPage() {
               <div className="space-y-2"
               >
                 <label className="text-sm font-medium">GPU</label>
-                <input
+                <Input
                   type="number"
                   min={0}
                   value={formData.gpu_limit}
                   onChange={(e) => setFormData({ ...formData, gpu_limit: parseInt(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 rounded-lg border border-input bg-input/80 text-sm focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none"
                 />
               </div>
               <div className="space-y-2"
               >
                 <label className="text-sm font-medium">Max Servers</label>
-                <input
+                <Input
                   type="number"
                   min={1}
                   value={formData.max_servers_per_user}
                   onChange={(e) => setFormData({ ...formData, max_servers_per_user: parseInt(e.target.value) || 1 })}
-                  className="w-full px-3 py-2 rounded-lg border border-input bg-input/80 text-sm focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none"
                 />
               </div>
               <div className="space-y-2"
               >
                 <label className="text-sm font-medium">Cost/hr</label>
-                <input
+                <Input
                   type="number"
                   min={0}
                   value={formData.cost_per_hour}
                   onChange={(e) => setFormData({ ...formData, cost_per_hour: parseInt(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 rounded-lg border border-input bg-input/80 text-sm focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none"
                 />
               </div>
             </div>
@@ -659,12 +654,11 @@ function PlansPage() {
               <div className="space-y-2"
               >
                 <label className="text-sm font-medium">Category</label>
-                <input
+                <Input
                   type="text"
                   list="plan-categories"
                   value={formData.category}
                   onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-input bg-input/80 text-sm focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none"
                   placeholder="cpu, gpu, memory..."
                 />
                 <datalist id="plan-categories">
@@ -676,42 +670,30 @@ function PlansPage() {
               <div className="space-y-2"
               >
                 <label className="text-sm font-medium">Priority</label>
-                <input
+                <Input
                   type="number"
                   value={formData.priority}
                   onChange={(e) => setFormData({ ...formData, priority: parseInt(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 rounded-lg border border-input bg-input/80 text-sm focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none"
                 />
               </div>
             </div>
-            <div className="flex items-center gap-2"
+            <label className="flex items-center gap-3 cursor-pointer group"
             >
-              <input
-                type="checkbox"
-                id="requires-approval"
+              <Checkbox
                 checked={formData.requires_approval}
-                onChange={(e) => setFormData({ ...formData, requires_approval: e.target.checked })}
-                className="rounded border-border"
+                onChange={(checked) => setFormData({ ...formData, requires_approval: checked })}
               />
-              <label htmlFor="requires-approval" className="text-sm">Requires admin approval</label>
-            </div>
-            <DialogFooter>
-              <button
-                type="button"
-                onClick={() => setDialogOpen(false)}
-                className="px-4 py-2 rounded-lg border border-input text-sm font-medium hover:bg-accent transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={createPlan.isPending || updatePlan.isPending}
-                className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
-              >
-                {editingPlan ? 'Update' : 'Create'}
-              </button>
-            </DialogFooter>
+              <span className="text-sm">Requires admin approval</span>
+            </label>
           </form>
+          <DialogFooter>
+            <Button variant="outline" type="button" onClick={() => setDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" form="plans-form" loading={createPlan.isPending || updatePlan.isPending}>
+              {editingPlan ? 'Update' : 'Create'}
+            </Button>
+          </DialogFooter>
           <DialogClose onClick={() => setDialogOpen(false)} />
         </DialogContent>
       </Dialog>

@@ -11,6 +11,9 @@ import { formatDate } from '../lib/utils';
 import type { User as UserType } from '../types/api';
 import type { ColumnDef, ColumnFiltersState, VisibilityState, SortingState } from '@tanstack/react-table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '../components/ui/dialog';
+import { Input } from '../components/ui/input';
+import { Button } from '../components/ui/button';
+import { Select, SelectItem } from '../components/ui/select';
 import { motion } from 'framer-motion';
 import { Tooltip } from '../components/ui/tooltip';
 
@@ -471,7 +474,7 @@ function UsersPage() {
       {canManageUsers && (
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}
       >
-        <DialogContent className="max-w-md"
+        <DialogContent
         >
           <DialogHeader>
             <DialogTitle>{editingUser ? 'Edit User' : 'Create User'}</DialogTitle>
@@ -479,19 +482,18 @@ function UsersPage() {
               {editingUser ? 'Update user details.' : 'Create a new user account.'}
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4 mt-4"
+          <form id="users-form" onSubmit={handleSubmit} className="space-y-4 mt-4" noValidate
           >
             <div className="space-y-2"
             >
               <label className="text-sm font-medium"
               >Username</label>
-              <input
+              <Input
                 type="text"
                 required
                 disabled={!!editingUser}
                 value={formData.username}
                 onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-input bg-input/80 text-sm focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none"
                 placeholder="johndoe"
               />
             </div>
@@ -499,12 +501,11 @@ function UsersPage() {
             >
               <label className="text-sm font-medium"
               >Email</label>
-              <input
+              <Input
                 type="email"
                 required
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-input bg-input/80 text-sm focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none"
                 placeholder="john@example.com"
               />
             </div>
@@ -513,12 +514,11 @@ function UsersPage() {
               >
                 <label className="text-sm font-medium"
                 >Password</label>
-                <input
+                <Input
                   type="password"
                   required={!editingUser}
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-input bg-input/80 text-sm focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none"
                   placeholder="Min 6 characters"
                 />
               </div>
@@ -529,22 +529,20 @@ function UsersPage() {
               >
                 <label className="text-sm font-medium"
                 >First Name</label>
-                <input
+                <Input
                   type="text"
                   value={formData.first_name}
                   onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-input bg-input/80 text-sm focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none"
                 />
               </div>
               <div className="space-y-2"
               >
                 <label className="text-sm font-medium"
                 >Last Name</label>
-                <input
+                <Input
                   type="text"
                   value={formData.last_name}
                   onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-input bg-input/80 text-sm focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none"
                 />
               </div>
             </div>
@@ -554,51 +552,41 @@ function UsersPage() {
               >
                 <label className="text-sm font-medium"
                 >Role</label>
-                <select
+                <Select
                   value={formData.role}
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-input bg-input/80 text-sm focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none"
+                  onChange={(value) => setFormData({ ...formData, role: value })}
                 >
-                  <option value="user">User</option>
-                  <option value="moderator">Moderator</option>
-                  <option value="support">Support</option>
-                  <option value="guest">Guest</option>
-                  {canDeleteUsers && <option value="admin">Admin</option>}
-                  {canDeleteUsers && <option value="super_admin">Super Admin</option>}
-                </select>
+                  <SelectItem value="user">User</SelectItem>
+                  <SelectItem value="moderator">Moderator</SelectItem>
+                  <SelectItem value="support">Support</SelectItem>
+                  <SelectItem value="guest">Guest</SelectItem>
+                  {canDeleteUsers && <SelectItem value="admin">Admin</SelectItem>}
+                  {canDeleteUsers && <SelectItem value="super_admin">Super Admin</SelectItem>}
+                </Select>
               </div>
               {canDeleteUsers && (
                 <div className="space-y-2"
                 >
                   <label className="text-sm font-medium"
                   >Credits</label>
-                  <input
+                  <Input
                     type="number"
                     min={0}
                     value={formData.credits}
                     onChange={(e) => setFormData({ ...formData, credits: parseInt(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 rounded-lg border border-input bg-input/80 text-sm focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none"
                   />
                 </div>
               )}
             </div>
-            <DialogFooter>
-              <button
-                type="button"
-                onClick={() => setDialogOpen(false)}
-                className="px-4 py-2 rounded-lg border border-input text-sm font-medium hover:bg-accent transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={createUser.isPending || updateUser.isPending}
-                className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
-              >
-                {editingUser ? 'Update' : 'Create'}
-              </button>
-            </DialogFooter>
           </form>
+          <DialogFooter>
+            <Button variant="outline" type="button" onClick={() => setDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" form="users-form" loading={createUser.isPending || updateUser.isPending}>
+              {editingUser ? 'Update' : 'Create'}
+            </Button>
+          </DialogFooter>
           <DialogClose onClick={() => setDialogOpen(false)} />
         </DialogContent>
       </Dialog>

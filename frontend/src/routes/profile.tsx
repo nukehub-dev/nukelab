@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { 
   Mail, 
   Shield, 
@@ -10,14 +10,16 @@ import {
   X,
   Check,
   Globe,
-  ToggleLeft,
-  ToggleRight,
   UserCircle
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAuthStore } from '../stores/auth-store';
 import { useToast } from '../stores/toast-store';
 import { cn } from '../lib/utils';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '../components/ui/dialog';
+import { Input } from '../components/ui/input';
+import { Button } from '../components/ui/button';
+import { Switch } from '../components/ui/switch';
 
 export const Route = createFileRoute('/profile')({
   component: ProfilePage,
@@ -32,6 +34,7 @@ function ProfilePage() {
   
   const [showEditModal, setShowEditModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [avatarKey, setAvatarKey] = useState(Date.now());
   
   const [editForm, setEditForm] = useState({
     first_name: user?.first_name || '',
@@ -91,6 +94,7 @@ function ProfilePage() {
       if (userRes.ok) {
         const fresh = await userRes.json();
         setUser(fresh);
+        setAvatarKey(Date.now());
       }
       
       toastSuccess(
@@ -127,94 +131,52 @@ function ProfilePage() {
   const initials = displayName.charAt(0).toUpperCase();
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-10 pt-6 lg:pt-8">
+    <>
       {/* Edit Modal */}
-      <AnimatePresence>
-        {showEditModal && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
-              onClick={() => setShowEditModal(false)}
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none"
-            >
-              <div className="w-full max-w-md bg-card/80 backdrop-blur-2xl border border-border/50 rounded-2xl shadow-2xl pointer-events-auto"
-              >
-                <div className="p-6 space-y-6">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-bold">Edit Profile</h2>
-                    <button 
-                      onClick={() => setShowEditModal(false)}
-                      className="p-2 rounded-lg hover:bg-muted transition-colors"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  </div>
+      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Profile</DialogTitle>
+            <DialogDescription>Update your profile information.</DialogDescription>
+          </DialogHeader>
+          <form id="profile-form" onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="space-y-4 mt-4" noValidate>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">First Name</label>
+              <Input
+                type="text"
+                value={editForm.first_name}
+                onChange={(e) => setEditForm({ ...editForm, first_name: e.target.value })}
+                placeholder="Enter first name"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Last Name</label>
+              <Input
+                type="text"
+                value={editForm.last_name}
+                onChange={(e) => setEditForm({ ...editForm, last_name: e.target.value })}
+                placeholder="Enter last name"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Email</label>
+              <Input
+                type="email"
+                value={editForm.email}
+                onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                placeholder="Enter email"
+              />
+            </div>
+          </form>
+          <DialogFooter>
+            <Button variant="outline" type="button" onClick={() => setShowEditModal(false)}>Cancel</Button>
+            <Button type="submit" form="profile-form" loading={isSaving}>Save Changes</Button>
+          </DialogFooter>
+          <DialogClose onClick={() => setShowEditModal(false)} />
+        </DialogContent>
+      </Dialog>
 
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-muted-foreground">First Name</label>
-                      <input
-                        type="text"
-                        value={editForm.first_name}
-                        onChange={(e) => setEditForm({ ...editForm, first_name: e.target.value })}
-                        className="w-full px-4 py-3 rounded-xl bg-input/60 border border-border/60 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
-                        placeholder="Enter first name"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-muted-foreground">Last Name</label>
-                      <input
-                        type="text"
-                        value={editForm.last_name}
-                        onChange={(e) => setEditForm({ ...editForm, last_name: e.target.value })}
-                        className="w-full px-4 py-3 rounded-xl bg-input/60 border border-border/60 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
-                        placeholder="Enter last name"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium text-muted-foreground">Email</label>
-                      <input
-                        type="email"
-                        value={editForm.email}
-                        onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                        className="w-full px-4 py-3 rounded-xl bg-input/60 border border-border/60 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all"
-                        placeholder="Enter email"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex gap-3 pt-2">
-                    <button
-                      onClick={() => setShowEditModal(false)}
-                      className="flex-1 px-4 py-3 rounded-xl bg-muted text-muted-foreground hover:bg-muted/80 transition-colors text-sm font-medium"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleSave}
-                      disabled={isSaving}
-                      className="flex-1 px-4 py-3 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-colors text-sm font-medium disabled:opacity-50 shadow-lg shadow-primary/20"
-                    >
-                      {isSaving ? 'Saving...' : 'Save Changes'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-
+      <div className="max-w-4xl mx-auto space-y-6 pb-10 pt-6 lg:pt-8">
       {/* Profile Header */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -227,7 +189,7 @@ function ProfilePage() {
           <div className="relative">
             {user.avatar_url && useGravatar ? (
               <img 
-                src={user.avatar_url} 
+                src={`${user.avatar_url}${user.avatar_url.includes('?') ? '&' : '?'}_t=${avatarKey}`} 
                 alt={displayName}
                 className="w-24 h-24 rounded-2xl object-cover ring-2 ring-border/50"
               />
@@ -347,16 +309,10 @@ function ProfilePage() {
                       <p className="text-xs text-muted-foreground">Fetch avatar from Gravatar</p>
                     </div>
                   </div>
-                  <button
-                    onClick={toggleGravatar}
-                    className="text-primary hover:text-primary/80 transition-colors"
-                  >
-                    {useGravatar ? (
-                      <ToggleRight className="w-10 h-6" />
-                    ) : (
-                      <ToggleLeft className="w-10 h-6 text-muted-foreground" />
-                    )}
-                  </button>
+                  <Switch
+                    checked={useGravatar}
+                    onCheckedChange={toggleGravatar}
+                  />
                 </div>
               </div>
             </div>
@@ -364,6 +320,7 @@ function ProfilePage() {
         </div>
       </div>
     </div>
+    </>
   );
 }
 

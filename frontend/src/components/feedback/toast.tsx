@@ -47,7 +47,7 @@ function ToastItem({ toast }: { toast: Toast }) {
       exit={{ opacity: 0, x: 100, scale: 0.9 }}
       transition={{ type: 'spring', stiffness: 400, damping: 25 }}
       className={cn(
-        'relative w-full max-w-sm rounded-lg border p-4 shadow-lg backdrop-blur-sm',
+        'relative w-full max-w-sm rounded-lg border p-4 shadow-lg backdrop-blur-sm overflow-hidden',
         toastStyles[toast.type]
       )}
     >
