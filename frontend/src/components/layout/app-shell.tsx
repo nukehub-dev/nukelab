@@ -9,6 +9,8 @@ import { Sidebar } from './sidebar';
 import { ToastProvider } from '../feedback/toast';
 import { ShortcutsModal } from '../feedback/shortcuts-modal';
 import { AmbientBackground } from '../animations/ambient-background';
+import { NotificationCenter } from '../notifications/notification-center';
+import { ErrorBoundary } from '../error-boundary';
 import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '../../lib/utils';
 
@@ -85,18 +87,25 @@ export function AppShell() {
             isOpen && 'lg:pl-[17rem]'
           )}
         >
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div
-              key={location.pathname}
-              initial={{ opacity: 0, y: 20, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -20, scale: 0.98 }}
-              transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-              className="min-h-screen"
-            >
-              <Outlet />
-            </motion.div>
-          </AnimatePresence>
+          {/* Top Bar */}
+          <div className="sticky top-0 z-30 flex items-center justify-end px-6 lg:px-10 py-4">
+            <NotificationCenter />
+          </div>
+
+          <ErrorBoundary>
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={location.pathname}
+                initial={{ opacity: 0, y: 20, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -20, scale: 0.98 }}
+                transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+                className="min-h-screen -mt-14 pt-14"
+              >
+                <Outlet />
+              </motion.div>
+            </AnimatePresence>
+          </ErrorBoundary>
         </motion.main>
       </div>
     </>

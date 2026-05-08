@@ -14,3 +14,5 @@ from app.models.alert_history import AlertHistory
 from app.models.health_check import HealthCheck
 from app.models.notification import Notification
 from app.models.server_schedule import ServerSchedule
+from app.models.volume_backup import VolumeBackup
+from app.models.shared_workspace import SharedWorkspace, WorkspaceMember

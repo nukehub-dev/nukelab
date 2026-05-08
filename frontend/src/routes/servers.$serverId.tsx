@@ -31,6 +31,7 @@ import { MetricsAreaChart, formatters } from '../components/charts/area-chart';
 import { SemiCircularGauge } from '../components/charts/semi-circular-gauge';
 import { StatusBadge } from '../components/data/status-badge';
 import { useServers, useServerActions, useServerSchedules, useServerLogs, useCreateSchedule, useDeleteSchedule } from '../hooks/use-servers';
+import { CronBuilder } from '../components/cron-builder';
 import { useServerMetrics } from '../hooks/use-server-metrics';
 import { formatDate, formatBytes, formatPlanResource, cn } from '../lib/utils';
 import { springs } from '../lib/animations';
@@ -632,7 +633,7 @@ function ServerDetailPage() {
 
           {showScheduleForm && (
             <div className="mb-4 p-4 rounded-xl bg-surface/50 border border-border/50 space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-muted-foreground mb-1 block">Action</label>
                   <select
@@ -646,16 +647,6 @@ function ServerDetailPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Cron Expression</label>
-                  <input
-                    type="text"
-                    value={newSchedule.cron_expression}
-                    onChange={(e) => setNewSchedule({ ...newSchedule, cron_expression: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg bg-background border border-border text-sm font-mono"
-                    placeholder="0 9 * * *"
-                  />
-                </div>
-                <div>
                   <label className="text-xs text-muted-foreground mb-1 block">Timezone</label>
                   <input
                     type="text"
@@ -665,6 +656,13 @@ function ServerDetailPage() {
                     placeholder="UTC"
                   />
                 </div>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Schedule</label>
+                <CronBuilder
+                  value={newSchedule.cron_expression}
+                  onChange={(cron) => setNewSchedule({ ...newSchedule, cron_expression: cron })}
+                />
               </div>
               <div className="flex items-center gap-2">
                 <button

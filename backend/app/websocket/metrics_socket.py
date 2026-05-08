@@ -19,6 +19,72 @@ connections: Dict[str, Set[WebSocket]] = {}
 # Track authenticated users per connection
 connection_users: Dict[WebSocket, dict] = {}
 
+# Track active log streaming tasks
+log_streams: Dict[str, asyncio.Task] = {}
+
+
+async def stream_logs_to_websocket(websocket: WebSocket, server_id: str, container_id: str, tail: int = 100):
+    """Stream container logs to a WebSocket connection"""
+    from app.docker.client import get_docker_client
+    
+    try:
+        docker = await get_docker_client()
+        container = await docker.client.containers.get(container_id)
+        
+        # Send initial message
+        await websocket.send_json({
+            "event": "logs:started",
+            "server_id": server_id,
+            "message": "Log streaming started"
+        })
+        
+        # Stream logs
+        logs = await container.log(
+            stdout=True,
+            stderr=True,
+            tail=tail,
+            follow=True,
+            timestamps=True
+        )
+        
+        async for line in logs:
+            if websocket not in connection_users:
+                break
+            
+            room = f"logs:{server_id}"
+            if room not in connections or websocket not in connections.get(room, set()):
+                break
+            
+            try:
+                await websocket.send_json({
+                    "event": "logs:data",
+                    "server_id": server_id,
+                    "data": line
+                })
+            except Exception:
+                break
+                
+    except Exception as e:
+        try:
+            await websocket.send_json({
+                "event": "logs:error",
+                "server_id": server_id,
+                "error": str(e)
+            })
+        except Exception:
+            pass
+    finally:
+        # Clean up
+        room = f"logs:{server_id}"
+        if room in connections:
+            connections[room].discard(websocket)
+            if not connections[room]:
+                connections.pop(room, None)
+        
+        task_key = f"{id(websocket)}:{server_id}"
+        if task_key in log_streams:
+            log_streams.pop(task_key, None)
+
 
 async def validate_websocket_token(websocket: WebSocket) -> Optional[User]:
     """Validate JWT token from WebSocket query parameters"""
@@ -262,6 +328,84 @@ class MetricsWebSocketManager:
                             "target_id": target_id
                         })
 
+                    elif msg_type == 'subscribe_logs':
+                        server_id = data.get('server_id')
+                        tail = data.get('tail', 100)
+                        
+                        if not server_id:
+                            await websocket.send_json({
+                                "event": "error",
+                                "message": "server_id is required for log streaming"
+                            })
+                            continue
+                        
+                        # Check server access
+                        async with AsyncSessionLocal() as db:
+                            allowed = await check_server_access(user, server_id, db)
+                        
+                        if not allowed:
+                            await websocket.send_json({
+                                "event": "error",
+                                "message": "Access denied to this server"
+                            })
+                            continue
+                        
+                        # Get container ID
+                        async with AsyncSessionLocal() as db:
+                            result = await db.execute(
+                                select(Server).where(Server.id == server_id)
+                            )
+                            server = result.scalar_one_or_none()
+                        
+                        if not server or not server.container_id:
+                            await websocket.send_json({
+                                "event": "error",
+                                "message": "Server not found or no container running"
+                            })
+                            continue
+                        
+                        room = f"logs:{server_id}"
+                        if room not in connections:
+                            connections[room] = set()
+                        connections[room].add(websocket)
+                        
+                        # Start log streaming task
+                        task_key = f"{id(websocket)}:{server_id}"
+                        if task_key in log_streams:
+                            log_streams[task_key].cancel()
+                        
+                        task = asyncio.create_task(
+                            stream_logs_to_websocket(
+                                websocket, server_id, server.container_id, tail
+                            )
+                        )
+                        log_streams[task_key] = task
+                        
+                        await websocket.send_json({
+                            "event": "logs:subscribed",
+                            "server_id": server_id
+                        })
+
+                    elif msg_type == 'unsubscribe_logs':
+                        server_id = data.get('server_id')
+                        
+                        if server_id:
+                            room = f"logs:{server_id}"
+                            if room in connections:
+                                connections[room].discard(websocket)
+                                if not connections[room]:
+                                    connections.pop(room, None)
+                            
+                            task_key = f"{id(websocket)}:{server_id}"
+                            if task_key in log_streams:
+                                log_streams[task_key].cancel()
+                                log_streams.pop(task_key, None)
+                        
+                        await websocket.send_json({
+                            "event": "logs:unsubscribed",
+                            "server_id": server_id
+                        })
+
                     elif msg_type == 'unsubscribe':
                         scope = data.get('scope', 'global')
                         target_id = data.get('target_id')
@@ -301,6 +445,14 @@ class MetricsWebSocketManager:
                 connections[room].discard(websocket)
                 if not connections[room]:
                     connections.pop(room, None)
+            
+            # Cancel any active log streaming tasks for this connection
+            tasks_to_cancel = [
+                task for key, task in log_streams.items()
+                if key.startswith(f"{id(websocket)}:")
+            ]
+            for task in tasks_to_cancel:
+                task.cancel()
 
 
 manager = MetricsWebSocketManager()

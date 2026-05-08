@@ -5,9 +5,9 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from app.config import settings
 from app.api import (
-    auth, users, servers, tokens, credits, admin, 
+    auth, users, servers, tokens, credits, admin,
     preferences, environments, plans, quotas, metrics,
-    notifications, dashboard, bulk, health, system, schedules, volumes, analytics
+    notifications, dashboard, bulk, health, system, schedules, volumes, analytics, workspaces
 )
 from app.db.base import Base
 from app.db.session import engine
@@ -65,6 +65,7 @@ app.include_router(system.router, prefix="/system", tags=["system"])
 app.include_router(schedules.router, prefix="/schedules", tags=["schedules"])
 app.include_router(volumes.router, prefix="/volumes", tags=["volumes"])
 app.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
+app.include_router(workspaces.router, prefix="/workspaces", tags=["workspaces"])
 
 
 @app.websocket("/ws")

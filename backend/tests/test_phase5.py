@@ -313,3 +313,200 @@ class TestScheduleTask:
         from app.tasks import evaluate_schedules
         
         assert evaluate_schedules is not None
+
+
+class TestPermissionMatrixAPI:
+    """Test permission matrix API"""
+    
+    @pytest.mark.asyncio
+    async def test_get_permissions_admin_only(self, client: AsyncClient, test_user, user_token):
+        """Test permission matrix is admin-only"""
+        headers = {"Authorization": f"Bearer {user_token}"}
+        
+        resp = await client.get("/api/admin/permissions", headers=headers)
+        assert resp.status_code == 403
+    
+    @pytest.mark.asyncio
+    async def test_get_permissions_as_admin(self, client: AsyncClient, admin_token):
+        """Test admin can get permission matrix"""
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        
+        resp = await client.get("/api/admin/permissions", headers=headers)
+        assert resp.status_code == 200
+        
+        data = resp.json()
+        assert "roles" in data
+        assert "permissions" in data
+        assert "matrix" in data
+        assert "super_admin" in data["matrix"]
+        assert "admin" in data["matrix"]
+    
+    @pytest.mark.asyncio
+    async def test_update_permissions(self, client: AsyncClient, admin_token):
+        """Test admin can update role permissions"""
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        
+        # Get current permissions
+        resp = await client.get("/api/admin/permissions", headers=headers)
+        data = resp.json()
+        
+        # Update moderator permissions
+        original_perms = data["matrix"]["moderator"]
+        new_perms = ["users:read", "servers:read_all"]
+        
+        resp = await client.put(
+            "/api/admin/permissions/moderator",
+            headers=headers,
+            json={"permissions": new_perms}
+        )
+        assert resp.status_code == 200
+        
+        updated = resp.json()
+        assert updated["role"] == "moderator"
+        assert updated["permissions"] == new_perms
+    
+    @pytest.mark.asyncio
+    async def test_cannot_update_super_admin(self, client: AsyncClient, admin_token):
+        """Test super_admin permissions cannot be modified"""
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        
+        resp = await client.put(
+            "/api/admin/permissions/super_admin",
+            headers=headers,
+            json={"permissions": []}
+        )
+        assert resp.status_code == 403
+
+
+class TestBackupService:
+    """Test backup and restore service"""
+    
+    @pytest.mark.asyncio
+    async def test_backup_service_exists(self, db_session):
+        """Test backup service can be instantiated"""
+        from app.services.backup_service import BackupService
+        
+        service = BackupService(db_session, backup_path="/tmp/test-backups")
+        assert service is not None
+    
+    @pytest.mark.asyncio
+    async def test_volume_backup_model(self):
+        """Test VolumeBackup model exists"""
+        from app.models.volume_backup import VolumeBackup
+        
+        backup = VolumeBackup()
+        assert hasattr(backup, 'volume_name')
+        assert hasattr(backup, 'size_bytes')
+        assert hasattr(backup, 'status')
+        assert hasattr(backup, 'backup_path')
+    
+    @pytest.mark.asyncio
+    async def test_backup_api_endpoints_exist(self, client: AsyncClient, admin_token):
+        """Test backup endpoints are registered"""
+        from app.api.volumes import router
+        
+        route_paths = [route.path for route in router.routes]
+        assert any("backup" in path for path in route_paths)
+
+
+class TestWorkspaceService:
+    """Test shared workspace service"""
+    
+    @pytest.mark.asyncio
+    async def test_workspace_model(self):
+        """Test workspace model exists"""
+        from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
+        
+        ws = SharedWorkspace()
+        assert hasattr(ws, 'name')
+        assert hasattr(ws, 'volume_name')
+        assert hasattr(ws, 'owner_id')
+        
+        member = WorkspaceMember()
+        assert hasattr(member, 'role')
+        assert hasattr(member, 'workspace_id')
+    
+    @pytest.mark.asyncio
+    async def test_create_workspace(self, db_session, test_user):
+        """Test creating a workspace"""
+        from app.services.workspace_service import WorkspaceService
+        
+        service = WorkspaceService(db_session)
+        workspace = await service.create_workspace(
+            name="Test Workspace",
+            description="A test workspace",
+            volume_name="test-volume",
+            owner_id=str(test_user.id)
+        )
+        
+        assert workspace.name == "Test Workspace"
+        assert workspace.volume_name == "test-volume"
+        assert str(workspace.owner_id) == str(test_user.id)
+    
+    @pytest.mark.asyncio
+    async def test_workspace_members(self, db_session, test_user, admin_user):
+        """Test adding and removing members"""
+        from app.services.workspace_service import WorkspaceService
+        
+        service = WorkspaceService(db_session)
+        workspace = await service.create_workspace(
+            name="Test Workspace",
+            description="Test",
+            volume_name="test-volume",
+            owner_id=str(test_user.id)
+        )
+        
+        # Add member
+        member = await service.add_member(
+            workspace_id=str(workspace.id),
+            user_id=str(admin_user.id),
+            role="read_write"
+        )
+        
+        assert member.role == "read_write"
+        
+        # Check workspace access
+        is_member = await service.is_workspace_member(str(workspace.id), str(admin_user.id))
+        assert is_member is True
+        
+        # Update role
+        updated = await service.update_member_role(
+            workspace_id=str(workspace.id),
+            user_id=str(admin_user.id),
+            role="admin"
+        )
+        assert updated.role == "admin"
+        
+        # Remove member
+        success = await service.remove_member(str(workspace.id), str(admin_user.id))
+        assert success is True
+    
+    @pytest.mark.asyncio
+    async def test_workspace_api(self, client: AsyncClient, test_user, user_token):
+        """Test workspace API endpoints"""
+        headers = {"Authorization": f"Bearer {user_token}"}
+        
+        # Create workspace
+        resp = await client.post("/api/workspaces/", headers=headers, json={
+            "name": "API Test Workspace",
+            "description": "Testing",
+            "volume_name": "test-vol"
+        })
+        assert resp.status_code == 201
+        
+        workspace = resp.json()
+        assert workspace["name"] == "API Test Workspace"
+        
+        # List workspaces
+        resp = await client.get("/api/workspaces/", headers=headers)
+        assert resp.status_code == 200
+        
+        data = resp.json()
+        assert len(data["workspaces"]) >= 1
+        
+        # Get workspace
+        resp = await client.get(f"/api/workspaces/{workspace['id']}", headers=headers)
+        assert resp.status_code == 200
+        
+        ws_data = resp.json()
+        assert ws_data["name"] == "API Test Workspace"

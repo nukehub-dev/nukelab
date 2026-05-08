@@ -58,6 +58,8 @@ class User(Base):
     servers = relationship("Server", back_populates="user", cascade="all, delete-orphan")
     api_tokens = relationship("ApiToken", back_populates="user", cascade="all, delete-orphan")
     notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
+    owned_workspaces = relationship("SharedWorkspace", back_populates="owner", cascade="all, delete-orphan")
+    workspace_memberships = relationship("WorkspaceMember", back_populates="user", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<User {self.username}>"

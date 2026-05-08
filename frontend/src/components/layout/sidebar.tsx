@@ -11,6 +11,10 @@ import {
   Settings,
   FileText,
   CreditCard,
+  BarChart3,
+  Activity,
+  Shield,
+  FolderOpen,
   Sun,
   Moon,
   Monitor,
@@ -45,6 +49,7 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'Dashboard', icon: LayoutDashboard, href: '/' },
       { label: 'Servers', icon: Server, href: '/servers' },
+      { label: 'Usage', icon: Activity, href: '/usage' },
     ],
   },
   {
@@ -52,6 +57,7 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'Environments', icon: Boxes, href: '/environments' },
       { label: 'Volumes', icon: HardDrive, href: '/volumes' },
+      { label: 'Workspaces', icon: FolderOpen, href: '/workspaces' },
       { label: 'Plans', icon: CreditCard, href: '/plans' },
     ],
   },
@@ -65,7 +71,9 @@ const navGroups: NavGroup[] = [
     label: 'Administration',
     items: [
       { label: 'Users', icon: Users, href: '/users', requiredRole: 'moderator' },
+      { label: 'Analytics', icon: BarChart3, href: '/analytics', requiredRole: 'admin' },
       { label: 'Audit Logs', icon: FileText, href: '/audit-logs', requiredRole: 'admin' },
+      { label: 'Permissions', icon: Shield, href: '/admin/permissions', requiredRole: 'admin' },
     ],
   },
 ];

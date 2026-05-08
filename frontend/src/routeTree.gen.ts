@@ -9,8 +9,10 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as WorkspacesRouteImport } from './routes/workspaces'
 import { Route as VolumesRouteImport } from './routes/volumes'
 import { Route as UsersRouteImport } from './routes/users'
+import { Route as UsageRouteImport } from './routes/usage'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ServersRouteImport } from './routes/servers'
 import { Route as PlansRouteImport } from './routes/plans'
@@ -19,18 +21,26 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as ImagesRouteImport } from './routes/images'
 import { Route as EnvironmentsRouteImport } from './routes/environments'
 import { Route as AuditLogsRouteImport } from './routes/audit-logs'
+import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SettingsIndexRouteImport } from './routes/settings.index'
 import { Route as ServersIndexRouteImport } from './routes/servers.index'
+import { Route as WorkspacesWorkspaceIdRouteImport } from './routes/workspaces.$workspaceId'
 import { Route as SettingsUsersRouteImport } from './routes/settings.users'
 import { Route as SettingsProfileRouteImport } from './routes/settings.profile'
 import { Route as SettingsNotificationsRouteImport } from './routes/settings.notifications'
 import { Route as SettingsAuthenticationRouteImport } from './routes/settings.authentication'
 import { Route as SettingsAppearanceRouteImport } from './routes/settings.appearance'
 import { Route as ServersServerIdRouteImport } from './routes/servers.$serverId'
+import { Route as AdminPermissionsRouteImport } from './routes/admin.permissions'
 import { Route as UserUsernameServerNameRouteImport } from './routes/user.$username.$serverName'
 import { Route as ServersServerIdMetricsRouteImport } from './routes/servers.$serverId.metrics'
 
+const WorkspacesRoute = WorkspacesRouteImport.update({
+  id: '/workspaces',
+  path: '/workspaces',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const VolumesRoute = VolumesRouteImport.update({
   id: '/volumes',
   path: '/volumes',
@@ -39,6 +49,11 @@ const VolumesRoute = VolumesRouteImport.update({
 const UsersRoute = UsersRouteImport.update({
   id: '/users',
   path: '/users',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const UsageRoute = UsageRouteImport.update({
+  id: '/usage',
+  path: '/usage',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsRoute = SettingsRouteImport.update({
@@ -81,6 +96,11 @@ const AuditLogsRoute = AuditLogsRouteImport.update({
   path: '/audit-logs',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AnalyticsRoute = AnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -95,6 +115,11 @@ const ServersIndexRoute = ServersIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => ServersRoute,
+} as any)
+const WorkspacesWorkspaceIdRoute = WorkspacesWorkspaceIdRouteImport.update({
+  id: '/$workspaceId',
+  path: '/$workspaceId',
+  getParentRoute: () => WorkspacesRoute,
 } as any)
 const SettingsUsersRoute = SettingsUsersRouteImport.update({
   id: '/users',
@@ -126,6 +151,11 @@ const ServersServerIdRoute = ServersServerIdRouteImport.update({
   path: '/$serverId',
   getParentRoute: () => ServersRoute,
 } as any)
+const AdminPermissionsRoute = AdminPermissionsRouteImport.update({
+  id: '/admin/permissions',
+  path: '/admin/permissions',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const UserUsernameServerNameRoute = UserUsernameServerNameRouteImport.update({
   id: '/user/$username/$serverName',
   path: '/user/$username/$serverName',
@@ -139,6 +169,7 @@ const ServersServerIdMetricsRoute = ServersServerIdMetricsRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/analytics': typeof AnalyticsRoute
   '/audit-logs': typeof AuditLogsRoute
   '/environments': typeof EnvironmentsRoute
   '/images': typeof ImagesRoute
@@ -147,14 +178,18 @@ export interface FileRoutesByFullPath {
   '/plans': typeof PlansRoute
   '/servers': typeof ServersRouteWithChildren
   '/settings': typeof SettingsRouteWithChildren
+  '/usage': typeof UsageRoute
   '/users': typeof UsersRoute
   '/volumes': typeof VolumesRoute
+  '/workspaces': typeof WorkspacesRouteWithChildren
+  '/admin/permissions': typeof AdminPermissionsRoute
   '/servers/$serverId': typeof ServersServerIdRouteWithChildren
   '/settings/appearance': typeof SettingsAppearanceRoute
   '/settings/authentication': typeof SettingsAuthenticationRoute
   '/settings/notifications': typeof SettingsNotificationsRoute
   '/settings/profile': typeof SettingsProfileRoute
   '/settings/users': typeof SettingsUsersRoute
+  '/workspaces/$workspaceId': typeof WorkspacesWorkspaceIdRoute
   '/servers/': typeof ServersIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/servers/$serverId/metrics': typeof ServersServerIdMetricsRoute
@@ -162,20 +197,25 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/analytics': typeof AnalyticsRoute
   '/audit-logs': typeof AuditLogsRoute
   '/environments': typeof EnvironmentsRoute
   '/images': typeof ImagesRoute
   '/login': typeof LoginRoute
   '/networks': typeof NetworksRoute
   '/plans': typeof PlansRoute
+  '/usage': typeof UsageRoute
   '/users': typeof UsersRoute
   '/volumes': typeof VolumesRoute
+  '/workspaces': typeof WorkspacesRouteWithChildren
+  '/admin/permissions': typeof AdminPermissionsRoute
   '/servers/$serverId': typeof ServersServerIdRouteWithChildren
   '/settings/appearance': typeof SettingsAppearanceRoute
   '/settings/authentication': typeof SettingsAuthenticationRoute
   '/settings/notifications': typeof SettingsNotificationsRoute
   '/settings/profile': typeof SettingsProfileRoute
   '/settings/users': typeof SettingsUsersRoute
+  '/workspaces/$workspaceId': typeof WorkspacesWorkspaceIdRoute
   '/servers': typeof ServersIndexRoute
   '/settings': typeof SettingsIndexRoute
   '/servers/$serverId/metrics': typeof ServersServerIdMetricsRoute
@@ -184,6 +224,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/analytics': typeof AnalyticsRoute
   '/audit-logs': typeof AuditLogsRoute
   '/environments': typeof EnvironmentsRoute
   '/images': typeof ImagesRoute
@@ -192,14 +233,18 @@ export interface FileRoutesById {
   '/plans': typeof PlansRoute
   '/servers': typeof ServersRouteWithChildren
   '/settings': typeof SettingsRouteWithChildren
+  '/usage': typeof UsageRoute
   '/users': typeof UsersRoute
   '/volumes': typeof VolumesRoute
+  '/workspaces': typeof WorkspacesRouteWithChildren
+  '/admin/permissions': typeof AdminPermissionsRoute
   '/servers/$serverId': typeof ServersServerIdRouteWithChildren
   '/settings/appearance': typeof SettingsAppearanceRoute
   '/settings/authentication': typeof SettingsAuthenticationRoute
   '/settings/notifications': typeof SettingsNotificationsRoute
   '/settings/profile': typeof SettingsProfileRoute
   '/settings/users': typeof SettingsUsersRoute
+  '/workspaces/$workspaceId': typeof WorkspacesWorkspaceIdRoute
   '/servers/': typeof ServersIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/servers/$serverId/metrics': typeof ServersServerIdMetricsRoute
@@ -209,6 +254,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/analytics'
     | '/audit-logs'
     | '/environments'
     | '/images'
@@ -217,14 +263,18 @@ export interface FileRouteTypes {
     | '/plans'
     | '/servers'
     | '/settings'
+    | '/usage'
     | '/users'
     | '/volumes'
+    | '/workspaces'
+    | '/admin/permissions'
     | '/servers/$serverId'
     | '/settings/appearance'
     | '/settings/authentication'
     | '/settings/notifications'
     | '/settings/profile'
     | '/settings/users'
+    | '/workspaces/$workspaceId'
     | '/servers/'
     | '/settings/'
     | '/servers/$serverId/metrics'
@@ -232,20 +282,25 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/analytics'
     | '/audit-logs'
     | '/environments'
     | '/images'
     | '/login'
     | '/networks'
     | '/plans'
+    | '/usage'
     | '/users'
     | '/volumes'
+    | '/workspaces'
+    | '/admin/permissions'
     | '/servers/$serverId'
     | '/settings/appearance'
     | '/settings/authentication'
     | '/settings/notifications'
     | '/settings/profile'
     | '/settings/users'
+    | '/workspaces/$workspaceId'
     | '/servers'
     | '/settings'
     | '/servers/$serverId/metrics'
@@ -253,6 +308,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/analytics'
     | '/audit-logs'
     | '/environments'
     | '/images'
@@ -261,14 +317,18 @@ export interface FileRouteTypes {
     | '/plans'
     | '/servers'
     | '/settings'
+    | '/usage'
     | '/users'
     | '/volumes'
+    | '/workspaces'
+    | '/admin/permissions'
     | '/servers/$serverId'
     | '/settings/appearance'
     | '/settings/authentication'
     | '/settings/notifications'
     | '/settings/profile'
     | '/settings/users'
+    | '/workspaces/$workspaceId'
     | '/servers/'
     | '/settings/'
     | '/servers/$serverId/metrics'
@@ -277,6 +337,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AnalyticsRoute: typeof AnalyticsRoute
   AuditLogsRoute: typeof AuditLogsRoute
   EnvironmentsRoute: typeof EnvironmentsRoute
   ImagesRoute: typeof ImagesRoute
@@ -285,13 +346,23 @@ export interface RootRouteChildren {
   PlansRoute: typeof PlansRoute
   ServersRoute: typeof ServersRouteWithChildren
   SettingsRoute: typeof SettingsRouteWithChildren
+  UsageRoute: typeof UsageRoute
   UsersRoute: typeof UsersRoute
   VolumesRoute: typeof VolumesRoute
+  WorkspacesRoute: typeof WorkspacesRouteWithChildren
+  AdminPermissionsRoute: typeof AdminPermissionsRoute
   UserUsernameServerNameRoute: typeof UserUsernameServerNameRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/workspaces': {
+      id: '/workspaces'
+      path: '/workspaces'
+      fullPath: '/workspaces'
+      preLoaderRoute: typeof WorkspacesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/volumes': {
       id: '/volumes'
       path: '/volumes'
@@ -304,6 +375,13 @@ declare module '@tanstack/react-router' {
       path: '/users'
       fullPath: '/users'
       preLoaderRoute: typeof UsersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/usage': {
+      id: '/usage'
+      path: '/usage'
+      fullPath: '/usage'
+      preLoaderRoute: typeof UsageRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings': {
@@ -362,6 +440,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuditLogsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/analytics': {
+      id: '/analytics'
+      path: '/analytics'
+      fullPath: '/analytics'
+      preLoaderRoute: typeof AnalyticsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -382,6 +467,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/servers/'
       preLoaderRoute: typeof ServersIndexRouteImport
       parentRoute: typeof ServersRoute
+    }
+    '/workspaces/$workspaceId': {
+      id: '/workspaces/$workspaceId'
+      path: '/$workspaceId'
+      fullPath: '/workspaces/$workspaceId'
+      preLoaderRoute: typeof WorkspacesWorkspaceIdRouteImport
+      parentRoute: typeof WorkspacesRoute
     }
     '/settings/users': {
       id: '/settings/users'
@@ -424,6 +516,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/servers/$serverId'
       preLoaderRoute: typeof ServersServerIdRouteImport
       parentRoute: typeof ServersRoute
+    }
+    '/admin/permissions': {
+      id: '/admin/permissions'
+      path: '/admin/permissions'
+      fullPath: '/admin/permissions'
+      preLoaderRoute: typeof AdminPermissionsRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/user/$username/$serverName': {
       id: '/user/$username/$serverName'
@@ -489,8 +588,21 @@ const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
   SettingsRouteChildren,
 )
 
+interface WorkspacesRouteChildren {
+  WorkspacesWorkspaceIdRoute: typeof WorkspacesWorkspaceIdRoute
+}
+
+const WorkspacesRouteChildren: WorkspacesRouteChildren = {
+  WorkspacesWorkspaceIdRoute: WorkspacesWorkspaceIdRoute,
+}
+
+const WorkspacesRouteWithChildren = WorkspacesRoute._addFileChildren(
+  WorkspacesRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AnalyticsRoute: AnalyticsRoute,
   AuditLogsRoute: AuditLogsRoute,
   EnvironmentsRoute: EnvironmentsRoute,
   ImagesRoute: ImagesRoute,
@@ -499,8 +611,11 @@ const rootRouteChildren: RootRouteChildren = {
   PlansRoute: PlansRoute,
   ServersRoute: ServersRouteWithChildren,
   SettingsRoute: SettingsRouteWithChildren,
+  UsageRoute: UsageRoute,
   UsersRoute: UsersRoute,
   VolumesRoute: VolumesRoute,
+  WorkspacesRoute: WorkspacesRouteWithChildren,
+  AdminPermissionsRoute: AdminPermissionsRoute,
   UserUsernameServerNameRoute: UserUsernameServerNameRoute,
 }
 export const routeTree = rootRouteImport

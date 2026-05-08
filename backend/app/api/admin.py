@@ -20,6 +20,7 @@ from app.models.credit_transaction import CreditTransaction
 from app.models.activity_log import ActivityLog
 from app.services.user_service import UserService
 from app.services.credit_service import CreditService
+from app.core.roles import ROLE_PERMISSIONS, get_role_permissions, VALID_ROLES
 
 router = APIRouter()
 
@@ -540,4 +541,65 @@ async def export_activity_logs(
     return {
         "logs": [log.to_dict() for log in logs],
         "count": len(logs)
+    }
+
+
+# ========== Permission Matrix ==========
+
+@router.get("/permissions")
+async def get_permission_matrix(
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS))
+):
+    """Get current role-permission matrix"""
+    matrix = {}
+    for role in VALID_ROLES:
+        matrix[role] = get_role_permissions(role)
+    
+    return {
+        "roles": VALID_ROLES,
+        "permissions": Permission.all_permissions(),
+        "matrix": matrix
+    }
+
+
+class UpdateRolePermissionsRequest(BaseModel):
+    permissions: List[str]
+
+
+@router.put("/permissions/{role}")
+async def update_role_permissions(
+    role: str,
+    request: UpdateRolePermissionsRequest,
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS))
+):
+    """Update permissions for a role (except super_admin which always has ALL)"""
+    if role == "super_admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot modify super_admin permissions"
+        )
+    
+    if role not in VALID_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid role: {role}"
+        )
+    
+    # Validate all permissions
+    all_perms = set(Permission.all_permissions())
+    invalid_perms = [p for p in request.permissions if p not in all_perms and p != Permission.ALL]
+    if invalid_perms:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid permissions: {invalid_perms}"
+        )
+    
+    # Update the role permissions in memory
+    # Note: In a production system, this should persist to database
+    ROLE_PERMISSIONS[role] = request.permissions
+    
+    return {
+        "role": role,
+        "permissions": request.permissions,
+        "message": f"Permissions updated for role '{role}'"
     }
