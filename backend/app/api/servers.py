@@ -2,7 +2,9 @@
 Server API endpoints with RBAC and ownership enforcement.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
+from typing import Optional
+from app.config import settings
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -114,7 +116,63 @@ async def create_server(
     if not quota_check["allowed"]:
         raise HTTPException(status_code=429, detail=quota_check["reason"])
     
+    # Check sufficient NUKE credits
+    from app.services.credit_service import CreditService
+    credit_service = CreditService(db)
+    
+    if settings.credits_enabled:
+        has_credits = await credit_service.check_sufficient_credits(
+            user_id=str(current_user.id),
+            required=plan.cost_per_hour
+        )
+        if not has_credits:
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail=f"Insufficient NUKE credits. Required: {plan.cost_per_hour} for 1 hour"
+            )
+    
+    # Check global resource pool
+    from app.services.resource_pool_service import ResourcePoolService
+    resource_pool = ResourcePoolService(db)
+    can_fit = await resource_pool.can_fit(request.plan_id)
+    
+    if not can_fit:
+        # Queue the server instead of rejecting
+        from app.models.server_queue import ServerQueue
+        
+        queue_entry = ServerQueue(
+            user_id=current_user.id,
+            environment_id=uuid.UUID(request.environment_id),
+            plan_id=uuid.UUID(request.plan_id),
+            status="pending",
+            priority=plan.priority,
+            server_name=request.name,
+            requested_cpu=plan.cpu_limit,
+            requested_memory=plan.memory_limit,
+            requested_disk=plan.disk_limit,
+        )
+        db.add(queue_entry)
+        await db.commit()
+        await db.refresh(queue_entry)
+        
+        queue_position = await resource_pool.get_queue_position(str(queue_entry.id))
+        
+        return {
+            "queued": True,
+            "queue_id": str(queue_entry.id),
+            "queue_position": queue_position,
+            "message": "Server queued due to resource scarcity. It will start automatically when resources are available.",
+        }
+    
     try:
+        # Deduct 1 hour of plan cost on spawn
+        if settings.credits_enabled and plan.cost_per_hour > 0:
+            await credit_service.consume_credits(
+                user_id=str(current_user.id),
+                amount=plan.cost_per_hour,
+                description=f"Initial spawn cost for server '{request.name}' (1 hour at {plan.cost_per_hour} NUKE/hour)",
+            )
+        
         # Spawn the container using plan resources + environment image
         server = await spawner.spawn(
             user_id=str(current_user.id),
@@ -130,11 +188,24 @@ async def create_server(
         
         # Store plan reference
         server.plan_id = uuid.UUID(request.plan_id)
+        server.last_activity = datetime.utcnow()
+        
+        # Set expiration based on max_runtime
+        from app.core.time_utils import parse_duration
+        max_runtime_seconds = parse_duration(plan.max_runtime)
+        if max_runtime_seconds > 0:
+            server.expires_at = datetime.utcnow() + timedelta(seconds=max_runtime_seconds)
         
         # Save to database
         db.add(server)
         await db.commit()
         await db.refresh(server)
+        
+        # Increment quota usage
+        await quota_service.increment_usage(
+            user_id=str(current_user.id),
+            plan_id=request.plan_id
+        )
         
         return ServerResponse(
             id=str(server.id),
@@ -214,11 +285,16 @@ async def list_servers(
                 "allocated_disk": s.allocated_disk,
                 "health_status": s.health_status,
                 "status_reason": s.status_reason,
+                "stop_reason": s.stop_reason,
                 "user_id": str(s.user_id),
                 "username": s.user.username if s.user else None,
                 "created_at": s.created_at.isoformat() if s.created_at else None,
                 "started_at": s.started_at.isoformat() if s.started_at else None,
                 "stopped_at": s.stopped_at.isoformat() if s.stopped_at else None,
+                "last_activity": s.last_activity.isoformat() if s.last_activity else None,
+                "expires_at": s.expires_at.isoformat() if s.expires_at else None,
+                "total_cost": s.total_cost,
+                "last_billed_at": s.last_billed_at.isoformat() if s.last_billed_at else None,
             }
             for s in servers
         ]
@@ -259,8 +335,13 @@ async def get_server(
         "allocated_disk": server.allocated_disk,
         "health_status": server.health_status,
         "status_reason": server.status_reason,
+        "stop_reason": server.stop_reason,
         "started_at": server.started_at.isoformat() if server.started_at else None,
         "stopped_at": server.stopped_at.isoformat() if server.stopped_at else None,
+        "last_activity": server.last_activity.isoformat() if server.last_activity else None,
+        "expires_at": server.expires_at.isoformat() if server.expires_at else None,
+        "total_cost": server.total_cost,
+        "last_billed_at": server.last_billed_at.isoformat() if server.last_billed_at else None,
         "user_id": str(server.user_id),
     }
 
@@ -317,8 +398,13 @@ async def get_server_by_path(
         "allocated_disk": server.allocated_disk,
         "health_status": server.health_status,
         "status_reason": server.status_reason,
+        "stop_reason": server.stop_reason,
         "started_at": server.started_at.isoformat() if server.started_at else None,
         "stopped_at": server.stopped_at.isoformat() if server.stopped_at else None,
+        "last_activity": server.last_activity.isoformat() if server.last_activity else None,
+        "expires_at": server.expires_at.isoformat() if server.expires_at else None,
+        "total_cost": server.total_cost,
+        "last_billed_at": server.last_billed_at.isoformat() if server.last_billed_at else None,
         "user_id": str(server.user_id),
         "username": server.user.username if server.user else None,
     }
@@ -490,6 +576,16 @@ async def stop_server(
             server.container_id = None
             server.status = "stopped"
             server.stopped_at = datetime.utcnow()
+            
+            # Decrement quota usage
+            if server.plan_id:
+                from app.services.quota_service import QuotaService
+                quota_service = QuotaService(db)
+                await quota_service.decrement_usage(
+                    user_id=str(server.user_id),
+                    plan_id=str(server.plan_id)
+                )
+            
             await db.commit()
             return {"message": "Server stopped", "server_id": server_id, "status": "stopped"}
         except Exception as e:
@@ -653,3 +749,109 @@ async def test_metric(
         "all_rooms": all_rooms,
         "metric": test_metric,
     }
+
+
+@router.post("/{server_id}/activity")
+async def ping_server_activity(
+    server_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update last_activity timestamp for a server. Called when user accesses the server."""
+    server = await get_server_with_permission_check(server_id, current_user, db)
+    
+    if server.status != "running":
+        raise HTTPException(status_code=400, detail="Server is not running")
+    
+    server.last_activity = datetime.utcnow()
+    await db.commit()
+    
+    return {"message": "Activity recorded", "server_id": server_id, "last_activity": server.last_activity.isoformat()}
+
+
+@router.get("/{server_id}/queue-status")
+async def get_server_queue_status(
+    server_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get queue status for a server that is waiting in queue."""
+    from app.models.server_queue import ServerQueue
+    from app.services.resource_pool_service import ResourcePoolService
+    
+    result = await db.execute(
+        select(ServerQueue).where(
+            ServerQueue.user_id == current_user.id,
+            ServerQueue.status == "pending"
+        ).order_by(ServerQueue.requested_at.desc())
+    )
+    entries = result.scalars().all()
+    
+    if not entries:
+        return {"queued": False, "entries": []}
+    
+    resource_pool = ResourcePoolService(db)
+    
+    queue_data = []
+    for entry in entries:
+        position = await resource_pool.get_queue_position(str(entry.id))
+        queue_data.append({
+            "id": str(entry.id),
+            "server_name": entry.server_name,
+            "status": entry.status,
+            "priority": entry.priority,
+            "position": position,
+            "requested_at": entry.requested_at.isoformat() if entry.requested_at else None,
+        })
+    
+    return {
+        "queued": True,
+        "entries": queue_data,
+    }
+
+
+@router.get("/{server_id}/logs")
+async def get_server_logs(
+    server_id: str,
+    tail: int = 100,
+    since: Optional[str] = None,
+    follow: bool = False,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get server container logs."""
+    server = await get_server_with_permission_check(server_id, current_user, db)
+    
+    if not server.container_id:
+        raise HTTPException(status_code=400, detail="Server has no running container")
+    
+    try:
+        # Parse since timestamp
+        since_timestamp = None
+        if since:
+            try:
+                since_dt = datetime.fromisoformat(since.replace('Z', '+00:00'))
+                since_timestamp = int(since_dt.timestamp())
+            except ValueError:
+                pass
+        
+        logs = await spawner.docker.get_container_logs(
+            container_id=server.container_id,
+            tail=tail,
+            since=since_timestamp,
+            timestamps=True,
+            stdout=True,
+            stderr=True
+        )
+        
+        return {
+            "server_id": server_id,
+            "logs": logs,
+            "tail": tail,
+            "follow": follow,
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get logs: {str(e)}"
+        )

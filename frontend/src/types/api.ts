@@ -23,8 +23,13 @@ export interface Server {
   allocated_disk?: string;
   health_status?: string;
   status_reason?: string;
+  stop_reason?: string;
   started_at?: string;
   stopped_at?: string;
+  last_activity?: string;
+  expires_at?: string;
+  total_cost?: number;
+  last_billed_at?: string;
 }
 
 export interface User {

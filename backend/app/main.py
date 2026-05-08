@@ -7,7 +7,7 @@ from app.config import settings
 from app.api import (
     auth, users, servers, tokens, credits, admin, 
     preferences, environments, plans, quotas, metrics,
-    notifications, dashboard, bulk, health, system
+    notifications, dashboard, bulk, health, system, schedules, volumes, analytics
 )
 from app.db.base import Base
 from app.db.session import engine
@@ -31,6 +31,10 @@ async def rate_limit_exceeded_handler(request: Request, exc):
         status_code=429,
         content={"detail": "Rate limit exceeded"}
     )
+
+# Audit middleware
+from app.middleware.audit import AuditMiddleware
+app.add_middleware(AuditMiddleware)
 
 # CORS
 app.add_middleware(
@@ -58,6 +62,9 @@ app.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
 app.include_router(bulk.router, prefix="/bulk", tags=["bulk"])
 app.include_router(health.router, prefix="/health", tags=["health"])
 app.include_router(system.router, prefix="/system", tags=["system"])
+app.include_router(schedules.router, prefix="/schedules", tags=["schedules"])
+app.include_router(volumes.router, prefix="/volumes", tags=["volumes"])
+app.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
 
 
 @app.websocket("/ws")

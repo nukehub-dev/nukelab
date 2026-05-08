@@ -281,6 +281,45 @@ class DockerClient:
         """List containers"""
         return await self.client.containers.list(filters=filters)
 
+    async def get_container_logs(
+        self,
+        container_id: str,
+        tail: int = 100,
+        since: Optional[int] = None,
+        timestamps: bool = True,
+        stdout: bool = True,
+        stderr: bool = True
+    ) -> str:
+        """Get container logs"""
+        container = await self.client.containers.get(container_id)
+        logs = await container.log(
+            stdout=stdout,
+            stderr=stderr,
+            tail=tail,
+            since=since,
+            timestamps=timestamps,
+            follow=False
+        )
+        return logs
+
+    async def stream_container_logs(
+        self,
+        container_id: str,
+        tail: int = 100,
+        stdout: bool = True,
+        stderr: bool = True
+    ):
+        """Stream container logs as async generator"""
+        container = await self.client.containers.get(container_id)
+        logs = await container.log(
+            stdout=stdout,
+            stderr=stderr,
+            tail=tail,
+            follow=True,
+            timestamps=True
+        )
+        return logs
+
     def _parse_memory(self, memory_str: str) -> int:
         """Parse memory string to bytes"""
         memory_str = memory_str.lower()

@@ -13,10 +13,13 @@ class ActivityLog(Base):
     target_type = Column(String(50), nullable=False, index=True)
     target_id = Column(UUID(as_uuid=True), nullable=True)
     details = Column(JSON, default=dict)
+    before_state = Column(JSON, default=dict)
+    after_state = Column(JSON, default=dict)
+    request_id = Column(UUID(as_uuid=True), nullable=True)
     ip_address = Column(INET, nullable=True)
     user_agent = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
-    
+
     def to_dict(self):
         return {
             "id": str(self.id),
@@ -25,6 +28,9 @@ class ActivityLog(Base):
             "target_type": self.target_type,
             "target_id": str(self.target_id) if self.target_id else None,
             "details": self.details or {},
+            "before_state": self.before_state or {},
+            "after_state": self.after_state or {},
+            "request_id": str(self.request_id) if self.request_id else None,
             "ip_address": str(self.ip_address) if self.ip_address else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

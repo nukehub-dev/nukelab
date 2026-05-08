@@ -40,6 +40,11 @@ class Server(Base):
     stopped_by = Column(UUID(as_uuid=True), nullable=True)
     stop_reason = Column(String(255), nullable=True)
     
+    # Billing and cost tracking
+    total_cost = Column(Integer, default=0)
+    last_billed_at = Column(DateTime, nullable=True)
+    expires_at = Column(DateTime, nullable=True)
+    
     # Relationships
     user = relationship("User", back_populates="servers")
     

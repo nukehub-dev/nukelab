@@ -36,6 +36,22 @@ celery_app.conf.update(
             'task': 'app.tasks.evaluate_alert_rules',
             'schedule': 60.0,  # Every 60 seconds
         },
+        'process-nuke-billing': {
+            'task': 'app.tasks.process_nuke_billing',
+            'schedule': 900.0,  # Every 15 minutes
+        },
+        'enforce-auto-stop': {
+            'task': 'app.tasks.enforce_auto_stop',
+            'schedule': 60.0,  # Every 60 seconds
+        },
+        'process-server-queue': {
+            'task': 'app.tasks.process_server_queue',
+            'schedule': 30.0,  # Every 30 seconds
+        },
+        'evaluate-schedules': {
+            'task': 'app.tasks.evaluate_schedules',
+            'schedule': 60.0,  # Every 60 seconds
+        },
     },
 )
 

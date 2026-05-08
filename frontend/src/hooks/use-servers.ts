@@ -192,3 +192,62 @@ export function useServerActions() {
     isOperationPending,
   };
 }
+
+export interface ServerSchedule {
+  id: string;
+  server_id: string;
+  user_id: string;
+  action: 'start' | 'stop' | 'restart';
+  cron_expression: string;
+  timezone: string;
+  is_active: boolean;
+  last_run_at?: string;
+  next_run_at?: string;
+  run_count: number;
+  created_at?: string;
+}
+
+export function useServerSchedules(serverId: string) {
+  return useQuery({
+    queryKey: ['server-schedules', serverId],
+    queryFn: async () => {
+      const response = await api.get<{ schedules: ServerSchedule[] }>(`/schedules/servers/${serverId}/schedules`);
+      return response.schedules;
+    },
+    enabled: !!serverId,
+  });
+}
+
+export function useCreateSchedule() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ serverId, data }: { serverId: string; data: Omit<ServerSchedule, 'id' | 'server_id' | 'user_id' | 'run_count' | 'created_at'> }) =>
+      api.post<ServerSchedule>(`/schedules/servers/${serverId}/schedules`, data),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['server-schedules', variables.serverId] });
+    },
+  });
+}
+
+export function useDeleteSchedule() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ serverId, scheduleId }: { serverId: string; scheduleId: string }) =>
+      api.delete(`/schedules/servers/${serverId}/schedules/${scheduleId}`),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['server-schedules', variables.serverId] });
+    },
+  });
+}
+
+export function useServerLogs(serverId: string, tail: number = 100) {
+  return useQuery({
+    queryKey: ['server-logs', serverId, tail],
+    queryFn: async () => {
+      const response = await api.get<{ logs: string; tail: number }>(`/servers/${serverId}/logs?tail=${tail}`);
+      return response;
+    },
+    enabled: !!serverId,
+    refetchInterval: 5000,
+  });
+}
