@@ -6,11 +6,8 @@ import {
   LayoutDashboard,
   Server,
   Boxes,
-  Image,
-  Network,
   HardDrive,
   Users,
-  UserCircle,
   Settings,
   FileText,
   CreditCard,
@@ -48,14 +45,12 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'Dashboard', icon: LayoutDashboard, href: '/' },
       { label: 'Servers', icon: Server, href: '/servers' },
-      { label: 'Environments', icon: Boxes, href: '/environments' },
     ],
   },
   {
     label: 'Resources',
     items: [
-      { label: 'Images', icon: Image, href: '/images' },
-      { label: 'Networks', icon: Network, href: '/networks' },
+      { label: 'Environments', icon: Boxes, href: '/environments' },
       { label: 'Volumes', icon: HardDrive, href: '/volumes' },
       { label: 'Plans', icon: CreditCard, href: '/plans' },
     ],
@@ -63,7 +58,6 @@ const navGroups: NavGroup[] = [
   {
     label: 'Preferences',
     items: [
-      { label: 'Profile', icon: UserCircle, href: '/profile' },
       { label: 'Settings', icon: Settings, href: '/settings' },
     ],
   },

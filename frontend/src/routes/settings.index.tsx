@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { Palette, Bell, Shield, Users, ChevronRight } from 'lucide-react';
+import { Palette, Bell, Shield, Users, UserCircle, ChevronRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuthStore } from '../stores/auth-store';
 import { cn } from '../lib/utils';
@@ -14,6 +14,13 @@ interface SettingsCategory {
 }
 
 const categories: SettingsCategory[] = [
+  {
+    label: 'Profile',
+    description: 'Manage your account information and avatar',
+    icon: UserCircle,
+    href: '/settings/profile',
+    color: 'bg-primary/10 text-primary',
+  },
   {
     label: 'Appearance',
     description: 'Customize the look and feel of NukeLab',

@@ -5,6 +5,7 @@ import {
   Shield, 
   Bell, 
   Users,
+  UserCircle,
   ChevronRight
 } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -18,6 +19,7 @@ interface SettingsNavItem {
 }
 
 const settingsNavItems: SettingsNavItem[] = [
+  { label: 'Profile', icon: UserCircle, href: '/settings/profile' },
   { label: 'Appearance', icon: Palette, href: '/settings/appearance' },
   { label: 'Notifications', icon: Bell, href: '/settings/notifications' },
   { label: 'Authentication', icon: Shield, href: '/settings/authentication', adminOnly: true },
