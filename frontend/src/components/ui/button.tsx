@@ -69,7 +69,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
             </svg>
           </span>
         )}
-        <span className={cn(loading && 'opacity-0')}>{children}</span>
+        <span className={cn('inline-flex items-center gap-2', loading && 'opacity-0')}>{children}</span>
       </button>
     );
   }

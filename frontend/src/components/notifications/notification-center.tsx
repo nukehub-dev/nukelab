@@ -131,38 +131,50 @@ export function NotificationCenter() {
 
   return (
     <>
-      <button
-        ref={bellRef}
-        onClick={toggleDropdown}
-        className={cn(
-          'relative p-2 rounded-xl transition-all duration-200 shrink-0',
-          isOpen
-            ? 'bg-primary/10 text-primary'
-            : 'hover:bg-sidebar-accent text-sidebar-foreground'
-        )}
-        aria-label="Notifications"
-        aria-expanded={isOpen}
-      >
-        <Bell className="w-5 h-5" />
-        {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-sidebar"
+      {isOpen ? (
+        <button
+          ref={bellRef}
+          onClick={toggleDropdown}
+          className={cn(
+            'relative p-2 rounded-xl transition-all duration-200 shrink-0',
+            'bg-primary/10 text-primary'
+          )}
+          aria-label="Notifications"
+          aria-expanded={isOpen}
+        >
+          <Bell className="w-5 h-5" />
+          {unreadCount > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-sidebar"
+            >
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
+        </button>
+      ) : (
+        <Tooltip content="Notifications" position="right">
+          <button
+            ref={bellRef}
+            onClick={toggleDropdown}
+            className={cn(
+              'relative p-2 rounded-xl transition-all duration-200 shrink-0',
+              'hover:bg-sidebar-accent text-sidebar-foreground'
+            )}
+            aria-label="Notifications"
+            aria-expanded={isOpen}
           >
-            {unreadCount > 99 ? '99+' : unreadCount}
-          </span>
-        )}
-      </button>
+            <Bell className="w-5 h-5" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-sidebar"
+              >
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
+          </button>
+        </Tooltip>
+      )}
 
       {isOpen && createPortal(
-        <>
-          {/* Backdrop - transparent, just for click-to-close */}
-          <div 
-            className="fixed inset-0"
-            style={{ zIndex: 9998 }}
-            onClick={handleClose}
-          />
-          
-          {/* Dropdown with backdrop blur */}
-          <div
+        <div
             ref={dropdownRef}
             className="bg-popover/80 backdrop-blur-xl border border-border/50 rounded-2xl shadow-2xl shadow-black/20 overflow-hidden"
             style={{
@@ -320,8 +332,7 @@ export function NotificationCenter() {
               </Link>
               <span className="text-[10px] text-muted-foreground">Press Esc to close</span>
             </div>
-          </div>
-        </>,
+          </div>,
         document.body
       )}
     </>

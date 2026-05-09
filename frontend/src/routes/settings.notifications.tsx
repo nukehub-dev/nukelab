@@ -1,47 +1,35 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { Bell, Mail, Globe, Smartphone, Save, RotateCcw } from 'lucide-react';
+import { Bell, Save, RotateCcw, Server, CreditCard, AlertTriangle, Calendar, Users, Check } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import { useCurrentUser } from '../hooks/use-current-user';
 import { api } from '../lib/api';
-import { springs } from '../lib/animations';
-import { cn } from '../lib/utils';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import { Checkbox } from '../components/ui/checkbox';
 
 export const Route = createFileRoute('/settings/notifications')({
   component: NotificationsSettingsPage,
 });
 
-interface NotificationChannel {
-  id: string;
-  label: string;
-  icon: React.ElementType;
-  description: string;
-}
-
 interface EventPreference {
   event: string;
   label: string;
+  description: string;
+  icon: React.ElementType;
   channels: Record<string, boolean>;
 }
 
-const channels: NotificationChannel[] = [
-  { id: 'email', label: 'Email', icon: Mail, description: 'Receive email notifications' },
-  { id: 'webhook', label: 'Webhook', icon: Globe, description: 'Send to webhook URL' },
-  { id: 'in_app', label: 'In-App', icon: Smartphone, description: 'Show in notification center' },
-];
-
 const defaultEvents: EventPreference[] = [
-  { event: 'server_start', label: 'Server Started', channels: { email: false, webhook: false, in_app: true } },
-  { event: 'server_stop', label: 'Server Stopped', channels: { email: false, webhook: false, in_app: true } },
-  { event: 'server_ready', label: 'Server Ready', channels: { email: true, webhook: false, in_app: true } },
-  { event: 'credit_low', label: 'Low Credits', channels: { email: true, webhook: true, in_app: true } },
-  { event: 'credit_granted', label: 'Credits Granted', channels: { email: true, webhook: false, in_app: true } },
-  { event: 'queue_position', label: 'Queue Position', channels: { email: false, webhook: false, in_app: true } },
-  { event: 'schedule_run', label: 'Schedule Executed', channels: { email: false, webhook: false, in_app: true } },
-  { event: 'alert_fired', label: 'Alert Fired', channels: { email: true, webhook: true, in_app: true } },
-  { event: 'maintenance', label: 'Maintenance Mode', channels: { email: true, webhook: true, in_app: true } },
+  { event: 'server_start', label: 'Server Started', description: 'When a server is started', icon: Server, channels: { email: false, webhook: false, in_app: true } },
+  { event: 'server_stop', label: 'Server Stopped', description: 'When a server is stopped', icon: Server, channels: { email: false, webhook: false, in_app: true } },
+  { event: 'server_ready', label: 'Server Ready', description: 'When a server is ready to use', icon: Server, channels: { email: true, webhook: false, in_app: true } },
+  { event: 'credit_low', label: 'Low Credits', description: 'When your credit balance is low', icon: CreditCard, channels: { email: true, webhook: true, in_app: true } },
+  { event: 'credit_granted', label: 'Credits Granted', description: 'When credits are added to your account', icon: CreditCard, channels: { email: true, webhook: false, in_app: true } },
+  { event: 'queue_position', label: 'Queue Position', description: 'Updates on your queue position', icon: Users, channels: { email: false, webhook: false, in_app: true } },
+  { event: 'schedule_run', label: 'Schedule Executed', description: 'When a scheduled task runs', icon: Calendar, channels: { email: false, webhook: false, in_app: true } },
+  { event: 'alert_fired', label: 'Alert Fired', description: 'When a system alert is triggered', icon: AlertTriangle, channels: { email: true, webhook: true, in_app: true } },
+  { event: 'maintenance', label: 'Maintenance Mode', description: 'System maintenance notifications', icon: AlertTriangle, channels: { email: true, webhook: true, in_app: true } },
 ];
 
 function NotificationsSettingsPage() {
@@ -102,122 +90,197 @@ function NotificationsSettingsPage() {
     setSaved(false);
   };
 
+  // Calculate summary stats
+  const totalEnabled = preferences.reduce((acc, pref) => 
+    acc + Object.values(pref.channels).filter(Boolean).length, 0
+  );
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-10 pb-10">
+      {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex items-center gap-4 p-6 rounded-2xl bg-card/60 border border-border/50 backdrop-blur-xl"
+        className="flex items-center justify-between"
       >
-        <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center">
-          <Bell className="w-6 h-6 text-blue-400" />
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+            <Bell className="w-6 h-6 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold">Notifications</h2>
+            <p className="text-muted-foreground">Configure notification preferences</p>
+          </div>
         </div>
-        <div>
-          <h2 className="text-2xl font-bold">Notifications</h2>
-          <p className="text-muted-foreground">Configure notification preferences</p>
+        <div className="text-right">
+          <p className="text-2xl font-bold">{totalEnabled}</p>
+          <p className="text-xs text-muted-foreground">Active notifications</p>
         </div>
       </motion.div>
 
-      <div className="space-y-6">
-        {/* Webhook Configuration */}
-        <motion.div
-          className="bubble p-5"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1, ...springs.gentle }}
-        >
-          <div className="flex items-center gap-2 mb-4">
-            <Globe className="w-4 h-4 text-primary" />
-            <h3 className="text-base font-semibold">Webhook URL</h3>
+      <div className="space-y-8">
+        {/* Webhook URL */}
+        <SettingsSection title="Webhook URL" description="Configure a webhook endpoint to receive notifications.">
+          <div className="flex items-start gap-4">
+            <div className="flex-1">
+              <Input
+                value={webhookUrl}
+                onChange={(e) => { setWebhookUrl(e.target.value); setSaved(false); }}
+                placeholder="https://hooks.example.com/nukelab"
+              />
+              <p className="text-xs text-muted-foreground mt-2">
+                Notifications will be sent as POST requests with HMAC-SHA256 signatures.
+              </p>
+            </div>
           </div>
-          <Input
-            value={webhookUrl}
-            onChange={(e) => { setWebhookUrl(e.target.value); setSaved(false); }}
-            placeholder="https://hooks.example.com/nukelab"
-            className="max-w-md"
-          />
-          <p className="text-xs text-muted-foreground mt-2">
-            Webhook notifications will be sent as POST requests with HMAC-SHA256 signatures.
-          </p>
-        </motion.div>
+        </SettingsSection>
 
         {/* Event Preferences */}
-        <motion.div
-          className="bubble p-5"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, ...springs.gentle }}
+        <SettingsSection 
+          title="Event Preferences" 
+          description="Choose how you want to receive notifications for each event."
         >
-          <div className="flex items-center gap-2 mb-4">
-            <Bell className="w-4 h-4 text-primary" />
-            <h3 className="text-base font-semibold">Event Preferences</h3>
-          </div>
+          <div className="rounded-xl border border-border/50 overflow-hidden">
+            {/* Table Header */}
+            <div className="grid grid-cols-[1fr_80px_80px_80px] gap-2 px-4 py-3 bg-muted/30 border-b border-border/50 text-sm font-medium text-muted-foreground">
+              <span>Event</span>
+              <span className="text-center">Email</span>
+              <span className="text-center">Webhook</span>
+              <span className="text-center">In-App</span>
+            </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="text-left py-2 px-3 text-sm font-medium text-muted-foreground">Event</th>
-                  {channels.map((ch) => (
-                    <th key={ch.id} className="text-center py-2 px-3 text-sm font-medium text-muted-foreground">
-                      <div className="flex flex-col items-center gap-1">
-                        <ch.icon className="w-4 h-4" />
-                        <span>{ch.label}</span>
+            {/* Event Rows */}
+            <div className="divide-y divide-border/30">
+              {preferences.map((pref, index) => {
+                const Icon = pref.icon;
+                return (
+                  <div
+                    key={pref.event}
+                    className="grid grid-cols-[1fr_80px_80px_80px] gap-2 px-4 py-4 items-center hover:bg-accent/10 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                        <Icon className="w-4 h-4 text-muted-foreground" />
                       </div>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {preferences.map((pref, eventIndex) => (
-                  <tr key={pref.event} className="border-b border-border/50 last:border-0">
-                    <td className="py-3 px-3 text-sm">{pref.label}</td>
-                    {channels.map((ch) => (
-                      <td key={ch.id} className="py-3 px-3 text-center">
-                        <button
-                          onClick={() => toggleChannel(eventIndex, ch.id)}
-                          className={cn(
-                            "w-5 h-5 rounded border transition-colors flex items-center justify-center",
-                            pref.channels[ch.id]
-                              ? "bg-primary border-primary text-primary-foreground"
-                              : "border-border hover:border-primary/50"
-                          )}
-                        >
-                          {pref.channels[ch.id] && (
-                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                            </svg>
-                          )}
-                        </button>
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      <div>
+                        <p className="text-sm font-medium">{pref.label}</p>
+                        <p className="text-xs text-muted-foreground">{pref.description}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex justify-center">
+                      <Checkbox
+                        checked={pref.channels.email}
+                        onChange={() => toggleChannel(index, 'email')}
+                      />
+                    </div>
+                    <div className="flex justify-center">
+                      <Checkbox
+                        checked={pref.channels.webhook}
+                        onChange={() => toggleChannel(index, 'webhook')}
+                      />
+                    </div>
+                    <div className="flex justify-center">
+                      <Checkbox
+                        checked={pref.channels.in_app}
+                        onChange={() => toggleChannel(index, 'in_app')}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </motion.div>
+        </SettingsSection>
+
+        {/* Quick Actions */}
+        <SettingsSection title="Quick Actions" description="Enable or disable all notifications at once.">
+          <div className="flex gap-4">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setPreferences(prev => prev.map(p => ({
+                  ...p,
+                  channels: { email: true, webhook: true, in_app: true }
+                })));
+                setSaved(false);
+              }}
+              className="gap-2"
+            >
+              <Check className="w-4 h-4" />
+              Enable All
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setPreferences(prev => prev.map(p => ({
+                  ...p,
+                  channels: { email: false, webhook: false, in_app: false }
+                })));
+                setSaved(false);
+              }}
+              className="gap-2"
+            >
+              <RotateCcw className="w-4 h-4" />
+              Disable All
+            </Button>
+          </div>
+        </SettingsSection>
 
         {/* Actions */}
         <motion.div
-          className="flex items-center gap-3"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3, ...springs.gentle }}
+          className="flex items-center gap-3 pt-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.3 }}
         >
           <Button onClick={handleSave} loading={saving} className="gap-2">
             <Save className="w-4 h-4" />
             Save Preferences
           </Button>
-          <Button variant="outline" onClick={handleReset} className="gap-2">
-            <RotateCcw className="w-4 h-4" />
-            Reset
+          <Button variant="ghost" onClick={handleReset} className="gap-2">
+            Reset to Defaults
           </Button>
           {saved && (
-            <span className="text-sm text-emerald-400">Saved successfully!</span>
+            <motion.span
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="text-sm text-emerald-400 font-medium flex items-center gap-1"
+            >
+              <Check className="w-4 h-4" />
+              Saved successfully!
+            </motion.span>
           )}
         </motion.div>
       </div>
     </div>
+  );
+}
+
+function SettingsSection({ 
+  title, 
+  description, 
+  children 
+}: { 
+  title?: string; 
+  description?: string; 
+  children: React.ReactNode;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+    >
+      {(title || description) && (
+        <div className="mb-4">
+          {title && <h3 className="text-lg font-semibold">{title}</h3>}
+          {description && (
+            <p className="text-sm text-muted-foreground mt-1">{description}</p>
+          )}
+        </div>
+      )}
+      <div>{children}</div>
+    </motion.div>
   );
 }
