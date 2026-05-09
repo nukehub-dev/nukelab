@@ -58,6 +58,7 @@ interface DataTableProps<TData> {
   emptyState?: React.ReactNode;
   mobileCardRenderer?: (row: TData) => React.ReactNode;
   enableRowSelection?: boolean;
+  defaultMobileView?: boolean;
 }
 
 export function DataTable<TData>({
@@ -90,8 +91,9 @@ export function DataTable<TData>({
   emptyState,
   mobileCardRenderer,
   enableRowSelection = true,
+  defaultMobileView = true,
 }: DataTableProps<TData>) {
-  const [showMobile, setShowMobile] = useState(true);
+  const [showMobile, setShowMobile] = useState(defaultMobileView);
 
   const table = useReactTable({
     data,

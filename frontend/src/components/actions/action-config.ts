@@ -100,6 +100,13 @@ export const ACTION_CONFIGS: Record<string, ActionConfig> = {
     tone: 'primary',
     loadingLabel: 'Creating...',
   },
+  export: {
+    label: 'Export',
+    icon: Download,
+    variant: 'outline',
+    tone: 'primary',
+    loadingLabel: 'Exporting...',
+  },
 };
 
 export type ActionType = keyof typeof ACTION_CONFIGS;
