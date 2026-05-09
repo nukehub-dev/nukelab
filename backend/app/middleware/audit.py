@@ -2,18 +2,19 @@
 Audit middleware for automatic activity logging.
 """
 
-import json
 import uuid
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from jose import jwt, JWTError
 
 from app.models.activity_log import ActivityLog
 from app.models.user import User
 from app.db.session import AsyncSessionLocal
+from app.config import settings
 
 
 class AuditMiddleware(BaseHTTPMiddleware):
@@ -118,6 +119,23 @@ class AuditMiddleware(BaseHTTPMiddleware):
         
         return {}
     
+    async def _get_user_from_token(self, request: Request) -> User | None:
+        """Decode JWT from Authorization header to get the user."""
+        auth_header = request.headers.get('authorization', '')
+        if not auth_header.startswith('Bearer '):
+            return None
+        token = auth_header[7:]
+        try:
+            payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+            username = payload.get('sub')
+            if not username:
+                return None
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(select(User).where(User.username == username))
+                return result.scalar_one_or_none()
+        except JWTError:
+            return None
+
     async def _log_activity(
         self,
         request: Request,
@@ -125,12 +143,11 @@ class AuditMiddleware(BaseHTTPMiddleware):
         before_state: Dict[str, Any]
     ):
         """Log the activity"""
-        
-        # Get user info from request state
-        user_id = None
-        if hasattr(request.state, 'user') and request.state.user:
-            user_id = str(request.state.user.id)
-        
+
+        # Get user from JWT token in Authorization header
+        user = await self._get_user_from_token(request)
+        user_id = str(user.id) if user else None
+
         # Extract target info from path
         path = request.url.path
         parts = path.strip('/').split('/')
@@ -151,6 +168,9 @@ class AuditMiddleware(BaseHTTPMiddleware):
             if request.method == 'POST':
                 if len(parts) > 3:
                     action = f"{parts[3]}_{target_type}"
+                elif len(parts) == 3 and target_id is None:
+                    # e.g., /api/users/bulk-action where parts[2] is not a UUID
+                    action = f"{parts[2]}_{target_type}"
                 else:
                     action = f"create_{target_type}"
             elif request.method == 'PUT':
@@ -168,6 +188,13 @@ class AuditMiddleware(BaseHTTPMiddleware):
             "path": path,
             "status_code": response.status_code,
         }
+
+        # Enrich with actor info if available
+        if user:
+            details["actor_username"] = user.username
+            details["actor_role"] = user.role
+            if user.email:
+                details["actor_email"] = user.email
         
         # Log to database
         async with AsyncSessionLocal() as db:

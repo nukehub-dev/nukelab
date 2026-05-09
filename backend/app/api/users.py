@@ -144,16 +144,6 @@ async def create_user(
         created_by=current_user
     )
     
-    # Log activity
-    activity_service = ActivityService(db)
-    await activity_service.log(
-        action="user_created",
-        target_type="user",
-        target_id=str(user.id),
-        actor_id=str(current_user.id),
-        details={"username": user.username, "role": user.role}
-    )
-    
     return serialize_user(user)
 
 

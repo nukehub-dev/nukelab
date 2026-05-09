@@ -20,6 +20,7 @@ import {
   XCircle,
   AlertCircle,
   Info,
+  Mail,
 } from 'lucide-react';
 import { ResourcePageLayout } from '../components/layout/resource-page-layout';
 import { DataTable } from '../components/data/data-table';
@@ -46,6 +47,18 @@ function getActionIcon(action: string) {
   return Activity;
 }
 
+function getDetailIcon(key: string): typeof Hash {
+  if (key.includes('username')) return User;
+  if (key.includes('email')) return Mail;
+  if (key.includes('role')) return Shield;
+  if (key.includes('actor')) return User;
+  if (key.includes('ip')) return Globe;
+  if (key.includes('path')) return Terminal;
+  if (key.includes('method')) return Terminal;
+  if (key.includes('status')) return CheckCircle2;
+  return Hash;
+}
+
 function getActionColor(action: string): string {
   if (action.includes('delete') || action.includes('disable')) return 'text-red-400 bg-red-400/10';
   if (action.includes('create') || action.includes('enable') || action.includes('spawn')) return 'text-emerald-400 bg-emerald-400/10';
@@ -68,14 +81,17 @@ function getStatusBadge(statusCode: number | undefined): { icon: typeof CheckCir
   return { icon: Info, color: 'text-blue-400', label: String(statusCode) };
 }
 
-function DetailRow({ label, value, mono = false, icon: Icon }: { label: string; value: React.ReactNode; mono?: boolean; icon?: typeof Hash }) {
+function DetailRow({ label, value, mono = false }: { label: string; value: React.ReactNode; mono?: boolean }) {
+  const Icon = getDetailIcon(label);
   return (
-    <div className="flex items-center justify-between py-2 border-b border-border/30 last:border-0">
-      <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-        {Icon && <Icon className="w-3 h-3" />}
+    <div className="flex items-center justify-between py-2.5 border-b border-border/30 last:border-0"
+    >
+      <span className="text-xs text-muted-foreground flex items-center gap-2"
+      >
+        <Icon className="w-3.5 h-3.5 text-muted-foreground/70" />
         {label}
       </span>
-      <span className={mono ? 'font-mono text-xs' : 'text-sm font-medium'}>{value}</span>
+      <span className={mono ? 'font-mono text-xs text-foreground' : 'text-sm font-medium text-foreground'}>{value}</span>
     </div>
   );
 }
@@ -257,10 +273,15 @@ function AuditLogsPage() {
       header: 'Actor',
       cell: ({ row }) => {
         const actorId = row.getValue('actor_id') as string | null;
+        const details = row.original.details as Record<string, unknown>;
+        const username = details?.actor_username as string | undefined;
         return (
           <div className="text-sm">
             {actorId ? (
-              <span className="font-mono text-xs">{actorId.slice(0, 8)}...</span>
+              <div className="flex items-center gap-1.5">
+                <span className="font-medium">{username || 'User'}</span>
+                <span className="font-mono text-xs text-muted-foreground">{actorId.slice(0, 6)}...</span>
+              </div>
             ) : (
               <span className="text-muted-foreground">System</span>
             )}
@@ -358,7 +379,8 @@ function AuditLogsPage() {
         </div>
         <div>
           <span className="text-muted-foreground text-xs">Actor</span>
-          <p className="font-mono text-xs">{log.actor_id ? log.actor_id.slice(0, 8) + '...' : 'System'}</p>
+          <p className="text-sm">{String(log.details?.actor_username || '') || (log.actor_id ? 'User' : 'System')}</p>
+          {log.actor_id && <p className="font-mono text-[10px] text-muted-foreground">{log.actor_id.slice(0, 8)}...</p>}
         </div>
       </div>
       <div className="text-xs text-muted-foreground">
@@ -466,8 +488,17 @@ function AuditLogsPage() {
                 <InfoCard
                   icon={User}
                   label="Actor"
-                  value={selectedLog.actor_id ? 'User' : 'System'}
-                  subValue={selectedLog.actor_id ? <CopyableId id={selectedLog.actor_id} /> : undefined}
+                  value={String(selectedLog.details.actor_username || '') || (selectedLog.actor_id ? 'User' : 'System')}
+                  subValue={
+                    <div className="flex items-center gap-2">
+                      {selectedLog.actor_id && <CopyableId id={selectedLog.actor_id} />}
+                      {!!selectedLog.details.actor_role && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">
+                          {String(selectedLog.details.actor_role)}
+                        </span>
+                      )}
+                    </div>
+                  }
                 />
                 {selectedLog.ip_address && (
                   <InfoCard
@@ -558,7 +589,7 @@ function AuditLogsPage() {
                     <Info className="w-3.5 h-3.5" />
                     Details
                   </div>
-                  <div className="rounded-xl border border-border/50 bg-muted/30 overflow-hidden">
+                  <div className="rounded-xl border border-border/50 bg-muted/30 overflow-hidden px-3.5">
                     {Object.entries(selectedLog.details).map(([key, value]) => (
                       <DetailRow key={key} label={key} value={typeof value === 'object' ? JSON.stringify(value) : String(value)} mono />
                     ))}
