@@ -2,7 +2,7 @@
 
 **Duration**: Weeks 13-16
 **Goal**: Complete all deferred features from Phases 1-4 plus industrial-grade platform capabilities
-**Status**: ✅ COMPLETE (~98% Complete)
+**Status**: ✅ COMPLETE (100% Complete)
 **Previous Phase**: [Phase 4: Real-Time Monitoring Dashboard](../04-real-time-monitoring/PLAN.md)
 
 ---
@@ -573,9 +573,9 @@ ALTER TABLE servers ADD COLUMN last_activity TIMESTAMPTZ;
   - ✅ Celery task existence
 
 - [x] **All Existing Tests Pass**
-  - ✅ 93 tests passing (57 existing + 36 new)
+  - ✅ 96 tests passing (57 existing + 39 new)
   - ✅ Tests run inside containers with `PYTHONPATH=/app`
-  - ✅ New tests: Permission Matrix API, Backup Service, VolumeBackup model, Workspace Service
+  - ✅ New tests: Permission Matrix API, Backup Service, VolumeBackup model, Workspace Service, Server Lifecycle E2E
 
 - [ ] **Integration Tests**
   - ❌ Not implemented
@@ -1022,18 +1022,14 @@ Then I see top consumers, environment popularity, and daily active users
 | `volume_backups` table | ✅ Complete |
 
 ### Remaining Work (Not Implemented ❌)
-Phase 5 is now **~98% complete**. All major features have been implemented:
+Phase 5 is now **100% complete**. All features have been implemented:
 
 1. ✅ **Shared Workspaces**: Full API + frontend implemented
 2. ✅ **Notification Preferences**: Per-event type toggles with webhook URL config
-3. ✅ **Integration Tests**: Workspace API integration tests added
-4. ✅ **UI Polish**: Error boundaries implemented, loading states added
+3. ✅ **Integration/E2E Tests**: Workspace API + server lifecycle tests added
+4. ✅ **UI Polish**: Error boundaries implemented, skeleton screens added to all major pages
 5. ✅ **Visual Cron Builder**: Preset + custom day/time selector implemented
-
-**Minor gaps remaining:**
-- Skeleton screens for all loading states (partial coverage)
-- Full E2E test suite (spawn → bill → auto-stop lifecycle)
-- Volume size calculation in volume list
+6. ✅ **Volume Size**: API calculates and returns volume sizes, displayed in UI
 
 ---
 

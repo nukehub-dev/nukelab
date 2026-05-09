@@ -17,6 +17,7 @@ import {
 } from '../hooks/use-workspaces';
 import { useVolumes } from '../hooks/use-volumes';
 import { springs } from '../lib/animations';
+import { SkeletonCard } from '../components/feedback/skeleton';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../components/ui/dialog';
@@ -79,12 +80,8 @@ function WorkspacesPage() {
       {/* Workspaces Grid */}
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="bubble p-5 animate-pulse">
-              <div className="h-6 bg-muted rounded w-3/4 mb-3"></div>
-              <div className="h-4 bg-muted rounded w-full mb-2"></div>
-              <div className="h-4 bg-muted rounded w-1/2"></div>
-            </div>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <SkeletonCard key={i} rows={2} />
           ))}
         </div>
       ) : workspaces.length === 0 ? (

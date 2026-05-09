@@ -46,6 +46,66 @@ class TestCreditsAdmin:
         assert response.status_code == 403
 
 
+class TestCreditService:
+    """Credit service business logic tests."""
+
+    @pytest.mark.asyncio
+    async def test_consume_credits(self, client, test_user, user_token, db_session):
+        """CreditService should consume credits and update balance."""
+        from app.services.credit_service import CreditService
+
+        service = CreditService(db_session)
+
+        initial = await service.get_balance(str(test_user.id))
+        assert initial > 0
+
+        tx = await service.consume_credits(
+            user_id=str(test_user.id),
+            amount=10,
+            description="Test consumption"
+        )
+
+        assert tx.amount == -10
+        assert tx.balance_after == initial - 10
+
+        new_balance = await service.get_balance(str(test_user.id))
+        assert new_balance == initial - 10
+
+    @pytest.mark.asyncio
+    async def test_credit_consumption_flow(self, client, test_user, user_token, db_session):
+        """E2E: Credits should be consumed and granted back correctly."""
+        from app.services.credit_service import CreditService
+
+        service = CreditService(db_session)
+
+        initial = await service.get_balance(str(test_user.id))
+        assert initial > 0
+
+        amount = 5
+        tx = await service.consume_credits(
+            user_id=str(test_user.id),
+            amount=amount,
+            description="E2E test consumption"
+        )
+
+        assert tx.amount == -amount
+        assert tx.balance_after == initial - amount
+
+        new_balance = await service.get_balance(str(test_user.id))
+        assert new_balance == initial - amount
+
+        grant_tx = await service.grant_credits(
+            user_id=str(test_user.id),
+            amount=amount,
+            actor_id=str(test_user.id),
+            reason="E2E test cleanup"
+        )
+
+        assert grant_tx.amount == amount
+        final_balance = await service.get_balance(str(test_user.id))
+        assert final_balance == initial
+
+
 class TestTransactions:
     """Credit transaction tests."""
 

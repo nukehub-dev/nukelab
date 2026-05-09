@@ -481,7 +481,7 @@ cmd_test() {
             conda run -n nukelab-backend pytest ${EXTRA_ARGS[@]:-} || warn "Tests failed or not configured"
         elif is_backend_container_running; then
             # Backend is running in containers, run tests there
-            $COMPOSE -f "$COMPOSE_FILE" exec backend pytest ${EXTRA_ARGS[@]:-} || warn "Tests failed or not configured"
+            $COMPOSE -f "$COMPOSE_FILE" exec backend bash -c "PYTHONPATH=/app pytest ${EXTRA_ARGS[@]:-}" || warn "Tests failed or not configured"
         elif has_conda_env; then
             # Fall back to Conda
             conda run -n nukelab-backend pytest ${EXTRA_ARGS[@]:-} || warn "Tests failed or not configured"
@@ -629,6 +629,8 @@ main() {
         install|test)
             if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
                 init_env
+                detect_engine
+                setup_podman_socket
             fi
             ;;
     esac

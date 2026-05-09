@@ -28,13 +28,16 @@ class VolumeService:
             if user_id and labels.get('nukelab.user.id') != user_id:
                 continue
             
+            # Try to get size
+            size_bytes = await self.get_volume_size(vol.get('Name'))
+            
             result.append({
                 "name": vol.get('Name'),
                 "driver": vol.get('Driver'),
                 "mountpoint": vol.get('Mountpoint'),
                 "created_at": vol.get('CreatedAt'),
                 "labels": labels,
-                "size": None,  # Would need du command
+                "size": size_bytes,
             })
         
         return result
@@ -49,13 +52,16 @@ class VolumeService:
             
             labels = info.get('Labels', {}) or {}
             
+            # Get volume size
+            size_bytes = await self.get_volume_size(name)
+            
             return {
                 "name": info.get('Name'),
                 "driver": info.get('Driver'),
                 "mountpoint": info.get('Mountpoint'),
                 "created_at": info.get('CreatedAt'),
                 "labels": labels,
-                "size": None,
+                "size": size_bytes,
             }
         except Exception:
             return None

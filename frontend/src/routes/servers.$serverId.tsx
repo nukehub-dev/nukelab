@@ -2,7 +2,6 @@ import { createFileRoute, Link } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-  Server,
   ArrowLeft,
   Activity,
   Cpu,
@@ -144,17 +143,25 @@ function ServerDetailPage() {
 
   if (!server) {
     return (
-      <div className="p-10 text-center">
-        <Server className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-        <h2 className="text-lg font-semibold mb-2">Server not found</h2>
-        <p className="text-muted-foreground mb-4">The server you are looking for does not exist.</p>
-        <Link
-          to="/servers"
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back to Servers
-        </Link>
+      <div className="min-h-screen p-6 lg:p-10 space-y-8">
+        {/* Skeleton Header */}
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 rounded-lg bg-muted animate-pulse" />
+          <div className="space-y-2">
+            <div className="h-8 w-48 bg-muted rounded animate-pulse" />
+            <div className="h-4 w-32 bg-muted rounded animate-pulse" />
+          </div>
+        </div>
+        {/* Skeleton Content */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="bubble p-4 animate-pulse">
+              <div className="h-4 w-24 bg-muted rounded mb-2" />
+              <div className="h-6 w-16 bg-muted rounded" />
+            </div>
+          ))}
+        </div>
+        <div className="bubble p-5 animate-pulse h-64" />
       </div>
     );
   }
