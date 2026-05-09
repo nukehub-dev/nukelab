@@ -29,6 +29,7 @@ import { useThemeStore } from '../../stores/theme-store';
 import { useAuthStore } from '../../stores/auth-store';
 import { cn } from '../../lib/utils';
 import { Tooltip } from '../ui/tooltip';
+import { NotificationCenter } from '../notifications/notification-center';
 
 
 interface NavItem {
@@ -283,18 +284,21 @@ export function Sidebar() {
             className="space-y-3 transition-all duration-300"
             style={{ maxHeight: isOpen ? 300 : 0, opacity: isOpen ? 1 : 0, overflow: 'hidden' }}
           >
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-sidebar-foreground/80">Theme</span>
-              <div className="flex items-center gap-1 bg-sidebar-accent rounded-lg p-1">
-                <button onClick={() => setDarkMode(true)} className={cn("p-1.5 rounded-md transition-colors", isDark && !isOled && "bg-background text-foreground")}>
-                  <Moon className="w-4 h-4" />
-                </button>
-                <button onClick={() => setDarkMode(false)} className={cn("p-1.5 rounded-md transition-colors", !isDark && "bg-background text-foreground")}>
-                  <Sun className="w-4 h-4" />
-                </button>
-                <button onClick={() => { setDarkMode(true); setOledMode(!isOled); }} className={cn("p-1.5 rounded-md transition-colors", isOled && "bg-background text-foreground")}>
-                  <Monitor className="w-4 h-4" />
-                </button>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm text-sidebar-foreground/80 shrink-0">Theme</span>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 bg-sidebar-accent rounded-lg p-1">
+                  <button onClick={() => setDarkMode(true)} className={cn("p-1.5 rounded-md transition-colors", isDark && !isOled && "bg-background text-foreground")}>
+                    <Moon className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => setDarkMode(false)} className={cn("p-1.5 rounded-md transition-colors", !isDark && "bg-background text-foreground")}>
+                    <Sun className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => { setDarkMode(true); setOledMode(!isOled); }} className={cn("p-1.5 rounded-md transition-colors", isOled && "bg-background text-foreground")}>
+                    <Monitor className="w-4 h-4" />
+                  </button>
+                </div>
+                <NotificationCenter />
               </div>
             </div>
 
@@ -313,8 +317,9 @@ export function Sidebar() {
 
           <div 
             className="flex flex-col items-center gap-2 transition-all duration-300"
-            style={{ maxHeight: !isOpen ? 100 : 0, opacity: !isOpen ? 1 : 0, overflow: 'hidden' }}
+            style={{ maxHeight: !isOpen ? 120 : 0, opacity: !isOpen ? 1 : 0, overflow: 'hidden' }}
           >
+            <NotificationCenter />
             <Tooltip content={isDark ? 'Switch to light mode' : 'Switch to dark mode'} position="right">
               <button onClick={() => setDarkMode(!isDark)} className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors">
                 {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}

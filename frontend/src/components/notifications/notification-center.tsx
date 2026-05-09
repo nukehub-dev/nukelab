@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from '@tanstack/react-router';
-import { motion, AnimatePresence } from 'framer-motion';
 import {
   Bell,
   Check,
@@ -10,7 +10,8 @@ import {
   AlertTriangle,
   AlertCircle,
   CheckCircle2,
-  X,
+  Settings,
+  Inbox,
 } from 'lucide-react';
 import {
   useNotifications,
@@ -20,6 +21,7 @@ import {
   useDeleteNotification,
 } from '../../hooks/use-notifications';
 import { cn } from '../../lib/utils';
+import { Tooltip } from '../ui/tooltip';
 
 const severityIcons = {
   info: Info,
@@ -35,129 +37,267 @@ const severityColors = {
   error: 'text-destructive bg-destructive/10',
 };
 
+const MAX_DROPDOWN_ITEMS = 6;
+
 export function NotificationCenter() {
   const [isOpen, setIsOpen] = useState(false);
+  const bellRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  
   const { data: unreadCount = 0 } = useUnreadCount();
-  const { data: notificationsData } = useNotifications(true, 1, 20);
+  const { data: notificationsData } = useNotifications(false, 1, MAX_DROPDOWN_ITEMS);
   const markAsRead = useMarkAsRead();
   const markAllAsRead = useMarkAllAsRead();
   const deleteNotification = useDeleteNotification();
 
   const notifications = notificationsData?.notifications || [];
+  const totalCount = notificationsData?.total || 0;
 
+  // Position dropdown when opened
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+    if (!isOpen || !bellRef.current || !dropdownRef.current) return;
+
+    const bell = bellRef.current;
+    const dropdown = dropdownRef.current;
+    const rect = bell.getBoundingClientRect();
+    const dropdownHeight = dropdown.offsetHeight || 480;
+    
+    // Position to the right of the bell button
+    const gap = 12;
+    const dropdownWidth = 360;
+    
+    let left = rect.right + gap;
+    // Align bottom of dropdown with bottom of bell button
+    let top = rect.bottom - dropdownHeight;
+    
+    // Check if would overflow right
+    if (left + dropdownWidth > window.innerWidth - gap) {
+      left = rect.left - dropdownWidth - gap;
+    }
+    
+    // If dropdown goes above viewport, align top instead
+    if (top < gap) {
+      top = rect.top;
+    }
+    
+    // Ensure not off-screen
+    left = Math.max(gap, left);
+    top = Math.max(gap, top);
+    
+    dropdown.style.position = 'fixed';
+    dropdown.style.top = `${top}px`;
+    dropdown.style.left = `${left}px`;
+    dropdown.style.zIndex = '9999';
+    dropdown.style.width = `${dropdownWidth}px`;
+  }, [isOpen]);
+
+  // Close on escape
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsOpen(false);
+    };
+    if (isOpen) {
+      document.addEventListener('keydown', handleEscape);
+      return () => document.removeEventListener('keydown', handleEscape);
+    }
+  }, [isOpen]);
+
+  // Close on click outside
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (
+        bellRef.current && 
+        !bellRef.current.contains(target) &&
+        dropdownRef.current &&
+        !dropdownRef.current.contains(target)
+      ) {
         setIsOpen(false);
       }
+    };
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClick);
+      return () => document.removeEventListener('mousedown', handleClick);
     }
+  }, [isOpen]);
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+  const toggleDropdown = useCallback(() => {
+    setIsOpen((prev) => !prev);
+  }, []);
+
+  const handleClose = useCallback(() => {
+    setIsOpen(false);
   }, []);
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <>
       <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 rounded-lg hover:bg-accent transition-colors"
+        ref={bellRef}
+        onClick={toggleDropdown}
+        className={cn(
+          'relative p-2 rounded-xl transition-all duration-200 shrink-0',
+          isOpen
+            ? 'bg-primary/10 text-primary'
+            : 'hover:bg-sidebar-accent text-sidebar-foreground'
+        )}
+        aria-label="Notifications"
+        aria-expanded={isOpen}
       >
         <Bell className="w-5 h-5" />
         {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full flex items-center justify-center">
+          <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-sidebar"
+          >
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}
       </button>
 
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: 10, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 10, scale: 0.95 }}
-            transition={{ duration: 0.15 }}
-            className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-popover border border-border rounded-xl shadow-lg shadow-black/20 z-50 overflow-hidden"
+      {isOpen && createPortal(
+        <>
+          {/* Backdrop - transparent, just for click-to-close */}
+          <div 
+            className="fixed inset-0"
+            style={{ zIndex: 9998 }}
+            onClick={handleClose}
+          />
+          
+          {/* Dropdown with backdrop blur */}
+          <div
+            ref={dropdownRef}
+            className="bg-popover/80 backdrop-blur-xl border border-border/50 rounded-2xl shadow-2xl shadow-black/20 overflow-hidden"
+            style={{
+              position: 'fixed',
+              zIndex: 9999,
+              width: '360px',
+              maxWidth: 'calc(100vw - 2rem)',
+              maxHeight: 'calc(100vh - 2rem)',
+            }}
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-              <div className="flex items-center gap-2">
-                <Bell className="w-4 h-4 text-primary" />
-                <span className="font-semibold text-sm">Notifications</span>
-                {unreadCount > 0 && (
-                  <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">
-                    {unreadCount}
-                  </span>
-                )}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border/50 bg-muted/30 backdrop-blur-sm">
+              <div className="flex items-center gap-2.5">
+                <div className="p-1.5 rounded-lg bg-primary/10">
+                  <Bell className="w-4 h-4 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-sm">Notifications</h3>
+                  <p className="text-[11px] text-muted-foreground">
+                    {unreadCount > 0 ? `${unreadCount} unread` : 'No new notifications'}
+                  </p>
+                </div>
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-0.5">
                 {unreadCount > 0 && (
-                  <button
-                    onClick={() => markAllAsRead.mutate()}
-                    className="p-1.5 rounded hover:bg-accent transition-colors"
-                    title="Mark all as read"
-                  >
-                    <CheckCheck className="w-3.5 h-3.5 text-muted-foreground" />
-                  </button>
+                  <Tooltip content="Mark all as read">
+                    <button
+                      onClick={() => markAllAsRead.mutate()}
+                      className="p-2 rounded-lg hover:bg-accent transition-colors"
+                    >
+                      <CheckCheck className="w-4 h-4 text-muted-foreground" />
+                    </button>
+                  </Tooltip>
                 )}
-                <button
-                  onClick={() => setIsOpen(false)}
-                  className="p-1.5 rounded hover:bg-accent transition-colors"
-                >
-                  <X className="w-3.5 h-3.5 text-muted-foreground" />
-                </button>
+                <Tooltip content="Notification settings">
+                  <Link
+                    to="/settings/notifications"
+                    onClick={handleClose}
+                    className="p-2 rounded-lg hover:bg-accent transition-colors inline-flex"
+                  >
+                    <Settings className="w-4 h-4 text-muted-foreground" />
+                  </Link>
+                </Tooltip>
               </div>
             </div>
 
             {/* Notification List */}
-            <div className="max-h-[400px] overflow-y-auto">
+            <div className="overflow-y-auto" style={{ maxHeight: '380px' }}>
               {notifications.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                  <Bell className="w-8 h-8 mb-2 opacity-50" />
-                  <p className="text-sm">No unread notifications</p>
+                <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
+                  <div className="p-3 rounded-full bg-muted mb-3">
+                    <Inbox className="w-6 h-6 opacity-50" />
+                  </div>
+                  <p className="text-sm font-medium">No notifications yet</p>
+                  <p className="text-xs mt-0.5">We'll notify you when something happens.</p>
                 </div>
               ) : (
                 <div className="divide-y divide-border">
                   {notifications.map((notification) => {
-                    const Icon = severityIcons[notification.severity] || Info;
+                    const Icon = severityIcons[notification.severity as keyof typeof severityIcons] || Info;
                     return (
                       <div
                         key={notification.id}
                         className={cn(
-                          "flex items-start gap-3 px-4 py-3 hover:bg-accent/50 transition-colors group",
-                          !notification.read && "bg-primary/5"
+                          'flex items-start gap-3 px-4 py-3 hover:bg-accent/40 transition-colors group cursor-pointer',
+                          !notification.read && 'bg-primary/[0.03]'
                         )}
+                        onClick={() => {
+                          if (!notification.read) {
+                            markAsRead.mutate(notification.id);
+                          }
+                          if (notification.action_url) {
+                            handleClose();
+                          }
+                        }}
                       >
-                        <div className={cn("p-1.5 rounded-lg shrink-0", severityColors[notification.severity])}>
+                        <div className="mt-2 shrink-0">
+                          {!notification.read ? (
+                            <div className="w-2 h-2 rounded-full bg-primary" />
+                          ) : (
+                            <div className="w-2 h-2 rounded-full border border-border" />
+                          )}
+                        </div>
+
+                        <div
+                          className={cn(
+                            'p-1.5 rounded-lg shrink-0',
+                            severityColors[notification.severity as keyof typeof severityColors]
+                          )}
+                        >
                           <Icon className="w-3.5 h-3.5" />
                         </div>
+
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{notification.title}</p>
+                          <p className={cn('text-sm leading-snug', !notification.read && 'font-medium')}>
+                            {notification.title}
+                          </p>
                           <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
                             {notification.message}
                           </p>
-                          <p className="text-[10px] text-muted-foreground mt-1">
-                            {new Date(notification.created_at).toLocaleDateString()}
+                          <p className="text-[10px] text-muted-foreground/70 mt-1">
+                            {new Date(notification.created_at).toLocaleDateString(undefined, {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
                           </p>
                         </div>
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+
+                        <div className="flex flex-col items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                           {!notification.read && (
-                            <button
-                              onClick={() => markAsRead.mutate(notification.id)}
-                              className="p-1 rounded hover:bg-accent transition-colors"
-                              title="Mark as read"
-                            >
-                              <Check className="w-3 h-3 text-muted-foreground" />
-                            </button>
+                            <Tooltip content="Mark as read">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  markAsRead.mutate(notification.id);
+                                }}
+                                className="p-1 rounded hover:bg-accent transition-colors"
+                              >
+                                <Check className="w-3 h-3 text-muted-foreground" />
+                              </button>
+                            </Tooltip>
                           )}
-                          <button
-                            onClick={() => deleteNotification.mutate(notification.id)}
-                            className="p-1 rounded hover:bg-destructive/10 transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-3 h-3 text-muted-foreground hover:text-destructive" />
-                          </button>
+                          <Tooltip content="Delete">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteNotification.mutate(notification.id);
+                              }}
+                              className="p-1 rounded hover:bg-destructive/10 transition-colors"
+                            >
+                              <Trash2 className="w-3 h-3 text-muted-foreground hover:text-destructive" />
+                            </button>
+                          </Tooltip>
                         </div>
                       </div>
                     );
@@ -167,18 +307,23 @@ export function NotificationCenter() {
             </div>
 
             {/* Footer */}
-            <div className="px-4 py-2 border-t border-border bg-muted/50">
+            <div className="flex items-center justify-between px-4 py-2.5 border-t border-border/50 bg-muted/30 backdrop-blur-sm">
               <Link
-                to="/settings/notifications"
-                onClick={() => setIsOpen(false)}
-                className="text-xs text-primary hover:underline"
+                to="/notifications"
+                onClick={handleClose}
+                className="text-xs font-medium text-primary hover:text-primary/80 transition-colors"
               >
                 View all notifications
+                {totalCount > MAX_DROPDOWN_ITEMS && (
+                  <span className="ml-1 text-muted-foreground">({totalCount})</span>
+                )}
               </Link>
+              <span className="text-[10px] text-muted-foreground">Press Esc to close</span>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+          </div>
+        </>,
+        document.body
+      )}
+    </>
   );
 }

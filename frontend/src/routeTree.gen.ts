@@ -16,6 +16,7 @@ import { Route as UsageRouteImport } from './routes/usage'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ServersRouteImport } from './routes/servers'
 import { Route as PlansRouteImport } from './routes/plans'
+import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as NetworksRouteImport } from './routes/networks'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ImagesRouteImport } from './routes/images'
@@ -69,6 +70,11 @@ const ServersRoute = ServersRouteImport.update({
 const PlansRoute = PlansRouteImport.update({
   id: '/plans',
   path: '/plans',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NotificationsRoute = NotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
   getParentRoute: () => rootRouteImport,
 } as any)
 const NetworksRoute = NetworksRouteImport.update({
@@ -175,6 +181,7 @@ export interface FileRoutesByFullPath {
   '/images': typeof ImagesRoute
   '/login': typeof LoginRoute
   '/networks': typeof NetworksRoute
+  '/notifications': typeof NotificationsRoute
   '/plans': typeof PlansRoute
   '/servers': typeof ServersRouteWithChildren
   '/settings': typeof SettingsRouteWithChildren
@@ -203,6 +210,7 @@ export interface FileRoutesByTo {
   '/images': typeof ImagesRoute
   '/login': typeof LoginRoute
   '/networks': typeof NetworksRoute
+  '/notifications': typeof NotificationsRoute
   '/plans': typeof PlansRoute
   '/usage': typeof UsageRoute
   '/users': typeof UsersRoute
@@ -230,6 +238,7 @@ export interface FileRoutesById {
   '/images': typeof ImagesRoute
   '/login': typeof LoginRoute
   '/networks': typeof NetworksRoute
+  '/notifications': typeof NotificationsRoute
   '/plans': typeof PlansRoute
   '/servers': typeof ServersRouteWithChildren
   '/settings': typeof SettingsRouteWithChildren
@@ -260,6 +269,7 @@ export interface FileRouteTypes {
     | '/images'
     | '/login'
     | '/networks'
+    | '/notifications'
     | '/plans'
     | '/servers'
     | '/settings'
@@ -288,6 +298,7 @@ export interface FileRouteTypes {
     | '/images'
     | '/login'
     | '/networks'
+    | '/notifications'
     | '/plans'
     | '/usage'
     | '/users'
@@ -314,6 +325,7 @@ export interface FileRouteTypes {
     | '/images'
     | '/login'
     | '/networks'
+    | '/notifications'
     | '/plans'
     | '/servers'
     | '/settings'
@@ -343,6 +355,7 @@ export interface RootRouteChildren {
   ImagesRoute: typeof ImagesRoute
   LoginRoute: typeof LoginRoute
   NetworksRoute: typeof NetworksRoute
+  NotificationsRoute: typeof NotificationsRoute
   PlansRoute: typeof PlansRoute
   ServersRoute: typeof ServersRouteWithChildren
   SettingsRoute: typeof SettingsRouteWithChildren
@@ -403,6 +416,13 @@ declare module '@tanstack/react-router' {
       path: '/plans'
       fullPath: '/plans'
       preLoaderRoute: typeof PlansRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/notifications': {
+      id: '/notifications'
+      path: '/notifications'
+      fullPath: '/notifications'
+      preLoaderRoute: typeof NotificationsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/networks': {
@@ -608,6 +628,7 @@ const rootRouteChildren: RootRouteChildren = {
   ImagesRoute: ImagesRoute,
   LoginRoute: LoginRoute,
   NetworksRoute: NetworksRoute,
+  NotificationsRoute: NotificationsRoute,
   PlansRoute: PlansRoute,
   ServersRoute: ServersRouteWithChildren,
   SettingsRoute: SettingsRouteWithChildren,
