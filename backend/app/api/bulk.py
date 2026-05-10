@@ -10,6 +10,7 @@ from sqlalchemy import select
 
 from app.api.auth import get_current_user
 from app.core.permissions import Permission
+from app.core.security import has_permission
 from app.dependencies import require_permissions
 from app.db.session import get_db
 from app.models.user import User
@@ -74,8 +75,8 @@ async def bulk_server_action(
             
             # Check ownership
             if str(server.user_id) != str(current_user.id):
-                # Admin can manage any server
-                if current_user.role not in ["admin", "super_admin"]:
+                # Need permission to manage other users' servers
+                if not has_permission(current_user, Permission.SERVERS_MANAGE):
                     failed.append({"server_id": server_id, "error": "Permission denied"})
                     continue
             

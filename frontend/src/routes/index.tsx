@@ -18,7 +18,7 @@ import { StatCard } from '../components/data/stat-card';
 
 import { useDashboard } from '../hooks/use-dashboard';
 import { useServers } from '../hooks/use-servers';
-import { useAuthStore } from '../stores/auth-store';
+import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
 import { SkeletonCard } from '../components/feedback/skeleton';
 import { MetricsDashboard } from '../components/charts/metrics-dashboard';
 import { UserServerMetrics } from '../components/charts/user-server-metrics';
@@ -31,8 +31,9 @@ export const Route = createFileRoute('/')({
 function DashboardPage() {
   const { data: dashboard, isLoading, isError, error } = useDashboard();
   const { data: servers = [] } = useServers();
-  const isAdmin = useAuthStore((state) => state.isAdmin());
-  const isModerator = useAuthStore((state) => state.isModerator());
+  const hasPermission = useAuthStore((state) => state.hasPermission);
+  const canAccessAdmin = hasPermission(PERMISSIONS.ADMIN_ACCESS);
+  const canViewSystemMetrics = hasPermission(PERMISSIONS.ADMIN_ACCESS);
   const currentUser = useAuthStore((state) => state.user);
   const userId = currentUser?.id;
 
@@ -50,7 +51,7 @@ function DashboardPage() {
     <div className="min-h-screen">
       <FloatingHeader
         title="Dashboard"
-        subtitle={isAdmin
+        subtitle={canAccessAdmin
           ? "System overview and monitoring"
           : "Overview of your simulation servers"
         }
@@ -82,7 +83,7 @@ function DashboardPage() {
         )}
 
         {/* Admin: Platform Overview */}
-        {isAdmin && platformStats && (
+        {canAccessAdmin && platformStats && (
           <section className="space-y-4">
             <div className="flex items-center gap-2">
               <Globe className="w-4 h-4 text-primary" />
@@ -105,7 +106,7 @@ function DashboardPage() {
         <section className="space-y-4">
           <div className="flex items-center gap-2">
             <Activity className="w-4 h-4 text-primary" />
-            <h2 className="text-base font-semibold">{isAdmin ? 'Your Resources' : 'Overview'}</h2>
+            <h2 className="text-base font-semibold">{canAccessAdmin ? 'Your Resources' : 'Overview'}</h2>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {isLoading ? (
@@ -142,7 +143,7 @@ function DashboardPage() {
         </section>
 
         {/* System Metrics (Admin Only) */}
-        {isModerator && (
+        {canViewSystemMetrics && (
           <section className="space-y-4">
             <div className="flex items-center gap-2">
               <HardDrive className="w-4 h-4 text-primary" />
@@ -157,7 +158,7 @@ function DashboardPage() {
           <section className="space-y-4">
             <div className="flex items-center gap-2">
               <Server className="w-4 h-4 text-primary" />
-              <h2 className="text-base font-semibold">{isAdmin ? 'Your Running Servers' : 'Running Servers'}</h2>
+              <h2 className="text-base font-semibold">{canAccessAdmin ? 'Your Running Servers' : 'Running Servers'}</h2>
               <span className="text-xs text-muted-foreground ml-2">{myRunningServers.length} active</span>
             </div>
             <UserServerMetrics servers={myServers} />

@@ -27,7 +27,6 @@ function ServersPage() {
   const { createServer, startServer, stopServer, restartServer, deleteServer, isOperationPending } = useServerActions();
   const { data: envData } = useEnvironments({ is_active: true, limit: 100 });
   const { data: plansData } = usePlans({ is_active: true, limit: 100 });
-  const isAdmin = useAuthStore((state) => state.isAdmin());
   const canViewAllServers = useAuthStore((state) => state.canViewAllServers());
    
   const {
@@ -181,7 +180,7 @@ function ServersPage() {
         );
       },
     },
-    ...(isAdmin ? [{
+    ...(canViewAllServers ? [{
       accessorKey: 'username' as const,
       header: 'Owner',
       cell: ({ row }: { row: { original: ServerType } }) => {

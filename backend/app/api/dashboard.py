@@ -9,6 +9,7 @@ from typing import Optional
 
 from app.api.auth import get_current_user
 from app.core.permissions import Permission
+from app.core.security import has_permission
 from app.dependencies import require_permissions
 from app.db.session import get_db
 from app.models.user import User
@@ -69,8 +70,8 @@ async def get_dashboard(
         ]
     }
     
-    # Admin stats (if admin)
-    if current_user.role in ["admin", "super_admin"]:
+    # Admin stats (if has admin access)
+    if has_permission(current_user, Permission.ADMIN_ACCESS):
         # Total users
         total_users_query = select(func.count()).select_from(User)
         total_users_result = await db.execute(total_users_query)

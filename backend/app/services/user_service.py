@@ -11,7 +11,7 @@ from sqlalchemy.orm import selectinload
 from fastapi import HTTPException, status
 
 from app.api.auth import get_password_hash
-from app.core.roles import is_valid_role, VALID_ROLES
+from app.core.roles import is_valid_role, VALID_ROLES, get_role_level
 from app.core.permissions import Permission
 from app.core.security import has_permission
 from app.models.user import User
@@ -190,6 +190,21 @@ class UserService:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Insufficient permissions to update role"
+                )
+            # Hierarchy check: can only modify users at or below your own level
+            updater_level = get_role_level(updated_by.role)
+            target_level = get_role_level(user.role)
+            if target_level > updater_level:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Cannot modify users with higher privileges"
+                )
+            # Hierarchy check: can only assign roles at or below your own level
+            new_role_level = get_role_level(data["role"])
+            if new_role_level > updater_level:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Cannot assign roles higher than your own"
                 )
             if is_valid_role(data["role"]):
                 user.role = data["role"]

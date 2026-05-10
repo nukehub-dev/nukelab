@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useWebSocket } from './use-websocket';
-import { useAuthStore } from '../stores/auth-store';
+import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
 
 export interface DashboardMetricPoint {
   timestamp: string;
@@ -132,7 +132,7 @@ export function useDashboardMetrics() {
     networkTx: 0,
   });
   const hasInitializedRef = useRef(false);
-  const isAdmin = useAuthStore((state) => state.isAdmin());
+  const canViewSystemMetrics = useAuthStore((state) => state.hasPermission(PERMISSIONS.ADMIN_ACCESS));
 
   const { isConnected, subscribe, onMessage } = useWebSocket({ autoConnect: true });
 
@@ -140,11 +140,11 @@ export function useDashboardMetrics() {
   const { data: historyData, isLoading: isHistoryLoading } = useQuery({
     queryKey: ['system-metrics'],
     queryFn: async () => {
-      if (!isAdmin) return null;
+      if (!canViewSystemMetrics) return null;
       const response = await api.get<SystemMetricApiResponse>(`/metrics/system?limit=${MAX_POINTS}`);
       return response;
     },
-    enabled: isAdmin,
+    enabled: canViewSystemMetrics,
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
@@ -176,14 +176,14 @@ export function useDashboardMetrics() {
 
   // 3. Subscribe to global WebSocket (admin only for system metrics)
   useEffect(() => {
-    if (isConnected && isAdmin) {
+    if (isConnected && canViewSystemMetrics) {
       subscribe('global');
     }
-  }, [isConnected, subscribe, isAdmin]);
+  }, [isConnected, subscribe, canViewSystemMetrics]);
 
   // 4. Handle incoming WebSocket messages (admin only for system metrics)
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!canViewSystemMetrics) return;
     
     const unsubscribeHandler = onMessage((message) => {
       if (message.event === 'metrics:system') {
@@ -228,7 +228,7 @@ export function useDashboardMetrics() {
     });
 
     return unsubscribeHandler;
-  }, [onMessage, isAdmin]);
+  }, [onMessage, canViewSystemMetrics]);
 
   return {
     metrics,
