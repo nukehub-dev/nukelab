@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm, HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -157,7 +158,16 @@ async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends
     await db.commit()
     
     access_token = create_access_token(data={"sub": user.username})
-    return {"access_token": access_token, "token_type": "bearer"}
+    response = JSONResponse(content={"access_token": access_token, "token_type": "bearer"})
+    response.set_cookie(
+        key="nukelab_token",
+        value=access_token,
+        max_age=settings.session_max_age,
+        httponly=settings.session_httponly,
+        secure=settings.session_secure,
+        samesite=settings.session_samesite,
+    )
+    return response
 
 
 @router.get("/verify")

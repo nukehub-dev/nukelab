@@ -68,6 +68,7 @@ class Settings(BaseSettings):
     docker_network: str = "nukelab-network"
     docker_registry: str = ""
     docker_pull_policy: str = "if-not-present"
+    volume_storage_path: str = ""
 
     container_default_cpu_limit: float = 2.0
     container_default_memory_limit: str = "4Gi"

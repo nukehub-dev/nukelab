@@ -121,10 +121,15 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - LOG_FORMAT=${LOG_FORMAT:-json}
       - DEV_RELOAD=${DEV_RELOAD:-true}
+      - VOLUME_STORAGE_PATH=${VOLUME_STORAGE_PATH:-}
     volumes:
       - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:Z
       - ./backend:/app:Z
       - /var/lib/lxcfs:/var/lib/lxcfs:ro
+      # Mount host volume storage to enable size calculation.
+      # Set VOLUME_STORAGE_PATH in your .env file, or remove this line.
+      # See .env.example for platform-specific values.
+      - ${VOLUME_STORAGE_PATH:?VOLUME_STORAGE_PATH must be set in .env}:${VOLUME_STORAGE_PATH}:ro
     networks:
       - nukelab-network
     depends_on:
