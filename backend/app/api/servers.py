@@ -5,7 +5,8 @@ Server API endpoints with RBAC and ownership enforcement.
 from datetime import datetime, timedelta
 from typing import Optional
 from app.config import settings
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
@@ -855,3 +856,93 @@ async def get_server_logs(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get logs: {str(e)}"
         )
+
+
+# ── Server Access Token Endpoints ────────────────────────────────────────────
+
+class ServerAccessTokenResponse(BaseModel):
+    access_token: str
+    expires_in: int
+    token_type: str = "Bearer"
+    server_id: str
+
+
+@router.post("/{server_id}/access-token")
+async def create_server_access_token(
+    server_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Generate a short-lived access token for direct server access.
+    
+    Returns the token as an HttpOnly cookie for secure browser access.
+    The cookie is scoped to path=/ and expires with the token (5 minutes default).
+    """
+    server = await get_server_with_permission_check(server_id, current_user, db)
+    
+    if server.status != "running":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Server must be running to generate access token"
+        )
+    
+    from app.services.server_auth_service import server_auth_service
+    
+    if not server_auth_service.is_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Server authentication is not enabled"
+        )
+    
+    try:
+        client_ip = request.client.host if request.client else None
+        user_agent = request.headers.get("user-agent")
+        
+        token = await server_auth_service.generate_access_token(
+            db=db,
+            server_id=server.id,
+            user_id=current_user.id,
+            client_ip=client_ip,
+            user_agent=user_agent,
+            token_type="session",
+        )
+        
+        # Return token as HttpOnly cookie - more secure than JSON body
+        # Cookie is automatically sent by browser on subsequent requests
+        response = Response(status_code=200)
+        response.set_cookie(
+            key="nukelab_server_token",
+            value=token,
+            max_age=settings.server_auth_token_ttl,
+            path="/",
+            httponly=True,
+            secure=False,  # Set to True in production (HTTPS only)
+            samesite="lax",
+        )
+        
+        return response
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate access token: {str(e)}"
+        )
+
+
+@router.get("/{server_id}/access-stats")
+async def get_server_access_stats(
+    server_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get access statistics for a server."""
+    server = await get_server_with_permission_check(server_id, current_user, db)
+    from app.services.server_auth_service import server_auth_service
+    stats = await server_auth_service.get_server_access_stats(db, server.id)
+    return {"server_id": server_id, **stats}

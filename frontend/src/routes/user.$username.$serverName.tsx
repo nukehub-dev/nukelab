@@ -17,6 +17,25 @@ import { springs } from '../lib/animations';
 import { formatDate } from '../lib/utils';
 import { useQueryClient } from '@tanstack/react-query';
 
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
+
+async function getServerAccessToken(serverId: string): Promise<boolean> {
+  try {
+    const token = localStorage.getItem('nukelab-token') || '';
+    const response = await fetch(`${API_BASE}/servers/${serverId}/access-token`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',  // Important: send and receive cookies
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 export const Route = createFileRoute('/user/$username/$serverName')({
   component: ServerGatewayPage,
 });
@@ -65,7 +84,7 @@ function ServerGatewayPage() {
     return () => clearInterval(interval);
   }, [server, username, serverName, queryClient]);
 
-  // When server transitions to running, redirect to the actual container URL
+  // When server transitions to running, get access token and redirect
   useEffect(() => {
     if (server?.status === 'running') {
       const redirectKey = `server-redirect-${server.id}`;
@@ -81,14 +100,22 @@ function ServerGatewayPage() {
       // Mark that we're about to redirect
       sessionStorage.setItem(redirectKey, 'true');
 
-      // Use external_url (e.g. http://localhost:8080/user/admin/my-server)
-      // rather than current page URL (e.g. http://localhost:5173/... in dev)
-      const targetUrl = server.external_url || window.location.href;
+      // Get server access token (backend sets HttpOnly cookie) and redirect
+      const getAccessTokenAndRedirect = async () => {
+        try {
+          // Backend sets HttpOnly cookie automatically
+          await getServerAccessToken(server.id);
+          window.location.replace(server.external_url || window.location.href);
+        } catch {
+          // Fallback if token request fails
+          window.location.replace(server.external_url || window.location.href);
+        }
+      };
 
-      // Wait longer for Traefik to pick up the Docker route (5s)
+      // Wait for Traefik to pick up the Docker route (3s)
       const timeout = setTimeout(() => {
-        window.location.replace(targetUrl);
-      }, 5000);
+        getAccessTokenAndRedirect();
+      }, 3000);
       return () => clearTimeout(timeout);
     }
   }, [server?.status, server?.id, server?.external_url]);
@@ -105,11 +132,21 @@ function ServerGatewayPage() {
     }
   }, [server, startServer, queryClient, username, serverName]);
 
-  const handleManualOpen = useCallback(() => {
+  const handleManualOpen = useCallback(async () => {
     // Use external_url to go to the actual container (e.g. port 8080 in dev)
     const targetUrl = server?.external_url || window.location.href;
+    
+    try {
+      if (server?.id) {
+        // Backend sets HttpOnly cookie automatically
+        await getServerAccessToken(server.id);
+      }
+    } catch {
+      // Ignore token errors, proceed without token
+    }
+    
     window.location.href = targetUrl;
-  }, [server?.external_url]);
+  }, [server?.id, server?.external_url]);
 
   if (isLoading) {
     return (

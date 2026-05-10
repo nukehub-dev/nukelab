@@ -16,7 +16,7 @@ entryPoints:
 certificatesResolvers:
   letsencrypt:
     acme:
-      email: admin@nukelab.local
+      email: ${TRAEFIK_ACME_EMAIL:-admin@nukelab.local}
       storage: /letsencrypt/acme.json
       tlsChallenge: {}
 

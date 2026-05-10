@@ -4,16 +4,7 @@ services:
     image: docker.io/library/traefik:v3.1
     container_name: nukelab-traefik
     command:
-      - --api.insecure=true
-      - --providers.docker=true
-      - --providers.docker.exposedbydefault=false
-      - --entrypoints.web.address=:80
-      - --entrypoints.websecure.address=:443
-      - --certificatesresolvers.letsencrypt.acme.tlschallenge=true
-      - --certificatesresolvers.letsencrypt.acme.email=${TRAEFIK_ACME_EMAIL:-admin@nukelab.local}
-      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
-      - --log.level=INFO
-      - --accesslog=true
+      - --configFile=/etc/traefik/traefik.yml
     ports:
       - "8080:80"
       - "8443:443"
@@ -22,6 +13,7 @@ services:
       - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:ro
       - ./certs:/certs:ro
       - letsencrypt:/letsencrypt
+      - ./infrastructure/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
     networks:
       - nukelab-network
     labels:
@@ -122,6 +114,17 @@ services:
       - LOG_FORMAT=${LOG_FORMAT:-json}
       - DEV_RELOAD=${DEV_RELOAD:-true}
       - VOLUME_STORAGE_PATH=${VOLUME_STORAGE_PATH:-}
+      # Server auth configuration
+      - SERVER_AUTH_ENABLED=${SERVER_AUTH_ENABLED:-true}
+      - SERVER_AUTH_TOKEN_TTL=${SERVER_AUTH_TOKEN_TTL:-300}
+      - SERVER_AUTH_KEY_ALGORITHM=${SERVER_AUTH_KEY_ALGORITHM:-RS256}
+      - SERVER_AUTH_PRIVATE_KEY_PATH=${SERVER_AUTH_PRIVATE_KEY_PATH:-/app/secrets/server-auth-private.pem}
+      - SERVER_AUTH_PUBLIC_KEY_PATH=${SERVER_AUTH_PUBLIC_KEY_PATH:-/app/secrets/server-auth-public.pem}
+      - SERVER_AUTH_KEY_ROTATION_DAYS=${SERVER_AUTH_KEY_ROTATION_DAYS:-30}
+      - SERVER_AUTH_MAX_TOKENS_PER_MINUTE=${SERVER_AUTH_MAX_TOKENS_PER_MINUTE:-10}
+      - SERVER_AUTH_AUDIT_LOG=${SERVER_AUTH_AUDIT_LOG:-true}
+      # Host directory for sharing keys with spawned containers
+      - SERVER_AUTH_KEYS_HOST_DIR=${SERVER_AUTH_KEYS_HOST_DIR:-/tmp/nukelab-secrets}
     volumes:
       - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:Z
       - ./backend:/app:Z
@@ -130,6 +133,8 @@ services:
       # Set VOLUME_STORAGE_PATH in your .env file, or remove this line.
       # See .env.example for platform-specific values.
       - ${VOLUME_STORAGE_PATH:?VOLUME_STORAGE_PATH must be set in .env}:${VOLUME_STORAGE_PATH}:ro
+      # Server auth keys - shared with spawned containers via host filesystem.
+      - ${SERVER_AUTH_KEYS_HOST_DIR:-/tmp/nukelab-secrets}:/app/secrets:Z
     networks:
       - nukelab-network
     depends_on:

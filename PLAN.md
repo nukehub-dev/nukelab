@@ -1161,7 +1161,7 @@ GET    /api/system/stats            # Platform statistics
   - [ ] `database/` — PostgreSQL 18 schema and migrations
   - [ ] `environments/` — Environment Dockerfiles
   - [ ] `docker-compose.yml` — Full stack orchestration
-  - [ ] `traefik/` — Traefik configuration
+  - [ ] `infrastructure/traefik/` — Traefik configuration
 
 - [ ] **Database Setup**
   - [ ] Create PostgreSQL 18 schema (users, roles, permissions, servers, environments, audit_logs)
@@ -1778,8 +1778,9 @@ nukelab/
 │       ├── nginx.conf
 │       └── startup.sh
 │
-├── traefik/                          # Traefik Configuration
-│   ├── traefik.yml                  # Static configuration
+├── infrastructure/                   # Infrastructure Configuration
+│   ├── traefik/                     # Traefik Configuration
+│   │   └── traefik.yml              # Static configuration
 │   └── dynamic/                     # Dynamic configuration
 │       ├── middlewares.yml
 │       └── routers.yml

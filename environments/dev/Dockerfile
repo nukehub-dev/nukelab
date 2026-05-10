@@ -4,6 +4,10 @@ FROM nukelab-base:latest
 RUN apt-get update && apt-get install -y nginx ttyd \
     && rm -rf /var/lib/apt/lists/*
 
+# Copy auth sidecar binary from services build
+COPY --from=nukelab-auth-sidecar:latest /auth-sidecar /usr/local/bin/auth-sidecar
+RUN chmod +x /usr/local/bin/auth-sidecar
+
 # Copy nginx config
 COPY nginx.conf /etc/nginx/nginx.conf
 

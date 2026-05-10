@@ -52,7 +52,8 @@ Phase 1 establishes the foundational infrastructure for NukeLab Platform v2.0. W
   ├── database/          # Schema and migrations
   │   ├── migrations/    # Alembic migrations
   │   └── seeds/         # Initial data
-  ├── traefik/           # Reverse proxy config
+  ├── infrastructure/    # Infrastructure config
+  │   └── traefik/       # Reverse proxy
   ├── certs/             # SSL certificates (self-signed)
   ├── scripts/           # Utility scripts
   └── docs/              # Documentation
@@ -74,8 +75,8 @@ Phase 1 establishes the foundational infrastructure for NukeLab Platform v2.0. W
   - [ ] Named volumes for PostgreSQL data
 
 - [ ] **Traefik Configuration**
-  - [ ] Static config (`traefik/traefik.yml`)
-  - [ ] Dynamic config directory (`traefik/dynamic/`)
+  - [ ] Static config (`infrastructure/traefik/traefik.yml`)
+  - [ ] Dynamic config directory (`infrastructure/traefik/dynamic/`)
   - [ ] Docker provider enabled
   - [ ] Entrypoints: web (80), websecure (443)
   - [ ] Self-signed certificate generation script

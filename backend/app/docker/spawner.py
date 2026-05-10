@@ -75,11 +75,17 @@ class ServerSpawner:
         }
         
         # Environment variables
+        # Note: We do NOT pass JWT_SECRET to containers anymore.
+        # Containers validate server access tokens using the public key only.
         environment = {
             "NUKELAB_USER_ID": user_id,
             "NUKELAB_USERNAME": username,
             "NUKELAB_SERVER_ID": server_id,
-            "JWT_SECRET": settings.jwt_secret,
+            # Auth sidecar configuration
+            "NUKELAB_AUTH_ENABLED": "true" if settings.server_auth_enabled else "false",
+            "NUKELAB_AUTH_PUBLIC_KEY_PATH": "/etc/nukelab/auth/public.pem",
+            "NUKELAB_AUTH_ALGORITHM": settings.server_auth_key_algorithm,
+            "NUKELAB_AUTH_SERVER_ID": server_id,
             **(env_vars or {}),
         }
         
@@ -87,6 +93,24 @@ class ServerSpawner:
         volumes = {
             volume_name: f"/home/{username}"
         }
+        
+        # Mount public key for auth validation if server auth is enabled
+        if settings.server_auth_enabled and settings.server_auth_public_key_path:
+            from app.services.server_auth_service import server_auth_service
+            # Ensure keys exist (generates them if needed)
+            server_auth_service._ensure_keys_exist()
+            # Use host path for volume mount - the key is shared via host filesystem
+            # In production, this would be a Kubernetes secret or similar
+            import os
+            host_keys_dir = os.environ.get('SERVER_AUTH_KEYS_HOST_DIR', '/tmp/nukelab-secrets')
+            host_public_key = os.path.join(host_keys_dir, 'server-auth-public.pem')
+            # Ensure the host directory exists
+            os.makedirs(host_keys_dir, mode=0o755, exist_ok=True)
+            # Copy key to host path if it doesn't exist there
+            if not os.path.exists(host_public_key):
+                import shutil
+                shutil.copy2(settings.server_auth_public_key_path, host_public_key)
+            volumes[host_public_key] = "/etc/nukelab/auth/public.pem:ro"
         
         try:
             # Check if image exists locally first, then try to pull

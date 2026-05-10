@@ -91,6 +91,16 @@ class Settings(BaseSettings):
     server_auto_stop_on_depletion: bool = True
     server_warn_before_stop: int = 600
 
+    # Server Auth - Asymmetric key signing for container access tokens
+    server_auth_enabled: bool = True
+    server_auth_token_ttl: int = 300  # 5 minutes
+    server_auth_key_algorithm: str = "RS256"
+    server_auth_private_key_path: str = "/app/secrets/server-auth-private.pem"
+    server_auth_public_key_path: str = "/app/secrets/server-auth-public.pem"
+    server_auth_key_rotation_days: int = 30
+    server_auth_max_tokens_per_minute: int = 10
+    server_auth_audit_log: bool = True
+
     class Config:
         env_file_encoding = "utf-8"
         case_sensitive = False

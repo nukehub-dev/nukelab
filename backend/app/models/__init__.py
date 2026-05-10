@@ -16,3 +16,4 @@ from app.models.notification import Notification
 from app.models.server_schedule import ServerSchedule
 from app.models.volume_backup import VolumeBackup
 from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
+from app.models.server_access_token import ServerAccessToken
