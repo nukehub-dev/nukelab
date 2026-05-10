@@ -18,6 +18,8 @@ import {
 import { MetricsAreaChart } from '../components/charts/area-chart';
 import { springs } from '../lib/animations';
 import { cn } from '../lib/utils';
+import { usePageGuard } from '../hooks/use-page-guard';
+import { PERMISSIONS } from '../stores/auth-store';
 
 export const Route = createFileRoute('/analytics')({
   component: AnalyticsDashboard,
@@ -58,6 +60,9 @@ function StatCard({ title, value, subtitle, icon: Icon, iconColor, bgColor }: St
 }
 
 function AnalyticsDashboard() {
+  const allowed = usePageGuard({ permission: PERMISSIONS.ANALYTICS_READ });
+  if (!allowed) return null;
+
   const [days, setDays] = useState(30);
   const { data: globalUsage } = useGlobalUsage(days);
   const { data: topConsumers } = useTopConsumers(days, 10);

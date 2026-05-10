@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
+import { useToast } from '../stores/toast-store';
 import type { User } from '../types/api';
 
 interface UsersQueryParams {
@@ -59,14 +60,29 @@ interface UpdateUserData {
   nuke_balance?: number;
 }
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  return 'An unexpected error occurred';
+}
+
 export function useUserActions() {
   const queryClient = useQueryClient();
+  const { success, error: showError } = useToast();
 
   const createUser = useMutation({
     mutationFn: (data: CreateUserData) =>
       api.post<User>('/users/', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      success('User created', 'New user has been created successfully');
+    },
+    onError: (err) => {
+      showError('Failed to create user', getErrorMessage(err));
     },
   });
 
@@ -75,6 +91,10 @@ export function useUserActions() {
       api.put<User>(`/users/${userId}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      success('User updated', 'User has been updated successfully');
+    },
+    onError: (err) => {
+      showError('Failed to update user', getErrorMessage(err));
     },
   });
 
@@ -83,6 +103,10 @@ export function useUserActions() {
       api.post<User>(`/users/${userId}/disable`, { disabled }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      success('User status updated', 'User status has been changed successfully');
+    },
+    onError: (err) => {
+      showError('Failed to update user status', getErrorMessage(err));
     },
   });
 
@@ -90,6 +114,10 @@ export function useUserActions() {
     mutationFn: (userId: string) => api.delete(`/users/${userId}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      success('User deleted', 'User has been deleted successfully');
+    },
+    onError: (err) => {
+      showError('Failed to delete user', getErrorMessage(err));
     },
   });
 

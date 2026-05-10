@@ -12,6 +12,7 @@ from app.config import settings
 from app.db.session import get_db
 from app.models.user import User
 from app.models.api_token import ApiToken
+from app.core.security import get_user_permissions
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -232,6 +233,7 @@ async def get_me(current_user: User = Depends(get_current_user)):
         "email": current_user.email,
         "full_name": current_user.display_name,
         "role": current_user.role,
+        "permissions": get_user_permissions(current_user),
         "nuke_balance": current_user.nuke_balance,
         "profile": current_user.profile or {},
         "preferences": current_user.preferences or {},

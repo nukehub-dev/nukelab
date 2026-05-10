@@ -1,12 +1,16 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { Shield } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { usePageGuard } from '../hooks/use-page-guard';
+import { PERMISSIONS } from '../stores/auth-store';
 
 export const Route = createFileRoute('/settings/authentication')({
   component: AuthenticationSettingsPage,
 });
 
 function AuthenticationSettingsPage() {
+  const allowed = usePageGuard({ permission: PERMISSIONS.ADMIN_ACCESS });
+  if (!allowed) return null;
   return (
     <div className="space-y-8">
       <motion.div

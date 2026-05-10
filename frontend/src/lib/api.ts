@@ -22,16 +22,24 @@ function getToken(): string {
   return localStorage.getItem('nukelab-token') || '';
 }
 
-function handleAuthError(response: Response): never {
+async function handleAuthError(response: Response): Promise<never> {
   if (response.status === 401) {
     localStorage.removeItem('nukelab-token');
     // Only redirect if not already on login page
     if (window.location.pathname !== '/login') {
       window.location.href = '/login';
     }
-    throw new Error('401: Session expired. Please log in again.');
+    throw new Error('Session expired. Please log in again.');
   }
-  throw new Error(`${response.status}: ${response.statusText}`);
+  // Try to get detailed error message from response body
+  let detail = response.statusText;
+  try {
+    const body = await response.json();
+    detail = body.detail || body.message || response.statusText;
+  } catch {
+    // ignore JSON parse errors
+  }
+  throw new Error(`${detail}`);
 }
 
 export const api = {
@@ -42,7 +50,7 @@ export const api = {
         'Content-Type': 'application/json',
       },
     });
-    if (!response.ok) handleAuthError(response);
+    if (!response.ok) await handleAuthError(response);
     return response.json();
   },
 
@@ -55,7 +63,7 @@ export const api = {
       },
       body: JSON.stringify(data),
     });
-    if (!response.ok) handleAuthError(response);
+    if (!response.ok) await handleAuthError(response);
     return response.json();
   },
 
@@ -68,7 +76,7 @@ export const api = {
       },
       body: JSON.stringify(data),
     });
-    if (!response.ok) handleAuthError(response);
+    if (!response.ok) await handleAuthError(response);
     return response.json();
   },
 
@@ -80,7 +88,7 @@ export const api = {
         'Content-Type': 'application/json',
       },
     });
-    if (!response.ok) handleAuthError(response);
+    if (!response.ok) await handleAuthError(response);
     return response.json();
   },
 };

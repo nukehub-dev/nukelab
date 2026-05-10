@@ -9,21 +9,21 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { useAuthStore } from '../stores/auth-store';
+import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
 
 interface SettingsNavItem {
   label: string;
   icon: React.ElementType;
   href: string;
-  adminOnly?: boolean;
+  requiredPermission?: string;
 }
 
 const settingsNavItems: SettingsNavItem[] = [
   { label: 'Profile', icon: UserCircle, href: '/settings/profile' },
   { label: 'Appearance', icon: Palette, href: '/settings/appearance' },
   { label: 'Notifications', icon: Bell, href: '/settings/notifications' },
-  { label: 'Authentication', icon: Shield, href: '/settings/authentication', adminOnly: true },
-  { label: 'Users', icon: Users, href: '/settings/users', adminOnly: true },
+  { label: 'Authentication', icon: Shield, href: '/settings/authentication', requiredPermission: PERMISSIONS.ADMIN_ACCESS },
+  { label: 'Users', icon: Users, href: '/settings/users', requiredPermission: PERMISSIONS.USERS_READ },
 ];
 
 export const Route = createFileRoute('/settings')({
@@ -32,10 +32,9 @@ export const Route = createFileRoute('/settings')({
 
 function SettingsLayout() {
   const location = useLocation();
-  const user = useAuthStore((state) => state.user);
-  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
+  const hasPermission = useAuthStore((state) => state.hasPermission);
 
-  const visibleItems = settingsNavItems.filter(item => !item.adminOnly || isAdmin);
+  const visibleItems = settingsNavItems.filter(item => !item.requiredPermission || hasPermission(item.requiredPermission));
 
   const isActive = (href: string) => {
     return location.pathname === href || location.pathname.startsWith(href + '/');

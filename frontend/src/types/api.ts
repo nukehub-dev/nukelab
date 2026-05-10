@@ -41,6 +41,7 @@ export interface User {
   display_name: string;
   avatar_url: string;
   role: string;
+  permissions?: string[];
   nuke_balance: number;
   is_active: boolean;
   is_verified: boolean;

@@ -51,6 +51,20 @@ ROLE_PERMISSIONS = {
         Permission.CREDITS_READ,
         Permission.CREDITS_GRANT,
         Permission.CREDITS_DEDUCT,
+        # Analytics
+        Permission.ANALYTICS_READ,
+        # Workspaces
+        Permission.WORKSPACES_READ,
+        Permission.WORKSPACES_MANAGE,
+        # Volumes
+        Permission.VOLUMES_READ,
+        Permission.VOLUMES_MANAGE,
+        # Images
+        Permission.IMAGES_READ,
+        Permission.IMAGES_MANAGE,
+        # Networks
+        Permission.NETWORKS_READ,
+        Permission.NETWORKS_MANAGE,
         # Audit
         Permission.AUDIT_READ,
         # Admin dashboard
@@ -76,6 +90,16 @@ ROLE_PERMISSIONS = {
         Permission.PLAN_READ,
         # Credits (view only)
         Permission.CREDITS_READ,
+        # Analytics (read only)
+        Permission.ANALYTICS_READ,
+        # Workspaces (read only)
+        Permission.WORKSPACES_READ,
+        # Volumes (read only)
+        Permission.VOLUMES_READ,
+        # Images (read only)
+        Permission.IMAGES_READ,
+        # Networks (read only)
+        Permission.NETWORKS_READ,
     ],
     
     "support": [
@@ -89,6 +113,16 @@ ROLE_PERMISSIONS = {
         Permission.RESOURCES_READ_ALL,
         # Credits (view only)
         Permission.CREDITS_READ,
+        # Analytics (read only)
+        Permission.ANALYTICS_READ,
+        # Workspaces (read only)
+        Permission.WORKSPACES_READ,
+        # Volumes (read only)
+        Permission.VOLUMES_READ,
+        # Images (read only)
+        Permission.IMAGES_READ,
+        # Networks (read only)
+        Permission.NETWORKS_READ,
     ],
     
     "user": [
@@ -101,12 +135,28 @@ ROLE_PERMISSIONS = {
         Permission.RESOURCES_READ_OWN,
         # Credits (view own)
         Permission.CREDITS_READ,
+        # Workspaces (read only)
+        Permission.WORKSPACES_READ,
+        # Volumes (read only)
+        Permission.VOLUMES_READ,
+        # Images (read only)
+        Permission.IMAGES_READ,
+        # Networks (read only)
+        Permission.NETWORKS_READ,
     ],
-    
+
     "guest": [
         # Read-only access to own resources
         Permission.SERVERS_READ_OWN,
         Permission.RESOURCES_READ_OWN,
+        # Workspaces (read only)
+        Permission.WORKSPACES_READ,
+        # Volumes (read only)
+        Permission.VOLUMES_READ,
+        # Images (read only)
+        Permission.IMAGES_READ,
+        # Networks (read only)
+        Permission.NETWORKS_READ,
     ],
 }
 

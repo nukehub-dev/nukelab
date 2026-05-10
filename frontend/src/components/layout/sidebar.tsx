@@ -26,7 +26,7 @@ import {
 import { NukeLabLogo } from '../logo';
 import { useSidebarStore } from '../../stores/sidebar-store';
 import { useThemeStore } from '../../stores/theme-store';
-import { useAuthStore } from '../../stores/auth-store';
+import { useAuthStore, PERMISSIONS } from '../../stores/auth-store';
 import { cn } from '../../lib/utils';
 import { Tooltip } from '../ui/tooltip';
 import { NotificationCenter } from '../notifications/notification-center';
@@ -36,7 +36,7 @@ interface NavItem {
   label: string;
   icon: React.ElementType;
   href: string;
-  requiredRole?: 'admin' | 'moderator' | 'support' | 'user';
+  requiredPermission?: string;
 }
 
 interface NavGroup {
@@ -71,10 +71,10 @@ const navGroups: NavGroup[] = [
   {
     label: 'Administration',
     items: [
-      { label: 'Users', icon: Users, href: '/users', requiredRole: 'moderator' },
-      { label: 'Analytics', icon: BarChart3, href: '/analytics', requiredRole: 'admin' },
-      { label: 'Audit Logs', icon: FileText, href: '/audit-logs', requiredRole: 'admin' },
-      { label: 'Permissions', icon: Shield, href: '/admin/permissions', requiredRole: 'admin' },
+      { label: 'Users', icon: Users, href: '/users', requiredPermission: PERMISSIONS.USERS_READ },
+      { label: 'Analytics', icon: BarChart3, href: '/analytics', requiredPermission: PERMISSIONS.ANALYTICS_READ },
+      { label: 'Audit Logs', icon: FileText, href: '/audit-logs', requiredPermission: PERMISSIONS.AUDIT_READ },
+      { label: 'Permissions', icon: Shield, href: '/admin/permissions', requiredPermission: PERMISSIONS.ADMIN_ACCESS },
     ],
   },
 ];
@@ -96,33 +96,18 @@ const rightDockItems = [
   { label: 'Plans', icon: CreditCard, href: '/plans' },
 ];
 
-function getMinimumRoleLevel(role: string): number {
-  const levels: Record<string, number> = {
-    guest: 0,
-    user: 1,
-    support: 2,
-    moderator: 3,
-    admin: 4,
-    super_admin: 5,
-  };
-  return levels[role] ?? 0;
-}
-
-function canAccessItem(item: NavItem, userRole: string): boolean {
-  if (!item.requiredRole) return true;
-  const required = getMinimumRoleLevel(item.requiredRole);
-  const current = getMinimumRoleLevel(userRole);
-  return current >= required;
+function canAccessItem(item: NavItem, hasPermission: (p: string) => boolean): boolean {
+  if (!item.requiredPermission) return true;
+  return hasPermission(item.requiredPermission);
 }
 
 export function Sidebar() {
   const location = useLocation();
   const { isOpen, mode, setOpen, setMode } = useSidebarStore();
   const { isDark, isOled, setDarkMode, setOledMode } = useThemeStore();
-  const user = useAuthStore((state) => state.user);
   const [showMore, setShowMore] = useState(false);
 
-  const userRole = user?.role ?? 'guest';
+  const hasPermission = useAuthStore((state) => state.hasPermission);
   const isAuto = mode === 'auto';
 
   const isActive = (href: string) => {
@@ -133,11 +118,11 @@ export function Sidebar() {
   const visibleNavGroups = navGroups
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => canAccessItem(item, userRole)),
+      items: group.items.filter((item) => canAccessItem(item, hasPermission)),
     }))
     .filter((group) => group.items.length > 0);
 
-  const visibleDockItems = dockItems.filter((item) => canAccessItem(item, userRole));
+  const visibleDockItems = dockItems.filter((item) => canAccessItem(item, hasPermission));
 
   return (
     <>

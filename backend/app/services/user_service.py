@@ -12,6 +12,8 @@ from fastapi import HTTPException, status
 
 from app.api.auth import get_password_hash
 from app.core.roles import is_valid_role, VALID_ROLES
+from app.core.permissions import Permission
+from app.core.security import has_permission
 from app.models.user import User
 
 
@@ -182,8 +184,13 @@ class UserService:
         # Update allowed fields
         allowed_fields = ["first_name", "last_name", "email", "avatar_url", "profile", "preferences"]
         
-        # Only admins can update role
-        if "role" in data and updated_by and updated_by.role in ["admin", "super_admin"]:
+        # Only users with users:update permission can update role
+        if "role" in data and updated_by:
+            if not has_permission(updated_by, Permission.USERS_UPDATE):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Insufficient permissions to update role"
+                )
             if is_valid_role(data["role"]):
                 user.role = data["role"]
             else:
@@ -192,9 +199,16 @@ class UserService:
                     detail=f"Invalid role"
                 )
         
-        # Only admins can update credits
-        if "nuke_balance" in data and updated_by and updated_by.role in ["admin", "super_admin"]:
-            user.nuke_balance = data["nuke_balance"]
+        # Only users with credits management permission can update credits
+        if "nuke_balance" in data and data["nuke_balance"] is not None and updated_by:
+            # Only enforce if credits are actually changing
+            if user.nuke_balance != data["nuke_balance"]:
+                if not has_permission(updated_by, Permission.CREDITS_GRANT) and not has_permission(updated_by, Permission.CREDITS_DEDUCT):
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Insufficient permissions to update credits"
+                    )
+                user.nuke_balance = data["nuke_balance"]
         
         for field in allowed_fields:
             if field in data:

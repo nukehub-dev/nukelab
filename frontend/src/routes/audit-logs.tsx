@@ -24,7 +24,7 @@ import {
 } from 'lucide-react';
 import { ResourcePageLayout } from '../components/layout/resource-page-layout';
 import { DataTable } from '../components/data/data-table';
-import { useAuthStore } from '../stores/auth-store';
+import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
 import { useDataTable } from '../hooks/use-data-table';
 import { useAuditLogs } from '../hooks/use-audit-logs';
 import { AuditLogDiff } from '../components/audit/audit-log-diff';
@@ -131,13 +131,13 @@ function CopyableId({ id }: { id: string }) {
 
 function AuditLogsPage() {
   const navigate = useNavigate();
-  const isAdmin = useAuthStore((state) => state.isAdmin());
+  const canViewAudit = useAuthStore((state) => state.hasPermission(PERMISSIONS.AUDIT_READ));
 
   useEffect(() => {
-    if (!isAdmin) {
+    if (!canViewAudit) {
       navigate({ to: '/' });
     }
-  }, [isAdmin, navigate]);
+  }, [canViewAudit, navigate]);
 
   const {
     state: tableState,
@@ -389,7 +389,7 @@ function AuditLogsPage() {
     </div>
   );
 
-  if (!isAdmin) return null;
+  if (!canViewAudit) return null;
 
   return (
     <>

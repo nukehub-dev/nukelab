@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import get_current_user
 from app.core.permissions import Permission
+from app.core.security import get_user_permissions
 from app.dependencies import require_permissions, PermissionChecker
 from app.db.session import get_db
 from app.models.user import User
@@ -83,6 +84,7 @@ def serialize_user(user: User) -> dict:
         "display_name": user.display_name,
         "avatar_url": user.get_avatar_url(),
         "role": user.role,
+        "permissions": get_user_permissions(user),
         "nuke_balance": user.nuke_balance,
         "preferences": user.preferences or {},
         "is_active": user.is_active,

@@ -19,7 +19,7 @@ import {
   CheckCheck,
 } from 'lucide-react';
 import { api } from '../lib/api';
-import { useAuthStore } from '../stores/auth-store';
+import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
 import { springs } from '../lib/animations';
 import { cn } from '../lib/utils';
 import { Button } from '../components/ui/button';
@@ -136,7 +136,7 @@ function getCategories(allPermissions: string[]): PermissionCategory[] {
 
 function PermissionsPage() {
   const navigate = useNavigate();
-  const isAdmin = useAuthStore((state) => state.isAdmin());
+  const canAccessAdmin = useAuthStore((state) => state.hasPermission(PERMISSIONS.ADMIN_ACCESS));
   const [matrix, setMatrix] = useState<PermissionMatrix | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingRole, setSavingRole] = useState<string | null>(null);
@@ -145,8 +145,8 @@ function PermissionsPage() {
   const [expandedRoles, setExpandedRoles] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    if (!isAdmin) navigate({ to: '/' });
-  }, [isAdmin, navigate]);
+    if (!canAccessAdmin) navigate({ to: '/' });
+  }, [canAccessAdmin, navigate]);
 
   useEffect(() => {
     fetchMatrix();

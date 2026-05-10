@@ -6,7 +6,7 @@ import { DataTable } from '../components/data/data-table';
 import { StatusBadge } from '../components/data/status-badge';
 import { useUsers, useUserActions } from '../hooks/use-users';
 import { useDataTable } from '../hooks/use-data-table';
-import { useAuthStore } from '../stores/auth-store';
+import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
 import { formatDate } from '../lib/utils';
 import type { User as UserType } from '../types/api';
 import type { ColumnDef, ColumnFiltersState, VisibilityState, SortingState } from '@tanstack/react-table';
@@ -23,15 +23,20 @@ export const Route = createFileRoute('/users')({
 
 function UsersPage() {
   const navigate = useNavigate();
-  const canManageUsers = useAuthStore((state) => state.canManageUsers());
-  
-  // Redirect non-admin/moderator users
+  const hasPermission = useAuthStore((state) => state.hasPermission);
+  const canReadUsers = hasPermission(PERMISSIONS.USERS_READ);
+  const canCreateUsers = hasPermission(PERMISSIONS.USERS_CREATE);
+  const canUpdateUsers = hasPermission(PERMISSIONS.USERS_UPDATE);
+  const canDeleteUsers = hasPermission(PERMISSIONS.USERS_DELETE);
+  const canManageCredits = hasPermission(PERMISSIONS.CREDITS_GRANT) || hasPermission(PERMISSIONS.CREDITS_DEDUCT);
+  const canManageUsers = canCreateUsers || canUpdateUsers || canDeleteUsers;
+
+  // Redirect users without read permission
   useEffect(() => {
-    if (!canManageUsers) {
+    if (!canReadUsers) {
       navigate({ to: '/' });
     }
-  }, [canManageUsers, navigate]);
-  const canDeleteUsers = useAuthStore((state) => state.canDeleteUsers());
+  }, [canReadUsers, navigate]);
 
   const {
     state: tableState,
@@ -129,28 +134,41 @@ function UsersPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (editingUser) {
-      updateUser.mutate({
-        userId: editingUser.id,
-        data: {
-          first_name: formData.first_name || undefined,
-          last_name: formData.last_name || undefined,
-          email: formData.email,
-          role: formData.role,
-          nuke_balance: formData.credits,
-        },
-      });
-    } else {
-      createUser.mutate({
-        username: formData.username,
-        email: formData.email,
-        password: formData.password,
-        role: formData.role,
+      const updateData: Record<string, unknown> = {
         first_name: formData.first_name || undefined,
         last_name: formData.last_name || undefined,
-        credits: formData.credits,
-      });
+        email: formData.email,
+        role: formData.role,
+      };
+      // Only send credits if user has permission to manage them
+      if (canManageCredits) {
+        updateData.nuke_balance = formData.credits;
+      }
+      updateUser.mutate(
+        {
+          userId: editingUser.id,
+          data: updateData,
+        },
+        {
+          onSuccess: () => setDialogOpen(false),
+        }
+      );
+    } else {
+      createUser.mutate(
+        {
+          username: formData.username,
+          email: formData.email,
+          password: formData.password,
+          role: formData.role,
+          first_name: formData.first_name || undefined,
+          last_name: formData.last_name || undefined,
+          credits: formData.credits,
+        },
+        {
+          onSuccess: () => setDialogOpen(false),
+        }
+      );
     }
-    setDialogOpen(false);
   };
 
   const columns: ColumnDef<UserType>[] = [
@@ -564,7 +582,7 @@ function UsersPage() {
                   {canDeleteUsers && <SelectItem value="super_admin">Super Admin</SelectItem>}
                 </Select>
               </div>
-              {canDeleteUsers && (
+              {canManageCredits && (
                 <div className="space-y-2"
                 >
                   <label className="text-sm font-medium"

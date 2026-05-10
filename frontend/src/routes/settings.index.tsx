@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { Palette, Bell, Shield, Users, UserCircle, ChevronRight } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { useAuthStore } from '../stores/auth-store';
+import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
 import { cn } from '../lib/utils';
 
 interface SettingsCategory {
@@ -9,7 +9,7 @@ interface SettingsCategory {
   description: string;
   icon: React.ElementType;
   href: string;
-  adminOnly?: boolean;
+  requiredPermission?: string;
   color: string;
 }
 
@@ -40,7 +40,7 @@ const categories: SettingsCategory[] = [
     description: 'Manage OAuth and local auth settings',
     icon: Shield,
     href: '/settings/authentication',
-    adminOnly: true,
+    requiredPermission: PERMISSIONS.ADMIN_ACCESS,
     color: 'bg-emerald-500/10 text-emerald-400',
   },
   {
@@ -48,7 +48,7 @@ const categories: SettingsCategory[] = [
     description: 'Manage user accounts and roles',
     icon: Users,
     href: '/settings/users',
-    adminOnly: true,
+    requiredPermission: PERMISSIONS.USERS_READ,
     color: 'bg-amber-500/10 text-amber-400',
   },
 ];
@@ -58,10 +58,9 @@ export const Route = createFileRoute('/settings/')({
 });
 
 function SettingsIndexPage() {
-  const user = useAuthStore((state) => state.user);
-  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
+  const hasPermission = useAuthStore((state) => state.hasPermission);
 
-  const visibleCategories = categories.filter(c => !c.adminOnly || isAdmin);
+  const visibleCategories = categories.filter(c => !c.requiredPermission || hasPermission(c.requiredPermission));
 
   return (
     <div className="space-y-6">
@@ -91,7 +90,7 @@ function SettingsIndexPage() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <h3 className="font-semibold text-base group-hover:text-primary transition-colors">{category.label}</h3>
-                  {category.adminOnly && (
+                  {category.requiredPermission && (
                     <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">Admin</span>
                   )}
                 </div>
