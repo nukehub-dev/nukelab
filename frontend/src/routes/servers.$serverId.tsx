@@ -34,6 +34,7 @@ import { CronBuilder } from '../components/cron-builder';
 import { useServerMetrics } from '../hooks/use-server-metrics';
 import { formatDate, formatBytes, formatPlanResource, cn } from '../lib/utils';
 import { springs } from '../lib/animations';
+import { useConfirmDialog } from '../components/ui/confirm-dialog';
 
 export const Route = createFileRoute('/servers/$serverId')({
   component: ServerDetailPage,
@@ -116,6 +117,7 @@ function ServerDetailPage() {
   const { data: logsData } = useServerLogs(serverId, 100);
   const createSchedule = useCreateSchedule();
   const deleteSchedule = useDeleteSchedule();
+  const { confirm, dialog } = useConfirmDialog();
 
   const [activeTab, setActiveTab] = useState<'overview' | 'schedules' | 'logs'>('overview');
   const [showScheduleForm, setShowScheduleForm] = useState(false);
@@ -243,10 +245,15 @@ function ServerDetailPage() {
             </>
           )}
           <button
-            onClick={() => {
-              if (confirm('Are you sure you want to delete this server?')) {
-                deleteServer.mutate(server.id);
-              }
+            onClick={async () => {
+              const confirmed = await confirm({
+                title: 'Delete Server',
+                description: 'Are you sure you want to delete this server?',
+                confirmLabel: 'Delete',
+                cancelLabel: 'Cancel',
+                variant: 'danger',
+              });
+              if (confirmed) deleteServer.mutate(server.id);
             }}
             disabled={isOperationPending(server.id, 'delete')}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/20 transition-all duration-100 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
@@ -731,10 +738,15 @@ function ServerDetailPage() {
                       </span>
                     )}
                     <button
-                      onClick={() => {
-                        if (confirm('Delete this schedule?')) {
-                          deleteSchedule.mutate({ serverId, scheduleId: schedule.id });
-                        }
+                      onClick={async () => {
+                        const confirmed = await confirm({
+                          title: 'Delete Schedule',
+                          description: 'Are you sure you want to delete this schedule?',
+                          confirmLabel: 'Delete',
+                          cancelLabel: 'Cancel',
+                          variant: 'danger',
+                        });
+                        if (confirmed) deleteSchedule.mutate({ serverId, scheduleId: schedule.id });
                       }}
                       className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
                     >
@@ -774,6 +786,7 @@ function ServerDetailPage() {
           </div>
         </motion.div>
       )}
+      {dialog}
     </div>
   );
 }

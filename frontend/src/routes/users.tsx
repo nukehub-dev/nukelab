@@ -16,6 +16,7 @@ import { Button } from '../components/ui/button';
 import { Select, SelectItem } from '../components/ui/select';
 import { motion } from 'framer-motion';
 import { Tooltip } from '../components/ui/tooltip';
+import { useConfirmDialog } from '../components/ui/confirm-dialog';
 
 export const Route = createFileRoute('/users')({
   component: UsersPage,
@@ -87,6 +88,7 @@ function UsersPage() {
   });
 
   const { createUser, updateUser, disableUser, deleteUser } = useUserActions();
+  const { confirm, dialog } = useConfirmDialog();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserType | null>(null);
@@ -303,10 +305,15 @@ function UsersPage() {
             {canDeleteUsers && (
               <Tooltip content="Delete">
                 <motion.button
-                  onClick={() => {
-                    if (confirm(`Are you sure you want to delete ${user.username}?`)) {
-                      deleteUser.mutate(user.id);
-                    }
+                  onClick={async () => {
+                    const confirmed = await confirm({
+                      title: 'Delete User',
+                      description: `Are you sure you want to delete ${user.username}?`,
+                      confirmLabel: 'Delete',
+                      cancelLabel: 'Cancel',
+                      variant: 'danger',
+                    });
+                    if (confirmed) deleteUser.mutate(user.id);
                   }}
                   disabled={deleteUser.isPending}
                   className="inline-flex p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
@@ -419,10 +426,15 @@ function UsersPage() {
               {canDeleteUsers && (
                 <Tooltip content="Delete">
                   <button
-                    onClick={() => {
-                      if (confirm(`Are you sure you want to delete ${user.username}?`)) {
-                        deleteUser.mutate(user.id);
-                      }
+                    onClick={async () => {
+                      const confirmed = await confirm({
+                        title: 'Delete User',
+                        description: `Are you sure you want to delete ${user.username}?`,
+                        confirmLabel: 'Delete',
+                        cancelLabel: 'Cancel',
+                        variant: 'danger',
+                      });
+                      if (confirmed) deleteUser.mutate(user.id);
                     }}
                     disabled={deleteUser.isPending}
                     className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors inline-flex"
@@ -609,6 +621,7 @@ function UsersPage() {
         </DialogContent>
       </Dialog>
       )}
+      {dialog}
     </>
   );
 }

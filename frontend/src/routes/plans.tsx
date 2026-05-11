@@ -17,12 +17,14 @@ import { Textarea } from '../components/ui/textarea';
 import { Checkbox } from '../components/ui/checkbox';
 import { motion } from 'framer-motion';
 import { Tooltip } from '../components/ui/tooltip';
+import { useConfirmDialog } from '../components/ui/confirm-dialog';
 
 export const Route = createFileRoute('/plans')({
   component: PlansPage,
 });
 
 function PlansPage() {
+  const { confirm, dialog } = useConfirmDialog();
   const canManagePlans = useAuthStore((state) => state.canManagePlans());
 
   const {
@@ -331,10 +333,15 @@ function PlansPage() {
             )}
             <Tooltip content="Delete">
               <motion.button
-                onClick={() => {
-                  if (confirm(`Are you sure you want to delete ${plan.name}?`)) {
-                    deletePlan.mutate(plan.id);
-                  }
+                onClick={async () => {
+                  const confirmed = await confirm({
+                    title: 'Delete Plan',
+                    description: `Are you sure you want to delete ${plan.name}?`,
+                    confirmLabel: 'Delete',
+                    cancelLabel: 'Cancel',
+                    variant: 'danger',
+                  });
+                  if (confirmed) deletePlan.mutate(plan.id);
                 }}
                 disabled={deletePlan.isPending}
                   className="inline-flex p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
@@ -455,11 +462,16 @@ function PlansPage() {
           )}
           <Tooltip content="Delete">
             <button
-              onClick={() => {
-                if (confirm(`Are you sure you want to delete ${plan.name}?`)) {
-                  deletePlan.mutate(plan.id);
-                }
-              }}
+            onClick={async () => {
+              const confirmed = await confirm({
+                title: 'Delete Plan',
+                description: `Are you sure you want to delete ${plan.name}?`,
+                confirmLabel: 'Delete',
+                cancelLabel: 'Cancel',
+                variant: 'danger',
+              });
+              if (confirmed) deletePlan.mutate(plan.id);
+            }}
               disabled={deletePlan.isPending}
               className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors inline-flex"
             >
@@ -698,6 +710,7 @@ function PlansPage() {
         </DialogContent>
       </Dialog>
       )}
+      {dialog}
     </>
   );
 }

@@ -17,12 +17,14 @@ import { Select, SelectItem } from '../components/ui/select';
 import { Textarea } from '../components/ui/textarea';
 import { motion } from 'framer-motion';
 import { Tooltip } from '../components/ui/tooltip';
+import { useConfirmDialog } from '../components/ui/confirm-dialog';
 
 export const Route = createFileRoute('/environments')({
   component: EnvironmentsPage,
 });
 
 function EnvironmentsPage() {
+  const { confirm, dialog } = useConfirmDialog();
   const canManageEnvironments = useAuthStore((state) => state.canManageEnvironments());
 
   const {
@@ -299,10 +301,15 @@ function EnvironmentsPage() {
             </Tooltip>
             <Tooltip content="Delete">
               <motion.button
-                onClick={() => {
-                  if (confirm(`Are you sure you want to delete ${env.name}?`)) {
-                    deleteEnvironment.mutate(env.id);
-                  }
+                onClick={async () => {
+                  const confirmed = await confirm({
+                    title: 'Delete Environment',
+                    description: `Are you sure you want to delete ${env.name}?`,
+                    confirmLabel: 'Delete',
+                    cancelLabel: 'Cancel',
+                    variant: 'danger',
+                  });
+                  if (confirmed) deleteEnvironment.mutate(env.id);
                 }}
                 disabled={deleteEnvironment.isPending}
                   className="inline-flex p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
@@ -443,10 +450,15 @@ function EnvironmentsPage() {
             </Tooltip>
             <Tooltip content="Delete">
               <button
-                onClick={() => {
-                  if (confirm(`Are you sure you want to delete ${env.name}?`)) {
-                    deleteEnvironment.mutate(env.id);
-                  }
+                onClick={async () => {
+                  const confirmed = await confirm({
+                    title: 'Delete Environment',
+                    description: `Are you sure you want to delete ${env.name}?`,
+                    confirmLabel: 'Delete',
+                    cancelLabel: 'Cancel',
+                    variant: 'danger',
+                  });
+                  if (confirmed) deleteEnvironment.mutate(env.id);
                 }}
                 disabled={deleteEnvironment.isPending}
                 className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors inline-flex"
@@ -619,6 +631,7 @@ function EnvironmentsPage() {
         </DialogContent>
       </Dialog>
       )}
+      {dialog}
     </>
   );
 }

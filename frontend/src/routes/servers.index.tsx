@@ -17,12 +17,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import { Select, SelectItem } from '../components/ui/select';
+import { useConfirmDialog } from '../components/ui/confirm-dialog';
 
 export const Route = createFileRoute('/servers/')({
   component: ServersPage,
 });
 
 function ServersPage() {
+  const { confirm, dialog } = useConfirmDialog();
   const { data: servers = [], isLoading, isError, error } = useServers();
   const { createServer, startServer, stopServer, restartServer, deleteServer, isOperationPending } = useServerActions();
   const { data: envData } = useEnvironments({ is_active: true, limit: 100 });
@@ -301,10 +303,15 @@ function ServersPage() {
             )}
             <Tooltip content={isOperationPending(server.id, 'delete') ? 'Deleting...' : 'Delete'}>
               <button
-                onClick={() => {
-                  if (confirm('Are you sure you want to delete this server?')) {
-                    deleteServer.mutate(server.id);
-                  }
+                onClick={async () => {
+                  const confirmed = await confirm({
+                    title: 'Delete Server',
+                    description: 'Are you sure you want to delete this server?',
+                    confirmLabel: 'Delete',
+                    cancelLabel: 'Cancel',
+                    variant: 'danger',
+                  });
+                  if (confirmed) deleteServer.mutate(server.id);
                 }}
                 disabled={isOperationPending(server.id, 'delete')}
                 className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-all duration-100 inline-flex disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
@@ -363,10 +370,15 @@ function ServersPage() {
     {
       label: 'Delete',
       icon: <Trash2 className="w-4 h-4" />,
-      onClick: (ids: string[]) => {
-        if (confirm(`Are you sure you want to delete ${ids.length} servers?`)) {
-          ids.forEach((id) => deleteServer.mutate(id));
-        }
+      onClick: async (ids: string[]) => {
+        const confirmed = await confirm({
+          title: 'Delete Servers',
+          description: `Are you sure you want to delete ${ids.length} servers?`,
+          confirmLabel: 'Delete',
+          cancelLabel: 'Cancel',
+          variant: 'danger',
+        });
+        if (confirmed) ids.forEach((id) => deleteServer.mutate(id));
       },
       variant: 'destructive' as const,
     },
@@ -482,10 +494,15 @@ function ServersPage() {
           )}
           <Tooltip content={isOperationPending(server.id, 'delete') ? 'Deleting...' : 'Delete'}>
             <button
-              onClick={() => {
-                if (confirm('Are you sure you want to delete this server?')) {
-                  deleteServer.mutate(server.id);
-                }
+              onClick={async () => {
+                const confirmed = await confirm({
+                  title: 'Delete Server',
+                  description: 'Are you sure you want to delete this server?',
+                  confirmLabel: 'Delete',
+                  cancelLabel: 'Cancel',
+                  variant: 'danger',
+                });
+                if (confirmed) deleteServer.mutate(server.id);
               }}
               disabled={isOperationPending(server.id, 'delete')}
               className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-all duration-100 inline-flex disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
@@ -617,6 +634,7 @@ function ServersPage() {
           <DialogClose onClick={() => setDialogOpen(false)} />
         </DialogContent>
       </Dialog>
+      {dialog}
     </>
   );
 }

@@ -24,6 +24,7 @@ import { Route as EnvironmentsRouteImport } from './routes/environments'
 import { Route as AuditLogsRouteImport } from './routes/audit-logs'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as WorkspacesIndexRouteImport } from './routes/workspaces.index'
 import { Route as SettingsIndexRouteImport } from './routes/settings.index'
 import { Route as ServersIndexRouteImport } from './routes/servers.index'
 import { Route as WorkspacesWorkspaceIdRouteImport } from './routes/workspaces.$workspaceId'
@@ -112,6 +113,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const WorkspacesIndexRoute = WorkspacesIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => WorkspacesRoute,
+} as any)
 const SettingsIndexRoute = SettingsIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -199,6 +205,7 @@ export interface FileRoutesByFullPath {
   '/workspaces/$workspaceId': typeof WorkspacesWorkspaceIdRoute
   '/servers/': typeof ServersIndexRoute
   '/settings/': typeof SettingsIndexRoute
+  '/workspaces/': typeof WorkspacesIndexRoute
   '/servers/$serverId/metrics': typeof ServersServerIdMetricsRoute
   '/user/$username/$serverName': typeof UserUsernameServerNameRoute
 }
@@ -215,7 +222,6 @@ export interface FileRoutesByTo {
   '/usage': typeof UsageRoute
   '/users': typeof UsersRoute
   '/volumes': typeof VolumesRoute
-  '/workspaces': typeof WorkspacesRouteWithChildren
   '/admin/permissions': typeof AdminPermissionsRoute
   '/servers/$serverId': typeof ServersServerIdRouteWithChildren
   '/settings/appearance': typeof SettingsAppearanceRoute
@@ -226,6 +232,7 @@ export interface FileRoutesByTo {
   '/workspaces/$workspaceId': typeof WorkspacesWorkspaceIdRoute
   '/servers': typeof ServersIndexRoute
   '/settings': typeof SettingsIndexRoute
+  '/workspaces': typeof WorkspacesIndexRoute
   '/servers/$serverId/metrics': typeof ServersServerIdMetricsRoute
   '/user/$username/$serverName': typeof UserUsernameServerNameRoute
 }
@@ -256,6 +263,7 @@ export interface FileRoutesById {
   '/workspaces/$workspaceId': typeof WorkspacesWorkspaceIdRoute
   '/servers/': typeof ServersIndexRoute
   '/settings/': typeof SettingsIndexRoute
+  '/workspaces/': typeof WorkspacesIndexRoute
   '/servers/$serverId/metrics': typeof ServersServerIdMetricsRoute
   '/user/$username/$serverName': typeof UserUsernameServerNameRoute
 }
@@ -287,6 +295,7 @@ export interface FileRouteTypes {
     | '/workspaces/$workspaceId'
     | '/servers/'
     | '/settings/'
+    | '/workspaces/'
     | '/servers/$serverId/metrics'
     | '/user/$username/$serverName'
   fileRoutesByTo: FileRoutesByTo
@@ -303,7 +312,6 @@ export interface FileRouteTypes {
     | '/usage'
     | '/users'
     | '/volumes'
-    | '/workspaces'
     | '/admin/permissions'
     | '/servers/$serverId'
     | '/settings/appearance'
@@ -314,6 +322,7 @@ export interface FileRouteTypes {
     | '/workspaces/$workspaceId'
     | '/servers'
     | '/settings'
+    | '/workspaces'
     | '/servers/$serverId/metrics'
     | '/user/$username/$serverName'
   id:
@@ -343,6 +352,7 @@ export interface FileRouteTypes {
     | '/workspaces/$workspaceId'
     | '/servers/'
     | '/settings/'
+    | '/workspaces/'
     | '/servers/$serverId/metrics'
     | '/user/$username/$serverName'
   fileRoutesById: FileRoutesById
@@ -473,6 +483,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/workspaces/': {
+      id: '/workspaces/'
+      path: '/'
+      fullPath: '/workspaces/'
+      preLoaderRoute: typeof WorkspacesIndexRouteImport
+      parentRoute: typeof WorkspacesRoute
     }
     '/settings/': {
       id: '/settings/'
@@ -610,10 +627,12 @@ const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
 
 interface WorkspacesRouteChildren {
   WorkspacesWorkspaceIdRoute: typeof WorkspacesWorkspaceIdRoute
+  WorkspacesIndexRoute: typeof WorkspacesIndexRoute
 }
 
 const WorkspacesRouteChildren: WorkspacesRouteChildren = {
   WorkspacesWorkspaceIdRoute: WorkspacesWorkspaceIdRoute,
+  WorkspacesIndexRoute: WorkspacesIndexRoute,
 }
 
 const WorkspacesRouteWithChildren = WorkspacesRoute._addFileChildren(

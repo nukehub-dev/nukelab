@@ -202,6 +202,17 @@ has_conda_env() {
     command -v conda > /dev/null 2>&1 && conda env list | grep -q "nukelab-backend"
 }
 
+# ─── Secrets Directory ─────────────────────────────────────────────────────
+ensure_secrets_dir() {
+    local secrets_dir="${SERVER_AUTH_KEYS_HOST_DIR:-/tmp/nukelab-secrets}"
+    if [ ! -d "$secrets_dir" ]; then
+        log "Creating secrets directory: $secrets_dir"
+        mkdir -p "$secrets_dir"
+        chmod 700 "$secrets_dir"
+        ok "Secrets directory ready"
+    fi
+}
+
 # ─── Health Check ──────────────────────────────────────────────────────────
 wait_for_backend() {
     local url="${APP_URL:-http://localhost:8080}/api/health"
@@ -231,28 +242,29 @@ cmd_start() {
         return
     fi
 
+    init_env
+    ensure_secrets_dir
+
     if $USE_DEV_MODE; then
         step "Starting development stack..."
-        
+
         # In dev mode, frontend runs on Vite dev server (port 5173)
         # This tells the backend where to redirect after OAuth login
         export FRONTEND_URL="${FRONTEND_URL:-http://localhost:5173}"
         info "FRONTEND_URL=$FRONTEND_URL"
-        
+
         $COMPOSE -f "$COMPOSE_FILE" stop frontend 2>/dev/null || true
-        
+
         if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
             log "Starting backend containers..."
             $COMPOSE -f "$COMPOSE_FILE" up -d traefik postgres redis backend celery-worker celery-beat
             wait_for_backend
         fi
-        
+
         if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
             command -v npm > /dev/null 2>&1 || die "npm not found"
             [ -d "$DIR/frontend/node_modules" ] || die "Run: ./manage.sh install frontend"
             log "Starting Vite dev server..."
-
-            init_env
 
             cd "$DIR/frontend"
             npm run dev &
