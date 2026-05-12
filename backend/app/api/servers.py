@@ -27,6 +27,8 @@ class ServerCreateRequest(BaseModel):
     name: str
     plan_id: str
     environment_id: str
+    volume_id: Optional[str] = None
+    volume_mode: Optional[str] = "read_write"  # read_write, read_only
 
 
 class ServerResponse(BaseModel):
@@ -34,7 +36,8 @@ class ServerResponse(BaseModel):
     name: str
     status: str
     container_id: str | None = None
-    volume_name: str | None = None
+    volume_id: str | None = None
+    volume_mode: str | None = None
     external_url: str | None = None
     allocated_cpu: float | None = None
     allocated_memory: str | None = None
@@ -166,6 +169,42 @@ async def create_server(
         }
     
     try:
+        from app.services.volume_service import VolumeService
+        from app.services.volume_access_service import VolumeAccessService
+        
+        volume_service = VolumeService(db)
+        volume_access = VolumeAccessService(db)
+        
+        # Handle volume selection
+        volume_id = request.volume_id
+        volume_mode = request.volume_mode or "read_write"
+        
+        if volume_id:
+            # Validate volume access
+            if not await volume_access.can_access_volume(volume_id, str(current_user.id), volume_mode):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You don't have permission to use this volume"
+                )
+            
+            # Check quota
+            quota_check = await volume_service.check_quota(volume_id, plan.disk_limit)
+            if not quota_check["allowed"]:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=quota_check["reason"]
+                )
+        else:
+            # Auto-create volume with plan limit
+            volume_name = f"nukelab-server-{current_user.username}-{request.name}-data"
+            new_volume = await volume_service.create_volume(
+                name=volume_name,
+                display_name=f"{request.name} Data",
+                owner_id=str(current_user.id),
+                max_size_bytes=volume_service._parse_memory(plan.disk_limit),
+            )
+            volume_id = str(new_volume.id)
+        
         # Deduct 1 hour of plan cost on spawn
         if settings.credits_enabled and plan.cost_per_hour > 0:
             await credit_service.consume_credits(
@@ -185,6 +224,8 @@ async def create_server(
             cpu=plan.cpu_limit,
             memory=plan.memory_limit,
             disk=plan.disk_limit,
+            volume_id=volume_id,
+            volume_mode=volume_mode,
         )
         
         # Store plan reference
@@ -202,6 +243,10 @@ async def create_server(
         await db.commit()
         await db.refresh(server)
         
+        # Increment volume server count
+        if server.volume_id:
+            await volume_service.increment_server_count(str(server.volume_id))
+        
         # Increment quota usage
         await quota_service.increment_usage(
             user_id=str(current_user.id),
@@ -213,7 +258,8 @@ async def create_server(
             name=server.name,
             status=server.status,
             container_id=server.container_id,
-            volume_name=server.volume_name,
+            volume_id=str(server.volume_id) if server.volume_id else None,
+            volume_mode=server.volume_mode,
             external_url=server.external_url,
             allocated_cpu=server.allocated_cpu,
             allocated_memory=server.allocated_memory,
@@ -225,6 +271,8 @@ async def create_server(
             started_at=server.started_at.isoformat() if server.started_at else None,
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
         await db.rollback()
         import traceback
@@ -279,7 +327,8 @@ async def list_servers(
                 "name": s.name,
                 "status": s.status,
                 "container_id": s.container_id,
-                "volume_name": s.volume_name,
+                "volume_id": str(s.volume_id) if s.volume_id else None,
+                "volume_mode": s.volume_mode,
                 "external_url": s.external_url,
                 "allocated_cpu": s.allocated_cpu,
                 "allocated_memory": s.allocated_memory,
@@ -329,7 +378,8 @@ async def get_server(
         "name": server.name,
         "status": server.status,
         "container_id": server.container_id,
-        "volume_name": server.volume_name,
+        "volume_id": str(server.volume_id) if server.volume_id else None,
+        "volume_mode": server.volume_mode,
         "external_url": server.external_url,
         "allocated_cpu": server.allocated_cpu,
         "allocated_memory": server.allocated_memory,
@@ -392,7 +442,8 @@ async def get_server_by_path(
         "name": server.name,
         "status": server.status,
         "container_id": server.container_id,
-        "volume_name": server.volume_name,
+        "volume_id": str(server.volume_id) if server.volume_id else None,
+        "volume_mode": server.volume_mode,
         "external_url": server.external_url,
         "allocated_cpu": server.allocated_cpu,
         "allocated_memory": server.allocated_memory,
@@ -427,17 +478,42 @@ async def start_server(
     if str(server.user_id) != str(current_user.id):
         checker.require(Permission.SERVERS_MANAGE)
     
+    # Check volume quota before starting
+    if server.volume_id and server.plan_id:
+        from app.services.volume_service import VolumeService
+        from app.services.plan_service import PlanService
+        
+        volume_service = VolumeService(db)
+        plan_service = PlanService(db)
+        plan = await plan_service.get_by_id(str(server.plan_id))
+        
+        if plan:
+            quota_check = await volume_service.check_quota(str(server.volume_id), plan.disk_limit)
+            if not quota_check["allowed"]:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=quota_check["reason"]
+                )
+    
     if server.container_id:
         try:
             actual_status = await spawner.get_status(server.container_id)
             if actual_status == "running":
                 return {"message": "Server already running", "server_id": server_id, "status": "running"}
             
-            if actual_status == "unknown":
+            if actual_status in ("unknown", "stopped"):
                 from app.services.environment_service import EnvironmentService
                 from app.services.plan_service import PlanService
                 
-                print(f"Container {server.container_id} not found, recreating...")
+                if actual_status == "unknown":
+                    print(f"Container {server.container_id} not found, recreating...")
+                else:
+                    print(f"Container {server.container_id} is stopped, deleting and recreating...")
+                    # Delete stale container to avoid broken mounts after reboots
+                    try:
+                        await spawner.delete(server.container_id)
+                    except Exception as e:
+                        print(f"Warning: failed to delete stale container: {e}")
                 
                 env_service = EnvironmentService(db)
                 environment = await env_service.get_by_id(str(server.environment_id)) if server.environment_id else None
@@ -457,16 +533,25 @@ async def start_server(
                     cpu=plan.cpu_limit if plan else server.allocated_cpu,
                     memory=plan.memory_limit if plan else server.allocated_memory,
                     disk=plan.disk_limit if plan else server.allocated_disk,
-                    volume_name=server.volume_name,
+                    volume_id=str(server.volume_id) if server.volume_id else None,
+                    volume_mode=server.volume_mode,
                     server_id=str(server.id),
                 )
                 
                 server.container_id = new_server.container_id
                 server.image = new_server.image
-                server.volume_name = new_server.volume_name
+                server.volume_id = new_server.volume_id
+                server.volume_mode = new_server.volume_mode
                 server.status = "running"
                 server.started_at = datetime.utcnow()
                 server.external_url = new_server.external_url
+                
+                # Increment volume server count
+                if server.volume_id:
+                    from app.services.volume_service import VolumeService
+                    volume_service = VolumeService(db)
+                    await volume_service.increment_server_count(str(server.volume_id))
+                
                 await db.commit()
                 return {"message": "Server container recreated and started", "server_id": server_id, "status": "running"}
             
@@ -476,6 +561,13 @@ async def start_server(
             
             server.status = "running"
             server.started_at = datetime.utcnow()
+            
+            # Increment volume server count
+            if server.volume_id:
+                from app.services.volume_service import VolumeService
+                volume_service = VolumeService(db)
+                await volume_service.increment_server_count(str(server.volume_id))
+            
             await db.commit()
             return {"message": "Server started", "server_id": server_id, "status": "running"}
         except Exception as e:
@@ -523,13 +615,15 @@ async def start_server(
                 cpu=plan.cpu_limit if plan else server.allocated_cpu,
                 memory=plan.memory_limit if plan else server.allocated_memory,
                 disk=plan.disk_limit if plan else server.allocated_disk,
-                volume_name=server.volume_name,
+                volume_id=str(server.volume_id) if server.volume_id else None,
+                volume_mode=server.volume_mode,
                 server_id=str(server.id),
             )
             
             server.container_id = new_server.container_id
             server.image = new_server.image
-            server.volume_name = new_server.volume_name
+            server.volume_id = new_server.volume_id
+            server.volume_mode = new_server.volume_mode
             server.status = "running"
             server.external_url = new_server.external_url
             server.started_at = datetime.utcnow()
@@ -587,6 +681,12 @@ async def stop_server(
                     plan_id=str(server.plan_id)
                 )
             
+            # Decrement volume server count
+            if server.volume_id:
+                from app.services.volume_service import VolumeService
+                volume_service = VolumeService(db)
+                await volume_service.decrement_server_count(str(server.volume_id))
+            
             await db.commit()
             return {"message": "Server stopped", "server_id": server_id, "status": "stopped"}
         except Exception as e:
@@ -615,6 +715,23 @@ async def restart_server(
     # Check if trying to restart someone else's server
     if str(server.user_id) != str(current_user.id):
         checker.require(Permission.SERVERS_MANAGE)
+    
+    # Check volume quota before restarting
+    if server.volume_id and server.plan_id:
+        from app.services.volume_service import VolumeService
+        from app.services.plan_service import PlanService
+        
+        volume_service = VolumeService(db)
+        plan_service = PlanService(db)
+        plan = await plan_service.get_by_id(str(server.plan_id))
+        
+        if plan:
+            quota_check = await volume_service.check_quota(str(server.volume_id), plan.disk_limit)
+            if not quota_check["allowed"]:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=quota_check["reason"]
+                )
     
     if server.container_id:
         try:
@@ -647,13 +764,15 @@ async def restart_server(
                     cpu=plan.cpu_limit if plan else server.allocated_cpu,
                     memory=plan.memory_limit if plan else server.allocated_memory,
                     disk=plan.disk_limit if plan else server.allocated_disk,
-                    volume_name=server.volume_name,
+                    volume_id=str(server.volume_id) if server.volume_id else None,
+                    volume_mode=server.volume_mode,
                     server_id=str(server.id),
                 )
                 
                 server.container_id = new_server.container_id
                 server.image = new_server.image
-                server.volume_name = new_server.volume_name
+                server.volume_id = new_server.volume_id
+                server.volume_mode = new_server.volume_mode
                 server.status = "running"
                 server.started_at = datetime.utcnow()
                 server.external_url = new_server.external_url
@@ -700,6 +819,12 @@ async def delete_server(
         except Exception as e:
             # Log but continue to delete from DB
             print(f"Warning: Failed to delete container: {e}")
+    
+    # Decrement volume server count
+    if server.volume_id:
+        from app.services.volume_service import VolumeService
+        volume_service = VolumeService(db)
+        await volume_service.decrement_server_count(str(server.volume_id))
     
     await db.delete(server)
     await db.commit()

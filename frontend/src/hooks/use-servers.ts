@@ -34,6 +34,8 @@ interface CreateServerData {
   name: string;
   plan_id: string;
   environment_id: string;
+  volume_id?: string;
+  volume_mode?: string;
 }
 
 type PendingOperation = {

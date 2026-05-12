@@ -202,17 +202,6 @@ has_conda_env() {
     command -v conda > /dev/null 2>&1 && conda env list | grep -q "nukelab-backend"
 }
 
-# ─── Secrets Directory ─────────────────────────────────────────────────────
-ensure_secrets_dir() {
-    local secrets_dir="${SERVER_AUTH_KEYS_HOST_DIR:-/tmp/nukelab-secrets}"
-    if [ ! -d "$secrets_dir" ]; then
-        log "Creating secrets directory: $secrets_dir"
-        mkdir -p "$secrets_dir"
-        chmod 700 "$secrets_dir"
-        ok "Secrets directory ready"
-    fi
-}
-
 # ─── Health Check ──────────────────────────────────────────────────────────
 wait_for_backend() {
     local url="${APP_URL:-http://localhost:8080}/api/health"
@@ -243,7 +232,6 @@ cmd_start() {
     fi
 
     init_env
-    ensure_secrets_dir
 
     if $USE_DEV_MODE; then
         step "Starting development stack..."

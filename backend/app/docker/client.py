@@ -170,9 +170,18 @@ class DockerClient:
             }
 
         if volumes:
-            config["HostConfig"]["Binds"] = [
-                f"{host}:{container}" for host, container in volumes.items()
-            ]
+            binds = []
+            for host, container in volumes.items():
+                if isinstance(container, dict):
+                    # New format: {host: {"bind": path, "mode": "rw"}}
+                    bind_str = f"{host}:{container['bind']}"
+                    if 'mode' in container:
+                        bind_str += f":{container['mode']}"
+                    binds.append(bind_str)
+                else:
+                    # Old format: {host: container_path}
+                    binds.append(f"{host}:{container}")
+            config["HostConfig"]["Binds"] = binds
 
         # --- lxcfs for cgroup-aware /proc (free, top, htop) ---
         await self._check_lxcfs_support()

@@ -91,4 +91,23 @@ export const api = {
     if (!response.ok) await handleAuthError(response);
     return response.json();
   },
+
+  async download(path: string, filename?: string): Promise<void> {
+    const response = await fetch(`${API_BASE}${path}`, {
+      headers: {
+        'Authorization': `Bearer ${getToken()}`,
+      },
+    });
+    if (!response.ok) await handleAuthError(response);
+    
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename || 'download';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  },
 };

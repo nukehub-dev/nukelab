@@ -9,6 +9,7 @@ import { StatusBadge } from '../components/data/status-badge';
 import { useServers, useServerActions } from '../hooks/use-servers';
 import { useEnvironments } from '../hooks/use-environments';
 import { usePlans } from '../hooks/use-plans';
+import { useVolumes } from '../hooks/use-volumes';
 import { useDataTable } from '../hooks/use-data-table';
 import { useAuthStore } from '../stores/auth-store';
 import { formatDate } from '../lib/utils';
@@ -29,6 +30,7 @@ function ServersPage() {
   const { createServer, startServer, stopServer, restartServer, deleteServer, isOperationPending } = useServerActions();
   const { data: envData } = useEnvironments({ is_active: true, limit: 100 });
   const { data: plansData } = usePlans({ is_active: true, limit: 100 });
+  const { data: volumesData } = useVolumes();
   const canViewAllServers = useAuthStore((state) => state.canViewAllServers());
    
   const {
@@ -70,10 +72,13 @@ function ServersPage() {
     name: '',
     plan_id: '',
     environment_id: '',
+    volume_id: '',
+    volume_mode: 'read_write',
   });
 
   const environments = envData?.data || [];
   const plans = plansData?.data || [];
+  const volumes = volumesData || [];
   
   // Client-side filtering and sorting for now since API doesn't support it fully
   const filteredServers = servers.filter((server) => {
@@ -129,11 +134,13 @@ function ServersPage() {
         name: deployForm.name,
         plan_id: deployForm.plan_id,
         environment_id: deployForm.environment_id,
+        volume_id: deployForm.volume_id || undefined,
+        volume_mode: deployForm.volume_mode,
       },
       {
         onSuccess: () => {
           setDialogOpen(false);
-          setDeployForm({ name: '', plan_id: '', environment_id: '' });
+          setDeployForm({ name: '', plan_id: '', environment_id: '', volume_id: '', volume_mode: 'read_write' });
         },
       }
     );
@@ -622,6 +629,51 @@ function ServersPage() {
                 ))}
               </Select>
             </div>
+            <div className="space-y-2"
+            >
+              <label className="text-sm font-medium"
+              >Volume</label>
+              <Select
+                value={deployForm.volume_id}
+                onChange={(value) => setDeployForm({ ...deployForm, volume_id: value })}
+                placeholder="Create new volume (default)"
+              >
+                <SelectItem value="">Create new volume</SelectItem>
+                {volumes.map((vol) => (
+                  <SelectItem key={vol.id} value={vol.id}>
+                    {vol.display_name} ({vol.server_count > 0 ? `${vol.server_count} servers` : 'unused'})
+                  </SelectItem>
+                ))}
+              </Select>
+            </div>
+            {deployForm.volume_id && (
+              <div className="space-y-2"
+              >
+                <label className="text-sm font-medium"
+                >Volume Access Mode</label>
+                <div className="flex gap-2"
+                >
+                  <Button
+                    type="button"
+                    variant={deployForm.volume_mode === 'read_write' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setDeployForm({ ...deployForm, volume_mode: 'read_write' })}
+                    className="flex-1"
+                  >
+                    Read-Write
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={deployForm.volume_mode === 'read_only' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setDeployForm({ ...deployForm, volume_mode: 'read_only' })}
+                    className="flex-1"
+                  >
+                    Read-Only
+                  </Button>
+                </div>
+              </div>
+            )}
           </form>
           <DialogFooter>
             <Button variant="outline" type="button" onClick={() => setDialogOpen(false)}>

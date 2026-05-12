@@ -17,7 +17,8 @@ export interface Server {
   username?: string;
   created_at?: string;
   container_id?: string;
-  volume_name?: string;
+  volume_id?: string;
+  volume_mode?: string;
   allocated_cpu?: number;
   allocated_memory?: string;
   allocated_disk?: string;

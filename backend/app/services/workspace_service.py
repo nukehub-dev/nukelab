@@ -8,6 +8,7 @@ from sqlalchemy import select, and_, or_
 from sqlalchemy.orm import selectinload
 
 from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
+from app.models.workspace_volume import WorkspaceVolume
 from app.models.user import User
 
 
@@ -21,14 +22,12 @@ class WorkspaceService:
         self,
         name: str,
         description: Optional[str],
-        volume_name: str,
         owner_id: str
     ) -> SharedWorkspace:
         """Create a new shared workspace"""
         workspace = SharedWorkspace(
             name=name,
             description=description,
-            volume_name=volume_name,
             owner_id=owner_id,
         )
         self.db.add(workspace)
@@ -37,10 +36,13 @@ class WorkspaceService:
         return workspace
     
     async def get_workspace(self, workspace_id: str) -> Optional[SharedWorkspace]:
-        """Get workspace by ID with members loaded"""
+        """Get workspace by ID with members and volumes loaded"""
         result = await self.db.execute(
             select(SharedWorkspace)
-            .options(selectinload(SharedWorkspace.members).selectinload(WorkspaceMember.user))
+            .options(
+                selectinload(SharedWorkspace.members).selectinload(WorkspaceMember.user),
+                selectinload(SharedWorkspace.volume_associations).selectinload(WorkspaceVolume.volume)
+            )
             .where(SharedWorkspace.id == workspace_id)
         )
         return result.scalar_one_or_none()
@@ -101,6 +103,71 @@ class WorkspaceService:
         await self.db.delete(workspace)
         await self.db.commit()
         return True
+    
+    # ========== Volume Management ==========
+    
+    async def add_volume(
+        self,
+        workspace_id: str,
+        volume_id: str,
+        role: str = "read_write",
+        added_by: Optional[str] = None
+    ) -> WorkspaceVolume:
+        """Add a volume to a workspace"""
+        workspace_volume = WorkspaceVolume(
+            workspace_id=workspace_id,
+            volume_id=volume_id,
+            role=role,
+            added_by=added_by
+        )
+        self.db.add(workspace_volume)
+        await self.db.commit()
+        await self.db.refresh(workspace_volume)
+        return workspace_volume
+    
+    async def remove_volume(self, workspace_id: str, volume_id: str) -> bool:
+        """Remove a volume from a workspace"""
+        result = await self.db.execute(
+            select(WorkspaceVolume).where(
+                and_(
+                    WorkspaceVolume.workspace_id == workspace_id,
+                    WorkspaceVolume.volume_id == volume_id
+                )
+            )
+        )
+        workspace_volume = result.scalar_one_or_none()
+        if not workspace_volume:
+            return False
+        
+        await self.db.delete(workspace_volume)
+        await self.db.commit()
+        return True
+    
+    async def update_volume_role(
+        self,
+        workspace_id: str,
+        volume_id: str,
+        role: str
+    ) -> Optional[WorkspaceVolume]:
+        """Update a volume's role in a workspace"""
+        result = await self.db.execute(
+            select(WorkspaceVolume).where(
+                and_(
+                    WorkspaceVolume.workspace_id == workspace_id,
+                    WorkspaceVolume.volume_id == volume_id
+                )
+            )
+        )
+        workspace_volume = result.scalar_one_or_none()
+        if not workspace_volume:
+            return None
+        
+        workspace_volume.role = role
+        await self.db.commit()
+        await self.db.refresh(workspace_volume)
+        return workspace_volume
+    
+    # ========== Member Management ==========
     
     async def add_member(
         self,

@@ -56,6 +56,7 @@ class User(Base):
     
     # Relationships
     servers = relationship("Server", back_populates="user", cascade="all, delete-orphan")
+    volumes = relationship("Volume", back_populates="owner", cascade="all, delete-orphan")
     api_tokens = relationship("ApiToken", back_populates="user", cascade="all, delete-orphan")
     notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
     owned_workspaces = relationship("SharedWorkspace", back_populates="owner", cascade="all, delete-orphan")

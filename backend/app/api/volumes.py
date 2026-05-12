@@ -2,191 +2,415 @@
 Volume API endpoints.
 """
 
-from typing import Optional
+from typing import Optional, List
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 
 from app.api.auth import get_current_user
 from app.core.permissions import Permission
 from app.dependencies import PermissionChecker
 from app.db.session import get_db
 from app.models.user import User
+from app.models.volume import Volume
 from app.services.volume_service import VolumeService
-from app.services.backup_service import BackupService
+from app.services.volume_access_service import VolumeAccessService
 
 router = APIRouter()
+
+
+class VolumeCreateRequest(BaseModel):
+    display_name: str
+    description: Optional[str] = None
+    max_size_bytes: Optional[int] = None
+
+
+class VolumeUpdateRequest(BaseModel):
+    display_name: Optional[str] = None
+    description: Optional[str] = None
+    visibility: Optional[str] = None
+    max_size_bytes: Optional[int] = None
+    status: Optional[str] = None
+
+
+class VolumeResponse(BaseModel):
+    id: str
+    name: str
+    display_name: str
+    owner_id: str
+    visibility: str
+    size_bytes: int
+    max_size_bytes: Optional[int]
+    status: str
+    server_count: int
+    description: Optional[str]
+    created_at: str
+    updated_at: str
+
+
+@router.post("/", status_code=status.HTTP_201_CREATED)
+async def create_volume(
+    request: VolumeCreateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a new volume."""
+    volume_service = VolumeService(db)
+    
+    # Generate unique volume name
+    import uuid
+    volume_name = f"nukelab-vol-{current_user.username}-{uuid.uuid4().hex[:8]}"
+    
+    volume = await volume_service.create_volume(
+        name=volume_name,
+        display_name=request.display_name,
+        owner_id=str(current_user.id),
+        max_size_bytes=request.max_size_bytes,
+        description=request.description,
+    )
+    
+    return volume.to_dict()
 
 
 @router.get("/")
 async def list_volumes(
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
-    """List volumes. Users see own volumes, admins see all."""
-    service = VolumeService()
+    """List volumes accessible to user."""
+    volume_service = VolumeService(db)
+    volumes = await volume_service.list_volumes(str(current_user.id))
     
-    checker = PermissionChecker(current_user)
-    if checker.is_admin():
-        volumes = await service.list_volumes()
-    else:
-        volumes = await service.list_volumes(user_id=str(current_user.id))
-    
-    return {"volumes": volumes}
+    return {"volumes": [v.to_dict() for v in volumes]}
 
 
-@router.get("/{name}")
+@router.get("/{volume_id}")
 async def get_volume(
-    name: str,
+    volume_id: str,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """Get volume details."""
-    service = VolumeService()
+    volume_service = VolumeService(db)
+    volume_access = VolumeAccessService(db)
     
-    volume = await service.get_volume(name)
+    volume = await volume_service.get_volume(volume_id)
     if not volume:
         raise HTTPException(status_code=404, detail="Volume not found")
     
-    # Check ownership
-    labels = volume.get('labels', {})
-    volume_user_id = labels.get('nukelab.user.id')
-    
-    if volume_user_id and str(volume_user_id) != str(current_user.id):
+    # Check access
+    if not await volume_access.can_access_volume(volume_id, str(current_user.id), "read_only"):
         checker = PermissionChecker(current_user)
-        checker.require(Permission.ADMIN)
+        checker.require(Permission.ADMIN_ACCESS)
     
-    return volume
+    return volume.to_dict()
 
 
-@router.delete("/{name}")
-async def delete_volume(
-    name: str,
+@router.put("/{volume_id}")
+async def update_volume(
+    volume_id: str,
+    request: VolumeUpdateRequest,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
-    """Delete a volume. Admin only."""
-    checker = PermissionChecker(current_user)
-    checker.require(Permission.ADMIN)
+    """Update volume. Only owner can update."""
+    volume_service = VolumeService(db)
+    volume_access = VolumeAccessService(db)
     
-    service = VolumeService()
-    
-    volume = await service.get_volume(name)
+    volume = await volume_service.get_volume(volume_id)
     if not volume:
         raise HTTPException(status_code=404, detail="Volume not found")
     
-    success = await service.delete_volume(name)
-    if not success:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to delete volume"
-        )
+    if not await volume_access.can_manage_volume(volume_id, str(current_user.id)):
+        checker = PermissionChecker(current_user)
+        checker.require(Permission.ADMIN_ACCESS)
     
-    return {"message": "Volume deleted", "name": name}
+    updated = await volume_service.update_volume(
+        volume_id=volume_id,
+        display_name=request.display_name,
+        description=request.description,
+        visibility=request.visibility,
+        max_size_bytes=request.max_size_bytes,
+        status=request.status,
+    )
+    
+    return updated.to_dict()
 
 
-# ========== Backup Endpoints ==========
-
-@router.post("/{name}/backup")
-async def backup_volume(
-    name: str,
-    description: Optional[str] = None,
+@router.delete("/{volume_id}")
+async def delete_volume(
+    volume_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Create a backup of a volume."""
-    service = BackupService(db)
+    """Delete volume. Only owner can delete."""
+    volume_service = VolumeService(db)
+    volume_access = VolumeAccessService(db)
+    
+    volume = await volume_service.get_volume(volume_id)
+    if not volume:
+        raise HTTPException(status_code=404, detail="Volume not found")
+    
+    if not await volume_access.can_manage_volume(volume_id, str(current_user.id)):
+        checker = PermissionChecker(current_user)
+        checker.require(Permission.ADMIN_ACCESS)
     
     try:
-        result = await service.create_backup(
-            volume_name=name,
-            user_id=str(current_user.id),
-            description=description
-        )
-        return result
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create backup: {str(e)}"
-        )
-
-
-@router.get("/{name}/backups")
-async def list_volume_backups(
-    name: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """List backups for a specific volume."""
-    service = BackupService(db)
-    backups = await service.list_backups(volume_name=name)
-    return {"backups": backups}
-
-
-@router.get("/backups/{backup_id}")
-async def get_backup(
-    backup_id: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get backup details."""
-    service = BackupService(db)
-    backup = await service.get_backup(backup_id)
-    
-    if not backup:
-        raise HTTPException(status_code=404, detail="Backup not found")
-    
-    return backup
-
-
-@router.post("/backups/{backup_id}/restore")
-async def restore_backup(
-    backup_id: str,
-    target_volume_name: Optional[str] = None,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Restore a backup to a volume."""
-    service = BackupService(db)
-    
-    try:
-        result = await service.restore_backup(backup_id, target_volume_name)
-        return result
+        success = await volume_service.delete_volume(volume_id)
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to delete volume")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    
+    return {"message": "Volume deleted", "volume_id": volume_id}
+
+
+@router.post("/{volume_id}/refresh-size")
+async def refresh_volume_size(
+    volume_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Refresh volume size from filesystem."""
+    volume_service = VolumeService(db)
+    volume_access = VolumeAccessService(db)
+    
+    volume = await volume_service.get_volume(volume_id)
+    if not volume:
+        raise HTTPException(status_code=404, detail="Volume not found")
+    
+    if not await volume_access.can_access_volume(volume_id, str(current_user.id), "read_only"):
+        checker = PermissionChecker(current_user)
+        checker.require(Permission.ADMIN_ACCESS)
+    
+    size = await volume_service.update_volume_size(volume_id)
+    return {"volume_id": volume_id, "size_bytes": size}
+
+
+# =============================================================================
+# Volume File Browser
+# =============================================================================
+
+import os
+import mimetypes
+from pathlib import Path
+
+VOLUME_STORAGE_PATH = os.environ.get("VOLUME_STORAGE_PATH", "/var/lib/docker/volumes")
+
+
+def _get_volume_base_path(volume_name: str) -> Path:
+    """Get the base filesystem path for a volume."""
+    return Path(VOLUME_STORAGE_PATH) / volume_name / "_data"
+
+
+def _secure_path(base_path: Path, subpath: str) -> Path:
+    """Validate and resolve a path within the volume to prevent traversal attacks."""
+    # Normalize the requested path
+    requested = (base_path / subpath.lstrip("/")).resolve()
+    
+    # Ensure it's within the volume directory
+    try:
+        requested.relative_to(base_path.resolve())
+    except ValueError:
+        raise HTTPException(status_code=403, detail="Access denied: path traversal detected")
+    
+    return requested
+
+
+@router.get("/{volume_id}/files")
+async def list_volume_files(
+    volume_id: str,
+    path: str = "",
+    search: Optional[str] = None,
+    sort_by: str = "name",  # name, size, modified
+    sort_order: str = "asc",  # asc, desc
+    page: int = 1,
+    page_size: int = 100,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """List files and directories in a volume with pagination, search, and sorting."""
+    volume_service = VolumeService(db)
+    volume_access = VolumeAccessService(db)
+    
+    volume = await volume_service.get_volume(volume_id)
+    if not volume:
+        raise HTTPException(status_code=404, detail="Volume not found")
+    
+    if not await volume_access.can_access_volume(volume_id, str(current_user.id), "read_only"):
+        checker = PermissionChecker(current_user)
+        checker.require(Permission.ADMIN_ACCESS)
+    
+    try:
+        base_path = _get_volume_base_path(volume.name)
+        target_path = _secure_path(base_path, path)
+        
+        if not target_path.exists():
+            raise HTTPException(status_code=404, detail="Path not found")
+        
+        if target_path.is_file():
+            stat = target_path.stat()
+            return {
+                "type": "file",
+                "name": target_path.name,
+                "path": path,
+                "size": stat.st_size,
+                "modified": stat.st_mtime,
+                "items": [],
+                "total": 1,
+                "page": 1,
+                "page_size": 1,
+                "total_pages": 1,
+            }
+        
+        # Collect all items
+        items = []
+        for item in target_path.iterdir():
+            try:
+                stat = item.stat()
+                items.append({
+                    "name": item.name,
+                    "type": "directory" if item.is_dir() else "file",
+                    "size": stat.st_size if item.is_file() else None,
+                    "modified": stat.st_mtime,
+                })
+            except (OSError, PermissionError):
+                continue
+        
+        # Search filter
+        if search:
+            search_lower = search.lower()
+            items = [item for item in items if search_lower in item["name"].lower()]
+        
+        # Sorting
+        reverse = sort_order.lower() == "desc"
+        if sort_by == "name":
+            items.sort(key=lambda x: (0 if x["type"] == "directory" else 1, x["name"].lower()), reverse=reverse)
+        elif sort_by == "size":
+            items.sort(key=lambda x: (x["size"] or 0, x["name"].lower()), reverse=reverse)
+        elif sort_by == "modified":
+            items.sort(key=lambda x: (x["modified"], x["name"].lower()), reverse=reverse)
+        else:
+            # Default: directories first, then alphabetically
+            items.sort(key=lambda x: (0 if x["type"] == "directory" else 1, x["name"].lower()))
+        
+        # Pagination
+        total = len(items)
+        total_pages = max(1, (total + page_size - 1) // page_size)
+        page = max(1, min(page, total_pages))
+        
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        paginated_items = items[start_idx:end_idx]
+        
+        return {
+            "type": "directory",
+            "path": path,
+            "items": paginated_items,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages,
+        }
+        
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to restore backup: {str(e)}"
+            detail=f"Failed to list files: {str(e)}"
         )
 
 
-@router.delete("/backups/{backup_id}")
-async def delete_backup(
-    backup_id: str,
+@router.delete("/{volume_id}/files")
+async def delete_volume_file(
+    volume_id: str,
+    path: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Delete a backup. Admin only."""
-    checker = PermissionChecker(current_user)
-    checker.require(Permission.ADMIN)
+    """Delete a file or directory in a volume."""
+    volume_service = VolumeService(db)
+    volume_access = VolumeAccessService(db)
     
-    service = BackupService(db)
-    success = await service.delete_backup(backup_id)
+    volume = await volume_service.get_volume(volume_id)
+    if not volume:
+        raise HTTPException(status_code=404, detail="Volume not found")
     
-    if not success:
-        raise HTTPException(status_code=404, detail="Backup not found")
+    if not await volume_access.can_access_volume(volume_id, str(current_user.id), "read_write"):
+        checker = PermissionChecker(current_user)
+        checker.require(Permission.ADMIN_ACCESS)
     
-    return {"message": "Backup deleted", "backup_id": backup_id}
+    try:
+        base_path = _get_volume_base_path(volume.name)
+        target_path = _secure_path(base_path, path)
+        
+        if not target_path.exists():
+            raise HTTPException(status_code=404, detail="Path not found")
+        
+        # Safety: don't allow deleting the root of the volume
+        if target_path == base_path.resolve():
+            raise HTTPException(status_code=403, detail="Cannot delete volume root")
+        
+        if target_path.is_dir():
+            import shutil
+            shutil.rmtree(target_path)
+        else:
+            target_path.unlink()
+        
+        return {"message": "Deleted", "path": path}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete: {str(e)}"
+        )
 
 
-@router.get("/backups/all")
-async def list_all_backups(
+@router.get("/{volume_id}/download")
+async def download_volume_file(
+    volume_id: str,
+    path: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """List all backups. Admin only."""
-    checker = PermissionChecker(current_user)
-    checker.require(Permission.ADMIN)
+    """Download a file from a volume."""
+    from fastapi.responses import FileResponse
     
-    service = BackupService(db)
-    backups = await service.list_backups()
-    return {"backups": backups}
+    volume_service = VolumeService(db)
+    volume_access = VolumeAccessService(db)
+    
+    volume = await volume_service.get_volume(volume_id)
+    if not volume:
+        raise HTTPException(status_code=404, detail="Volume not found")
+    
+    if not await volume_access.can_access_volume(volume_id, str(current_user.id), "read_only"):
+        checker = PermissionChecker(current_user)
+        checker.require(Permission.ADMIN_ACCESS)
+    
+    try:
+        base_path = _get_volume_base_path(volume.name)
+        target_path = _secure_path(base_path, path)
+        
+        if not target_path.exists() or target_path.is_dir():
+            raise HTTPException(status_code=404, detail="File not found")
+        
+        media_type, _ = mimetypes.guess_type(str(target_path))
+        
+        return FileResponse(
+            path=str(target_path),
+            filename=target_path.name,
+            media_type=media_type or "application/octet-stream"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to download file: {str(e)}"
+        )

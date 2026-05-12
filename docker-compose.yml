@@ -123,8 +123,6 @@ services:
       - SERVER_AUTH_KEY_ROTATION_DAYS=${SERVER_AUTH_KEY_ROTATION_DAYS:-30}
       - SERVER_AUTH_MAX_TOKENS_PER_MINUTE=${SERVER_AUTH_MAX_TOKENS_PER_MINUTE:-10}
       - SERVER_AUTH_AUDIT_LOG=${SERVER_AUTH_AUDIT_LOG:-true}
-      # Host directory for sharing keys with spawned containers
-      - SERVER_AUTH_KEYS_HOST_DIR=${SERVER_AUTH_KEYS_HOST_DIR:-/tmp/nukelab-secrets}
     volumes:
       - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:Z
       - ./backend:/app:Z
@@ -133,8 +131,8 @@ services:
       # Set VOLUME_STORAGE_PATH in your .env file, or remove this line.
       # See .env.example for platform-specific values.
       - ${VOLUME_STORAGE_PATH:?VOLUME_STORAGE_PATH must be set in .env}:${VOLUME_STORAGE_PATH}:ro
-      # Server auth keys - shared with spawned containers via host filesystem.
-      - ${SERVER_AUTH_KEYS_HOST_DIR:-/tmp/nukelab-secrets}:/app/secrets:Z
+      # Server auth keys - shared with spawned containers via named volume.
+      - secrets:/app/secrets:Z
     networks:
       - nukelab-network
     depends_on:
@@ -221,6 +219,8 @@ volumes:
     name: nukelab-postgres-data
   letsencrypt:
     name: nukelab-letsencrypt
+  secrets:
+    name: nukelab-secrets
 
 networks:
   nukelab-network:

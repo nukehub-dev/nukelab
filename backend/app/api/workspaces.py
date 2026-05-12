@@ -13,6 +13,7 @@ from app.dependencies import PermissionChecker
 from app.db.session import get_db
 from app.models.user import User
 from app.services.workspace_service import WorkspaceService
+from app.services.volume_access_service import VolumeAccessService
 
 router = APIRouter()
 
@@ -20,7 +21,6 @@ router = APIRouter()
 class CreateWorkspaceRequest(BaseModel):
     name: str
     description: Optional[str] = None
-    volume_name: str
 
 
 class UpdateWorkspaceRequest(BaseModel):
@@ -35,6 +35,15 @@ class AddMemberRequest(BaseModel):
 
 
 class UpdateMemberRequest(BaseModel):
+    role: str
+
+
+class AddVolumeRequest(BaseModel):
+    volume_id: str
+    role: str = "read_write"  # read_only, read_write
+
+
+class UpdateVolumeRoleRequest(BaseModel):
     role: str
 
 
@@ -64,7 +73,6 @@ async def create_workspace(
     workspace = await service.create_workspace(
         name=request.name,
         description=request.description,
-        volume_name=request.volume_name,
         owner_id=str(current_user.id)
     )
     
@@ -91,6 +99,7 @@ async def get_workspace(
     
     data = workspace.to_dict()
     data["members"] = [m.to_dict() for m in workspace.members]
+    data["volumes"] = [v.to_dict() for v in workspace.volume_associations]
     return data
 
 
@@ -146,6 +155,101 @@ async def delete_workspace(
         raise HTTPException(status_code=500, detail="Failed to delete workspace")
     
     return {"message": "Workspace deleted", "workspace_id": workspace_id}
+
+
+# ========== Volume Management ==========
+
+@router.post("/{workspace_id}/volumes")
+async def add_volume_to_workspace(
+    workspace_id: str,
+    request: AddVolumeRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Add a volume to workspace. Must be owner or admin."""
+    service = WorkspaceService(db)
+    volume_access = VolumeAccessService(db)
+    
+    workspace = await service.get_workspace(workspace_id)
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    
+    if not await service.can_manage_workspace(workspace_id, str(current_user.id)):
+        checker = PermissionChecker(current_user)
+        checker.require(Permission.ADMIN_ACCESS)
+    
+    # Verify user can manage the volume
+    if not await volume_access.can_manage_volume(request.volume_id, str(current_user.id)):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to share this volume"
+        )
+    
+    if request.role not in ("read_only", "read_write"):
+        raise HTTPException(status_code=400, detail="Invalid role. Must be: read_only, read_write")
+    
+    workspace_volume = await service.add_volume(
+        workspace_id=workspace_id,
+        volume_id=request.volume_id,
+        role=request.role,
+        added_by=str(current_user.id)
+    )
+    
+    return workspace_volume.to_dict()
+
+
+@router.delete("/{workspace_id}/volumes/{volume_id}")
+async def remove_volume_from_workspace(
+    workspace_id: str,
+    volume_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Remove a volume from workspace. Must be owner or admin."""
+    service = WorkspaceService(db)
+    
+    workspace = await service.get_workspace(workspace_id)
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    
+    if not await service.can_manage_workspace(workspace_id, str(current_user.id)):
+        checker = PermissionChecker(current_user)
+        checker.require(Permission.ADMIN_ACCESS)
+    
+    success = await service.remove_volume(workspace_id, volume_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Volume not found in workspace")
+    
+    return {"message": "Volume removed from workspace", "volume_id": volume_id}
+
+
+@router.put("/{workspace_id}/volumes/{volume_id}")
+async def update_volume_role(
+    workspace_id: str,
+    volume_id: str,
+    request: UpdateVolumeRoleRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update volume role in workspace. Must be owner or admin."""
+    service = WorkspaceService(db)
+    
+    workspace = await service.get_workspace(workspace_id)
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    
+    if not await service.can_manage_workspace(workspace_id, str(current_user.id)):
+        checker = PermissionChecker(current_user)
+        checker.require(Permission.ADMIN_ACCESS)
+    
+    if request.role not in ("read_only", "read_write"):
+        raise HTTPException(status_code=400, detail="Invalid role. Must be: read_only, read_write")
+    
+    updated = await service.update_volume_role(workspace_id, volume_id, request.role)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Volume not found in workspace")
+    
+    return updated.to_dict()
 
 
 # ========== Member Management ==========

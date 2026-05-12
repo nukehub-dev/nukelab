@@ -17,7 +17,8 @@ class Server(Base):
     # Docker
     container_id = Column(String(255), nullable=True)
     image = Column(String(255), nullable=True)
-    volume_name = Column(String(255), nullable=True)
+    volume_id = Column(UUID(as_uuid=True), ForeignKey("volumes.id"), nullable=True)
+    volume_mode = Column(String(20), default="read_write")  # read_write, read_only
     status = Column(String(50), default="pending", nullable=False)
     
     # Resources
@@ -47,6 +48,7 @@ class Server(Base):
     
     # Relationships
     user = relationship("User", back_populates="servers")
+    volume = relationship("Volume", back_populates="servers")
     
     # Timestamps
     started_at = Column(DateTime, nullable=True)

@@ -40,7 +40,8 @@ class ServerSpawner:
         memory: str = "2g",
         disk: str = "10g",
         env_vars: Optional[dict] = None,
-        volume_name: Optional[str] = None,
+        volume_id: Optional[str] = None,
+        volume_mode: Optional[str] = "read_write",
         server_id: Optional[str] = None,
     ) -> Server:
         """Spawn a new server container with persistent volume"""
@@ -49,6 +50,19 @@ class ServerSpawner:
         # Use existing server ID or generate new one
         server_id = server_id or str(uuid.uuid4())
         container_name = f"nukelab-server-{username}-{server_name}"
+        
+        # Get volume name from database if volume_id provided
+        volume_name = None
+        if volume_id:
+            from app.db.session import async_session
+            from sqlalchemy import select
+            from app.models.volume import Volume
+            
+            async with async_session() as db:
+                result = await db.execute(select(Volume).where(Volume.id == volume_id))
+                volume = result.scalar_one_or_none()
+                if volume:
+                    volume_name = volume.name
         
         # Create or reuse persistent volume
         if not volume_name:
@@ -83,15 +97,16 @@ class ServerSpawner:
             "NUKELAB_SERVER_ID": server_id,
             # Auth sidecar configuration
             "NUKELAB_AUTH_ENABLED": "true" if settings.server_auth_enabled else "false",
-            "NUKELAB_AUTH_PUBLIC_KEY_PATH": "/etc/nukelab/auth/public.pem",
+            "NUKELAB_AUTH_PUBLIC_KEY_PATH": "/etc/nukelab/auth/server-auth-public.pem",
             "NUKELAB_AUTH_ALGORITHM": settings.server_auth_key_algorithm,
             "NUKELAB_AUTH_SERVER_ID": server_id,
             **(env_vars or {}),
         }
         
-        # Mount volume to user's home directory
+        # Mount volume to user's home directory with mode
+        mount_mode = "ro" if volume_mode == "read_only" else "rw"
         volumes = {
-            volume_name: f"/home/{username}"
+            volume_name: {"bind": f"/home/{username}", "mode": mount_mode}
         }
         
         # Mount public key for auth validation if server auth is enabled
@@ -99,18 +114,9 @@ class ServerSpawner:
             from app.services.server_auth_service import server_auth_service
             # Ensure keys exist (generates them if needed)
             server_auth_service._ensure_keys_exist()
-            # Use host path for volume mount - the key is shared via host filesystem
-            # In production, this would be a Kubernetes secret or similar
-            import os
-            host_keys_dir = os.environ.get('SERVER_AUTH_KEYS_HOST_DIR', '/tmp/nukelab-secrets')
-            host_public_key = os.path.join(host_keys_dir, 'server-auth-public.pem')
-            # Ensure the host directory exists
-            os.makedirs(host_keys_dir, mode=0o755, exist_ok=True)
-            # Copy key to host path if it doesn't exist there
-            if not os.path.exists(host_public_key):
-                import shutil
-                shutil.copy2(settings.server_auth_public_key_path, host_public_key)
-            volumes[host_public_key] = "/etc/nukelab/auth/public.pem:ro"
+            # Share the nukelab-secrets named volume with spawned containers.
+            # The volume is mounted read-only at /etc/nukelab/auth.
+            volumes["nukelab-secrets"] = {"bind": "/etc/nukelab/auth", "mode": "ro"}
         
         try:
             # Check if image exists locally first, then try to pull
@@ -126,6 +132,21 @@ class ServerSpawner:
                     # (nukelab-dev has nginx and stays running)
                     image = "nukelab-dev:latest"
             
+            # Convert volumes dict to Docker bind mounts format
+            # Handle both simple string format and dict format
+            binds = []
+            for host, container in volumes.items():
+                if isinstance(container, dict):
+                    bind_str = f"{host}:{container['bind']}:{container['mode']}"
+                elif isinstance(container, str):
+                    if ":" in container:
+                        bind_str = f"{host}:{container}"
+                    else:
+                        bind_str = f"{host}:{container}"
+                else:
+                    bind_str = f"{host}:{container}"
+                binds.append(bind_str)
+            
             # Create container
             container = await docker.create_container(
                 name=container_name,
@@ -136,7 +157,7 @@ class ServerSpawner:
                 cpu_limit=cpu,
                 memory_limit=memory,
                 disk_limit=disk,
-                volumes=volumes,
+                volumes={k: v if isinstance(v, str) else v['bind'] for k, v in volumes.items()},
             )
             
             # Start container
@@ -150,7 +171,8 @@ class ServerSpawner:
                 environment_id=uuid.UUID(environment_id) if environment_id else None,
                 container_id=container.id,
                 image=image,
-                volume_name=volume_name,
+                volume_id=uuid.UUID(volume_id) if volume_id else None,
+                volume_mode=volume_mode,
                 status="running",
                 allocated_cpu=cpu,
                 allocated_memory=memory,

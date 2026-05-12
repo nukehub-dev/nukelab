@@ -5,12 +5,12 @@ export interface Workspace {
   id: string;
   name: string;
   description?: string;
-  volume_name: string;
   owner_id: string;
   is_active: boolean;
   created_at?: string;
   updated_at?: string;
   member_count: number;
+  volume_count: number;
 }
 
 export interface WorkspaceMember {
@@ -22,8 +22,24 @@ export interface WorkspaceMember {
   email?: string;
 }
 
+export interface WorkspaceVolume {
+  workspace_id: string;
+  volume_id: string;
+  role: 'read_only' | 'read_write';
+  added_at?: string;
+  added_by?: string;
+  volume?: {
+    id: string;
+    name: string;
+    display_name: string;
+    size_bytes: number;
+    status: string;
+  };
+}
+
 export interface WorkspaceWithMembers extends Workspace {
   members: WorkspaceMember[];
+  volumes: WorkspaceVolume[];
 }
 
 export function useWorkspaces() {
@@ -50,7 +66,7 @@ export function useWorkspace(workspaceId: string) {
 export function useCreateWorkspace() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: { name: string; description?: string; volume_name: string }) => {
+    mutationFn: async (data: { name: string; description?: string }) => {
       const response = await api.post<Workspace>('/workspaces/', data);
       return response;
     },
@@ -123,6 +139,36 @@ export function useUpdateMemberRole() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['workspace', variables.workspaceId] });
+    },
+  });
+}
+
+export function useAddWorkspaceVolume() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ workspaceId, volumeId, role }: { workspaceId: string; volumeId: string; role: string }) => {
+      const response = await api.post<WorkspaceVolume>(`/workspaces/${workspaceId}/volumes`, {
+        volume_id: volumeId,
+        role,
+      });
+      return response;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['workspace', variables.workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ['workspaces'] });
+    },
+  });
+}
+
+export function useRemoveWorkspaceVolume() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ workspaceId, volumeId }: { workspaceId: string; volumeId: string }) => {
+      await api.delete(`/workspaces/${workspaceId}/volumes/${volumeId}`);
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['workspace', variables.workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ['workspaces'] });
     },
   });
 }

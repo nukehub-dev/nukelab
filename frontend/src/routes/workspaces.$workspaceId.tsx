@@ -20,12 +20,17 @@ import {
   useAddWorkspaceMember,
   useRemoveWorkspaceMember,
   useUpdateMemberRole,
+  useAddWorkspaceVolume,
+  useRemoveWorkspaceVolume,
 } from '../hooks/use-workspaces';
+import { useVolumes } from '../hooks/use-volumes';
 import { useUsers } from '../hooks/use-users';
 import { springs } from '../lib/animations';
-import { cn } from '../lib/utils';
+import { cn, formatBytes } from '../lib/utils';
 import { Button } from '../components/ui/button';
+import { StatCard } from '../components/data/stat-card';
 import { Input } from '../components/ui/input';
+import { Textarea } from '../components/ui/textarea';
 import { Select, SelectItem } from '../components/ui/select';
 import { Combobox } from '../components/ui/combobox';
 import { useConfirmDialog } from '../components/ui/confirm-dialog';
@@ -58,16 +63,22 @@ function WorkspaceDetailPage() {
   const { workspaceId } = Route.useParams();
   const { data: workspace, isLoading } = useWorkspace(workspaceId);
   const { data: usersData } = useUsers();
+  const { data: volumesData } = useVolumes();
   const updateWorkspace = useUpdateWorkspace();
   const addMember = useAddWorkspaceMember();
   const removeMember = useRemoveWorkspaceMember();
   const updateRole = useUpdateMemberRole();
+  const addVolume = useAddWorkspaceVolume();
+  const removeVolume = useRemoveWorkspaceVolume();
   const { confirm, dialog } = useConfirmDialog();
 
   const [showAddMember, setShowAddMember] = useState(false);
+  const [showAddVolume, setShowAddVolume] = useState(false);
   const [showEditWorkspace, setShowEditWorkspace] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState('');
   const [selectedRole, setSelectedRole] = useState('read_write');
+  const [selectedVolumeId, setSelectedVolumeId] = useState('');
+  const [selectedVolumeRole, setSelectedVolumeRole] = useState('read_write');
   const [editForm, setEditForm] = useState({ name: '', description: '' });
 
   const handleAddMember = (e: React.FormEvent) => {
@@ -81,6 +92,22 @@ function WorkspaceDetailPage() {
           setShowAddMember(false);
           setSelectedUserId('');
           setSelectedRole('read_write');
+        },
+      }
+    );
+  };
+
+  const handleAddVolume = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedVolumeId) return;
+    
+    addVolume.mutate(
+      { workspaceId, volumeId: selectedVolumeId, role: selectedVolumeRole },
+      {
+        onSuccess: () => {
+          setShowAddVolume(false);
+          setSelectedVolumeId('');
+          setSelectedVolumeRole('read_write');
         },
       }
     );
@@ -121,33 +148,38 @@ function WorkspaceDetailPage() {
     label: `${user.username} (${user.email})`,
   }));
 
+  const availableVolumes = volumesData?.filter(
+    (v: any) => !workspace.volumes?.some((wv: any) => wv.volume_id === v.id)
+  ) || [];
+
+  const volumeOptions = availableVolumes.map((vol: any) => ({
+    value: vol.id,
+    label: `${vol.display_name} (${vol.server_count} servers)`,
+  }));
+
   return (
-    <div className="min-h-screen p-6 lg:p-10 space-y-8">
+    <div className="min-h-screen p-6 lg:p-10 space-y-6">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={springs.gentle}
-        className="space-y-4"
       >
-        <Link
-          to="/workspaces"
-          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back to Workspaces
-        </Link>
-
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="p-2 rounded-lg bg-primary/10 flex-shrink-0">
-              <FolderOpen className="w-5 h-5 text-primary" />
+            <Tooltip content="Back to workspaces">
+              <Link
+                to="/workspaces"
+                className="p-2 rounded-lg hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors flex-shrink-0 inline-flex"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </Link>
+            </Tooltip>
+            <div className="p-2 rounded-xl bg-primary/10 shrink-0">
+              <FolderOpen className="w-4 h-4 text-primary" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-2xl font-bold truncate">{workspace.name}</h1>
-              {workspace.description && (
-                <p className="text-sm text-muted-foreground truncate">{workspace.description}</p>
-              )}
+              <h1 className="text-xl font-bold truncate">{workspace.name}</h1>
             </div>
           </div>
           <Tooltip content="Edit workspace">
@@ -158,68 +190,160 @@ function WorkspaceDetailPage() {
                 setEditForm({ name: workspace.name, description: workspace.description || '' });
                 setShowEditWorkspace(true);
               }}
-              className="gap-1 flex-shrink-0"
+              className="gap-1.5 flex-shrink-0"
             >
               <Pencil className="w-3.5 h-3.5" />
               Edit
             </Button>
           </Tooltip>
         </div>
+
+        {/* Description */}
+        {workspace.description && (
+          <div className="rounded-xl bg-muted/30 border border-border/30 p-4 mb-4">
+            <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
+              {workspace.description}
+            </p>
+          </div>
+        )}
+
+        {/* Stats */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <StatCard
+            title="Volumes"
+            value={workspace.volumes?.length || 0}
+            icon={HardDrive}
+            iconColor="text-blue-400"
+            bgColor="bg-blue-500/10"
+            variant="compact"
+          />
+          <StatCard
+            title="Members"
+            value={workspace.members?.length || 0}
+            icon={Users}
+            iconColor="text-violet-400"
+            bgColor="bg-violet-500/10"
+            variant="compact"
+          />
+          <StatCard
+            title="Status"
+            value={workspace.is_active ? 'Active' : 'Inactive'}
+            icon={Shield}
+            iconColor={workspace.is_active ? 'text-emerald-400' : 'text-muted-foreground'}
+            bgColor={workspace.is_active ? 'bg-emerald-500/10' : 'bg-muted/50'}
+            variant="compact"
+          />
+        </div>
       </motion.div>
 
-      {/* Info Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <motion.div
-          className="bubble p-4"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1, ...springs.gentle }}
-        >
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-chart-1/10">
-              <HardDrive className="w-4 h-4 text-chart-1" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Volume</p>
-              <p className="text-sm font-medium">{workspace.volume_name}</p>
-            </div>
+      {/* Volumes Section */}
+      <motion.div
+        className="bubble p-5"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.35, ...springs.gentle }}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <HardDrive className="w-4 h-4 text-primary" />
+            <h3 className="text-base font-semibold">Volumes</h3>
           </div>
-        </motion.div>
+          <Button
+            size="sm"
+            onClick={() => setShowAddVolume(!showAddVolume)}
+            className="gap-1"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Add Volume
+          </Button>
+        </div>
 
-        <motion.div
-          className="bubble p-4"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, ...springs.gentle }}
-        >
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-chart-2/10">
-              <Users className="w-4 h-4 text-chart-2" />
+        {showAddVolume && (
+          <form onSubmit={handleAddVolume} className="mb-4 p-4 rounded-xl bg-surface/50 border border-border/50 space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Volume</label>
+                <Combobox
+                  value={selectedVolumeId}
+                  onChange={setSelectedVolumeId}
+                  options={volumeOptions}
+                  placeholder="Select volume..."
+                  searchPlaceholder="Search volumes..."
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Access Role</label>
+                <Select
+                  value={selectedVolumeRole}
+                  onChange={setSelectedVolumeRole}
+                  placeholder="Select role..."
+                >
+                  <SelectItem value="read_write">Read-Write</SelectItem>
+                  <SelectItem value="read_only">Read-Only</SelectItem>
+                </Select>
+              </div>
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Members</p>
-              <p className="text-sm font-medium">{workspace.members?.length || 0}</p>
+            <div className="flex items-center gap-2">
+              <Button type="submit" size="sm" loading={addVolume.isPending}>Add</Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => setShowAddVolume(false)}>
+                Cancel
+              </Button>
             </div>
-          </div>
-        </motion.div>
+          </form>
+        )}
 
-        <motion.div
-          className="bubble p-4"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3, ...springs.gentle }}
-        >
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-chart-3/10">
-              <Shield className="w-4 h-4 text-chart-3" />
+        <div className="space-y-2">
+          {workspace.volumes?.map((wv: any) => (
+            <div
+              key={wv.volume_id}
+              className="flex items-center justify-between p-3 rounded-lg bg-surface/50 border border-border/50"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="p-1.5 rounded flex-shrink-0 bg-primary/10">
+                  <HardDrive className="w-3.5 h-3.5 text-primary" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{wv.volume?.display_name || 'Unnamed Volume'}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {wv.volume?.size_bytes != null ? formatBytes(wv.volume.size_bytes) : 'Size unknown'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <span className={cn("text-xs px-2 py-0.5 rounded-full", roleColors[wv.role as keyof typeof roleColors])}>
+                  {roleLabels[wv.role as keyof typeof roleLabels] || wv.role}
+                </span>
+                <Tooltip content="Remove volume">
+                  <button
+                    onClick={async () => {
+                      const confirmed = await confirm({
+                        title: 'Remove Volume',
+                        description: `Are you sure you want to remove this volume from the workspace?`,
+                        confirmLabel: 'Remove',
+                        cancelLabel: 'Cancel',
+                        variant: 'warning',
+                      });
+                      if (confirmed) {
+                        removeVolume.mutate({ workspaceId, volumeId: wv.volume_id });
+                      }
+                    }}
+                    className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors inline-flex"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </Tooltip>
+              </div>
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Status</p>
-              <p className="text-sm font-medium">{workspace.is_active ? 'Active' : 'Inactive'}</p>
+          ))}
+          {!workspace.volumes?.length && (
+            <div className="text-center py-8 text-muted-foreground">
+              <HardDrive className="w-8 h-8 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">No volumes yet</p>
+              <p className="text-xs mt-1">Add volumes to share with workspace members</p>
             </div>
-          </div>
-        </motion.div>
-      </div>
+          )}
+        </div>
+      </motion.div>
 
       {/* Members Section */}
       <motion.div
@@ -379,10 +503,11 @@ function WorkspaceDetailPage() {
                 </div>
                 <div className="space-y-1">
                   <label className="text-sm font-medium">Description</label>
-                  <Input
+                  <Textarea
                     value={editForm.description}
                     onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
                     placeholder="Optional description"
+                    rows={3}
                   />
                 </div>
               </div>

@@ -11,7 +11,6 @@ class SharedWorkspace(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
-    volume_name = Column(String(255), nullable=False)
     owner_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -20,22 +19,27 @@ class SharedWorkspace(Base):
     # Relationships
     owner = relationship("User", foreign_keys=[owner_id], back_populates="owned_workspaces")
     members = relationship("WorkspaceMember", back_populates="workspace", cascade="all, delete-orphan")
+    volume_associations = relationship("WorkspaceVolume", back_populates="workspace", cascade="all, delete-orphan")
     
     def to_dict(self):
         try:
             member_count = len(self.members) if self.members else 0
         except:
             member_count = 0
+        try:
+            volume_count = len(self.volume_associations) if self.volume_associations else 0
+        except:
+            volume_count = 0
         return {
             "id": str(self.id),
             "name": self.name,
             "description": self.description,
-            "volume_name": self.volume_name,
             "owner_id": str(self.owner_id),
             "is_active": self.is_active,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "member_count": member_count,
+            "volume_count": volume_count,
         }
 
 class WorkspaceMember(Base):
