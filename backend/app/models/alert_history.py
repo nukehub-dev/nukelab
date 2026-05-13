@@ -9,9 +9,9 @@ class AlertHistory(Base):
     __tablename__ = "alert_history"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    rule_id = Column(UUID(as_uuid=True), ForeignKey("alert_rules.id"))
-    server_id = Column(UUID(as_uuid=True), ForeignKey("servers.id"))
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    rule_id = Column(UUID(as_uuid=True), ForeignKey("alert_rules.id", ondelete="SET NULL"), nullable=True)
+    server_id = Column(UUID(as_uuid=True), ForeignKey("servers.id", ondelete="SET NULL"), nullable=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
     metric_value = Column(Float, nullable=False)
     threshold = Column(Float, nullable=False)
@@ -23,7 +23,7 @@ class AlertHistory(Base):
     email_sent = Column(Boolean, default=False)
     webhook_sent = Column(Boolean, default=False)
 
-    acknowledged_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    acknowledged_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     acknowledged_at = Column(DateTime)
     notes = Column(Text)
 

@@ -10,16 +10,20 @@ import {
   FolderOpen,
   Search,
   Pencil,
+  User,
+  Users,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useMemo } from 'react';
 import { ResourcePageLayout } from '../components/layout/resource-page-layout';
 import { useVolumes, useCreateVolume, useDeleteVolume, useUpdateVolume } from '../hooks/use-volumes';
+import { useCurrentUser } from '../hooks/use-current-user';
 import { FileBrowser } from '../components/volume-file-browser';
 import { SkeletonCard } from '../components/feedback/skeleton';
 import { EmptyState } from '../components/feedback/empty-state';
 import { Card, CardContent } from '../components/ui/card';
 import { Input } from '../components/ui/input';
+import { Select, SelectItem } from '../components/ui/select';
 import { Textarea } from '../components/ui/textarea';
 import { Button } from '../components/ui/button';
 import { Tooltip } from '../components/ui/tooltip';
@@ -40,13 +44,15 @@ function VolumeCard({
   index, 
   onDelete, 
   onBrowse,
-  onEdit
+  onEdit,
+  isOwner,
 }: { 
   volume: Volume; 
   index: number; 
   onDelete?: () => void;
   onBrowse?: () => void;
   onEdit?: () => void;
+  isOwner: boolean;
 }) {
   const sizePercent = volume.size_bytes > 0 && volume.max_size_bytes && volume.max_size_bytes > 0
     ? (volume.size_bytes / volume.max_size_bytes) * 100
@@ -85,6 +91,17 @@ function VolumeCard({
               </div>
             </div>
             <div className="flex items-center gap-1 shrink-0">
+              {isOwner ? (
+                <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] uppercase tracking-wider bg-primary/10 text-primary">
+                  <User className="w-3 h-3" />
+                  Owner
+                </span>
+              ) : (
+                <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] uppercase tracking-wider bg-muted/50 text-muted-foreground">
+                  <Users className="w-3 h-3" />
+                  Shared
+                </span>
+              )}
               {volume.visibility !== 'private' && (
                 <span className={cn(
                   "shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] uppercase tracking-wider",
@@ -106,7 +123,7 @@ function VolumeCard({
                   </button>
                 </Tooltip>
               )}
-              {onEdit && (
+              {onEdit && isOwner && (
                 <Tooltip content="Edit volume">
                   <button
                     onClick={(e) => {
@@ -119,7 +136,7 @@ function VolumeCard({
                   </button>
                 </Tooltip>
               )}
-              {onDelete && volume.server_count === 0 && (
+              {onDelete && isOwner && volume.server_count === 0 && (
                 <Tooltip content="Delete volume">
                   <button
                     onClick={(e) => {
@@ -204,13 +221,19 @@ function VolumeCard({
   );
 }
 
+type OwnershipFilter = 'all' | 'mine' | 'shared';
+type SortOption = 'name' | 'size' | 'created' | 'updated';
+
 function VolumesPage() {
   const { data: volumes = [], isLoading } = useVolumes();
+  const { data: currentUser } = useCurrentUser();
   const createVolume = useCreateVolume();
   const deleteVolume = useDeleteVolume();
   const updateVolume = useUpdateVolume();
   const { confirm, dialog } = useConfirmDialog();
   const [searchQuery, setSearchQuery] = useState('');
+  const [ownershipFilter, setOwnershipFilter] = useState<OwnershipFilter>('all');
+  const [sortBy, setSortBy] = useState<SortOption>('created');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [createForm, setCreateForm] = useState({
@@ -238,10 +261,19 @@ function VolumesPage() {
     };
   }, [volumes]);
 
-  // Filter volumes
+  // Filter & sort volumes
   const filteredVolumes = useMemo(() => {
     let result = [...volumes];
 
+    // Ownership filter
+    if (ownershipFilter !== 'all' && currentUser) {
+      const userId = currentUser.id;
+      result = result.filter(v =>
+        ownershipFilter === 'mine' ? v.owner_id === userId : v.owner_id !== userId
+      );
+    }
+
+    // Search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       result = result.filter(v =>
@@ -251,8 +283,24 @@ function VolumesPage() {
       );
     }
 
+    // Sort
+    result.sort((a, b) => {
+      switch (sortBy) {
+        case 'name':
+          return a.display_name.localeCompare(b.display_name);
+        case 'size':
+          return (b.size_bytes || 0) - (a.size_bytes || 0);
+        case 'created':
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        case 'updated':
+          return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+        default:
+          return 0;
+      }
+    });
+
     return result;
-  }, [volumes, searchQuery]);
+  }, [volumes, searchQuery, ownershipFilter, sortBy, currentUser]);
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -339,13 +387,13 @@ function VolumesPage() {
           },
         ]}
       >
-        {/* Search Toolbar */}
-        {!isLoading && (
+        {/* Toolbar: Search + Filters + Sort */}
+        {!isLoading && volumes.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={springs.gentle}
-            className="flex flex-col sm:flex-row items-start sm:items-center gap-3"
+            className="flex flex-col lg:flex-row items-start lg:items-center gap-3"
           >
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none z-10" />
@@ -355,6 +403,36 @@ function VolumesPage() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
               />
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Ownership filter pills */}
+              <div className="flex items-center bg-muted/50 rounded-lg p-0.5">
+                {(['all', 'mine', 'shared'] as OwnershipFilter[]).map((filter) => (
+                  <button
+                    key={filter}
+                    onClick={() => setOwnershipFilter(filter)}
+                    className={cn(
+                      'px-3 py-1.5 rounded-md text-xs font-medium transition-all',
+                      ownershipFilter === filter
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    {filter === 'all' && `All (${volumes.length})`}
+                    {filter === 'mine' && `Mine (${volumes.filter(v => v.owner_id === currentUser?.id).length})`}
+                    {filter === 'shared' && `Shared (${volumes.filter(v => v.owner_id !== currentUser?.id).length})`}
+                  </button>
+                ))}
+              </div>
+
+              {/* Sort dropdown */}
+              <Select value={sortBy} onChange={(value) => setSortBy(value as SortOption)} className="w-36">
+                <SelectItem value="created">Newest</SelectItem>
+                <SelectItem value="updated">Recently Updated</SelectItem>
+                <SelectItem value="name">Name</SelectItem>
+                <SelectItem value="size">Size</SelectItem>
+              </Select>
             </div>
           </motion.div>
         )}
@@ -383,10 +461,21 @@ function VolumesPage() {
             animate={{ opacity: 1 }}
             className="text-center py-12"
           >
-            <p className="text-muted-foreground">No volumes match your search.</p>
-            <Button variant="outline" size="sm" onClick={() => setSearchQuery('')} className="mt-2">
-              Clear Search
-            </Button>
+            <p className="text-muted-foreground">
+              {searchQuery || ownershipFilter !== 'all'
+                ? 'No volumes match your filters.'
+                : 'No volumes found.'}
+            </p>
+            {(searchQuery || ownershipFilter !== 'all') && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => { setSearchQuery(''); setOwnershipFilter('all'); }}
+                className="mt-2"
+              >
+                Clear Filters
+              </Button>
+            )}
           </motion.div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -396,6 +485,7 @@ function VolumesPage() {
                   key={volume.id}
                   volume={volume}
                   index={index}
+                  isOwner={volume.owner_id === currentUser?.id}
                   onDelete={() => handleDelete(volume)}
                   onBrowse={() => setBrowsingVolume({ id: volume.id, name: volume.display_name })}
                   onEdit={() => handleEdit(volume)}
@@ -414,18 +504,7 @@ function VolumesPage() {
           />
         )}
 
-        {/* Footer Stats */}
-        {!isLoading && volumes.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.3 }}
-            className="text-center text-xs text-muted-foreground pt-4"
-          >
-            Showing {filteredVolumes.length} of {volumes.length} volumes
-            {searchQuery && ` matching "${searchQuery}"`}
-          </motion.div>
-        )}
+
       </ResourcePageLayout>
 
       {/* Create Volume Dialog */}

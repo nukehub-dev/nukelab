@@ -33,7 +33,7 @@ class EnvironmentTemplate(Base):
     is_public = Column(Boolean, default=True)
     
     # Ownership
-    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)

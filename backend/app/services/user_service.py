@@ -236,7 +236,7 @@ class UserService:
         return user
     
     async def delete_user(self, user_id: str) -> None:
-        """Hard delete user"""
+        """Hard delete user. DB-level CASCADE/SET NULL handles related records."""
         user = await self.get_by_id(user_id)
         if not user:
             raise HTTPException(

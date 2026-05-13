@@ -13,9 +13,9 @@ class CreditTransaction(Base):
     balance_after = Column(Integer, nullable=False)
     type = Column(String(50), nullable=False, index=True)
     description = Column(Text, nullable=True)
-    server_id = Column(UUID(as_uuid=True), ForeignKey("servers.id"), nullable=True)
+    server_id = Column(UUID(as_uuid=True), ForeignKey("servers.id", ondelete="SET NULL"), nullable=True)
     plan_id = Column(UUID(as_uuid=True), nullable=True)
-    actor_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    actor_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     meta = Column(JSON, default=dict)
     created_at = Column(DateTime, default=datetime.utcnow)
     

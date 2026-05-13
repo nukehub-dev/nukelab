@@ -9,8 +9,8 @@ class ServerQueue(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    environment_id = Column(UUID(as_uuid=True), ForeignKey("environment_templates.id"), nullable=False)
-    plan_id = Column(UUID(as_uuid=True), ForeignKey("server_plans.id"), nullable=False)
+    environment_id = Column(UUID(as_uuid=True), ForeignKey("environment_templates.id", ondelete="CASCADE"), nullable=False)
+    plan_id = Column(UUID(as_uuid=True), ForeignKey("server_plans.id", ondelete="CASCADE"), nullable=False)
     
     # Status: pending, scheduled, starting, failed, cancelled
     status = Column(String(50), default="pending", nullable=False)
