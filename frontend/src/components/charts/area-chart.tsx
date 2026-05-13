@@ -63,7 +63,11 @@ function CustomTooltip({ active, payload, label, series, tooltipFormatter, yTick
         color: 'var(--popover-foreground)',
       }}
     >
-      <p className="font-medium text-muted-foreground mb-2">{label}</p>
+      <p className="font-medium text-muted-foreground mb-2">
+        {typeof label === 'string' && label.includes('T')
+          ? new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+          : label}
+      </p>
       <div className="space-y-1">
         {customItems ? (
           // Custom tooltip items
@@ -238,5 +242,16 @@ export const formatters = {
       minute: '2-digit',
       hour12: false,
     });
+  },
+  date: (value: string) => {
+    const date = new Date(value);
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+    });
+  },
+  dateShort: (value: string) => {
+    const date = new Date(value);
+    return `${date.getMonth() + 1}/${date.getDate()}`;
   },
 };

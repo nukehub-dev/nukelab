@@ -14,6 +14,7 @@ from app.dependencies import require_permissions
 from app.db.session import get_db
 from app.models.user import User
 from app.models.server import Server
+from app.models.server_plan import ServerPlan
 from app.models.credit_transaction import CreditTransaction
 from app.models.activity_log import ActivityLog
 
@@ -45,18 +46,32 @@ async def get_dashboard(
     activity_result = await db.execute(activity_query)
     recent_activity = activity_result.scalars().all()
     
+    # Calculate hourly cost from running servers' plans
+    hourly_cost_result = await db.execute(
+        select(func.coalesce(func.sum(ServerPlan.cost_per_hour), 0))
+        .select_from(Server)
+        .join(ServerPlan, Server.plan_id == ServerPlan.id)
+        .where(
+            and_(Server.user_id == current_user.id, Server.status == "running")
+        )
+    )
+    hourly_cost = hourly_cost_result.scalar() or 0
+    
+    balance = current_user.nuke_balance or 0
+    estimated_hours_left = int(balance / hourly_cost) if hourly_cost > 0 else 0
+    
     dashboard_data = {
         "my_servers": {
             "total": total_servers,
             "running": running_servers,
             "stopped": total_servers - running_servers,
-            "pending": 0  # TODO: Add pending status count
+            "pending": 0
         },
         "my_nukes": {
-            "balance": current_user.nuke_balance,
+            "balance": balance,
             "daily_allowance": current_user.daily_allowance,
-            "hourly_cost": 0,  # TODO: Calculate from active servers
-            "estimated_hours_left": 0  # TODO: Calculate
+            "hourly_cost": hourly_cost,
+            "estimated_hours_left": estimated_hours_left
         },
         "recent_activity": [
             {

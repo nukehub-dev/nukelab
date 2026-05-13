@@ -25,7 +25,7 @@ export interface BarChartProps {
   showGrid?: boolean;
   showTooltip?: boolean;
   barSize?: number;
-  radius?: number;
+  radius?: number | [number, number, number, number];
   className?: string;
 }
 
@@ -116,7 +116,7 @@ export function MetricsBarChart({
           <Bar
             dataKey="value"
             barSize={barSize}
-            radius={[radius, radius, radius, radius]}
+            radius={Array.isArray(radius) ? radius : [radius, radius, radius, radius]}
             animationDuration={800}
             animationEasing="ease-out"
           >

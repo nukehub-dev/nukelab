@@ -118,6 +118,7 @@ export function useServerActions() {
       api.post<Server>('/servers/', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['servers'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
   });
 
@@ -129,6 +130,7 @@ export function useServerActions() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['servers'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
     onError: (error: Error, serverId) => {
       removePendingOp(serverId);
@@ -145,6 +147,7 @@ export function useServerActions() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['servers'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
     onError: (error: Error, serverId) => {
       removePendingOp(serverId);
@@ -161,6 +164,7 @@ export function useServerActions() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['servers'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
     onError: (error: Error, serverId) => {
       removePendingOp(serverId);
@@ -177,6 +181,7 @@ export function useServerActions() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['servers'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
     onError: (error: Error, serverId) => {
       removePendingOp(serverId);

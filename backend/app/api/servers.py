@@ -826,6 +826,13 @@ async def delete_server(
         volume_service = VolumeService(db)
         await volume_service.decrement_server_count(str(server.volume_id))
     
+    # Delete associated credit transactions to avoid FK constraint
+    from app.models.credit_transaction import CreditTransaction
+    from sqlalchemy import delete
+    await db.execute(
+        delete(CreditTransaction).where(CreditTransaction.server_id == server.id)
+    )
+    
     await db.delete(server)
     await db.commit()
     

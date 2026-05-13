@@ -1,16 +1,45 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 
+export interface DailyUsage {
+  date: string;
+  avg_cpu: number;
+  peak_cpu: number;
+  avg_memory: number;
+  peak_memory: number;
+  avg_network_rx: number;
+  avg_network_tx: number;
+  avg_disk_read: number;
+  avg_disk_write: number;
+  avg_gpu: number;
+  peak_gpu: number;
+  data_points: number;
+}
+
+export interface ServerBreakdown {
+  server_id: string;
+  server_name: string;
+  cost: number;
+}
+
+export interface PeakStats {
+  peak_cpu: number;
+  peak_memory: number;
+  peak_gpu: number;
+  overall_avg_cpu: number;
+  overall_avg_memory: number;
+}
+
 export interface UserUsageData {
   user_id: string;
   period_days: number;
-  daily_usage: {
-    date: string;
-    avg_cpu: number;
-    avg_memory: number;
-    data_points: number;
-  }[];
+  daily_usage: DailyUsage[];
   total_cost: number;
+  prev_cost: number;
+  cost_trend: number;
+  server_breakdown: ServerBreakdown[];
+  peak_stats: PeakStats;
+  active_days: number;
 }
 
 export interface GlobalUsageData {
