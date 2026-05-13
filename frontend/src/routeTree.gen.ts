@@ -23,10 +23,12 @@ import { Route as ImagesRouteImport } from './routes/images'
 import { Route as EnvironmentsRouteImport } from './routes/environments'
 import { Route as AuditLogsRouteImport } from './routes/audit-logs'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as WorkspacesIndexRouteImport } from './routes/workspaces.index'
 import { Route as SettingsIndexRouteImport } from './routes/settings.index'
 import { Route as ServersIndexRouteImport } from './routes/servers.index'
+import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as WorkspacesWorkspaceIdRouteImport } from './routes/workspaces.$workspaceId'
 import { Route as SettingsUsersRouteImport } from './routes/settings.users'
 import { Route as SettingsProfileRouteImport } from './routes/settings.profile'
@@ -34,7 +36,15 @@ import { Route as SettingsNotificationsRouteImport } from './routes/settings.not
 import { Route as SettingsAuthenticationRouteImport } from './routes/settings.authentication'
 import { Route as SettingsAppearanceRouteImport } from './routes/settings.appearance'
 import { Route as ServersServerIdRouteImport } from './routes/servers.$serverId'
+import { Route as AdminUsersRouteImport } from './routes/admin.users'
+import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
+import { Route as AdminServersRouteImport } from './routes/admin.servers'
+import { Route as AdminPlansRouteImport } from './routes/admin.plans'
 import { Route as AdminPermissionsRouteImport } from './routes/admin.permissions'
+import { Route as AdminEnvironmentsRouteImport } from './routes/admin.environments'
+import { Route as AdminCreditsRouteImport } from './routes/admin.credits'
+import { Route as AdminAuditLogsRouteImport } from './routes/admin.audit-logs'
+import { Route as AdminAnalyticsRouteImport } from './routes/admin.analytics'
 import { Route as UserUsernameServerNameRouteImport } from './routes/user.$username.$serverName'
 import { Route as ServersServerIdMetricsRouteImport } from './routes/servers.$serverId.metrics'
 
@@ -108,6 +118,11 @@ const AnalyticsRoute = AnalyticsRouteImport.update({
   path: '/analytics',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -127,6 +142,11 @@ const ServersIndexRoute = ServersIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => ServersRoute,
+} as any)
+const AdminIndexRoute = AdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminRoute,
 } as any)
 const WorkspacesWorkspaceIdRoute = WorkspacesWorkspaceIdRouteImport.update({
   id: '/$workspaceId',
@@ -163,10 +183,50 @@ const ServersServerIdRoute = ServersServerIdRouteImport.update({
   path: '/$serverId',
   getParentRoute: () => ServersRoute,
 } as any)
+const AdminUsersRoute = AdminUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminSettingsRoute = AdminSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminServersRoute = AdminServersRouteImport.update({
+  id: '/servers',
+  path: '/servers',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminPlansRoute = AdminPlansRouteImport.update({
+  id: '/plans',
+  path: '/plans',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminPermissionsRoute = AdminPermissionsRouteImport.update({
-  id: '/admin/permissions',
-  path: '/admin/permissions',
-  getParentRoute: () => rootRouteImport,
+  id: '/permissions',
+  path: '/permissions',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminEnvironmentsRoute = AdminEnvironmentsRouteImport.update({
+  id: '/environments',
+  path: '/environments',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminCreditsRoute = AdminCreditsRouteImport.update({
+  id: '/credits',
+  path: '/credits',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAuditLogsRoute = AdminAuditLogsRouteImport.update({
+  id: '/audit-logs',
+  path: '/audit-logs',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAnalyticsRoute = AdminAnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
+  getParentRoute: () => AdminRoute,
 } as any)
 const UserUsernameServerNameRoute = UserUsernameServerNameRouteImport.update({
   id: '/user/$username/$serverName',
@@ -181,6 +241,7 @@ const ServersServerIdMetricsRoute = ServersServerIdMetricsRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteWithChildren
   '/analytics': typeof AnalyticsRoute
   '/audit-logs': typeof AuditLogsRoute
   '/environments': typeof EnvironmentsRoute
@@ -195,7 +256,15 @@ export interface FileRoutesByFullPath {
   '/users': typeof UsersRoute
   '/volumes': typeof VolumesRoute
   '/workspaces': typeof WorkspacesRouteWithChildren
+  '/admin/analytics': typeof AdminAnalyticsRoute
+  '/admin/audit-logs': typeof AdminAuditLogsRoute
+  '/admin/credits': typeof AdminCreditsRoute
+  '/admin/environments': typeof AdminEnvironmentsRoute
   '/admin/permissions': typeof AdminPermissionsRoute
+  '/admin/plans': typeof AdminPlansRoute
+  '/admin/servers': typeof AdminServersRoute
+  '/admin/settings': typeof AdminSettingsRoute
+  '/admin/users': typeof AdminUsersRoute
   '/servers/$serverId': typeof ServersServerIdRouteWithChildren
   '/settings/appearance': typeof SettingsAppearanceRoute
   '/settings/authentication': typeof SettingsAuthenticationRoute
@@ -203,6 +272,7 @@ export interface FileRoutesByFullPath {
   '/settings/profile': typeof SettingsProfileRoute
   '/settings/users': typeof SettingsUsersRoute
   '/workspaces/$workspaceId': typeof WorkspacesWorkspaceIdRoute
+  '/admin/': typeof AdminIndexRoute
   '/servers/': typeof ServersIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/workspaces/': typeof WorkspacesIndexRoute
@@ -222,7 +292,15 @@ export interface FileRoutesByTo {
   '/usage': typeof UsageRoute
   '/users': typeof UsersRoute
   '/volumes': typeof VolumesRoute
+  '/admin/analytics': typeof AdminAnalyticsRoute
+  '/admin/audit-logs': typeof AdminAuditLogsRoute
+  '/admin/credits': typeof AdminCreditsRoute
+  '/admin/environments': typeof AdminEnvironmentsRoute
   '/admin/permissions': typeof AdminPermissionsRoute
+  '/admin/plans': typeof AdminPlansRoute
+  '/admin/servers': typeof AdminServersRoute
+  '/admin/settings': typeof AdminSettingsRoute
+  '/admin/users': typeof AdminUsersRoute
   '/servers/$serverId': typeof ServersServerIdRouteWithChildren
   '/settings/appearance': typeof SettingsAppearanceRoute
   '/settings/authentication': typeof SettingsAuthenticationRoute
@@ -230,6 +308,7 @@ export interface FileRoutesByTo {
   '/settings/profile': typeof SettingsProfileRoute
   '/settings/users': typeof SettingsUsersRoute
   '/workspaces/$workspaceId': typeof WorkspacesWorkspaceIdRoute
+  '/admin': typeof AdminIndexRoute
   '/servers': typeof ServersIndexRoute
   '/settings': typeof SettingsIndexRoute
   '/workspaces': typeof WorkspacesIndexRoute
@@ -239,6 +318,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteWithChildren
   '/analytics': typeof AnalyticsRoute
   '/audit-logs': typeof AuditLogsRoute
   '/environments': typeof EnvironmentsRoute
@@ -253,7 +333,15 @@ export interface FileRoutesById {
   '/users': typeof UsersRoute
   '/volumes': typeof VolumesRoute
   '/workspaces': typeof WorkspacesRouteWithChildren
+  '/admin/analytics': typeof AdminAnalyticsRoute
+  '/admin/audit-logs': typeof AdminAuditLogsRoute
+  '/admin/credits': typeof AdminCreditsRoute
+  '/admin/environments': typeof AdminEnvironmentsRoute
   '/admin/permissions': typeof AdminPermissionsRoute
+  '/admin/plans': typeof AdminPlansRoute
+  '/admin/servers': typeof AdminServersRoute
+  '/admin/settings': typeof AdminSettingsRoute
+  '/admin/users': typeof AdminUsersRoute
   '/servers/$serverId': typeof ServersServerIdRouteWithChildren
   '/settings/appearance': typeof SettingsAppearanceRoute
   '/settings/authentication': typeof SettingsAuthenticationRoute
@@ -261,6 +349,7 @@ export interface FileRoutesById {
   '/settings/profile': typeof SettingsProfileRoute
   '/settings/users': typeof SettingsUsersRoute
   '/workspaces/$workspaceId': typeof WorkspacesWorkspaceIdRoute
+  '/admin/': typeof AdminIndexRoute
   '/servers/': typeof ServersIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/workspaces/': typeof WorkspacesIndexRoute
@@ -271,6 +360,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/admin'
     | '/analytics'
     | '/audit-logs'
     | '/environments'
@@ -285,7 +375,15 @@ export interface FileRouteTypes {
     | '/users'
     | '/volumes'
     | '/workspaces'
+    | '/admin/analytics'
+    | '/admin/audit-logs'
+    | '/admin/credits'
+    | '/admin/environments'
     | '/admin/permissions'
+    | '/admin/plans'
+    | '/admin/servers'
+    | '/admin/settings'
+    | '/admin/users'
     | '/servers/$serverId'
     | '/settings/appearance'
     | '/settings/authentication'
@@ -293,6 +391,7 @@ export interface FileRouteTypes {
     | '/settings/profile'
     | '/settings/users'
     | '/workspaces/$workspaceId'
+    | '/admin/'
     | '/servers/'
     | '/settings/'
     | '/workspaces/'
@@ -312,7 +411,15 @@ export interface FileRouteTypes {
     | '/usage'
     | '/users'
     | '/volumes'
+    | '/admin/analytics'
+    | '/admin/audit-logs'
+    | '/admin/credits'
+    | '/admin/environments'
     | '/admin/permissions'
+    | '/admin/plans'
+    | '/admin/servers'
+    | '/admin/settings'
+    | '/admin/users'
     | '/servers/$serverId'
     | '/settings/appearance'
     | '/settings/authentication'
@@ -320,6 +427,7 @@ export interface FileRouteTypes {
     | '/settings/profile'
     | '/settings/users'
     | '/workspaces/$workspaceId'
+    | '/admin'
     | '/servers'
     | '/settings'
     | '/workspaces'
@@ -328,6 +436,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/admin'
     | '/analytics'
     | '/audit-logs'
     | '/environments'
@@ -342,7 +451,15 @@ export interface FileRouteTypes {
     | '/users'
     | '/volumes'
     | '/workspaces'
+    | '/admin/analytics'
+    | '/admin/audit-logs'
+    | '/admin/credits'
+    | '/admin/environments'
     | '/admin/permissions'
+    | '/admin/plans'
+    | '/admin/servers'
+    | '/admin/settings'
+    | '/admin/users'
     | '/servers/$serverId'
     | '/settings/appearance'
     | '/settings/authentication'
@@ -350,6 +467,7 @@ export interface FileRouteTypes {
     | '/settings/profile'
     | '/settings/users'
     | '/workspaces/$workspaceId'
+    | '/admin/'
     | '/servers/'
     | '/settings/'
     | '/workspaces/'
@@ -359,6 +477,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminRoute: typeof AdminRouteWithChildren
   AnalyticsRoute: typeof AnalyticsRoute
   AuditLogsRoute: typeof AuditLogsRoute
   EnvironmentsRoute: typeof EnvironmentsRoute
@@ -373,7 +492,6 @@ export interface RootRouteChildren {
   UsersRoute: typeof UsersRoute
   VolumesRoute: typeof VolumesRoute
   WorkspacesRoute: typeof WorkspacesRouteWithChildren
-  AdminPermissionsRoute: typeof AdminPermissionsRoute
   UserUsernameServerNameRoute: typeof UserUsernameServerNameRoute
 }
 
@@ -477,6 +595,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AnalyticsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -504,6 +629,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/servers/'
       preLoaderRoute: typeof ServersIndexRouteImport
       parentRoute: typeof ServersRoute
+    }
+    '/admin/': {
+      id: '/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof AdminRoute
     }
     '/workspaces/$workspaceId': {
       id: '/workspaces/$workspaceId'
@@ -554,12 +686,68 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ServersServerIdRouteImport
       parentRoute: typeof ServersRoute
     }
+    '/admin/users': {
+      id: '/admin/users'
+      path: '/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AdminUsersRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/settings': {
+      id: '/admin/settings'
+      path: '/settings'
+      fullPath: '/admin/settings'
+      preLoaderRoute: typeof AdminSettingsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/servers': {
+      id: '/admin/servers'
+      path: '/servers'
+      fullPath: '/admin/servers'
+      preLoaderRoute: typeof AdminServersRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/plans': {
+      id: '/admin/plans'
+      path: '/plans'
+      fullPath: '/admin/plans'
+      preLoaderRoute: typeof AdminPlansRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/permissions': {
       id: '/admin/permissions'
-      path: '/admin/permissions'
+      path: '/permissions'
       fullPath: '/admin/permissions'
       preLoaderRoute: typeof AdminPermissionsRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/environments': {
+      id: '/admin/environments'
+      path: '/environments'
+      fullPath: '/admin/environments'
+      preLoaderRoute: typeof AdminEnvironmentsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/credits': {
+      id: '/admin/credits'
+      path: '/credits'
+      fullPath: '/admin/credits'
+      preLoaderRoute: typeof AdminCreditsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/audit-logs': {
+      id: '/admin/audit-logs'
+      path: '/audit-logs'
+      fullPath: '/admin/audit-logs'
+      preLoaderRoute: typeof AdminAuditLogsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/analytics': {
+      id: '/admin/analytics'
+      path: '/analytics'
+      fullPath: '/admin/analytics'
+      preLoaderRoute: typeof AdminAnalyticsRouteImport
+      parentRoute: typeof AdminRoute
     }
     '/user/$username/$serverName': {
       id: '/user/$username/$serverName'
@@ -577,6 +765,34 @@ declare module '@tanstack/react-router' {
     }
   }
 }
+
+interface AdminRouteChildren {
+  AdminAnalyticsRoute: typeof AdminAnalyticsRoute
+  AdminAuditLogsRoute: typeof AdminAuditLogsRoute
+  AdminCreditsRoute: typeof AdminCreditsRoute
+  AdminEnvironmentsRoute: typeof AdminEnvironmentsRoute
+  AdminPermissionsRoute: typeof AdminPermissionsRoute
+  AdminPlansRoute: typeof AdminPlansRoute
+  AdminServersRoute: typeof AdminServersRoute
+  AdminSettingsRoute: typeof AdminSettingsRoute
+  AdminUsersRoute: typeof AdminUsersRoute
+  AdminIndexRoute: typeof AdminIndexRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminAnalyticsRoute: AdminAnalyticsRoute,
+  AdminAuditLogsRoute: AdminAuditLogsRoute,
+  AdminCreditsRoute: AdminCreditsRoute,
+  AdminEnvironmentsRoute: AdminEnvironmentsRoute,
+  AdminPermissionsRoute: AdminPermissionsRoute,
+  AdminPlansRoute: AdminPlansRoute,
+  AdminServersRoute: AdminServersRoute,
+  AdminSettingsRoute: AdminSettingsRoute,
+  AdminUsersRoute: AdminUsersRoute,
+  AdminIndexRoute: AdminIndexRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
 interface ServersServerIdRouteChildren {
   ServersServerIdMetricsRoute: typeof ServersServerIdMetricsRoute
@@ -641,6 +857,7 @@ const WorkspacesRouteWithChildren = WorkspacesRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminRoute: AdminRouteWithChildren,
   AnalyticsRoute: AnalyticsRoute,
   AuditLogsRoute: AuditLogsRoute,
   EnvironmentsRoute: EnvironmentsRoute,
@@ -655,7 +872,6 @@ const rootRouteChildren: RootRouteChildren = {
   UsersRoute: UsersRoute,
   VolumesRoute: VolumesRoute,
   WorkspacesRoute: WorkspacesRouteWithChildren,
-  AdminPermissionsRoute: AdminPermissionsRoute,
   UserUsernameServerNameRoute: UserUsernameServerNameRoute,
 }
 export const routeTree = rootRouteImport

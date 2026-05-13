@@ -1,39 +1,53 @@
 import { createFileRoute, Outlet, Link, useLocation } from '@tanstack/react-router';
-import { 
-  Settings, 
-  Palette, 
-  Bell, 
-  UserCircle,
-  ChevronRight
+import {
+  LayoutDashboard,
+  Users,
+  Server,
+  BarChart3,
+  FileText,
+  CreditCard,
+  Boxes,
+  CreditCard as PlanIcon,
+  Shield,
+  Settings,
+  ChevronRight,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { useAuthStore } from '../stores/auth-store';
+import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
 
-interface SettingsNavItem {
+interface AdminNavItem {
   label: string;
   icon: React.ElementType;
   href: string;
   requiredPermission?: string;
 }
 
-const settingsNavItems: SettingsNavItem[] = [
-  { label: 'Profile', icon: UserCircle, href: '/settings/profile' },
-  { label: 'Appearance', icon: Palette, href: '/settings/appearance' },
-  { label: 'Notifications', icon: Bell, href: '/settings/notifications' },
+const adminNavItems: AdminNavItem[] = [
+  { label: 'Overview', icon: LayoutDashboard, href: '/admin' },
+  { label: 'Users', icon: Users, href: '/admin/users', requiredPermission: PERMISSIONS.USERS_READ },
+  { label: 'Servers', icon: Server, href: '/admin/servers', requiredPermission: PERMISSIONS.SERVERS_READ_ALL },
+  { label: 'Analytics', icon: BarChart3, href: '/admin/analytics', requiredPermission: PERMISSIONS.ANALYTICS_READ },
+  { label: 'Audit Logs', icon: FileText, href: '/admin/audit-logs', requiredPermission: PERMISSIONS.AUDIT_READ },
+  { label: 'Credits', icon: CreditCard, href: '/admin/credits', requiredPermission: PERMISSIONS.CREDITS_READ },
+  { label: 'Environments', icon: Boxes, href: '/admin/environments', requiredPermission: PERMISSIONS.ENVIRONMENT_CREATE },
+  { label: 'Plans', icon: PlanIcon, href: '/admin/plans', requiredPermission: PERMISSIONS.PLAN_CREATE },
+  { label: 'Permissions', icon: Shield, href: '/admin/permissions', requiredPermission: PERMISSIONS.ADMIN_ACCESS },
+  { label: 'Settings', icon: Settings, href: '/admin/settings', requiredPermission: PERMISSIONS.ADMIN_ACCESS },
 ];
 
-export const Route = createFileRoute('/settings')({
-  component: SettingsLayout,
+export const Route = createFileRoute('/admin')({
+  component: AdminLayout,
 });
 
-function SettingsLayout() {
+function AdminLayout() {
   const location = useLocation();
   const hasPermission = useAuthStore((state) => state.hasPermission);
 
-  const visibleItems = settingsNavItems.filter(item => !item.requiredPermission || hasPermission(item.requiredPermission));
+  const visibleItems = adminNavItems.filter(item => !item.requiredPermission || hasPermission(item.requiredPermission));
 
   const isActive = (href: string) => {
-    return location.pathname === href || location.pathname.startsWith(href + '/');
+    if (href === '/admin') return location.pathname === '/admin';
+    return location.pathname.startsWith(href);
   };
 
   return (
@@ -46,8 +60,8 @@ function SettingsLayout() {
               <Settings className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h1 className="font-semibold text-lg">Settings</h1>
-              <p className="text-xs text-muted-foreground">Manage preferences</p>
+              <h1 className="font-semibold text-lg">Admin</h1>
+              <p className="text-xs text-muted-foreground">Platform management</p>
             </div>
           </div>
 

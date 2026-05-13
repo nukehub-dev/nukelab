@@ -7,11 +7,8 @@ import {
   Server,
   Boxes,
   HardDrive,
-  Users,
   Settings,
-  FileText,
   CreditCard,
-  BarChart3,
   Activity,
   Shield,
   FolderOpen,
@@ -71,10 +68,7 @@ const navGroups: NavGroup[] = [
   {
     label: 'Administration',
     items: [
-      { label: 'Users', icon: Users, href: '/users', requiredPermission: PERMISSIONS.USERS_READ },
-      { label: 'Analytics', icon: BarChart3, href: '/analytics', requiredPermission: PERMISSIONS.ANALYTICS_READ },
-      { label: 'Audit Logs', icon: FileText, href: '/audit-logs', requiredPermission: PERMISSIONS.AUDIT_READ },
-      { label: 'Permissions', icon: Shield, href: '/admin/permissions', requiredPermission: PERMISSIONS.ADMIN_ACCESS },
+      { label: 'Admin Dashboard', icon: Shield, href: '/admin', requiredPermission: PERMISSIONS.ADMIN_ACCESS },
     ],
   },
 ];

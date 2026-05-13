@@ -176,8 +176,8 @@ function DashboardPage() {
               {[
                 { label: 'Deploy Server', icon: Server, color: 'bg-primary/10 text-primary', href: '/servers' },
                 { label: 'New Environment', icon: Boxes, color: 'bg-chart-2/10 text-chart-2', href: '/environments' },
-                { label: 'View Logs', icon: Activity, color: 'bg-chart-3/10 text-chart-3', href: '#' },
-                { label: 'Manage Network', icon: Network, color: 'bg-chart-4/10 text-chart-4', href: '#' },
+                { label: 'View Logs', icon: Activity, color: 'bg-chart-3/10 text-chart-3', href: '/servers' },
+                { label: 'Manage Network', icon: Network, color: 'bg-chart-4/10 text-chart-4', href: '/networks' },
               ].map((action) => (
                 <a
                   key={action.label}

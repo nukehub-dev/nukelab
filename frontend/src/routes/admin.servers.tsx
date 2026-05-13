@@ -1,8 +1,8 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { Server, Activity, Cpu, MemoryStick, Play, Square, RotateCcw, Trash2, ExternalLink, Eye } from 'lucide-react';
+import { Server, Activity, Cpu, MemoryStick, Play, Square, RotateCcw, Trash2, ExternalLink, Eye, Users } from 'lucide-react';
 import { Tooltip } from '../components/ui/tooltip';
 import { Checkbox } from '../components/ui/checkbox';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { type ColumnDef, type SortingState, type ColumnFiltersState, type VisibilityState } from '@tanstack/react-table';
 import { ResourcePageLayout } from '../components/layout/resource-page-layout';
 import { DataTable } from '../components/data/data-table';
@@ -12,7 +12,8 @@ import { useEnvironments } from '../hooks/use-environments';
 import { usePlans } from '../hooks/use-plans';
 import { useVolumes } from '../hooks/use-volumes';
 import { useDataTable } from '../hooks/use-data-table';
-import { useAuthStore } from '../stores/auth-store';
+import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
+import { PermissionGuard } from '../components/permission-guard';
 import { formatDate } from '../lib/utils';
 import type { Server as ServerType } from '../types/api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '../components/ui/dialog';
@@ -21,18 +22,27 @@ import { Button } from '../components/ui/button';
 import { Select, SelectItem } from '../components/ui/select';
 import { useConfirmDialog } from '../components/ui/confirm-dialog';
 
-export const Route = createFileRoute('/servers/')({
-  component: ServersPage,
+export const Route = createFileRoute('/admin/servers')({
+  component: AdminServersPage,
 });
 
-function ServersPage() {
+function AdminServersPage() {
+  const canManageServers = useAuthStore((state) => state.canManageServers());
+
+  return (
+    <PermissionGuard permission={PERMISSIONS.SERVERS_READ_ALL} redirectTo="/servers">
+      <AdminServersContent enableManagement={canManageServers} />
+    </PermissionGuard>
+  );
+}
+
+function AdminServersContent({ enableManagement }: { enableManagement: boolean }) {
   const { confirm, dialog } = useConfirmDialog();
   const { data: servers = [], isLoading, isError, error } = useServers();
   const { createServer, startServer, stopServer, restartServer, deleteServer, isOperationPending } = useServerActions();
   const { data: envData } = useEnvironments({ is_active: true, limit: 100 });
   const { data: plansData } = usePlans({ is_active: true, limit: 100 });
   const { data: volumesData } = useVolumes();
-  const user = useAuthStore((state) => state.user);
 
   const {
     state: tableState,
@@ -40,7 +50,7 @@ function ServersPage() {
     setLimit,
     setSearch,
     setFilter,
-  } = useDataTable({ defaultLimit: 10 });
+  } = useDataTable({ defaultLimit: 20 });
 
   const [sorting, setSorting] = useState<SortingState>([]);
   const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
@@ -80,19 +90,37 @@ function ServersPage() {
   const plans = plansData?.data || [];
   const volumes = volumesData || [];
 
-  // Filter to only current user's servers
-  const myServers = servers.filter((server) => !user || server.user_id === user.id);
+  // Build dynamic owner filter from server data
+  const ownerFilterOptions = useMemo(() => {
+    const usernames = new Map<string, string>();
+    servers.forEach((s) => {
+      if (s.user_id && s.username) {
+        usernames.set(s.user_id, s.username);
+      }
+    });
+    return Array.from(usernames.entries())
+      .map(([id, username]) => ({ label: username, value: id }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [servers]);
 
   // Client-side filtering and sorting
-  const filteredServers = myServers.filter((server) => {
+  const filteredServers = servers.filter((server) => {
     let matches = true;
 
     if (tableState.search) {
       const search = tableState.search.toLowerCase();
+      const userName = server.username?.toLowerCase() || '';
       matches = matches && (
         server.name.toLowerCase().includes(search) ||
-        server.status.toLowerCase().includes(search)
+        server.status.toLowerCase().includes(search) ||
+        userName.includes(search)
       );
+    }
+
+    // Filter by owner
+    const ownerFilter = tableState.filters.owner;
+    if (ownerFilter && server.user_id !== ownerFilter) {
+      matches = false;
     }
 
     // Filter by status
@@ -143,15 +171,15 @@ function ServersPage() {
   };
 
   const columns: ColumnDef<ServerType>[] = [
-    {
-      id: 'select',
-      header: ({ table }) => (
+    ...(enableManagement ? [{
+      id: 'select' as const,
+      header: ({ table }: { table: { getIsAllPageRowsSelected: () => boolean; toggleAllPageRowsSelected: (value?: boolean) => void } }) => (
         <Checkbox
           checked={table.getIsAllPageRowsSelected()}
           onChange={(checked) => table.toggleAllPageRowsSelected(checked)}
         />
       ),
-      cell: ({ row }) => (
+      cell: ({ row }: { row: { getIsSelected: () => boolean; toggleSelected: (value?: boolean) => void } }) => (
         <Checkbox
           checked={row.getIsSelected()}
           onChange={(checked) => row.toggleSelected(checked)}
@@ -159,7 +187,7 @@ function ServersPage() {
       ),
       enableSorting: false,
       size: 40,
-    },
+    }] : []),
     {
       accessorKey: 'name',
       header: 'Name',
@@ -179,6 +207,39 @@ function ServersPage() {
           />
         );
       },
+    },
+    {
+      accessorKey: 'username',
+      header: 'Owner',
+      cell: ({ row }) => {
+        const username = row.original.username;
+        return (
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs font-medium">
+              {username?.slice(0, 2).toUpperCase() || '??'}
+            </div>
+            <span className="text-sm">{username || 'Unknown'}</span>
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: 'allocated_cpu',
+      header: 'CPU',
+      cell: ({ row }) => (
+        <span className="text-sm text-muted-foreground">
+          {row.original.allocated_cpu ? `${row.original.allocated_cpu} cores` : '—'}
+        </span>
+      ),
+    },
+    {
+      accessorKey: 'allocated_memory',
+      header: 'Memory',
+      cell: ({ row }) => (
+        <span className="text-sm text-muted-foreground">
+          {row.original.allocated_memory || '—'}
+        </span>
+      ),
     },
     {
       accessorKey: 'external_url',
@@ -219,13 +280,220 @@ function ServersPage() {
       header: 'Created',
       cell: ({ row }) => formatDate(row.getValue('created_at') as string),
     },
-    {
-      id: 'actions',
+    ...(enableManagement ? [{
+      id: 'actions' as const,
       header: 'Actions',
-      cell: ({ row }) => {
+      cell: ({ row }: { row: { original: ServerType } }) => {
         const server = row.original;
         return (
           <div className="flex items-center gap-1">
+            <Tooltip content="View Details">
+              <Link
+                to="/servers/$serverId"
+                params={{ serverId: server.id }}
+                className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex"
+              >
+                <Eye className="w-4 h-4" />
+              </Link>
+            </Tooltip>
+            {server.status === 'stopped' && (
+              <Tooltip content={isOperationPending(server.id, 'start') ? 'Starting...' : 'Start'}>
+                <button
+                  onClick={() => startServer.mutate(server.id)}
+                  disabled={isOperationPending(server.id, 'start')}
+                  className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-all duration-100 inline-flex disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
+                >
+                  {isOperationPending(server.id, 'start') ? (
+                    <RotateCcw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Play className="w-4 h-4" />
+                  )}
+                </button>
+              </Tooltip>
+            )}
+            {server.status === 'running' && (
+              <>
+                <Tooltip content={isOperationPending(server.id, 'stop') ? 'Stopping...' : 'Stop'}>
+                  <button
+                    onClick={() => stopServer.mutate(server.id)}
+                    disabled={isOperationPending(server.id, 'stop')}
+                    className="p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-all duration-100 inline-flex disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
+                  >
+                    {isOperationPending(server.id, 'stop') ? (
+                      <RotateCcw className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Square className="w-4 h-4" />
+                    )}
+                  </button>
+                </Tooltip>
+                <Tooltip content={isOperationPending(server.id, 'restart') ? 'Restarting...' : 'Restart'}>
+                  <button
+                    onClick={() => restartServer.mutate(server.id)}
+                    disabled={isOperationPending(server.id, 'restart')}
+                    className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-all duration-100 inline-flex disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
+                  >
+                    {isOperationPending(server.id, 'restart') ? (
+                      <RotateCcw className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <RotateCcw className="w-4 h-4" />
+                    )}
+                  </button>
+                </Tooltip>
+              </>
+            )}
+            <Tooltip content={isOperationPending(server.id, 'delete') ? 'Deleting...' : 'Delete'}>
+              <button
+                onClick={async () => {
+                  const confirmed = await confirm({
+                    title: 'Delete Server',
+                    description: `Are you sure you want to delete ${server.name}${server.username ? ` (owned by ${server.username})` : ''}?`,
+                    confirmLabel: 'Delete',
+                    cancelLabel: 'Cancel',
+                    variant: 'danger',
+                  });
+                  if (confirmed) deleteServer.mutate(server.id);
+                }}
+                disabled={isOperationPending(server.id, 'delete')}
+                className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-all duration-100 inline-flex disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
+              >
+                {isOperationPending(server.id, 'delete') ? (
+                  <RotateCcw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
+              </button>
+            </Tooltip>
+          </div>
+        );
+      },
+      enableSorting: false,
+    }] : []),
+  ];
+
+  const activeServers = servers.filter((s) => s.status === 'running').length;
+  const parseMemory = (mem: string | undefined) => {
+    if (!mem) return 0;
+    const match = mem.match(/^(\d+)/);
+    return match ? parseInt(match[1]) : 0;
+  };
+  const totalMemory = servers.reduce((acc, s) => acc + parseMemory(s.allocated_memory), 0);
+  // const totalDisk = servers.reduce((acc, s) => acc + parseMemory(s.allocated_disk), 0);
+
+  const stats = [
+    { title: 'Active Servers', value: activeServers, icon: Server, iconColor: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
+    { title: 'Total Servers', value: servers.length, icon: Activity, iconColor: 'text-blue-400', bgColor: 'bg-blue-500/10' },
+    { title: 'Total Memory', value: `${totalMemory} GB`, icon: MemoryStick, iconColor: 'text-rose-400', bgColor: 'bg-rose-500/10' },
+    { title: 'Total CPU Cores', value: servers.reduce((acc, s) => acc + (s.allocated_cpu || 0), 0), icon: Cpu, iconColor: 'text-amber-400', bgColor: 'bg-amber-500/10' },
+  ];
+
+  const bulkActions = enableManagement ? [
+    {
+      label: 'Start',
+      icon: <Play className="w-4 h-4" />,
+      onClick: (ids: string[]) => {
+        ids.forEach((id) => startServer.mutate(id));
+      },
+    },
+    {
+      label: 'Stop',
+      icon: <Square className="w-4 h-4" />,
+      onClick: (ids: string[]) => {
+        ids.forEach((id) => stopServer.mutate(id));
+      },
+    },
+    {
+      label: 'Restart',
+      icon: <RotateCcw className="w-4 h-4" />,
+      onClick: (ids: string[]) => {
+        ids.forEach((id) => restartServer.mutate(id));
+      },
+    },
+    {
+      label: 'Delete',
+      icon: <Trash2 className="w-4 h-4" />,
+      onClick: async (ids: string[]) => {
+        const confirmed = await confirm({
+          title: 'Delete Servers',
+          description: `Are you sure you want to delete ${ids.length} servers?`,
+          confirmLabel: 'Delete',
+          cancelLabel: 'Cancel',
+          variant: 'danger',
+        });
+        if (confirmed) ids.forEach((id) => deleteServer.mutate(id));
+      },
+      variant: 'destructive' as const,
+    },
+  ] : [];
+
+  const filters = [
+    ...(ownerFilterOptions.length > 0 ? [{
+      key: 'owner' as const,
+      label: 'Owner',
+      options: ownerFilterOptions,
+    }] : []),
+    {
+      key: 'status' as const,
+      label: 'Status',
+      options: [
+        { label: 'Running', value: 'running' },
+        { label: 'Stopped', value: 'stopped' },
+        { label: 'Pending', value: 'pending' },
+        { label: 'Error', value: 'error' },
+      ],
+    },
+  ];
+
+  const mobileCardRenderer = (server: ServerType) => (
+    <div className="p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="font-medium">{server.name}</div>
+        <StatusBadge status={server.status as 'running' | 'stopped' | 'pending' | 'error'} pulse={server.status === 'running'} />
+      </div>
+      {server.username && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Users className="w-3.5 h-3.5" />
+          {server.username}
+        </div>
+      )}
+      <div className="flex items-center gap-3 text-sm text-muted-foreground">
+        {server.allocated_cpu !== undefined && (
+          <span className="inline-flex items-center gap-1">
+            <Cpu className="w-3.5 h-3.5" />
+            {server.allocated_cpu} cores
+          </span>
+        )}
+        {server.allocated_memory && (
+          <span className="inline-flex items-center gap-1">
+            <MemoryStick className="w-3.5 h-3.5" />
+            {server.allocated_memory}
+          </span>
+        )}
+      </div>
+      <div className="text-sm text-muted-foreground">
+        Created: {formatDate(server.created_at || '')}
+      </div>
+      <div className="flex items-center justify-between pt-1">
+        {server.external_url && (
+          <button
+            onClick={async (e) => {
+              e.preventDefault();
+              if (server.status !== 'running') {
+                await startServer.mutateAsync(server.id);
+              }
+              const gatewayUrl = server.username
+                ? `/user/${server.username}/${server.name}`
+                : server.external_url;
+              window.open(gatewayUrl, '_blank', 'noopener,noreferrer');
+            }}
+            disabled={isOperationPending(server.id)}
+            className="inline-flex items-center gap-1 text-sm text-primary hover:underline disabled:opacity-50"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            {isOperationPending(server.id, 'start') ? 'Starting...' : server.status !== 'running' ? 'Start & Open' : 'Open Server'}
+          </button>
+        )}
+        {enableManagement && (
+          <div className="flex items-center gap-1 ml-auto">
             <Tooltip content="View Details">
               <Link
                 to="/servers/$serverId"
@@ -303,186 +571,7 @@ function ServersPage() {
               </button>
             </Tooltip>
           </div>
-        );
-      },
-      enableSorting: false,
-    },
-  ];
-
-  const activeServers = myServers.filter((s) => s.status === 'running').length;
-  const parseMemory = (mem: string | undefined) => {
-    if (!mem) return 0;
-    const match = mem.match(/^(\d+)/);
-    return match ? parseInt(match[1]) : 0;
-  };
-  const totalMemory = myServers.reduce((acc, s) => acc + parseMemory(s.allocated_memory), 0);
-
-  const stats = [
-    { title: 'Active Servers', value: activeServers, icon: Server, iconColor: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
-    { title: 'Total Servers', value: myServers.length, icon: Activity, iconColor: 'text-blue-400', bgColor: 'bg-blue-500/10' },
-    { title: 'Memory Allocated', value: `${totalMemory} GB`, icon: MemoryStick, iconColor: 'text-rose-400', bgColor: 'bg-rose-500/10' },
-    { title: 'CPU Cores', value: myServers.reduce((acc, s) => acc + (s.allocated_cpu || 0), 0), icon: Cpu, iconColor: 'text-amber-400', bgColor: 'bg-amber-500/10' },
-  ];
-
-  const bulkActions = [
-    {
-      label: 'Start',
-      icon: <Play className="w-4 h-4" />,
-      onClick: (ids: string[]) => {
-        ids.forEach((id) => startServer.mutate(id));
-      },
-    },
-    {
-      label: 'Stop',
-      icon: <Square className="w-4 h-4" />,
-      onClick: (ids: string[]) => {
-        ids.forEach((id) => stopServer.mutate(id));
-      },
-    },
-    {
-      label: 'Restart',
-      icon: <RotateCcw className="w-4 h-4" />,
-      onClick: (ids: string[]) => {
-        ids.forEach((id) => restartServer.mutate(id));
-      },
-    },
-    {
-      label: 'Delete',
-      icon: <Trash2 className="w-4 h-4" />,
-      onClick: async (ids: string[]) => {
-        const confirmed = await confirm({
-          title: 'Delete Servers',
-          description: `Are you sure you want to delete ${ids.length} servers?`,
-          confirmLabel: 'Delete',
-          cancelLabel: 'Cancel',
-          variant: 'danger',
-        });
-        if (confirmed) ids.forEach((id) => deleteServer.mutate(id));
-      },
-      variant: 'destructive' as const,
-    },
-  ];
-
-  const filters = [
-    {
-      key: 'status',
-      label: 'Status',
-      options: [
-        { label: 'Running', value: 'running' },
-        { label: 'Stopped', value: 'stopped' },
-        { label: 'Pending', value: 'pending' },
-        { label: 'Error', value: 'error' },
-      ],
-    },
-  ];
-
-  const mobileCardRenderer = (server: ServerType) => (
-    <div className="p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="font-medium">{server.name}</div>
-        <StatusBadge status={server.status as 'running' | 'stopped' | 'pending' | 'error'} pulse={server.status === 'running'} />
-      </div>
-      <div className="text-sm text-muted-foreground">
-        Created: {formatDate(server.created_at || '')}
-      </div>
-      <div className="flex items-center justify-between pt-1">
-        {server.external_url && (
-          <button
-            onClick={async (e) => {
-              e.preventDefault();
-              if (server.status !== 'running') {
-                await startServer.mutateAsync(server.id);
-              }
-              const gatewayUrl = server.username
-                ? `/user/${server.username}/${server.name}`
-                : server.external_url;
-              window.open(gatewayUrl, '_blank', 'noopener,noreferrer');
-            }}
-            disabled={isOperationPending(server.id)}
-            className="inline-flex items-center gap-1 text-sm text-primary hover:underline disabled:opacity-50"
-          >
-            <ExternalLink className="w-3.5 h-3.5" />
-            {isOperationPending(server.id, 'start') ? 'Starting...' : server.status !== 'running' ? 'Start & Open' : 'Open Server'}
-          </button>
         )}
-        <div className="flex items-center gap-1 ml-auto">
-          <Tooltip content="View Details">
-            <Link
-              to="/servers/$serverId"
-              params={{ serverId: server.id }}
-              className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex"
-            >
-              <Eye className="w-4 h-4" />
-            </Link>
-          </Tooltip>
-          {server.status === 'stopped' && (
-            <Tooltip content={isOperationPending(server.id, 'start') ? 'Starting...' : 'Start'}>
-              <button
-                onClick={() => startServer.mutate(server.id)}
-                disabled={isOperationPending(server.id, 'start')}
-                className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-all duration-100 inline-flex disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
-              >
-                {isOperationPending(server.id, 'start') ? (
-                  <RotateCcw className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Play className="w-4 h-4" />
-                )}
-              </button>
-            </Tooltip>
-          )}
-          {server.status === 'running' && (
-            <>
-              <Tooltip content={isOperationPending(server.id, 'stop') ? 'Stopping...' : 'Stop'}>
-                <button
-                  onClick={() => stopServer.mutate(server.id)}
-                  disabled={isOperationPending(server.id, 'stop')}
-                  className="p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-all duration-100 inline-flex disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
-                >
-                  {isOperationPending(server.id, 'stop') ? (
-                    <RotateCcw className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Square className="w-4 h-4" />
-                  )}
-                </button>
-              </Tooltip>
-              <Tooltip content={isOperationPending(server.id, 'restart') ? 'Restarting...' : 'Restart'}>
-                <button
-                  onClick={() => restartServer.mutate(server.id)}
-                  disabled={isOperationPending(server.id, 'restart')}
-                  className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-all duration-100 inline-flex disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
-                >
-                  {isOperationPending(server.id, 'restart') ? (
-                    <RotateCcw className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <RotateCcw className="w-4 h-4" />
-                  )}
-                </button>
-              </Tooltip>
-            </>
-          )}
-          <Tooltip content={isOperationPending(server.id, 'delete') ? 'Deleting...' : 'Delete'}>
-            <button
-              onClick={async () => {
-                const confirmed = await confirm({
-                  title: 'Delete Server',
-                  description: 'Are you sure you want to delete this server?',
-                  confirmLabel: 'Delete',
-                  cancelLabel: 'Cancel',
-                  variant: 'danger',
-                });
-                if (confirmed) deleteServer.mutate(server.id);
-              }}
-              disabled={isOperationPending(server.id, 'delete')}
-              className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-all duration-100 inline-flex disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
-            >
-              {isOperationPending(server.id, 'delete') ? (
-                <RotateCcw className="w-4 h-4 animate-spin" />
-              ) : (
-                <Trash2 className="w-4 h-4" />
-              )}
-            </button>
-          </Tooltip>
-        </div>
       </div>
     </div>
   );
@@ -490,8 +579,8 @@ function ServersPage() {
   return (
     <>
       <ResourcePageLayout
-        title="My Servers"
-        subtitle="Manage your personal simulation servers"
+        title="Server Management"
+        subtitle="Manage all platform servers"
         icon={Server}
         stats={stats}
         actions={[
@@ -501,7 +590,6 @@ function ServersPage() {
           },
         ]}
       >
-        {/* Servers Table - Always paginated flat view for performance */}
         <DataTable
           columns={columns}
           data={paginatedServers}
@@ -528,8 +616,9 @@ function ServersPage() {
           bulkActions={bulkActions}
           filters={filters}
           searchable
-          searchPlaceholder="Search by name or status..."
+          searchPlaceholder="Search by name, status, or owner..."
           mobileCardRenderer={mobileCardRenderer}
+          enableRowSelection={enableManagement}
         />
       </ResourcePageLayout>
 
