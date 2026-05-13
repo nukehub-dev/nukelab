@@ -7,7 +7,6 @@ import {
   Server,
   Trash2,
   Plus,
-  X,
   FolderOpen,
   Search,
   Pencil,
@@ -25,6 +24,7 @@ import { Textarea } from '../components/ui/textarea';
 import { Button } from '../components/ui/button';
 import { Tooltip } from '../components/ui/tooltip';
 import { useConfirmDialog } from '../components/ui/confirm-dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '../components/ui/dialog';
 import { formatBytes } from '../lib/utils';
 import { springs } from '../lib/animations';
 import { cn } from '../lib/utils';
@@ -429,116 +429,82 @@ function VolumesPage() {
       </ResourcePageLayout>
 
       {/* Create Volume Dialog */}
-      {showCreateDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-          onClick={() => setShowCreateDialog(false)}
-        >
-          <motion.div
-            className="w-full max-w-md rounded-2xl bg-card/95 backdrop-blur-xl border border-border/50 shadow-2xl overflow-hidden"
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="h-1 bg-primary" />
-            <div className="p-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold">Create Volume</h3>
-                <button
-                  onClick={() => setShowCreateDialog(false)}
-                  className="p-1 rounded hover:bg-muted transition-colors"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <form onSubmit={handleCreate} className="space-y-3">
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Display Name *</label>
-                  <Input
-                    value={createForm.display_name}
-                    onChange={(e) => setCreateForm({ ...createForm, display_name: e.target.value })}
-                    placeholder="My Project Data"
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Description</label>
-                  <Textarea
-                    value={createForm.description}
-                    onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
-                    placeholder="Optional description"
-                    rows={3}
-                  />
-                </div>
-                <div className="flex justify-end gap-2 pt-2">
-                  <Button variant="outline" type="button" onClick={() => setShowCreateDialog(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" loading={createVolume.isPending}>
-                    Create
-                  </Button>
-                </div>
-              </form>
+      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create Volume</DialogTitle>
+            <DialogDescription>Create a new storage volume.</DialogDescription>
+          </DialogHeader>
+          <form id="create-volume-form" onSubmit={handleCreate} className="space-y-4 mt-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Display Name *</label>
+              <Input
+                value={createForm.display_name}
+                onChange={(e) => setCreateForm({ ...createForm, display_name: e.target.value })}
+                placeholder="My Project Data"
+                required
+              />
             </div>
-          </motion.div>
-        </div>
-      )}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Description</label>
+              <Textarea
+                value={createForm.description}
+                onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
+                placeholder="Optional description"
+                rows={3}
+              />
+            </div>
+          </form>
+          <DialogFooter>
+            <Button variant="outline" type="button" onClick={() => setShowCreateDialog(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" form="create-volume-form" loading={createVolume.isPending}>
+              Create
+            </Button>
+          </DialogFooter>
+          <DialogClose onClick={() => setShowCreateDialog(false)} />
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Volume Dialog */}
-      {showEditDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-          onClick={() => setShowEditDialog(false)}
-        >
-          <motion.div
-            className="w-full max-w-md rounded-2xl bg-card/95 backdrop-blur-xl border border-border/50 shadow-2xl overflow-hidden"
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="h-1 bg-primary" />
-            <div className="p-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold">Edit Volume</h3>
-                <button
-                  onClick={() => setShowEditDialog(false)}
-                  className="p-1 rounded hover:bg-muted transition-colors"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <form onSubmit={handleUpdate} className="space-y-3">
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Display Name *</label>
-                  <Input
-                    value={editForm.display_name}
-                    onChange={(e) => setEditForm({ ...editForm, display_name: e.target.value })}
-                    placeholder="My Project Data"
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Description</label>
-                  <Textarea
-                    value={editForm.description}
-                    onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                    placeholder="Optional description"
-                    rows={3}
-                  />
-                </div>
-                <div className="flex justify-end gap-2 pt-2">
-                  <Button variant="outline" type="button" onClick={() => setShowEditDialog(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" loading={updateVolume.isPending}>
-                    Save Changes
-                  </Button>
-                </div>
-              </form>
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Volume</DialogTitle>
+            <DialogDescription>Update volume details.</DialogDescription>
+          </DialogHeader>
+          <form id="edit-volume-form" onSubmit={handleUpdate} className="space-y-4 mt-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Display Name *</label>
+              <Input
+                value={editForm.display_name}
+                onChange={(e) => setEditForm({ ...editForm, display_name: e.target.value })}
+                placeholder="My Project Data"
+                required
+              />
             </div>
-          </motion.div>
-        </div>
-      )}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Description</label>
+              <Textarea
+                value={editForm.description}
+                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                placeholder="Optional description"
+                rows={3}
+              />
+            </div>
+          </form>
+          <DialogFooter>
+            <Button variant="outline" type="button" onClick={() => setShowEditDialog(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" form="edit-volume-form" loading={updateVolume.isPending}>
+              Save Changes
+            </Button>
+          </DialogFooter>
+          <DialogClose onClick={() => setShowEditDialog(false)} />
+        </DialogContent>
+      </Dialog>
 
       {/* Confirmation Dialog */}
       {dialog}

@@ -23,7 +23,7 @@ import { Textarea } from '../components/ui/textarea';
 import { Card, CardContent } from '../components/ui/card';
 import { SkeletonCard } from '../components/feedback/skeleton';
 import { EmptyState } from '../components/feedback/empty-state';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '../components/ui/dialog';
 import { useConfirmDialog } from '../components/ui/confirm-dialog';
 import { Tooltip } from '../components/ui/tooltip';
 import { Link } from '@tanstack/react-router';
@@ -290,7 +290,7 @@ function WorkspacesListPage() {
               </DialogDescription>
             </DialogHeader>
             
-            <form onSubmit={handleCreate} className="space-y-4">
+            <form onSubmit={handleCreate} className="space-y-4 mt-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Name</label>
                 <Input
@@ -323,6 +323,7 @@ function WorkspacesListPage() {
                 </Button>
               </DialogFooter>
             </form>
+            <DialogClose onClick={() => setShowCreateDialog(false)} />
           </DialogContent>
         </Dialog>
       )}

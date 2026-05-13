@@ -12,7 +12,6 @@ import {
   User,
   Eye,
   Pencil,
-  X,
 } from 'lucide-react';
 import {
   useWorkspace,
@@ -35,6 +34,7 @@ import { Select, SelectItem } from '../components/ui/select';
 import { Combobox } from '../components/ui/combobox';
 import { useConfirmDialog } from '../components/ui/confirm-dialog';
 import { Tooltip } from '../components/ui/tooltip';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '../components/ui/dialog';
 import { Link } from '@tanstack/react-router';
 
 export const Route = createFileRoute('/workspaces/$workspaceId')({
@@ -261,7 +261,7 @@ function WorkspaceDetailPage() {
         {showAddVolume && (
           <form onSubmit={handleAddVolume} className="mb-4 p-4 rounded-xl bg-surface/50 border border-border/50 space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1">
+              <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Volume</label>
                 <Combobox
                   value={selectedVolumeId}
@@ -271,7 +271,7 @@ function WorkspaceDetailPage() {
                   searchPlaceholder="Search volumes..."
                 />
               </div>
-              <div className="space-y-1">
+              <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Access Role</label>
                 <Select
                   value={selectedVolumeRole}
@@ -370,7 +370,7 @@ function WorkspaceDetailPage() {
         {showAddMember && (
           <form onSubmit={handleAddMember} className="mb-4 p-4 rounded-xl bg-surface/50 border border-border/50 space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1">
+              <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">User</label>
                 <Combobox
                   value={selectedUserId}
@@ -380,7 +380,7 @@ function WorkspaceDetailPage() {
                   searchPlaceholder="Search users..."
                 />
               </div>
-              <div className="space-y-1">
+              <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Role</label>
                 <Select
                   value={selectedRole}
@@ -470,69 +470,52 @@ function WorkspaceDetailPage() {
       </motion.div>
 
       {/* Edit Workspace Dialog */}
-      {showEditWorkspace && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-          onClick={() => setShowEditWorkspace(false)}
-        >
-          <motion.div
-            className="w-full max-w-md rounded-2xl bg-card/95 backdrop-blur-xl border border-border/50 shadow-2xl overflow-hidden"
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="h-1 bg-primary" />
-            <div className="p-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold">Edit Workspace</h3>
-                <button
-                  onClick={() => setShowEditWorkspace(false)}
-                  className="p-1 rounded hover:bg-muted transition-colors"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="space-y-3">
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Name</label>
-                  <Input
-                    value={editForm.name}
-                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                    placeholder="Workspace name"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Description</label>
-                  <Textarea
-                    value={editForm.description}
-                    onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                    placeholder="Optional description"
-                    rows={3}
-                  />
-                </div>
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <Button variant="outline" onClick={() => setShowEditWorkspace(false)}>Cancel</Button>
-                <Button
-                  onClick={() => {
-                    updateWorkspace.mutate(
-                      { workspaceId, data: editForm },
-                      {
-                        onSuccess: () => {
-                          setShowEditWorkspace(false);
-                        },
-                      }
-                    );
-                  }}
-                  loading={updateWorkspace.isPending}
-                >
-                  Save
-                </Button>
-              </div>
+      <Dialog open={showEditWorkspace} onOpenChange={setShowEditWorkspace}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Workspace</DialogTitle>
+            <DialogDescription>Update workspace details.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Name</label>
+              <Input
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                placeholder="Workspace name"
+              />
             </div>
-          </motion.div>
-        </div>
-      )}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Description</label>
+              <Textarea
+                value={editForm.description}
+                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                placeholder="Optional description"
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditWorkspace(false)}>Cancel</Button>
+            <Button
+              onClick={() => {
+                updateWorkspace.mutate(
+                  { workspaceId, data: editForm },
+                  {
+                    onSuccess: () => {
+                      setShowEditWorkspace(false);
+                    },
+                  }
+                );
+              }}
+              loading={updateWorkspace.isPending}
+            >
+              Save
+            </Button>
+          </DialogFooter>
+          <DialogClose onClick={() => setShowEditWorkspace(false)} />
+        </DialogContent>
+      </Dialog>
 
       {/* Confirmation Dialog */}
       {dialog}
