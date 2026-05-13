@@ -116,10 +116,9 @@ services:
       - VOLUME_STORAGE_PATH=${VOLUME_STORAGE_PATH:-}
       # Server auth configuration
       - SERVER_AUTH_ENABLED=${SERVER_AUTH_ENABLED:-true}
+      - SERVER_AUTH_SECRETS_DIR=${SERVER_AUTH_SECRETS_DIR:-/run/secrets}
       - SERVER_AUTH_TOKEN_TTL=${SERVER_AUTH_TOKEN_TTL:-300}
       - SERVER_AUTH_KEY_ALGORITHM=${SERVER_AUTH_KEY_ALGORITHM:-RS256}
-      - SERVER_AUTH_PRIVATE_KEY_PATH=${SERVER_AUTH_PRIVATE_KEY_PATH:-/app/secrets/server-auth-private.pem}
-      - SERVER_AUTH_PUBLIC_KEY_PATH=${SERVER_AUTH_PUBLIC_KEY_PATH:-/app/secrets/server-auth-public.pem}
       - SERVER_AUTH_KEY_ROTATION_DAYS=${SERVER_AUTH_KEY_ROTATION_DAYS:-30}
       - SERVER_AUTH_MAX_TOKENS_PER_MINUTE=${SERVER_AUTH_MAX_TOKENS_PER_MINUTE:-10}
       - SERVER_AUTH_AUDIT_LOG=${SERVER_AUTH_AUDIT_LOG:-true}
@@ -128,7 +127,7 @@ services:
       - ./backend:/app:Z
       - /var/lib/lxcfs:/var/lib/lxcfs:ro
       - ${VOLUME_STORAGE_PATH:?VOLUME_STORAGE_PATH must be set in .env}:${VOLUME_STORAGE_PATH}:rw
-      - secrets:/app/secrets:Z
+      - secrets:${SERVER_AUTH_SECRETS_DIR:-/run/secrets}
     networks:
       - nukelab-network
     depends_on:
@@ -184,6 +183,7 @@ services:
     volumes:
       - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
       - ./backend:/app:Z
+      - secrets:${SERVER_AUTH_SECRETS_DIR:-/run/secrets}
     networks:
       - nukelab-network
     depends_on:
@@ -203,6 +203,7 @@ services:
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
     volumes:
       - ./backend:/app:Z
+      - secrets:${SERVER_AUTH_SECRETS_DIR:-/run/secrets}
     networks:
       - nukelab-network
     depends_on:

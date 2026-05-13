@@ -170,7 +170,7 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
     );
   };
 
-  const columns: ColumnDef<ServerType>[] = [
+  const columns = useMemo<ColumnDef<ServerType>[]>(() => [
     ...(enableManagement ? [{
       id: 'select' as const,
       header: ({ table }: { table: { getIsAllPageRowsSelected: () => boolean; toggleAllPageRowsSelected: (value?: boolean) => void } }) => (
@@ -368,7 +368,7 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
       },
       enableSorting: false,
     }] : []),
-  ];
+  ], [enableManagement, isOperationPending, startServer, stopServer, restartServer, deleteServer, confirm]);
 
   const activeServers = servers.filter((s) => s.status === 'running').length;
   const parseMemory = (mem: string | undefined) => {

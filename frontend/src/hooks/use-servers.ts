@@ -63,8 +63,9 @@ export function useServerActions() {
       const servers = queryClient.getQueryData<Server[]>(['servers']);
       if (!servers) return;
 
-      setPendingOps((prev) =>
-        prev.filter((op) => {
+      setPendingOps((prev) => {
+        if (prev.length === 0) return prev;
+        const next = prev.filter((op) => {
           if (op.targetStatus === 'deleted') {
             // Remove if server no longer exists
             return servers.some((s) => s.id === op.serverId);
@@ -77,8 +78,9 @@ export function useServerActions() {
           }
           // Keep pending if status doesn't match target yet
           return server.status !== op.targetStatus;
-        })
-      );
+        });
+        return next.length === prev.length ? prev : next;
+      });
     };
 
     // Check immediately

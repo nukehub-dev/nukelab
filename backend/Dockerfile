@@ -12,8 +12,11 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY . .
+# Copy application code explicitly
+# This ensures only necessary code enters the image.
+COPY alembic.ini .
+COPY alembic/ ./alembic/
+COPY app/ ./app/
 
 # Expose port
 EXPOSE 8000

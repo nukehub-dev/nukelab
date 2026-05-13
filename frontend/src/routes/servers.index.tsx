@@ -2,7 +2,7 @@ import { createFileRoute, Link } from '@tanstack/react-router';
 import { Server, Activity, Cpu, MemoryStick, Play, Square, RotateCcw, Trash2, ExternalLink, Eye } from 'lucide-react';
 import { Tooltip } from '../components/ui/tooltip';
 import { Checkbox } from '../components/ui/checkbox';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { type ColumnDef, type SortingState, type ColumnFiltersState, type VisibilityState } from '@tanstack/react-table';
 import { ResourcePageLayout } from '../components/layout/resource-page-layout';
 import { DataTable } from '../components/data/data-table';
@@ -142,7 +142,7 @@ function ServersPage() {
     );
   };
 
-  const columns: ColumnDef<ServerType>[] = [
+  const columns = useMemo<ColumnDef<ServerType>[]>(() => [
     {
       id: 'select',
       header: ({ table }) => (
@@ -307,7 +307,7 @@ function ServersPage() {
       },
       enableSorting: false,
     },
-  ];
+  ], [isOperationPending, startServer, stopServer, restartServer, deleteServer, confirm]);
 
   const activeServers = myServers.filter((s) => s.status === 'running').length;
   const parseMemory = (mem: string | undefined) => {

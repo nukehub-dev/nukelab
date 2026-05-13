@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from '@tanstack/react-router';
+import { createFileRoute, useRouter } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
@@ -35,6 +35,8 @@ import { useServerMetrics } from '../hooks/use-server-metrics';
 import { formatDate, formatBytes, formatPlanResource, cn } from '../lib/utils';
 import { springs } from '../lib/animations';
 import { useConfirmDialog } from '../components/ui/confirm-dialog';
+import { Input } from '../components/ui/input';
+import { Select, SelectItem } from '../components/ui/select';
 
 export const Route = createFileRoute('/servers/$serverId')({
   component: ServerDetailPage,
@@ -108,8 +110,49 @@ function MetricCard({
   );
 }
 
+function ExternalUrlLink({
+  server,
+  startServer,
+  isOperationPending,
+}: {
+  server: { id: string; status: string; username?: string; name: string; external_url?: string };
+  startServer: { mutateAsync: (id: string) => Promise<unknown> };
+  isOperationPending: (serverId: string, type?: 'start' | 'stop' | 'restart' | 'delete') => boolean;
+}) {
+  const gatewayUrl = server.username
+    ? `/user/${server.username}/${server.name}`
+    : server.external_url;
+
+  const handleOpen = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (server.status !== 'running') {
+      await startServer.mutateAsync(server.id);
+    }
+    if (gatewayUrl) {
+      window.open(gatewayUrl, '_blank', 'noopener,noreferrer');
+    }
+  };
+
+  const anyPending = isOperationPending(server.id);
+
+  return (
+    <button
+      onClick={handleOpen}
+      disabled={anyPending}
+      className="text-sm font-medium text-primary hover:underline flex items-center gap-1 truncate disabled:opacity-50"
+    >
+      {server.external_url}
+      <ExternalLink className="w-3 h-3 flex-shrink-0" />
+      {isOperationPending(server.id, 'start') && (
+        <span className="text-xs text-muted-foreground ml-1">(starting...)</span>
+      )}
+    </button>
+  );
+}
+
 function ServerDetailPage() {
   const { serverId } = Route.useParams();
+  const router = useRouter();
   const { data: servers = [] } = useServers();
   const { startServer, stopServer, restartServer, deleteServer, isOperationPending } = useServerActions();
   const { metrics, currentMetrics, isLive } = useServerMetrics(serverId);
@@ -121,7 +164,7 @@ function ServerDetailPage() {
 
   const [activeTab, setActiveTab] = useState<'overview' | 'schedules' | 'logs'>('overview');
   const [showScheduleForm, setShowScheduleForm] = useState(false);
-  const [newSchedule, setNewSchedule] = useState({ action: 'start' as const, cron_expression: '0 9 * * *', timezone: 'UTC', is_active: true });
+  const [newSchedule, setNewSchedule] = useState<{ action: 'start' | 'stop' | 'restart'; cron_expression: string; timezone: string; is_active: boolean }>({ action: 'start', cron_expression: '0 9 * * *', timezone: 'UTC', is_active: true });
 
   const server = servers.find((s) => s.id === serverId);
 
@@ -178,12 +221,12 @@ function ServerDetailPage() {
         className="flex flex-col md:flex-row md:items-center md:justify-between gap-4"
       >
         <div className="flex items-center gap-4">
-          <Link
-            to="/servers"
+          <button
+            onClick={() => router.history.back()}
             className="p-2 rounded-lg hover:bg-accent transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />
-          </Link>
+          </button>
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold">{server.name}</h1>
@@ -365,26 +408,7 @@ function ServerDetailPage() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs text-muted-foreground mb-1">External URL</p>
-                {server.status === 'running' ? (
-                  <a
-                    href={server.external_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm font-medium text-primary hover:underline flex items-center gap-1 truncate"
-                  >
-                    {server.external_url}
-                    <ExternalLink className="w-3 h-3 flex-shrink-0" />
-                  </a>
-                ) : (
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-sm font-medium text-muted-foreground truncate">
-                      {server.external_url}
-                    </span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground whitespace-nowrap">
-                      Start server to access
-                    </span>
-                  </div>
-                )}
+                <ExternalUrlLink server={server} startServer={startServer} isOperationPending={isOperationPending} />
               </div>
             </div>
           )}
@@ -650,23 +674,21 @@ function ServerDetailPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-muted-foreground mb-1 block">Action</label>
-                  <select
+                  <Select
                     value={newSchedule.action}
-                    onChange={(e) => setNewSchedule({ ...newSchedule, action: e.target.value as any })}
-                    className="w-full px-3 py-2 rounded-lg bg-background border border-border text-sm"
+                    onChange={(value) => setNewSchedule({ ...newSchedule, action: value as 'start' | 'stop' | 'restart' })}
                   >
-                    <option value="start">Start</option>
-                    <option value="stop">Stop</option>
-                    <option value="restart">Restart</option>
-                  </select>
+                    <SelectItem value="start">Start</SelectItem>
+                    <SelectItem value="stop">Stop</SelectItem>
+                    <SelectItem value="restart">Restart</SelectItem>
+                  </Select>
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground mb-1 block">Timezone</label>
-                  <input
+                  <Input
                     type="text"
                     value={newSchedule.timezone}
                     onChange={(e) => setNewSchedule({ ...newSchedule, timezone: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg bg-background border border-border text-sm"
                     placeholder="UTC"
                   />
                 </div>

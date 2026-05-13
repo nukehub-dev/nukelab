@@ -19,6 +19,7 @@ export function AppShell() {
   const navigate = useNavigate();
   const location = useLocation();
   const isLoginPage = location.pathname === '/login';
+  const isGatewayPage = location.pathname.startsWith('/user/');
   const isDashboard = location.pathname === '/';
 
   // Dynamic favicon with theme color
@@ -48,8 +49,8 @@ export function AppShell() {
     }
   }, [isLoginPage, navigate]);
 
-  // Login page renders without sidebar/layout
-  if (isLoginPage) {
+  // Login and gateway pages render without sidebar/layout
+  if (isLoginPage || isGatewayPage) {
     return (
       <>
         <ToastProvider />

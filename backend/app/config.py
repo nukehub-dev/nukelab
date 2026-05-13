@@ -1,4 +1,6 @@
+import os
 from pydantic_settings import BaseSettings
+from pydantic import model_validator
 
 
 class Settings(BaseSettings):
@@ -95,11 +97,25 @@ class Settings(BaseSettings):
     server_auth_enabled: bool = True
     server_auth_token_ttl: int = 300  # 5 minutes
     server_auth_key_algorithm: str = "RS256"
-    server_auth_private_key_path: str = "/app/secrets/server-auth-private.pem"
-    server_auth_public_key_path: str = "/app/secrets/server-auth-public.pem"
+    server_auth_secrets_dir: str = "/run/secrets"
+    server_auth_private_key_path: str = ""
+    server_auth_public_key_path: str = ""
     server_auth_key_rotation_days: int = 30
     server_auth_max_tokens_per_minute: int = 10
     server_auth_audit_log: bool = True
+
+    @model_validator(mode='after')
+    def set_key_paths(self) -> 'Settings':
+        """Derive key paths from secrets_dir if not explicitly set."""
+        if not self.server_auth_private_key_path:
+            self.server_auth_private_key_path = os.path.join(
+                self.server_auth_secrets_dir, 'server-auth-private.pem'
+            )
+        if not self.server_auth_public_key_path:
+            self.server_auth_public_key_path = os.path.join(
+                self.server_auth_secrets_dir, 'server-auth-public.pem'
+            )
+        return self
 
     class Config:
         env_file_encoding = "utf-8"
