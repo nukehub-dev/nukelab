@@ -155,7 +155,7 @@ services:
     depends_on:
       - backend
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3000/health"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -197,7 +197,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: nukelab-celery-beat
-    command: celery -A app.worker beat --loglevel=info
+    command: celery -A app.worker beat --loglevel=info --schedule /tmp/celerybeat-schedule
     environment:
       - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://nukelab:nukelab123@postgres:5432/nukelab}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
