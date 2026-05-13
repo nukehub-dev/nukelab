@@ -177,7 +177,65 @@ class CreditService:
             description=description,
             server_id=server_id
         )
-    
+
+    async def reconcile_server_billing(
+        self,
+        server,
+        plan
+    ) -> int:
+        """
+        Reconcile exact billing when a server stops.
+        Calculates exact runtime cost and bills the difference
+        from what was already charged via periodic ticks.
+        Returns the additional amount billed (0 if nothing to bill).
+        """
+        if not server.started_at or not server.stopped_at:
+            return 0
+        if not plan or plan.cost_per_hour <= 0:
+            return 0
+
+        # Exact runtime in seconds
+        duration = server.stopped_at - server.started_at
+        duration_seconds = duration.total_seconds()
+
+        if duration_seconds <= 0:
+            return 0
+
+        # Exact cost for the full runtime
+        exact_cost = int((duration_seconds / 3600) * plan.cost_per_hour)
+        if exact_cost <= 0:
+            exact_cost = 1  # Minimum 1 credit
+
+        # What was already billed via ticks
+        already_billed = server.total_cost or 0
+
+        # Amount still owed
+        additional_cost = exact_cost - already_billed
+
+        if additional_cost > 0:
+            await self.consume_credits(
+                user_id=str(server.user_id),
+                amount=additional_cost,
+                description=f"Server usage reconciliation: '{server.name}' ({self._format_duration(duration_seconds)} at {plan.cost_per_hour} NUKE/hour)",
+                server_id=str(server.id)
+            )
+            server.total_cost = already_billed + additional_cost
+            return additional_cost
+
+        return 0
+
+    def _format_duration(self, seconds: int) -> str:
+        """Format seconds into a human-readable duration"""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        if hours > 0:
+            return f"{hours}h {minutes}m {secs}s"
+        elif minutes > 0:
+            return f"{minutes}m {secs}s"
+        else:
+            return f"{secs}s"
+
     async def grant_credits(
         self,
         user_id: str,

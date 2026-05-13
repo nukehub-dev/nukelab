@@ -1,6 +1,8 @@
 """Tests for Credits API endpoints."""
 
 import pytest
+from datetime import datetime, timedelta
+from app.models.server import Server
 
 
 class TestCreditsBalance:
@@ -104,6 +106,157 @@ class TestCreditService:
         assert grant_tx.amount == amount
         final_balance = await service.get_balance(str(test_user.id))
         assert final_balance == initial
+
+
+class TestServerBillingReconciliation:
+    """Server billing reconciliation tests."""
+
+    @pytest.mark.asyncio
+    async def test_reconcile_exact_billing_short_run(self, db_session, test_user):
+        """Server stopped after short run should bill exact duration."""
+        from app.services.credit_service import CreditService
+        from app.models.server_plan import ServerPlan
+        import uuid as uuid_mod
+
+        plan = ServerPlan(
+            id=uuid_mod.uuid4(),
+            name="Test Plan",
+            slug="test-plan",
+            cost_per_hour=60,  # 1 NUKE per minute
+        )
+        db_session.add(plan)
+        await db_session.flush()
+
+        server = Server(
+            id=uuid_mod.uuid4(),
+            name="test-server",
+            user_id=test_user.id,
+            plan_id=plan.id,
+            status="running",
+            started_at=datetime.utcnow() - timedelta(minutes=5),
+            stopped_at=datetime.utcnow(),
+            total_cost=0,
+        )
+        db_session.add(server)
+        await db_session.commit()
+
+        service = CreditService(db_session)
+        initial_balance = await service.get_balance(str(test_user.id))
+        additional = await service.reconcile_server_billing(server, plan)
+
+        # 5 minutes at 60 NUKE/hr = 5 NUKE
+        assert additional == 5
+        assert server.total_cost == 5
+
+        balance = await service.get_balance(str(test_user.id))
+        assert balance == initial_balance - 5
+
+    @pytest.mark.asyncio
+    async def test_reconcile_no_double_billing(self, db_session, test_user):
+        """Server already billed via ticks should not double-bill."""
+        from app.services.credit_service import CreditService
+        from app.models.server_plan import ServerPlan
+        import uuid as uuid_mod
+
+        plan = ServerPlan(
+            id=uuid_mod.uuid4(),
+            name="Test Plan",
+            slug="test-plan",
+            cost_per_hour=60,
+        )
+        db_session.add(plan)
+        await db_session.flush()
+
+        server = Server(
+            id=uuid_mod.uuid4(),
+            name="test-server",
+            user_id=test_user.id,
+            plan_id=plan.id,
+            status="running",
+            started_at=datetime.utcnow() - timedelta(minutes=30),
+            stopped_at=datetime.utcnow(),
+            total_cost=30,  # Already billed 30 NUKE via ticks
+        )
+        db_session.add(server)
+        await db_session.commit()
+
+        service = CreditService(db_session)
+        additional = await service.reconcile_server_billing(server, plan)
+
+        # 30 min at 60 NUKE/hr = 30 NUKE, already billed 30
+        assert additional == 0
+        assert server.total_cost == 30
+
+    @pytest.mark.asyncio
+    async def test_reconcile_partial_under_billing(self, db_session, test_user):
+        """Server under-billed via ticks should bill difference."""
+        from app.services.credit_service import CreditService
+        from app.models.server_plan import ServerPlan
+        import uuid as uuid_mod
+
+        plan = ServerPlan(
+            id=uuid_mod.uuid4(),
+            name="Test Plan",
+            slug="test-plan",
+            cost_per_hour=60,
+        )
+        db_session.add(plan)
+        await db_session.flush()
+
+        server = Server(
+            id=uuid_mod.uuid4(),
+            name="test-server",
+            user_id=test_user.id,
+            plan_id=plan.id,
+            status="running",
+            started_at=datetime.utcnow() - timedelta(minutes=20),
+            stopped_at=datetime.utcnow(),
+            total_cost=10,  # Only billed for 10 minutes
+        )
+        db_session.add(server)
+        await db_session.commit()
+
+        service = CreditService(db_session)
+        additional = await service.reconcile_server_billing(server, plan)
+
+        # 20 min at 60 NUKE/hr = 20 NUKE, already billed 10
+        assert additional == 10
+        assert server.total_cost == 20
+
+    @pytest.mark.asyncio
+    async def test_reconcile_zero_cost_plan(self, db_session, test_user):
+        """Free plan should not bill anything."""
+        from app.services.credit_service import CreditService
+        from app.models.server_plan import ServerPlan
+        import uuid as uuid_mod
+
+        plan = ServerPlan(
+            id=uuid_mod.uuid4(),
+            name="Free Plan",
+            slug="free-plan",
+            cost_per_hour=0,
+        )
+        db_session.add(plan)
+        await db_session.flush()
+
+        server = Server(
+            id=uuid_mod.uuid4(),
+            name="test-server",
+            user_id=test_user.id,
+            plan_id=plan.id,
+            status="running",
+            started_at=datetime.utcnow() - timedelta(hours=1),
+            stopped_at=datetime.utcnow(),
+            total_cost=0,
+        )
+        db_session.add(server)
+        await db_session.commit()
+
+        service = CreditService(db_session)
+        additional = await service.reconcile_server_billing(server, plan)
+
+        assert additional == 0
+        assert server.total_cost == 0
 
 
 class TestTransactions:

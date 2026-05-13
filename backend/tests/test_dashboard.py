@@ -36,6 +36,58 @@ class TestUserDashboard:
         assert "stopped" in servers
         assert "pending" in servers
 
+    @pytest.mark.asyncio
+    async def test_dashboard_hourly_cost_with_running_server(self, client, test_user, user_token, db_session):
+        """Dashboard should calculate hourly cost from running servers."""
+        import uuid as uuid_mod
+        from app.models.server import Server
+        from app.models.server_plan import ServerPlan
+
+        plan = ServerPlan(
+            id=uuid_mod.uuid4(),
+            name="Test Plan",
+            slug="test-plan",
+            cost_per_hour=10,
+        )
+        db_session.add(plan)
+        await db_session.flush()
+
+        server = Server(
+            id=uuid_mod.uuid4(),
+            name="running-server",
+            user_id=test_user.id,
+            plan_id=plan.id,
+            status="running",
+            container_id="test-container",
+        )
+        db_session.add(server)
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/dashboard/",
+            headers={"Authorization": f"Bearer {user_token}"}
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        nukes = data["my_nukes"]
+        assert nukes["hourly_cost"] == 10
+        assert nukes["estimated_hours_left"] == test_user.nuke_balance // 10
+
+    @pytest.mark.asyncio
+    async def test_dashboard_hourly_cost_no_running_servers(self, client, user_token):
+        """Dashboard should show 0 hourly cost when no servers are running."""
+        response = await client.get(
+            "/api/dashboard/",
+            headers={"Authorization": f"Bearer {user_token}"}
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        nukes = data["my_nukes"]
+        assert nukes["hourly_cost"] == 0
+        assert nukes["estimated_hours_left"] == 0
+
 
 class TestAdminDashboard:
     """Admin-only dashboard features."""

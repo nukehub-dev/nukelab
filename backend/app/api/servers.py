@@ -672,6 +672,18 @@ async def stop_server(
             server.status = "stopped"
             server.stopped_at = datetime.utcnow()
             
+            # Reconcile exact billing for the final partial interval
+            if server.plan_id:
+                from app.services.credit_service import CreditService
+                from app.models.server_plan import ServerPlan
+                credit_service = CreditService(db)
+                plan_result = await db.execute(
+                    select(ServerPlan).where(ServerPlan.id == server.plan_id)
+                )
+                plan = plan_result.scalar_one_or_none()
+                if plan:
+                    await credit_service.reconcile_server_billing(server, plan)
+            
             # Decrement quota usage
             if server.plan_id:
                 from app.services.quota_service import QuotaService

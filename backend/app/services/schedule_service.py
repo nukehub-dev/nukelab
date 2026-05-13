@@ -211,6 +211,18 @@ class ScheduleService:
                     server.stopped_at = datetime.utcnow()
                     server.stop_reason = "scheduled_stop"
                     
+                    # Reconcile exact billing for final partial interval
+                    if server.plan_id:
+                        from app.services.credit_service import CreditService
+                        from app.models.server_plan import ServerPlan
+                        credit_service = CreditService(self.db)
+                        plan_result = await self.db.execute(
+                            select(ServerPlan).where(ServerPlan.id == server.plan_id)
+                        )
+                        plan = plan_result.scalar_one_or_none()
+                        if plan:
+                            await credit_service.reconcile_server_billing(server, plan)
+                    
                     # Decrement quota
                     if server.plan_id:
                         quota_service = QuotaService(self.db)

@@ -165,6 +165,9 @@ def process_nuke_billing(self):
                             server.stopped_at = datetime.utcnow()
                             server.stop_reason = "credit_depleted"
                             
+                            # Reconcile exact billing for final partial interval
+                            await credit_service.reconcile_server_billing(server, plan)
+                            
                             # Create notification
                             notification = Notification(
                                 user_id=server.user_id,
