@@ -117,9 +117,8 @@ export function useDeleteVolumeFile() {
       await api.delete(`/volumes/${volumeId}/files?path=${encodeURIComponent(path)}`);
     },
     onSuccess: (_, variables) => {
-      // Invalidate the parent directory listing
-      const parentPath = variables.path.split('/').slice(0, -1).join('/');
-      queryClient.invalidateQueries({ queryKey: ['volume-files', variables.volumeId, parentPath] });
+      // Invalidate all file listings for this volume
+      queryClient.invalidateQueries({ queryKey: ['volume-files', variables.volumeId] });
     },
   });
 }

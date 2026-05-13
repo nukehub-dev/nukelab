@@ -127,11 +127,7 @@ services:
       - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:Z
       - ./backend:/app:Z
       - /var/lib/lxcfs:/var/lib/lxcfs:ro
-      # Mount host volume storage to enable size calculation.
-      # Set VOLUME_STORAGE_PATH in your .env file, or remove this line.
-      # See .env.example for platform-specific values.
-      - ${VOLUME_STORAGE_PATH:?VOLUME_STORAGE_PATH must be set in .env}:${VOLUME_STORAGE_PATH}:ro
-      # Server auth keys - shared with spawned containers via named volume.
+      - ${VOLUME_STORAGE_PATH:?VOLUME_STORAGE_PATH must be set in .env}:${VOLUME_STORAGE_PATH}:rw
       - secrets:/app/secrets:Z
     networks:
       - nukelab-network

@@ -364,10 +364,20 @@ async def delete_volume_file(
         
     except HTTPException:
         raise
-    except Exception as e:
+    except OSError as e:
+        if e.errno == 30:  # Read-only file system
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Volume is read-only. Cannot modify files."
+            )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete: {str(e)}"
+            detail="Failed to delete file or directory."
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete file or directory."
         )
 
 

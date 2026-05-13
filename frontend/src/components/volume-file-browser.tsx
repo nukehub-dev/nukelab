@@ -22,6 +22,8 @@ import { formatBytes } from '../lib/utils';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Tooltip } from './ui/tooltip';
+import { useConfirmDialog } from './ui/confirm-dialog';
+import { useToast } from '../stores/toast-store';
 
 interface FileBrowserProps {
   volumeId: string;
@@ -51,6 +53,8 @@ export function FileBrowser({ volumeId, volumeName, onClose }: FileBrowserProps)
 
   const { data, isLoading, error } = useVolumeFiles(volumeId, params);
   const deleteFile = useDeleteVolumeFile();
+  const { confirm, dialog } = useConfirmDialog();
+  const { error: toastError } = useToast();
   const [deleting, setDeleting] = useState<string | null>(null);
   const [scrolledItems, setScrolledItems] = useState(50); // Virtual scrolling window
 
@@ -92,13 +96,23 @@ export function FileBrowser({ volumeId, volumeName, onClose }: FileBrowserProps)
     setScrolledItems(50);
   };
 
-  const handleDelete = async (itemName: string) => {
+  const handleDelete = async (itemName: string, itemType: string) => {
     const path = currentPath ? `${currentPath}/${itemName}` : itemName;
-    if (!confirm(`Delete "${itemName}"?\n\nThis action cannot be undone.`)) return;
-    
+    const confirmed = await confirm({
+      title: `Delete ${itemType === 'directory' ? 'Folder' : 'File'}`,
+      description: `Are you sure you want to delete "${itemName}"? This action cannot be undone.`,
+      confirmLabel: 'Delete',
+      cancelLabel: 'Cancel',
+      variant: 'danger',
+    });
+    if (!confirmed) return;
+
     setDeleting(itemName);
     try {
       await deleteFile.mutateAsync({ volumeId, path });
+    } catch (err: any) {
+      const message = err?.response?.data?.detail || err.message || 'Failed to delete';
+      toastError('Delete Failed', message);
     } finally {
       setDeleting(null);
     }
@@ -304,30 +318,28 @@ export function FileBrowser({ volumeId, volumeName, onClose }: FileBrowserProps)
                     {/* Actions */}
                     <div className="flex items-center justify-end gap-1">
                       {item.type === 'file' && (
-                        <>
-                          <Tooltip content="Download">
-                            <button
-                              onClick={() => handleDownload(item.name)}
-                              className="p-1.5 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
-                              <Download className="w-3.5 h-3.5" />
-                            </button>
-                          </Tooltip>
-                          <Tooltip content="Delete">
-                            <button
-                              onClick={() => handleDelete(item.name)}
-                              disabled={deleting === item.name}
-                              className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-50 opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
-                              {deleting === item.name ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              ) : (
-                                <Trash2 className="w-3.5 h-3.5" />
-                              )}
-                            </button>
-                          </Tooltip>
-                        </>
+                        <Tooltip content="Download">
+                          <button
+                            onClick={() => handleDownload(item.name)}
+                            className="p-1.5 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                          </button>
+                        </Tooltip>
                       )}
+                      <Tooltip content="Delete">
+                        <button
+                          onClick={() => handleDelete(item.name, item.type)}
+                          disabled={deleting === item.name}
+                          className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive disabled:opacity-50 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          {deleting === item.name ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </Tooltip>
                     </div>
                   </motion.div>
                 ))}
@@ -376,6 +388,7 @@ export function FileBrowser({ volumeId, volumeName, onClose }: FileBrowserProps)
           )}
         </div>
       </motion.div>
+      {dialog}
     </div>
   );
 }
