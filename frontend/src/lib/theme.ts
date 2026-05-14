@@ -36,24 +36,6 @@ export function applyAccentColor(color: AccentColor): void {
   document.documentElement.style.setProperty('--sidebar-ring', ringColor);
 }
 
-function getColorBrightness(color: string): number {
-  // Parse OKLCH to get lightness
-  const match = color.match(/oklch\(([\d.]+)\s/);
-  if (match) {
-    return parseFloat(match[1]);
-  }
-  // Fallback for hex/rgb
-  if (color.startsWith('#')) {
-    const hex = color.replace('#', '');
-    const r = parseInt(hex.substring(0, 2), 16) / 255;
-    const g = parseInt(hex.substring(2, 4), 16) / 255;
-    const b = parseInt(hex.substring(4, 6), 16) / 255;
-    return 0.299 * r + 0.587 * g + 0.114 * b;
-  }
-  return 0.5;
-}
-
-function getContrastingForeground(color: string): string {
-  const brightness = getColorBrightness(color);
-  return brightness < 0.55 ? 'oklch(0.98 0 0)' : 'oklch(0.09 0 0)';
+function getContrastingForeground(_color: string): string {
+  return 'oklch(0.98 0 0)';
 }

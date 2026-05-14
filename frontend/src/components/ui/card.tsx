@@ -28,7 +28,7 @@ const Card = React.forwardRef<HTMLDivElement, CardProps>(
           transition={{ type: 'spring', stiffness: 120, damping: 14, duration: 0.4 }}
           whileHover={{ 
             y: -4, 
-            boxShadow: '0 20px 40px -12px rgba(0,0,0,0.3)',
+            boxShadow: '0 12px 24px -8px rgba(0,0,0,0.12)',
             transition: { type: 'spring', stiffness: 300, damping: 20 }
           }}
         >

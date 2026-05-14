@@ -85,7 +85,7 @@ export function DataTableToolbar<TData>({
               onChange={(e) => onGlobalFilterChange(e.target.value)}
               placeholder={searchPlaceholder}
               className={cn(
-                'w-full h-9 pl-9 pr-8 rounded-lg border border-input bg-background',
+                'w-full h-9 pl-9 pr-8 rounded-lg border border-input bg-input/80',
                 'text-sm placeholder:text-muted-foreground',
                 'focus:outline-none focus:ring-2 focus:ring-ring/50'
               )}
@@ -107,7 +107,7 @@ export function DataTableToolbar<TData>({
           <button
             onClick={() => setShowFilters(!showFilters)}
             className={cn(
-              'h-9 px-3 rounded-lg border border-border/50 text-sm font-medium',
+              'h-9 px-3 rounded-lg border border-input/50 bg-input/80 text-sm font-medium',
               'transition-colors hover:bg-accent flex items-center gap-2',
               showFilters && 'bg-primary/10 border-primary/30 text-primary'
             )}
@@ -128,7 +128,7 @@ export function DataTableToolbar<TData>({
               <button
                 onClick={() => setShowColumnMenu(!showColumnMenu)}
                 className={cn(
-                  'h-9 px-3 rounded-lg border border-border/50 text-sm font-medium',
+                  'h-9 px-3 rounded-lg border border-input/50 bg-input/80 text-sm font-medium',
                   'transition-colors hover:bg-accent flex items-center gap-2',
                   showColumnMenu && 'bg-primary/10 border-primary/30 text-primary'
                 )}
@@ -184,7 +184,7 @@ export function DataTableToolbar<TData>({
           <button
             onClick={onViewToggle}
             className={cn(
-              'h-9 px-3 rounded-lg border border-border/50 text-sm font-medium',
+              'h-9 px-3 rounded-lg border border-input/50 bg-input/80 text-sm font-medium',
               'transition-colors hover:bg-accent flex items-center gap-2',
               isMobileView && 'bg-primary/10 border-primary/30 text-primary'
             )}

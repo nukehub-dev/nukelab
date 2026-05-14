@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { Boxes, Search, ExternalLink, Layers, GitBranch, CheckCircle2, XCircle } from 'lucide-react';
 import { useState, useMemo } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useEnvironments } from '../hooks/use-environments';
 import { useAuthStore } from '../stores/auth-store';
 import { springs } from '../lib/animations';
@@ -38,6 +38,7 @@ function EnvironmentCard({ env, index }: { env: EnvironmentType; index: number }
     >
       <Card
         variant="bubble"
+        interactive
         className={cn("overflow-hidden h-full", isInactive && "opacity-60")}
       >
         <CardContent className="p-5 flex flex-col h-full">
@@ -211,7 +212,7 @@ function EnvironmentsCatalogPage() {
 
       {/* Grid */}
       {isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
           {Array.from({ length: 8 }).map((_, i) => (
             <SkeletonCard key={i} rows={3} />
           ))}
@@ -231,10 +232,12 @@ function EnvironmentsCatalogPage() {
           }
         />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filteredEnvironments.map((env, index) => (
-            <EnvironmentCard key={env.id} env={env} index={index} />
-          ))}
+        <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
+          <AnimatePresence mode="popLayout">
+            {filteredEnvironments.map((env, index) => (
+              <EnvironmentCard key={env.id} env={env} index={index} />
+            ))}
+          </AnimatePresence>
         </div>
       )}
     </ResourcePageLayout>

@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { CreditCard, Cpu, MemoryStick, HardDrive, Search, CheckCircle2, ExternalLink, XCircle } from 'lucide-react';
 import { useState, useMemo } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { usePlans } from '../hooks/use-plans';
 import { useAuthStore } from '../stores/auth-store';
 import { springs } from '../lib/animations';
@@ -29,6 +29,7 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
     >
       <Card
         variant="bubble"
+        interactive
         className={cn(
           "overflow-hidden h-full flex flex-col",
           isUnavailable && "opacity-60"
@@ -201,7 +202,7 @@ function PlansCatalogPage() {
 
       {/* Grid */}
       {isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
           {Array.from({ length: 6 }).map((_, i) => (
             <SkeletonCard key={i} rows={4} />
           ))}
@@ -221,10 +222,12 @@ function PlansCatalogPage() {
           }
         />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredPlans.map((plan, index) => (
-            <PlanCard key={plan.id} plan={plan} index={index} />
-          ))}
+        <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
+          <AnimatePresence mode="popLayout">
+            {filteredPlans.map((plan, index) => (
+              <PlanCard key={plan.id} plan={plan} index={index} />
+            ))}
+          </AnimatePresence>
         </div>
       )}
     </ResourcePageLayout>

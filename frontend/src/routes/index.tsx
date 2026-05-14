@@ -89,7 +89,7 @@ function DashboardPage() {
               <Globe className="w-4 h-4 text-primary" />
               <h2 className="text-base font-semibold">Platform Overview</h2>
             </div>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[
                 { title: 'Total Users', value: platformStats.total_users, icon: Users, iconColor: 'text-blue-400', bgColor: 'bg-blue-500/10' },
                 { title: 'Active Servers', value: platformStats.active_servers, icon: Server, iconColor: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },

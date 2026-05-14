@@ -241,7 +241,7 @@ export function UserServerMetrics({ servers }: UserServerMetricsProps) {
         </span>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {runningServers.map((server) => (
           <ServerMetricCard
             key={server.id}

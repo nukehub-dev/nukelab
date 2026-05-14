@@ -407,7 +407,7 @@ function VolumesPage() {
 
             <div className="flex items-center gap-2 flex-wrap">
               {/* Ownership filter pills */}
-              <div className="flex items-center bg-muted/50 rounded-lg p-0.5">
+              <div className="flex items-center bg-input/80 border border-input/50 rounded-lg p-0.5">
                 {(['all', 'mine', 'shared'] as OwnershipFilter[]).map((filter) => (
                   <button
                     key={filter}
@@ -439,7 +439,7 @@ function VolumesPage() {
 
         {/* Content */}
         {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
             {Array.from({ length: 6 }).map((_, i) => (
               <SkeletonCard key={i} rows={4} />
             ))}
@@ -478,7 +478,7 @@ function VolumesPage() {
             )}
           </motion.div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
             <AnimatePresence mode="popLayout">
               {filteredVolumes.map((volume, index) => (
                 <VolumeCard

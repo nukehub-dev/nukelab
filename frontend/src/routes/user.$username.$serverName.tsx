@@ -145,7 +145,7 @@ function ServerSpecs({ server }: { server: { allocated_cpu?: number; allocated_m
   ];
 
   return (
-    <motion.div variants={itemVariants} className="grid grid-cols-3 gap-2">
+    <motion.div variants={itemVariants} className="grid grid-cols-1 sm:grid-cols-3 gap-2">
       {specs.map((spec) => (
         <div key={spec.label} className="text-center p-3 rounded-xl bg-muted/50">
           <spec.icon className="w-4 h-4 mx-auto text-muted-foreground mb-1" />

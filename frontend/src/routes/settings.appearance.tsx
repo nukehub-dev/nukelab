@@ -45,7 +45,7 @@ function AppearanceSettingsPage() {
       <div className="space-y-8">
         {/* Application Theme */}
         <SettingsSection title="Application Theme" description="Choose the overall visual theme for NukeLab.">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {THEME_VALUES.map((t) => (
               <motion.button
                 key={t}
@@ -60,10 +60,22 @@ function AppearanceSettingsPage() {
                 )}
               >
                 <div className="space-y-3">
-                  <div 
-                    className="w-full h-12 rounded-lg border border-border/20" 
-                    style={{ backgroundColor: isDark ? THEME_PREVIEWS[t].dark.background : THEME_PREVIEWS[t].light.background }}
-                  />
+                  <div
+                    className="w-full h-12 rounded-lg border border-border/20 overflow-hidden relative flex items-end p-1 gap-1"
+                    style={{
+                      backgroundColor: isDark ? THEME_PREVIEWS[t].dark.background : THEME_PREVIEWS[t].light.background,
+                      borderColor: isDark ? THEME_PREVIEWS[t].dark.border : THEME_PREVIEWS[t].light.border,
+                    }}
+                  >
+                    <div
+                      className="h-6 rounded flex-1"
+                      style={{ backgroundColor: isDark ? THEME_PREVIEWS[t].dark.card : THEME_PREVIEWS[t].light.card }}
+                    />
+                    <div
+                      className="w-4 h-4 rounded-full shrink-0"
+                      style={{ backgroundColor: isDark ? THEME_PREVIEWS[t].dark.primary : THEME_PREVIEWS[t].light.primary }}
+                    />
+                  </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium capitalize">{t}</span>
                     {theme === t && (

@@ -220,7 +220,7 @@ export function Sidebar() {
                           marginRight: 4,
                         }}
                       >
-                        <item.icon className={cn("w-5 h-5 shrink-0", isActive(item.href) && "text-primary")} />
+                        <item.icon className={cn("w-5 h-5 shrink-0", item.label === 'Environments' && "opacity-80", isActive(item.href) && "text-primary")} />
                         <span
                           className="truncate whitespace-nowrap overflow-hidden transition-all duration-300"
                           style={{ maxWidth: 200, opacity: 1, marginLeft: 12 }}
@@ -246,7 +246,7 @@ export function Sidebar() {
                             marginRight: 10,
                           }}
                         >
-                          <item.icon className={cn("w-5 h-5 shrink-0", isActive(item.href) && "text-primary")} />
+                          <item.icon className={cn("w-5 h-5 shrink-0", item.label === 'Environments' && "opacity-80", isActive(item.href) && "text-primary")} />
                         </Link>
                       </Tooltip>
                     )}
@@ -287,7 +287,7 @@ export function Sidebar() {
                 document.cookie = 'nukelab_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
                 window.location.href = '/login';
               }}
-              className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm hover:bg-sidebar-accent transition-colors text-red-400"
+              className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm hover:bg-sidebar-accent transition-colors text-destructive"
             >
               <LogOut className="w-4 h-4" />
               <span className="flex-1 text-left">Log Out</span>
@@ -311,7 +311,7 @@ export function Sidebar() {
                   document.cookie = 'nukelab_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
                   window.location.href = '/login';
                 }} 
-                className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors text-red-400"
+                className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors text-destructive"
               >
                 <LogOut className="w-4 h-4" />
               </button>
@@ -335,7 +335,7 @@ export function Sidebar() {
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              <item.icon className="w-5 h-5" />
+              <item.icon className={cn("w-5 h-5", item.label === 'Environments' && "opacity-80")} />
               <span className="text-[10px] font-medium hidden sm:inline">{item.label}</span>
             </Link>
           ))}
@@ -362,7 +362,7 @@ export function Sidebar() {
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              <item.icon className="w-5 h-5" />
+              <item.icon className={cn("w-5 h-5", item.label === 'Environments' && "opacity-80")} />
               <span className="text-[10px] font-medium hidden sm:inline">{item.label}</span>
             </Link>
           ))}
@@ -412,7 +412,7 @@ export function Sidebar() {
                                 : "text-foreground/80 hover:bg-muted/50"
                             )}
                           >
-                            <item.icon className={cn("w-5 h-5 shrink-0", isActive(item.href) && "text-primary")} />
+                            <item.icon className={cn("w-5 h-5 shrink-0", item.label === 'Environments' && "opacity-80", isActive(item.href) && "text-primary")} />
                             <span>{item.label}</span>
                           </Link>
                         ))}
@@ -427,7 +427,7 @@ export function Sidebar() {
                         document.cookie = 'nukelab_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
                         window.location.href = '/login';
                       }}
-                      className="flex items-center gap-2 w-full px-4 py-3 rounded-xl text-sm hover:bg-muted transition-colors text-red-400"
+                      className="flex items-center gap-2 w-full px-4 py-3 rounded-xl text-sm hover:bg-muted transition-colors text-destructive"
                     >
                       <LogOut className="w-4 h-4" />
                       <span>Log Out</span>

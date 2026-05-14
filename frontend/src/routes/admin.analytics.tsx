@@ -150,7 +150,7 @@ function AnalyticsDashboard() {
       </div>
 
       {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <motion.div
           className="bubble p-5 overflow-hidden"
           initial={{ opacity: 0, y: 20 }}
@@ -212,7 +212,7 @@ function AnalyticsDashboard() {
       </div>
 
       {/* Environment & Plan Usage */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <motion.div
           className="bubble p-5"
           initial={{ opacity: 0, y: 20 }}

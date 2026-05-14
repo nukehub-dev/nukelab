@@ -65,7 +65,7 @@ export function FloatingHeader({
 
       {/* Stats Bar */}
       {stats && stats.length > 0 && (
-        <div className="hidden lg:flex items-center gap-4 px-6 lg:px-10 pb-4">
+        <div className="hidden lg:flex flex-wrap items-center gap-4 px-6 lg:px-10 pb-4">
           {stats.map((stat) => (
             <StatCard key={stat.title} {...stat} variant="mini" />
           ))}

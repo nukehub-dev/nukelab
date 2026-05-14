@@ -173,7 +173,7 @@ export function DataTable<TData>({
           {/* Desktop Table */}
           <div className={cn(showMobile && 'hidden')}>
             <div 
-              className="rounded-xl border border-border/50 overflow-x-auto relative"
+              className="rounded-xl border border-border/50 bg-card overflow-x-auto relative"
               style={{ WebkitOverflowScrolling: 'touch' }}
             >
               <table className="w-full caption-bottom text-sm whitespace-nowrap" style={{ minWidth: 'max-content' }}>

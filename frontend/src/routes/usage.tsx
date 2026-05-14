@@ -185,7 +185,7 @@ function UsagePage() {
 
         <div className="flex items-center gap-2 flex-wrap">
           {canViewAnalytics && (
-            <div className="flex items-center bg-muted rounded-lg p-0.5 mr-2">
+            <div className="flex items-center bg-input/80 border border-input/50 rounded-lg p-0.5 mr-2">
               <button
                 onClick={() => setViewMode('personal')}
                 className={cn(
@@ -307,7 +307,7 @@ function UsagePage() {
       </div>
 
       {/* Charts Grid */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* CPU Usage Chart */}
         <motion.div
           className="bubble p-5 overflow-hidden"
@@ -470,7 +470,7 @@ function UsagePage() {
       </div>
 
       {/* Bottom Section: Server Breakdown + Peak Stats */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Server Cost Breakdown */}
         <motion.div
           className="bubble p-5 overflow-hidden xl:col-span-2"

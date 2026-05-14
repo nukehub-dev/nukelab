@@ -198,7 +198,7 @@ function ServerDetailPage() {
           </div>
         </div>
         {/* Skeleton Content */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="bubble p-4 animate-pulse">
               <div className="h-4 w-24 bg-muted rounded mb-2" />
@@ -323,7 +323,7 @@ function ServerDetailPage() {
           <h3 className="text-base font-semibold">Server Details</h3>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {/* Status Card */}
           <div className="flex items-start gap-4 p-4 rounded-xl bg-surface/50 border border-border/50">
             <div className="p-2.5 rounded-lg bg-primary/10">

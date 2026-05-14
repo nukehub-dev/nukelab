@@ -106,7 +106,7 @@ function WorkspaceCard({
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-3 gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
               <div className="flex items-center gap-1.5">
                 <Users className="w-3 h-3 text-muted-foreground" />
                 <span className="text-xs text-muted-foreground">
@@ -119,7 +119,7 @@ function WorkspaceCard({
                   {workspace.volume_count || 0} volumes
                 </span>
               </div>
-              <div className="flex items-center gap-1.5 justify-end">
+              <div className="flex items-center gap-1.5">
                 <span className="text-xs text-muted-foreground">
                   {formatDate(workspace.created_at)}
                 </span>
@@ -236,7 +236,7 @@ function WorkspacesListPage() {
 
         {/* Content */}
         {isLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
             {Array.from({ length: 6 }).map((_, i) => (
               <SkeletonCard key={i} rows={4} />
             ))}
@@ -264,7 +264,7 @@ function WorkspacesListPage() {
             </Button>
           </motion.div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
             <AnimatePresence mode="popLayout">
               {filteredWorkspaces.map((workspace, index) => (
                 <WorkspaceCard

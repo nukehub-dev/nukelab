@@ -164,7 +164,7 @@ function AdminDashboardPage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2, ...springs.gentle }}
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+        className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4"
       >
         <StatCard
           title="Total Users"
@@ -205,7 +205,7 @@ function AdminDashboardPage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3, ...springs.gentle }}
-        className="grid grid-cols-1 sm:grid-cols-3 gap-4"
+        className="grid grid-cols-1 md:grid-cols-3 gap-4"
       >
         <div className="p-5 rounded-xl bg-card/50 border border-border/50">
           <div className="flex items-center justify-between mb-3">

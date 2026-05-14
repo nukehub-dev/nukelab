@@ -51,7 +51,7 @@ export function DataTablePagination({
             onClick={() => onPageChange(1)}
             disabled={page <= 1}
             className={cn(
-              'p-2 rounded-lg border border-border/50 transition-colors',
+              'p-2 rounded-lg border border-input/50 bg-input/80 transition-colors',
               'hover:bg-accent disabled:opacity-50 disabled:pointer-events-none'
             )}
           >
@@ -61,7 +61,7 @@ export function DataTablePagination({
             onClick={() => onPageChange(page - 1)}
             disabled={page <= 1}
             className={cn(
-              'p-2 rounded-lg border border-border/50 transition-colors',
+              'p-2 rounded-lg border border-input/50 bg-input/80 transition-colors',
               'hover:bg-accent disabled:opacity-50 disabled:pointer-events-none'
             )}
           >
@@ -89,7 +89,7 @@ export function DataTablePagination({
                     'min-w-[2rem] h-8 px-2 rounded-lg text-sm font-medium transition-colors',
                     page === pageNum
                       ? 'bg-primary text-primary-foreground'
-                      : 'hover:bg-accent border border-border/50'
+                      : 'hover:bg-accent border border-input/50 bg-input/80'
                   )}
                 >
                   {pageNum}
@@ -102,7 +102,7 @@ export function DataTablePagination({
             onClick={() => onPageChange(page + 1)}
             disabled={page >= pageCount}
             className={cn(
-              'p-2 rounded-lg border border-border/50 transition-colors',
+              'p-2 rounded-lg border border-input/50 bg-input/80 transition-colors',
               'hover:bg-accent disabled:opacity-50 disabled:pointer-events-none'
             )}
           >
@@ -112,7 +112,7 @@ export function DataTablePagination({
             onClick={() => onPageChange(pageCount)}
             disabled={page >= pageCount}
             className={cn(
-              'p-2 rounded-lg border border-border/50 transition-colors',
+              'p-2 rounded-lg border border-input/50 bg-input/80 transition-colors',
               'hover:bg-accent disabled:opacity-50 disabled:pointer-events-none'
             )}
           >
@@ -126,7 +126,7 @@ export function DataTablePagination({
             className={cn(
               'relative h-8 px-3 pr-8 rounded-lg border text-sm font-medium',
               'transition-colors flex items-center gap-2',
-              'border-border/50 bg-background hover:bg-accent'
+              'border-input/50 bg-input/80 hover:bg-accent'
             )}
           >
             <span>{limit} / page</span>

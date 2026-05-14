@@ -284,7 +284,10 @@
   20%, 40%, 60%, 80% { transform: translateX(4px); }
 }
 
-/* Theme definitions */
+/* ============================================
+   DARK APPLICATION THEMES
+   ============================================ */
+
 [data-app-theme="graphite"] {
   --background: oklch(0.15 0.005 260);
   --foreground: oklch(0.95 0.005 260);
@@ -488,7 +491,10 @@
   --surface: oklch(0.25 0.02 320);
 }
 
-/* OLED Mode */
+/* ============================================
+   OLED MODE
+   ============================================ */
+
 html.dark.oled,
 html.oled {
   --background: oklch(0 0 0);
@@ -504,35 +510,383 @@ html.oled {
   --glass-noise-opacity: 0.02;
 }
 
-/* Light mode support */
+/* ============================================
+   LIGHT MODE — BASE (Default theme light)
+   ============================================ */
+
 html.light {
   color-scheme: light;
-  --background: oklch(0.98 0.005 285.823);
-  --foreground: oklch(0.141 0.005 285.823);
-  --card: oklch(1 0 0 / 0.8);
-  --card-foreground: oklch(0.141 0.005 285.823);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.141 0.005 285.823);
-  --secondary: oklch(0.92 0.005 286.033 / 0.55);
-  --secondary-foreground: oklch(0.141 0.005 285.823);
-  --muted: oklch(0.92 0.005 286.033 / 0.55);
-  --muted-foreground: oklch(0.45 0.015 286.067);
-  --accent: oklch(0.92 0.005 286.033 / 0.55);
-  --accent-foreground: oklch(0.141 0.005 285.823);
+  --background: oklch(0.97 0.005 285.823);
+  --foreground: oklch(0.22 0.005 285.823);
+  --card: color-mix(in oklch, var(--primary) 1.5%, oklch(1 0 0));
+  --card-foreground: oklch(0.22 0.005 285.823);
+  --popover: color-mix(in oklch, var(--primary) 1.5%, oklch(1 0 0));
+  --popover-foreground: oklch(0.22 0.005 285.823);
+  --primary: oklch(0.541 0.281 293.009);
+  --primary-foreground: oklch(0.969 0.016 293.756);
+  --secondary: oklch(0.90 0.005 286.033);
+  --secondary-foreground: oklch(0.22 0.005 285.823);
+  --muted: oklch(0.90 0.005 286.033);
+  --muted-foreground: oklch(0.52 0.015 286.067);
+  --accent: oklch(0.90 0.005 286.033);
+  --accent-foreground: oklch(0.22 0.005 285.823);
   --destructive: oklch(0.6 0.191 22.216);
   --destructive-foreground: oklch(1 0 0);
-  --border: oklch(0 0 0 / 10%);
-  --input: oklch(0 0 0 / 15%);
-  --sidebar: oklch(0.95 0.005 285.885 / 0.8);
-  --sidebar-foreground: oklch(0.141 0.005 285.823);
-  --sidebar-accent: oklch(0.92 0.005 286.033 / 0.55);
-  --sidebar-accent-foreground: oklch(0.141 0.005 285.823);
-  --sidebar-border: oklch(0 0 0 / 10%);
-  --surface: oklch(0.95 0.005 285.885);
-  --glass-shadow-color: oklch(0 0 0 / 0.15);
+  --border: color-mix(in oklch, var(--primary) 10%, oklch(0 0 0 / 0.07));
+  --input: color-mix(in oklch, var(--primary) 8%, var(--muted));
+  --ring: oklch(0.541 0.281 293.009);
+  --sidebar: oklch(0.96 0.005 285.823 / 0.68);
+  --sidebar-foreground: oklch(0.22 0.005 285.823);
+  --sidebar-primary: oklch(0.541 0.281 293.009);
+  --sidebar-primary-foreground: oklch(0.969 0.016 293.756);
+  --sidebar-accent: oklch(0.90 0.005 286.033 / 0.6);
+  --sidebar-accent-foreground: oklch(0.22 0.005 285.823);
+  --sidebar-border: color-mix(in oklch, var(--primary) 12%, oklch(0 0 0 / 0.08));
+  --surface: oklch(0.98 0.005 285.885);
+  --bg-surface: oklch(0.98 0.005 285.885);
+  --glass-base: oklch(1 0 0 / 0.88);
+  --glass-tint: var(--primary);
+  --glass-shadow-color: oklch(0 0 0 / 0.08);
+  --glass-noise-opacity: 0.015;
 }
 
-/* Global cursor styles for interactive elements */
+/* ============================================
+   LIGHT MODE — APPLICATION THEME VARIANTS
+   Each theme gets its own cohesive light palette
+   ============================================ */
+
+html.light[data-app-theme="graphite"] {
+  --background: oklch(0.96 0.005 260);
+  --foreground: oklch(0.22 0.005 260);
+  --card: color-mix(in oklch, var(--primary) 1.5%, oklch(1 0 0));
+  --card-foreground: oklch(0.22 0.005 260);
+  --popover: color-mix(in oklch, var(--primary) 1.5%, oklch(1 0 0));
+  --popover-foreground: oklch(0.22 0.005 260);
+  --primary: oklch(0.55 0.14 240);
+  --primary-foreground: oklch(0.98 0.005 240);
+  --secondary: oklch(0.89 0.01 260);
+  --secondary-foreground: oklch(0.22 0.005 260);
+  --muted: oklch(0.89 0.01 260);
+  --muted-foreground: oklch(0.5 0.01 260);
+  --accent: oklch(0.89 0.01 260);
+  --accent-foreground: oklch(0.22 0.005 260);
+  --destructive: oklch(0.6 0.191 22.216);
+  --destructive-foreground: oklch(1 0 0);
+  --border: color-mix(in oklch, var(--primary) 10%, oklch(0 0 0 / 0.08));
+  --input: color-mix(in oklch, var(--primary) 8%, var(--muted));
+  --ring: oklch(0.55 0.14 240);
+  --sidebar: oklch(0.93 0.012 260 / 0.68);
+  --sidebar-foreground: oklch(0.22 0.005 260);
+  --sidebar-primary: oklch(0.55 0.14 240);
+  --sidebar-primary-foreground: oklch(0.98 0.005 240);
+  --sidebar-accent: oklch(0.86 0.015 260 / 0.6);
+  --sidebar-accent-foreground: oklch(0.22 0.005 260);
+  --sidebar-border: color-mix(in oklch, var(--primary) 12%, oklch(0 0 0 / 0.08));
+  --surface: oklch(0.97 0.005 260);
+  --bg-surface: oklch(0.97 0.005 260);
+}
+
+html.light[data-app-theme="ocean"] {
+  --background: oklch(0.97 0.01 220);
+  --foreground: oklch(0.2 0.01 220);
+  --card: color-mix(in oklch, var(--primary) 1.5%, oklch(1 0 0));
+  --card-foreground: oklch(0.2 0.01 220);
+  --popover: color-mix(in oklch, var(--primary) 1.5%, oklch(1 0 0));
+  --popover-foreground: oklch(0.2 0.01 220);
+  --primary: oklch(0.55 0.18 200);
+  --primary-foreground: oklch(0.98 0.01 200);
+  --secondary: oklch(0.89 0.015 220);
+  --secondary-foreground: oklch(0.2 0.01 220);
+  --muted: oklch(0.89 0.015 220);
+  --muted-foreground: oklch(0.5 0.015 220);
+  --accent: oklch(0.89 0.015 220);
+  --accent-foreground: oklch(0.2 0.01 220);
+  --destructive: oklch(0.6 0.191 22.216);
+  --destructive-foreground: oklch(1 0 0);
+  --border: color-mix(in oklch, var(--primary) 12%, oklch(0 0 0 / 0.07));
+  --input: color-mix(in oklch, var(--primary) 8%, var(--muted));
+  --ring: oklch(0.55 0.18 200);
+  --sidebar: oklch(0.94 0.018 220 / 0.68);
+  --sidebar-foreground: oklch(0.2 0.01 220);
+  --sidebar-primary: oklch(0.55 0.18 200);
+  --sidebar-primary-foreground: oklch(0.98 0.01 200);
+  --sidebar-accent: oklch(0.87 0.02 220 / 0.6);
+  --sidebar-accent-foreground: oklch(0.2 0.01 220);
+  --sidebar-border: color-mix(in oklch, var(--primary) 14%, oklch(0 0 0 / 0.07));
+  --surface: oklch(0.97 0.01 220);
+  --bg-surface: oklch(0.97 0.01 220);
+}
+
+html.light[data-app-theme="amber"] {
+  --background: oklch(0.985 0.015 80);
+  --foreground: oklch(0.22 0.01 80);
+  --card: color-mix(in oklch, var(--primary) 1.5%, oklch(1 0 0));
+  --card-foreground: oklch(0.22 0.01 80);
+  --popover: color-mix(in oklch, var(--primary) 1.5%, oklch(1 0 0));
+  --popover-foreground: oklch(0.22 0.01 80);
+  --primary: oklch(0.6 0.2 70);
+  --primary-foreground: oklch(0.97 0.01 70);
+  --secondary: oklch(0.90 0.015 80);
+  --secondary-foreground: oklch(0.22 0.01 80);
+  --muted: oklch(0.90 0.015 80);
+  --muted-foreground: oklch(0.5 0.015 80);
+  --accent: oklch(0.90 0.015 80);
+  --accent-foreground: oklch(0.22 0.01 80);
+  --destructive: oklch(0.6 0.191 22.216);
+  --destructive-foreground: oklch(1 0 0);
+  --border: color-mix(in oklch, var(--primary) 12%, oklch(0 0 0 / 0.07));
+  --input: color-mix(in oklch, var(--primary) 12%, oklch(0 0 0 / 0.07));
+  --ring: oklch(0.6 0.2 70);
+  --sidebar: oklch(0.96 0.02 80 / 0.68);
+  --sidebar-foreground: oklch(0.22 0.01 80);
+  --sidebar-primary: oklch(0.6 0.2 70);
+  --sidebar-primary-foreground: oklch(0.97 0.01 70);
+  --sidebar-accent: oklch(0.89 0.025 80 / 0.6);
+  --sidebar-accent-foreground: oklch(0.22 0.01 80);
+  --sidebar-border: color-mix(in oklch, var(--primary) 14%, oklch(0 0 0 / 0.07));
+  --surface: oklch(0.975 0.015 80);
+  --bg-surface: oklch(0.975 0.015 80);
+}
+
+html.light[data-app-theme="github"] {
+  --background: oklch(0.985 0.005 260);
+  --foreground: oklch(0.2 0.005 260);
+  --card: color-mix(in oklch, var(--primary) 1.5%, oklch(1 0 0));
+  --card-foreground: oklch(0.2 0.005 260);
+  --popover: color-mix(in oklch, var(--primary) 1.5%, oklch(1 0 0));
+  --popover-foreground: oklch(0.2 0.005 260);
+  --primary: oklch(0.55 0.15 250);
+  --primary-foreground: oklch(0.98 0.005 250);
+  --secondary: oklch(0.92 0.005 260);
+  --secondary-foreground: oklch(0.2 0.005 260);
+  --muted: oklch(0.92 0.005 260);
+  --muted-foreground: oklch(0.5 0.01 260);
+  --accent: oklch(0.92 0.005 260);
+  --accent-foreground: oklch(0.2 0.005 260);
+  --destructive: oklch(0.6 0.191 22.216);
+  --destructive-foreground: oklch(1 0 0);
+  --border: color-mix(in oklch, var(--primary) 10%, oklch(0 0 0 / 0.08));
+  --input: color-mix(in oklch, var(--primary) 10%, oklch(0 0 0 / 0.08));
+  --ring: oklch(0.55 0.15 250);
+  --sidebar: oklch(0.95 0.005 260 / 0.68);
+  --sidebar-foreground: oklch(0.2 0.005 260);
+  --sidebar-primary: oklch(0.55 0.15 250);
+  --sidebar-primary-foreground: oklch(0.98 0.005 250);
+  --sidebar-accent: oklch(0.88 0.005 260 / 0.6);
+  --sidebar-accent-foreground: oklch(0.2 0.005 260);
+  --sidebar-border: color-mix(in oklch, var(--primary) 12%, oklch(0 0 0 / 0.08));
+  --surface: oklch(0.98 0.005 260);
+  --bg-surface: oklch(0.98 0.005 260);
+}
+
+html.light[data-app-theme="nord"] {
+  --background: oklch(0.955 0.01 250);
+  --foreground: oklch(0.22 0.01 250);
+  --card: color-mix(in oklch, var(--primary) 1.5%, oklch(1 0 0));
+  --card-foreground: oklch(0.22 0.01 250);
+  --popover: color-mix(in oklch, var(--primary) 1.5%, oklch(1 0 0));
+  --popover-foreground: oklch(0.22 0.01 250);
+  --primary: oklch(0.55 0.1 240);
+  --primary-foreground: oklch(0.98 0.01 240);
+  --secondary: oklch(0.88 0.01 250);
+  --secondary-foreground: oklch(0.22 0.01 250);
+  --muted: oklch(0.88 0.01 250);
+  --muted-foreground: oklch(0.48 0.015 250);
+  --accent: oklch(0.88 0.01 250);
+  --accent-foreground: oklch(0.22 0.01 250);
+  --destructive: oklch(0.6 0.191 22.216);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.75 0.02 250);
+  --input: color-mix(in oklch, var(--primary) 8%, var(--muted));
+  --ring: oklch(0.55 0.1 240);
+  --sidebar: oklch(0.92 0.015 250 / 0.68);
+  --sidebar-foreground: oklch(0.22 0.01 250);
+  --sidebar-primary: oklch(0.55 0.1 240);
+  --sidebar-primary-foreground: oklch(0.98 0.01 240);
+  --sidebar-accent: oklch(0.84 0.015 250 / 0.6);
+  --sidebar-accent-foreground: oklch(0.22 0.01 250);
+  --sidebar-border: oklch(0.8 0.015 250);
+  --surface: oklch(0.93 0.01 250);
+  --bg-surface: oklch(0.93 0.01 250);
+}
+
+html.light[data-app-theme="everforest"] {
+  --background: oklch(0.975 0.02 90);
+  --foreground: oklch(0.22 0.015 90);
+  --card: color-mix(in oklch, var(--primary) 1.5%, oklch(1 0 0));
+  --card-foreground: oklch(0.22 0.015 90);
+  --popover: color-mix(in oklch, var(--primary) 1.5%, oklch(1 0 0));
+  --popover-foreground: oklch(0.22 0.015 90);
+  --primary: oklch(0.55 0.14 150);
+  --primary-foreground: oklch(0.97 0.01 150);
+  --secondary: oklch(0.90 0.02 90);
+  --secondary-foreground: oklch(0.22 0.015 90);
+  --muted: oklch(0.90 0.02 90);
+  --muted-foreground: oklch(0.48 0.02 90);
+  --accent: oklch(0.90 0.02 90);
+  --accent-foreground: oklch(0.22 0.015 90);
+  --destructive: oklch(0.6 0.191 22.216);
+  --destructive-foreground: oklch(1 0 0);
+  --border: color-mix(in oklch, var(--primary) 10%, oklch(0 0 0 / 0.08));
+  --input: color-mix(in oklch, var(--primary) 10%, oklch(0 0 0 / 0.08));
+  --ring: oklch(0.55 0.14 150);
+  --sidebar: oklch(0.94 0.025 90 / 0.68);
+  --sidebar-foreground: oklch(0.22 0.015 90);
+  --sidebar-primary: oklch(0.55 0.14 150);
+  --sidebar-primary-foreground: oklch(0.97 0.01 150);
+  --sidebar-accent: oklch(0.86 0.03 90 / 0.6);
+  --sidebar-accent-foreground: oklch(0.22 0.015 90);
+  --sidebar-border: color-mix(in oklch, var(--primary) 12%, oklch(0 0 0 / 0.08));
+  --surface: oklch(0.97 0.02 90);
+  --bg-surface: oklch(0.97 0.02 90);
+}
+
+html.light[data-app-theme="rosepine"] {
+  --background: oklch(0.975 0.015 50);
+  --foreground: oklch(0.22 0.01 320);
+  --card: color-mix(in oklch, var(--primary) 1.5%, oklch(1 0 0));
+  --card-foreground: oklch(0.22 0.01 320);
+  --popover: color-mix(in oklch, var(--primary) 1.5%, oklch(1 0 0));
+  --popover-foreground: oklch(0.22 0.01 320);
+  --primary: oklch(0.55 0.12 300);
+  --primary-foreground: oklch(0.98 0.01 300);
+  --secondary: oklch(0.90 0.015 320);
+  --secondary-foreground: oklch(0.22 0.01 320);
+  --muted: oklch(0.90 0.015 320);
+  --muted-foreground: oklch(0.48 0.015 320);
+  --accent: oklch(0.90 0.015 320);
+  --accent-foreground: oklch(0.22 0.01 320);
+  --destructive: oklch(0.6 0.191 22.216);
+  --destructive-foreground: oklch(1 0 0);
+  --border: color-mix(in oklch, var(--primary) 10%, oklch(0 0 0 / 0.08));
+  --input: color-mix(in oklch, var(--primary) 10%, oklch(0 0 0 / 0.08));
+  --ring: oklch(0.55 0.12 300);
+  --sidebar: oklch(0.94 0.02 320 / 0.68);
+  --sidebar-foreground: oklch(0.22 0.01 320);
+  --sidebar-primary: oklch(0.55 0.12 300);
+  --sidebar-primary-foreground: oklch(0.98 0.01 300);
+  --sidebar-accent: oklch(0.86 0.025 320 / 0.6);
+  --sidebar-accent-foreground: oklch(0.22 0.01 320);
+  --sidebar-border: color-mix(in oklch, var(--primary) 12%, oklch(0 0 0 / 0.08));
+  --surface: oklch(0.97 0.015 320);
+  --bg-surface: oklch(0.97 0.015 320);
+}
+
+/* ============================================
+   LIGHT MODE — SHARED UTILITY OVERRIDES
+   ============================================ */
+
+/* Refined bubble cards with subtle theme tint */
+html.light .bubble {
+  background:
+    radial-gradient(
+      120% 100% at 10% 0%,
+      color-mix(in oklch, var(--glass-tint, var(--primary)) 5%, transparent) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      120% 100% at 100% 0%,
+      color-mix(in oklch, var(--glass-base, var(--bg-surface)) 6%, transparent) 0%,
+      transparent 60%
+    );
+  background-color: color-mix(in oklch, var(--glass-base, var(--bg-surface)) 98%, transparent);
+  border: 1px solid color-mix(in oklch, var(--primary) 10%, oklch(0 0 0 / 0.06));
+  box-shadow:
+    0 0 0 1px oklch(0 0 0 / 0.02),
+    0 2px 8px oklch(0 0 0 / 0.03),
+    0 8px 24px oklch(0 0 0 / 0.03);
+}
+
+/* Backdrop overlays */
+html.light .fixed.inset-0.bg-black\/60,
+html.light .fixed.inset-0.bg-black\/50,
+html.light .fixed.inset-0.bg-black\/40 {
+  background-color: rgb(0 0 0 / 0.18) !important;
+}
+
+/* Semi-transparent borders — theme adaptive */
+html.light .border-border\/50,
+html.light .border-border\/40 {
+  border-color: color-mix(in oklch, var(--primary) 12%, oklch(0 0 0 / 0.08));
+}
+
+html.light .border-border\/30,
+html.light .border-border\/20 {
+  border-color: color-mix(in oklch, var(--primary) 10%, oklch(0 0 0 / 0.06));
+}
+
+html.light .divide-border\/50 > :not([hidden]) ~ :not([hidden]),
+html.light .divide-border\/40 > :not([hidden]) ~ :not([hidden]) {
+  border-color: oklch(0 0 0 / 0.08);
+}
+
+/* Semi-transparent backgrounds — resolve to solid tokens */
+html.light .bg-card\/50,
+html.light .bg-card\/40,
+html.light .bg-card\/30,
+html.light .bg-card\/95,
+html.light .bg-card\/80 {
+  background-color: var(--card);
+}
+
+html.light .bg-muted\/50,
+html.light .bg-muted\/40,
+html.light .bg-muted\/30,
+html.light .bg-muted\/20,
+html.light .bg-muted\/80 {
+  background-color: var(--muted);
+}
+
+html.light .bg-surface\/50,
+html.light .bg-surface\/40,
+html.light .bg-surface\/30 {
+  background-color: var(--surface);
+}
+
+/* Ambient blobs — very subtle in light mode */
+html.light .blob-float {
+  opacity: 0.2;
+}
+
+/* Selection color adapts to theme */
+html.light ::selection {
+  background: color-mix(in oklch, var(--primary) 22%, transparent);
+  color: var(--foreground);
+}
+
+/* ============================================
+   LIGHT MODE
+   ============================================ */
+
+/* Desktop sidebar: softer shadow + inner highlight for glass effect */
+html.light aside.fixed.top-3.left-3.bottom-3 {
+  box-shadow:
+    0 8px 32px -4px oklch(0 0 0 / 0.06),
+    0 2px 8px oklch(0 0 0 / 0.03),
+    inset 0 1px 0 0 oklch(1 0 0 / 0.5) !important;
+}
+
+/* Mobile dock: more translucent + softer shadow (target container only) */
+html.light nav.fixed.bottom-4 > div {
+  background-color: color-mix(in oklch, var(--background) 55%, transparent) !important;
+  box-shadow:
+    0 8px 24px -4px oklch(0 0 0 / 0.08),
+    0 2px 6px oklch(0 0 0 / 0.04) !important;
+  border-color: color-mix(in oklch, var(--border) 50%, transparent) !important;
+}
+
+/* Mobile more menu: more translucent */
+html.light .fixed.bottom-0.left-0.right-0 .rounded-t-3xl.backdrop-blur-xl {
+  background-color: color-mix(in oklch, var(--background) 70%, transparent) !important;
+  box-shadow:
+    0 -4px 24px oklch(0 0 0 / 0.05),
+    0 -1px 4px oklch(0 0 0 / 0.03) !important;
+}
+
+/* ============================================
+   GLOBAL UTILITIES
+   ============================================ */
+
 button, a, [role="button"], [role="switch"], input[type="submit"], input[type="button"], input[type="reset"], label {
   cursor: pointer;
 }
