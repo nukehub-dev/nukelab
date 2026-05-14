@@ -4,7 +4,8 @@ import {
   Palette, 
   Bell, 
   UserCircle,
-  ChevronRight
+  ChevronRight,
+  KeyRound
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useAuthStore } from '../stores/auth-store';
@@ -20,6 +21,7 @@ const settingsNavItems: SettingsNavItem[] = [
   { label: 'Profile', icon: UserCircle, href: '/settings/profile' },
   { label: 'Appearance', icon: Palette, href: '/settings/appearance' },
   { label: 'Notifications', icon: Bell, href: '/settings/notifications' },
+  { label: 'API Tokens', icon: KeyRound, href: '/settings/tokens' },
 ];
 
 export const Route = createFileRoute('/settings')({

@@ -88,6 +88,31 @@ export interface Plan {
   updated_at?: string;
 }
 
+export interface ApiToken {
+  id: string;
+  name: string;
+  scopes: string[];
+  usage_count: number;
+  last_used_at?: string;
+  created_at: string;
+  expires_at?: string;
+  is_active: boolean;
+}
+
+export interface ApiTokenWithValue extends ApiToken {
+  token: string;
+}
+
+export interface ApiTokenUsage {
+  token_id: string;
+  name: string;
+  usage_count: number;
+  last_used_at?: string;
+  created_at?: string;
+  expires_at?: string;
+  is_active: boolean;
+}
+
 export interface ApiError {
   detail: string;
 }

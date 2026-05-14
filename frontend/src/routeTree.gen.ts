@@ -31,6 +31,7 @@ import { Route as ServersIndexRouteImport } from './routes/servers.index'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as WorkspacesWorkspaceIdRouteImport } from './routes/workspaces.$workspaceId'
 import { Route as SettingsUsersRouteImport } from './routes/settings.users'
+import { Route as SettingsTokensRouteImport } from './routes/settings.tokens'
 import { Route as SettingsProfileRouteImport } from './routes/settings.profile'
 import { Route as SettingsNotificationsRouteImport } from './routes/settings.notifications'
 import { Route as SettingsAuthenticationRouteImport } from './routes/settings.authentication'
@@ -158,6 +159,11 @@ const SettingsUsersRoute = SettingsUsersRouteImport.update({
   path: '/users',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsTokensRoute = SettingsTokensRouteImport.update({
+  id: '/tokens',
+  path: '/tokens',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SettingsProfileRoute = SettingsProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
@@ -270,6 +276,7 @@ export interface FileRoutesByFullPath {
   '/settings/authentication': typeof SettingsAuthenticationRoute
   '/settings/notifications': typeof SettingsNotificationsRoute
   '/settings/profile': typeof SettingsProfileRoute
+  '/settings/tokens': typeof SettingsTokensRoute
   '/settings/users': typeof SettingsUsersRoute
   '/workspaces/$workspaceId': typeof WorkspacesWorkspaceIdRoute
   '/admin/': typeof AdminIndexRoute
@@ -306,6 +313,7 @@ export interface FileRoutesByTo {
   '/settings/authentication': typeof SettingsAuthenticationRoute
   '/settings/notifications': typeof SettingsNotificationsRoute
   '/settings/profile': typeof SettingsProfileRoute
+  '/settings/tokens': typeof SettingsTokensRoute
   '/settings/users': typeof SettingsUsersRoute
   '/workspaces/$workspaceId': typeof WorkspacesWorkspaceIdRoute
   '/admin': typeof AdminIndexRoute
@@ -347,6 +355,7 @@ export interface FileRoutesById {
   '/settings/authentication': typeof SettingsAuthenticationRoute
   '/settings/notifications': typeof SettingsNotificationsRoute
   '/settings/profile': typeof SettingsProfileRoute
+  '/settings/tokens': typeof SettingsTokensRoute
   '/settings/users': typeof SettingsUsersRoute
   '/workspaces/$workspaceId': typeof WorkspacesWorkspaceIdRoute
   '/admin/': typeof AdminIndexRoute
@@ -389,6 +398,7 @@ export interface FileRouteTypes {
     | '/settings/authentication'
     | '/settings/notifications'
     | '/settings/profile'
+    | '/settings/tokens'
     | '/settings/users'
     | '/workspaces/$workspaceId'
     | '/admin/'
@@ -425,6 +435,7 @@ export interface FileRouteTypes {
     | '/settings/authentication'
     | '/settings/notifications'
     | '/settings/profile'
+    | '/settings/tokens'
     | '/settings/users'
     | '/workspaces/$workspaceId'
     | '/admin'
@@ -465,6 +476,7 @@ export interface FileRouteTypes {
     | '/settings/authentication'
     | '/settings/notifications'
     | '/settings/profile'
+    | '/settings/tokens'
     | '/settings/users'
     | '/workspaces/$workspaceId'
     | '/admin/'
@@ -651,6 +663,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsUsersRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/tokens': {
+      id: '/settings/tokens'
+      path: '/tokens'
+      fullPath: '/settings/tokens'
+      preLoaderRoute: typeof SettingsTokensRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/settings/profile': {
       id: '/settings/profile'
       path: '/profile'
@@ -824,6 +843,7 @@ interface SettingsRouteChildren {
   SettingsAuthenticationRoute: typeof SettingsAuthenticationRoute
   SettingsNotificationsRoute: typeof SettingsNotificationsRoute
   SettingsProfileRoute: typeof SettingsProfileRoute
+  SettingsTokensRoute: typeof SettingsTokensRoute
   SettingsUsersRoute: typeof SettingsUsersRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
 }
@@ -833,6 +853,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsAuthenticationRoute: SettingsAuthenticationRoute,
   SettingsNotificationsRoute: SettingsNotificationsRoute,
   SettingsProfileRoute: SettingsProfileRoute,
+  SettingsTokensRoute: SettingsTokensRoute,
   SettingsUsersRoute: SettingsUsersRoute,
   SettingsIndexRoute: SettingsIndexRoute,
 }

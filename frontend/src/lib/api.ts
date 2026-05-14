@@ -22,6 +22,11 @@ function getToken(): string {
   return localStorage.getItem('nukelab-token') || '';
 }
 
+async function parseJson<T>(response: Response): Promise<T> {
+  const text = await response.text();
+  return text ? JSON.parse(text) : undefined as T;
+}
+
 async function handleAuthError(response: Response): Promise<never> {
   if (response.status === 401) {
     localStorage.removeItem('nukelab-token');
@@ -51,7 +56,7 @@ export const api = {
       },
     });
     if (!response.ok) await handleAuthError(response);
-    return response.json();
+    return parseJson<T>(response);
   },
 
   async post<T>(path: string, data: unknown): Promise<T> {
@@ -64,7 +69,7 @@ export const api = {
       body: JSON.stringify(data),
     });
     if (!response.ok) await handleAuthError(response);
-    return response.json();
+    return parseJson<T>(response);
   },
 
   async put<T>(path: string, data: unknown): Promise<T> {
@@ -77,7 +82,7 @@ export const api = {
       body: JSON.stringify(data),
     });
     if (!response.ok) await handleAuthError(response);
-    return response.json();
+    return parseJson<T>(response);
   },
 
   async delete<T>(path: string): Promise<T> {
@@ -89,7 +94,7 @@ export const api = {
       },
     });
     if (!response.ok) await handleAuthError(response);
-    return response.json();
+    return parseJson<T>(response);
   },
 
   async download(path: string, filename?: string): Promise<void> {
