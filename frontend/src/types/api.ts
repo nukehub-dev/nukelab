@@ -44,6 +44,7 @@ export interface User {
   role: string;
   permissions?: string[];
   nuke_balance: number;
+  daily_allowance?: number;
   is_active: boolean;
   is_verified: boolean;
   last_login?: string;
@@ -111,6 +112,45 @@ export interface ApiTokenUsage {
   created_at?: string;
   expires_at?: string;
   is_active: boolean;
+}
+
+export interface CreditTransaction {
+  id: string;
+  user_id: string;
+  amount: number;
+  balance_after: number;
+  type: 'admin_grant' | 'admin_deduct' | 'server_usage' | 'daily_allowance' | string;
+  description: string;
+  server_id?: string;
+  actor_id?: string;
+  metadata?: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface CreditSummary {
+  user_id: string;
+  current_balance: number;
+  today_consumed: number;
+  total_earned: number;
+  total_consumed: number;
+}
+
+export interface CreditHistoryResponse {
+  transactions: CreditTransaction[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    total_pages: number;
+  };
+}
+
+export interface LowBalanceUser {
+  id: string;
+  username: string;
+  nuke_balance: number;
+  daily_allowance: number;
+  email: string;
 }
 
 export interface ApiError {

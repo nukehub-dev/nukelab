@@ -35,7 +35,9 @@ class CreditService:
         from_date: Optional[datetime] = None,
         to_date: Optional[datetime] = None,
         page: int = 1,
-        limit: int = 50
+        limit: int = 50,
+        sort_by: str = "created_at",
+        sort_order: str = "desc"
     ) -> Dict[str, Any]:
         """Get user's credit transaction history"""
         
@@ -52,7 +54,12 @@ class CreditService:
         if to_date:
             query = query.where(CreditTransaction.created_at <= to_date)
         
-        query = query.order_by(CreditTransaction.created_at.desc())
+        # Dynamic sorting
+        sort_column = getattr(CreditTransaction, sort_by, CreditTransaction.created_at)
+        if sort_order == "desc":
+            query = query.order_by(sort_column.desc())
+        else:
+            query = query.order_by(sort_column.asc())
         
         # Get total count
         count_query = select(func.count()).select_from(query.subquery())
@@ -281,29 +288,54 @@ class CreditService:
     
     async def get_low_credit_users(
         self,
-        threshold: int = 100
-    ) -> List[Dict[str, Any]]:
+        threshold: int = 100,
+        page: int = 1,
+        limit: int = 50
+    ) -> Dict[str, Any]:
         """Get users with low credits"""
+        # Get total count
+        count_query = select(func.count()).select_from(
+            select(User).where(
+                and_(
+                    User.is_active == True,
+                    User.nuke_balance <= threshold
+                )
+            ).subquery()
+        )
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar()
+        
+        # Get paginated results
+        offset = (page - 1) * limit
         result = await self.db.execute(
             select(User).where(
                 and_(
                     User.is_active == True,
                     User.nuke_balance <= threshold
                 )
-            ).order_by(User.nuke_balance.asc())
+            ).order_by(User.nuke_balance.asc()).offset(offset).limit(limit)
         )
         users = result.scalars().all()
         
-        return [
-            {
-                "id": str(u.id),
-                "username": u.username,
-                "nuke_balance": u.nuke_balance,
-                "daily_allowance": u.daily_allowance,
-                "email": u.email,
+        return {
+            "count": total,
+            "users": [
+                {
+                    "id": str(u.id),
+                    "username": u.username,
+                    "nuke_balance": u.nuke_balance,
+                    "daily_allowance": u.daily_allowance,
+                    "email": u.email,
+                }
+                for u in users
+            ],
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total,
+                "total_pages": (total + limit - 1) // limit
             }
-            for u in users
-        ]
+        }
     
     async def get_credit_summary(self, user_id: str) -> Dict[str, Any]:
         """Get credit summary for a user"""

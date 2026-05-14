@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { Users, Shield, UserCheck, UserX, Mail, Calendar, Pencil, Trash2 } from 'lucide-react';
+import { Users, Shield, UserCheck, UserX, Mail, Calendar, Pencil, Trash2, CreditCard } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { ResourcePageLayout } from '../components/layout/resource-page-layout';
 import { DataTable } from '../components/data/data-table';
@@ -7,7 +7,7 @@ import { StatusBadge } from '../components/data/status-badge';
 import { useUsers, useUserActions } from '../hooks/use-users';
 import { useDataTable } from '../hooks/use-data-table';
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
-import { formatDate } from '../lib/utils';
+import { formatDate, cn } from '../lib/utils';
 import type { User as UserType } from '../types/api';
 import type { ColumnDef, ColumnFiltersState, VisibilityState, SortingState } from '@tanstack/react-table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '../components/ui/dialog';
@@ -17,6 +17,7 @@ import { Select, SelectItem } from '../components/ui/select';
 import { motion } from 'framer-motion';
 import { Tooltip } from '../components/ui/tooltip';
 import { useConfirmDialog } from '../components/ui/confirm-dialog';
+import { CreditAdjustDialog } from '../components/admin/credit-adjust-dialog';
 
 export const Route = createFileRoute('/admin/users')({
   component: UsersPage,
@@ -83,6 +84,8 @@ function UsersPage() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserType | null>(null);
+  const [adjustUser, setAdjustUser] = useState<UserType | null>(null);
+  const [adjustDialogOpen, setAdjustDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
     username: '',
     email: '',
@@ -90,7 +93,6 @@ function UsersPage() {
     role: 'user',
     first_name: '',
     last_name: '',
-    credits: 500,
   });
 
   const users = data?.data || [];
@@ -105,7 +107,6 @@ function UsersPage() {
       role: 'user',
       first_name: '',
       last_name: '',
-      credits: 500,
     });
     setDialogOpen(true);
   };
@@ -119,9 +120,13 @@ function UsersPage() {
       role: user.role,
       first_name: user.first_name || '',
       last_name: user.last_name || '',
-      credits: user.nuke_balance,
     });
     setDialogOpen(true);
+  };
+
+  const openAdjustDialog = (user: UserType) => {
+    setAdjustUser(user);
+    setAdjustDialogOpen(true);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -134,9 +139,7 @@ function UsersPage() {
         role: formData.role,
       };
       // Only send credits if user has permission to manage them
-      if (canManageCredits) {
-        updateData.nuke_balance = formData.credits;
-      }
+      // Credit management is now handled via dedicated credit API, not user update
       updateUser.mutate(
         {
           userId: editingUser.id,
@@ -155,7 +158,7 @@ function UsersPage() {
           role: formData.role,
           first_name: formData.first_name || undefined,
           last_name: formData.last_name || undefined,
-          credits: formData.credits,
+          credits: 500,
         },
         {
           onSuccess: () => setDialogOpen(false),
@@ -254,12 +257,15 @@ function UsersPage() {
     {
       accessorKey: 'nuke_balance',
       header: 'Credits',
-      cell: ({ row }) => (
-        <span className="font-mono text-sm"
-        >
-          {(row.getValue('nuke_balance') as number).toLocaleString()}
-        </span>
-      ),
+      cell: ({ row }) => {
+        const balance = row.getValue('nuke_balance') as number;
+        const isLow = balance <= 100;
+        return (
+          <span className={cn('font-mono text-sm', isLow && 'text-amber-400')}>
+            {balance.toLocaleString()}
+          </span>
+        );
+      },
     },
     {
       accessorKey: 'created_at',
@@ -293,6 +299,16 @@ function UsersPage() {
                 <Pencil className="w-4 h-4" />
               </motion.button>
             </Tooltip>
+            {canManageCredits && (
+              <Tooltip content="Adjust Credits">
+                <motion.button
+                  onClick={() => openAdjustDialog(user)}
+                  className="inline-flex p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-colors"
+                >
+                  <CreditCard className="w-4 h-4" />
+                </motion.button>
+              </Tooltip>
+            )}
             {canDeleteUsers && (
               <Tooltip content="Delete">
                 <motion.button
@@ -308,8 +324,6 @@ function UsersPage() {
                   }}
                   disabled={deleteUser.isPending}
                   className="inline-flex p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
-                  
-                  
                 >
                   <Trash2 className="w-4 h-4" />
                 </motion.button>
@@ -400,8 +414,7 @@ function UsersPage() {
         </span>
         <div className="flex items-center gap-3"
         >
-          <span className="text-muted-foreground"
-          >
+          <span className={cn('text-muted-foreground', user.nuke_balance <= 100 && 'text-amber-400')}>
             Credits: {user.nuke_balance.toLocaleString()}
           </span>
           {canManageUsers && (
@@ -491,6 +504,13 @@ function UsersPage() {
           enableRowSelection={canManageUsers}
         />
       </ResourcePageLayout>
+
+      {/* Credit Adjust Dialog */}
+      <CreditAdjustDialog
+        user={adjustUser}
+        open={adjustDialogOpen}
+        onOpenChange={setAdjustDialogOpen}
+      />
 
       {canManageUsers && (
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}
@@ -585,19 +605,7 @@ function UsersPage() {
                   {canDeleteUsers && <SelectItem value="super_admin">Super Admin</SelectItem>}
                 </Select>
               </div>
-              {canManageCredits && (
-                <div className="space-y-2"
-                >
-                  <label className="text-sm font-medium"
-                  >Credits</label>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={formData.credits}
-                    onChange={(e) => setFormData({ ...formData, credits: parseInt(e.target.value) || 0 })}
-                  />
-                </div>
-              )}
+
             </div>
           </form>
           <DialogFooter>

@@ -54,6 +54,8 @@ async def get_my_credit_history(
     to_date: Optional[datetime] = Query(None, description="To date"),
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=100),
+    sort_by: str = Query("created_at", description="Sort column"),
+    sort_order: str = Query("desc", description="Sort order: asc or desc"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -65,7 +67,9 @@ async def get_my_credit_history(
         from_date=from_date,
         to_date=to_date,
         page=page,
-        limit=limit
+        limit=limit,
+        sort_by=sort_by,
+        sort_order=sort_order
     )
     
     return result
@@ -98,6 +102,8 @@ async def get_user_credit_history(
     to_date: Optional[datetime] = Query(None),
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=100),
+    sort_by: str = Query("created_at"),
+    sort_order: str = Query("desc"),
     current_user: User = Depends(require_permissions(Permission.CREDITS_READ)),
     db: AsyncSession = Depends(get_db)
 ):
@@ -109,7 +115,9 @@ async def get_user_credit_history(
         from_date=from_date,
         to_date=to_date,
         page=page,
-        limit=limit
+        limit=limit,
+        sort_by=sort_by,
+        sort_order=sort_order
     )
     
     return result
@@ -162,15 +170,18 @@ async def deduct_credits_from_user(
 @router.get("/low-balance")
 async def get_low_balance_users(
     threshold: int = Query(100, ge=0, description="Credit threshold"),
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(50, ge=1, le=500, description="Items per page"),
     current_user: User = Depends(require_permissions(Permission.CREDITS_READ)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get users with low credit balance (Admin only)"""
     service = CreditService(db)
-    users = await service.get_low_credit_users(threshold)
+    result = await service.get_low_credit_users(threshold, page=page, limit=limit)
     
     return {
         "threshold": threshold,
-        "count": len(users),
-        "users": users
+        "count": result["count"],
+        "users": result["users"],
+        "pagination": result["pagination"]
     }
