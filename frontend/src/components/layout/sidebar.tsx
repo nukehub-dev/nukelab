@@ -126,7 +126,7 @@ export function Sidebar() {
           "fixed top-3 left-3 bottom-3 z-40 hidden lg:flex flex-col",
           "bg-sidebar/95 backdrop-blur-xl rounded-2xl",
           "border border-sidebar-border/50 shadow-2xl shadow-black/20",
-          "transition-[width] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] overflow-hidden"
+          "transition-[width] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
         )}
         style={{ width: isOpen ? 256 : 64 }}
         onMouseEnter={() => { if (isAuto) setOpen(true); }}
@@ -277,7 +277,9 @@ export function Sidebar() {
                     <Monitor className="w-4 h-4" />
                   </button>
                 </div>
-                <NotificationCenter />
+                <div className="p-0.5">
+                  <NotificationCenter />
+                </div>
               </div>
             </div>
 
@@ -295,10 +297,12 @@ export function Sidebar() {
           </div>
 
           <div 
-            className="flex flex-col items-center gap-2 transition-all duration-300"
+            className="flex flex-col items-center gap-2 transition-all duration-300 py-1"
             style={{ maxHeight: !isOpen ? 120 : 0, opacity: !isOpen ? 1 : 0, overflow: 'hidden' }}
           >
-            <NotificationCenter />
+            <div className="p-0.5">
+              <NotificationCenter />
+            </div>
             <Tooltip content={isDark ? 'Switch to light mode' : 'Switch to dark mode'} position="right">
               <button onClick={() => setDarkMode(!isDark)} className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors">
                 {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}

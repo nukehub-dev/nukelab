@@ -5,6 +5,7 @@ import { useSidebarStore } from '../../stores/sidebar-store';
 import { useCurrentUser } from '../../hooks/use-current-user';
 import { useGlobalShortcuts } from '../../hooks/use-keyboard-shortcuts';
 import { useFavicon } from '../../lib/favicon';
+import { useNotificationToasts } from '../notifications/notification-toast-provider';
 import { Sidebar } from './sidebar';
 import { ToastProvider } from '../feedback/toast';
 import { ShortcutsModal } from '../feedback/shortcuts-modal';
@@ -31,6 +32,9 @@ export function AppShell() {
   // Fetch current user when authenticated (skip on login page)
   const hasToken = !!localStorage.getItem('nukelab-token');
   useCurrentUser({ enabled: hasToken && !isLoginPage });
+
+  // Global notification toast watcher
+  useNotificationToasts();
 
   useEffect(() => {
     // Initialize theme on mount

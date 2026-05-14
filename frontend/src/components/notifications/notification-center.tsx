@@ -44,8 +44,8 @@ export function NotificationCenter() {
   const bellRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   
-  const { data: unreadCount = 0 } = useUnreadCount();
-  const { data: notificationsData } = useNotifications(false, 1, MAX_DROPDOWN_ITEMS);
+  const { data: unreadCount = 0, refetch: refetchUnread } = useUnreadCount();
+  const { data: notificationsData, refetch: refetchNotifications } = useNotifications(false, 1, MAX_DROPDOWN_ITEMS);
   const markAsRead = useMarkAsRead();
   const markAllAsRead = useMarkAllAsRead();
   const deleteNotification = useDeleteNotification();
@@ -53,42 +53,52 @@ export function NotificationCenter() {
   const notifications = notificationsData?.notifications || [];
   const totalCount = notificationsData?.total || 0;
 
+  const MAX_DROPDOWN_HEIGHT = 480;
+
   // Position dropdown when opened
   useEffect(() => {
     if (!isOpen || !bellRef.current || !dropdownRef.current) return;
 
-    const bell = bellRef.current;
-    const dropdown = dropdownRef.current;
-    const rect = bell.getBoundingClientRect();
-    const dropdownHeight = dropdown.offsetHeight || 480;
-    
-    // Position to the right of the bell button
-    const gap = 12;
-    const dropdownWidth = 360;
-    
-    let left = rect.right + gap;
-    // Align bottom of dropdown with bottom of bell button
-    let top = rect.bottom - dropdownHeight;
-    
-    // Check if would overflow right
-    if (left + dropdownWidth > window.innerWidth - gap) {
-      left = rect.left - dropdownWidth - gap;
-    }
-    
-    // If dropdown goes above viewport, align top instead
-    if (top < gap) {
-      top = rect.top;
-    }
-    
-    // Ensure not off-screen
-    left = Math.max(gap, left);
-    top = Math.max(gap, top);
-    
-    dropdown.style.position = 'fixed';
-    dropdown.style.top = `${top}px`;
-    dropdown.style.left = `${left}px`;
-    dropdown.style.zIndex = '9999';
-    dropdown.style.width = `${dropdownWidth}px`;
+    const positionDropdown = () => {
+      if (!bellRef.current || !dropdownRef.current) return;
+      const bell = bellRef.current;
+      const dropdown = dropdownRef.current;
+      const rect = bell.getBoundingClientRect();
+
+      const gap = 12;
+      const dropdownWidth = 360;
+
+      // Position to the right of the bell button
+      let left = rect.right + gap;
+      // Align bottom of dropdown with bottom of bell button (so it grows upward)
+      let top = rect.bottom - MAX_DROPDOWN_HEIGHT;
+
+      // If would overflow right, show on the left side instead
+      if (left + dropdownWidth > window.innerWidth - gap) {
+        left = rect.left - dropdownWidth - gap;
+      }
+
+      // If dropdown goes above viewport, position below the bell instead
+      if (top < gap) {
+        top = rect.bottom + gap;
+      }
+
+      // Ensure not off-screen
+      left = Math.max(gap, left);
+      top = Math.max(gap, top);
+
+      dropdown.style.position = 'fixed';
+      dropdown.style.top = `${top}px`;
+      dropdown.style.left = `${left}px`;
+      dropdown.style.zIndex = '9999';
+      dropdown.style.width = `${dropdownWidth}px`;
+      dropdown.style.maxHeight = `${MAX_DROPDOWN_HEIGHT}px`;
+    };
+
+    // Measure after content has rendered
+    positionDropdown();
+    const raf = requestAnimationFrame(positionDropdown);
+    return () => cancelAnimationFrame(raf);
   }, [isOpen]);
 
   // Close on escape
@@ -122,8 +132,16 @@ export function NotificationCenter() {
   }, [isOpen]);
 
   const toggleDropdown = useCallback(() => {
-    setIsOpen((prev) => !prev);
-  }, []);
+    setIsOpen((prev) => {
+      const next = !prev;
+      if (next) {
+        // Refetch when opening
+        refetchUnread();
+        refetchNotifications();
+      }
+      return next;
+    });
+  }, [refetchUnread, refetchNotifications]);
 
   const handleClose = useCallback(() => {
     setIsOpen(false);
@@ -182,7 +200,6 @@ export function NotificationCenter() {
               zIndex: 9999,
               width: '360px',
               maxWidth: 'calc(100vw - 2rem)',
-              maxHeight: 'calc(100vh - 2rem)',
             }}
           >
             {/* Header */}

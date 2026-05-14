@@ -14,6 +14,7 @@ from app.dependencies import PermissionChecker, require_permissions
 from app.db.session import get_db
 from app.models.user import User
 from app.services.credit_service import CreditService
+from app.services.notification_service import NotificationService
 
 router = APIRouter()
 
@@ -138,7 +139,16 @@ async def grant_credits_to_user(
         actor_id=str(current_user.id),
         reason=request.reason
     )
-    
+
+    # Notify the user
+    notif_service = NotificationService(db)
+    await notif_service.credits_granted(
+        user_id=user_id,
+        amount=request.amount,
+        new_balance=transaction.balance_after,
+        reason=request.reason
+    )
+
     return {
         "message": f"Granted {request.amount} credits",
         "transaction": transaction.to_dict()
@@ -160,7 +170,16 @@ async def deduct_credits_from_user(
         actor_id=str(current_user.id),
         reason=request.reason
     )
-    
+
+    # Notify the user
+    notif_service = NotificationService(db)
+    await notif_service.credits_deducted(
+        user_id=user_id,
+        amount=request.amount,
+        new_balance=transaction.balance_after,
+        reason=request.reason
+    )
+
     return {
         "message": f"Deducted {request.amount} credits",
         "transaction": transaction.to_dict()

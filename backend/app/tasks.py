@@ -173,8 +173,8 @@ def process_nuke_billing(self):
                                 user_id=server.user_id,
                                 title="Server Stopped",
                                 message=f"Server '{server.name}' was stopped due to insufficient NUKE credits.",
-                                type="warning",
-                                category="server"
+                                type="server",
+                                severity="warning"
                             )
                             db.add(notification)
                             stopped_count += 1
@@ -203,8 +203,8 @@ def process_nuke_billing(self):
                             user_id=server.user_id,
                             title="Low NUKE Credits",
                             message=f"Server '{server.name}' is running low on credits. Balance: {new_balance} NUKE.",
-                            type="warning",
-                            category="credits"
+                            type="credit",
+                            severity="warning"
                         )
                         db.add(notification)
                 
@@ -272,8 +272,8 @@ def enforce_auto_stop(self):
                                     user_id=server.user_id,
                                     title="Server Idle Warning",
                                     message=f"Server '{server.name}' will stop soon due to inactivity. Last activity: {int(idle_duration/60)} minutes ago.",
-                                    type="warning",
-                                    category="server"
+                                    type="server",
+                                    severity="warning"
                                 )
                                 db.add(warning)
                                 warned_count += 1
@@ -305,8 +305,8 @@ def enforce_auto_stop(self):
                             user_id=server.user_id,
                             title="Server Stopped",
                             message=reason_messages.get(stop_reason, f"Server '{server.name}' was stopped automatically."),
-                            type="info",
-                            category="server"
+                            type="server",
+                            severity="info"
                         )
                         db.add(notification)
                         stopped_count += 1
@@ -365,8 +365,8 @@ def process_server_queue(self):
                     user_id=entry.user_id,
                     title="Queue Timeout",
                     message=f"Server '{entry.server_name}' was removed from the queue due to timeout.",
-                    type="warning",
-                    category="server"
+                    type="server",
+                    severity="warning"
                 )
                 db.add(notification)
                 timeout_count += 1
@@ -479,8 +479,8 @@ def process_server_queue(self):
                         user_id=next_entry.user_id,
                         title="Server Started",
                         message=f"Your queued server '{next_entry.server_name}' has been started.",
-                        type="success",
-                        category="server"
+                        type="server",
+                        severity="success"
                     )
                     db.add(notification)
                     started_count += 1
@@ -495,8 +495,8 @@ def process_server_queue(self):
                         user_id=next_entry.user_id,
                         title="Server Start Failed",
                         message=f"Failed to start queued server '{next_entry.server_name}': {str(e)}",
-                        type="error",
-                        category="server"
+                        type="server",
+                        severity="error"
                     )
                     db.add(notification)
             

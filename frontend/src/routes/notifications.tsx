@@ -11,6 +11,7 @@ import {
 } from '../hooks/use-notifications';
 import { cn } from '../lib/utils';
 import { springs } from '../lib/animations';
+import { Tooltip } from '../components/ui/tooltip';
 
 const severityIcons = {
   info: Info,
@@ -200,21 +201,23 @@ function NotificationsPage() {
                         {/* Actions */}
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           {!notification.read && (
-                            <button
-                              onClick={() => markAsRead.mutate(notification.id)}
-                              className="p-1.5 rounded-lg hover:bg-accent transition-colors"
-                              title="Mark as read"
-                            >
-                              <Check className="w-3.5 h-3.5 text-muted-foreground" />
-                            </button>
+                            <Tooltip content="Mark as read">
+                              <button
+                                onClick={() => markAsRead.mutate(notification.id)}
+                                className="p-1.5 rounded-lg hover:bg-accent transition-colors"
+                              >
+                                <Check className="w-3.5 h-3.5 text-muted-foreground" />
+                              </button>
+                            </Tooltip>
                           )}
-                          <button
-                            onClick={() => deleteNotification.mutate(notification.id)}
-                            className="p-1.5 rounded-lg hover:bg-destructive/10 transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
-                          </button>
+                          <Tooltip content="Delete">
+                            <button
+                              onClick={() => deleteNotification.mutate(notification.id)}
+                              className="p-1.5 rounded-lg hover:bg-destructive/10 transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
+                            </button>
+                          </Tooltip>
                         </div>
                       </div>
                     </div>

@@ -249,8 +249,8 @@ class ScheduleService:
                     user_id=server.user_id,
                     title="Schedule Executed",
                     message=message,
-                    type="info",
-                    category="server"
+                    type="server",
+                    severity="info"
                 )
                 self.db.add(notification)
             

@@ -37,6 +37,6 @@ class Notification(Base):
             "read": self.read,
             "read_at": self.read_at.isoformat() if self.read_at else None,
             "action_url": self.action_url,
-            "metadata": self.metadata or {},
+            "extra_data": self.extra_data or {},
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

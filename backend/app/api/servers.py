@@ -19,6 +19,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.models.server import Server
 from app.docker.spawner import spawner
+from app.services.notification_service import NotificationService
 
 router = APIRouter()
 
@@ -568,6 +569,14 @@ async def start_server(
                 volume_service = VolumeService(db)
                 await volume_service.increment_server_count(str(server.volume_id))
             
+            # Create notification for server owner
+            notif_service = NotificationService(db)
+            await notif_service.server_started(
+                user_id=server.user_id,
+                server_name=server.name,
+                action_url=f"/servers/{server_id}"
+            )
+
             await db.commit()
             return {"message": "Server started", "server_id": server_id, "status": "running"}
         except Exception as e:
@@ -630,7 +639,15 @@ async def start_server(
             server.allocated_cpu = new_server.allocated_cpu
             server.allocated_memory = new_server.allocated_memory
             await db.commit()
-            
+
+            # Create notification for server owner
+            notif_service = NotificationService(db)
+            await notif_service.server_started(
+                user_id=server.user_id,
+                server_name=server.name,
+                action_url=f"/servers/{server_id}"
+            )
+
             return {"message": "Server started", "server_id": server_id, "status": "running"}
         except Exception as e:
             import traceback
@@ -700,6 +717,15 @@ async def stop_server(
                 await volume_service.decrement_server_count(str(server.volume_id))
             
             await db.commit()
+
+            # Create notification for server owner
+            notif_service = NotificationService(db)
+            await notif_service.server_stopped(
+                user_id=server.user_id,
+                server_name=server.name,
+                action_url=f"/servers/{server_id}"
+            )
+
             return {"message": "Server stopped", "server_id": server_id, "status": "stopped"}
         except Exception as e:
             raise HTTPException(
@@ -709,6 +735,15 @@ async def stop_server(
 
     server.status = "stopped"
     await db.commit()
+
+    # Create notification for server owner
+    notif_service = NotificationService(db)
+    await notif_service.server_stopped(
+        user_id=server.user_id,
+        server_name=server.name,
+        action_url=f"/servers/{server_id}"
+    )
+
     return {"message": "Server stopped", "server_id": server_id, "status": "stopped"}
 
 
@@ -789,6 +824,15 @@ async def restart_server(
                 server.started_at = datetime.utcnow()
                 server.external_url = new_server.external_url
                 await db.commit()
+
+                # Create notification for server owner
+                notif_service = NotificationService(db)
+                await notif_service.server_restarted(
+                    user_id=server.user_id,
+                    server_name=server.name,
+                    action_url=f"/servers/{server_id}"
+                )
+
                 return {"message": "Server container recreated and started", "server_id": server_id, "status": "running"}
             
             await spawner.stop(server.container_id)
@@ -796,6 +840,15 @@ async def restart_server(
             server.status = "running"
             server.started_at = datetime.utcnow()
             await db.commit()
+
+            # Create notification for server owner
+            notif_service = NotificationService(db)
+            await notif_service.server_restarted(
+                user_id=server.user_id,
+                server_name=server.name,
+                action_url=f"/servers/{server_id}"
+            )
+
             return {"message": "Server restarted", "server_id": server_id, "status": "running"}
         except Exception as e:
             raise HTTPException(
@@ -847,7 +900,14 @@ async def delete_server(
     
     await db.delete(server)
     await db.commit()
-    
+
+    # Create notification for server owner
+    notif_service = NotificationService(db)
+    await notif_service.server_deleted(
+        user_id=server.user_id,
+        server_name=server.name
+    )
+
     return {"message": "Server deleted", "server_id": server_id}
 
 

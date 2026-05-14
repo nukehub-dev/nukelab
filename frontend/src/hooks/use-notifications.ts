@@ -31,6 +31,8 @@ export function useNotifications(unreadOnly = false, page = 1, pageSize = 20) {
       );
       return response;
     },
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
   });
 }
 
@@ -42,6 +44,8 @@ export function useUnreadCount() {
       return response.unread_count;
     },
     refetchInterval: 30000, // Refetch every 30 seconds
+    refetchOnWindowFocus: true,
+    refetchOnMount: true,
   });
 }
 

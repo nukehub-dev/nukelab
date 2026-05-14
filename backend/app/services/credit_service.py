@@ -12,6 +12,7 @@ from fastapi import HTTPException, status
 
 from app.models.user import User
 from app.models.credit_transaction import CreditTransaction
+from app.services.notification_service import NotificationService
 
 
 class CreditService:
@@ -162,12 +163,22 @@ class CreditService:
                 detail="Daily allowance already granted today"
             )
         
-        return await self._create_transaction(
+        transaction = await self._create_transaction(
             user_id=user_id,
             amount=user.daily_allowance,
             transaction_type="daily_allowance",
             description=f"Daily allowance: {user.daily_allowance} credits"
         )
+
+        # Notify user
+        notif_service = NotificationService(self.db)
+        await notif_service.daily_allowance(
+            user_id=user_id,
+            amount=user.daily_allowance,
+            new_balance=transaction.balance_after
+        )
+
+        return transaction
     
     async def consume_credits(
         self,
