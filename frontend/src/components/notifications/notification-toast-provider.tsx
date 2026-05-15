@@ -1,65 +1,100 @@
 import { useEffect, useRef } from 'react';
-import { useUnreadCount, useNotifications } from '../../hooks/use-notifications';
+import { useQueryClient } from '@tanstack/react-query';
+import { useUnreadCount } from '../../hooks/use-notifications';
 import { useToast } from '../../stores/toast-store';
-import { Server, CreditCard, AlertTriangle, Info, CheckCircle } from 'lucide-react';
+import { api } from '../../lib/api';
+import type { Notification, NotificationListResponse } from '../../hooks/use-notifications';
 
-const typeIcons: Record<string, typeof Info> = {
-  server: Server,
-  credit: CreditCard,
-  system: Info,
-};
+const STORAGE_KEY = 'nukelab-last-notification-toast';
 
-const severityToToastType = {
-  info: 'info' as const,
-  success: 'success' as const,
-  warning: 'warning' as const,
-  error: 'error' as const,
-};
+/** Backend returns naive UTC datetimes (no Z suffix). Treat them as UTC. */
+function parseUtcDate(iso: string): Date {
+  const normalized = iso.endsWith('Z') ? iso : iso + 'Z';
+  return new Date(normalized);
+}
+
+function getLastToastTime(): string {
+  const stored = localStorage.getItem(STORAGE_KEY);
+  if (stored) return stored;
+  const now = new Date().toISOString();
+  localStorage.setItem(STORAGE_KEY, now);
+  return now;
+}
+
+function setLastToastTime(time: string) {
+  localStorage.setItem(STORAGE_KEY, time);
+}
 
 /**
- * Global provider that watches for new notifications and displays them as toasts.
- * Place this inside AppShell (already mounted via a hook approach).
+ * Watches unread count and shows toasts for new notifications.
+ * Uses React Query fetchQuery for fresh data and localStorage timestamp
+ * to avoid replaying old notifications across tabs.
  */
 export function useNotificationToasts() {
+  const queryClient = useQueryClient();
   const { data: unreadCount = 0 } = useUnreadCount();
   const prevCountRef = useRef(0);
-  const shownIdsRef = useRef<Set<string>>(new Set());
+  const lastToastTimeRef = useRef<string>(getLastToastTime());
+  const busyRef = useRef(false);
   const { info, success, warning, error } = useToast();
-
-  // Fetch unread notifications when count changes
-  const { data: notificationsData } = useNotifications(true, 1, 10);
-  const notifications = notificationsData?.notifications || [];
 
   useEffect(() => {
     const prevCount = prevCountRef.current;
     prevCountRef.current = unreadCount;
 
     if (unreadCount <= prevCount) return;
-    if (!notifications.length) return;
+    if (busyRef.current) return;
 
-    // Show toasts for notifications we haven't shown yet
-    const newNotifications = notifications.filter((n) => !shownIdsRef.current.has(n.id));
+    const checkAndToast = async () => {
+      busyRef.current = true;
+      try {
+        const data = await queryClient.fetchQuery<NotificationListResponse>({
+          queryKey: ['notifications', 'unread', 1, 10],
+          queryFn: async () => {
+            return api.get<NotificationListResponse>(
+              '/notifications/?unread_only=true&page=1&page_size=10'
+            );
+          },
+          staleTime: 0,
+        });
 
-    for (const notification of newNotifications.slice(0, 3)) {
-      shownIdsRef.current.add(notification.id);
+        const notifications = data.notifications || [];
+        const lastToastTime = lastToastTimeRef.current;
+        const lastToastDate = parseUtcDate(lastToastTime);
 
-      const toastFn =
-        notification.severity === 'success'
-          ? success
-          : notification.severity === 'warning'
-            ? warning
-            : notification.severity === 'error'
-              ? error
-              : info;
+        const newNotifications = notifications.filter(
+          (n: Notification) => parseUtcDate(n.created_at) > lastToastDate
+        );
 
-      toastFn(notification.title, notification.message);
-    }
-  }, [unreadCount, notifications, info, success, warning, error]);
+        if (!newNotifications.length) return;
 
-  // Reset shown IDs when count drops to 0 (all read)
-  useEffect(() => {
-    if (unreadCount === 0) {
-      shownIdsRef.current.clear();
-    }
-  }, [unreadCount]);
+        const toShow = newNotifications.slice(0, 3);
+        let newestTime = lastToastTime;
+
+        for (const notification of toShow) {
+          const toastFn =
+            notification.severity === 'success'
+              ? success
+              : notification.severity === 'warning'
+                ? warning
+                : notification.severity === 'error'
+                  ? error
+                  : info;
+
+          toastFn(notification.title, notification.message);
+
+          if (notification.created_at > newestTime) {
+            newestTime = notification.created_at;
+          }
+        }
+
+        lastToastTimeRef.current = newestTime;
+        setLastToastTime(newestTime);
+      } finally {
+        busyRef.current = false;
+      }
+    };
+
+    checkAndToast();
+  }, [unreadCount, queryClient, info, success, warning, error]);
 }
