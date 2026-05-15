@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
+import { isAuthenticated } from './use-auth';
 
 export interface Notification {
   id: string;
@@ -22,7 +23,7 @@ export interface NotificationListResponse {
   page_size: number;
 }
 
-export function useNotifications(unreadOnly = false, page = 1, pageSize = 20) {
+export function useNotifications(unreadOnly = false, page = 1, pageSize = 20, enabled = true) {
   return useQuery({
     queryKey: ['notifications', unreadOnly, page, pageSize],
     queryFn: async () => {
@@ -31,19 +32,21 @@ export function useNotifications(unreadOnly = false, page = 1, pageSize = 20) {
       );
       return response;
     },
+    enabled: enabled && isAuthenticated(),
     refetchOnWindowFocus: true,
     refetchOnMount: true,
   });
 }
 
-export function useUnreadCount() {
+export function useUnreadCount(enabled = true) {
   return useQuery({
     queryKey: ['notifications', 'unread-count'],
     queryFn: async () => {
       const response = await api.get<{ unread_count: number }>('/notifications/unread-count');
       return response.unread_count;
     },
-    refetchInterval: 30000, // Refetch every 30 seconds
+    enabled: enabled && isAuthenticated(),
+    refetchInterval: 5 * 60 * 1000, // Fallback poll every 5 min if WebSocket is down
     refetchOnWindowFocus: true,
     refetchOnMount: true,
   });

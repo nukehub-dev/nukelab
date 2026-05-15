@@ -1,9 +1,10 @@
 import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useUnreadCount } from '../../hooks/use-notifications';
+import { useWebSocket } from '../../hooks/use-websocket';
+import { useAuthStore } from '../../stores/auth-store';
 import { useToast } from '../../stores/toast-store';
-import { api } from '../../lib/api';
-import type { Notification, NotificationListResponse } from '../../hooks/use-notifications';
+import { isAuthenticated } from '../../hooks/use-auth';
+import type { Notification } from '../../hooks/use-notifications';
 
 const STORAGE_KEY = 'nukelab-last-notification-toast';
 
@@ -26,75 +27,65 @@ function setLastToastTime(time: string) {
 }
 
 /**
- * Watches unread count and shows toasts for new notifications.
- * Uses React Query fetchQuery for fresh data and localStorage timestamp
- * to avoid replaying old notifications across tabs.
+ * Listens for real-time notifications via WebSocket and shows toasts.
+ * Falls back to HTTP polling via the unread-count hook if WebSocket is down.
+ * Uses localStorage timestamp to avoid replaying old notifications across tabs.
  */
 export function useNotificationToasts() {
   const queryClient = useQueryClient();
-  const { data: unreadCount = 0 } = useUnreadCount();
-  const prevCountRef = useRef(0);
+  const user = useAuthStore((state) => state.user);
   const lastToastTimeRef = useRef<string>(getLastToastTime());
-  const busyRef = useRef(false);
   const { info, success, warning, error } = useToast();
 
+  // Only connect when both user object and JWT token are present
+  const canConnect = !!(user && isAuthenticated());
+  const { isConnected, subscribe, unsubscribe, onMessage } = useWebSocket({
+    autoConnect: canConnect,
+  });
+
+  // Subscribe to user-specific room when connected
   useEffect(() => {
-    const prevCount = prevCountRef.current;
-    prevCountRef.current = unreadCount;
-
-    if (unreadCount <= prevCount) return;
-    if (busyRef.current) return;
-
-    const checkAndToast = async () => {
-      busyRef.current = true;
-      try {
-        const data = await queryClient.fetchQuery<NotificationListResponse>({
-          queryKey: ['notifications', 'unread', 1, 10],
-          queryFn: async () => {
-            return api.get<NotificationListResponse>(
-              '/notifications/?unread_only=true&page=1&page_size=10'
-            );
-          },
-          staleTime: 0,
-        });
-
-        const notifications = data.notifications || [];
-        const lastToastTime = lastToastTimeRef.current;
-        const lastToastDate = parseUtcDate(lastToastTime);
-
-        const newNotifications = notifications.filter(
-          (n: Notification) => parseUtcDate(n.created_at) > lastToastDate
-        );
-
-        if (!newNotifications.length) return;
-
-        const toShow = newNotifications.slice(0, 3);
-        let newestTime = lastToastTime;
-
-        for (const notification of toShow) {
-          const toastFn =
-            notification.severity === 'success'
-              ? success
-              : notification.severity === 'warning'
-                ? warning
-                : notification.severity === 'error'
-                  ? error
-                  : info;
-
-          toastFn(notification.title, notification.message);
-
-          if (notification.created_at > newestTime) {
-            newestTime = notification.created_at;
-          }
-        }
-
-        lastToastTimeRef.current = newestTime;
-        setLastToastTime(newestTime);
-      } finally {
-        busyRef.current = false;
-      }
+    if (!isConnected || !user) return;
+    subscribe('user', user.id);
+    return () => {
+      unsubscribe('user', user.id);
     };
+  }, [isConnected, user, subscribe, unsubscribe]);
 
-    checkAndToast();
-  }, [unreadCount, queryClient, info, success, warning, error]);
+  // Handle incoming notification events
+  useEffect(() => {
+    const cleanup = onMessage((message) => {
+      if (message.event !== 'notification:new') return;
+
+      const notification = message.data as Notification;
+      if (!notification?.created_at) return;
+
+      // Deduplicate against last toast time (cross-tab safety)
+      const lastToastTime = lastToastTimeRef.current;
+      if (parseUtcDate(notification.created_at) <= parseUtcDate(lastToastTime)) {
+        return;
+      }
+
+      // Show toast based on severity
+      const toastFn =
+        notification.severity === 'success'
+          ? success
+          : notification.severity === 'warning'
+            ? warning
+            : notification.severity === 'error'
+              ? error
+              : info;
+
+      toastFn(notification.title, notification.message);
+
+      // Update last toast time
+      lastToastTimeRef.current = notification.created_at;
+      setLastToastTime(notification.created_at);
+
+      // Invalidate notification queries so NotificationCenter updates instantly
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    });
+
+    return cleanup;
+  }, [onMessage, queryClient, info, success, warning, error]);
 }

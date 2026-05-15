@@ -3,9 +3,13 @@ Notification service for creating user notifications.
 Centralizes notification creation to ensure consistency across the app.
 """
 
+import json
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from app.models.notification import Notification
+from app.models.user import User
+from app.config import settings
 
 
 class NotificationService:
@@ -14,6 +18,75 @@ class NotificationService:
     def __init__(self, db: AsyncSession):
         self.db = db
     
+    async def _send_email_for_notification(
+        self,
+        user_id,
+        title: str,
+        message: str,
+        type: str = "system"
+    ):
+        """Send an email notification to the user. Silently logs errors."""
+        import logging
+        logger = logging.getLogger(__name__)
+        try:
+            from app.services.email_service import EmailService
+            email_service = EmailService()
+            if not email_service.enabled:
+                return
+            
+            # Fetch user email
+            result = await self.db.execute(select(User).where(User.id == user_id))
+            user = result.scalar_one_or_none()
+            if not user or not user.email:
+                return
+            
+            # Build simple HTML email body
+            html_body = f"""
+            <html>
+            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+                <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+                    <h2 style="color: #4F46E5;">{title}</h2>
+                    <p>{message}</p>
+                    <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+                    <p style="font-size: 12px; color: #666;">
+                        This is an automated notification from NukeLab.<br>
+                        You can manage your notification preferences in your account settings.
+                    </p>
+                </div>
+            </body>
+            </html>
+            """
+            
+            result = await email_service.send_email(
+                to_email=user.email,
+                subject=f"[NukeLab] {title}",
+                html_body=html_body,
+                text_body=message
+            )
+            if result["success"]:
+                logger.info(f"Email sent to {user.email}: {title}")
+            else:
+                logger.warning(f"Email failed for {user.email}: {result.get('error')}")
+        except Exception as e:
+            logger.warning(f"Failed to send email notification: {e}")
+    
+    async def _publish_to_websocket(self, user_id, notification: Notification):
+        """Push notification to WebSocket subscribers via Redis pub/sub."""
+        try:
+            import redis.asyncio as redis_client
+            r = redis_client.from_url(settings.redis_url)
+            await r.publish(
+                f"user:{user_id}",
+                json.dumps({
+                    "event": "notification:new",
+                    "user_id": str(user_id),
+                    "data": notification.to_dict()
+                })
+            )
+            await r.close()
+        except Exception:
+            pass
+
     async def create(
         self,
         user_id,
@@ -22,9 +95,13 @@ class NotificationService:
         type: str = "system",
         severity: str = "info",
         action_url: Optional[str] = None,
-        extra_data: Optional[dict] = None
+        extra_data: Optional[dict] = None,
+        send_email: bool = False
     ) -> Notification:
         """Create a notification for a user."""
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Creating notification for user={user_id}: {title}")
         notification = Notification(
             user_id=user_id,
             title=title,
@@ -37,6 +114,14 @@ class NotificationService:
         self.db.add(notification)
         await self.db.commit()
         await self.db.refresh(notification)
+        logger.info(f"Notification created: id={notification.id}")
+
+        # Push to WebSocket subscribers for instant delivery
+        await self._publish_to_websocket(user_id, notification)
+
+        if send_email:
+            await self._send_email_for_notification(user_id, title, message, type)
+
         return notification
     
     async def server_started(self, user_id, server_name: str, action_url: Optional[str] = None) -> Notification:
@@ -47,7 +132,8 @@ class NotificationService:
             message=f"Your server '{server_name}' is now running.",
             type="server",
             severity="success",
-            action_url=action_url
+            action_url=action_url,
+            send_email=True
         )
     
     async def server_stopped(self, user_id, server_name: str, reason: Optional[str] = None, action_url: Optional[str] = None) -> Notification:
@@ -61,7 +147,8 @@ class NotificationService:
             message=msg,
             type="server",
             severity="info",
-            action_url=action_url
+            action_url=action_url,
+            send_email=True
         )
     
     async def server_restarted(self, user_id, server_name: str, action_url: Optional[str] = None) -> Notification:
@@ -72,7 +159,8 @@ class NotificationService:
             message=f"Your server '{server_name}' has been restarted.",
             type="server",
             severity="info",
-            action_url=action_url
+            action_url=action_url,
+            send_email=True
         )
     
     async def server_deleted(self, user_id, server_name: str) -> Notification:
@@ -82,7 +170,8 @@ class NotificationService:
             title="Server Deleted",
             message=f"Your server '{server_name}' has been permanently deleted.",
             type="server",
-            severity="warning"
+            severity="warning",
+            send_email=True
         )
     
     async def credits_granted(self, user_id, amount: int, new_balance: int, reason: Optional[str] = None) -> Notification:

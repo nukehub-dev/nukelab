@@ -86,24 +86,25 @@ async def stream_logs_to_websocket(websocket: WebSocket, server_id: str, contain
             log_streams.pop(task_key, None)
 
 
-async def validate_websocket_token(websocket: WebSocket) -> Optional[User]:
-    """Validate JWT token from WebSocket query parameters"""
-    token = websocket.query_params.get('token')
-    
+async def validate_token(token: str) -> Optional[User]:
+    """Validate a JWT token string and return the user."""
     if not token:
         return None
-    
     try:
         payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
         username: str = payload.get("sub")
         if not username:
             return None
-        
         async with AsyncSessionLocal() as db:
             result = await db.execute(select(User).where(User.username == username))
             return result.scalar_one_or_none()
     except (JWTError, Exception):
         return None
+
+
+async def validate_websocket_token(websocket: WebSocket) -> Optional[User]:
+    """Validate JWT token from WebSocket query parameters"""
+    return await validate_token(websocket.query_params.get('token') or '')
 
 
 def has_permission(user: User, permission: str) -> bool:
@@ -152,7 +153,7 @@ class MetricsWebSocketManager:
             pubsub = redis_client.pubsub()
             # Subscribe to specific channels and pattern for all metrics
             await pubsub.subscribe("metrics:all", "metrics:system")
-            await pubsub.psubscribe("metrics:server:*")
+            await pubsub.psubscribe("metrics:server:*", "user:*")
 
             async for message in pubsub.listen():
                 if not self._running:
@@ -161,7 +162,10 @@ class MetricsWebSocketManager:
                     try:
                         data = json.loads(message['data'])
                         channel = message.get('channel', '').decode() if isinstance(message.get('channel'), bytes) else message.get('channel', '')
-                        if channel == 'metrics:system' or 'metrics:system' in str(channel):
+                        channel_str = str(channel)
+                        if channel_str.startswith('user:'):
+                            await self._broadcast_user_event(data)
+                        elif channel == 'metrics:system' or 'metrics:system' in channel_str:
                             await self._broadcast_system_metric(data)
                         else:
                             await self._broadcast_metric(data)
@@ -204,12 +208,34 @@ class MetricsWebSocketManager:
                 except Exception:
                     disconnected.append(("global", ws))
 
-        # Clean up disconnected clients
+        self._cleanup_disconnected(disconnected)
+
+    def _cleanup_disconnected(self, disconnected: list):
+        """Remove disconnected clients from rooms."""
         for room, ws in disconnected:
             if room in connections:
                 connections[room].discard(ws)
                 if not connections[room]:
                     connections.pop(room, None)
+
+    async def _broadcast_user_event(self, payload: dict):
+        """Broadcast user-specific events (e.g. notifications) to their room."""
+        user_id = payload.get('user_id')
+        if not user_id:
+            return
+        room = f"user:{user_id}"
+        if room not in connections:
+            return
+        disconnected = []
+        for ws in connections[room]:
+            try:
+                await ws.send_json({
+                    "event": payload.get('event', 'user:event'),
+                    "data": payload.get('data', {})
+                })
+            except Exception:
+                disconnected.append((room, ws))
+        self._cleanup_disconnected(disconnected)
 
     async def _broadcast_system_metric(self, metric: dict):
         """Broadcast system metric to global subscribers only"""
@@ -226,30 +252,43 @@ class MetricsWebSocketManager:
                 except Exception:
                     disconnected.append(("global", ws))
         
-        # Clean up disconnected clients
-        for room, ws in disconnected:
-            if room in connections:
-                connections[room].discard(ws)
-                if not connections[room]:
-                    connections.pop(room, None)
+        self._cleanup_disconnected(disconnected)
+
+    async def _authenticate(self, websocket: WebSocket) -> Optional[User]:
+        """Authenticate a WebSocket connection.
+        
+        First tries query parameter (backward compat), then waits for
+        an 'auth' message post-connection. Returns None if auth fails.
+        """
+        # Phase 1: Try query param (legacy clients)
+        user = await validate_websocket_token(websocket)
+        if user:
+            return user
+
+        # Phase 2: Wait for auth message (modern clients — token not in URL)
+        try:
+            message = await asyncio.wait_for(websocket.receive_text(), timeout=5.0)
+            data = json.loads(message)
+            if data.get('type') == 'auth':
+                return await validate_token(data.get('token') or '')
+        except asyncio.TimeoutError:
+            pass
+        except Exception:
+            pass
+        return None
 
     async def handle_connection(self, websocket: WebSocket):
         """Handle a new WebSocket connection with authentication"""
-        
-        # Authenticate the connection
-        user = await validate_websocket_token(websocket)
-        
+        await websocket.accept()
+
+        user = await self._authenticate(websocket)
         if not user:
-            await websocket.accept()
-            await websocket.send_json({
-                "event": "error",
-                "message": "Authentication required"
-            })
+            await websocket.send_json({"event": "auth:error", "message": "Authentication required"})
             await websocket.close(code=4001, reason="Authentication required")
             return
-        
-        await websocket.accept()
-        
+
+        await websocket.send_json({"event": "auth:success"})
+
         # Store user data for this connection
         connection_users[websocket] = {
             'user_id': str(user.id),

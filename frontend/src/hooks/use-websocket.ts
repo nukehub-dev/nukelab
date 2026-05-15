@@ -23,7 +23,6 @@ function getToken(): string {
 
 function getDefaultWebSocketUrl(): string {
   const apiUrl = import.meta.env.VITE_API_URL as string | undefined;
-  const token = getToken();
 
   if (apiUrl) {
     // VITE_API_URL is set (e.g. http://localhost:8000/api)
@@ -33,8 +32,7 @@ function getDefaultWebSocketUrl(): string {
     const rest = httpUrl.replace(/^https?:/, '');
     // Keep the /api prefix since the WS endpoint is at /api/ws
     const hostPart = rest.replace(/\/api$/, '');
-    const baseUrl = `${wsProtocol}${hostPart}/api/ws`;
-    return token ? `${baseUrl}?token=${encodeURIComponent(token)}` : baseUrl;
+    return `${wsProtocol}${hostPart}/api/ws`;
   }
 
   // Development fallback: when running via Vite dev server (port 5173),
@@ -42,13 +40,12 @@ function getDefaultWebSocketUrl(): string {
   const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
   const host = isLocalhost ? 'localhost:8080' : window.location.host;
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const baseUrl = `${protocol}//${host}/api/ws`;
-  return token ? `${baseUrl}?token=${encodeURIComponent(token)}` : baseUrl;
+  return `${protocol}//${host}/api/ws`;
 }
 
 export function useWebSocket(options: UseWebSocketOptions = {}) {
   const {
-    url = getDefaultWebSocketUrl(),
+    url: explicitUrl,
     autoConnect = true,
     reconnectInterval = 3000,
     maxReconnectAttempts = 5,
@@ -69,28 +66,45 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
     if (isConnectingRef.current) return;
 
+    // Build URL fresh each time so token changes are picked up on reconnect
+    const url = explicitUrl || getDefaultWebSocketUrl();
+
     isConnectingRef.current = true;
     setIsConnecting(true);
     setError(null);
 
     try {
-      console.log('[WS] Connecting to:', url);
       const ws = new WebSocket(url);
       wsRef.current = ws;
 
       ws.onopen = () => {
-        console.log('[WS] Connected');
-        isConnectingRef.current = false;
-        setIsConnected(true);
-        setIsConnecting(false);
-        setError(null);
-        reconnectAttemptsRef.current = 0;
+        // Send auth message immediately — token never goes in the URL
+        const token = getToken();
+        if (token) {
+          ws.send(JSON.stringify({ type: 'auth', token }));
+        }
       };
 
       ws.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data) as WebSocketMessage;
-          console.log('[WS] Received:', message.event);
+
+          // Handle auth handshake before dispatching to consumers
+          if (message.event === 'auth:success') {
+            isConnectingRef.current = false;
+            setIsConnected(true);
+            setIsConnecting(false);
+            setError(null);
+            reconnectAttemptsRef.current = 0;
+            return;
+          }
+          if (message.event === 'auth:error') {
+            setError('Authentication failed');
+            setIsConnecting(false);
+            ws.close();
+            return;
+          }
+
           handlersRef.current.forEach((handler) => {
             try {
               handler(message);
@@ -103,23 +117,26 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
         }
       };
 
-      ws.onerror = (e) => {
-        console.error('[WS] Error:', e);
+      ws.onerror = () => {
         isConnectingRef.current = false;
         setError('WebSocket connection error');
         setIsConnecting(false);
       };
 
       ws.onclose = (e) => {
-        console.log('[WS] Closed. Code:', e.code, 'Reason:', e.reason, 'Clean:', e.wasClean);
         isConnectingRef.current = false;
         setIsConnected(false);
         setIsConnecting(false);
         wsRef.current = null;
 
+        // Don't reconnect on auth failure (4001) — token missing/invalid
+        if (e.code === 4001) {
+          setError('Authentication required');
+          return;
+        }
+
         if (shouldReconnectRef.current && reconnectAttemptsRef.current < maxReconnectAttempts) {
           reconnectAttemptsRef.current += 1;
-          console.log('[WS] Reconnecting in', reconnectInterval, 'ms. Attempt:', reconnectAttemptsRef.current);
           reconnectTimerRef.current = setTimeout(() => {
             connect();
           }, reconnectInterval);
@@ -130,7 +147,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
       setError(err instanceof Error ? err.message : 'Failed to connect');
       setIsConnecting(false);
     }
-  }, [url, reconnectInterval, maxReconnectAttempts]);
+  }, [explicitUrl, reconnectInterval, maxReconnectAttempts]);
 
   const disconnect = useCallback(() => {
     shouldReconnectRef.current = false;

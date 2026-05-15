@@ -51,7 +51,9 @@ class UserResponse(BaseModel):
     display_name: str
     avatar_url: str
     role: str
+    permissions: List[str]
     nuke_balance: int
+    preferences: dict
     is_active: bool
     is_verified: bool
     last_login: Optional[str]

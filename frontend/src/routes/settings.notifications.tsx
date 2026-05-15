@@ -1,55 +1,113 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { Bell, Save, RotateCcw, Server, CreditCard, AlertTriangle, Calendar, Users, Check } from 'lucide-react';
+import { Bell, Server, CreditCard, AlertTriangle, Calendar, Users, Check, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCurrentUser } from '../hooks/use-current-user';
 import { api } from '../lib/api';
-import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Checkbox } from '../components/ui/checkbox';
+import { useToast } from '../stores/toast-store';
 
 export const Route = createFileRoute('/settings/notifications')({
   component: NotificationsSettingsPage,
 });
 
+// Icon mapping — kept locally, never sent to API
+const EVENT_ICONS: Record<string, React.ElementType> = {
+  server_start: Server,
+  server_stop: Server,
+  server_ready: Server,
+  credit_low: CreditCard,
+  credit_granted: CreditCard,
+  queue_position: Users,
+  schedule_run: Calendar,
+  alert_fired: AlertTriangle,
+  maintenance: AlertTriangle,
+};
+
 interface EventPreference {
   event: string;
   label: string;
   description: string;
-  icon: React.ElementType;
   channels: Record<string, boolean>;
 }
 
+// Serializable defaults (no icon component)
 const defaultEvents: EventPreference[] = [
-  { event: 'server_start', label: 'Server Started', description: 'When a server is started', icon: Server, channels: { email: false, webhook: false, in_app: true } },
-  { event: 'server_stop', label: 'Server Stopped', description: 'When a server is stopped', icon: Server, channels: { email: false, webhook: false, in_app: true } },
-  { event: 'server_ready', label: 'Server Ready', description: 'When a server is ready to use', icon: Server, channels: { email: true, webhook: false, in_app: true } },
-  { event: 'credit_low', label: 'Low Credits', description: 'When your credit balance is low', icon: CreditCard, channels: { email: true, webhook: true, in_app: true } },
-  { event: 'credit_granted', label: 'Credits Granted', description: 'When credits are added to your account', icon: CreditCard, channels: { email: true, webhook: false, in_app: true } },
-  { event: 'queue_position', label: 'Queue Position', description: 'Updates on your queue position', icon: Users, channels: { email: false, webhook: false, in_app: true } },
-  { event: 'schedule_run', label: 'Schedule Executed', description: 'When a scheduled task runs', icon: Calendar, channels: { email: false, webhook: false, in_app: true } },
-  { event: 'alert_fired', label: 'Alert Fired', description: 'When a system alert is triggered', icon: AlertTriangle, channels: { email: true, webhook: true, in_app: true } },
-  { event: 'maintenance', label: 'Maintenance Mode', description: 'System maintenance notifications', icon: AlertTriangle, channels: { email: true, webhook: true, in_app: true } },
+  { event: 'server_start', label: 'Server Started', description: 'When a server is started', channels: { email: false, webhook: false, in_app: true } },
+  { event: 'server_stop', label: 'Server Stopped', description: 'When a server is stopped', channels: { email: false, webhook: false, in_app: true } },
+  { event: 'server_ready', label: 'Server Ready', description: 'When a server is ready to use', channels: { email: true, webhook: false, in_app: true } },
+  { event: 'credit_low', label: 'Low Credits', description: 'When your credit balance is low', channels: { email: true, webhook: true, in_app: true } },
+  { event: 'credit_granted', label: 'Credits Granted', description: 'When credits are added to your account', channels: { email: true, webhook: false, in_app: true } },
+  { event: 'queue_position', label: 'Queue Position', description: 'Updates on your queue position', channels: { email: false, webhook: false, in_app: true } },
+  { event: 'schedule_run', label: 'Schedule Executed', description: 'When a scheduled task runs', channels: { email: false, webhook: false, in_app: true } },
+  { event: 'alert_fired', label: 'Alert Fired', description: 'When a system alert is triggered', channels: { email: true, webhook: true, in_app: true } },
+  { event: 'maintenance', label: 'Maintenance Mode', description: 'System maintenance notifications', channels: { email: true, webhook: true, in_app: true } },
 ];
 
 function NotificationsSettingsPage() {
   const { data: user } = useCurrentUser();
+  const queryClient = useQueryClient();
+  const { error } = useToast();
   const [preferences, setPreferences] = useState<EventPreference[]>(defaultEvents);
   const [webhookUrl, setWebhookUrl] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
 
+  // Load saved preferences
   useEffect(() => {
     if (user?.preferences?.notifications) {
       const saved = user.preferences.notifications;
       if (saved.events) {
         setPreferences(saved.events);
       }
-      if (saved.webhook_url) {
+      if (saved.webhook_url !== undefined) {
         setWebhookUrl(saved.webhook_url);
       }
     }
   }, [user]);
+
+  // Debounced auto-save
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const saveMutation = useMutation({
+    mutationFn: async (payload: { events: EventPreference[]; webhook_url: string }) => {
+      return api.put('/preferences/', { notifications: payload });
+    },
+    onSuccess: (result, variables) => {
+      setSaveStatus('saved');
+      // Update cached user data directly instead of refetching
+      queryClient.setQueryData(['me'], (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          preferences: {
+            ...(old.preferences || {}),
+            notifications: {
+              events: variables.events,
+              webhook_url: variables.webhook_url,
+            },
+          },
+        };
+      });
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    },
+    onError: (err: any) => {
+      setSaveStatus('idle');
+      error('Failed to save preferences', err?.message || 'Please try again');
+    },
+  });
+
+  const triggerSave = useCallback(
+    (newPreferences: EventPreference[], newWebhookUrl: string) => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      setSaveStatus('saving');
+      saveTimeoutRef.current = setTimeout(() => {
+        saveMutation.mutate({ events: newPreferences, webhook_url: newWebhookUrl });
+      }, 400);
+    },
+    [saveMutation]
+  );
 
   const toggleChannel = (eventIndex: number, channelId: string) => {
     setPreferences((prev) => {
@@ -61,38 +119,44 @@ function NotificationsSettingsPage() {
           [channelId]: !updated[eventIndex].channels[channelId],
         },
       };
+      triggerSave(updated, webhookUrl);
       return updated;
     });
-    setSaved(false);
   };
 
-  const handleSave = async () => {
-    try {
-      setSaving(true);
-      await api.put('/users/me/preferences', {
-        notifications: {
-          events: preferences,
-          webhook_url: webhookUrl,
-        },
-      });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
-    } catch (error) {
-      console.error('Failed to save preferences:', error);
-    } finally {
-      setSaving(false);
-    }
+  const handleWebhookChange = (value: string) => {
+    setWebhookUrl(value);
+    triggerSave(preferences, value);
+  };
+
+  const handleEnableAll = () => {
+    const updated = preferences.map((p) => ({
+      ...p,
+      channels: { email: true, webhook: true, in_app: true },
+    }));
+    setPreferences(updated);
+    triggerSave(updated, webhookUrl);
+  };
+
+  const handleDisableAll = () => {
+    const updated = preferences.map((p) => ({
+      ...p,
+      channels: { email: false, webhook: false, in_app: false },
+    }));
+    setPreferences(updated);
+    triggerSave(updated, webhookUrl);
   };
 
   const handleReset = () => {
     setPreferences(defaultEvents);
     setWebhookUrl('');
-    setSaved(false);
+    triggerSave(defaultEvents, '');
   };
 
   // Calculate summary stats
-  const totalEnabled = preferences.reduce((acc, pref) => 
-    acc + Object.values(pref.channels).filter(Boolean).length, 0
+  const totalEnabled = preferences.reduce(
+    (acc, pref) => acc + Object.values(pref.channels).filter(Boolean).length,
+    0
   );
 
   return (
@@ -112,20 +176,41 @@ function NotificationsSettingsPage() {
             <p className="text-muted-foreground">Configure notification preferences</p>
           </div>
         </div>
-        <div className="text-right">
-          <p className="text-2xl font-bold">{totalEnabled}</p>
-          <p className="text-xs text-muted-foreground">Active notifications</p>
+        <div className="flex items-center gap-4">
+          {saveStatus === 'saving' && (
+            <span className="text-sm text-muted-foreground flex items-center gap-1.5">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              Saving...
+            </span>
+          )}
+          {saveStatus === 'saved' && (
+            <motion.span
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="text-sm text-emerald-400 font-medium flex items-center gap-1"
+            >
+              <Check className="w-3.5 h-3.5" />
+              Saved
+            </motion.span>
+          )}
+          <div className="text-right">
+            <p className="text-2xl font-bold">{totalEnabled}</p>
+            <p className="text-xs text-muted-foreground">Active notifications</p>
+          </div>
         </div>
       </motion.div>
 
       <div className="space-y-8">
         {/* Webhook URL */}
-        <SettingsSection title="Webhook URL" description="Configure a webhook endpoint to receive notifications.">
+        <SettingsSection
+          title="Webhook URL"
+          description="Configure a webhook endpoint to receive notifications."
+        >
           <div className="flex items-start gap-4">
             <div className="flex-1">
               <Input
                 value={webhookUrl}
-                onChange={(e) => { setWebhookUrl(e.target.value); setSaved(false); }}
+                onChange={(e) => handleWebhookChange(e.target.value)}
                 placeholder="https://hooks.example.com/nukelab"
               />
               <p className="text-xs text-muted-foreground mt-2">
@@ -136,9 +221,9 @@ function NotificationsSettingsPage() {
         </SettingsSection>
 
         {/* Event Preferences */}
-        <SettingsSection 
-          title="Event Preferences" 
-          description="Choose how you want to receive notifications for each event."
+        <SettingsSection
+          title="Event Preferences"
+          description="Choose how you want to receive notifications for each event. Changes are saved automatically."
         >
           <div className="rounded-xl border border-border/50 overflow-hidden">
             {/* Table Header */}
@@ -152,7 +237,7 @@ function NotificationsSettingsPage() {
             {/* Event Rows */}
             <div className="divide-y divide-border/30">
               {preferences.map((pref, index) => {
-                const Icon = pref.icon;
+                const Icon = EVENT_ICONS[pref.event] || Bell;
                 return (
                   <div
                     key={pref.event}
@@ -167,7 +252,7 @@ function NotificationsSettingsPage() {
                         <p className="text-xs text-muted-foreground">{pref.description}</p>
                       </div>
                     </div>
-                    
+
                     <div className="flex justify-center">
                       <Checkbox
                         checked={pref.channels.email}
@@ -194,76 +279,44 @@ function NotificationsSettingsPage() {
         </SettingsSection>
 
         {/* Quick Actions */}
-        <SettingsSection title="Quick Actions" description="Enable or disable all notifications at once.">
+        <SettingsSection
+          title="Quick Actions"
+          description="Enable or disable all notifications at once."
+        >
           <div className="flex gap-4">
-            <Button 
-              variant="outline" 
-              onClick={() => {
-                setPreferences(prev => prev.map(p => ({
-                  ...p,
-                  channels: { email: true, webhook: true, in_app: true }
-                })));
-                setSaved(false);
-              }}
-              className="gap-2"
+            <button
+              onClick={handleEnableAll}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border/50 bg-muted/30 text-sm font-medium hover:bg-accent transition-colors"
             >
               <Check className="w-4 h-4" />
               Enable All
-            </Button>
-            <Button 
-              variant="outline" 
-              onClick={() => {
-                setPreferences(prev => prev.map(p => ({
-                  ...p,
-                  channels: { email: false, webhook: false, in_app: false }
-                })));
-                setSaved(false);
-              }}
-              className="gap-2"
+            </button>
+            <button
+              onClick={handleDisableAll}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border/50 bg-muted/30 text-sm font-medium hover:bg-accent transition-colors"
             >
-              <RotateCcw className="w-4 h-4" />
               Disable All
-            </Button>
+            </button>
+            <button
+              onClick={handleReset}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border/50 bg-muted/30 text-sm font-medium hover:bg-accent transition-colors text-muted-foreground"
+            >
+              Reset to Defaults
+            </button>
           </div>
         </SettingsSection>
-
-        {/* Actions */}
-        <motion.div
-          className="flex items-center gap-3 pt-4"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.3 }}
-        >
-          <Button onClick={handleSave} loading={saving} className="gap-2">
-            <Save className="w-4 h-4" />
-            Save Preferences
-          </Button>
-          <Button variant="ghost" onClick={handleReset} className="gap-2">
-            Reset to Defaults
-          </Button>
-          {saved && (
-            <motion.span
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="text-sm text-emerald-400 font-medium flex items-center gap-1"
-            >
-              <Check className="w-4 h-4" />
-              Saved successfully!
-            </motion.span>
-          )}
-        </motion.div>
       </div>
     </div>
   );
 }
 
-function SettingsSection({ 
-  title, 
-  description, 
-  children 
-}: { 
-  title?: string; 
-  description?: string; 
+function SettingsSection({
+  title,
+  description,
+  children,
+}: {
+  title?: string;
+  description?: string;
   children: React.ReactNode;
 }) {
   return (
