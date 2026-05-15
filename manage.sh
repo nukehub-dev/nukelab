@@ -119,13 +119,19 @@ load_env_file() {
 }
 
 init_env() {
+    # Always load .env as base defaults
     if [ -f .env ]; then
         log "Loading ${BOLD}.env${RESET}"
         load_env_file .env
-    elif [ -f .env.development ]; then
+    fi
+    # In dev mode, overlay .env.development on top so dev values win
+    if $USE_DEV_MODE && [ -f .env.development ]; then
+        log "Loading ${BOLD}.env.development${RESET} (dev overrides)"
+        load_env_file .env.development
+    elif [ ! -f .env ] && [ -f .env.development ]; then
         log "Loading ${BOLD}.env.development${RESET}"
         load_env_file .env.development
-    else
+    elif [ ! -f .env ] && [ ! -f .env.development ]; then
         die "No environment file found.\n\n  cp .env.example .env.development"
     fi
 }

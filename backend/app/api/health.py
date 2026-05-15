@@ -88,6 +88,40 @@ async def detailed_health_check(
         }
         health_data["status"] = "degraded"
     
+    # SMTP check
+    try:
+        from app.services.email_service import EmailService
+        email_service = EmailService()
+        if email_service.enabled:
+            import aiosmtplib
+            smtp = aiosmtplib.SMTP(
+                hostname=email_service.smtp_host,
+                port=email_service.smtp_port,
+                timeout=3,
+                start_tls=False,
+                validate_certs=email_service.verify_certs,
+            )
+            await smtp.connect()
+            if email_service.use_tls:
+                await smtp.starttls(validate_certs=email_service.verify_certs)
+            await smtp.quit()
+            health_data["services"]["smtp"] = {
+                "status": "healthy",
+                "host": email_service.smtp_host,
+                "port": email_service.smtp_port
+            }
+        else:
+            health_data["services"]["smtp"] = {
+                "status": "disabled",
+                "message": "SMTP not configured"
+            }
+    except Exception as e:
+        health_data["services"]["smtp"] = {
+            "status": "unhealthy",
+            "error": str(e)
+        }
+        health_data["status"] = "degraded"
+    
     # System resources
     try:
         health_data["resources"] = {

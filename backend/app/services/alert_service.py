@@ -91,6 +91,9 @@ class AlertService:
 
     async def _send_notifications(self, rule: AlertRule, alert: AlertHistory):
         """Send notifications for an alert"""
+        from app.services.email_service import EmailService
+        from app.services.notification_service import NotificationService
+
         result = await self.db.execute(
             select(User).where(User.id == alert.server_id)
         )
@@ -101,9 +104,33 @@ class AlertService:
 
         if rule.notify_user and user:
             alert.user_notified = True
+            # Create in-app notification
+            notif_service = NotificationService(self.db)
+            await notif_service.create(
+                user_id=user.id,
+                title=f"Alert: {rule.name}",
+                message=f"{rule.metric_type.upper()} exceeded threshold ({alert.metric_value:.1f} > {rule.threshold:.1f})",
+                type="system",
+                severity="warning",
+                action_url=f"/servers/{alert.server_id}"
+            )
 
-        if rule.email_enabled:
-            alert.email_sent = True
+        if rule.email_enabled and user and user.email:
+            email_service = EmailService()
+            if email_service.enabled:
+                template = email_service.render_template("server_ready", {
+                    "username": user.username,
+                    "server_name": rule.name,
+                    "message": f"{rule.metric_type.upper()} alert: {alert.metric_value:.1f} (threshold: {rule.threshold:.1f})"
+                })
+                result = await email_service.send_email(
+                    to_email=user.email,
+                    subject=f"[NukeLab Alert] {rule.name}",
+                    html_body=template,
+                    text_body=f"Alert: {rule.name}\n{rule.metric_type.upper()}: {alert.metric_value:.1f} (threshold: {rule.threshold:.1f})"
+                )
+                if result["success"]:
+                    alert.email_sent = True
 
         if rule.webhook_url:
             alert.webhook_sent = True

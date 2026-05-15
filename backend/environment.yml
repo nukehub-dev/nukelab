@@ -37,3 +37,4 @@ dependencies:
   - pip:
     # Packages not available in conda
     - alembic
+    - aiosmtplib

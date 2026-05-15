@@ -11,11 +11,14 @@ class EmailService:
     """Email service with Jinja2 templates"""
     
     def __init__(self):
-        self.smtp_host = getattr(settings, 'smtp_host', None)
-        self.smtp_port = getattr(settings, 'smtp_port', 587)
-        self.smtp_user = getattr(settings, 'smtp_user', None)
-        self.smtp_password = getattr(settings, 'smtp_password', None)
-        self.smtp_from = getattr(settings, 'smtp_from', 'noreply@nukelab.local')
+        self.smtp_host = settings.smtp_host or None
+        self.smtp_port = settings.smtp_port
+        self.smtp_user = settings.smtp_user or None
+        self.smtp_password = settings.smtp_password or None
+        self.smtp_from = settings.smtp_from
+        self.smtp_from_name = settings.smtp_from_name
+        self.use_tls = settings.smtp_tls
+        self.verify_certs = settings.smtp_verify_certs
         self.enabled = bool(self.smtp_host)
     
     async def send_email(
@@ -25,40 +28,38 @@ class EmailService:
         html_body: str,
         text_body: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Send an email"""
+        """Send an email using explicit SMTP control"""
         if not self.enabled:
             return {"success": False, "error": "SMTP not configured"}
-        
+
         try:
+            from email.mime.multipart import MIMEMultipart
+            from email.mime.text import MIMEText
             import aiosmtplib
-            
-            message = f"""From: {self.smtp_from}
-To: {to_email}
-Subject: {subject}
-MIME-Version: 1.0
-Content-Type: multipart/alternative; boundary="boundary"
 
---boundary
-Content-Type: text/plain; charset=utf-8
+            msg = MIMEMultipart('alternative')
+            msg['Subject'] = subject
+            msg['From'] = f"{self.smtp_from_name} <{self.smtp_from}>"
+            msg['To'] = to_email
 
-{text_body or html_body}
+            msg.attach(MIMEText(text_body or html_body, 'plain', 'utf-8'))
+            msg.attach(MIMEText(html_body, 'html', 'utf-8'))
 
---boundary
-Content-Type: text/html; charset=utf-8
-
-{html_body}
---boundary--
-"""
-            
-            await aiosmtplib.send(
-                message,
+            # Explicit SMTP control to avoid auto-TLS issues on port 587
+            smtp = aiosmtplib.SMTP(
                 hostname=self.smtp_host,
                 port=self.smtp_port,
-                username=self.smtp_user,
-                password=self.smtp_password,
-                start_tls=True,
+                start_tls=False,
+                validate_certs=self.verify_certs,
             )
-            
+            await smtp.connect()
+            if self.use_tls:
+                await smtp.starttls(validate_certs=self.verify_certs)
+            if self.smtp_user and self.smtp_password:
+                await smtp.login(self.smtp_user, self.smtp_password)
+            await smtp.send_message(msg)
+            await smtp.quit()
+
             return {"success": True}
         except Exception as e:
             return {"success": False, "error": str(e)}

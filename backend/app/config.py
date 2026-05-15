@@ -93,6 +93,16 @@ class Settings(BaseSettings):
     server_auto_stop_on_depletion: bool = True
     server_warn_before_stop: int = 600
 
+    # SMTP Email Configuration
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_tls: bool = True
+    smtp_verify_certs: bool = True
+    smtp_from: str = "noreply@nukelab.local"
+    smtp_from_name: str = "NukeLab"
+
     # Server Auth - Asymmetric key signing for container access tokens
     server_auth_enabled: bool = True
     server_auth_token_ttl: int = 300  # 5 minutes

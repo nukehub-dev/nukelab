@@ -21,6 +21,7 @@ from app.models.activity_log import ActivityLog
 from app.services.user_service import UserService
 from app.services.credit_service import CreditService
 from app.core.roles import ROLE_PERMISSIONS, get_role_permissions, VALID_ROLES
+from app.config import settings
 
 router = APIRouter()
 
@@ -603,3 +604,153 @@ async def update_role_permissions(
         "permissions": request.permissions,
         "message": f"Permissions updated for role '{role}'"
     }
+
+
+# ========== Email Configuration ==========
+
+class EmailConfigResponse(BaseModel):
+    smtp_host: str
+    smtp_port: int
+    smtp_user: str
+    smtp_from: str
+    smtp_from_name: str
+    smtp_tls: bool
+    smtp_verify_certs: bool
+    enabled: bool
+    password_configured: bool
+
+
+class EmailTestRequest(BaseModel):
+    to_email: Optional[str] = None
+
+
+@router.get("/email-config", response_model=EmailConfigResponse)
+async def get_email_config(
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS))
+):
+    """Get current email/SMTP configuration (password hidden)"""
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"Email config request — host={settings.smtp_host!r}, port={settings.smtp_port}, user={settings.smtp_user!r}, from={settings.smtp_from!r}")
+    return EmailConfigResponse(
+        smtp_host=settings.smtp_host,
+        smtp_port=settings.smtp_port,
+        smtp_user=settings.smtp_user,
+        smtp_from=settings.smtp_from,
+        smtp_from_name=settings.smtp_from_name,
+        smtp_tls=settings.smtp_tls,
+        smtp_verify_certs=settings.smtp_verify_certs,
+        enabled=bool(settings.smtp_host),
+        password_configured=bool(settings.smtp_password)
+    )
+
+
+@router.post("/email-test")
+async def test_email(
+    request: EmailTestRequest,
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS))
+):
+    """Send a test email to verify SMTP configuration"""
+    from app.services.email_service import EmailService
+
+    service = EmailService()
+    if not service.enabled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="SMTP is not configured. Set SMTP_HOST and other SMTP variables in your environment."
+        )
+
+    to_email = request.to_email or current_user.email
+    if not to_email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No recipient email provided and current user has no email address."
+        )
+
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"Sending test email to {to_email} via {service.smtp_host}:{service.smtp_port}")
+
+    result = await service.send_email(
+        to_email=to_email,
+        subject="NukeLab SMTP Test",
+        html_body=f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+            <h2 style="color: #4F46E5;">SMTP Test Successful</h2>
+            <p>Hello {current_user.username},</p>
+            <p>This is a test email from <strong>NukeLab</strong> to verify that your SMTP configuration is working correctly.</p>
+            <div style="background: #f3f4f6; padding: 16px; border-radius: 8px; margin: 16px 0;">
+                <p style="margin: 0;"><strong>SMTP Host:</strong> {service.smtp_host}</p>
+                <p style="margin: 4px 0 0;"><strong>SMTP Port:</strong> {service.smtp_port}</p>
+                <p style="margin: 4px 0 0;"><strong>Sent at:</strong> {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}</p>
+            </div>
+            <p>If you received this email, your email notifications are ready to use.</p>
+        </body>
+        </html>
+        """,
+        text_body=f"SMTP Test from NukeLab\n\nHello {current_user.username},\n\nThis is a test email to verify your SMTP configuration is working.\n\nSMTP Host: {service.smtp_host}\nSMTP Port: {service.smtp_port}\nSent at: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}"
+    )
+
+    if not result["success"]:
+        logger.error(f"Test email failed: {result['error']}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to send test email: {result['error']}"
+        )
+
+    logger.info(f"Test email sent successfully to {to_email}")
+    return {
+        "success": True,
+        "message": f"Test email sent to {to_email}",
+        "recipient": to_email
+    }
+
+
+@router.get("/email-status")
+async def get_email_status(
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS))
+):
+    """Check SMTP connectivity status"""
+    from app.services.email_service import EmailService
+
+    service = EmailService()
+    if not service.enabled:
+        return {
+            "status": "disabled",
+            "message": "SMTP is not configured",
+            "configured": False
+        }
+
+    # Try to connect to SMTP server without sending
+    try:
+        import aiosmtplib
+        # Disable auto-TLS so we control it explicitly (avoid "already using TLS" on port 587)
+        smtp = aiosmtplib.SMTP(
+            hostname=service.smtp_host,
+            port=service.smtp_port,
+            timeout=5,
+            start_tls=False,
+            validate_certs=service.verify_certs,
+        )
+        await smtp.connect()
+        if service.use_tls:
+            await smtp.starttls(validate_certs=service.verify_certs)
+        if service.smtp_user and service.smtp_password:
+            await smtp.login(service.smtp_user, service.smtp_password)
+        await smtp.quit()
+        return {
+            "status": "connected",
+            "message": f"Successfully connected to {service.smtp_host}:{service.smtp_port}",
+            "configured": True,
+            "host": service.smtp_host,
+            "port": service.smtp_port
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Could not connect to SMTP server: {str(e)}",
+            "configured": True,
+            "host": service.smtp_host,
+            "port": service.smtp_port
+        }

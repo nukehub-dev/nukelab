@@ -122,6 +122,15 @@ services:
       - SERVER_AUTH_KEY_ROTATION_DAYS=${SERVER_AUTH_KEY_ROTATION_DAYS:-30}
       - SERVER_AUTH_MAX_TOKENS_PER_MINUTE=${SERVER_AUTH_MAX_TOKENS_PER_MINUTE:-10}
       - SERVER_AUTH_AUDIT_LOG=${SERVER_AUTH_AUDIT_LOG:-true}
+      # Email / SMTP configuration
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_TLS=${SMTP_TLS:-true}
+      - SMTP_VERIFY_CERTS=${SMTP_VERIFY_CERTS:-true}
+      - SMTP_FROM=${SMTP_FROM:-noreply@nukelab.local}
+      - SMTP_FROM_NAME=${SMTP_FROM_NAME:-NukeLab}
     volumes:
       - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:Z
       - ./backend:/app:Z
