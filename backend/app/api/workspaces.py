@@ -14,6 +14,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.services.workspace_service import WorkspaceService
 from app.services.volume_access_service import VolumeAccessService
+from app.services.notification_service import NotificationService
 
 router = APIRouter()
 
@@ -38,6 +39,11 @@ class UpdateMemberRequest(BaseModel):
     role: str
 
 
+class InviteMemberRequest(BaseModel):
+    user_id: str
+    role: str = "read_write"  # read_only, read_write, admin
+
+
 class AddVolumeRequest(BaseModel):
     volume_id: str
     role: str = "read_write"  # read_only, read_write
@@ -52,12 +58,23 @@ async def list_workspaces(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """List workspaces user has access to (owned or member)."""
+    """List workspaces user has access to (owned, member, or invited)."""
     service = WorkspaceService(db)
     workspaces = await service.list_workspaces(str(current_user.id))
     
+    result = []
+    for w in workspaces:
+        data = w.to_dict()
+        # Check if current user has a pending invitation to this workspace
+        has_pending = any(
+            str(i.user_id) == str(current_user.id) and i.status == "pending"
+            for i in (w.invitations or [])
+        )
+        data["has_pending_invitation"] = has_pending
+        result.append(data)
+    
     return {
-        "workspaces": [w.to_dict() for w in workspaces]
+        "workspaces": result
     }
 
 
@@ -85,21 +102,30 @@ async def get_workspace(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get workspace details. Must be owner or member."""
+    """Get workspace details. Must be owner, member, or invited user."""
     service = WorkspaceService(db)
     
     workspace = await service.get_workspace(workspace_id)
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found")
     
-    # Check access
-    if not await service.is_workspace_member(workspace_id, str(current_user.id)):
-        checker = PermissionChecker(current_user)
-        checker.require(Permission.ADMIN_ACCESS)
+    # Check access: owner, member, or has pending invitation
+    if not await service.can_view_workspace(workspace_id, str(current_user.id)):
+        raise HTTPException(status_code=403, detail="You don't have access to this workspace")
     
     data = workspace.to_dict()
     data["members"] = [m.to_dict() for m in workspace.members]
     data["volumes"] = [v.to_dict() for v in workspace.volume_associations]
+    data["invitations"] = [i.to_dict() for i in workspace.invitations if i.status == "pending"]
+    # Include current user's pending invitation status
+    user_invitation = next(
+        (i for i in workspace.invitations if str(i.user_id) == str(current_user.id) and i.status == "pending"),
+        None
+    )
+    if user_invitation:
+        data["my_invitation"] = user_invitation.to_dict()
+    else:
+        data["my_invitation"] = None
     return data
 
 
@@ -254,14 +280,14 @@ async def update_volume_role(
 
 # ========== Member Management ==========
 
-@router.post("/{workspace_id}/members")
-async def add_member(
+@router.post("/{workspace_id}/invitations")
+async def invite_member(
     workspace_id: str,
-    request: AddMemberRequest,
+    request: InviteMemberRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Add a member to workspace. Must be owner or admin."""
+    """Invite a user to workspace. Must be owner or admin."""
     service = WorkspaceService(db)
     
     workspace = await service.get_workspace(workspace_id)
@@ -276,13 +302,104 @@ async def add_member(
     if request.role not in ("read_only", "read_write", "admin"):
         raise HTTPException(status_code=400, detail="Invalid role. Must be: read_only, read_write, admin")
     
-    member = await service.add_member(
-        workspace_id=workspace_id,
+    try:
+        invitation = await service.invite_member(
+            workspace_id=workspace_id,
+            user_id=request.user_id,
+            invited_by=str(current_user.id),
+            role=request.role
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+    # Send notification to invited user
+    notif_service = NotificationService(db)
+    await notif_service.workspace_invitation(
         user_id=request.user_id,
-        role=request.role
+        workspace_name=workspace.name,
+        inviter_name=current_user.display_name or current_user.username,
+        action_url=f"/workspaces/{workspace_id}"
     )
     
+    return invitation.to_dict()
+
+
+@router.post("/{workspace_id}/invitations/{invitation_id}/accept")
+async def accept_invitation(
+    workspace_id: str,
+    invitation_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Accept a workspace invitation."""
+    service = WorkspaceService(db)
+    
+    try:
+        member = await service.accept_invitation(invitation_id, str(current_user.id))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
     return member.to_dict()
+
+
+@router.post("/{workspace_id}/invitations/{invitation_id}/reject")
+async def reject_invitation(
+    workspace_id: str,
+    invitation_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Reject a workspace invitation."""
+    service = WorkspaceService(db)
+    
+    try:
+        await service.reject_invitation(invitation_id, str(current_user.id))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+    return {"message": "Invitation rejected", "invitation_id": invitation_id}
+
+
+@router.delete("/{workspace_id}/invitations/{invitation_id}")
+async def cancel_invitation(
+    workspace_id: str,
+    invitation_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Cancel a workspace invitation. Must be owner, admin, or the inviter."""
+    service = WorkspaceService(db)
+    
+    try:
+        success = await service.cancel_invitation(invitation_id, str(current_user.id))
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    
+    if not success:
+        raise HTTPException(status_code=404, detail="Invitation not found")
+    
+    return {"message": "Invitation cancelled", "invitation_id": invitation_id}
+
+
+@router.get("/{workspace_id}/invitations")
+async def list_invitations(
+    workspace_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """List pending invitations for a workspace. Must be owner or admin."""
+    service = WorkspaceService(db)
+    
+    if not await service.can_manage_workspace(workspace_id, str(current_user.id)):
+        checker = PermissionChecker(current_user)
+        checker.require(Permission.ADMIN_ACCESS)
+    
+    workspace = await service.get_workspace(workspace_id)
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    
+    pending = [i.to_dict() for i in workspace.invitations if i.status == "pending"]
+    return {"invitations": pending}
 
 
 @router.delete("/{workspace_id}/members/{user_id}")

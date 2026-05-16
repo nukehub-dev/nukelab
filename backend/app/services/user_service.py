@@ -182,7 +182,7 @@ class UserService:
             )
         
         # Update allowed fields
-        allowed_fields = ["first_name", "last_name", "email", "avatar_url", "profile", "preferences"]
+        allowed_fields = ["first_name", "last_name", "email", "avatar_url", "profile", "preferences", "profile_visibility"]
         
         # Only users with users:update permission can update role
         if "role" in data and updated_by:
@@ -311,6 +311,33 @@ class UserService:
         
         await self.db.commit()
         return True
+    
+    async def discover_users(
+        self,
+        search: Optional[str] = None,
+        limit: int = 50
+    ) -> List[User]:
+        """Discover public users for collaboration.
+        
+        Returns only users with profile_visibility='public'.
+        Filters by username, first_name, or last_name if search is provided.
+        """
+        query = select(User).where(
+            User.profile_visibility == "public",
+            User.is_active == True
+        )
+        
+        if search:
+            search_filter = or_(
+                User.username.ilike(f"%{search}%"),
+                User.first_name.ilike(f"%{search}%"),
+                User.last_name.ilike(f"%{search}%")
+            )
+            query = query.where(search_filter)
+        
+        query = query.order_by(User.username.asc()).limit(limit)
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
     
     async def get_user_stats(self, user_id: str) -> Dict[str, Any]:
         """Get user statistics"""

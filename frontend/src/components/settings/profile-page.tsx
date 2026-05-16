@@ -9,7 +9,8 @@ import {
   X,
   Check,
   Globe,
-  UserCircle
+  UserCircle,
+  Eye
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAuthStore } from '../../stores/auth-store';
@@ -36,6 +37,7 @@ export function ProfilePage() {
     last_name: user?.last_name || '',
     email: user?.email || '',
   });
+  const [isTogglingVisibility, setIsTogglingVisibility] = useState(false);
 
   if (!user) return null;
 
@@ -98,6 +100,39 @@ export function ProfilePage() {
       );
     } catch {
       toastError('Update failed', 'Failed to update preferences');
+    }
+  };
+
+  const toggleProfileVisibility = async () => {
+    setIsTogglingVisibility(true);
+    try {
+      const token = localStorage.getItem('nukelab-token');
+      const newVisibility = user.profile_visibility === 'public' ? 'private' : 'public';
+      
+      const res = await fetch(`${API_BASE}/users/me/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ profile_visibility: newVisibility }),
+      });
+      
+      if (!res.ok) throw new Error('Failed to update profile visibility');
+      
+      const updated = await res.json();
+      setUser({ ...user, ...updated });
+      
+      toastSuccess(
+        newVisibility === 'public' ? 'Profile is now public' : 'Profile is now private',
+        newVisibility === 'public' 
+          ? 'Other users can now find you in search and invite you to workspaces'
+          : 'You are hidden from user discovery'
+      );
+    } catch {
+      toastError('Update failed', 'Failed to update profile visibility');
+    } finally {
+      setIsTogglingVisibility(false);
     }
   };
 
@@ -314,6 +349,22 @@ export function ProfilePage() {
                     <Switch
                       checked={useGravatar}
                       onCheckedChange={toggleGravatar}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between py-2">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                        <Eye className="w-5 h-5 text-primary" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">Public Profile</p>
+                        <p className="text-xs text-muted-foreground">Let others find you in search</p>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={user.profile_visibility === 'public'}
+                      onCheckedChange={toggleProfileVisibility}
+                      disabled={isTogglingVisibility}
                     />
                   </div>
                 </div>

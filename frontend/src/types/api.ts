@@ -50,6 +50,14 @@ export interface User {
   last_login?: string;
   created_at?: string;
   preferences?: Record<string, any>;
+  profile_visibility?: 'private' | 'public';
+}
+
+export interface PublicUser {
+  id: string;
+  username: string;
+  display_name: string;
+  avatar_url: string;
 }
 
 export interface Environment {

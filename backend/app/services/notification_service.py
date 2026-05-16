@@ -219,3 +219,14 @@ class NotificationService:
             type="credit",
             severity="warning"
         )
+    
+    async def workspace_invitation(self, user_id, workspace_name: str, inviter_name: str, action_url: Optional[str] = None) -> Notification:
+        """Notify user that they've been invited to a workspace."""
+        return await self.create(
+            user_id=user_id,
+            title="Workspace Invitation",
+            message=f"{inviter_name} invited you to join the workspace '{workspace_name}'.",
+            type="workspace",
+            severity="info",
+            action_url=action_url
+        )

@@ -80,6 +80,11 @@ function WorkspaceCard({
                         Inactive
                       </span>
                     )}
+                    {workspace.has_pending_invitation && (
+                      <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                        Pending
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5 truncate">
                     {workspace.description || <span className="italic opacity-60">No description</span>}

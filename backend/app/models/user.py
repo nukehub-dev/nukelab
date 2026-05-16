@@ -29,6 +29,9 @@ class User(Base):
     # Avatar
     avatar_url = Column(String(500), nullable=True)
     
+    # Profile visibility
+    profile_visibility = Column(String(20), default="private", nullable=False)
+    
     # Profile (flexible JSONB)
     # Stores: timezone, phone, department, organization, etc.
     profile = Column(JSON, default=dict)
@@ -61,6 +64,8 @@ class User(Base):
     notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
     owned_workspaces = relationship("SharedWorkspace", back_populates="owner", cascade="all, delete-orphan")
     workspace_memberships = relationship("WorkspaceMember", back_populates="user", cascade="all, delete-orphan")
+    workspace_invitations_received = relationship("WorkspaceInvitation", foreign_keys="WorkspaceInvitation.user_id", back_populates="user", cascade="all, delete-orphan")
+    workspace_invitations_sent = relationship("WorkspaceInvitation", foreign_keys="WorkspaceInvitation.invited_by", back_populates="inviter", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<User {self.username}>"
@@ -101,6 +106,7 @@ class User(Base):
             "nuke_balance": self.nuke_balance,
             "profile": self.profile or {},
             "preferences": self.preferences or {},
+            "profile_visibility": self.profile_visibility or "private",
             "is_active": self.is_active,
             "is_verified": self.is_verified,
             "last_login": self.last_login.isoformat() if self.last_login else None,

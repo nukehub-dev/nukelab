@@ -3,10 +3,16 @@ import { cn } from '../../lib/utils';
 import { ChevronDown, Check, Search } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
+interface ComboboxOption {
+  value: string;
+  label: string;
+  image?: string;
+}
+
 interface ComboboxProps {
   value: string;
   onChange: (value: string) => void;
-  options: { value: string; label: string }[];
+  options: ComboboxOption[];
   placeholder?: string;
   className?: string;
   disabled?: boolean;
@@ -50,10 +56,9 @@ export function Combobox({
     return options.filter((opt) => opt.label.toLowerCase().includes(query));
   }, [options, search]);
 
-  const selectedLabel = React.useMemo(() => {
-    const option = options.find((opt) => opt.value === value);
-    return option?.label || placeholder;
-  }, [options, value, placeholder]);
+  const selectedOption = React.useMemo(() => {
+    return options.find((opt) => opt.value === value);
+  }, [options, value]);
 
   return (
     <div ref={containerRef} className={cn('relative', className)}>
@@ -72,7 +77,12 @@ export function Combobox({
           !value && 'text-muted-foreground'
         )}
       >
-        <span className="truncate">{selectedLabel}</span>
+        <span className="flex items-center gap-2 truncate">
+          {selectedOption?.image && (
+            <img src={selectedOption.image} alt="" className="w-5 h-5 rounded-full object-cover" />
+          )}
+          <span className="truncate">{selectedOption?.label || placeholder}</span>
+        </span>
         <ChevronDown className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')} />
       </button>
 
@@ -126,7 +136,12 @@ export function Combobox({
                       )}
                     >
                       <Check className={cn('h-4 w-4 shrink-0', isSelected ? 'opacity-100' : 'opacity-0')} />
-                      <span className="flex-1 text-left truncate">{option.label}</span>
+                      <span className="flex items-center gap-2 flex-1 text-left truncate">
+                        {option.image && (
+                          <img src={option.image} alt="" className="w-5 h-5 rounded-full object-cover shrink-0" />
+                        )}
+                        <span className="truncate">{option.label}</span>
+                      </span>
                     </button>
                   );
                 })

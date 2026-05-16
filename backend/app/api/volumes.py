@@ -83,7 +83,12 @@ async def list_volumes(
     volume_service = VolumeService(db)
     volumes = await volume_service.list_volumes(str(current_user.id))
     
-    return {"volumes": [v.to_dict() for v in volumes]}
+    result = []
+    for v in volumes:
+        data = v.to_dict()
+        data["workspace_count"] = len(v.workspace_associations) if v.workspace_associations else 0
+        result.append(data)
+    return {"volumes": result}
 
 
 @router.get("/{volume_id}")

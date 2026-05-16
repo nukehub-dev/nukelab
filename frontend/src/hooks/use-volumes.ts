@@ -14,6 +14,7 @@ export interface Volume {
   description?: string | null;
   created_at: string;
   updated_at: string;
+  workspace_count?: number;
 }
 
 export interface VolumeFileItem {

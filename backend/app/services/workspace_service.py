@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
 from app.models.workspace_volume import WorkspaceVolume
+from app.models.workspace_invitation import WorkspaceInvitation
 from app.models.user import User
 
 
@@ -36,12 +37,13 @@ class WorkspaceService:
         return workspace
     
     async def get_workspace(self, workspace_id: str) -> Optional[SharedWorkspace]:
-        """Get workspace by ID with members and volumes loaded"""
+        """Get workspace by ID with members, volumes, and invitations loaded"""
         result = await self.db.execute(
             select(SharedWorkspace)
             .options(
                 selectinload(SharedWorkspace.members).selectinload(WorkspaceMember.user),
-                selectinload(SharedWorkspace.volume_associations).selectinload(WorkspaceVolume.volume)
+                selectinload(SharedWorkspace.volume_associations).selectinload(WorkspaceVolume.volume),
+                selectinload(SharedWorkspace.invitations).selectinload(WorkspaceInvitation.user)
             )
             .where(SharedWorkspace.id == workspace_id)
         )
@@ -52,16 +54,23 @@ class WorkspaceService:
         user_id: str,
         include_memberships: bool = True
     ) -> List[SharedWorkspace]:
-        """List workspaces accessible to user (owned or member of)"""
+        """List workspaces accessible to user (owned, member of, or invited to)"""
         query = select(SharedWorkspace).options(
-            selectinload(SharedWorkspace.members).selectinload(WorkspaceMember.user)
+            selectinload(SharedWorkspace.members).selectinload(WorkspaceMember.user),
+            selectinload(SharedWorkspace.invitations)
         )
         
         if include_memberships:
             query = query.where(
                 or_(
                     SharedWorkspace.owner_id == user_id,
-                    SharedWorkspace.members.any(WorkspaceMember.user_id == user_id)
+                    SharedWorkspace.members.any(WorkspaceMember.user_id == user_id),
+                    SharedWorkspace.invitations.any(
+                        and_(
+                            WorkspaceInvitation.user_id == user_id,
+                            WorkspaceInvitation.status == "pending"
+                        )
+                    )
                 )
             )
         else:
@@ -176,6 +185,21 @@ class WorkspaceService:
         role: str = "read_write"
     ) -> WorkspaceMember:
         """Add a member to a workspace"""
+        # Check if member already exists (eagerly load user to avoid lazy load issues in async)
+        result = await self.db.execute(
+            select(WorkspaceMember)
+            .options(selectinload(WorkspaceMember.user))
+            .where(
+                and_(
+                    WorkspaceMember.workspace_id == workspace_id,
+                    WorkspaceMember.user_id == user_id
+                )
+            )
+        )
+        existing = result.scalar_one_or_none()
+        if existing:
+            return existing
+        
         member = WorkspaceMember(
             workspace_id=workspace_id,
             user_id=user_id,
@@ -183,7 +207,7 @@ class WorkspaceService:
         )
         self.db.add(member)
         await self.db.commit()
-        await self.db.refresh(member)
+        await self.db.refresh(member, attribute_names=["user"])
         return member
     
     async def remove_member(self, workspace_id: str, user_id: str) -> bool:
@@ -228,6 +252,151 @@ class WorkspaceService:
         await self.db.refresh(member)
         return member
     
+    # ========== Invitation Management ==========
+    
+    async def invite_member(
+        self,
+        workspace_id: str,
+        user_id: str,
+        invited_by: str,
+        role: str = "read_write"
+    ) -> WorkspaceInvitation:
+        """Send a workspace invitation to a user."""
+        # Check if already a member
+        result = await self.db.execute(
+            select(WorkspaceMember).where(
+                and_(
+                    WorkspaceMember.workspace_id == workspace_id,
+                    WorkspaceMember.user_id == user_id
+                )
+            )
+        )
+        if result.scalar_one_or_none() is not None:
+            raise ValueError("User is already a member of this workspace")
+        
+        # Check if invitation already exists
+        result = await self.db.execute(
+            select(WorkspaceInvitation).where(
+                and_(
+                    WorkspaceInvitation.workspace_id == workspace_id,
+                    WorkspaceInvitation.user_id == user_id,
+                    WorkspaceInvitation.status == "pending"
+                )
+            )
+        )
+        existing = result.scalar_one_or_none()
+        if existing:
+            return existing
+        
+        invitation = WorkspaceInvitation(
+            workspace_id=workspace_id,
+            user_id=user_id,
+            invited_by=invited_by,
+            role=role
+        )
+        self.db.add(invitation)
+        await self.db.commit()
+        await self.db.refresh(invitation, attribute_names=["user", "inviter", "workspace"])
+        return invitation
+    
+    async def accept_invitation(
+        self,
+        invitation_id: str,
+        user_id: str
+    ) -> WorkspaceMember:
+        """Accept a workspace invitation."""
+        from uuid import UUID
+        result = await self.db.execute(
+            select(WorkspaceInvitation)
+            .options(selectinload(WorkspaceInvitation.workspace))
+            .where(
+                and_(
+                    WorkspaceInvitation.id == UUID(invitation_id),
+                    WorkspaceInvitation.user_id == user_id,
+                    WorkspaceInvitation.status == "pending"
+                )
+            )
+        )
+        invitation = result.scalar_one_or_none()
+        if not invitation:
+            raise ValueError("Invitation not found or already processed")
+        
+        # Create workspace member
+        member = WorkspaceMember(
+            workspace_id=invitation.workspace_id,
+            user_id=user_id,
+            role=invitation.role
+        )
+        self.db.add(member)
+        
+        # Update invitation status
+        invitation.status = "accepted"
+        await self.db.commit()
+        await self.db.refresh(member, attribute_names=["user"])
+        return member
+    
+    async def reject_invitation(
+        self,
+        invitation_id: str,
+        user_id: str
+    ) -> None:
+        """Reject a workspace invitation."""
+        from uuid import UUID
+        result = await self.db.execute(
+            select(WorkspaceInvitation).where(
+                and_(
+                    WorkspaceInvitation.id == UUID(invitation_id),
+                    WorkspaceInvitation.user_id == user_id,
+                    WorkspaceInvitation.status == "pending"
+                )
+            )
+        )
+        invitation = result.scalar_one_or_none()
+        if not invitation:
+            raise ValueError("Invitation not found or already processed")
+        
+        invitation.status = "rejected"
+        await self.db.commit()
+    
+    async def cancel_invitation(
+        self,
+        invitation_id: str,
+        cancelled_by: str
+    ) -> bool:
+        """Cancel a workspace invitation (by inviter or admin)."""
+        from uuid import UUID
+        result = await self.db.execute(
+            select(WorkspaceInvitation)
+            .options(selectinload(WorkspaceInvitation.workspace))
+            .where(
+                and_(
+                    WorkspaceInvitation.id == UUID(invitation_id),
+                    WorkspaceInvitation.status == "pending"
+                )
+            )
+        )
+        invitation = result.scalar_one_or_none()
+        if not invitation:
+            return False
+        
+        # Check permission: only inviter or workspace owner can cancel
+        if str(invitation.invited_by) != cancelled_by and str(invitation.workspace.owner_id) != cancelled_by:
+            raise PermissionError("Only the inviter or workspace owner can cancel this invitation")
+        
+        await self.db.delete(invitation)
+        await self.db.commit()
+        return True
+    
+    async def get_invitation(self, invitation_id: str) -> Optional[WorkspaceInvitation]:
+        """Get invitation by ID with user loaded"""
+        from uuid import UUID
+        result = await self.db.execute(
+            select(WorkspaceInvitation)
+            .options(selectinload(WorkspaceInvitation.user))
+            .where(WorkspaceInvitation.id == UUID(invitation_id))
+        )
+        return result.scalar_one_or_none()
+    
     async def is_workspace_member(
         self,
         workspace_id: str,
@@ -246,6 +415,43 @@ class WorkspaceService:
                 and_(
                     WorkspaceMember.workspace_id == workspace_id,
                     WorkspaceMember.user_id == user_id
+                )
+            )
+        )
+        return result.scalar_one_or_none() is not None
+    
+    async def can_view_workspace(
+        self,
+        workspace_id: str,
+        user_id: str
+    ) -> bool:
+        """Check if user can view workspace (owner, member, or has pending invitation)"""
+        workspace = await self.get_workspace(workspace_id)
+        if not workspace:
+            return False
+        
+        if str(workspace.owner_id) == user_id:
+            return True
+        
+        # Check if member
+        result = await self.db.execute(
+            select(WorkspaceMember).where(
+                and_(
+                    WorkspaceMember.workspace_id == workspace_id,
+                    WorkspaceMember.user_id == user_id
+                )
+            )
+        )
+        if result.scalar_one_or_none() is not None:
+            return True
+        
+        # Check if has pending invitation
+        result = await self.db.execute(
+            select(WorkspaceInvitation).where(
+                and_(
+                    WorkspaceInvitation.workspace_id == workspace_id,
+                    WorkspaceInvitation.user_id == user_id,
+                    WorkspaceInvitation.status == "pending"
                 )
             )
         )

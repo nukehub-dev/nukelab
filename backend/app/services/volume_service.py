@@ -121,7 +121,9 @@ class VolumeService:
         # Also include public volumes
         conditions.append(Volume.visibility == "public")
 
-        query = select(Volume).where(or_(*conditions))
+        query = select(Volume).options(
+            selectinload(Volume.workspace_associations)
+        ).where(or_(*conditions))
         result = await self.db.execute(query)
         return result.scalars().all()
 

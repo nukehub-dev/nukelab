@@ -40,6 +40,7 @@ class UserUpdateRequest(BaseModel):
     profile: Optional[dict] = None
     preferences: Optional[dict] = None
     nuke_balance: Optional[int] = None
+    profile_visibility: Optional[str] = Field(default=None, pattern=r"^(private|public)$")
 
 
 class UserResponse(BaseModel):
@@ -54,6 +55,7 @@ class UserResponse(BaseModel):
     permissions: List[str]
     nuke_balance: int
     preferences: dict
+    profile_visibility: str
     is_active: bool
     is_verified: bool
     last_login: Optional[str]
@@ -89,10 +91,52 @@ def serialize_user(user: User) -> dict:
         "permissions": get_user_permissions(user),
         "nuke_balance": user.nuke_balance,
         "preferences": user.preferences or {},
+        "profile_visibility": user.profile_visibility or "private",
         "is_active": user.is_active,
         "is_verified": user.is_verified,
         "last_login": user.last_login.isoformat() if user.last_login else None,
         "created_at": user.created_at.isoformat() if user.created_at else None,
+    }
+
+
+class DiscoverUserResponse(BaseModel):
+    id: str
+    username: str
+    display_name: str
+    avatar_url: str
+
+
+class DiscoverUserListResponse(BaseModel):
+    users: List[DiscoverUserResponse]
+
+
+# ========== Public Discovery Endpoints ==========
+
+@router.get("/discover", response_model=DiscoverUserListResponse)
+async def discover_users(
+    search: Optional[str] = Query(None, description="Search username/display name"),
+    limit: int = Query(50, ge=1, le=100, description="Max results"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Discover public users for collaboration. Any authenticated user can access.
+    
+    Returns only users who have set their profile_visibility to 'public'.
+    Excludes sensitive fields like email, role, and balance.
+    """
+    service = UserService(db)
+    users = await service.discover_users(search=search, limit=limit)
+    
+    return {
+        "users": [
+            {
+                "id": str(u.id),
+                "username": u.username,
+                "display_name": u.display_name,
+                "avatar_url": u.get_avatar_url(),
+            }
+            for u in users
+        ]
     }
 
 
@@ -373,6 +417,8 @@ async def update_my_profile(
         update_data["profile"] = request.profile
     if request.preferences is not None:
         update_data["preferences"] = request.preferences
+    if request.profile_visibility is not None:
+        update_data["profile_visibility"] = request.profile_visibility
     
     user = await service.update_user(str(current_user.id), update_data)
     return serialize_user(user)
