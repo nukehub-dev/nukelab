@@ -10,7 +10,8 @@ import {
   Check,
   Globe,
   UserCircle,
-  Eye
+  Eye,
+  BookOpen
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAuthStore } from '../../stores/auth-store';
@@ -36,6 +37,7 @@ export function ProfilePage() {
     first_name: user?.first_name || '',
     last_name: user?.last_name || '',
     email: user?.email || '',
+    bio: user?.profile?.bio || '',
   });
   const [isTogglingVisibility, setIsTogglingVisibility] = useState(false);
 
@@ -53,7 +55,12 @@ export function ProfilePage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify(editForm),
+        body: JSON.stringify({
+          first_name: editForm.first_name,
+          last_name: editForm.last_name,
+          email: editForm.email,
+          profile: { ...user.profile, bio: editForm.bio },
+        }),
       });
       
       if (!res.ok) throw new Error('Failed to update profile');
@@ -141,6 +148,7 @@ export function ProfilePage() {
       first_name: user.first_name || '',
       last_name: user.last_name || '',
       email: user.email || '',
+      bio: user?.profile?.bio || '',
     });
     setShowEditModal(true);
   };
@@ -195,6 +203,16 @@ export function ProfilePage() {
                 value={editForm.email}
                 onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
                 placeholder="Enter email"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Bio</label>
+              <textarea
+                value={editForm.bio}
+                onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })}
+                placeholder="Tell us about yourself..."
+                rows={3}
+                className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
           </form>
@@ -260,6 +278,9 @@ export function ProfilePage() {
                 </span>
                 <span className="text-sm text-muted-foreground">{user.email}</span>
               </div>
+              {user?.profile?.bio && (
+                <p className="text-sm text-muted-foreground mt-2 max-w-md">{user.profile.bio}</p>
+              )}
             </div>
 
             <button
@@ -287,6 +308,9 @@ export function ProfilePage() {
               <div className="space-y-0">
                 <InfoRow icon={UserCircle} label="Username" value={user.username} />
                 <InfoRow icon={Mail} label="Email" value={user.email} />
+                {user?.profile?.bio && (
+                  <InfoRow icon={BookOpen} label="Bio" value={user.profile.bio} />
+                )}
                 <InfoRow icon={Shield} label="Role" value={user.role.replace('_', ' ')} />
                 <InfoRow 
                   icon={user.is_active ? Check : X} 

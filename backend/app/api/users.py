@@ -54,6 +54,7 @@ class UserResponse(BaseModel):
     role: str
     permissions: List[str]
     nuke_balance: int
+    profile: dict
     preferences: dict
     profile_visibility: str
     is_active: bool
@@ -90,6 +91,7 @@ def serialize_user(user: User) -> dict:
         "role": user.role,
         "permissions": get_user_permissions(user),
         "nuke_balance": user.nuke_balance,
+        "profile": user.profile or {},
         "preferences": user.preferences or {},
         "profile_visibility": user.profile_visibility or "private",
         "is_active": user.is_active,
@@ -141,6 +143,143 @@ async def discover_users(
 
 
 # ========== User CRUD Endpoints ==========
+
+# ========== Profile Endpoints (Current User) ==========
+
+@router.get("/me/profile", response_model=UserResponse)
+async def get_my_profile(
+    current_user: User = Depends(get_current_user)
+):
+    """Get current user's profile"""
+    return serialize_user(current_user)
+
+
+@router.put("/me/profile", response_model=UserResponse)
+async def update_my_profile(
+    request: UserUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Update current user's profile"""
+    service = UserService(db)
+    
+    update_data = {}
+    if request.first_name is not None:
+        update_data["first_name"] = request.first_name
+    if request.last_name is not None:
+        update_data["last_name"] = request.last_name
+    if request.email is not None:
+        update_data["email"] = request.email
+    if request.avatar_url is not None:
+        update_data["avatar_url"] = request.avatar_url
+    if request.profile is not None:
+        update_data["profile"] = request.profile
+    if request.preferences is not None:
+        update_data["preferences"] = request.preferences
+    if request.profile_visibility is not None:
+        update_data["profile_visibility"] = request.profile_visibility
+    
+    user = await service.update_user(str(current_user.id), update_data)
+    return serialize_user(user)
+
+
+@router.post("/me/change-password")
+async def change_my_password(
+    request: ChangePasswordRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Change current user's password"""
+    service = UserService(db)
+    await service.change_password(
+        str(current_user.id),
+        request.current_password,
+        request.new_password
+    )
+    
+    return {"message": "Password changed successfully"}
+
+@router.get("/{user_id}/profile")
+async def get_public_profile(
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get a user's public profile.
+    
+    Accessible if:
+    - The target user has profile_visibility='public'
+    - The viewer is the target user themselves
+    - The viewer shares a workspace with the target user
+    Otherwise returns 404 to avoid leaking private profile existence.
+    """
+    from sqlalchemy import select, and_, or_
+    from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
+    
+    service = UserService(db)
+    target_user = await service.get_by_id(user_id)
+    
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    viewer_id = str(current_user.id)
+    target_id = str(target_user.id)
+    
+    # Always allow self-view
+    can_view = viewer_id == target_id
+    
+    # Allow if profile is public
+    if not can_view and target_user.profile_visibility == "public":
+        can_view = True
+    
+    # Allow if they share a workspace
+    if not can_view:
+        result = await db.execute(
+            select(WorkspaceMember).where(
+                and_(
+                    WorkspaceMember.user_id == viewer_id,
+                    WorkspaceMember.workspace_id.in_(
+                        select(WorkspaceMember.workspace_id).where(
+                            WorkspaceMember.user_id == target_id
+                        )
+                    )
+                )
+            )
+        )
+        can_view = result.scalar_one_or_none() is not None
+        
+        # Also check if one owns a workspace the other is member of
+        if not can_view:
+            result = await db.execute(
+                select(SharedWorkspace).where(
+                    or_(
+                        and_(
+                            SharedWorkspace.owner_id == viewer_id,
+                            SharedWorkspace.members.any(WorkspaceMember.user_id == target_id)
+                        ),
+                        and_(
+                            SharedWorkspace.owner_id == target_id,
+                            SharedWorkspace.members.any(WorkspaceMember.user_id == viewer_id)
+                        )
+                    )
+                )
+            )
+            can_view = result.scalar_one_or_none() is not None
+    
+    if not can_view:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return {
+        "id": str(target_user.id),
+        "username": target_user.username,
+        "display_name": target_user.display_name,
+        "avatar_url": target_user.get_avatar_url(),
+        "role": target_user.role,
+        "profile_visibility": target_user.profile_visibility or "private",
+        "profile": target_user.profile or {},
+        "created_at": target_user.created_at.isoformat() if target_user.created_at else None,
+    }
+
 
 @router.get("/", response_model=UserListResponse)
 async def list_users(
@@ -384,58 +523,3 @@ async def get_user_resources(
     
     return stats
 
-
-# ========== Profile Endpoints (Current User) ==========
-
-@router.get("/me/profile", response_model=UserResponse)
-async def get_my_profile(
-    current_user: User = Depends(get_current_user)
-):
-    """Get current user's profile"""
-    return serialize_user(current_user)
-
-
-@router.put("/me/profile", response_model=UserResponse)
-async def update_my_profile(
-    request: UserUpdateRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Update current user's profile"""
-    service = UserService(db)
-    
-    update_data = {}
-    if request.first_name is not None:
-        update_data["first_name"] = request.first_name
-    if request.last_name is not None:
-        update_data["last_name"] = request.last_name
-    if request.email is not None:
-        update_data["email"] = request.email
-    if request.avatar_url is not None:
-        update_data["avatar_url"] = request.avatar_url
-    if request.profile is not None:
-        update_data["profile"] = request.profile
-    if request.preferences is not None:
-        update_data["preferences"] = request.preferences
-    if request.profile_visibility is not None:
-        update_data["profile_visibility"] = request.profile_visibility
-    
-    user = await service.update_user(str(current_user.id), update_data)
-    return serialize_user(user)
-
-
-@router.post("/me/change-password")
-async def change_my_password(
-    request: ChangePasswordRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Change current user's password"""
-    service = UserService(db)
-    await service.change_password(
-        str(current_user.id),
-        request.current_password,
-        request.new_password
-    )
-    
-    return {"message": "Password changed successfully"}

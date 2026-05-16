@@ -173,12 +173,10 @@ class TestVolumeAccessService:
             str(volume.id), str(admin_user.id), "read_only"
         ) is True
 
-        # But not write (workspace volume role is read_write, but member is read_only)
-        # Actually, the access service checks both - workspace volume role OR member role
-        # With read_write workspace volume, any member can write
+        # But not write (read_only member cannot write even if volume role is read_write)
         assert await access_service.can_access_volume(
             str(volume.id), str(admin_user.id), "read_write"
-        ) is True
+        ) is False
 
     @pytest.mark.asyncio
     async def test_get_accessible_volume_ids(self, db_session, test_user, admin_user):
@@ -211,3 +209,41 @@ class TestVolumeAccessService:
         ids = await access_service.get_accessible_volume_ids(str(admin_user.id), mode="read_only")
         assert str(vol1.id) not in ids
         assert str(vol2.id) in ids
+
+    @pytest.mark.asyncio
+    async def test_workspace_permission_matrix(self, db_session, test_user, admin_user):
+        """Member role and volume role should interact correctly."""
+        from app.services.volume_access_service import VolumeAccessService
+        from app.services.volume_service import VolumeService
+        from app.services.workspace_service import WorkspaceService
+
+        vol_service = VolumeService(db_session)
+        access_service = VolumeAccessService(db_session)
+        ws_service = WorkspaceService(db_session)
+
+        workspace = await ws_service.create_workspace(
+            name="Permission Matrix",
+            description="Test",
+            owner_id=str(test_user.id)
+        )
+
+        vol_rw = await vol_service.create_volume(
+            name="test-rw", display_name="RW Vol", owner_id=str(test_user.id),
+        )
+        vol_ro = await vol_service.create_volume(
+            name="test-ro", display_name="RO Vol", owner_id=str(test_user.id),
+        )
+
+        await ws_service.add_volume(workspace_id=str(workspace.id), volume_id=str(vol_rw.id), role="read_write")
+        await ws_service.add_volume(workspace_id=str(workspace.id), volume_id=str(vol_ro.id), role="read_only")
+
+        # Admin member should write only to read_write volume (no admin override)
+        await ws_service.add_member(workspace_id=str(workspace.id), user_id=str(admin_user.id), role="admin")
+        assert await access_service.can_access_volume(str(vol_rw.id), str(admin_user.id), "read_write") is True
+        assert await access_service.can_access_volume(str(vol_ro.id), str(admin_user.id), "read_write") is False
+
+        # Editor member: same behavior as admin for volume access
+        # (Documented by test_workspace_read_only_member above)
+
+        # Viewer member should not write to either
+        # (Documented by test_workspace_read_only_member above)

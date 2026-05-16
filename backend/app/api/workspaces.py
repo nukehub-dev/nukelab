@@ -15,6 +15,7 @@ from app.models.user import User
 from app.services.workspace_service import WorkspaceService
 from app.services.volume_access_service import VolumeAccessService
 from app.services.notification_service import NotificationService
+from app.services.activity_service import ActivityService
 
 router = APIRouter()
 
@@ -51,6 +52,10 @@ class AddVolumeRequest(BaseModel):
 
 class UpdateVolumeRoleRequest(BaseModel):
     role: str
+
+
+class TransferOwnershipRequest(BaseModel):
+    user_id: str
 
 
 @router.get("/")
@@ -114,18 +119,20 @@ async def get_workspace(
         raise HTTPException(status_code=403, detail="You don't have access to this workspace")
     
     data = workspace.to_dict()
-    data["members"] = [m.to_dict() for m in workspace.members]
-    data["volumes"] = [v.to_dict() for v in workspace.volume_associations]
-    data["invitations"] = [i.to_dict() for i in workspace.invitations if i.status == "pending"]
-    # Include current user's pending invitation status
+    # Current user's membership (for role checks without loading all members)
+    my_membership = next(
+        (m.to_dict() for m in workspace.members if str(m.user_id) == str(current_user.id)),
+        None
+    )
+    data["my_membership"] = my_membership
+    # Pending invitation count for stats
+    data["invitation_count"] = sum(1 for i in workspace.invitations if i.status == "pending")
+    # Current user's pending invitation
     user_invitation = next(
         (i for i in workspace.invitations if str(i.user_id) == str(current_user.id) and i.status == "pending"),
         None
     )
-    if user_invitation:
-        data["my_invitation"] = user_invitation.to_dict()
-    else:
-        data["my_invitation"] = None
+    data["my_invitation"] = user_invitation.to_dict() if user_invitation else None
     return data
 
 
@@ -155,6 +162,24 @@ async def update_workspace(
         is_active=request.is_active
     )
     
+    # Log activity
+    activity = ActivityService(db)
+    await activity.log(
+        action="workspace_updated",
+        target_type="workspace",
+        target_id=workspace_id,
+        actor_id=str(current_user.id),
+        details={
+            "changed_fields": [
+                f for f in ["name", "description", "is_active"]
+                if getattr(request, f) is not None
+            ],
+            "name": request.name,
+            "description": request.description,
+            "is_active": request.is_active,
+        }
+    )
+    
     return updated.to_dict()
 
 
@@ -181,6 +206,171 @@ async def delete_workspace(
         raise HTTPException(status_code=500, detail="Failed to delete workspace")
     
     return {"message": "Workspace deleted", "workspace_id": workspace_id}
+
+
+@router.post("/{workspace_id}/leave")
+async def leave_workspace(
+    workspace_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Leave a workspace. Owner must transfer ownership first."""
+    service = WorkspaceService(db)
+    activity = ActivityService(db)
+    
+    workspace = await service.get_workspace(workspace_id)
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    
+    if not await service.is_workspace_member(workspace_id, str(current_user.id)):
+        raise HTTPException(status_code=403, detail="You are not a member of this workspace")
+    
+    try:
+        success = await service.leave_workspace(workspace_id, str(current_user.id))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+    if success:
+        await activity.log(
+            action="member_left",
+            target_type="workspace",
+            target_id=workspace_id,
+            actor_id=str(current_user.id),
+            details={
+                "user_id": str(current_user.id),
+                "username": current_user.username,
+                "display_name": current_user.display_name,
+            }
+        )
+    
+    return {"message": "Left workspace", "workspace_id": workspace_id}
+
+
+@router.post("/{workspace_id}/transfer")
+async def transfer_ownership(
+    workspace_id: str,
+    request: TransferOwnershipRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Transfer workspace ownership to another member."""
+    service = WorkspaceService(db)
+    activity = ActivityService(db)
+    
+    workspace = await service.get_workspace(workspace_id)
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    
+    try:
+        updated = await service.transfer_ownership(
+            workspace_id=workspace_id,
+            current_owner_id=str(current_user.id),
+            new_owner_id=request.user_id
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    
+    if updated:
+        await activity.log(
+            action="ownership_transferred",
+            target_type="workspace",
+            target_id=workspace_id,
+            actor_id=str(current_user.id),
+            details={
+                "from_user_id": str(current_user.id),
+                "from_username": current_user.username,
+                "to_user_id": request.user_id,
+            }
+        )
+    
+    return updated.to_dict()
+
+
+@router.get("/{workspace_id}/activity")
+async def get_workspace_activity(
+    workspace_id: str,
+    page: int = 1,
+    limit: int = 20,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get activity feed for a workspace. Must be member or owner."""
+    from sqlalchemy import select, func, and_, desc
+    from app.models.activity_log import ActivityLog
+    import uuid
+    
+    service = WorkspaceService(db)
+    
+    workspace = await service.get_workspace(workspace_id)
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    
+    if not await service.can_view_workspace(workspace_id, str(current_user.id)):
+        raise HTTPException(status_code=403, detail="You don't have access to this workspace")
+    
+    offset = (page - 1) * limit
+    
+    # Get total count
+    count_result = await db.execute(
+        select(func.count())
+        .select_from(ActivityLog)
+        .where(
+            and_(
+                ActivityLog.target_type == "workspace",
+                ActivityLog.target_id == uuid.UUID(workspace_id)
+            )
+        )
+    )
+    total = count_result.scalar() or 0
+    
+    # Get paginated logs
+    logs_result = await db.execute(
+        select(ActivityLog)
+        .where(
+            and_(
+                ActivityLog.target_type == "workspace",
+                ActivityLog.target_id == uuid.UUID(workspace_id)
+            )
+        )
+        .order_by(desc(ActivityLog.created_at))
+        .offset(offset)
+        .limit(limit)
+    )
+    logs = logs_result.scalars().all()
+    
+    # Enrich with actor info
+    actor_ids = {str(log.actor_id) for log in logs if log.actor_id}
+    actors = {}
+    if actor_ids:
+        user_result = await db.execute(
+            select(User).where(User.id.in_([uuid.UUID(aid) for aid in actor_ids]))
+        )
+        for user in user_result.scalars().all():
+            actors[str(user.id)] = {
+                "username": user.username,
+                "display_name": user.display_name,
+                "avatar_url": user.get_avatar_url(),
+            }
+    
+    total_pages = (total + limit - 1) // limit
+    
+    return {
+        "activity": [
+            {
+                **log.to_dict(),
+                "actor": actors.get(str(log.actor_id)) if log.actor_id else None,
+            }
+            for log in logs
+        ],
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "total_pages": total_pages,
+        },
+    }
 
 
 # ========== Volume Management ==========
@@ -321,6 +511,19 @@ async def invite_member(
         action_url=f"/workspaces/{workspace_id}"
     )
     
+    # Log activity
+    activity = ActivityService(db)
+    await activity.log(
+        action="invitation_sent",
+        target_type="workspace",
+        target_id=workspace_id,
+        actor_id=str(current_user.id),
+        details={
+            "invited_user_id": request.user_id,
+            "role": request.role,
+        }
+    )
+    
     return invitation.to_dict()
 
 
@@ -339,6 +542,19 @@ async def accept_invitation(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     
+    # Log activity
+    activity = ActivityService(db)
+    await activity.log(
+        action="invitation_accepted",
+        target_type="workspace",
+        target_id=workspace_id,
+        actor_id=str(current_user.id),
+        details={
+            "user_id": str(current_user.id),
+            "username": current_user.username,
+        }
+    )
+    
     return member.to_dict()
 
 
@@ -356,6 +572,19 @@ async def reject_invitation(
         await service.reject_invitation(invitation_id, str(current_user.id))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    
+    # Log activity
+    activity = ActivityService(db)
+    await activity.log(
+        action="invitation_rejected",
+        target_type="workspace",
+        target_id=workspace_id,
+        actor_id=str(current_user.id),
+        details={
+            "user_id": str(current_user.id),
+            "username": current_user.username,
+        }
+    )
     
     return {"message": "Invitation rejected", "invitation_id": invitation_id}
 
@@ -402,6 +631,94 @@ async def list_invitations(
     return {"invitations": pending}
 
 
+@router.get("/{workspace_id}/members")
+async def list_workspace_members(
+    workspace_id: str,
+    page: int = 1,
+    limit: int = 20,
+    sort_by: str = "joined_at",
+    sort_order: str = "desc",
+    search: Optional[str] = None,
+    role: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """List workspace members with pagination. Must be member or owner."""
+    service = WorkspaceService(db)
+    
+    workspace = await service.get_workspace(workspace_id)
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    
+    if not await service.can_view_workspace(workspace_id, str(current_user.id)):
+        raise HTTPException(status_code=403, detail="You don't have access to this workspace")
+    
+    result = await service.list_workspace_members(
+        workspace_id=workspace_id,
+        page=page,
+        limit=limit,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        search=search,
+        role=role,
+    )
+    
+    total_pages = (result["total"] + limit - 1) // limit
+    
+    return {
+        "members": result["members"],
+        "pagination": {
+            "page": result["page"],
+            "limit": result["limit"],
+            "total": result["total"],
+            "total_pages": total_pages,
+        },
+    }
+
+
+@router.get("/{workspace_id}/volumes")
+async def list_workspace_volumes(
+    workspace_id: str,
+    page: int = 1,
+    limit: int = 20,
+    sort_by: str = "added_at",
+    sort_order: str = "desc",
+    search: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """List workspace volumes with pagination. Must be member or owner."""
+    service = WorkspaceService(db)
+    
+    workspace = await service.get_workspace(workspace_id)
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    
+    if not await service.can_view_workspace(workspace_id, str(current_user.id)):
+        raise HTTPException(status_code=403, detail="You don't have access to this workspace")
+    
+    result = await service.list_workspace_volumes(
+        workspace_id=workspace_id,
+        page=page,
+        limit=limit,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        search=search,
+    )
+    
+    total_pages = (result["total"] + limit - 1) // limit
+    
+    return {
+        "volumes": result["volumes"],
+        "pagination": {
+            "page": result["page"],
+            "limit": result["limit"],
+            "total": result["total"],
+            "total_pages": total_pages,
+        },
+    }
+
+
 @router.delete("/{workspace_id}/members/{user_id}")
 async def remove_member(
     workspace_id: str,
@@ -422,7 +739,11 @@ async def remove_member(
             checker = PermissionChecker(current_user)
             checker.require(Permission.ADMIN_ACCESS)
     
-    success = await service.remove_member(workspace_id, user_id)
+    try:
+        success = await service.remove_member(workspace_id, user_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
     if not success:
         raise HTTPException(status_code=404, detail="Member not found")
     
@@ -451,7 +772,11 @@ async def update_member_role(
     if request.role not in ("read_only", "read_write", "admin"):
         raise HTTPException(status_code=400, detail="Invalid role. Must be: read_only, read_write, admin")
     
-    member = await service.update_member_role(workspace_id, user_id, request.role)
+    try:
+        member = await service.update_member_role(workspace_id, user_id, request.role)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
     if not member:
         raise HTTPException(status_code=404, detail="Member not found")
     

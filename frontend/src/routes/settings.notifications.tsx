@@ -74,7 +74,7 @@ function NotificationsSettingsPage() {
     mutationFn: async (payload: { events: EventPreference[]; webhook_url: string }) => {
       return api.put('/preferences/', { notifications: payload });
     },
-    onSuccess: (result, variables) => {
+    onSuccess: (_result, variables) => {
       setSaveStatus('saved');
       // Update cached user data directly instead of refetching
       queryClient.setQueryData(['me'], (old: any) => {

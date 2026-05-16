@@ -28,7 +28,7 @@ export function DataTableMobile<TData>({
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <AnimatePresence mode="popLayout">
         {rows.map((row, i) => {
           const rowId = getRowId(row);
@@ -44,14 +44,14 @@ export function DataTableMobile<TData>({
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ delay: i * 0.05, type: 'spring', stiffness: 300, damping: 30 }}
                 className={cn(
-                  'relative rounded-xl border transition-colors',
+                  'relative rounded-lg border transition-colors',
                   isSelected
                     ? 'border-primary/50 bg-primary/5'
                     : 'border-border/50 bg-card'
                 )}
               >
                 {enableRowSelection && (
-                  <div className="absolute top-3 left-3 z-10">
+                  <div className="absolute top-2 left-2 z-10">
                     <button
                       onClick={() => toggleRow(rowId)}
                       className={cn(
@@ -65,7 +65,7 @@ export function DataTableMobile<TData>({
                     </button>
                   </div>
                 )}
-                <div className={cn(enableRowSelection && 'pl-10')} >
+                <div className={cn(enableRowSelection && 'pl-8')} >
                   {cardRenderer(row.original)}
                 </div>
               </motion.div>
@@ -82,7 +82,7 @@ export function DataTableMobile<TData>({
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ delay: i * 0.05, type: 'spring', stiffness: 300, damping: 30 }}
               className={cn(
-                'bubble p-4 space-y-3',
+                'bubble p-3 space-y-2',
                 isSelected && 'border-primary/50'
               )}
             >

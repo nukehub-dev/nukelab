@@ -2,15 +2,17 @@
 Shared workspace service for managing collaborative workspaces.
 """
 
+from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_
+from sqlalchemy import select, and_, or_, func
 from sqlalchemy.orm import selectinload
 
 from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
 from app.models.workspace_volume import WorkspaceVolume
 from app.models.workspace_invitation import WorkspaceInvitation
 from app.models.user import User
+from app.models.volume import Volume
 
 
 class WorkspaceService:
@@ -25,7 +27,7 @@ class WorkspaceService:
         description: Optional[str],
         owner_id: str
     ) -> SharedWorkspace:
-        """Create a new shared workspace"""
+        """Create a new shared workspace and add owner as admin member."""
         workspace = SharedWorkspace(
             name=name,
             description=description,
@@ -34,7 +36,157 @@ class WorkspaceService:
         self.db.add(workspace)
         await self.db.commit()
         await self.db.refresh(workspace)
+        
+        # Add owner as a member so they appear in the members list
+        owner_member = WorkspaceMember(
+            workspace_id=str(workspace.id),
+            user_id=owner_id,
+            role="admin"
+        )
+        self.db.add(owner_member)
+        await self.db.commit()
+        await self.db.refresh(workspace)
         return workspace
+    
+    # ========== Paginated Lists ==========
+    
+    async def list_workspace_members(
+        self,
+        workspace_id: str,
+        page: int = 1,
+        limit: int = 20,
+        sort_by: str = "joined_at",
+        sort_order: str = "desc",
+        search: Optional[str] = None,
+        role: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """List workspace members with pagination, sorting, and filtering."""
+        # Build base query with user joined for sorting/searching
+        query = (
+            select(WorkspaceMember)
+            .options(selectinload(WorkspaceMember.user))
+            .join(User, WorkspaceMember.user_id == User.id)
+            .where(WorkspaceMember.workspace_id == workspace_id)
+        )
+        
+        count_query = (
+            select(func.count())
+            .select_from(WorkspaceMember)
+            .join(User, WorkspaceMember.user_id == User.id)
+            .where(WorkspaceMember.workspace_id == workspace_id)
+        )
+        
+        # Apply role filter
+        if role:
+            query = query.where(WorkspaceMember.role == role)
+            count_query = count_query.where(WorkspaceMember.role == role)
+        
+        # Apply search
+        if search:
+            search_pattern = f"%{search}%"
+            search_filter = or_(
+                User.username.ilike(search_pattern),
+                User.email.ilike(search_pattern),
+            )
+            query = query.where(search_filter)
+            count_query = count_query.where(search_filter)
+        
+        # Get total count
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar() or 0
+        
+        # Apply sorting
+        sort_column_map = {
+            "username": User.username,
+            "role": WorkspaceMember.role,
+            "joined_at": WorkspaceMember.joined_at,
+        }
+        sort_column = sort_column_map.get(sort_by, WorkspaceMember.joined_at)
+        
+        if sort_order == "desc":
+            query = query.order_by(sort_column.desc())
+        else:
+            query = query.order_by(sort_column.asc())
+        
+        # Apply pagination
+        offset = (page - 1) * limit
+        query = query.offset(offset).limit(limit)
+        
+        result = await self.db.execute(query)
+        members = result.scalars().all()
+        
+        return {
+            "members": [m.to_dict() for m in members],
+            "total": total,
+            "page": page,
+            "limit": limit,
+        }
+    
+    async def list_workspace_volumes(
+        self,
+        workspace_id: str,
+        page: int = 1,
+        limit: int = 20,
+        sort_by: str = "added_at",
+        sort_order: str = "desc",
+        search: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """List workspace volumes with pagination, sorting, and filtering."""
+        # Build base query with volume joined for sorting/searching
+        query = (
+            select(WorkspaceVolume)
+            .options(
+                selectinload(WorkspaceVolume.volume).selectinload(Volume.owner),
+                selectinload(WorkspaceVolume.added_by_user),
+            )
+            .join(Volume, WorkspaceVolume.volume_id == Volume.id)
+            .where(WorkspaceVolume.workspace_id == workspace_id)
+        )
+        
+        count_query = (
+            select(func.count())
+            .select_from(WorkspaceVolume)
+            .join(Volume, WorkspaceVolume.volume_id == Volume.id)
+            .where(WorkspaceVolume.workspace_id == workspace_id)
+        )
+        
+        # Apply search
+        if search:
+            search_pattern = f"%{search}%"
+            search_filter = Volume.display_name.ilike(search_pattern)
+            query = query.where(search_filter)
+            count_query = count_query.where(search_filter)
+        
+        # Get total count
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar() or 0
+        
+        # Apply sorting
+        sort_column_map = {
+            "display_name": Volume.display_name,
+            "added_at": WorkspaceVolume.added_at,
+            "role": WorkspaceVolume.role,
+        }
+        sort_column = sort_column_map.get(sort_by, WorkspaceVolume.added_at)
+        
+        if sort_order == "desc":
+            query = query.order_by(sort_column.desc())
+        else:
+            query = query.order_by(sort_column.asc())
+        
+        # Apply pagination
+        offset = (page - 1) * limit
+        query = query.offset(offset).limit(limit)
+        
+        result = await self.db.execute(query)
+        volumes = result.scalars().all()
+        
+        return {
+            "volumes": [v.to_dict() for v in volumes],
+            "total": total,
+            "page": page,
+            "limit": limit,
+        }
     
     async def get_workspace(self, workspace_id: str) -> Optional[SharedWorkspace]:
         """Get workspace by ID with members, volumes, and invitations loaded"""
@@ -43,7 +195,8 @@ class WorkspaceService:
             .options(
                 selectinload(SharedWorkspace.members).selectinload(WorkspaceMember.user),
                 selectinload(SharedWorkspace.volume_associations).selectinload(WorkspaceVolume.volume),
-                selectinload(SharedWorkspace.invitations).selectinload(WorkspaceInvitation.user)
+                selectinload(SharedWorkspace.invitations).selectinload(WorkspaceInvitation.user),
+                selectinload(SharedWorkspace.invitations).selectinload(WorkspaceInvitation.inviter)
             )
             .where(SharedWorkspace.id == workspace_id)
         )
@@ -211,7 +364,14 @@ class WorkspaceService:
         return member
     
     async def remove_member(self, workspace_id: str, user_id: str) -> bool:
-        """Remove a member from a workspace"""
+        """Remove a member from a workspace. Owner cannot be removed."""
+        workspace = await self.get_workspace(workspace_id)
+        if not workspace:
+            raise ValueError("Workspace not found")
+        
+        if str(workspace.owner_id) == user_id:
+            raise ValueError("Cannot remove the owner from the workspace. Transfer ownership first.")
+        
         result = await self.db.execute(
             select(WorkspaceMember).where(
                 and_(
@@ -234,7 +394,14 @@ class WorkspaceService:
         user_id: str,
         role: str
     ) -> Optional[WorkspaceMember]:
-        """Update a member's role"""
+        """Update a member's role. Owner's role cannot be changed."""
+        workspace = await self.get_workspace(workspace_id)
+        if not workspace:
+            raise ValueError("Workspace not found")
+        
+        if str(workspace.owner_id) == user_id:
+            raise ValueError("Cannot change the owner's role. Transfer ownership first.")
+        
         result = await self.db.execute(
             select(WorkspaceMember).where(
                 and_(
@@ -274,18 +441,26 @@ class WorkspaceService:
         if result.scalar_one_or_none() is not None:
             raise ValueError("User is already a member of this workspace")
         
-        # Check if invitation already exists
+        # Check if invitation already exists (any status)
         result = await self.db.execute(
             select(WorkspaceInvitation).where(
                 and_(
                     WorkspaceInvitation.workspace_id == workspace_id,
                     WorkspaceInvitation.user_id == user_id,
-                    WorkspaceInvitation.status == "pending"
                 )
             )
         )
         existing = result.scalar_one_or_none()
         if existing:
+            if existing.status == "pending":
+                return existing
+            # Re-invite: reset a rejected/expired/accepted invitation back to pending
+            existing.status = "pending"
+            existing.role = role
+            existing.invited_by = invited_by
+            existing.expires_at = datetime.utcnow() + timedelta(days=7)
+            await self.db.commit()
+            await self.db.refresh(existing, attribute_names=["user", "inviter", "workspace"])
             return existing
         
         invitation = WorkspaceInvitation(
@@ -320,6 +495,12 @@ class WorkspaceService:
         invitation = result.scalar_one_or_none()
         if not invitation:
             raise ValueError("Invitation not found or already processed")
+        
+        # Check expiration
+        if invitation.expires_at and invitation.expires_at < datetime.utcnow():
+            invitation.status = "expired"
+            await self.db.commit()
+            raise ValueError("Invitation has expired")
         
         # Create workspace member
         member = WorkspaceMember(
@@ -480,3 +661,76 @@ class WorkspaceService:
             )
         )
         return result.scalar_one_or_none() is not None
+    
+    # ========== Leave & Transfer ==========
+    
+    async def leave_workspace(self, workspace_id: str, user_id: str) -> bool:
+        """Allow a member (non-owner) to leave a workspace."""
+        workspace = await self.get_workspace(workspace_id)
+        if not workspace:
+            raise ValueError("Workspace not found")
+        
+        if str(workspace.owner_id) == user_id:
+            raise ValueError("Owner must transfer ownership before leaving")
+        
+        return await self.remove_member(workspace_id, user_id)
+    
+    async def transfer_ownership(
+        self,
+        workspace_id: str,
+        current_owner_id: str,
+        new_owner_id: str
+    ) -> Optional[SharedWorkspace]:
+        """Transfer workspace ownership to another member."""
+        workspace = await self.get_workspace(workspace_id)
+        if not workspace:
+            return None
+        
+        if str(workspace.owner_id) != current_owner_id:
+            raise PermissionError("Only the owner can transfer ownership")
+        
+        if current_owner_id == new_owner_id:
+            raise ValueError("Cannot transfer ownership to yourself")
+        
+        # Verify new owner is a member
+        result = await self.db.execute(
+            select(WorkspaceMember).where(
+                and_(
+                    WorkspaceMember.workspace_id == workspace_id,
+                    WorkspaceMember.user_id == new_owner_id
+                )
+            )
+        )
+        new_owner_member = result.scalar_one_or_none()
+        if not new_owner_member:
+            raise ValueError("Target user must be a workspace member")
+        
+        # Update old owner's membership to admin (create if not exists)
+        result = await self.db.execute(
+            select(WorkspaceMember).where(
+                and_(
+                    WorkspaceMember.workspace_id == workspace_id,
+                    WorkspaceMember.user_id == current_owner_id
+                )
+            )
+        )
+        old_owner_member = result.scalar_one_or_none()
+        if old_owner_member:
+            old_owner_member.role = "admin"
+        else:
+            old_owner_member = WorkspaceMember(
+                workspace_id=workspace_id,
+                user_id=current_owner_id,
+                role="admin"
+            )
+            self.db.add(old_owner_member)
+        
+        # Transfer ownership
+        workspace.owner_id = new_owner_id
+        
+        # Update new owner's role to admin just in case
+        new_owner_member.role = "admin"
+        
+        await self.db.commit()
+        await self.db.refresh(workspace)
+        return workspace

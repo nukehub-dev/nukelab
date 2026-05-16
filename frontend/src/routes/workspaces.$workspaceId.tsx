@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   FolderOpen,
@@ -16,6 +16,10 @@ import {
   Check,
   X,
   Clock,
+  LogOut,
+  Crown,
+  Activity,
+  AlertCircle,
 } from 'lucide-react';
 import {
   useWorkspace,
@@ -24,13 +28,20 @@ import {
   useUpdateMemberRole,
   useAddWorkspaceVolume,
   useRemoveWorkspaceVolume,
+  useUpdateVolumeRole,
   useInviteWorkspaceMember,
   useAcceptInvitation,
   useRejectInvitation,
   useCancelInvitation,
+  useLeaveWorkspace,
+  useTransferOwnership,
+  useWorkspaceActivity,
+  useWorkspaceMembers,
+  useWorkspaceVolumes,
+  useWorkspaceInvitations,
 } from '../hooks/use-workspaces';
 import { useVolumes } from '../hooks/use-volumes';
-import { useDiscoverUsers } from '../hooks/use-users';
+import { useDiscoverUsers, usePublicProfile } from '../hooks/use-users';
 import { useAuthStore } from '../stores/auth-store';
 import { springs } from '../lib/animations';
 import { cn, formatBytes } from '../lib/utils';
@@ -43,7 +54,12 @@ import { Combobox } from '../components/ui/combobox';
 import { useConfirmDialog } from '../components/ui/confirm-dialog';
 import { Tooltip } from '../components/ui/tooltip';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '../components/ui/dialog';
+import { DataTable } from '../components/data/data-table';
+import { useDataTable } from '../hooks/use-data-table';
 import { Link } from '@tanstack/react-router';
+import type { ColumnDef, SortingState, ColumnFiltersState, VisibilityState } from '@tanstack/react-table';
+import type { WorkspaceMember, WorkspaceVolume } from '../hooks/use-workspaces';
+import type { WorkspaceActivity } from '../types/api';
 
 export const Route = createFileRoute('/workspaces/$workspaceId')({
   component: WorkspaceDetailPage,
@@ -59,6 +75,11 @@ const roleLabels = {
   admin: 'Admin',
   read_write: 'Editor',
   read_only: 'Viewer',
+};
+
+const volumeRoleLabels = {
+  read_write: 'Read-Write',
+  read_only: 'Read-Only',
 };
 
 const roleColors = {
@@ -77,21 +98,83 @@ function WorkspaceDetailPage() {
   const updateRole = useUpdateMemberRole();
   const addVolume = useAddWorkspaceVolume();
   const removeVolume = useRemoveWorkspaceVolume();
+  const updateVolumeRole = useUpdateVolumeRole();
   const inviteMember = useInviteWorkspaceMember();
   const acceptInvitation = useAcceptInvitation();
   const rejectInvitation = useRejectInvitation();
   const cancelInvitation = useCancelInvitation();
+  const leaveWorkspace = useLeaveWorkspace();
+  const transferOwnership = useTransferOwnership();
   const { confirm, dialog } = useConfirmDialog();
   const currentUser = useAuthStore((state) => state.user);
+  const navigate = Route.useNavigate();
 
   const [showInviteMember, setShowInviteMember] = useState(false);
   const [showAddVolume, setShowAddVolume] = useState(false);
   const [showEditWorkspace, setShowEditWorkspace] = useState(false);
+  const [showTransferOwnership, setShowTransferOwnership] = useState(false);
+  const [selectedMember, setSelectedMember] = useState<WorkspaceMember | null>(null);
+  const [selectedVolume, setSelectedVolume] = useState<WorkspaceVolume | null>(null);
   const [selectedUserId, setSelectedUserId] = useState('');
   const [selectedRole, setSelectedRole] = useState('read_write');
   const [selectedVolumeId, setSelectedVolumeId] = useState('');
   const [selectedVolumeRole, setSelectedVolumeRole] = useState('read_write');
   const [editForm, setEditForm] = useState({ name: '', description: '' });
+  const [transferTargetId, setTransferTargetId] = useState('');
+
+  // ─── Members DataTable State ───
+  const membersTable = useDataTable({ defaultLimit: 20, defaultSortBy: 'joined_at' });
+  const [membersSorting, setMembersSorting] = useState<SortingState>([{ id: 'joined_at', desc: true }]);
+  const [membersRowSelection, setMembersRowSelection] = useState<Record<string, boolean>>({});
+  const [membersColumnFilters, setMembersColumnFilters] = useState<ColumnFiltersState>([]);
+  const [membersColumnVisibility, setMembersColumnVisibility] = useState<VisibilityState>({});
+
+  const prevMembersColumnFilters = useRef<ColumnFiltersState>([]);
+  useEffect(() => {
+    const currentIds = new Set(membersColumnFilters.map((f) => f.id));
+    membersColumnFilters.forEach((filter) => {
+      if (filter.value !== undefined && filter.value !== null) {
+        membersTable.setFilter(filter.id, String(filter.value));
+      }
+    });
+    prevMembersColumnFilters.current.forEach((filter) => {
+      if (!currentIds.has(filter.id)) {
+        membersTable.setFilter(filter.id, null);
+      }
+    });
+    prevMembersColumnFilters.current = membersColumnFilters;
+  }, [membersColumnFilters, membersTable]);
+
+  const { data: membersData, isLoading: membersLoading } = useWorkspaceMembers(workspaceId, {
+    page: membersTable.state.page,
+    limit: membersTable.state.limit,
+    sort_by: membersSorting[0]?.id,
+    sort_order: membersSorting[0]?.desc ? 'desc' : 'asc',
+    search: membersTable.state.search,
+    role: membersTable.state.filters.role as string,
+  });
+
+  // Fetch all members for forms (high limit)
+  const { data: allMembersData } = useWorkspaceMembers(workspaceId, { limit: 1000 });
+  const { data: invitationsData } = useWorkspaceInvitations(workspaceId);
+
+  // ─── Volumes DataTable State ───
+  const volumesTable = useDataTable({ defaultLimit: 20, defaultSortBy: 'added_at' });
+  const [volumesSorting, setVolumesSorting] = useState<SortingState>([{ id: 'added_at', desc: true }]);
+  const [volumesRowSelection, setVolumesRowSelection] = useState<Record<string, boolean>>({});
+  const [volumesColumnFilters, setVolumesColumnFilters] = useState<ColumnFiltersState>([]);
+  const [volumesColumnVisibility, setVolumesColumnVisibility] = useState<VisibilityState>({});
+
+  const { data: volumesDataTable, isLoading: volumesLoading } = useWorkspaceVolumes(workspaceId, {
+    page: volumesTable.state.page,
+    limit: volumesTable.state.limit,
+    sort_by: volumesSorting[0]?.id,
+    sort_order: volumesSorting[0]?.desc ? 'desc' : 'asc',
+    search: volumesTable.state.search,
+  });
+
+  // Fetch all workspace volumes for forms
+  const { data: allWorkspaceVolumes } = useWorkspaceVolumes(workspaceId, { limit: 1000 });
 
   const handleInviteMember = (e: React.FormEvent) => {
     e.preventDefault();
@@ -125,6 +208,38 @@ function WorkspaceDetailPage() {
     );
   };
 
+  const handleLeaveWorkspace = async () => {
+    const confirmed = await confirm({
+      title: 'Leave Workspace',
+      description: `Are you sure you want to leave "${workspace?.name}"? You will lose access to all shared volumes.`,
+      confirmLabel: 'Leave',
+      cancelLabel: 'Cancel',
+      variant: 'warning',
+    });
+    if (confirmed) {
+      leaveWorkspace.mutate(workspaceId, {
+        onSuccess: () => {
+          navigate({ to: '/workspaces' });
+        },
+      });
+    }
+  };
+
+  const handleTransferOwnership = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!transferTargetId) return;
+
+    transferOwnership.mutate(
+      { workspaceId, userId: transferTargetId },
+      {
+        onSuccess: () => {
+          setShowTransferOwnership(false);
+          setTransferTargetId('');
+        },
+      }
+    );
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen p-6 lg:p-10">
@@ -152,7 +267,7 @@ function WorkspaceDetailPage() {
   }
 
   const isOwner = workspace.owner_id === currentUser?.id;
-  const myMembership = workspace.members?.find((m: any) => m.user_id === currentUser?.id);
+  const myMembership = workspace.my_membership;
   const isAdmin = isOwner || myMembership?.role === 'admin';
   const isMember = isOwner || !!myMembership;
   const hasPendingInvite = workspace.my_invitation?.status === 'pending';
@@ -238,10 +353,17 @@ function WorkspaceDetailPage() {
                 variant="outline"
                 className="flex-1 gap-2"
                 onClick={() =>
-                  rejectInvitation.mutate({
-                    workspaceId,
-                    invitationId: workspace.my_invitation!.id,
-                  })
+                  rejectInvitation.mutate(
+                    {
+                      workspaceId,
+                      invitationId: workspace.my_invitation!.id,
+                    },
+                    {
+                      onSuccess: () => {
+                        navigate({ to: '/workspaces' });
+                      },
+                    }
+                  )
                 }
                 loading={rejectInvitation.isPending}
               >
@@ -289,8 +411,8 @@ function WorkspaceDetailPage() {
   const availableUsers = discoverableUsers?.filter(
     (u) =>
       u.id !== currentUser?.id &&
-      !workspace.members?.some((m: any) => m.user_id === u.id) &&
-      !workspace.invitations?.some((i: any) => i.user_id === u.id)
+      !allMembersData?.members?.some((m) => m.user_id === u.id) &&
+      !invitationsData?.some((i) => i.user_id === u.id)
   ) || [];
 
   const userOptions = availableUsers.map((user) => ({
@@ -302,13 +424,306 @@ function WorkspaceDetailPage() {
   const availableVolumes = volumesData?.filter(
     (v: any) =>
       v.owner_id === currentUser?.id &&
-      !workspace.volumes?.some((wv: any) => wv.volume_id === v.id)
+      !allWorkspaceVolumes?.volumes?.some((wv) => wv.volume_id === v.id)
   ) || [];
 
   const volumeOptions = availableVolumes.map((vol: any) => ({
     value: vol.id,
     label: `${vol.display_name} (${vol.server_count} servers)`,
   }));
+
+  // ─── Members Table Columns ───
+  const memberColumns: ColumnDef<WorkspaceMember>[] = [
+    {
+      accessorKey: 'username',
+      header: 'Member',
+      cell: ({ row }) => {
+        const member = row.original;
+        const RoleIcon = roleIcons[member.role as keyof typeof roleIcons] || User;
+        return (
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setSelectedMember(member)}
+              className={cn("p-1.5 rounded flex-shrink-0", roleColors[member.role as keyof typeof roleColors])}
+            >
+              <RoleIcon className="w-3.5 h-3.5" />
+            </button>
+            <div>
+              <button
+                onClick={() => setSelectedMember(member)}
+                className="text-sm font-medium hover:underline text-left"
+              >
+                {member.username || 'Unknown'}
+              </button>
+              <p className="text-xs text-muted-foreground">{member.email}</p>
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: 'role',
+      header: 'Role',
+      cell: ({ row }) => {
+        const member = row.original;
+        const isOwnerMember = workspace.owner_id === member.user_id;
+        const isSelf = currentUser?.id === member.user_id;
+        const canManage = isAdmin && !isOwnerMember && !isSelf;
+        return (
+          <div className="flex items-center gap-2">
+            <span className={cn("text-xs px-2 py-0.5 rounded-full", roleColors[member.role as keyof typeof roleColors])}>
+              {isOwnerMember ? 'Owner' : (roleLabels[member.role as keyof typeof roleLabels] || member.role)}
+            </span>
+            {canManage && (
+              <>
+                <RoleEditor
+                  currentRole={member.role}
+                  onChange={(role) => updateRole.mutate({ workspaceId, userId: member.user_id, role })}
+                />
+                <Tooltip content="Remove member">
+                  <button
+                    onClick={async () => {
+                      const confirmed = await confirm({
+                        title: 'Remove Member',
+                        description: `Remove ${member.username || 'this member'} from the workspace?`,
+                        confirmLabel: 'Remove',
+                        cancelLabel: 'Cancel',
+                        variant: 'warning',
+                      });
+                      if (confirmed) {
+                        removeMember.mutate({ workspaceId, userId: member.user_id });
+                      }
+                    }}
+                    className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors inline-flex"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </Tooltip>
+              </>
+            )}
+          </div>
+        );
+      },
+    },
+  ];
+
+  const memberMobileCardRenderer = (member: WorkspaceMember) => {
+    const RoleIcon = roleIcons[member.role as keyof typeof roleIcons] || User;
+    const isOwnerMember = workspace.owner_id === member.user_id;
+    const isSelf = currentUser?.id === member.user_id;
+    const canManage = isAdmin && !isOwnerMember && !isSelf;
+    return (
+      <div className="p-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <button
+              onClick={() => setSelectedMember(member)}
+              className={cn("p-1 rounded flex-shrink-0", roleColors[member.role as keyof typeof roleColors])}
+            >
+              <RoleIcon className="w-3 h-3" />
+            </button>
+            <div className="min-w-0">
+              <button
+                onClick={() => setSelectedMember(member)}
+                className="text-sm font-medium hover:underline text-left truncate block"
+              >
+                {member.username || 'Unknown'}
+              </button>
+              <p className="text-xs text-muted-foreground truncate">{member.email}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className={cn("text-xs px-1.5 py-0.5 rounded-full", roleColors[member.role as keyof typeof roleColors])}>
+              {isOwnerMember ? 'Owner' : (roleLabels[member.role as keyof typeof roleLabels] || member.role)}
+            </span>
+            {canManage && (
+              <>
+                <RoleEditor
+                  currentRole={member.role}
+                  onChange={(role) => updateRole.mutate({ workspaceId, userId: member.user_id, role })}
+                />
+                <Tooltip content="Remove member">
+                  <button
+                    onClick={async () => {
+                      const confirmed = await confirm({
+                        title: 'Remove Member',
+                        description: `Remove ${member.username || 'this member'}?`,
+                        confirmLabel: 'Remove',
+                        cancelLabel: 'Cancel',
+                        variant: 'warning',
+                      });
+                      if (confirmed) {
+                        removeMember.mutate({ workspaceId, userId: member.user_id });
+                      }
+                    }}
+                    className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors inline-flex"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </Tooltip>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // ─── Volumes Table Columns ───
+  const volumeColumns: ColumnDef<WorkspaceVolume>[] = [
+    {
+      accessorKey: 'display_name',
+      header: 'Volume',
+      cell: ({ row }) => {
+        const wv = row.original;
+        return (
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="p-1.5 rounded flex-shrink-0 bg-primary/10">
+              <HardDrive className="w-3.5 h-3.5 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <button
+                onClick={() => setSelectedVolume(wv)}
+                className="text-sm font-medium truncate hover:underline text-left"
+              >
+                {wv.volume?.display_name || 'Unnamed Volume'}
+              </button>
+              <p className="text-xs text-muted-foreground">
+                {wv.volume?.size_bytes != null ? formatBytes(wv.volume.size_bytes) : 'Size unknown'}
+              </p>
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: 'owner',
+      header: 'Owner',
+      cell: ({ row }) => {
+        const wv = row.original;
+        const owner = wv.volume?.owner;
+        return (
+          <span className="text-xs text-muted-foreground">
+            {owner?.username || 'Unknown'}
+          </span>
+        );
+      },
+    },
+    {
+      accessorKey: 'role',
+      header: 'Access',
+      cell: ({ row }) => {
+        const wv = row.original;
+        return (
+          <div className="flex items-center gap-2">
+            <span className={cn("text-xs px-2 py-0.5 rounded-full", roleColors[wv.role as keyof typeof roleColors])}>
+              {volumeRoleLabels[wv.role as keyof typeof volumeRoleLabels] || wv.role}
+            </span>
+            {isAdmin && (
+              <>
+                <VolumeRoleEditor
+                  currentRole={wv.role}
+                  onChange={(role) => updateVolumeRole.mutate({ workspaceId, volumeId: wv.volume_id, role })}
+                />
+                <Tooltip content="Remove volume">
+                  <button
+                    onClick={async () => {
+                      const confirmed = await confirm({
+                        title: 'Remove Volume',
+                        description: `Remove this volume from the workspace?`,
+                        confirmLabel: 'Remove',
+                        cancelLabel: 'Cancel',
+                        variant: 'warning',
+                      });
+                      if (confirmed) {
+                        removeVolume.mutate({ workspaceId, volumeId: wv.volume_id });
+                      }
+                    }}
+                    className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors inline-flex"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </Tooltip>
+              </>
+            )}
+          </div>
+        );
+      },
+    },
+  ];
+
+  const volumeMobileCardRenderer = (wv: WorkspaceVolume) => {
+    const owner = wv.volume?.owner;
+    return (
+    <div className="p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="p-1 rounded flex-shrink-0 bg-primary/10">
+            <HardDrive className="w-3 h-3 text-primary" />
+          </div>
+          <div className="min-w-0">
+            <button
+              onClick={() => setSelectedVolume(wv)}
+              className="text-sm font-medium truncate hover:underline text-left block"
+            >
+              {wv.volume?.display_name || 'Unnamed Volume'}
+            </button>
+            <p className="text-xs text-muted-foreground">
+              {wv.volume?.size_bytes != null ? formatBytes(wv.volume.size_bytes) : 'Size unknown'}
+              {owner && (
+                <span>{` · ${owner.username}`}</span>
+              )}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className={cn("text-xs px-1.5 py-0.5 rounded-full", roleColors[wv.role as keyof typeof roleColors])}>
+            {volumeRoleLabels[wv.role as keyof typeof volumeRoleLabels] || wv.role}
+          </span>
+          {isAdmin && (
+            <>
+              <VolumeRoleEditor
+                currentRole={wv.role}
+                onChange={(role) => updateVolumeRole.mutate({ workspaceId, volumeId: wv.volume_id, role })}
+              />
+              <Tooltip content="Remove volume">
+                <button
+                  onClick={async () => {
+                    const confirmed = await confirm({
+                      title: 'Remove Volume',
+                      description: `Remove this volume from the workspace?`,
+                      confirmLabel: 'Remove',
+                      cancelLabel: 'Cancel',
+                      variant: 'warning',
+                    });
+                    if (confirmed) {
+                      removeVolume.mutate({ workspaceId, volumeId: wv.volume_id });
+                    }
+                  }}
+                  className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors inline-flex"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </Tooltip>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+  const memberFilters = [
+    {
+      key: 'role',
+      label: 'Role',
+      options: [
+        { label: 'Admin', value: 'admin' },
+        { label: 'Editor', value: 'read_write' },
+        { label: 'Viewer', value: 'read_only' },
+      ],
+    },
+  ];
 
   return (
     <div className="min-h-screen p-6 lg:p-10 space-y-6">
@@ -335,22 +750,54 @@ function WorkspaceDetailPage() {
               <h1 className="text-xl font-bold truncate">{workspace.name}</h1>
             </div>
           </div>
-          {isAdmin && (
-            <Tooltip content="Edit workspace">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setEditForm({ name: workspace.name, description: workspace.description || '' });
-                  setShowEditWorkspace(true);
-                }}
-                className="gap-1.5 flex-shrink-0"
-              >
-                <Pencil className="w-3.5 h-3.5" />
-                Edit
-              </Button>
-            </Tooltip>
-          )}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {isOwner && (
+              <Tooltip content="Transfer ownership">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setTransferTargetId('');
+                    setShowTransferOwnership(true);
+                  }}
+                  className="gap-1.5"
+                >
+                  <Crown className="w-3.5 h-3.5" />
+                  Transfer
+                </Button>
+              </Tooltip>
+            )}
+            {isAdmin && (
+              <Tooltip content="Edit workspace">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setEditForm({ name: workspace.name, description: workspace.description || '' });
+                    setShowEditWorkspace(true);
+                  }}
+                  className="gap-1.5"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  Edit
+                </Button>
+              </Tooltip>
+            )}
+            {isMember && !isOwner && (
+              <Tooltip content="Leave workspace">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleLeaveWorkspace}
+                  loading={leaveWorkspace.isPending}
+                  className="gap-1.5 text-destructive hover:text-destructive"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  Leave
+                </Button>
+              </Tooltip>
+            )}
+          </div>
         </div>
 
         {/* Description */}
@@ -366,7 +813,7 @@ function WorkspaceDetailPage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <StatCard
             title="Volumes"
-            value={workspace.volumes?.length || 0}
+            value={workspace.volume_count || 0}
             icon={HardDrive}
             iconColor="text-blue-400"
             bgColor="bg-blue-500/10"
@@ -374,7 +821,7 @@ function WorkspaceDetailPage() {
           />
           <StatCard
             title="Members"
-            value={workspace.members?.length || 0}
+            value={workspace.member_count || 0}
             icon={Users}
             iconColor="text-violet-400"
             bgColor="bg-violet-500/10"
@@ -406,7 +853,11 @@ function WorkspaceDetailPage() {
           {isAdmin && (
             <Button
               size="sm"
-              onClick={() => setShowAddVolume(!showAddVolume)}
+              onClick={() => {
+                setSelectedVolumeId('');
+                setSelectedVolumeRole('read_write');
+                setShowAddVolume(true);
+              }}
               className="gap-1"
             >
               <Plus className="w-3.5 h-3.5" />
@@ -415,93 +866,44 @@ function WorkspaceDetailPage() {
           )}
         </div>
 
-        {showAddVolume && isAdmin && (
-          <form onSubmit={handleAddVolume} className="mb-4 p-4 rounded-xl bg-surface/50 border border-border/50 space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">Volume</label>
-                <Combobox
-                  value={selectedVolumeId}
-                  onChange={setSelectedVolumeId}
-                  options={volumeOptions}
-                  placeholder="Select volume..."
-                  searchPlaceholder="Search volumes..."
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">Access Role</label>
-                <Select
-                  value={selectedVolumeRole}
-                  onChange={setSelectedVolumeRole}
-                  placeholder="Select role..."
-                >
-                  <SelectItem value="read_write">Read-Write</SelectItem>
-                  <SelectItem value="read_only">Read-Only</SelectItem>
-                </Select>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button type="submit" size="sm" loading={addVolume.isPending}>Add</Button>
-              <Button type="button" variant="outline" size="sm" onClick={() => setShowAddVolume(false)}>
-                Cancel
-              </Button>
-            </div>
-          </form>
-        )}
-
-        <div className="space-y-2">
-          {workspace.volumes?.map((wv: any) => (
-            <div
-              key={wv.volume_id}
-              className="flex items-center justify-between p-3 rounded-lg bg-surface/50 border border-border/50"
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="p-1.5 rounded flex-shrink-0 bg-primary/10">
-                  <HardDrive className="w-3.5 h-3.5 text-primary" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium truncate">{wv.volume?.display_name || 'Unnamed Volume'}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {wv.volume?.size_bytes != null ? formatBytes(wv.volume.size_bytes) : 'Size unknown'}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <span className={cn("text-xs px-2 py-0.5 rounded-full", roleColors[wv.role as keyof typeof roleColors])}>
-                  {roleLabels[wv.role as keyof typeof roleLabels] || wv.role}
-                </span>
-                {isAdmin && (
-                  <Tooltip content="Remove volume">
-                    <button
-                      onClick={async () => {
-                        const confirmed = await confirm({
-                          title: 'Remove Volume',
-                          description: `Are you sure you want to remove this volume from the workspace?`,
-                          confirmLabel: 'Remove',
-                          cancelLabel: 'Cancel',
-                          variant: 'warning',
-                        });
-                        if (confirmed) {
-                          removeVolume.mutate({ workspaceId, volumeId: wv.volume_id });
-                        }
-                      }}
-                      className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors inline-flex"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </Tooltip>
-                )}
-              </div>
-            </div>
-          ))}
-          {!workspace.volumes?.length && (
+        <DataTable
+          columns={volumeColumns}
+          data={volumesDataTable?.volumes || []}
+          totalCount={volumesDataTable?.pagination?.total || 0}
+          pageCount={volumesDataTable?.pagination?.total_pages || 1}
+          page={volumesTable.state.page}
+          limit={volumesTable.state.limit}
+          sorting={volumesSorting}
+          rowSelection={volumesRowSelection}
+          columnFilters={volumesColumnFilters}
+          columnVisibility={volumesColumnVisibility}
+          globalFilter={volumesTable.state.search}
+          isLoading={volumesLoading}
+          onPageChange={volumesTable.setPage}
+          onLimitChange={volumesTable.setLimit}
+          onSortingChange={(newSorting) => {
+            setVolumesSorting(newSorting);
+            if (newSorting.length > 0) {
+              volumesTable.setSort(newSorting[0].id, newSorting[0].desc ? 'desc' : 'asc');
+            }
+          }}
+          onRowSelectionChange={setVolumesRowSelection}
+          onColumnFiltersChange={setVolumesColumnFilters}
+          onColumnVisibilityChange={setVolumesColumnVisibility}
+          onGlobalFilterChange={volumesTable.setSearch}
+          getRowId={(row) => row.volume_id}
+          searchable
+          searchPlaceholder="Search volumes..."
+          mobileCardRenderer={volumeMobileCardRenderer}
+          enableRowSelection={false}
+          emptyState={
             <div className="text-center py-8 text-muted-foreground">
               <HardDrive className="w-8 h-8 mx-auto mb-2 opacity-50" />
               <p className="text-sm">No volumes yet</p>
               <p className="text-xs mt-1">Add volumes to share with workspace members</p>
             </div>
-          )}
-        </div>
+          }
+        />
       </motion.div>
 
       {/* Members Section */}
@@ -519,7 +921,11 @@ function WorkspaceDetailPage() {
           {isAdmin && (
             <Button
               size="sm"
-              onClick={() => setShowInviteMember(!showInviteMember)}
+              onClick={() => {
+                setSelectedUserId('');
+                setSelectedRole('read_write');
+                setShowInviteMember(true);
+              }}
               className="gap-1"
             >
               <Mail className="w-3.5 h-3.5" />
@@ -528,114 +934,49 @@ function WorkspaceDetailPage() {
           )}
         </div>
 
-        {showInviteMember && isAdmin && (
-          <form onSubmit={handleInviteMember} className="mb-4 p-4 rounded-xl bg-surface/50 border border-border/50 space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">User</label>
-                <Combobox
-                  value={selectedUserId}
-                  onChange={setSelectedUserId}
-                  options={userOptions}
-                  placeholder="Select user..."
-                  searchPlaceholder="Search users..."
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">Role</label>
-                <Select
-                  value={selectedRole}
-                  onChange={setSelectedRole}
-                  placeholder="Select role..."
-                >
-                  <SelectItem value="read_write">Editor</SelectItem>
-                  <SelectItem value="read_only">Viewer</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                </Select>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button type="submit" size="sm" loading={inviteMember.isPending}>Send Invite</Button>
-              <Button type="button" variant="outline" size="sm" onClick={() => setShowInviteMember(false)}>
-                Cancel
-              </Button>
-            </div>
-          </form>
-        )}
-
-        <div className="space-y-2">
-          {workspace.members?.map((member: any) => {
-            const RoleIcon = roleIcons[member.role as keyof typeof roleIcons] || User;
-            return (
-              <div
-                key={member.user_id}
-                className="flex items-center justify-between p-3 rounded-lg bg-surface/50 border border-border/50"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className={cn("p-1.5 rounded flex-shrink-0", roleColors[member.role as keyof typeof roleColors])}>
-                    <RoleIcon className="w-3.5 h-3.5" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{member.username || 'Unknown'}</p>
-                    <p className="text-xs text-muted-foreground truncate">{member.email}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <span className={cn("text-xs px-2 py-0.5 rounded-full", roleColors[member.role as keyof typeof roleColors])}>
-                    {roleLabels[member.role as keyof typeof roleLabels] || member.role}
-                  </span>
-                  {isAdmin && (
-                    <Select
-                      value={member.role}
-                      onChange={(value) => updateRole.mutate({
-                        workspaceId,
-                        userId: member.user_id,
-                        role: value
-                      })}
-                      className="w-28"
-                    >
-                      <SelectItem value="read_write">Editor</SelectItem>
-                      <SelectItem value="read_only">Viewer</SelectItem>
-                      <SelectItem value="admin">Admin</SelectItem>
-                    </Select>
-                  )}
-                  {(isAdmin || currentUser?.id === member.user_id) && (
-                    <Tooltip content="Remove member">
-                      <button
-                        onClick={async () => {
-                          const confirmed = await confirm({
-                            title: 'Remove Member',
-                            description: `Are you sure you want to remove ${member.username || 'this member'} from the workspace?`,
-                            confirmLabel: 'Remove',
-                            cancelLabel: 'Cancel',
-                            variant: 'warning',
-                          });
-                          if (confirmed) {
-                            removeMember.mutate({ workspaceId, userId: member.user_id });
-                          }
-                        }}
-                        className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors inline-flex"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </Tooltip>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-          {!workspace.members?.length && (
+        <DataTable
+          columns={memberColumns}
+          data={membersData?.members || []}
+          totalCount={membersData?.pagination?.total || 0}
+          pageCount={membersData?.pagination?.total_pages || 1}
+          page={membersTable.state.page}
+          limit={membersTable.state.limit}
+          sorting={membersSorting}
+          rowSelection={membersRowSelection}
+          columnFilters={membersColumnFilters}
+          columnVisibility={membersColumnVisibility}
+          globalFilter={membersTable.state.search}
+          isLoading={membersLoading}
+          onPageChange={membersTable.setPage}
+          onLimitChange={membersTable.setLimit}
+          onSortingChange={(newSorting) => {
+            setMembersSorting(newSorting);
+            if (newSorting.length > 0) {
+              membersTable.setSort(newSorting[0].id, newSorting[0].desc ? 'desc' : 'asc');
+            }
+          }}
+          onRowSelectionChange={setMembersRowSelection}
+          onColumnFiltersChange={setMembersColumnFilters}
+          onColumnVisibilityChange={setMembersColumnVisibility}
+          onGlobalFilterChange={membersTable.setSearch}
+          getRowId={(row) => row.user_id}
+          filters={memberFilters}
+          searchable
+          searchPlaceholder="Search members..."
+          mobileCardRenderer={memberMobileCardRenderer}
+          enableRowSelection={false}
+          emptyState={
             <div className="text-center py-8 text-muted-foreground">
               <Users className="w-8 h-8 mx-auto mb-2 opacity-50" />
               <p className="text-sm">No members yet</p>
               <p className="text-xs mt-1">Invite members to collaborate</p>
             </div>
-          )}
-        </div>
+          }
+        />
       </motion.div>
 
       {/* Pending Invitations Section */}
-      {isAdmin && workspace.invitations && workspace.invitations.length > 0 && (
+      {isAdmin && invitationsData && invitationsData.length > 0 && (
         <motion.div
           className="bubble p-5"
           initial={{ opacity: 0, y: 20 }}
@@ -647,7 +988,7 @@ function WorkspaceDetailPage() {
             <h3 className="text-base font-semibold">Pending Invitations</h3>
           </div>
           <div className="space-y-2">
-            {workspace.invitations.map((invitation: any) => (
+            {invitationsData.map((invitation: any) => (
               <div
                 key={invitation.id}
                 className="flex items-center justify-between p-3 rounded-lg bg-surface/50 border border-border/50"
@@ -675,7 +1016,17 @@ function WorkspaceDetailPage() {
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <span className="text-xs text-muted-foreground">
-                    Sent {invitation.created_at ? new Date(invitation.created_at).toLocaleDateString() : ''}
+                    {invitation.expires_at
+                      ? (() => {
+                          const expires = new Date(invitation.expires_at);
+                          const now = new Date();
+                          const diffDays = Math.ceil((expires.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                          if (diffDays < 0) return <span className="text-destructive flex items-center gap-1"><AlertCircle className="w-3 h-3" /> Expired</span>;
+                          if (diffDays === 0) return <span className="text-amber-400">Expires today</span>;
+                          return `Expires in ${diffDays} day${diffDays > 1 ? 's' : ''}`;
+                        })()
+                      : `Sent ${invitation.created_at ? new Date(invitation.created_at).toLocaleDateString() : ''}`
+                    }
                   </span>
                   <Tooltip content="Cancel invitation">
                     <button
@@ -705,6 +1056,20 @@ function WorkspaceDetailPage() {
           </div>
         </motion.div>
       )}
+
+      {/* Activity Section */}
+      <motion.div
+        className="bubble p-5"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.5, ...springs.gentle }}
+      >
+        <div className="flex items-center gap-2 mb-4">
+          <Activity className="w-4 h-4 text-primary" />
+          <h3 className="text-base font-semibold">Activity</h3>
+        </div>
+        <WorkspaceActivityTable workspaceId={workspaceId} />
+      </motion.div>
 
       {/* Edit Workspace Dialog */}
       {isAdmin && (
@@ -756,8 +1121,663 @@ function WorkspaceDetailPage() {
         </Dialog>
       )}
 
+      {/* Transfer Ownership Dialog */}
+      {isOwner && (
+        <Dialog open={showTransferOwnership} onOpenChange={setShowTransferOwnership}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Transfer Ownership</DialogTitle>
+              <DialogDescription>
+                Choose a member to become the new owner. You will be demoted to admin.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleTransferOwnership} className="space-y-4 mt-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">New Owner</label>
+                <Combobox
+                  value={transferTargetId}
+                  onChange={setTransferTargetId}
+                  options={allMembersData?.members
+                    ?.filter((m) => m.user_id !== currentUser?.id)
+                    .map((m) => ({
+                      value: m.user_id,
+                      label: `${m.username || 'Unknown'}`,
+                    })) || []}
+                  placeholder="Select member..."
+                  searchPlaceholder="Search members..."
+                />
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setShowTransferOwnership(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" loading={transferOwnership.isPending} disabled={!transferTargetId}>
+                  Transfer
+                </Button>
+              </DialogFooter>
+            </form>
+            <DialogClose onClick={() => setShowTransferOwnership(false)} />
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Invite Member Dialog */}
+      {isAdmin && (
+        <Dialog open={showInviteMember} onOpenChange={setShowInviteMember}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Invite Member</DialogTitle>
+              <DialogDescription>Invite a user to collaborate in this workspace.</DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleInviteMember} className="space-y-4 mt-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">User</label>
+                <Combobox
+                  value={selectedUserId}
+                  onChange={setSelectedUserId}
+                  options={userOptions}
+                  placeholder="Select user..."
+                  searchPlaceholder="Search users..."
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Role</label>
+                <Select
+                  value={selectedRole}
+                  onChange={setSelectedRole}
+                  placeholder="Select role..."
+                >
+                  <SelectItem value="read_write">Editor</SelectItem>
+                  <SelectItem value="read_only">Viewer</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                </Select>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setShowInviteMember(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" loading={inviteMember.isPending} disabled={!selectedUserId}>
+                  Send Invite
+                </Button>
+              </DialogFooter>
+            </form>
+            <DialogClose onClick={() => setShowInviteMember(false)} />
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Add Volume Dialog */}
+      {isAdmin && (
+        <Dialog open={showAddVolume} onOpenChange={setShowAddVolume}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add Volume</DialogTitle>
+              <DialogDescription>Add a volume to share with workspace members.</DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleAddVolume} className="space-y-4 mt-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Volume</label>
+                <Combobox
+                  value={selectedVolumeId}
+                  onChange={setSelectedVolumeId}
+                  options={volumeOptions}
+                  placeholder="Select volume..."
+                  searchPlaceholder="Search volumes..."
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Access Role</label>
+                <Select
+                  value={selectedVolumeRole}
+                  onChange={setSelectedVolumeRole}
+                  placeholder="Select role..."
+                >
+                  <SelectItem value="read_write">Read-Write</SelectItem>
+                  <SelectItem value="read_only">Read-Only</SelectItem>
+                </Select>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setShowAddVolume(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" loading={addVolume.isPending} disabled={!selectedVolumeId}>
+                  Add
+                </Button>
+              </DialogFooter>
+            </form>
+            <DialogClose onClick={() => setShowAddVolume(false)} />
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* User Profile Dialog */}
+      <UserProfileDialog
+        member={selectedMember}
+        onClose={() => setSelectedMember(null)}
+      />
+
+      {/* Volume Detail Dialog */}
+      <VolumeDetailDialog
+        volume={selectedVolume}
+        onClose={() => setSelectedVolume(null)}
+      />
+
       {/* Confirmation Dialog */}
       {dialog}
     </div>
+  );
+}
+
+
+// ─── Sub-components ─────────────────────────────────────────────────────────
+
+function RoleEditor({ currentRole, onChange }: { currentRole: string; onChange: (role: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setEditing(false);
+      }
+    };
+    if (editing) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [editing]);
+
+  const options = [
+    { value: 'admin', label: 'Admin', color: roleColors.admin },
+    { value: 'read_write', label: 'Editor', color: roleColors.read_write },
+    { value: 'read_only', label: 'Viewer', color: roleColors.read_only },
+  ];
+
+  if (editing) {
+    return (
+      <div ref={ref} className="flex items-center gap-1">
+        {options.map((opt) => (
+          <button
+            key={opt.value}
+            onClick={() => {
+              if (opt.value !== currentRole) {
+                onChange(opt.value);
+              }
+              setEditing(false);
+            }}
+            className={cn(
+              'text-xs px-2 py-0.5 rounded-full font-medium transition-colors',
+              opt.color,
+              currentRole === opt.value && 'ring-1 ring-current'
+            )}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <Tooltip content="Change role">
+      <button
+        onClick={() => setEditing(true)}
+        className="p-1 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors inline-flex"
+      >
+        <Pencil className="w-3 h-3" />
+      </button>
+    </Tooltip>
+  );
+}
+
+function VolumeRoleEditor({ currentRole, onChange }: { currentRole: string; onChange: (role: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setEditing(false);
+      }
+    };
+    if (editing) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [editing]);
+
+  const options = [
+    { value: 'read_write', label: 'RW', title: 'Read-Write', color: roleColors.read_write },
+    { value: 'read_only', label: 'RO', title: 'Read-Only', color: roleColors.read_only },
+  ];
+
+  if (editing) {
+    return (
+      <div ref={ref} className="flex items-center gap-1">
+        {options.map((opt) => (
+          <Tooltip key={opt.value} content={opt.title}>
+            <button
+              onClick={() => {
+                if (opt.value !== currentRole) {
+                  onChange(opt.value);
+                }
+                setEditing(false);
+              }}
+              className={cn(
+                'text-xs px-2 py-0.5 rounded-full font-medium transition-colors',
+                opt.color,
+                currentRole === opt.value && 'ring-1 ring-current'
+              )}
+            >
+              {opt.label}
+            </button>
+          </Tooltip>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <Tooltip content="Change access">
+      <button
+        onClick={() => setEditing(true)}
+        className="p-1 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors inline-flex"
+      >
+        <Pencil className="w-3 h-3" />
+      </button>
+    </Tooltip>
+  );
+}
+
+function formatActivityLabel(item: WorkspaceActivity): string {
+  const changed = item.details?.changed_fields as string[] | undefined;
+
+  switch (item.action) {
+    case 'workspace_updated':
+      if (!changed?.length) return 'updated workspace';
+      if (changed.length === 1 && changed[0] === 'name') {
+        return `renamed workspace to "${item.details?.name}"`;
+      }
+      if (changed.length === 1 && changed[0] === 'description') {
+        return 'updated workspace description';
+      }
+      if (changed.length === 1 && changed[0] === 'is_active') {
+        return item.details?.is_active ? 'activated workspace' : 'deactivated workspace';
+      }
+      return `updated workspace ${changed.join(', ')}`;
+    case 'member_left':
+      return 'left the workspace';
+    case 'ownership_transferred':
+      return 'transferred ownership';
+    case 'invitation_sent':
+      return 'sent an invitation';
+    case 'invitation_accepted':
+      return 'accepted an invitation';
+    case 'invitation_rejected':
+      return 'rejected an invitation';
+    case 'invitation_expired':
+      return 'invitation expired';
+    case 'member_added':
+      return 'was added';
+    case 'member_removed':
+      return 'was removed';
+    case 'role_updated':
+      return 'role was updated';
+    case 'volume_added':
+      return 'added a volume';
+    case 'volume_removed':
+      return 'removed a volume';
+    case 'workspace_created':
+      return 'created workspace';
+    default:
+      return item.action;
+  }
+}
+
+function WorkspaceActivityTable({ workspaceId }: { workspaceId: string }) {
+  const table = useDataTable({ defaultLimit: 20, defaultSortBy: 'created_at' });
+  const [sorting, setSorting] = useState<SortingState>([{ id: 'created_at', desc: true }]);
+  const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+
+  const { data, isLoading } = useWorkspaceActivity(workspaceId, {
+    page: table.state.page,
+    limit: table.state.limit,
+  });
+
+  const activity = data?.activity || [];
+
+  const columns: ColumnDef<WorkspaceActivity>[] = [
+    {
+      accessorKey: 'actor',
+      header: 'Actor',
+      cell: ({ row }) => {
+        const item = row.original;
+        const actorName = item.actor?.display_name || item.actor?.username || 'Someone';
+        return (
+          <div className="flex items-center gap-2">
+            {item.actor?.avatar_url ? (
+              <img src={item.actor.avatar_url} alt="" className="w-6 h-6 rounded-full object-cover" />
+            ) : (
+              <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
+                {actorName.charAt(0).toUpperCase()}
+              </div>
+            )}
+            <span className="text-sm font-medium">{actorName}</span>
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: 'action',
+      header: 'Action',
+      cell: ({ row }) => {
+        const item = row.original;
+        return (
+          <span className="text-sm text-muted-foreground">
+            {formatActivityLabel(item)}
+          </span>
+        );
+      },
+    },
+    {
+      accessorKey: 'created_at',
+      header: 'Time',
+      cell: ({ row }) => {
+        const item = row.original;
+        return (
+          <span className="text-xs text-muted-foreground">
+            {item.created_at
+              ? new Date(item.created_at).toLocaleString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })
+              : ''}
+          </span>
+        );
+      },
+    },
+  ];
+
+  const mobileCardRenderer = (item: WorkspaceActivity) => {
+    const actorName = item.actor?.display_name || item.actor?.username || 'Someone';
+    return (
+      <div className="p-3">
+        <div className="flex items-start gap-2">
+          {item.actor?.avatar_url ? (
+            <img src={item.actor.avatar_url} alt="" className="w-6 h-6 rounded-full object-cover flex-shrink-0" />
+          ) : (
+            <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary flex-shrink-0">
+              {actorName.charAt(0).toUpperCase()}
+            </div>
+          )}
+          <div className="min-w-0">
+            <p className="text-sm">
+              <span className="font-medium">{actorName}</span>{' '}
+              <span className="text-muted-foreground">{formatActivityLabel(item)}</span>
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {item.created_at
+                ? new Date(item.created_at).toLocaleString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })
+                : ''}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <DataTable
+      columns={columns}
+      data={activity}
+      totalCount={data?.pagination?.total || 0}
+      pageCount={data?.pagination?.total_pages || 1}
+      page={table.state.page}
+      limit={table.state.limit}
+      sorting={sorting}
+      rowSelection={rowSelection}
+      columnFilters={columnFilters}
+      columnVisibility={columnVisibility}
+      globalFilter={table.state.search}
+      isLoading={isLoading}
+      onPageChange={table.setPage}
+      onLimitChange={table.setLimit}
+      onSortingChange={(newSorting) => {
+        setSorting(newSorting);
+        if (newSorting.length > 0) {
+          table.setSort(newSorting[0].id, newSorting[0].desc ? 'desc' : 'asc');
+        }
+      }}
+      onRowSelectionChange={setRowSelection}
+      onColumnFiltersChange={setColumnFilters}
+      onColumnVisibilityChange={setColumnVisibility}
+      onGlobalFilterChange={table.setSearch}
+      getRowId={(row) => row.id}
+      searchable
+      searchPlaceholder="Search activity..."
+      mobileCardRenderer={mobileCardRenderer}
+      enableRowSelection={false}
+      emptyState={
+        <div className="text-center py-6 text-muted-foreground">
+          <Activity className="w-8 h-8 mx-auto mb-2 opacity-50" />
+          <p className="text-sm">No activity yet</p>
+        </div>
+      }
+    />
+  );
+}
+
+function UserProfileDialog({ member, onClose }: { member: WorkspaceMember | null; onClose: () => void }) {
+  const { data: profile, isLoading } = usePublicProfile(member?.user_id || undefined);
+
+  const formatDateTime = (date: string) =>
+    new Date(date).toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+
+  return (
+    <Dialog open={!!member} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="relative overflow-hidden">
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-chart-2/5 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2 pointer-events-none" />
+        <DialogHeader>
+          <DialogTitle className="text-base text-muted-foreground font-medium">Member Profile</DialogTitle>
+        </DialogHeader>
+        {isLoading ? (
+          <div className="py-8 space-y-4">
+            <div className="h-14 w-14 bg-muted rounded-full animate-pulse" />
+            <div className="h-4 bg-muted rounded w-1/2" />
+          </div>
+        ) : member ? (
+          <div className="py-4 space-y-4 relative">
+            <div className="flex items-center gap-4">
+              {profile?.avatar_url ? (
+                <img
+                  src={profile.avatar_url}
+                  alt={profile.username}
+                  className="w-14 h-14 rounded-full object-cover ring-2 ring-border/50 flex-shrink-0"
+                />
+              ) : (
+                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary/30 to-primary/10 ring-2 ring-primary/30 flex items-center justify-center text-xl font-bold text-primary flex-shrink-0">
+                  {(profile?.display_name || member.username || '?').charAt(0).toUpperCase()}
+                </div>
+              )}
+              <div className="min-w-0">
+                <p className="text-lg font-semibold truncate">{profile?.display_name || member.username || 'Unknown'}</p>
+                <p className="text-sm text-muted-foreground">@{member.username || 'unknown'}</p>
+                <span className={cn(
+                  "text-xs px-2 py-0.5 rounded-full mt-1 inline-block",
+                  roleColors[member.role as keyof typeof roleColors]
+                )}>
+                  {roleLabels[member.role as keyof typeof roleLabels] || member.role}
+                </span>
+              </div>
+            </div>
+
+            {profile?.profile?.bio && (
+              <p className="text-sm text-muted-foreground">{profile.profile.bio}</p>
+            )}
+
+            <div className="divide-y divide-border/50">
+              <div className="flex items-center justify-between py-2.5">
+                <span className="text-xs text-muted-foreground">Email</span>
+                <span className="text-sm font-medium">{member.email || '—'}</span>
+              </div>
+              {member.joined_at && (
+                <div className="flex items-center justify-between py-2.5">
+                  <span className="text-xs text-muted-foreground">Joined</span>
+                  <span className="text-sm font-medium">{formatDateTime(member.joined_at)}</span>
+                </div>
+              )}
+              {profile?.created_at && (
+                <div className="flex items-center justify-between py-2.5">
+                  <span className="text-xs text-muted-foreground">Member Since</span>
+                  <span className="text-sm font-medium">{formatDateTime(profile.created_at)}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="py-8 text-center text-muted-foreground">
+            <p>Member not found.</p>
+          </div>
+        )}
+        <DialogClose onClick={onClose} />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function VolumeDetailDialog({ volume, onClose }: { volume: WorkspaceVolume | null; onClose: () => void }) {
+  const vol = volume?.volume;
+  const owner = vol?.owner;
+
+  const formatDateTime = (date: string) =>
+    new Date(date).toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+
+  return (
+    <Dialog open={!!volume} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="relative overflow-hidden">
+        <div className="absolute bottom-0 left-0 w-48 h-48 bg-chart-2/5 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2 pointer-events-none" />
+        <DialogHeader>
+          <DialogTitle className="text-base text-muted-foreground font-medium">Volume Details</DialogTitle>
+        </DialogHeader>
+        {volume ? (
+          <div className="py-4 space-y-4 relative">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <HardDrive className="w-6 h-6 text-primary" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-lg font-semibold truncate">{vol?.display_name || 'Unnamed Volume'}</p>
+                <p className="text-sm text-muted-foreground">{vol?.name || 'unknown'}</p>
+                <span className={cn(
+                  "text-xs px-2 py-0.5 rounded-full mt-1 inline-block",
+                  roleColors[volume.role as keyof typeof roleColors]
+                )}>
+                  {volumeRoleLabels[volume.role as keyof typeof volumeRoleLabels] || volume.role}
+                </span>
+              </div>
+            </div>
+
+            {vol?.description && (
+              <p className="text-sm text-muted-foreground">{vol.description}</p>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 rounded-xl bg-surface/50 border border-border/50 text-center">
+                <p className="text-xs text-muted-foreground mb-1">Size</p>
+                <p className="text-sm font-semibold">{vol?.size_bytes != null ? formatBytes(vol.size_bytes) : 'Unknown'}</p>
+                {vol?.max_size_bytes != null && (
+                  <p className="text-[10px] text-muted-foreground mt-0.5">of {formatBytes(vol.max_size_bytes)}</p>
+                )}
+              </div>
+              <div className="p-3 rounded-xl bg-surface/50 border border-border/50 text-center">
+                <p className="text-xs text-muted-foreground mb-1">Servers</p>
+                <p className="text-sm font-semibold">{vol?.server_count ?? 0}</p>
+              </div>
+            </div>
+
+            <div className="divide-y divide-border/50">
+              <div className="flex items-center justify-between py-2.5">
+                <span className="text-xs text-muted-foreground">Status</span>
+                <span className="text-sm font-medium capitalize">{vol?.status || 'Unknown'}</span>
+              </div>
+              {vol?.visibility && (
+                <div className="flex items-center justify-between py-2.5">
+                  <span className="text-xs text-muted-foreground">Visibility</span>
+                  <span className="text-sm font-medium capitalize">{vol.visibility}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between py-2.5">
+                <span className="text-xs text-muted-foreground">Owner</span>
+                <span className="text-sm font-medium">@{owner?.username || 'Unknown'}</span>
+              </div>
+              {owner?.display_name && (
+                <div className="flex items-center justify-between py-2.5">
+                  <span className="text-xs text-muted-foreground">Owner Name</span>
+                  <span className="text-sm font-medium">{owner.display_name}</span>
+                </div>
+              )}
+              {vol?.created_at && (
+                <div className="flex items-center justify-between py-2.5">
+                  <span className="text-xs text-muted-foreground">Created</span>
+                  <span className="text-sm font-medium">{formatDateTime(vol.created_at)}</span>
+                </div>
+              )}
+              {volume.added_at && (
+                <div className="flex items-center justify-between py-2.5">
+                  <span className="text-xs text-muted-foreground">Added to Workspace</span>
+                  <span className="text-sm font-medium">{formatDateTime(volume.added_at)}</span>
+                </div>
+              )}
+              {vol?.last_mounted_at && (
+                <div className="flex items-center justify-between py-2.5">
+                  <span className="text-xs text-muted-foreground">Last Mounted</span>
+                  <span className="text-sm font-medium">{formatDateTime(vol.last_mounted_at)}</span>
+                </div>
+              )}
+              {vol?.labels && Object.keys(vol.labels).length > 0 && (
+                <div className="flex items-center justify-between py-2.5">
+                  <span className="text-xs text-muted-foreground">Labels</span>
+                  <div className="flex gap-1 flex-wrap justify-end">
+                    {Object.entries(vol.labels).map(([k, v]) => (
+                      <span key={k} className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                        {k}{v ? `:${v}` : ''}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="py-8 text-center text-muted-foreground">
+            <p>Volume not found.</p>
+          </div>
+        )}
+        <DialogClose onClick={onClose} />
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -48,7 +48,7 @@ function getTypeConfig(type: string) {
 
 export function CreditHistoryDialog({ user, open, onClose, usersMap = {} }: CreditHistoryDialogProps) {
   const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(10);
+  const [limit] = useState(10);
   const [typeFilter, setTypeFilter] = useState('');
   const [sortBy, setSortBy] = useState('created_at');
   const [sortDesc, setSortDesc] = useState(true);

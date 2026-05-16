@@ -229,5 +229,270 @@ class TestWorkspaceAPI:
 
         ws_data = resp.json()
         assert ws_data["name"] == "Detail Test Workspace"
-        assert "members" in ws_data
-        assert "volumes" in ws_data
+        assert "my_membership" in ws_data
+        assert ws_data["member_count"] == 1  # Owner is a member
+        assert "volume_count" in ws_data
+
+
+
+
+class TestWorkspaceCollaboration:
+    """Tests for leave, transfer, activity, and invitation expiry."""
+
+    @pytest.mark.asyncio
+    async def test_leave_workspace(self, client: AsyncClient, test_user, user_token):
+        """Member should be able to leave a workspace; owner should not."""
+        headers = {"Authorization": f"Bearer {user_token}"}
+
+        # Create workspace
+        resp = await client.post("/api/workspaces/", headers=headers, json={
+            "name": "Leave Test Workspace",
+            "description": "Testing leave",
+        })
+        workspace = resp.json()
+
+        # Owner trying to leave should fail
+        resp = await client.post(f"/api/workspaces/{workspace['id']}/leave", headers=headers)
+        assert resp.status_code == 400
+        assert "transfer ownership" in resp.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_transfer_ownership(self, client: AsyncClient, test_user, admin_user, user_token, admin_token):
+        """Owner should transfer ownership to another member."""
+        headers = {"Authorization": f"Bearer {user_token}"}
+        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+
+        # Create workspace
+        resp = await client.post("/api/workspaces/", headers=headers, json={
+            "name": "Transfer Test Workspace",
+            "description": "Testing transfer",
+        })
+        workspace = resp.json()
+
+        # Invite admin_user
+        resp = await client.post(
+            f"/api/workspaces/{workspace['id']}/invitations",
+            headers=headers,
+            json={"user_id": str(admin_user.id), "role": "read_write"}
+        )
+        invitation = resp.json()
+
+        # Accept as admin_user
+        resp = await client.post(
+            f"/api/workspaces/{workspace['id']}/invitations/{invitation['id']}/accept",
+            headers=admin_headers
+        )
+        assert resp.status_code == 200
+
+        # Transfer ownership
+        resp = await client.post(
+            f"/api/workspaces/{workspace['id']}/transfer",
+            headers=headers,
+            json={"user_id": str(admin_user.id)}
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["owner_id"] == str(admin_user.id)
+
+    @pytest.mark.asyncio
+    async def test_invitation_expiration(self, client: AsyncClient, test_user, admin_user, user_token, admin_token, db_session):
+        """Expired invitations should be rejected."""
+        headers = {"Authorization": f"Bearer {user_token}"}
+        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+
+        # Create workspace
+        resp = await client.post("/api/workspaces/", headers=headers, json={
+            "name": "Expiry Test Workspace",
+            "description": "Testing expiry",
+        })
+        workspace = resp.json()
+
+        # Invite admin_user
+        resp = await client.post(
+            f"/api/workspaces/{workspace['id']}/invitations",
+            headers=headers,
+            json={"user_id": str(admin_user.id), "role": "read_write"}
+        )
+        invitation = resp.json()
+        assert "expires_at" in invitation
+
+        # Manually expire the invitation in DB via db_session fixture
+        from app.models.workspace_invitation import WorkspaceInvitation
+        from sqlalchemy import update
+        from datetime import datetime, timedelta
+        await db_session.execute(
+            update(WorkspaceInvitation)
+            .where(WorkspaceInvitation.id == invitation["id"])
+            .values(expires_at=datetime.utcnow() - timedelta(days=1))
+        )
+        await db_session.commit()
+
+        # Accept as admin_user should fail
+        resp = await client.post(
+            f"/api/workspaces/{workspace['id']}/invitations/{invitation['id']}/accept",
+            headers=admin_headers
+        )
+        assert resp.status_code == 400
+        assert "expired" in resp.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_get_workspace_activity(self, client: AsyncClient, test_user, user_token):
+        """Activity feed should return workspace events."""
+        headers = {"Authorization": f"Bearer {user_token}"}
+
+        # Create workspace
+        resp = await client.post("/api/workspaces/", headers=headers, json={
+            "name": "Activity Test Workspace",
+            "description": "Testing activity",
+        })
+        workspace = resp.json()
+
+        # Get activity
+        resp = await client.get(f"/api/workspaces/{workspace['id']}/activity", headers=headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "activity" in data
+        assert isinstance(data["activity"], list)
+
+
+    @pytest.mark.asyncio
+    async def test_creator_is_in_members_list(self, client: AsyncClient, test_user, user_token):
+        """Workspace creator/owner should appear in the members list."""
+        headers = {"Authorization": f"Bearer {user_token}"}
+
+        resp = await client.post("/api/workspaces/", headers=headers, json={
+            "name": "Members List Test",
+            "description": "Testing creator in members",
+        })
+        workspace = resp.json()
+
+        # Use the paginated members endpoint
+        resp = await client.get(f"/api/workspaces/{workspace['id']}/members", headers=headers)
+        data = resp.json()
+
+        member_ids = [m["user_id"] for m in data["members"]]
+        assert str(test_user.id) in member_ids
+        # Owner should have admin role in members list
+        owner_member = next(m for m in data["members"] if m["user_id"] == str(test_user.id))
+        assert owner_member["role"] == "admin"
+        # Check pagination
+        assert "pagination" in data
+        assert data["pagination"]["total"] == 1
+
+    @pytest.mark.asyncio
+    async def test_owner_role_cannot_be_changed(self, client: AsyncClient, test_user, user_token):
+        """Owner's role cannot be changed via member update."""
+        headers = {"Authorization": f"Bearer {user_token}"}
+
+        resp = await client.post("/api/workspaces/", headers=headers, json={
+            "name": "Owner Role Test",
+            "description": "Testing owner protection",
+        })
+        workspace = resp.json()
+
+        resp = await client.put(
+            f"/api/workspaces/{workspace['id']}/members/{test_user.id}",
+            headers=headers,
+            json={"role": "read_write"}
+        )
+        assert resp.status_code == 400
+        assert "owner" in resp.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_owner_cannot_be_removed(self, client: AsyncClient, test_user, user_token):
+        """Owner cannot be removed from workspace."""
+        headers = {"Authorization": f"Bearer {user_token}"}
+
+        resp = await client.post("/api/workspaces/", headers=headers, json={
+            "name": "Owner Remove Test",
+            "description": "Testing owner protection",
+        })
+        workspace = resp.json()
+
+        resp = await client.delete(
+            f"/api/workspaces/{workspace['id']}/members/{test_user.id}",
+            headers=headers
+        )
+        assert resp.status_code == 400
+        assert "owner" in resp.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_list_workspace_members_pagination(self, client: AsyncClient, test_user, user_token):
+        """Members endpoint should support pagination, sorting, and search."""
+        headers = {"Authorization": f"Bearer {user_token}"}
+
+        # Create workspace
+        resp = await client.post("/api/workspaces/", headers=headers, json={
+            "name": "Pagination Test",
+            "description": "Testing member pagination",
+        })
+        workspace = resp.json()
+
+        # List members with default pagination
+        resp = await client.get(f"/api/workspaces/{workspace['id']}/members", headers=headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "members" in data
+        assert "pagination" in data
+        assert data["pagination"]["total"] == 1
+        assert data["pagination"]["page"] == 1
+
+        # Test sorting by username
+        resp = await client.get(
+            f"/api/workspaces/{workspace['id']}/members?sort_by=username&sort_order=asc",
+            headers=headers
+        )
+        assert resp.status_code == 200
+
+        # Test role filter
+        resp = await client.get(
+            f"/api/workspaces/{workspace['id']}/members?role=admin",
+            headers=headers
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["pagination"]["total"] == 1
+
+        resp = await client.get(
+            f"/api/workspaces/{workspace['id']}/members?role=read_write",
+            headers=headers
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["pagination"]["total"] == 0
+
+        # Test search
+        resp = await client.get(
+            f"/api/workspaces/{workspace['id']}/members?search={test_user.username[:3]}",
+            headers=headers
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["pagination"]["total"] == 1
+
+    @pytest.mark.asyncio
+    async def test_list_workspace_volumes_pagination(self, client: AsyncClient, test_user, user_token):
+        """Volumes endpoint should support pagination."""
+        headers = {"Authorization": f"Bearer {user_token}"}
+
+        # Create workspace
+        resp = await client.post("/api/workspaces/", headers=headers, json={
+            "name": "Volume Pagination Test",
+            "description": "Testing volume pagination",
+        })
+        workspace = resp.json()
+
+        # List volumes (empty)
+        resp = await client.get(f"/api/workspaces/{workspace['id']}/volumes", headers=headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "volumes" in data
+        assert "pagination" in data
+        assert data["pagination"]["total"] == 0
+
+        # Test sorting
+        resp = await client.get(
+            f"/api/workspaces/{workspace['id']}/volumes?sort_by=added_at&sort_order=desc",
+            headers=headers
+        )
+        assert resp.status_code == 200

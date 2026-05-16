@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
+import type { WorkspaceActivity } from '../types/api';
 
 export interface Workspace {
   id: string;
@@ -34,7 +35,20 @@ export interface WorkspaceVolume {
     name: string;
     display_name: string;
     size_bytes: number;
+    max_size_bytes?: number | null;
     status: string;
+    visibility?: string;
+    server_count?: number;
+    description?: string | null;
+    labels?: Record<string, string>;
+    created_at?: string;
+    updated_at?: string;
+    last_mounted_at?: string | null;
+    owner?: {
+      id: string;
+      username: string;
+      display_name: string;
+    };
   };
 }
 
@@ -56,10 +70,29 @@ export interface WorkspaceInvitation {
 }
 
 export interface WorkspaceWithMembers extends Workspace {
-  members: WorkspaceMember[];
-  volumes: WorkspaceVolume[];
-  invitations: WorkspaceInvitation[];
+  my_membership: WorkspaceMember | null;
+  invitation_count: number;
   my_invitation: WorkspaceInvitation | null;
+}
+
+export interface PaginatedWorkspaceMembers {
+  members: WorkspaceMember[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    total_pages: number;
+  };
+}
+
+export interface PaginatedWorkspaceVolumes {
+  volumes: WorkspaceVolume[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    total_pages: number;
+  };
 }
 
 export function useWorkspaces() {
@@ -193,6 +226,19 @@ export function useRemoveWorkspaceVolume() {
   });
 }
 
+export function useUpdateVolumeRole() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ workspaceId, volumeId, role }: { workspaceId: string; volumeId: string; role: string }) => {
+      const response = await api.put<WorkspaceVolume>(`/workspaces/${workspaceId}/volumes/${volumeId}`, { role });
+      return response;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['workspace', variables.workspaceId] });
+    },
+  });
+}
+
 export function useInviteWorkspaceMember() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -245,5 +291,122 @@ export function useCancelInvitation() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['workspace', variables.workspaceId] });
     },
+  });
+}
+
+export function useLeaveWorkspace() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (workspaceId: string) => {
+      await api.post(`/workspaces/${workspaceId}/leave`, {});
+    },
+    onSuccess: (_, workspaceId) => {
+      queryClient.invalidateQueries({ queryKey: ['workspace', workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ['workspaces'] });
+    },
+  });
+}
+
+export function useTransferOwnership() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ workspaceId, userId }: { workspaceId: string; userId: string }) => {
+      await api.post(`/workspaces/${workspaceId}/transfer`, { user_id: userId });
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['workspace', variables.workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ['workspaces'] });
+    },
+  });
+}
+
+export function useWorkspaceActivity(workspaceId: string, params: { page?: number; limit?: number } = {}) {
+  return useQuery({
+    queryKey: ['workspace', workspaceId, 'activity', params],
+    queryFn: async () => {
+      const searchParams = new URLSearchParams();
+      if (params.page) searchParams.set('page', String(params.page));
+      if (params.limit) searchParams.set('limit', String(params.limit));
+      const queryString = searchParams.toString();
+      const response = await api.get<{
+        activity: WorkspaceActivity[];
+        pagination: { page: number; limit: number; total: number; total_pages: number };
+      }>(`/workspaces/${workspaceId}/activity?${queryString}`);
+      return response;
+    },
+    enabled: !!workspaceId,
+  });
+}
+
+interface WorkspaceMembersQueryParams {
+  page?: number;
+  limit?: number;
+  sort_by?: string;
+  sort_order?: string;
+  search?: string;
+  role?: string;
+}
+
+export function useWorkspaceMembers(workspaceId: string, params: WorkspaceMembersQueryParams = {}) {
+  return useQuery({
+    queryKey: ['workspace', workspaceId, 'members', params],
+    queryFn: async () => {
+      const searchParams = new URLSearchParams();
+      if (params.page) searchParams.set('page', String(params.page));
+      if (params.limit) searchParams.set('limit', String(params.limit));
+      if (params.sort_by) searchParams.set('sort_by', params.sort_by);
+      if (params.sort_order) searchParams.set('sort_order', params.sort_order);
+      if (params.search) searchParams.set('search', params.search);
+      if (params.role) searchParams.set('role', params.role);
+
+      const queryString = searchParams.toString();
+      const response = await api.get<PaginatedWorkspaceMembers>(
+        `/workspaces/${workspaceId}/members?${queryString}`
+      );
+      return response;
+    },
+    enabled: !!workspaceId,
+  });
+}
+
+interface WorkspaceVolumesQueryParams {
+  page?: number;
+  limit?: number;
+  sort_by?: string;
+  sort_order?: string;
+  search?: string;
+}
+
+export function useWorkspaceVolumes(workspaceId: string, params: WorkspaceVolumesQueryParams = {}) {
+  return useQuery({
+    queryKey: ['workspace', workspaceId, 'volumes', params],
+    queryFn: async () => {
+      const searchParams = new URLSearchParams();
+      if (params.page) searchParams.set('page', String(params.page));
+      if (params.limit) searchParams.set('limit', String(params.limit));
+      if (params.sort_by) searchParams.set('sort_by', params.sort_by);
+      if (params.sort_order) searchParams.set('sort_order', params.sort_order);
+      if (params.search) searchParams.set('search', params.search);
+
+      const queryString = searchParams.toString();
+      const response = await api.get<PaginatedWorkspaceVolumes>(
+        `/workspaces/${workspaceId}/volumes?${queryString}`
+      );
+      return response;
+    },
+    enabled: !!workspaceId,
+  });
+}
+
+export function useWorkspaceInvitations(workspaceId: string) {
+  return useQuery({
+    queryKey: ['workspace', workspaceId, 'invitations'],
+    queryFn: async () => {
+      const response = await api.get<{ invitations: WorkspaceInvitation[] }>(
+        `/workspaces/${workspaceId}/invitations`
+      );
+      return response.invitations;
+    },
+    enabled: !!workspaceId,
   });
 }

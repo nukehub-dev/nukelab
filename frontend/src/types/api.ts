@@ -49,6 +49,7 @@ export interface User {
   is_verified: boolean;
   last_login?: string;
   created_at?: string;
+  profile?: Record<string, any>;
   preferences?: Record<string, any>;
   profile_visibility?: 'private' | 'public';
 }
@@ -159,6 +160,32 @@ export interface LowBalanceUser {
   nuke_balance: number;
   daily_allowance: number;
   email: string;
+}
+
+export interface WorkspaceActivity {
+  id: string;
+  actor_id: string | null;
+  action: string;
+  target_type: string;
+  target_id: string | null;
+  details: Record<string, any>;
+  created_at: string;
+  actor?: {
+    username: string;
+    display_name: string;
+    avatar_url: string;
+  } | null;
+}
+
+export interface PublicProfile {
+  id: string;
+  username: string;
+  display_name: string;
+  avatar_url: string;
+  role: string;
+  profile_visibility: 'private' | 'public';
+  profile: Record<string, any>;
+  created_at?: string;
 }
 
 export interface ApiError {

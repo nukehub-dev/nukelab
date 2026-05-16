@@ -86,3 +86,24 @@ class ActivityService:
             .limit(limit)
         )
         return result.scalars().all()
+    
+    async def get_workspace_activity(
+        self,
+        workspace_id: str,
+        limit: int = 50,
+        offset: int = 0
+    ) -> List[ActivityLog]:
+        """Get activity logs for a specific workspace"""
+        result = await self.db.execute(
+            select(ActivityLog)
+            .where(
+                and_(
+                    ActivityLog.target_type == "workspace",
+                    ActivityLog.target_id == uuid.UUID(workspace_id)
+                )
+            )
+            .order_by(desc(ActivityLog.created_at))
+            .offset(offset)
+            .limit(limit)
+        )
+        return result.scalars().all()

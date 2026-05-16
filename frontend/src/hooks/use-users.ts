@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useToast } from '../stores/toast-store';
-import type { User, PublicUser } from '../types/api';
+import type { User, PublicUser, PublicProfile } from '../types/api';
 
 interface UsersQueryParams {
   role?: string;
@@ -84,6 +84,18 @@ export function useDiscoverUsers(search?: string) {
     },
     enabled: search === undefined || search.length >= 2,
     staleTime: 1000 * 30,
+  });
+}
+
+export function usePublicProfile(userId?: string) {
+  return useQuery({
+    queryKey: ['users', 'profile', userId],
+    queryFn: async () => {
+      const response = await api.get<PublicProfile>(`/users/${userId}/profile`);
+      return response;
+    },
+    enabled: !!userId,
+    staleTime: 1000 * 60,
   });
 }
 

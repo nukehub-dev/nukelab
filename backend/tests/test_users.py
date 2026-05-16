@@ -129,3 +129,41 @@ class TestUserSearchAPI:
         assert response.status_code == 200
         data = response.json()
         assert len(data["users"]) > 0
+
+
+class TestPublicProfileAPI:
+    """Public profile endpoint tests."""
+
+    @pytest.mark.asyncio
+    async def test_get_public_profile_of_public_user(self, client, user_token, admin_user):
+        """Should return public profile for a user with public visibility."""
+        from app.db.session import get_db
+        async for db in get_db():
+            admin_user.profile_visibility = "public"
+            await db.commit()
+            break
+
+        response = await client.get(
+            f"/api/users/{admin_user.id}/profile",
+            headers={"Authorization": f"Bearer {user_token}"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["username"] == admin_user.username
+        assert "display_name" in data
+        assert "avatar_url" in data
+
+    @pytest.mark.asyncio
+    async def test_get_private_profile_returns_404(self, client, user_token, admin_user):
+        """Should return 404 for private user with no shared workspace."""
+        from app.db.session import get_db
+        async for db in get_db():
+            admin_user.profile_visibility = "private"
+            await db.commit()
+            break
+
+        response = await client.get(
+            f"/api/users/{admin_user.id}/profile",
+            headers={"Authorization": f"Bearer {user_token}"}
+        )
+        assert response.status_code == 404

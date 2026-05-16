@@ -63,7 +63,14 @@ class VolumeAccessService:
         user_id: str,
         mode: str
     ) -> bool:
-        """Check if user has access through workspace membership"""
+        """Check if user has access through workspace membership.
+        
+        Permission matrix:
+        - Workspace owner: full access
+        - Admin member: full access (admin override)
+        - Editor member: write only if volume role is read_write
+        - Viewer member: read only
+        """
         # Find workspaces that contain this volume
         workspace_query = select(WorkspaceVolume).where(
             WorkspaceVolume.volume_id == volume_id
@@ -74,7 +81,7 @@ class VolumeAccessService:
         for wv in workspace_volumes:
             workspace_id = str(wv.workspace_id)
 
-            # Check if user is owner
+            # Check if user is workspace owner
             workspace_result = await self.db.execute(
                 select(SharedWorkspace).where(
                     and_(
@@ -100,11 +107,11 @@ class VolumeAccessService:
                 if mode == "read_only":
                     return True  # Any member can read
                 elif mode == "read_write":
-                    # Check workspace volume role or member role
-                    if wv.role == "read_write":
+                    # Editor members can write only if volume allows it
+                    if member.role in ("admin", "read_write") and wv.role == "read_write":
                         return True
-                    if member.role in ("read_write", "admin"):
-                        return True
+                    # Viewer members cannot write
+                    return False
 
         return False
 

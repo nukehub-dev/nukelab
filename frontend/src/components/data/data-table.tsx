@@ -256,14 +256,16 @@ export function DataTable<TData>({
             />
           </div>
 
-          <DataTablePagination
-            page={page}
-            limit={limit}
-            totalCount={totalCount}
-            pageCount={pageCount}
-            onPageChange={onPageChange}
-            onLimitChange={onLimitChange}
-          />
+          {totalCount > limit && (
+            <DataTablePagination
+              page={page}
+              limit={limit}
+              totalCount={totalCount}
+              pageCount={pageCount}
+              onPageChange={onPageChange}
+              onLimitChange={onLimitChange}
+            />
+          )}
         </>
       )}
     </div>

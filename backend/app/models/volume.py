@@ -4,6 +4,7 @@ from sqlalchemy import Column, String, DateTime, BigInteger, ForeignKey, Integer
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
+from sqlalchemy import inspect
 from app.db.base import Base
 
 
@@ -42,7 +43,7 @@ class Volume(Base):
     workspace_associations = relationship("WorkspaceVolume", back_populates="volume", cascade="all, delete-orphan")
     
     def to_dict(self):
-        return {
+        data = {
             "id": str(self.id),
             "name": self.name,
             "display_name": self.display_name,
@@ -58,3 +59,10 @@ class Volume(Base):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
+        if "owner" not in inspect(self).unloaded and self.owner:
+            data["owner"] = {
+                "id": str(self.owner.id),
+                "username": self.owner.username,
+                "display_name": self.owner.display_name,
+            }
+        return data

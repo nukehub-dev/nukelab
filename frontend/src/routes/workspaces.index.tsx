@@ -9,6 +9,12 @@ import {
   Trash2,
   Search,
   Activity,
+  SlidersHorizontal,
+  Crown,
+  UserCheck,
+  Clock,
+  LayoutGrid,
+  List,
 } from 'lucide-react';
 import {
   useWorkspaces,
@@ -16,9 +22,12 @@ import {
   useDeleteWorkspace,
 } from '../hooks/use-workspaces';
 import { springs } from '../lib/animations';
+import { cn } from '../lib/utils';
+import { useAuthStore } from '../stores/auth-store';
 import { ResourcePageLayout } from '../components/layout/resource-page-layout';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import { Select, SelectItem } from '../components/ui/select';
 import { Textarea } from '../components/ui/textarea';
 import { Card, CardContent } from '../components/ui/card';
 import { SkeletonCard } from '../components/feedback/skeleton';
@@ -137,13 +146,99 @@ function WorkspaceCard({
   );
 }
 
+// Workspace List Row Component
+function WorkspaceListRow({
+  workspace,
+  index,
+  onDelete,
+}: {
+  workspace: any;
+  index: number;
+  onDelete?: () => void;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: -10 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: index * 0.03, ...springs.gentle }}
+    >
+      <Link
+        to="/workspaces/$workspaceId"
+        params={{ workspaceId: workspace.id }}
+      >
+        <Card variant="bubble" interactive className="overflow-hidden group">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-4">
+              <div className="p-2 rounded-xl bg-primary/10 shrink-0">
+                <FolderOpen className="w-4 h-4 text-primary" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-sm truncate">
+                    {workspace.name}
+                  </h3>
+                  {!workspace.is_active && (
+                    <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] uppercase tracking-wider bg-muted text-muted-foreground">
+                      Inactive
+                    </span>
+                  )}
+                  {workspace.has_pending_invitation && (
+                    <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                      Pending
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                  {workspace.description || <span className="italic opacity-60">No description</span>}
+                </p>
+              </div>
+              <div className="hidden sm:flex items-center gap-4 text-xs text-muted-foreground shrink-0">
+                <div className="flex items-center gap-1">
+                  <Users className="w-3 h-3" />
+                  {workspace.member_count || 0}
+                </div>
+                <div className="flex items-center gap-1">
+                  <HardDrive className="w-3 h-3" />
+                  {workspace.volume_count || 0}
+                </div>
+                <span>{formatDate(workspace.created_at)}</span>
+              </div>
+              {onDelete && (
+                <Tooltip content="Delete workspace">
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onDelete();
+                    }}
+                    className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </Tooltip>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </Link>
+    </motion.div>
+  );
+}
+
+type FilterTab = 'all' | 'owned' | 'member' | 'pending';
+type SortOption = 'name_asc' | 'name_desc' | 'newest' | 'oldest' | 'members';
+
 function WorkspacesListPage() {
+  const currentUser = useAuthStore((state) => state.user);
   const { data: workspaces = [], isLoading } = useWorkspaces();
   const createWorkspace = useCreateWorkspace();
   const deleteWorkspace = useDeleteWorkspace();
   const { confirm, dialog } = useConfirmDialog();
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeFilter, setActiveFilter] = useState<FilterTab>('all');
+  const [sortBy, setSortBy] = useState<SortOption>('newest');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newWorkspace, setNewWorkspace] = useState({
     name: '',
@@ -151,14 +246,54 @@ function WorkspacesListPage() {
   });
 
   const filteredWorkspaces = useMemo(() => {
-    if (!searchQuery.trim()) return workspaces;
-    const query = searchQuery.toLowerCase();
-    return workspaces.filter(
-      (w) =>
-        w.name.toLowerCase().includes(query) ||
-        w.description?.toLowerCase().includes(query)
-    );
-  }, [workspaces, searchQuery]);
+    let result = workspaces;
+
+    // Search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(
+        (w) =>
+          w.name.toLowerCase().includes(query) ||
+          w.description?.toLowerCase().includes(query)
+      );
+    }
+
+    // Category filter
+    if (activeFilter === 'owned') {
+      result = result.filter((w) => w.owner_id === currentUser?.id);
+    } else if (activeFilter === 'member') {
+      result = result.filter((w) => w.owner_id !== currentUser?.id && !w.has_pending_invitation);
+    } else if (activeFilter === 'pending') {
+      result = result.filter((w) => w.has_pending_invitation);
+    }
+
+    // Sort
+    result = [...result].sort((a, b) => {
+      switch (sortBy) {
+        case 'name_asc':
+          return a.name.localeCompare(b.name);
+        case 'name_desc':
+          return b.name.localeCompare(a.name);
+        case 'newest':
+          return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+        case 'oldest':
+          return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
+        case 'members':
+          return (b.member_count || 0) - (a.member_count || 0);
+        default:
+          return 0;
+      }
+    });
+
+    return result;
+  }, [workspaces, searchQuery, activeFilter, sortBy]);
+
+  const filterCounts = useMemo(() => ({
+    all: workspaces.length,
+    owned: workspaces.filter((w) => w.owner_id === currentUser?.id).length,
+    member: workspaces.filter((w) => w.owner_id !== currentUser?.id && !w.has_pending_invitation).length,
+    pending: workspaces.filter((w) => w.has_pending_invitation).length,
+  }), [workspaces]);
 
   const stats = useMemo(() => {
     const totalWorkspaces = workspaces.length;
@@ -219,22 +354,90 @@ function WorkspacesListPage() {
           },
         ]}
       >
-        {/* Search Toolbar */}
+        {/* Filter & Search Toolbar */}
         {!isLoading && workspaces.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={springs.gentle}
-            className="flex flex-col sm:flex-row items-start sm:items-center gap-3"
+            className="flex flex-col gap-4"
           >
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none z-10" />
-              <Input
-                placeholder="Search workspaces..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-              />
+            {/* Search + Sort Row */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+              <div className="relative flex-1 max-w-sm">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none z-10" />
+                <Input
+                  placeholder="Search workspaces..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 bg-muted/50 rounded-lg p-1">
+                  <button
+                    onClick={() => setViewMode('grid')}
+                    className={cn(
+                      'p-1.5 rounded-md transition-colors',
+                      viewMode === 'grid' ? 'bg-surface shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    <LayoutGrid className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setViewMode('list')}
+                    className={cn(
+                      'p-1.5 rounded-md transition-colors',
+                      viewMode === 'list' ? 'bg-surface shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    <List className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="w-40">
+                  <Select
+                    value={sortBy}
+                    onChange={(value) => setSortBy(value as SortOption)}
+                    placeholder="Sort by..."
+                  >
+                    <SelectItem value="newest">Newest First</SelectItem>
+                    <SelectItem value="oldest">Oldest First</SelectItem>
+                    <SelectItem value="name_asc">Name A-Z</SelectItem>
+                    <SelectItem value="name_desc">Name Z-A</SelectItem>
+                    <SelectItem value="members">Most Members</SelectItem>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            {/* Filter Tabs */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {[
+                { key: 'all' as FilterTab, label: 'All', icon: SlidersHorizontal, count: filterCounts.all },
+                { key: 'owned' as FilterTab, label: 'Owned', icon: Crown, count: filterCounts.owned },
+                { key: 'member' as FilterTab, label: 'Member', icon: UserCheck, count: filterCounts.member },
+                { key: 'pending' as FilterTab, label: 'Pending', icon: Clock, count: filterCounts.pending },
+              ].map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveFilter(tab.key)}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors border',
+                    activeFilter === tab.key
+                      ? 'bg-primary/10 border-primary/30 text-primary'
+                      : 'bg-muted/50 border-border/50 text-muted-foreground hover:text-foreground hover:bg-muted'
+                  )}
+                >
+                  <tab.icon className="w-3.5 h-3.5" />
+                  {tab.label}
+                  <span className={cn(
+                    'ml-0.5 px-1.5 py-0.5 rounded-full text-[10px]',
+                    activeFilter === tab.key ? 'bg-primary/20' : 'bg-muted'
+                  )}>
+                    {tab.count}
+                  </span>
+                </button>
+              ))}
             </div>
           </motion.div>
         )}
@@ -263,16 +466,44 @@ function WorkspacesListPage() {
             animate={{ opacity: 1 }}
             className="text-center py-12"
           >
-            <p className="text-muted-foreground">No workspaces match your search.</p>
-            <Button variant="outline" size="sm" onClick={() => setSearchQuery('')} className="mt-2">
-              Clear Search
-            </Button>
+            <p className="text-muted-foreground">
+              {activeFilter !== 'all'
+                ? `No ${activeFilter} workspaces.`
+                : searchQuery.trim()
+                  ? 'No workspaces match your search.'
+                  : 'No workspaces found.'}
+            </p>
+            <div className="flex items-center justify-center gap-2 mt-2">
+              {searchQuery.trim() && (
+                <Button variant="outline" size="sm" onClick={() => setSearchQuery('')}>
+                  Clear Search
+                </Button>
+              )}
+              {activeFilter !== 'all' && (
+                <Button variant="outline" size="sm" onClick={() => setActiveFilter('all')}>
+                  Clear Filter
+                </Button>
+              )}
+            </div>
           </motion.div>
-        ) : (
+        ) : viewMode === 'grid' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
             <AnimatePresence mode="popLayout">
               {filteredWorkspaces.map((workspace, index) => (
                 <WorkspaceCard
+                  key={workspace.id}
+                  workspace={workspace}
+                  index={index}
+                  onDelete={() => handleDelete(workspace)}
+                />
+              ))}
+            </AnimatePresence>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <AnimatePresence mode="popLayout">
+              {filteredWorkspaces.map((workspace, index) => (
+                <WorkspaceListRow
                   key={workspace.id}
                   workspace={workspace}
                   index={index}
