@@ -31,6 +31,7 @@ import { SemiCircularGauge } from '../components/charts/semi-circular-gauge';
 import { StatusBadge } from '../components/data/status-badge';
 import { useServers, useServerActions, useServerSchedules, useServerLogs, useCreateSchedule, useDeleteSchedule } from '../hooks/use-servers';
 import { CronBuilder } from '../components/cron-builder';
+import { LogViewer } from '../components/log-viewer';
 import { useServerMetrics } from '../hooks/use-server-metrics';
 import { formatDate, formatBytes, formatPlanResource, cn } from '../lib/utils';
 import { springs } from '../lib/animations';
@@ -154,15 +155,15 @@ function ServerDetailPage() {
   const { serverId } = Route.useParams();
   const router = useRouter();
   const { data: servers = [] } = useServers();
-  const { startServer, stopServer, restartServer, deleteServer, isOperationPending } = useServerActions();
+  const { startServer, stopServer, restartServer, deleteServer, updateServer, isOperationPending } = useServerActions();
   const { metrics, currentMetrics, isLive } = useServerMetrics(serverId);
   const { data: schedules = [] } = useServerSchedules(serverId);
-  const { data: logsData } = useServerLogs(serverId, 100);
+  const [activeTab, setActiveTab] = useState<'overview' | 'schedules' | 'logs'>('overview');
+  const [logsPaused, setLogsPaused] = useState(false);
+  const { data: logsData, isLoading: logsLoading } = useServerLogs(serverId, 100, logsPaused, activeTab === 'logs');
   const createSchedule = useCreateSchedule();
   const deleteSchedule = useDeleteSchedule();
   const { confirm, dialog } = useConfirmDialog();
-
-  const [activeTab, setActiveTab] = useState<'overview' | 'schedules' | 'logs'>('overview');
   const [showScheduleForm, setShowScheduleForm] = useState(false);
   const [newSchedule, setNewSchedule] = useState<{ action: 'start' | 'stop' | 'restart'; cron_expression: string; timezone: string; is_active: boolean }>({ action: 'start', cron_expression: '0 9 * * *', timezone: 'UTC', is_active: true });
 
@@ -480,6 +481,55 @@ function ServerDetailPage() {
       {/* Tab Content */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
+          {/* Volume Mounts */}
+          {server.volume_mounts && server.volume_mounts.length > 0 && (
+            <motion.div
+              className="bubble p-5"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.05, ...springs.gentle }}
+            >
+              <div className="flex items-center gap-2 mb-4">
+                <HardDrive className="w-4 h-4 text-primary" />
+                <h3 className="text-base font-semibold">Volume Mounts</h3>
+              </div>
+              <div className="space-y-2">
+                {server.volume_mounts.map((mount, idx) => (
+                  <div
+                    key={idx}
+                    className={cn(
+                      "flex items-center justify-between p-3 rounded-lg border",
+                      mount.is_primary ? "bg-primary/5 border-primary/20" : "bg-surface/50 border-border/50"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        "p-1.5 rounded",
+                        mount.mode === 'read_write' ? "bg-emerald-500/10 text-emerald-400" : "bg-amber-500/10 text-amber-400"
+                      )}>
+                        <HardDrive className="w-3.5 h-3.5" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">
+                          {mount.volume?.display_name || mount.volume?.name || mount.volume_id}
+                          {mount.is_primary && <span className="ml-1.5 text-xs text-primary">(primary)</span>}
+                        </p>
+                        <p className="text-xs text-muted-foreground font-mono">{mount.mount_path}</p>
+                      </div>
+                    </div>
+                    <span className={cn(
+                      "text-xs px-2 py-0.5 rounded-full font-medium",
+                      mount.mode === 'read_write'
+                        ? "bg-emerald-500/10 text-emerald-400"
+                        : "bg-amber-500/10 text-amber-400"
+                    )}>
+                      {mount.mode === 'read_write' ? 'RW' : 'RO'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
           {/* Connection Status */}
           <div className="flex items-center gap-2">
             <div className={cn(
@@ -789,23 +839,13 @@ function ServerDetailPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={springs.gentle}
         >
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Terminal className="w-4 h-4 text-primary" />
-              <h3 className="text-base font-semibold">Container Logs</h3>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">
-                {logsData?.tail ? `Last ${logsData.tail} lines` : 'Loading...'}
-              </span>
-            </div>
-          </div>
-
-          <div className="relative">
-            <pre className="p-4 rounded-lg bg-black/50 border border-border/50 font-mono text-xs text-foreground/80 overflow-auto max-h-[600px] whitespace-pre-wrap break-all">
-              {logsData?.logs || 'No logs available'}
-            </pre>
-          </div>
+          <LogViewer
+            logs={logsData?.logs || ''}
+            status={logsData?.status as 'running' | 'stopped' | 'error'}
+            tail={logsData?.tail}
+            isLoading={logsLoading}
+            onPauseChange={setLogsPaused}
+          />
         </motion.div>
       )}
       {dialog}

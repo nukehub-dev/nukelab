@@ -40,6 +40,7 @@ class Volume(Base):
     # Relationships
     owner = relationship("User", back_populates="volumes")
     servers = relationship("Server", back_populates="volume")
+    server_mounts = relationship("ServerVolume", back_populates="volume", cascade="all, delete-orphan")
     workspace_associations = relationship("WorkspaceVolume", back_populates="volume", cascade="all, delete-orphan")
     
     def to_dict(self):

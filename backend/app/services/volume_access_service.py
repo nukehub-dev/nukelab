@@ -1,5 +1,13 @@
 """
 Volume access control service for permission checking.
+
+Permission Model A (Workspace Role Ceiling):
+- Effective access = MIN(personal_access, most_restrictive_workspace_access)
+- If volume is NOT in any workspace: owner = RW, non-owner = none (or public RO)
+- If volume IS in workspace(s): workspace role is a hard ceiling
+  - Owner + shared as RO → effective RO
+  - Admin/Editor member + volume role RW → effective RW
+  - Viewer member + any volume role → effective RO
 """
 
 from typing import Optional
@@ -13,7 +21,7 @@ from app.models.workspace_volume import WorkspaceVolume
 
 
 class VolumeAccessService:
-    """Centralized volume permission checker"""
+    """Centralized volume permission checker implementing Model A."""
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -24,23 +32,39 @@ class VolumeAccessService:
         user_id: str,
         mode: str = "read_write"
     ) -> bool:
-        """Check if user can access a volume in read_write or read_only mode"""
+        """Check if user can access a volume in read_write or read_only mode.
+
+        Model A: Workspace role is a hard ceiling. Owner access is capped by
+        the most restrictive workspace role across all workspaces the volume
+        is shared in where the user has membership.
+        """
         volume = await self._get_volume(volume_id)
         if not volume:
             return False
 
-        # Owner always has full access
+        # Compute personal_access: RW if owner, else none
         if str(volume.owner_id) == user_id:
-            return True
+            personal_access = "read_write"
+        else:
+            personal_access = None
 
-        # Check workspace memberships
-        if await self._is_workspace_member_with_access(volume_id, user_id, mode):
-            return True
+        # Find all workspace memberships for this user+volume combo
+        workspace_access = await self._get_workspace_access(volume_id, user_id)
 
-        # Check public visibility (read-only only)
-        if volume.visibility == "public" and mode == "read_only":
-            return True
+        # Compute effective access
+        effective = self._compute_effective_access(personal_access, workspace_access)
 
+        # If no effective access, fall back to public visibility
+        if effective is None:
+            if volume.visibility == "public" and mode == "read_only":
+                return True
+            return False
+
+        # Check if effective access satisfies requested mode
+        if mode == "read_only":
+            return effective in ("read_only", "read_write")
+        elif mode == "read_write":
+            return effective == "read_write"
         return False
 
     async def can_manage_volume(self, volume_id: str, user_id: str) -> bool:
@@ -57,19 +81,11 @@ class VolumeAccessService:
         )
         return result.scalar_one_or_none()
 
-    async def _is_workspace_member_with_access(
-        self,
-        volume_id: str,
-        user_id: str,
-        mode: str
-    ) -> bool:
-        """Check if user has access through workspace membership.
-        
-        Permission matrix:
-        - Workspace owner: full access
-        - Admin member: full access (admin override)
-        - Editor member: write only if volume role is read_write
-        - Viewer member: read only
+    async def _get_workspace_access(self, volume_id: str, user_id: str) -> Optional[str]:
+        """Get the most restrictive workspace access for user+volume.
+
+        Returns:
+            "read_write", "read_only", or None if no workspace access.
         """
         # Find workspaces that contain this volume
         workspace_query = select(WorkspaceVolume).where(
@@ -78,8 +94,14 @@ class VolumeAccessService:
         result = await self.db.execute(workspace_query)
         workspace_volumes = result.scalars().all()
 
+        if not workspace_volumes:
+            return None
+
+        workspace_access = None
+
         for wv in workspace_volumes:
             workspace_id = str(wv.workspace_id)
+            volume_role = wv.role  # "read_write" or "read_only"
 
             # Check if user is workspace owner
             workspace_result = await self.db.execute(
@@ -90,10 +112,15 @@ class VolumeAccessService:
                     )
                 )
             )
-            if workspace_result.scalar_one_or_none():
-                return True
+            ws = workspace_result.scalar_one_or_none()
+            if ws:
+                # Workspace owner gets the volume's role in that workspace
+                workspace_access = self._most_restrictive(
+                    workspace_access, volume_role
+                )
+                continue
 
-            # Check if user is member
+            # Check if user is a member
             member_result = await self.db.execute(
                 select(WorkspaceMember).where(
                     and_(
@@ -104,16 +131,55 @@ class VolumeAccessService:
             )
             member = member_result.scalar_one_or_none()
             if member:
-                if mode == "read_only":
-                    return True  # Any member can read
-                elif mode == "read_write":
-                    # Editor members can write only if volume allows it
-                    if member.role in ("admin", "read_write") and wv.role == "read_write":
-                        return True
-                    # Viewer members cannot write
-                    return False
+                if volume_role == "read_only":
+                    access = "read_only"
+                else:
+                    # volume_role is "read_write"
+                    if member.role == "viewer":
+                        access = "read_only"
+                    else:
+                        # admin, editor, read_write members get RW
+                        access = "read_write"
+                workspace_access = self._most_restrictive(
+                    workspace_access, access
+                )
 
-        return False
+        return workspace_access
+
+    @staticmethod
+    def _most_restrictive(a: Optional[str], b: Optional[str]) -> Optional[str]:
+        """Return the most restrictive of two access levels.
+
+        read_only is more restrictive than read_write.
+        None means no access.
+        """
+        if a is None:
+            return b
+        if b is None:
+            return a
+        if a == "read_only" or b == "read_only":
+            return "read_only"
+        return "read_write"
+
+    @staticmethod
+    def _compute_effective_access(
+        personal: Optional[str],
+        workspace: Optional[str]
+    ) -> Optional[str]:
+        """Compute effective access as MIN(personal, workspace).
+
+        If volume is in workspaces and user has workspace access, workspace caps personal.
+        If volume is in workspaces but user has no workspace membership,
+        personal access applies unchanged.
+        If no personal access and no workspace access, no access.
+        """
+        if personal and workspace:
+            return VolumeAccessService._most_restrictive(personal, workspace)
+        elif personal:
+            return personal
+        elif workspace:
+            return workspace
+        return None
 
     async def get_accessible_volume_ids(
         self,

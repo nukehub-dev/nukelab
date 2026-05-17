@@ -1,9 +1,10 @@
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from app.docker.client import DockerClient, get_docker_client
 from app.models.server import Server
 from app.config import settings
+
 
 class ServerSpawner:
     def __init__(self):
@@ -40,34 +41,55 @@ class ServerSpawner:
         memory: str = "2g",
         disk: str = "10g",
         env_vars: Optional[dict] = None,
-        volume_id: Optional[str] = None,
-        volume_mode: Optional[str] = "read_write",
+        volume_mounts: Optional[List[Dict[str, Any]]] = None,
         server_id: Optional[str] = None,
     ) -> Server:
-        """Spawn a new server container with persistent volume"""
+        """Spawn a new server container with persistent volume(s)
+        
+        Args:
+            volume_mounts: List of dicts with keys: volume_id, mount_path, mode
+        """
         docker = await self._get_docker()
         
         # Use existing server ID or generate new one
         server_id = server_id or str(uuid.uuid4())
         container_name = f"nukelab-server-{username}-{server_name}"
         
-        # Get volume name from database if volume_id provided
-        volume_name = None
-        if volume_id:
-            from app.db.session import async_session
-            from sqlalchemy import select
-            from app.models.volume import Volume
-            
-            async with async_session() as db:
-                result = await db.execute(select(Volume).where(Volume.id == volume_id))
-                volume = result.scalar_one_or_none()
-                if volume:
-                    volume_name = volume.name
+        # Build Docker volumes dict from multiple mounts
+        volumes = {}
         
-        # Create or reuse persistent volume
-        if not volume_name:
+        if volume_mounts:
+            for mount in volume_mounts:
+                vol_id = mount.get("volume_id")
+                mount_path = mount.get("mount_path", "/data")
+                mode = mount.get("mode", "read_write")
+                
+                # Get volume name from database
+                if vol_id:
+                    from app.db.session import async_session
+                    from sqlalchemy import select
+                    from app.models.volume import Volume
+                    
+                    async with async_session() as db:
+                        result = await db.execute(select(Volume).where(Volume.id == vol_id))
+                        volume = result.scalar_one_or_none()
+                        if volume:
+                            volume_name = volume.name
+                        else:
+                            # Fallback: generate name from id
+                            volume_name = f"nukelab-vol-{vol_id[:8]}"
+                else:
+                    volume_name = f"nukelab-server-{username}-{server_name}-data"
+                
+                await self._ensure_volume(volume_name)
+                
+                mount_mode = "ro" if mode == "read_only" else "rw"
+                volumes[volume_name] = {"bind": mount_path, "mode": mount_mode}
+        else:
+            # Default single volume for backward compatibility
             volume_name = f"nukelab-server-{username}-{server_name}-data"
-        await self._ensure_volume(volume_name)
+            await self._ensure_volume(volume_name)
+            volumes[volume_name] = {"bind": f"/home/{username}", "mode": "rw"}
         
         # Determine image - use provided image or default to naming convention
         if not image:
@@ -101,12 +123,6 @@ class ServerSpawner:
             "NUKELAB_AUTH_ALGORITHM": settings.server_auth_key_algorithm,
             "NUKELAB_AUTH_SERVER_ID": server_id,
             **(env_vars or {}),
-        }
-        
-        # Mount volume to user's home directory with mode
-        mount_mode = "ro" if volume_mode == "read_only" else "rw"
-        volumes = {
-            volume_name: {"bind": f"/home/{username}", "mode": mount_mode}
         }
         
         # Mount public key for auth validation if server auth is enabled
@@ -163,6 +179,13 @@ class ServerSpawner:
             # Start container
             await docker.start_container(container.id)
             
+            # Determine primary volume_id from volume_mounts if provided
+            primary_volume_id = None
+            if volume_mounts:
+                # Find primary mount or use first mount
+                primary = next((m for m in volume_mounts if m.get("is_primary")), volume_mounts[0])
+                primary_volume_id = primary.get("volume_id")
+            
             # Create server record
             server = Server(
                 id=uuid.UUID(server_id),
@@ -171,8 +194,7 @@ class ServerSpawner:
                 environment_id=uuid.UUID(environment_id) if environment_id else None,
                 container_id=container.id,
                 image=image,
-                volume_id=uuid.UUID(volume_id) if volume_id else None,
-                volume_mode=volume_mode,
+                volume_id=uuid.UUID(primary_volume_id) if primary_volume_id else None,
                 status="running",
                 allocated_cpu=cpu,
                 allocated_memory=memory,

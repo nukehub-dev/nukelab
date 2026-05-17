@@ -15,6 +15,7 @@ class TestServerModelFields:
         server = Server()
         assert hasattr(server, 'volume_id')
         assert hasattr(server, 'volume_mode')
+        assert hasattr(server, 'volume_mounts')
         assert hasattr(server, 'total_cost')
         assert hasattr(server, 'last_billed_at')
         assert hasattr(server, 'expires_at')

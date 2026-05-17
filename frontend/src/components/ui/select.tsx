@@ -107,7 +107,7 @@ function SelectItem({ value, children }: SelectItemProps) {
       )}
     >
       <Check className={cn('h-4 w-4 shrink-0', isSelected ? 'opacity-100' : 'opacity-0')} />
-      <span className="flex-1 text-left">{children}</span>
+      <span className="flex-1 text-left whitespace-nowrap">{children}</span>
     </button>
   );
 }

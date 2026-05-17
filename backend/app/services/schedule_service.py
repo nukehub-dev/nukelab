@@ -14,6 +14,24 @@ from app.models.notification import Notification
 from app.core.time_utils import parse_duration
 
 
+def _validate_cron(cron_expression: str) -> None:
+    """Validate a cron expression using croniter."""
+    try:
+        from croniter import croniter
+        croniter(cron_expression)
+    except Exception as e:
+        raise ValueError(f"Invalid cron expression: {str(e)}")
+
+
+def _get_next_run(cron_expression: str, timezone: str = "UTC") -> datetime:
+    """Calculate next run time from cron expression."""
+    from croniter import croniter
+    base = datetime.utcnow()
+    itr = croniter(cron_expression, base)
+    next_dt = itr.get_next(datetime)
+    return next_dt
+
+
 class ScheduleService:
     """Server schedule business logic"""
     
@@ -53,13 +71,8 @@ class ScheduleService:
         if action not in ["start", "stop", "restart"]:
             raise ValueError(f"Invalid action: {action}. Must be start, stop, or restart")
         
-        # Validate cron expression (basic validation)
-        try:
-            from crontab import CronTab
-            cron = CronTab(cron_expression)
-            next_run = cron.next(default_utc=(timezone == "UTC"))
-        except Exception as e:
-            raise ValueError(f"Invalid cron expression: {str(e)}")
+        # Validate cron expression
+        _validate_cron(cron_expression)
         
         schedule = ServerSchedule(
             server_id=uuid.UUID(server_id),
@@ -68,7 +81,7 @@ class ScheduleService:
             cron_expression=cron_expression,
             timezone=timezone,
             is_active=is_active,
-            next_run_at=datetime.utcnow() + timedelta(seconds=next_run),
+            next_run_at=_get_next_run(cron_expression, timezone),
         )
         
         self.db.add(schedule)
@@ -107,14 +120,8 @@ class ScheduleService:
             schedule.action = action
         
         if cron_expression is not None:
-            try:
-                from crontab import CronTab
-                cron = CronTab(cron_expression)
-                next_run = cron.next(default_utc=(schedule.timezone == "UTC"))
-                schedule.cron_expression = cron_expression
-                schedule.next_run_at = datetime.utcnow() + timedelta(seconds=next_run)
-            except Exception as e:
-                raise ValueError(f"Invalid cron expression: {str(e)}")
+            _validate_cron(cron_expression)
+            schedule.cron_expression = cron_expression
         
         if timezone is not None:
             schedule.timezone = timezone
@@ -122,7 +129,7 @@ class ScheduleService:
         if is_active is not None:
             schedule.is_active = is_active
         
-        schedule.next_run_at = await self._calculate_next_run(schedule)
+        schedule.next_run_at = _get_next_run(schedule.cron_expression, schedule.timezone)
         
         await self.db.commit()
         await self.db.refresh(schedule)
@@ -147,14 +154,6 @@ class ScheduleService:
         await self.db.delete(schedule)
         await self.db.commit()
         return True
-    
-    async def _calculate_next_run(self, schedule: ServerSchedule) -> datetime:
-        """Calculate next run time from cron expression"""
-        from crontab import CronTab
-        
-        cron = CronTab(schedule.cron_expression)
-        seconds_until = cron.next(default_utc=(schedule.timezone == "UTC"))
-        return datetime.utcnow() + timedelta(seconds=seconds_until)
     
     async def get_due_schedules(self) -> List[ServerSchedule]:
         """Get all schedules that are due to run"""
@@ -263,7 +262,7 @@ class ScheduleService:
         # Update schedule
         schedule.last_run_at = datetime.utcnow()
         schedule.run_count += 1
-        schedule.next_run_at = await self._calculate_next_run(schedule)
+        schedule.next_run_at = _get_next_run(schedule.cron_expression, schedule.timezone)
         await self.db.commit()
         
         return {"success": success, "message": message}

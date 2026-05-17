@@ -18,6 +18,7 @@ python-dotenv==1.0.1
 slowapi==0.1.9
 APScheduler==3.10.4
 python-crontab==3.0.0
+croniter==6.2.2
 # Testing
 pytest==8.3.0
 pytest-asyncio==0.24.0

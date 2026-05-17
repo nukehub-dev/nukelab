@@ -8,6 +8,19 @@ export interface PaginatedResponse<T> {
   };
 }
 
+export interface ServerVolumeMount {
+  volume_id: string;
+  mount_path: string;
+  mode: 'read_write' | 'read_only';
+  is_primary?: boolean;
+  volume?: {
+    id: string;
+    name: string;
+    display_name: string;
+    size_bytes: number;
+  };
+}
+
 export interface Server {
   id: string;
   name: string;
@@ -19,6 +32,7 @@ export interface Server {
   container_id?: string;
   volume_id?: string;
   volume_mode?: string;
+  volume_mounts?: ServerVolumeMount[];
   allocated_cpu?: number;
   allocated_memory?: string;
   allocated_disk?: string;

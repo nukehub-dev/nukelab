@@ -51,6 +51,7 @@ TRUNCATE_TABLES = [
     "notifications",
     "resource_quotas",
     "environment_templates",
+    "server_volumes",
     "workspace_volumes",
     "workspace_members",
     "shared_workspaces",

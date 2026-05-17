@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { Server, Activity, Cpu, MemoryStick, Play, Square, RotateCcw, Trash2, ExternalLink, Eye } from 'lucide-react';
+import { Server, Activity, Cpu, MemoryStick, Play, Square, RotateCcw, Trash2, ExternalLink, Eye, HardDrive, Plus, X, Pencil, Calendar, AlertTriangle, Clock } from 'lucide-react';
 import { Tooltip } from '../components/ui/tooltip';
 import { Checkbox } from '../components/ui/checkbox';
 import { useState, useEffect, useRef, useMemo } from 'react';
@@ -7,19 +7,20 @@ import { type ColumnDef, type SortingState, type ColumnFiltersState, type Visibi
 import { ResourcePageLayout } from '../components/layout/resource-page-layout';
 import { DataTable } from '../components/data/data-table';
 import { StatusBadge } from '../components/data/status-badge';
-import { useServers, useServerActions } from '../hooks/use-servers';
+import { useServers, useServerActions, useServerSchedules, useCreateSchedule, useDeleteSchedule } from '../hooks/use-servers';
 import { useEnvironments } from '../hooks/use-environments';
 import { usePlans } from '../hooks/use-plans';
 import { useVolumes } from '../hooks/use-volumes';
 import { useDataTable } from '../hooks/use-data-table';
 import { useAuthStore } from '../stores/auth-store';
-import { formatDate } from '../lib/utils';
+import { formatDate, cn } from '../lib/utils';
 import type { Server as ServerType } from '../types/api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '../components/ui/dialog';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import { Select, SelectItem } from '../components/ui/select';
 import { useConfirmDialog } from '../components/ui/confirm-dialog';
+import { CronBuilder, humanizeSchedule, parseCron } from '../components/cron-builder';
 
 export const Route = createFileRoute('/servers/')({
   component: ServersPage,
@@ -28,7 +29,7 @@ export const Route = createFileRoute('/servers/')({
 function ServersPage() {
   const { confirm, dialog } = useConfirmDialog();
   const { data: servers = [], isLoading, isError, error } = useServers();
-  const { createServer, startServer, stopServer, restartServer, deleteServer, isOperationPending } = useServerActions();
+  const { createServer, updateServer, startServer, stopServer, restartServer, deleteServer, isOperationPending } = useServerActions();
   const { data: envData } = useEnvironments({ is_active: true, limit: 100 });
   const { data: plansData } = usePlans({ is_active: true, limit: 100 });
   const { data: volumesData } = useVolumes();
@@ -67,14 +68,121 @@ function ServersPage() {
     prevColumnFiltersRef.current = columnFilters;
   }, [columnFilters, setFilter]);
 
+  interface VolumeMountForm {
+    volume_id: string;
+    mount_path: string;
+    mode: 'read_write' | 'read_only';
+  }
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deployForm, setDeployForm] = useState({
     name: '',
     plan_id: '',
     environment_id: '',
-    volume_id: '',
-    volume_mode: 'read_write',
   });
+  const [volumeMounts, setVolumeMounts] = useState<VolumeMountForm[]>([
+    { volume_id: '', mount_path: '', mode: 'read_write' },
+  ]);
+
+  // Edit dialog state
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editServerId, setEditServerId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    plan_id: '',
+    environment_id: '',
+  });
+  const [editVolumeMounts, setEditVolumeMounts] = useState<VolumeMountForm[]>([
+    { volume_id: '', mount_path: '', mode: 'read_write' },
+  ]);
+
+  const openEditDialog = (server: ServerType) => {
+    setEditServerId(server.id);
+    setEditForm({
+      name: server.name,
+      plan_id: server.plan_id || '',
+      environment_id: server.environment_id || '',
+    });
+    if (server.volume_mounts && server.volume_mounts.length > 0) {
+      setEditVolumeMounts(
+        server.volume_mounts.map((m) => ({
+          volume_id: m.volume_id,
+          mount_path: m.mount_path,
+          mode: m.mode,
+        }))
+      );
+    } else {
+      setEditVolumeMounts([
+        {
+          volume_id: server.volume_id || '',
+          mount_path: server.volume_mode ? `/home/${user?.username || 'user'}` : '',
+          mode: (server.volume_mode as 'read_write' | 'read_only') || 'read_write',
+        },
+      ]);
+    }
+    setEditDialogOpen(true);
+  };
+
+  const handleEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editServerId) return;
+
+    const mounts = editVolumeMounts
+      .filter((m) => m.volume_id)
+      .map((m, idx) => ({
+        volume_id: m.volume_id,
+        mount_path: idx === 0 && !m.mount_path ? `/home/${user?.username || 'user'}` : (m.mount_path || '/data'),
+        mode: m.mode,
+      }));
+
+    updateServer.mutate(
+      {
+        serverId: editServerId,
+        data: {
+          name: editForm.name,
+          plan_id: editForm.plan_id || undefined,
+          environment_id: editForm.environment_id || undefined,
+          volume_mounts: mounts.length > 0 ? mounts : undefined,
+        },
+      },
+      {
+        onSuccess: () => {
+          setEditDialogOpen(false);
+          setEditServerId(null);
+        },
+      }
+    );
+  };
+
+  const addEditVolumeMount = () => {
+    setEditVolumeMounts((prev) => [
+      ...prev,
+      { volume_id: '', mount_path: '/data', mode: 'read_write' },
+    ]);
+  };
+
+  const removeEditVolumeMount = (index: number) => {
+    setEditVolumeMounts((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const updateEditVolumeMount = (index: number, field: keyof VolumeMountForm, value: string) => {
+    setEditVolumeMounts((prev) =>
+      prev.map((m, i) => (i === index ? { ...m, [field]: value } : m))
+    );
+  };
+
+  // Schedule dialog state
+  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
+  const [scheduleServerId, setScheduleServerId] = useState<string | null>(null);
+  const [showScheduleForm, setShowScheduleForm] = useState(false);
+  const [newSchedule, setNewSchedule] = useState<{ action: 'start' | 'stop' | 'restart'; cron_expression: string; timezone: string; is_active: boolean }>({ action: 'start', cron_expression: '0 9 * * *', timezone: 'UTC', is_active: true });
+
+  const openScheduleDialog = (server: ServerType) => {
+    setScheduleServerId(server.id);
+    setShowScheduleForm(false);
+    setNewSchedule({ action: 'start', cron_expression: '0 9 * * *', timezone: 'UTC', is_active: true });
+    setScheduleDialogOpen(true);
+  };
 
   const environments = envData?.data || [];
   const plans = plansData?.data || [];
@@ -125,20 +233,46 @@ function ServersPage() {
   const handleDeploy = (e: React.FormEvent) => {
     e.preventDefault();
     if (!deployForm.environment_id) return;
+
+    const mounts = volumeMounts
+      .filter((m) => m.volume_id)
+      .map((m, idx) => ({
+        volume_id: m.volume_id,
+        mount_path: idx === 0 && !m.mount_path ? `/home/${user?.username || 'user'}` : (m.mount_path || '/data'),
+        mode: m.mode,
+      }));
+
     createServer.mutate(
       {
         name: deployForm.name,
         plan_id: deployForm.plan_id,
         environment_id: deployForm.environment_id,
-        volume_id: deployForm.volume_id || undefined,
-        volume_mode: deployForm.volume_mode,
+        volume_mounts: mounts.length > 0 ? mounts : undefined,
       },
       {
         onSuccess: () => {
           setDialogOpen(false);
-          setDeployForm({ name: '', plan_id: '', environment_id: '', volume_id: '', volume_mode: 'read_write' });
+          setDeployForm({ name: '', plan_id: '', environment_id: '' });
+          setVolumeMounts([{ volume_id: '', mount_path: '', mode: 'read_write' }]);
         },
       }
+    );
+  };
+
+  const addVolumeMount = () => {
+    setVolumeMounts((prev) => [
+      ...prev,
+      { volume_id: '', mount_path: '/data', mode: 'read_write' },
+    ]);
+  };
+
+  const removeVolumeMount = (index: number) => {
+    setVolumeMounts((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const updateVolumeMount = (index: number, field: keyof VolumeMountForm, value: string) => {
+    setVolumeMounts((prev) =>
+      prev.map((m, i) => (i === index ? { ...m, [field]: value } : m))
     );
   };
 
@@ -234,6 +368,22 @@ function ServersPage() {
               >
                 <Eye className="w-4 h-4" />
               </Link>
+            </Tooltip>
+            <Tooltip content="Edit Server">
+              <button
+                onClick={() => openEditDialog(server)}
+                className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-all duration-100 inline-flex hover:-translate-y-[1px] active:translate-y-[1px]"
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+            </Tooltip>
+            <Tooltip content="Schedules">
+              <button
+                onClick={() => openScheduleDialog(server)}
+                className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-all duration-100 inline-flex hover:-translate-y-[1px] active:translate-y-[1px]"
+              >
+                <Calendar className="w-4 h-4" />
+              </button>
             </Tooltip>
             {server.status === 'stopped' && (
               <Tooltip content={isOperationPending(server.id, 'start') ? 'Starting...' : 'Start'}>
@@ -415,6 +565,22 @@ function ServersPage() {
               <Eye className="w-4 h-4" />
             </Link>
           </Tooltip>
+          <Tooltip content="Edit Server">
+            <button
+              onClick={() => openEditDialog(server)}
+              className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-all duration-100 inline-flex"
+            >
+              <Pencil className="w-4 h-4" />
+            </button>
+          </Tooltip>
+          <Tooltip content="Schedules">
+            <button
+              onClick={() => openScheduleDialog(server)}
+              className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-all duration-100 inline-flex"
+            >
+              <Calendar className="w-4 h-4" />
+            </button>
+          </Tooltip>
           {server.status === 'stopped' && (
             <Tooltip content={isOperationPending(server.id, 'start') ? 'Starting...' : 'Start'}>
               <button
@@ -580,49 +746,87 @@ function ServersPage() {
                 ))}
               </Select>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Volume</label>
-              <Select
-                value={deployForm.volume_id}
-                onChange={(value) => setDeployForm({ ...deployForm, volume_id: value })}
-                placeholder="Create new volume (default)"
-              >
-                <SelectItem value="">Create new volume</SelectItem>
-                {volumes.map((vol) => (
-                  <SelectItem key={vol.id} value={vol.id}>
-                    {vol.display_name} ({vol.server_count > 0 ? `${vol.server_count} servers` : 'unused'})
-                  </SelectItem>
-                ))}
-              </Select>
-            </div>
-            {deployForm.volume_id && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Volume Access Mode</label>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant={deployForm.volume_mode === 'read_write' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setDeployForm({ ...deployForm, volume_mode: 'read_write' })}
-                    className="flex-1"
-                  >
-                    Read-Write
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={deployForm.volume_mode === 'read_only' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setDeployForm({ ...deployForm, volume_mode: 'read_only' })}
-                    className="flex-1"
-                  >
-                    Read-Only
-                  </Button>
-                </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium flex items-center gap-1.5">
+                  <HardDrive className="w-4 h-4" />
+                  Volume Mounts
+                </label>
+                <button
+                  type="button"
+                  onClick={addVolumeMount}
+                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Add Volume
+                </button>
               </div>
-            )}
+              
+              {volumeMounts.map((mount, index) => (
+                <div key={index} className="space-y-2 p-3 rounded-lg bg-surface/50 border border-border/50">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">
+                      {index === 0 ? 'Primary Mount' : `Additional Mount ${index}`}
+                    </span>
+                    {volumeMounts.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeVolumeMount(index)}
+                        className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                  
+                  <Select
+                    value={mount.volume_id}
+                    onChange={(value) => updateVolumeMount(index, 'volume_id', value)}
+                    placeholder="Create new volume (default)"
+                  >
+                    <SelectItem value="">Create new volume</SelectItem>
+                    {volumes.map((vol) => (
+                      <SelectItem key={vol.id} value={vol.id}>
+                        {vol.display_name} ({vol.server_count > 0 ? `${vol.server_count} servers` : 'unused'})
+                      </SelectItem>
+                    ))}
+                  </Select>
+                  
+                  <div className="flex gap-2">
+                    <Input
+                      type="text"
+                      value={mount.mount_path}
+                      onChange={(e) => updateVolumeMount(index, 'mount_path', e.target.value)}
+                      placeholder={index === 0 ? `/home/${user?.username || 'user'}` : '/data'}
+                      className="flex-1 text-sm"
+                    />
+                    <div className="flex gap-1">
+                      <Button
+                        type="button"
+                        variant={mount.mode === 'read_write' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => updateVolumeMount(index, 'mode', 'read_write')}
+                        className="text-xs px-2"
+                      >
+                        RW
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={mount.mode === 'read_only' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => updateVolumeMount(index, 'mode', 'read_only')}
+                        className="text-xs px-2"
+                      >
+                        RO
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </form>
           <DialogFooter>
-            <Button variant="outline" type="button" onClick={() => setDialogOpen(false)}>
+            <Button variant="outline" type="button" onClick={() => { setDialogOpen(false); setVolumeMounts([{ volume_id: '', mount_path: '', mode: 'read_write' }]); }}>
               Cancel
             </Button>
             <Button type="submit" form="deploy-form" loading={createServer.isPending || !deployForm.environment_id}>
@@ -632,7 +836,315 @@ function ServersPage() {
           <DialogClose onClick={() => setDialogOpen(false)} />
         </DialogContent>
       </Dialog>
+      {/* Edit Server Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Server</DialogTitle>
+            <DialogDescription>
+              Update server configuration. Changes to plan, environment, or volumes require a container restart.
+            </DialogDescription>
+          </DialogHeader>
+          <form id="edit-form" onSubmit={handleEdit} className="space-y-4 mt-4" noValidate>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Server Name</label>
+              <Input
+                type="text"
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                placeholder="my-simulation-server"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Plan</label>
+              <Select
+                value={editForm.plan_id}
+                onChange={(value) => setEditForm({ ...editForm, plan_id: value })}
+                placeholder="Select a plan..."
+              >
+                {plans.map((plan) => (
+                  <SelectItem key={plan.id} value={plan.id}>
+                    {plan.name} ({plan.cpu_limit} CPU / {plan.memory_limit})
+                  </SelectItem>
+                ))}
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Environment</label>
+              <Select
+                value={editForm.environment_id}
+                onChange={(value) => setEditForm({ ...editForm, environment_id: value })}
+                placeholder="Select an environment..."
+              >
+                {environments.map((env) => (
+                  <SelectItem key={env.id} value={env.id}>
+                    {env.name} ({env.slug})
+                  </SelectItem>
+                ))}
+              </Select>
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium flex items-center gap-1.5">
+                  <HardDrive className="w-4 h-4" />
+                  Volume Mounts
+                </label>
+                <button
+                  type="button"
+                  onClick={addEditVolumeMount}
+                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Add Volume
+                </button>
+              </div>
+              
+              {editVolumeMounts.map((mount, index) => (
+                <div key={index} className="space-y-2 p-3 rounded-lg bg-surface/50 border border-border/50">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">
+                      {index === 0 ? 'Primary Mount' : `Additional Mount ${index}`}
+                    </span>
+                    {editVolumeMounts.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeEditVolumeMount(index)}
+                        className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                  
+                  <Select
+                    value={mount.volume_id}
+                    onChange={(value) => updateEditVolumeMount(index, 'volume_id', value)}
+                    placeholder="Select a volume..."
+                  >
+                    <SelectItem value="">Create new volume</SelectItem>
+                    {volumes.map((vol) => (
+                      <SelectItem key={vol.id} value={vol.id}>
+                        {vol.display_name} ({vol.server_count > 0 ? `${vol.server_count} servers` : 'unused'})
+                      </SelectItem>
+                    ))}
+                  </Select>
+                  
+                  <div className="flex gap-2">
+                    <Input
+                      type="text"
+                      value={mount.mount_path}
+                      onChange={(e) => updateEditVolumeMount(index, 'mount_path', e.target.value)}
+                      placeholder={index === 0 ? `/home/${user?.username || 'user'}` : '/data'}
+                      className="flex-1 text-sm"
+                    />
+                    <div className="flex gap-1">
+                      <Button
+                        type="button"
+                        variant={mount.mode === 'read_write' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => updateEditVolumeMount(index, 'mode', 'read_write')}
+                        className="text-xs px-2"
+                      >
+                        RW
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={mount.mode === 'read_only' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => updateEditVolumeMount(index, 'mode', 'read_only')}
+                        className="text-xs px-2"
+                      >
+                        RO
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
+              <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+              <p className="text-xs text-amber-400">
+                Changing plan, environment, or volumes will stop and recreate the container.
+              </p>
+            </div>
+          </form>
+          <DialogFooter>
+            <Button variant="outline" type="button" onClick={() => { setEditDialogOpen(false); setEditServerId(null); }}>
+              Cancel
+            </Button>
+            <Button type="submit" form="edit-form" loading={updateServer.isPending}>
+              {updateServer.isPending ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </DialogFooter>
+          <DialogClose onClick={() => setEditDialogOpen(false)} />
+        </DialogContent>
+      </Dialog>
+
+      {/* Schedule Dialog */}
+      <ScheduleDialog
+        open={scheduleDialogOpen}
+        onOpenChange={setScheduleDialogOpen}
+        serverId={scheduleServerId}
+      />
+
       {dialog}
     </>
+  );
+}
+
+function ScheduleDialog({ open, onOpenChange, serverId }: { open: boolean; onOpenChange: (v: boolean) => void; serverId: string | null }) {
+  const [showForm, setShowForm] = useState(false);
+  const [newSchedule, setNewSchedule] = useState<{ action: 'start' | 'stop' | 'restart'; cron_expression: string; timezone: string; is_active: boolean }>({ action: 'start', cron_expression: '0 9 * * *', timezone: 'UTC', is_active: true });
+  const { data: schedules = [] } = useServerSchedules(serverId || '');
+  const createSchedule = useCreateSchedule();
+  const deleteSchedule = useDeleteSchedule();
+  const { confirm, dialog } = useConfirmDialog();
+
+  if (!serverId) return null;
+
+  const actionMeta = (action: string) => {
+    switch (action) {
+      case 'start': return { icon: Play, label: 'Start', bg: 'bg-emerald-500/10', text: 'text-emerald-400', iconBg: 'bg-emerald-500/15' };
+      case 'stop': return { icon: Square, label: 'Stop', bg: 'bg-amber-500/10', text: 'text-amber-400', iconBg: 'bg-amber-500/15' };
+      default: return { icon: RotateCcw, label: 'Restart', bg: 'bg-primary/10', text: 'text-primary', iconBg: 'bg-primary/15' };
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Scheduled Actions</DialogTitle>
+          <DialogDescription>
+            Automate server start, stop, and restart.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 mt-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-medium">Schedules</h3>
+            <button
+              onClick={() => setShowForm(!showForm)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-all text-sm font-medium"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add Schedule
+            </button>
+          </div>
+
+          {showForm && (
+            <div className="p-4 rounded-xl bg-surface/50 border border-border/50 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Action</label>
+                  <Select
+                    value={newSchedule.action}
+                    onChange={(value) => setNewSchedule({ ...newSchedule, action: value as 'start' | 'stop' | 'restart' })}
+                  >
+                    <SelectItem value="start">Start</SelectItem>
+                    <SelectItem value="stop">Stop</SelectItem>
+                    <SelectItem value="restart">Restart</SelectItem>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Timezone</label>
+                  <Input
+                    type="text"
+                    value={newSchedule.timezone}
+                    onChange={(e) => setNewSchedule({ ...newSchedule, timezone: e.target.value })}
+                    placeholder="UTC"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Schedule</label>
+                <CronBuilder
+                  value={newSchedule.cron_expression}
+                  onChange={(cron) => setNewSchedule({ ...newSchedule, cron_expression: cron })}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    createSchedule.mutate({ serverId, data: newSchedule });
+                    setShowForm(false);
+                    setNewSchedule({ action: 'start', cron_expression: '0 9 * * *', timezone: 'UTC', is_active: true });
+                  }}
+                  className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+                >
+                  Create Schedule
+                </button>
+                <button
+                  onClick={() => setShowForm(false)}
+                  className="px-4 py-2 rounded-lg bg-muted text-muted-foreground text-sm font-medium hover:bg-muted/80 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!showForm && schedules.length === 0 && (
+            <div className="text-center py-10 text-muted-foreground">
+              <Calendar className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p className="text-sm">No schedules configured</p>
+              <p className="text-xs mt-1">Create a schedule to automate server actions</p>
+            </div>
+          )}
+
+          {schedules.length > 0 && (
+            <div className="space-y-2">
+              {schedules.map((schedule) => {
+                const meta = actionMeta(schedule.action);
+                const ActionIcon = meta.icon;
+                const parsed = parseCron(schedule.cron_expression);
+                const humanCron = humanizeSchedule(parsed.minute, parsed.hour, parsed.days);
+                return (
+                  <div key={schedule.id} className="flex items-center gap-3 p-3 rounded-xl bg-surface/50 border border-border/50">
+                    <div className={cn("p-2.5 rounded-xl flex-shrink-0", meta.iconBg)}>
+                      <ActionIcon className={cn("w-4 h-4", meta.text)} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium capitalize">{meta.label}</span>
+                        <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", schedule.is_active ? "bg-emerald-500/10 text-emerald-400" : "bg-muted text-muted-foreground")}>
+                          {schedule.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <Clock className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                        <span className="text-xs text-muted-foreground">{humanCron}</span>
+                      </div>
+                      {schedule.next_run_at && (
+                        <p className="text-xs text-muted-foreground/70 mt-0.5">
+                          Next: {formatDate(schedule.next_run_at)}
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      onClick={async () => {
+                        const confirmed = await confirm({
+                          title: 'Delete Schedule',
+                          description: 'Are you sure you want to delete this schedule?',
+                          confirmLabel: 'Delete',
+                          cancelLabel: 'Cancel',
+                          variant: 'danger',
+                        });
+                        if (confirmed) deleteSchedule.mutate({ serverId, scheduleId: schedule.id });
+                      }}
+                      className="p-2 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors flex-shrink-0"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        {dialog}
+        <DialogClose onClick={() => onOpenChange(false)} />
+      </DialogContent>
+    </Dialog>
   );
 }

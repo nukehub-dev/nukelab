@@ -301,14 +301,19 @@ class DockerClient:
     ) -> str:
         """Get container logs"""
         container = await self.client.containers.get(container_id)
-        logs = await container.log(
-            stdout=stdout,
-            stderr=stderr,
-            tail=tail,
-            since=since,
-            timestamps=timestamps,
-            follow=False
-        )
+        kwargs = {
+            "stdout": stdout,
+            "stderr": stderr,
+            "tail": tail,
+            "timestamps": timestamps,
+            "follow": False,
+        }
+        if since is not None:
+            kwargs["since"] = since
+        logs = await container.log(**kwargs)
+        # aiodocker returns list of lines; join into single string
+        if isinstance(logs, list):
+            return ''.join(logs)
         return logs
 
     async def stream_container_logs(

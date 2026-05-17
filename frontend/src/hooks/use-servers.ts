@@ -30,12 +30,26 @@ export function useServerByPath(username: string, serverName: string) {
   });
 }
 
+interface VolumeMountData {
+  volume_id: string;
+  mount_path: string;
+  mode: string;
+}
+
 interface CreateServerData {
   name: string;
   plan_id: string;
   environment_id: string;
   volume_id?: string;
   volume_mode?: string;
+  volume_mounts?: VolumeMountData[];
+}
+
+interface UpdateServerData {
+  name?: string;
+  plan_id?: string;
+  environment_id?: string;
+  volume_mounts?: VolumeMountData[];
 }
 
 type PendingOperation = {
@@ -124,6 +138,15 @@ export function useServerActions() {
     },
   });
 
+  const updateServer = useMutation({
+    mutationFn: ({ serverId, data }: { serverId: string; data: UpdateServerData }) =>
+      api.patch<Server>(`/servers/${serverId}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['servers'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+  });
+
   const startServer = useMutation({
     mutationFn: (serverId: string) =>
       api.post<{ message: string }>(`/servers/${serverId}/start`, {}),
@@ -194,6 +217,7 @@ export function useServerActions() {
 
   return {
     createServer,
+    updateServer,
     startServer,
     stopServer,
     restartServer,
@@ -249,14 +273,14 @@ export function useDeleteSchedule() {
   });
 }
 
-export function useServerLogs(serverId: string, tail: number = 100) {
+export function useServerLogs(serverId: string, tail: number = 100, paused: boolean = false, active: boolean = true) {
   return useQuery({
     queryKey: ['server-logs', serverId, tail],
     queryFn: async () => {
-      const response = await api.get<{ logs: string; tail: number }>(`/servers/${serverId}/logs?tail=${tail}`);
+      const response = await api.get<{ logs: string | string[]; tail: number; status?: string }>(`/servers/${serverId}/logs?tail=${tail}`);
       return response;
     },
-    enabled: !!serverId,
-    refetchInterval: 5000,
+    enabled: !!serverId && !paused && active,
+    refetchInterval: (paused || !active) ? false : 5000,
   });
 }
