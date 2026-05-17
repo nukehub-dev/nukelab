@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { Server, Activity, Cpu, MemoryStick, Play, Square, RotateCcw, Trash2, ExternalLink, Eye, HardDrive, Plus, X, Pencil, Calendar, AlertTriangle, Clock } from 'lucide-react';
+import { Server, Activity, Cpu, MemoryStick, Play, Square, RotateCcw, Trash2, ExternalLink, Eye, HardDrive, Plus, X, Pencil, Calendar, AlertTriangle } from 'lucide-react';
 import { Tooltip } from '../components/ui/tooltip';
 import { Checkbox } from '../components/ui/checkbox';
 import { useState, useEffect, useRef, useMemo } from 'react';
@@ -7,20 +7,20 @@ import { type ColumnDef, type SortingState, type ColumnFiltersState, type Visibi
 import { ResourcePageLayout } from '../components/layout/resource-page-layout';
 import { DataTable } from '../components/data/data-table';
 import { StatusBadge } from '../components/data/status-badge';
-import { useServers, useServerActions, useServerSchedules, useCreateSchedule, useDeleteSchedule } from '../hooks/use-servers';
+import { useServers, useServerActions } from '../hooks/use-servers';
 import { useEnvironments } from '../hooks/use-environments';
 import { usePlans } from '../hooks/use-plans';
 import { useVolumes } from '../hooks/use-volumes';
 import { useDataTable } from '../hooks/use-data-table';
 import { useAuthStore } from '../stores/auth-store';
-import { formatDate, cn } from '../lib/utils';
+import { formatDate } from '../lib/utils';
 import type { Server as ServerType } from '../types/api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '../components/ui/dialog';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import { Select, SelectItem } from '../components/ui/select';
 import { useConfirmDialog } from '../components/ui/confirm-dialog';
-import { CronBuilder, humanizeSchedule, parseCron } from '../components/cron-builder';
+import { ScheduleDialog } from '../components/server/schedule-dialog';
 
 export const Route = createFileRoute('/servers/')({
   component: ServersPage,
@@ -100,8 +100,8 @@ function ServersPage() {
     setEditServerId(server.id);
     setEditForm({
       name: server.name,
-      plan_id: server.plan_id || '',
-      environment_id: server.environment_id || '',
+      plan_id: (server as unknown as Record<string, string | undefined>).plan_id || '',
+      environment_id: (server as unknown as Record<string, string | undefined>).environment_id || '',
     });
     if (server.volume_mounts && server.volume_mounts.length > 0) {
       setEditVolumeMounts(
@@ -174,13 +174,8 @@ function ServersPage() {
   // Schedule dialog state
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
   const [scheduleServerId, setScheduleServerId] = useState<string | null>(null);
-  const [showScheduleForm, setShowScheduleForm] = useState(false);
-  const [newSchedule, setNewSchedule] = useState<{ action: 'start' | 'stop' | 'restart'; cron_expression: string; timezone: string; is_active: boolean }>({ action: 'start', cron_expression: '0 9 * * *', timezone: 'UTC', is_active: true });
-
   const openScheduleDialog = (server: ServerType) => {
     setScheduleServerId(server.id);
-    setShowScheduleForm(false);
-    setNewSchedule({ action: 'start', cron_expression: '0 9 * * *', timezone: 'UTC', is_active: true });
     setScheduleDialogOpen(true);
   };
 
@@ -990,161 +985,5 @@ function ServersPage() {
 
       {dialog}
     </>
-  );
-}
-
-function ScheduleDialog({ open, onOpenChange, serverId }: { open: boolean; onOpenChange: (v: boolean) => void; serverId: string | null }) {
-  const [showForm, setShowForm] = useState(false);
-  const [newSchedule, setNewSchedule] = useState<{ action: 'start' | 'stop' | 'restart'; cron_expression: string; timezone: string; is_active: boolean }>({ action: 'start', cron_expression: '0 9 * * *', timezone: 'UTC', is_active: true });
-  const { data: schedules = [] } = useServerSchedules(serverId || '');
-  const createSchedule = useCreateSchedule();
-  const deleteSchedule = useDeleteSchedule();
-  const { confirm, dialog } = useConfirmDialog();
-
-  if (!serverId) return null;
-
-  const actionMeta = (action: string) => {
-    switch (action) {
-      case 'start': return { icon: Play, label: 'Start', bg: 'bg-emerald-500/10', text: 'text-emerald-400', iconBg: 'bg-emerald-500/15' };
-      case 'stop': return { icon: Square, label: 'Stop', bg: 'bg-amber-500/10', text: 'text-amber-400', iconBg: 'bg-amber-500/15' };
-      default: return { icon: RotateCcw, label: 'Restart', bg: 'bg-primary/10', text: 'text-primary', iconBg: 'bg-primary/15' };
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Scheduled Actions</DialogTitle>
-          <DialogDescription>
-            Automate server start, stop, and restart.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4 mt-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium">Schedules</h3>
-            <button
-              onClick={() => setShowForm(!showForm)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-all text-sm font-medium"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Add Schedule
-            </button>
-          </div>
-
-          {showForm && (
-            <div className="p-4 rounded-xl bg-surface/50 border border-border/50 space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Action</label>
-                  <Select
-                    value={newSchedule.action}
-                    onChange={(value) => setNewSchedule({ ...newSchedule, action: value as 'start' | 'stop' | 'restart' })}
-                  >
-                    <SelectItem value="start">Start</SelectItem>
-                    <SelectItem value="stop">Stop</SelectItem>
-                    <SelectItem value="restart">Restart</SelectItem>
-                  </Select>
-                </div>
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Timezone</label>
-                  <Input
-                    type="text"
-                    value={newSchedule.timezone}
-                    onChange={(e) => setNewSchedule({ ...newSchedule, timezone: e.target.value })}
-                    placeholder="UTC"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Schedule</label>
-                <CronBuilder
-                  value={newSchedule.cron_expression}
-                  onChange={(cron) => setNewSchedule({ ...newSchedule, cron_expression: cron })}
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    createSchedule.mutate({ serverId, data: newSchedule });
-                    setShowForm(false);
-                    setNewSchedule({ action: 'start', cron_expression: '0 9 * * *', timezone: 'UTC', is_active: true });
-                  }}
-                  className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-                >
-                  Create Schedule
-                </button>
-                <button
-                  onClick={() => setShowForm(false)}
-                  className="px-4 py-2 rounded-lg bg-muted text-muted-foreground text-sm font-medium hover:bg-muted/80 transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
-
-          {!showForm && schedules.length === 0 && (
-            <div className="text-center py-10 text-muted-foreground">
-              <Calendar className="w-10 h-10 mx-auto mb-3 opacity-30" />
-              <p className="text-sm">No schedules configured</p>
-              <p className="text-xs mt-1">Create a schedule to automate server actions</p>
-            </div>
-          )}
-
-          {schedules.length > 0 && (
-            <div className="space-y-2">
-              {schedules.map((schedule) => {
-                const meta = actionMeta(schedule.action);
-                const ActionIcon = meta.icon;
-                const parsed = parseCron(schedule.cron_expression);
-                const humanCron = humanizeSchedule(parsed.minute, parsed.hour, parsed.days);
-                return (
-                  <div key={schedule.id} className="flex items-center gap-3 p-3 rounded-xl bg-surface/50 border border-border/50">
-                    <div className={cn("p-2.5 rounded-xl flex-shrink-0", meta.iconBg)}>
-                      <ActionIcon className={cn("w-4 h-4", meta.text)} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium capitalize">{meta.label}</span>
-                        <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", schedule.is_active ? "bg-emerald-500/10 text-emerald-400" : "bg-muted text-muted-foreground")}>
-                          {schedule.is_active ? 'Active' : 'Inactive'}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <Clock className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-                        <span className="text-xs text-muted-foreground">{humanCron}</span>
-                      </div>
-                      {schedule.next_run_at && (
-                        <p className="text-xs text-muted-foreground/70 mt-0.5">
-                          Next: {formatDate(schedule.next_run_at)}
-                        </p>
-                      )}
-                    </div>
-                    <button
-                      onClick={async () => {
-                        const confirmed = await confirm({
-                          title: 'Delete Schedule',
-                          description: 'Are you sure you want to delete this schedule?',
-                          confirmLabel: 'Delete',
-                          cancelLabel: 'Cancel',
-                          variant: 'danger',
-                        });
-                        if (confirmed) deleteSchedule.mutate({ serverId, scheduleId: schedule.id });
-                      }}
-                      className="p-2 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors flex-shrink-0"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-        {dialog}
-        <DialogClose onClick={() => onOpenChange(false)} />
-      </DialogContent>
-    </Dialog>
   );
 }

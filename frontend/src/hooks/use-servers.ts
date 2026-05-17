@@ -277,7 +277,7 @@ export function useServerLogs(serverId: string, tail: number = 100, paused: bool
   return useQuery({
     queryKey: ['server-logs', serverId, tail],
     queryFn: async () => {
-      const response = await api.get<{ logs: string | string[]; tail: number; status?: string }>(`/servers/${serverId}/logs?tail=${tail}`);
+      const response = await api.get<{ logs: string; tail: number; status?: string }>(`/servers/${serverId}/logs?tail=${tail}`);
       return response;
     },
     enabled: !!serverId && !paused && active,

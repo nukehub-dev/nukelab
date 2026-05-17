@@ -85,6 +85,19 @@ export const api = {
     return parseJson<T>(response);
   },
 
+  async patch<T>(path: string, data: unknown): Promise<T> {
+    const response = await fetch(`${API_BASE}${path}`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${getToken()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) await handleAuthError(response);
+    return parseJson<T>(response);
+  },
+
   async delete<T>(path: string): Promise<T> {
     const response = await fetch(`${API_BASE}${path}`, {
       method: 'DELETE',

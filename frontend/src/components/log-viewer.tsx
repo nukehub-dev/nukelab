@@ -45,7 +45,7 @@ function parseLogLevel(line: string): LogEntry['level'] {
   return 'unknown';
 }
 
-function parseLogs(raw: string | string[]): LogEntry[] {
+function parseLogs(raw: string): LogEntry[] {
   if (!raw) return [];
   const lines = Array.isArray(raw) ? raw : raw.split('\n');
   return lines.filter(Boolean).map((line) => {
@@ -71,7 +71,7 @@ const levelConfig = {
   unknown: { color: 'text-muted-foreground', bg: 'bg-muted/30', border: 'border-border/20', label: 'LOG' },
 };
 
-export function LogViewer({ logs, status, tail = 100, isLoading, onPauseChange }: LogViewerProps) {
+export function LogViewer({ logs, status, tail: _tail = 100, isLoading, onPauseChange }: LogViewerProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [levelFilter, setLevelFilter] = useState<LogEntry['level'] | 'all'>('all');
   const [showTimestamps, setShowTimestamps] = useState(true);
