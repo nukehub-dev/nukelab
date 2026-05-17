@@ -58,11 +58,13 @@ export interface User {
   role: string;
   permissions?: string[];
   nuke_balance: number;
-  daily_allowance?: number;
+  daily_allowance: number;
   is_active: boolean;
   is_verified: boolean;
   last_login?: string;
   created_at?: string;
+  updated_at?: string;
+  login_count: number;
   profile?: Record<string, any>;
   preferences?: Record<string, any>;
   profile_visibility?: 'private' | 'public';

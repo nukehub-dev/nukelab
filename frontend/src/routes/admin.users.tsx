@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { Users, Shield, UserCheck, UserX, Mail, Calendar, Pencil, Trash2, CreditCard } from 'lucide-react';
+import { Users, Shield, UserCheck, UserX, Mail, Calendar, Pencil, Trash2, CreditCard, BadgeCheck, LogIn, Zap } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { ResourcePageLayout } from '../components/layout/resource-page-layout';
 import { DataTable } from '../components/data/data-table';
@@ -255,6 +255,21 @@ function UsersPage() {
       },
     },
     {
+      accessorKey: 'is_verified',
+      header: 'Verified',
+      cell: ({ row }) => {
+        const verified = row.getValue('is_verified') as boolean;
+        return verified ? (
+          <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+            <BadgeCheck className="w-3.5 h-3.5" />
+            Yes
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground">No</span>
+        );
+      },
+    },
+    {
       accessorKey: 'nuke_balance',
       header: 'Credits',
       cell: ({ row }) => {
@@ -268,6 +283,15 @@ function UsersPage() {
       },
     },
     {
+      accessorKey: 'daily_allowance',
+      header: 'Daily',
+      cell: ({ row }) => (
+        <span className="font-mono text-sm text-muted-foreground">
+          {(row.getValue('daily_allowance') as number).toLocaleString()}
+        </span>
+      ),
+    },
+    {
       accessorKey: 'created_at',
       header: 'Joined',
       cell: ({ row }) => (
@@ -277,6 +301,18 @@ function UsersPage() {
           <span className="text-sm text-muted-foreground"
           >
             {formatDate(row.getValue('created_at') as string)}
+          </span>
+        </div>
+      ),
+    },
+    {
+      accessorKey: 'login_count',
+      header: 'Logins',
+      cell: ({ row }) => (
+        <div className="flex items-center gap-2">
+          <LogIn className="w-3.5 h-3.5 text-muted-foreground" />
+          <span className="font-mono text-sm text-muted-foreground">
+            {(row.getValue('login_count') as number).toLocaleString()}
           </span>
         </div>
       ),
@@ -414,8 +450,12 @@ function UsersPage() {
         </span>
         <div className="flex items-center gap-3"
         >
+          {user.is_verified && <BadgeCheck className="w-4 h-4 text-emerald-500" />}
           <span className={cn('text-muted-foreground', user.nuke_balance <= 100 && 'text-amber-400')}>
             Credits: {user.nuke_balance.toLocaleString()}
+          </span>
+          <span className="text-muted-foreground">
+            Daily: {user.daily_allowance.toLocaleString()}
           </span>
           {canManageUsers && (
             <div className="flex items-center gap-1">

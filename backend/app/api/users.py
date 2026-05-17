@@ -54,6 +54,7 @@ class UserResponse(BaseModel):
     role: str
     permissions: List[str]
     nuke_balance: int
+    daily_allowance: int
     profile: dict
     preferences: dict
     profile_visibility: str
@@ -61,6 +62,8 @@ class UserResponse(BaseModel):
     is_verified: bool
     last_login: Optional[str]
     created_at: Optional[str]
+    updated_at: Optional[str]
+    login_count: int
 
 
 class UserListResponse(BaseModel):
@@ -98,6 +101,9 @@ def serialize_user(user: User) -> dict:
         "is_verified": user.is_verified,
         "last_login": user.last_login.isoformat() if user.last_login else None,
         "created_at": user.created_at.isoformat() if user.created_at else None,
+        "updated_at": user.updated_at.isoformat() if user.updated_at else None,
+        "login_count": user.login_count,
+        "daily_allowance": user.daily_allowance,
     }
 
 

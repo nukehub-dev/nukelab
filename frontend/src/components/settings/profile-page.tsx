@@ -1,8 +1,9 @@
-import { motion } from 'framer-motion';
-import { 
-  Mail, 
-  Shield, 
-  Zap, 
+import { useState, useEffect, useRef } from 'react';
+import { motion, useInView, useMotionValue, useTransform, animate } from 'framer-motion';
+import {
+  Mail,
+  Shield,
+  Zap,
   Calendar,
   Clock,
   Pencil,
@@ -11,414 +12,438 @@ import {
   Globe,
   UserCircle,
   Eye,
-  BookOpen
+  BadgeCheck,
+  LogIn,
+  RefreshCw,
+  type LucideIcon,
 } from 'lucide-react';
-import { useState } from 'react';
 import { useAuthStore } from '../../stores/auth-store';
 import { useToast } from '../../stores/toast-store';
 import { cn } from '../../lib/utils';
+import { api } from '../../lib/api';
+import { Card } from '../ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '../ui/dialog';
 import { Input } from '../ui/input';
+import { Textarea } from '../ui/textarea';
 import { Button } from '../ui/button';
 import { Switch } from '../ui/switch';
 
-const API_BASE = import.meta.env.VITE_API_URL || '/api';
+/* ------------------------------------------------------------------ */
+/*  Animation helpers                                                  */
+/* ------------------------------------------------------------------ */
 
-export function ProfilePage() {
-  const user = useAuthStore((state) => state.user);
-  const setUser = useAuthStore((state) => state.setUser);
-  const { success: toastSuccess, error: toastError } = useToast();
-  
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [avatarKey, setAvatarKey] = useState(Date.now());
-  
-  const [editForm, setEditForm] = useState({
-    first_name: user?.first_name || '',
-    last_name: user?.last_name || '',
-    email: user?.email || '',
-    bio: user?.profile?.bio || '',
-  });
-  const [isTogglingVisibility, setIsTogglingVisibility] = useState(false);
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.06, delayChildren: 0.05 },
+  },
+};
 
-  if (!user) return null;
+const fadeUp = {
+  hidden: { opacity: 0, y: 16 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { type: 'spring', stiffness: 350, damping: 28 },
+  },
+};
 
-  const useGravatar = user.preferences?.use_gravatar !== false;
-  
-  const handleSave = async () => {
-    setIsSaving(true);
-    try {
-      const token = localStorage.getItem('nukelab-token');
-      const res = await fetch(`${API_BASE}/users/me/profile`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          first_name: editForm.first_name,
-          last_name: editForm.last_name,
-          email: editForm.email,
-          profile: { ...user.profile, bio: editForm.bio },
-        }),
-      });
-      
-      if (!res.ok) throw new Error('Failed to update profile');
-      
-      const updated = await res.json();
-      setUser({ ...user, ...updated });
-      toastSuccess('Profile updated', 'Your profile has been updated successfully');
-      setShowEditModal(false);
-    } catch {
-      toastError('Update failed', 'Failed to update your profile');
-    } finally {
-      setIsSaving(false);
+const fadeIn = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { duration: 0.4 } },
+};
+
+function AnimatedNumber({ value }: { value: number }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const isInView = useInView(ref, { once: true });
+  const count = useMotionValue(0);
+  const rounded = useTransform(count, (v) => Math.round(v).toLocaleString());
+
+  useEffect(() => {
+    if (isInView) {
+      const controls = animate(count, value, { duration: 1.2, ease: 'easeOut' });
+      return controls.stop;
     }
-  };
+  }, [isInView, value, count]);
 
-  const toggleGravatar = async () => {
-    try {
-      const token = localStorage.getItem('nukelab-token');
-      const newPrefs = { ...user.preferences, use_gravatar: !useGravatar };
-      
-      const res = await fetch(`${API_BASE}/preferences/`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(newPrefs),
-      });
-      
-      if (!res.ok) throw new Error('Failed to update preferences');
-      
-      const userRes = await fetch(`${API_BASE}/auth/me`, {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      if (userRes.ok) {
-        const fresh = await userRes.json();
-        setUser(fresh);
-        setAvatarKey(Date.now());
-      }
-      
-      toastSuccess(
-        !useGravatar ? 'Gravatar enabled' : 'Custom avatar enabled',
-        !useGravatar ? 'Your Gravatar is now being used' : 'Using default avatar'
-      );
-    } catch {
-      toastError('Update failed', 'Failed to update preferences');
-    }
-  };
+  return <motion.span ref={ref}>{rounded}</motion.span>;
+}
 
-  const toggleProfileVisibility = async () => {
-    setIsTogglingVisibility(true);
-    try {
-      const token = localStorage.getItem('nukelab-token');
-      const newVisibility = user.profile_visibility === 'public' ? 'private' : 'public';
-      
-      const res = await fetch(`${API_BASE}/users/me/profile`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({ profile_visibility: newVisibility }),
-      });
-      
-      if (!res.ok) throw new Error('Failed to update profile visibility');
-      
-      const updated = await res.json();
-      setUser({ ...user, ...updated });
-      
-      toastSuccess(
-        newVisibility === 'public' ? 'Profile is now public' : 'Profile is now private',
-        newVisibility === 'public' 
-          ? 'Other users can now find you in search and invite you to workspaces'
-          : 'You are hidden from user discovery'
-      );
-    } catch {
-      toastError('Update failed', 'Failed to update profile visibility');
-    } finally {
-      setIsTogglingVisibility(false);
-    }
-  };
+/* ------------------------------------------------------------------ */
+/*  Small components                                                   */
+/* ------------------------------------------------------------------ */
 
-  const openEdit = () => {
-    setEditForm({
-      first_name: user.first_name || '',
-      last_name: user.last_name || '',
-      email: user.email || '',
-      bio: user?.profile?.bio || '',
-    });
-    setShowEditModal(true);
-  };
-
-  const formatDate = (date?: string) => {
-    if (!date) return 'Never';
-    return new Date(date).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-  };
-
-  const displayName = user.first_name && user.last_name 
-    ? `${user.first_name} ${user.last_name}`
-    : user.display_name || user.username;
-
-  const initials = displayName.charAt(0).toUpperCase();
-
+function Orb({ className }: { className?: string }) {
   return (
-    <>
-      {/* Edit Modal */}
-      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit Profile</DialogTitle>
-            <DialogDescription>Update your profile information.</DialogDescription>
-          </DialogHeader>
-          <form id="profile-form" onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="space-y-4 mt-4" noValidate>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">First Name</label>
-              <Input
-                type="text"
-                value={editForm.first_name}
-                onChange={(e) => setEditForm({ ...editForm, first_name: e.target.value })}
-                placeholder="Enter first name"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Last Name</label>
-              <Input
-                type="text"
-                value={editForm.last_name}
-                onChange={(e) => setEditForm({ ...editForm, last_name: e.target.value })}
-                placeholder="Enter last name"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Email</label>
-              <Input
-                type="email"
-                value={editForm.email}
-                onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                placeholder="Enter email"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Bio</label>
-              <textarea
-                value={editForm.bio}
-                onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })}
-                placeholder="Tell us about yourself..."
-                rows={3}
-                className="w-full px-3 py-2 rounded-md border border-border bg-background text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
-          </form>
-          <DialogFooter>
-            <Button variant="outline" type="button" onClick={() => setShowEditModal(false)}>Cancel</Button>
-            <Button type="submit" form="profile-form" loading={isSaving}>Save Changes</Button>
-          </DialogFooter>
-          <DialogClose onClick={() => setShowEditModal(false)} />
-        </DialogContent>
-      </Dialog>
-
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold">Profile</h2>
-            <p className="text-muted-foreground mt-1">Manage your account settings and preferences</p>
-          </div>
-        </div>
-
-        {/* Profile Header Card */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-card/40 backdrop-blur-2xl border border-border/40 rounded-2xl p-6 relative overflow-hidden"
-        >
-          <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-          <div className="relative flex flex-col sm:flex-row items-center sm:items-start gap-6">
-            {/* Avatar */}
-            <div className="relative">
-              {user.avatar_url && useGravatar ? (
-                <img 
-                  src={`${user.avatar_url}${user.avatar_url.includes('?') ? '&' : '?'}_t=${avatarKey}`} 
-                  alt={displayName}
-                  className="w-24 h-24 rounded-2xl object-cover ring-2 ring-border/50"
-                />
-              ) : (
-                <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-primary/30 to-primary/10 ring-2 ring-primary/30 flex items-center justify-center text-3xl font-bold text-primary">
-                  {initials}
-                </div>
-              )}
-              <div className={cn(
-                "absolute -bottom-1.5 -right-1.5 w-6 h-6 rounded-full border-2 border-card flex items-center justify-center",
-                user.is_active ? "bg-green-500" : "bg-red-500"
-              )}>
-                <div className="w-2 h-2 rounded-full bg-white" />
-              </div>
-            </div>
-
-            {/* Info */}
-            <div className="flex-1 min-w-0 text-center sm:text-left">
-              <h1 className="text-2xl font-bold">{displayName}</h1>
-              <p className="text-muted-foreground mt-0.5">@{user.username}</p>
-              
-              <div className="flex items-center justify-center sm:justify-start gap-3 mt-3">
-                <span className={cn(
-                  "px-2.5 py-0.5 rounded-full text-xs font-medium border capitalize",
-                  user.role === 'admin' && "bg-orange-500/10 text-orange-400 border-orange-500/20",
-                  user.role === 'super_admin' && "bg-red-500/10 text-red-400 border-red-500/20",
-                  user.role === 'moderator' && "bg-blue-500/10 text-blue-400 border-blue-500/20",
-                  user.role === 'user' && "bg-primary/10 text-primary border-primary/20"
-                )}>
-                  {user.role.replace('_', ' ')}
-                </span>
-                <span className="text-sm text-muted-foreground">{user.email}</span>
-              </div>
-              {user?.profile?.bio && (
-                <p className="text-sm text-muted-foreground mt-2 max-w-md">{user.profile.bio}</p>
-              )}
-            </div>
-
-            <button
-              onClick={openEdit}
-              className="px-5 py-2.5 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-all text-sm font-medium flex items-center gap-2 backdrop-blur-sm shrink-0"
-            >
-              <Pencil className="w-4 h-4" />
-              Edit Profile
-            </button>
-          </div>
-        </motion.div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Account Details */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="lg:col-span-2 bg-card/40 backdrop-blur-2xl border border-border/40 rounded-2xl p-6 relative overflow-hidden"
-          >
-            <div className="absolute bottom-0 left-0 w-48 h-48 bg-chart-2/5 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2" />
-            
-            <div className="relative">
-              <h3 className="text-lg font-semibold mb-5">Account Details</h3>
-              <div className="space-y-0">
-                <InfoRow icon={UserCircle} label="Username" value={user.username} />
-                <InfoRow icon={Mail} label="Email" value={user.email} />
-                {user?.profile?.bio && (
-                  <InfoRow icon={BookOpen} label="Bio" value={user.profile.bio} />
-                )}
-                <InfoRow icon={Shield} label="Role" value={user.role.replace('_', ' ')} />
-                <InfoRow 
-                  icon={user.is_active ? Check : X} 
-                  label="Status" 
-                  value={user.is_active ? 'Active' : 'Inactive'} 
-                  valueClass={user.is_active ? 'text-green-400' : 'text-red-400'}
-                />
-                <InfoRow icon={Calendar} label="Member Since" value={formatDate(user.created_at)} />
-                <InfoRow icon={Clock} label="Last Login" value={formatDate(user.last_login)} />
-              </div>
-            </div>
-          </motion.div>
-
-          <div className="flex flex-col gap-6">
-            {/* Credits */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-              className="bg-card/40 backdrop-blur-2xl border border-border/40 rounded-2xl p-6 relative overflow-hidden"
-            >
-              <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-              
-              <div className="relative">
-                <h3 className="text-lg font-semibold mb-4">Credits</h3>
-                <div className="p-5 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center">
-                      <Zap className="w-6 h-6 text-primary" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Available Balance</p>
-                      <p className="text-3xl font-bold">{user.nuke_balance.toLocaleString()} NUKE</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-
-            {/* Preferences */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-              className="flex-1 bg-card/40 backdrop-blur-2xl border border-border/40 rounded-2xl p-6 relative overflow-hidden"
-            >
-              <div className="relative">
-                <h3 className="text-lg font-semibold mb-4">Preferences</h3>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between py-2">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                        <Globe className="w-5 h-5 text-primary" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium">Use Gravatar</p>
-                        <p className="text-xs text-muted-foreground">Fetch avatar from Gravatar</p>
-                      </div>
-                    </div>
-                    <Switch
-                      checked={useGravatar}
-                      onCheckedChange={toggleGravatar}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between py-2">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                        <Eye className="w-5 h-5 text-primary" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium">Public Profile</p>
-                        <p className="text-xs text-muted-foreground">Let others find you in search</p>
-                      </div>
-                    </div>
-                    <Switch
-                      checked={user.profile_visibility === 'public'}
-                      onCheckedChange={toggleProfileVisibility}
-                      disabled={isTogglingVisibility}
-                    />
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        </div>
-      </div>
-    </>
+    <div className={cn('absolute rounded-full blur-3xl pointer-events-none opacity-50', className)} />
   );
 }
 
-function InfoRow({ 
-  icon: Icon, 
-  label, 
-  value, 
-  valueClass 
-}: { 
-  icon: React.ElementType; 
-  label: string; 
+function SectionCard({
+  children,
+  className,
+  orb,
+  delay = 0,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  orb?: string;
+  delay?: number;
+}) {
+  return (
+    <motion.div variants={fadeUp} transition={{ delay }} className="h-full">
+      <Card variant="default" className={cn('relative overflow-hidden h-full', className)}>
+        {orb && <Orb className={orb} />}
+        <div className="relative">{children}</div>
+      </Card>
+    </motion.div>
+  );
+}
+
+function DetailRow({
+  icon: Icon,
+  label,
+  value,
+  valueClass,
+}: {
+  icon: LucideIcon;
+  label: string;
   value: string;
   valueClass?: string;
 }) {
   return (
-    <div className="flex items-center justify-between py-3.5 border-b border-border/20 last:border-0">
-      <div className="flex items-center gap-2.5 text-sm text-muted-foreground">
-        <Icon className="w-4 h-4" />
-        {label}
+    <div className="flex items-center justify-between py-2.5">
+      <div className="flex items-center gap-3 text-sm text-muted-foreground">
+        <Icon className="w-4 h-4 shrink-0" />
+        <span>{label}</span>
       </div>
-      <span className={cn("text-sm font-medium", valueClass)}>{value}</span>
+      <span className={cn('text-sm font-medium text-right', valueClass)}>{value}</span>
     </div>
+  );
+}
+
+function RoleBadge({ role }: { role: string }) {
+  const map: Record<string, string> = {
+    super_admin: 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20',
+    admin: 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20',
+    moderator: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20',
+    support: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20',
+    user: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
+  };
+  return (
+    <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium border capitalize', map[role] || map.user)}>
+      {role.replace('_', ' ')}
+    </span>
+  );
+}
+
+function PrefToggle({
+  icon: Icon,
+  title,
+  desc,
+  checked,
+  onChange,
+  disabled,
+}: {
+  icon: LucideIcon;
+  title: string;
+  desc: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-1">
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+          <Icon className="w-4 h-4 text-primary" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-medium">{title}</p>
+          <p className="text-xs text-muted-foreground">{desc}</p>
+        </div>
+      </div>
+      <Switch checked={checked} onCheckedChange={onChange} disabled={disabled} />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Edit Dialog                                                        */
+/* ------------------------------------------------------------------ */
+
+function EditDialog({
+  open,
+  onOpenChange,
+  user,
+  onSaved,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  user: NonNullable<ReturnType<typeof useAuthStore.getState>['user']>;
+  onSaved: (u: Record<string, unknown>) => void;
+}) {
+  const { success, error } = useToast();
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    first_name: user.first_name || '',
+    last_name: user.last_name || '',
+    email: user.email || '',
+    bio: user.profile?.bio || '',
+  });
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const updated = await api.put<Record<string, unknown>>('/users/me/profile', {
+        first_name: form.first_name,
+        last_name: form.last_name,
+        email: form.email,
+        profile: { ...user.profile, bio: form.bio },
+      });
+      onSaved(updated);
+      success('Profile updated', 'Your profile has been updated successfully');
+      onOpenChange(false);
+    } catch {
+      error('Update failed', 'Failed to update your profile');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Edit Profile</DialogTitle>
+          <DialogDescription>Update your profile information.</DialogDescription>
+        </DialogHeader>
+        <form id="pf" onSubmit={(e) => { e.preventDefault(); save(); }} className="space-y-4 mt-4" noValidate>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">First Name</label>
+            <Input value={form.first_name} onChange={(e) => setForm((f) => ({ ...f, first_name: e.target.value }))} placeholder="First name" />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Last Name</label>
+            <Input value={form.last_name} onChange={(e) => setForm((f) => ({ ...f, last_name: e.target.value }))} placeholder="Last name" />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Email</label>
+            <Input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} placeholder="Email" />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Bio</label>
+            <Textarea
+              value={form.bio}
+              onChange={(e) => setForm((f) => ({ ...f, bio: e.target.value }))}
+              placeholder="Tell us about yourself..."
+              rows={3}
+              className="resize-none"
+            />
+          </div>
+        </form>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button type="submit" form="pf" loading={saving}>Save Changes</Button>
+        </DialogFooter>
+        <DialogClose onClick={() => onOpenChange(false)} />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Page                                                               */
+/* ------------------------------------------------------------------ */
+
+export function ProfilePage() {
+  const user = useAuthStore((s) => s.user);
+  const setUser = useAuthStore((s) => s.setUser);
+  const { success, error } = useToast();
+
+  const [editOpen, setEditOpen] = useState(false);
+  const [avatarKey, setAvatarKey] = useState(Date.now());
+  const [togglingVis, setTogglingVis] = useState(false);
+
+  if (!user) return null;
+
+  const useGravatar = user.preferences?.use_gravatar !== false;
+  const displayName = user.first_name && user.last_name ? `${user.first_name} ${user.last_name}` : user.display_name || user.username;
+  const initials = displayName.charAt(0).toUpperCase();
+
+  const fmtDate = (d?: string) =>
+    d ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'Never';
+
+  const handleSaved = (updated: Record<string, unknown>) => setUser({ ...user, ...updated });
+
+  const toggleGravatar = async () => {
+    try {
+      const newPrefs = { ...user.preferences, use_gravatar: !useGravatar };
+      await api.put('/preferences/', newPrefs);
+      setUser({ ...user, preferences: newPrefs });
+      setAvatarKey(Date.now());
+      success(!useGravatar ? 'Gravatar enabled' : 'Custom avatar enabled', !useGravatar ? 'Gravatar is now active' : 'Using default avatar');
+    } catch {
+      error('Update failed', 'Failed to update preferences');
+    }
+  };
+
+  const toggleVisibility = async () => {
+    setTogglingVis(true);
+    try {
+      const next = user.profile_visibility === 'public' ? 'private' : 'public';
+      const updated = await api.put<Record<string, unknown>>('/users/me/profile', { profile_visibility: next });
+      setUser({ ...user, ...updated });
+      success(next === 'public' ? 'Profile is now public' : 'Profile is now private', next === 'public' ? 'Others can find you in search' : 'Hidden from discovery');
+    } catch {
+      error('Update failed', 'Failed to update visibility');
+    } finally {
+      setTogglingVis(false);
+    }
+  };
+
+  return (
+    <>
+      <EditDialog open={editOpen} onOpenChange={setEditOpen} user={user} onSaved={handleSaved} />
+
+      <motion.div className="space-y-6 max-w-5xl mx-auto" variants={containerVariants} initial="hidden" animate="visible">
+        {/* Page title */}
+        <motion.div variants={fadeUp}>
+          <h2 className="text-2xl font-bold">Profile</h2>
+          <p className="text-muted-foreground mt-1">Manage your account settings and preferences</p>
+        </motion.div>
+
+        {/* ── Header ── */}
+        <SectionCard className="p-6 sm:p-8" orb="top-0 right-0 w-72 h-72 bg-primary/5 -translate-y-1/2 translate-x-1/3">
+          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 sm:gap-6">
+            {/* Avatar */}
+            <motion.div
+              initial={{ scale: 0.85, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: 'spring', stiffness: 250, damping: 18, delay: 0.1 }}
+              className="relative shrink-0"
+            >
+              {user.avatar_url && useGravatar ? (
+                <img
+                  src={`${user.avatar_url}${user.avatar_url.includes('?') ? '&' : '?'}_t=${avatarKey}`}
+                  alt={displayName}
+                  className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl object-cover ring-2 ring-border/60"
+                />
+              ) : (
+                <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-gradient-to-br from-primary/40 to-primary/10 ring-2 ring-primary/30 flex items-center justify-center text-4xl font-bold text-primary">
+                  {initials}
+                </div>
+              )}
+              <div className={cn('absolute -bottom-1.5 -right-1.5 w-6 h-6 rounded-full border-2 border-background flex items-center justify-center', user.is_active ? 'bg-emerald-500' : 'bg-red-500')}>
+                <div className="w-2 h-2 rounded-full bg-white" />
+              </div>
+            </motion.div>
+
+            {/* Text */}
+            <div className="flex-1 min-w-0 text-center sm:text-left">
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{displayName}</h1>
+              <p className="text-muted-foreground mt-0.5">@{user.username}</p>
+
+              <div className="flex items-center justify-center sm:justify-start gap-2.5 mt-3 flex-wrap">
+                <RoleBadge role={user.role} />
+                <span className="text-sm text-muted-foreground">{user.email}</span>
+              </div>
+
+              {user.profile?.bio && (
+                <motion.p variants={fadeIn} className="text-sm text-muted-foreground mt-3 max-w-lg leading-relaxed">
+                  {user.profile.bio}
+                </motion.p>
+              )}
+            </div>
+
+            <Button variant="outline" className="shrink-0" onClick={() => setEditOpen(true)}>
+              <Pencil className="w-4 h-4 mr-2" />
+              Edit Profile
+            </Button>
+          </div>
+        </SectionCard>
+
+        {/* ── Equal 2-column grid ── */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Left: Account Details */}
+          <SectionCard className="p-6" delay={0.1}>
+            <h3 className="text-lg font-semibold mb-1">Account Details</h3>
+            <p className="text-xs text-muted-foreground mb-4">Your account information and activity</p>
+
+            <div className="divide-y divide-border/30">
+              <DetailRow icon={UserCircle} label="Username" value={user.username} />
+              <DetailRow icon={Mail} label="Email" value={user.email} />
+              <DetailRow icon={Shield} label="Role" value={user.role.replace('_', ' ')} />
+              <DetailRow
+                icon={user.is_active ? Check : X}
+                label="Status"
+                value={user.is_active ? 'Active' : 'Inactive'}
+                valueClass={user.is_active ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}
+              />
+              <DetailRow
+                icon={BadgeCheck}
+                label="Email Verified"
+                value={user.is_verified ? 'Verified' : 'Not Verified'}
+                valueClass={user.is_verified ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}
+              />
+              <DetailRow icon={LogIn} label="Total Logins" value={user.login_count.toLocaleString()} />
+              <DetailRow icon={Calendar} label="Member Since" value={fmtDate(user.created_at)} />
+              <DetailRow icon={Clock} label="Last Login" value={fmtDate(user.last_login)} />
+              <DetailRow icon={RefreshCw} label="Profile Updated" value={fmtDate(user.updated_at)} />
+            </div>
+          </SectionCard>
+
+          {/* Right: Credits + Preferences stacked */}
+          <div className="flex flex-col gap-6 h-full">
+            {/* Credits — prominent */}
+            <SectionCard className="p-6" delay={0.15}>
+              <h3 className="text-lg font-semibold mb-1">Credits</h3>
+              <p className="text-xs text-muted-foreground mb-4">Your current NUKE balance</p>
+
+              <div className="flex items-center gap-5 p-5 rounded-xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border border-primary/15">
+                <div className="w-14 h-14 rounded-2xl bg-primary/20 flex items-center justify-center shrink-0">
+                  <Zap className="w-7 h-7 text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Available Balance</p>
+                  <p className="text-3xl sm:text-4xl font-bold tracking-tight">
+                    <AnimatedNumber value={user.nuke_balance} /> <span className="text-lg text-muted-foreground font-semibold">NUKE</span>
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 flex items-center justify-between py-2 px-1">
+                <span className="text-sm text-muted-foreground">Daily Allowance</span>
+                <span className="text-sm font-medium">{user.daily_allowance.toLocaleString()} NUKE</span>
+              </div>
+            </SectionCard>
+
+            {/* Preferences */}
+            <SectionCard className="p-6 flex-1" delay={0.2}>
+              <h3 className="text-lg font-semibold mb-1">Preferences</h3>
+              <p className="text-xs text-muted-foreground mb-4">Manage your profile settings</p>
+
+              <div className="space-y-3">
+                <PrefToggle
+                  icon={Globe}
+                  title="Use Gravatar"
+                  desc="Fetch avatar from Gravatar"
+                  checked={useGravatar}
+                  onChange={toggleGravatar}
+                />
+                <PrefToggle
+                  icon={Eye}
+                  title="Public Profile"
+                  desc="Let others find you in search"
+                  checked={user.profile_visibility === 'public'}
+                  onChange={toggleVisibility}
+                  disabled={togglingVis}
+                />
+              </div>
+            </SectionCard>
+          </div>
+        </div>
+      </motion.div>
+    </>
   );
 }
