@@ -231,14 +231,31 @@ class CreditService:
         additional_cost = exact_cost - already_billed
 
         if additional_cost > 0:
-            await self.consume_credits(
-                user_id=str(server.user_id),
-                amount=additional_cost,
-                description=f"Server usage reconciliation: '{server.name}' ({self._format_duration(duration_seconds)} at {plan.cost_per_hour} NUKE/hour)",
-                server_id=str(server.id)
-            )
-            server.total_cost = already_billed + additional_cost
-            return additional_cost
+            # Check balance first; if insufficient, record what we can and move on
+            # (server stopping must never be blocked by credit issues)
+            balance = await self.get_balance(str(server.user_id))
+            if balance >= additional_cost:
+                await self.consume_credits(
+                    user_id=str(server.user_id),
+                    amount=additional_cost,
+                    description=f"Server usage reconciliation: '{server.name}' ({self._format_duration(duration_seconds)} at {plan.cost_per_hour} NUKE/hour)",
+                    server_id=str(server.id)
+                )
+                server.total_cost = already_billed + additional_cost
+                return additional_cost
+            else:
+                # Charge what we can, mark remainder as debt (balance hits 0)
+                if balance > 0:
+                    await self.consume_credits(
+                        user_id=str(server.user_id),
+                        amount=balance,
+                        description=f"Partial server usage reconciliation: '{server.name}' ({self._format_duration(duration_seconds)} at {plan.cost_per_hour} NUKE/hour). Remaining {additional_cost - balance} NUKE unpaid.",
+                        server_id=str(server.id)
+                    )
+                    server.total_cost = already_billed + balance
+                # Log unpaid amount for future reference
+                print(f"[CREDIT] Server {server.id} stopped with unpaid balance: {additional_cost - balance} NUKE (user had {balance})")
+                return balance if balance > 0 else 0
 
         return 0
 

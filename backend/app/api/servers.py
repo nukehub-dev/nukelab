@@ -324,14 +324,6 @@ async def create_server(
                     detail=f"Volume {vol_id}: {quota_check['reason']}"
                 )
         
-        # Deduct 1 hour of plan cost on spawn
-        if settings.credits_enabled and plan.cost_per_hour > 0:
-            await credit_service.consume_credits(
-                user_id=str(current_user.id),
-                amount=plan.cost_per_hour,
-                description=f"Initial spawn cost for server '{request.name}' (1 hour at {plan.cost_per_hour} NUKE/hour)",
-            )
-        
         # Spawn the container using plan resources + environment image
         server = await spawner.spawn(
             user_id=str(current_user.id),
@@ -634,6 +626,26 @@ async def start_server(
     # Check if trying to start someone else's server
     if str(server.user_id) != str(current_user.id):
         checker.require(Permission.SERVERS_MANAGE)
+    
+    # Check NUKE credits before starting
+    if settings.credits_enabled and server.plan_id:
+        from app.services.plan_service import PlanService
+        from app.services.credit_service import CreditService
+        
+        plan_service = PlanService(db)
+        plan = await plan_service.get_by_id(str(server.plan_id))
+        
+        if plan and plan.cost_per_hour > 0:
+            credit_service = CreditService(db)
+            has_credits = await credit_service.check_sufficient_credits(
+                user_id=str(server.user_id),
+                required=plan.cost_per_hour
+            )
+            if not has_credits:
+                raise HTTPException(
+                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                    detail=f"Insufficient NUKE credits. Required: {plan.cost_per_hour} for 1 hour"
+                )
     
     # Load volume mounts
     volume_mounts = await _load_server_volume_mounts(db, str(server.id))
@@ -953,6 +965,26 @@ async def restart_server(
     # Check if trying to restart someone else's server
     if str(server.user_id) != str(current_user.id):
         checker.require(Permission.SERVERS_MANAGE)
+    
+    # Check NUKE credits before restarting
+    if settings.credits_enabled and server.plan_id:
+        from app.services.plan_service import PlanService
+        from app.services.credit_service import CreditService
+        
+        plan_service = PlanService(db)
+        plan = await plan_service.get_by_id(str(server.plan_id))
+        
+        if plan and plan.cost_per_hour > 0:
+            credit_service = CreditService(db)
+            has_credits = await credit_service.check_sufficient_credits(
+                user_id=str(server.user_id),
+                required=plan.cost_per_hour
+            )
+            if not has_credits:
+                raise HTTPException(
+                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                    detail=f"Insufficient NUKE credits. Required: {plan.cost_per_hour} for 1 hour"
+                )
     
     # Load volume mounts
     volume_mounts = await _load_server_volume_mounts(db, str(server.id))

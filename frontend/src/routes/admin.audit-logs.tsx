@@ -29,6 +29,7 @@ import { useDataTable } from '../hooks/use-data-table';
 import { useAuditLogs } from '../hooks/use-audit-logs';
 import { AuditLogDiff } from '../components/audit/audit-log-diff';
 import { formatDate, cn } from '../lib/utils';
+import { useToastStore } from '../stores/toast-store';
 import { Dialog, DialogContent, DialogClose } from '../components/ui/dialog';
 import { Tooltip } from '../components/ui/tooltip';
 
@@ -228,7 +229,7 @@ function AuditLogsPage() {
       a.click();
       window.URL.revokeObjectURL(url);
     } catch {
-      alert('Failed to export audit logs');
+      useToastStore.getState().addToast({ type: 'error', title: 'Export failed', message: 'Failed to export audit logs', duration: 8000 });
     } finally {
       setExportLoading(false);
     }

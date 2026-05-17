@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useCallback } from 'react';
+import { useToastStore } from '../stores/toast-store';
 import { 
   Folder, 
   File, 
@@ -123,7 +124,7 @@ export function FileBrowser({ volumeId, volumeName, onClose }: FileBrowserProps)
     try {
       await api.download(`/volumes/${volumeId}/download?path=${encodeURIComponent(path)}`, itemName);
     } catch (e) {
-      alert(`Download failed: ${e instanceof Error ? e.message : 'Unknown error'}`);
+      useToastStore.getState().addToast({ type: 'error', title: 'Download failed', message: e instanceof Error ? e.message : 'Unknown error', duration: 8000 });
     }
   };
 

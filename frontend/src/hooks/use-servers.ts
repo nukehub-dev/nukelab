@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useCallback, useEffect } from 'react';
 import { api } from '../lib/api';
+import { useToastStore } from '../stores/toast-store';
 import type { Server } from '../types/api';
 
 export function useServers() {
@@ -160,7 +161,7 @@ export function useServerActions() {
     onError: (error: Error, serverId) => {
       removePendingOp(serverId);
       console.error('Failed to start server:', error.message);
-      alert(`Failed to start server: ${error.message}`);
+      useToastStore.getState().addToast({ type: 'error', title: 'Failed to start server', message: error.message, duration: 8000 });
     },
   });
 
@@ -177,7 +178,7 @@ export function useServerActions() {
     onError: (error: Error, serverId) => {
       removePendingOp(serverId);
       console.error('Failed to stop server:', error.message);
-      alert(`Failed to stop server: ${error.message}`);
+      useToastStore.getState().addToast({ type: 'error', title: 'Failed to stop server', message: error.message, duration: 8000 });
     },
   });
 
@@ -194,7 +195,7 @@ export function useServerActions() {
     onError: (error: Error, serverId) => {
       removePendingOp(serverId);
       console.error('Failed to restart server:', error.message);
-      alert(`Failed to restart server: ${error.message}`);
+      useToastStore.getState().addToast({ type: 'error', title: 'Failed to restart server', message: error.message, duration: 8000 });
     },
   });
 
@@ -211,7 +212,7 @@ export function useServerActions() {
     onError: (error: Error, serverId) => {
       removePendingOp(serverId);
       console.error('Failed to delete server:', error.message);
-      alert(`Failed to delete server: ${error.message}`);
+      useToastStore.getState().addToast({ type: 'error', title: 'Failed to delete server', message: error.message, duration: 8000 });
     },
   });
 

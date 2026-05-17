@@ -13,10 +13,24 @@ const toastIcons: Record<ToastType, typeof CheckCircle> = {
 };
 
 const toastStyles: Record<ToastType, string> = {
-  success: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400',
-  error: 'border-red-500/20 bg-red-500/10 text-red-400',
-  warning: 'border-amber-500/20 bg-amber-500/10 text-amber-400',
-  info: 'border-blue-500/20 bg-blue-500/10 text-blue-400',
+  success: 'shadow-[0_0_20px_-4px_rgba(16,185,129,0.25)] dark:border-emerald-500/15',
+  error: 'shadow-[0_0_20px_-4px_rgba(239,68,68,0.25)] dark:border-red-500/15',
+  warning: 'shadow-[0_0_20px_-4px_rgba(245,158,11,0.25)] dark:border-amber-500/15',
+  info: 'shadow-[0_0_20px_-4px_rgba(59,130,246,0.25)] dark:border-blue-500/15',
+};
+
+const iconBgStyles: Record<ToastType, string> = {
+  success: 'bg-emerald-500/15 text-emerald-500 dark:text-emerald-400',
+  error: 'bg-red-500/15 text-red-500 dark:text-red-400',
+  warning: 'bg-amber-500/15 text-amber-500 dark:text-amber-400',
+  info: 'bg-blue-500/15 text-blue-500 dark:text-blue-400',
+};
+
+const titleColors: Record<ToastType, string> = {
+  success: 'text-emerald-700 dark:text-emerald-300',
+  error: 'text-red-700 dark:text-red-300',
+  warning: 'text-amber-700 dark:text-amber-300',
+  info: 'text-blue-700 dark:text-blue-300',
 };
 
 const progressColors: Record<ToastType, string> = {
@@ -47,16 +61,27 @@ function ToastItem({ toast }: { toast: Toast }) {
       exit={{ opacity: 0, x: 100, scale: 0.9 }}
       transition={{ type: 'spring', stiffness: 400, damping: 25 }}
       className={cn(
-        'relative w-full max-w-sm rounded-lg border p-4 shadow-lg backdrop-blur-sm overflow-hidden',
+        'relative w-full max-w-sm rounded-xl border border-border/30 p-4 shadow-2xl backdrop-blur-xl overflow-hidden bg-background/80',
         toastStyles[toast.type]
       )}
     >
-      <div className="flex items-start gap-3">
-        <Icon className="mt-0.5 h-5 w-5 shrink-0" />
-        <div className="flex-1 min-w-0">
-          <p className="font-medium text-sm">{toast.title}</p>
+      {/* Colored tint overlay */}
+      <div className={cn(
+        'absolute inset-0 opacity-[0.08] dark:opacity-[0.12] pointer-events-none',
+        toast.type === 'success' && 'bg-emerald-500',
+        toast.type === 'error' && 'bg-red-500',
+        toast.type === 'warning' && 'bg-amber-500',
+        toast.type === 'info' && 'bg-blue-500',
+      )} />
+
+      <div className="relative flex items-start gap-3">
+        <div className={cn('p-1.5 rounded-lg shrink-0', iconBgStyles[toast.type])}>
+          <Icon className="h-4 w-4" />
+        </div>
+        <div className="flex-1 min-w-0 pt-0.5">
+          <p className={cn('font-semibold text-sm leading-tight', titleColors[toast.type])}>{toast.title}</p>
           {toast.message && (
-            <p className="mt-1 text-xs opacity-80">{toast.message}</p>
+            <p className="mt-1 text-xs text-foreground/65 dark:text-foreground/80 leading-relaxed">{toast.message}</p>
           )}
           {toast.action && (
             <button
@@ -69,16 +94,16 @@ function ToastItem({ toast }: { toast: Toast }) {
         </div>
         <button
           onClick={() => removeToast(toast.id)}
-          className="shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+          className="shrink-0 p-1 rounded-md opacity-50 hover:opacity-100 hover:bg-foreground/10 transition-all text-foreground"
         >
-          <X className="h-4 w-4" />
+          <X className="h-3.5 w-3.5" />
         </button>
       </div>
 
       {/* Progress bar */}
       {duration !== Infinity && (
         <motion.div
-          className={cn('absolute bottom-0 left-0 h-0.5 rounded-full', progressColors[toast.type])}
+          className={cn('absolute bottom-0 left-0 h-[3px] rounded-full', progressColors[toast.type])}
           initial={{ width: '100%' }}
           animate={{ width: '0%' }}
           transition={{ duration: duration / 1000, ease: 'linear' }}
