@@ -86,11 +86,13 @@ class User(Base):
     def get_avatar_url(self, size=200):
         """Get avatar URL (Gravatar or custom)"""
         prefs = self.preferences or {}
-        use_gravatar = prefs.get('use_gravatar', True)
-        
-        if self.avatar_url and not use_gravatar:
+        use_gravatar = prefs.get('use_gravatar', False)
+
+        if use_gravatar:
+            return self.get_gravatar_url(size=size)
+        if self.avatar_url:
             return self.avatar_url
-        return self.get_gravatar_url(size=size)
+        return ""
     
     def to_dict(self):
         """Serialize user to dictionary"""

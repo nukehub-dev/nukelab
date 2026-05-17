@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
   X,
   History,
@@ -18,6 +18,7 @@ import { useCreditHistory } from '../../hooks/use-credits';
 import { formatDate, cn } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { Tooltip } from '../ui/tooltip';
+import { Modal } from '../ui/modal';
 import type { User as UserType, CreditTransaction } from '../../types/api';
 
 interface CreditHistoryDialogProps {
@@ -86,19 +87,7 @@ export function CreditHistoryDialog({ user, open, onClose, usersMap = {} }: Cred
   if (!open) return null;
 
   return (
-    <AnimatePresence>
-      {open && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-          onClick={onClose}
-        >
-          <motion.div
-            className="w-full max-w-4xl max-h-[90vh] rounded-2xl bg-card/95 backdrop-blur-xl border border-border/50 shadow-2xl overflow-hidden flex flex-col"
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            onClick={(e) => e.stopPropagation()}
-          >
+    <Modal open={open} onOpenChange={onClose} showClose={false} className="max-w-4xl max-h-[90vh] flex flex-col">
             {/* Header */}
             <div className="h-1 bg-primary" />
             <div className="p-5 border-b border-border/50 space-y-4 shrink-0">
@@ -263,10 +252,7 @@ export function CreditHistoryDialog({ user, open, onClose, usersMap = {} }: Cred
                 </Button>
               </div>
             </div>
-          </motion.div>
-        </div>
-      )}
-    </AnimatePresence>
+          </Modal>
   );
 }
 

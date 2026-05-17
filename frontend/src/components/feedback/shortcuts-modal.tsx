@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, Keyboard } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Keyboard } from 'lucide-react';
 import { useShortcutsList } from '../../hooks/use-keyboard-shortcuts';
 import { cn } from '../../lib/utils';
+import { Modal } from '../ui/modal';
 
 export function ShortcutsModal() {
   const [isOpen, setIsOpen] = useState(false);
@@ -15,36 +16,10 @@ export function ShortcutsModal() {
   }, []);
 
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
-            onClick={() => setIsOpen(false)}
-          />
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none"
-          >
-            <div className="bubble w-full max-w-lg pointer-events-auto">
-              <div className="flex items-center justify-between p-6 pb-4">
-                <div className="flex items-center gap-3">
-                  <Keyboard className="w-5 h-5 text-primary" />
-                  <h2 className="text-lg font-semibold">Keyboard Shortcuts</h2>
-                </div>
-                <button
-                  onClick={() => setIsOpen(false)}
-                  className="p-1 rounded-md hover:bg-muted transition-colors"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+    <Modal open={isOpen} onOpenChange={setIsOpen} showClose={false} className="bubble max-w-lg">
+              <div className="flex items-center gap-3 px-5 pt-5 pb-2">
+                <Keyboard className="w-5 h-5 text-primary" />
+                <h2 className="text-lg font-semibold">Keyboard Shortcuts</h2>
               </div>
 
               <div className="p-6 pt-0 space-y-3">
@@ -85,10 +60,6 @@ export function ShortcutsModal() {
                   </motion.div>
                 ))}
               </div>
-            </div>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
+            </Modal>
   );
 }

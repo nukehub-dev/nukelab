@@ -2,12 +2,14 @@
 Preferences API endpoints.
 """
 
+import os
 from typing import Optional
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import get_current_user
+from app.config import settings
 from app.db.session import get_db
 from app.models.user import User
 from app.services.user_service import UserService
@@ -137,10 +139,22 @@ async def update_preferences(
     # Merge with existing preferences
     new_prefs = {**current_prefs, **update_data}
     
+    # Build user update payload
+    user_update: dict = {"preferences": new_prefs}
+    
+    # If enabling Gravatar, remove custom avatar file and clear avatar_url
+    if request.use_gravatar:
+        avatars_dir = os.path.join(settings.upload_dir, "avatars")
+        if os.path.isdir(avatars_dir):
+            for old_file in os.listdir(avatars_dir):
+                if old_file.startswith(str(current_user.id)):
+                    os.remove(os.path.join(avatars_dir, old_file))
+        user_update["avatar_url"] = ""
+    
     # Update user
     await service.update_user(
         str(current_user.id),
-        {"preferences": new_prefs}
+        user_update
     )
     
     # Return merged preferences with defaults

@@ -88,6 +88,9 @@ class Settings(BaseSettings):
     credits_max_balance: int = 5000
     credits_rollover: bool = False
 
+    upload_dir: str = "/data/uploads"
+    max_avatar_size_mb: int = 2
+
     server_idle_timeout: int = 3600
     server_max_runtime: int = 86400
     server_auto_stop_on_depletion: bool = True

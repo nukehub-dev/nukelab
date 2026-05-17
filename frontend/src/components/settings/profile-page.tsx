@@ -7,20 +7,23 @@ import {
   Calendar,
   Clock,
   Pencil,
-  X,
   Check,
+  X,
   Globe,
   UserCircle,
   Eye,
   BadgeCheck,
   LogIn,
   RefreshCw,
+  Loader2,
   type LucideIcon,
 } from 'lucide-react';
+import { AvatarEditDialog } from './avatar-edit-dialog';
 import { useAuthStore } from '../../stores/auth-store';
 import { useToast } from '../../stores/toast-store';
 import { cn } from '../../lib/utils';
 import { api } from '../../lib/api';
+import type { User } from '../../types/api';
 import { Card } from '../ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '../ui/dialog';
 import { Input } from '../ui/input';
@@ -170,6 +173,40 @@ function PrefToggle({
 }
 
 /* ------------------------------------------------------------------ */
+/*  Avatar Image with loading spinner                                  */
+/* ------------------------------------------------------------------ */
+
+function AvatarImage({ src, alt, fallback }: { src: string; alt: string; fallback: string }) {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  return (
+    <div className="relative w-24 h-24 sm:w-28 sm:h-28">
+      {(loading || error) && (
+        <div className="absolute inset-0 rounded-2xl bg-muted ring-2 ring-border/60 group-hover:ring-primary/50 transition-all duration-200 flex items-center justify-center">
+          {loading && !error ? (
+            <Loader2 className="w-6 h-6 text-muted-foreground animate-spin" />
+          ) : (
+            <span className="text-4xl font-bold text-primary">{fallback}</span>
+          )}
+        </div>
+      )}
+      <img
+        src={src}
+        alt={alt}
+        onLoad={() => { setLoading(false); setError(false); }}
+        onError={() => { setLoading(false); setError(true); }}
+        className={cn(
+          'w-full h-full rounded-2xl object-cover ring-2 ring-border/60 group-hover:ring-primary/50 transition-all duration-200',
+          loading && 'opacity-0',
+          !loading && 'opacity-100'
+        )}
+      />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Edit Dialog                                                        */
 /* ------------------------------------------------------------------ */
 
@@ -182,7 +219,7 @@ function EditDialog({
   open: boolean;
   onOpenChange: (v: boolean) => void;
   user: NonNullable<ReturnType<typeof useAuthStore.getState>['user']>;
-  onSaved: (u: Record<string, unknown>) => void;
+  onSaved: (u: Partial<User>) => void;
 }) {
   const { success, error } = useToast();
   const [saving, setSaving] = useState(false);
@@ -196,7 +233,7 @@ function EditDialog({
   const save = async () => {
     setSaving(true);
     try {
-      const updated = await api.put<Record<string, unknown>>('/users/me/profile', {
+      const updated = await api.put<Partial<User>>('/users/me/profile', {
         first_name: form.first_name,
         last_name: form.last_name,
         email: form.email,
@@ -263,25 +300,28 @@ export function ProfilePage() {
   const { success, error } = useToast();
 
   const [editOpen, setEditOpen] = useState(false);
-  const [avatarKey, setAvatarKey] = useState(Date.now());
+  const [avatarDialogOpen, setAvatarDialogOpen] = useState(false);
+  const [avatarDialogKey, setAvatarDialogKey] = useState(0);
+  const [avatarKey, setAvatarKey] = useState(() => Date.now());
   const [togglingVis, setTogglingVis] = useState(false);
 
   if (!user) return null;
 
-  const useGravatar = user.preferences?.use_gravatar !== false;
+  const useGravatar = user.preferences?.use_gravatar === true;
   const displayName = user.first_name && user.last_name ? `${user.first_name} ${user.last_name}` : user.display_name || user.username;
   const initials = displayName.charAt(0).toUpperCase();
 
   const fmtDate = (d?: string) =>
     d ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'Never';
 
-  const handleSaved = (updated: Record<string, unknown>) => setUser({ ...user, ...updated });
+  const handleSaved = (updated: Partial<User>) => setUser({ ...user, ...updated });
 
   const toggleGravatar = async () => {
     try {
       const newPrefs = { ...user.preferences, use_gravatar: !useGravatar };
       await api.put('/preferences/', newPrefs);
-      setUser({ ...user, preferences: newPrefs });
+      const fresh = await api.get<User>('/users/me/profile');
+      setUser(fresh);
       setAvatarKey(Date.now());
       success(!useGravatar ? 'Gravatar enabled' : 'Custom avatar enabled', !useGravatar ? 'Gravatar is now active' : 'Using default avatar');
     } catch {
@@ -293,7 +333,7 @@ export function ProfilePage() {
     setTogglingVis(true);
     try {
       const next = user.profile_visibility === 'public' ? 'private' : 'public';
-      const updated = await api.put<Record<string, unknown>>('/users/me/profile', { profile_visibility: next });
+      const updated = await api.put<Partial<User>>('/users/me/profile', { profile_visibility: next });
       setUser({ ...user, ...updated });
       success(next === 'public' ? 'Profile is now public' : 'Profile is now private', next === 'public' ? 'Others can find you in search' : 'Hidden from discovery');
     } catch {
@@ -306,6 +346,19 @@ export function ProfilePage() {
   return (
     <>
       <EditDialog open={editOpen} onOpenChange={setEditOpen} user={user} onSaved={handleSaved} />
+      <AvatarEditDialog
+        key={avatarDialogKey}
+        open={avatarDialogOpen}
+        onOpenChange={setAvatarDialogOpen}
+        currentAvatarUrl={user.avatar_url}
+        fallbackInitial={initials}
+        useGravatar={useGravatar}
+        onSaved={(updated) => {
+          handleSaved(updated);
+          setAvatarKey(Date.now());
+        }}
+        onToggleGravatar={toggleGravatar}
+      />
 
       <motion.div className="space-y-6 max-w-5xl mx-auto" variants={containerVariants} initial="hidden" animate="visible">
         {/* Page title */}
@@ -318,27 +371,45 @@ export function ProfilePage() {
         <SectionCard className="p-6 sm:p-8" orb="top-0 right-0 w-72 h-72 bg-primary/5 -translate-y-1/2 translate-x-1/3">
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 sm:gap-6">
             {/* Avatar */}
-            <motion.div
-              initial={{ scale: 0.85, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: 'spring', stiffness: 250, damping: 18, delay: 0.1 }}
-              className="relative shrink-0"
+            <div
+              className="relative shrink-0 cursor-pointer group"
+              onClick={() => {
+                setAvatarDialogKey((k) => k + 1);
+                setAvatarDialogOpen(true);
+              }}
             >
-              {user.avatar_url && useGravatar ? (
-                <img
-                  src={`${user.avatar_url}${user.avatar_url.includes('?') ? '&' : '?'}_t=${avatarKey}`}
-                  alt={displayName}
-                  className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl object-cover ring-2 ring-border/60"
-                />
-              ) : (
-                <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-gradient-to-br from-primary/40 to-primary/10 ring-2 ring-primary/30 flex items-center justify-center text-4xl font-bold text-primary">
-                  {initials}
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ type: 'spring', stiffness: 300, damping: 24, delay: 0.1 }}
+                className="relative"
+              >
+                {user.avatar_url ? (
+                  <AvatarImage
+                    src={`${user.avatar_url}${user.avatar_url.includes('?') ? '&' : '?'}_t=${avatarKey}`}
+                    alt={displayName}
+                    fallback={initials}
+                  />
+                ) : (
+                  <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-gradient-to-br from-primary/40 to-primary/10 ring-2 ring-primary/30 group-hover:ring-primary/60 flex items-center justify-center text-4xl font-bold text-primary transition-all duration-200">
+                    {initials}
+                  </div>
+                )}
+              </motion.div>
+
+              {/* Hover overlay (desktop) */}
+              <div className="hidden sm:flex absolute inset-0 rounded-2xl bg-black/0 group-hover:bg-black/40 transition-all duration-200 items-center justify-center">
+                <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col items-center gap-1">
+                  <Pencil className="w-5 h-5 text-white" />
+                  <span className="text-[10px] font-medium text-white/90">Edit</span>
                 </div>
-              )}
-              <div className={cn('absolute -bottom-1.5 -right-1.5 w-6 h-6 rounded-full border-2 border-background flex items-center justify-center', user.is_active ? 'bg-emerald-500' : 'bg-red-500')}>
-                <div className="w-2 h-2 rounded-full bg-white" />
               </div>
-            </motion.div>
+
+              {/* Mobile: subtle edit indicator */}
+              <div className="sm:hidden absolute -bottom-1 -right-1 w-7 h-7 rounded-full bg-primary border-2 border-background flex items-center justify-center shadow-sm">
+                <Pencil className="w-3 h-3 text-primary-foreground" />
+              </div>
+            </div>
 
             {/* Text */}
             <div className="flex-1 min-w-0 text-center sm:text-left">

@@ -23,10 +23,12 @@ import { formatBytes } from '../lib/utils';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Tooltip } from './ui/tooltip';
+import { Modal } from './ui/modal';
 import { useConfirmDialog } from './ui/confirm-dialog';
 import { useToast } from '../stores/toast-store';
 
 interface FileBrowserProps {
+  open: boolean;
   volumeId: string;
   volumeName: string;
   onClose: () => void;
@@ -34,7 +36,8 @@ interface FileBrowserProps {
 
 const PAGE_SIZE = 100;
 
-export function FileBrowser({ volumeId, volumeName, onClose }: FileBrowserProps) {
+export function FileBrowser({ open, volumeId, volumeName, onClose }: FileBrowserProps) {
+  if (!open) return null;
   const [currentPath, setCurrentPath] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -158,16 +161,8 @@ export function FileBrowser({ volumeId, volumeName, onClose }: FileBrowserProps)
   const hasMore = scrolledItems < (data?.items.length || 0);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <motion.div
-        className="w-full max-w-4xl max-h-[85vh] rounded-2xl bg-card/95 backdrop-blur-xl border border-border/50 shadow-2xl overflow-hidden flex flex-col"
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.9, opacity: 0 }}
-        onClick={(e) => e.stopPropagation()}
-      >
+    <>
+      <Modal open={open} onOpenChange={onClose} showClose={false} className="max-w-4xl max-h-[85vh] flex flex-col">
         {/* Header */}
         <div className="h-1 bg-primary" />
         <div className="p-4 border-b border-border/50 space-y-3">
@@ -388,8 +383,8 @@ export function FileBrowser({ volumeId, volumeName, onClose }: FileBrowserProps)
             </div>
           )}
         </div>
-      </motion.div>
+      </Modal>
       {dialog}
-    </div>
+    </>
   );
 }

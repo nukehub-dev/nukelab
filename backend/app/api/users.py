@@ -4,7 +4,9 @@ User API endpoints with RBAC enforcement.
 
 from typing import Optional, List
 from pydantic import BaseModel, Field
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+import os
+import shutil
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import get_current_user
@@ -15,6 +17,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.services.user_service import UserService
 from app.services.activity_service import ActivityService
+from app.config import settings
 
 router = APIRouter()
 
@@ -187,6 +190,82 @@ async def update_my_profile(
     
     user = await service.update_user(str(current_user.id), update_data)
     return serialize_user(user)
+
+
+@router.post("/me/avatar", response_model=UserResponse)
+async def upload_avatar(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Upload a custom avatar image."""
+    # Validate file type
+    allowed_types = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid file type. Allowed: JPEG, PNG, WebP, GIF"
+        )
+
+    # Validate file size
+    contents = await file.read()
+    max_size = settings.max_avatar_size_mb * 1024 * 1024
+    if len(contents) > max_size:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File too large. Max size: {settings.max_avatar_size_mb}MB"
+        )
+
+    # Determine file extension
+    ext_map = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif"}
+    ext = ext_map.get(file.content_type, "png")
+
+    # Save file
+    avatars_dir = os.path.join(settings.upload_dir, "avatars")
+    os.makedirs(avatars_dir, exist_ok=True)
+
+    filename = f"{current_user.id}.{ext}"
+    file_path = os.path.join(avatars_dir, filename)
+
+    # Remove old avatar files for this user
+    for old_file in os.listdir(avatars_dir):
+        if old_file.startswith(str(current_user.id)):
+            os.remove(os.path.join(avatars_dir, old_file))
+
+    with open(file_path, "wb") as f:
+        f.write(contents)
+
+    # Update user: set avatar_url to relative path and disable Gravatar
+    avatar_url = f"/api/users/avatar/{filename}"
+    prefs = dict(current_user.preferences or {})
+    prefs["use_gravatar"] = False
+
+    service = UserService(db)
+    user = await service.update_user(str(current_user.id), {
+        "avatar_url": avatar_url,
+        "preferences": prefs,
+    })
+    return serialize_user(user)
+
+
+@router.get("/avatar/{filename}")
+async def get_avatar(filename: str):
+    """Serve an avatar image file."""
+    file_path = os.path.join(settings.upload_dir, "avatars", filename)
+    if not os.path.isfile(file_path):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Avatar not found")
+
+    from fastapi.responses import FileResponse
+    media_types = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+        ".gif": "image/gif",
+    }
+    ext = os.path.splitext(filename)[1].lower()
+    media_type = media_types.get(ext, "application/octet-stream")
+    return FileResponse(file_path, media_type=media_type)
 
 
 @router.post("/me/change-password")

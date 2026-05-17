@@ -496,13 +496,12 @@ function VolumesPage() {
         )}
 
         {/* File Browser Dialog */}
-        {browsingVolume && (
-          <FileBrowser
-            volumeId={browsingVolume.id}
-            volumeName={browsingVolume.name}
-            onClose={() => setBrowsingVolume(null)}
-          />
-        )}
+        <FileBrowser
+          open={!!browsingVolume}
+          volumeId={browsingVolume?.id || ''}
+          volumeName={browsingVolume?.name || ''}
+          onClose={() => setBrowsingVolume(null)}
+        />
 
 
       </ResourcePageLayout>

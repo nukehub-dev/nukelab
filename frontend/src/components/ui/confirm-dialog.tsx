@@ -6,9 +6,8 @@ import {
   RefreshCw,
   type LucideIcon,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { modalOverlayVariants } from '../../lib/animations';
 import { Button } from './button';
+import { Modal } from './modal';
 import { cn } from '../../lib/utils';
 
 export type ConfirmVariant = 'danger' | 'warning' | 'info' | 'destructive';
@@ -70,33 +69,7 @@ export function useConfirmDialog() {
   const Icon = state.icon ?? config.icon;
 
   const dialog = (
-    <AnimatePresence>
-      {state.isOpen && (
-        <>
-          {/* Overlay */}
-          <motion.div
-            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
-            variants={modalOverlayVariants}
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-            onClick={() => handleClose(false)}
-          />
-          {/* Dialog */}
-          <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <motion.div
-              className="relative w-full max-w-md rounded-2xl bg-card/95 backdrop-blur-xl border border-border/50 shadow-2xl overflow-hidden"
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-              onClick={(e) => e.stopPropagation()}
-            >
+    <Modal open={state.isOpen} onOpenChange={(v) => handleClose(v)} showClose={false} className="max-w-md">
               {/* Top accent line */}
               <div
                 className={cn(
@@ -154,11 +127,7 @@ export function useConfirmDialog() {
                   </Button>
                 </div>
               </div>
-            </motion.div>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
+            </Modal>
   );
 
   return { confirm, dialog };

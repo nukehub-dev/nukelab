@@ -910,6 +910,52 @@ input[type="number"] {
   -moz-appearance: textfield;
 }
 
+/* Custom range slider (used by <Slider /> component) */
+input[type="range"].slider-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--background);
+  border: 2.5px solid var(--primary);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  margin-top: -5px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+input[type="range"].slider-range::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+
+input[type="range"].slider-range::-webkit-slider-thumb:active {
+  transform: scale(0.95);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+input[type="range"].slider-range::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--background);
+  border: 2.5px solid var(--primary);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+input[type="range"].slider-range::-moz-range-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+
+input[type="range"].slider-range::-moz-range-thumb:active {
+  transform: scale(0.95);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

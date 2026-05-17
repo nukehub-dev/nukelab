@@ -136,6 +136,7 @@ services:
       - ./backend:/app:Z
       - /var/lib/lxcfs:/var/lib/lxcfs:ro
       - ${VOLUME_STORAGE_PATH:?VOLUME_STORAGE_PATH must be set in .env}:${VOLUME_STORAGE_PATH}:rw
+      - uploads:${UPLOAD_DIR:-/data/uploads}
       - secrets:${SERVER_AUTH_SECRETS_DIR:-/run/secrets}
     networks:
       - nukelab-network
@@ -225,6 +226,8 @@ volumes:
     name: nukelab-postgres-data
   letsencrypt:
     name: nukelab-letsencrypt
+  uploads:
+    name: nukelab-uploads
   secrets:
     name: nukelab-secrets
 

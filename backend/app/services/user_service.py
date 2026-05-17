@@ -237,12 +237,22 @@ class UserService:
     
     async def delete_user(self, user_id: str) -> None:
         """Hard delete user. DB-level CASCADE/SET NULL handles related records."""
+        import os
+        from app.config import settings
+        
         user = await self.get_by_id(user_id)
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
+        
+        # Clean up local avatar files if any exist
+        avatars_dir = os.path.join(settings.upload_dir, "avatars")
+        if os.path.isdir(avatars_dir):
+            for old_file in os.listdir(avatars_dir):
+                if old_file.startswith(str(user.id)):
+                    os.remove(os.path.join(avatars_dir, old_file))
         
         await self.db.delete(user)
         await self.db.commit()
@@ -264,7 +274,7 @@ class UserService:
         user.is_active = not disabled
         
         # Update security tracking
-        security = user.security or {}
+        security = dict(user.security or {})
         if disabled:
             security["disabled_reason"] = reason
             security["disabled_at"] = datetime.utcnow().isoformat()
@@ -305,7 +315,7 @@ class UserService:
         user.password_hash = get_password_hash(new_password)
         
         # Update security tracking
-        security = user.security or {}
+        security = dict(user.security or {})
         security["password_changed_at"] = datetime.utcnow().isoformat()
         user.security = security
         

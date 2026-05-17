@@ -151,7 +151,7 @@ async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends
     user.login_count += 1
     
     # Update security tracking
-    security = user.security or {}
+    security = dict(user.security or {})
     security["last_login_at"] = datetime.utcnow().isoformat()
     user.security = security
     
@@ -439,7 +439,7 @@ async def oauth_callback(
         user.last_login = datetime.utcnow()
         user.login_count += 1
         
-        security = user.security or {}
+        security = dict(user.security or {})
         security["last_login_at"] = datetime.utcnow().isoformat()
         security["oauth_login"] = True
         user.security = security
