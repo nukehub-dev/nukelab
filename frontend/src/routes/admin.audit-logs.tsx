@@ -30,6 +30,7 @@ import { useAuditLogs } from '../hooks/use-audit-logs';
 import { AuditLogDiff } from '../components/audit/audit-log-diff';
 import { formatDate, cn } from '../lib/utils';
 import { Dialog, DialogContent, DialogClose } from '../components/ui/dialog';
+import { Tooltip } from '../components/ui/tooltip';
 
 import type { ColumnDef, ColumnFiltersState, SortingState } from '@tanstack/react-table';
 import type { ActivityLog } from '../hooks/use-audit-logs';
@@ -105,7 +106,7 @@ function InfoCard({ icon: Icon, label, value, subValue }: { icon: typeof Hash; l
       <div className="min-w-0">
         <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5">{label}</p>
         <p className="text-sm font-medium truncate">{value}</p>
-        {subValue && <p className="text-xs text-muted-foreground font-mono mt-0.5 truncate">{subValue}</p>}
+        {subValue && <div className="text-xs text-muted-foreground font-mono mt-0.5">{subValue}</div>}
       </div>
     </div>
   );
@@ -354,37 +355,35 @@ function AuditLogsPage() {
   ];
 
   const mobileCardRenderer = (log: ActivityLog) => (
-    <div className="p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className={`p-1.5 rounded-md ${getActionColor(log.action)}`}>
+    <div className="p-3 space-y-1.5">
+      {/* Top row: action + view */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className={`p-1 rounded ${getActionColor(log.action)} shrink-0`}>
             {(() => {
               const Icon = getActionIcon(log.action);
-              return <Icon className="w-3.5 h-3.5" />;
+              return <Icon className="w-3 h-3" />;
             })()}
           </div>
-          <span className="font-medium text-sm">{log.action}</span>
+          <span className="font-medium text-sm truncate">{log.action}</span>
         </div>
         <button
           onClick={() => setSelectedLog(log)}
-          className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex"
+          className="p-1 rounded-md hover:bg-primary/10 text-primary transition-colors inline-flex shrink-0"
         >
-          <Eye className="w-4 h-4" />
+          <Eye className="w-3.5 h-3.5" />
         </button>
       </div>
-      <div className="grid grid-cols-2 gap-2 text-sm">
-        <div>
-          <span className="text-muted-foreground text-xs">Target</span>
-          <p>{log.target_type}</p>
-        </div>
-        <div>
-          <span className="text-muted-foreground text-xs">Actor</span>
-          <p className="text-sm">{String(log.details?.actor_username || '') || (log.actor_id ? 'User' : 'System')}</p>
-          {log.actor_id && <p className="font-mono text-[10px] text-muted-foreground">{log.actor_id.slice(0, 8)}...</p>}
-        </div>
-      </div>
-      <div className="text-xs text-muted-foreground">
-        {formatDate(log.created_at)}
+
+      {/* Bottom row: metadata inline */}
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground flex-wrap">
+        <span className="text-foreground font-medium">{log.target_type}</span>
+        <span className="text-border">·</span>
+        <span className="truncate">
+          {String(log.details?.actor_username || '') || (log.actor_id ? 'User' : 'System')}
+        </span>
+        <span className="text-border">·</span>
+        <span className="tabular-nums">{formatDate(log.created_at)}</span>
       </div>
     </div>
   );
@@ -489,16 +488,7 @@ function AuditLogsPage() {
                   icon={User}
                   label="Actor"
                   value={String(selectedLog.details.actor_username || '') || (selectedLog.actor_id ? 'User' : 'System')}
-                  subValue={
-                    <div className="flex items-center gap-2">
-                      {selectedLog.actor_id && <CopyableId id={selectedLog.actor_id} />}
-                      {!!selectedLog.details.actor_role && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">
-                          {String(selectedLog.details.actor_role)}
-                        </span>
-                      )}
-                    </div>
-                  }
+                  subValue={selectedLog.actor_id ? <CopyableId id={selectedLog.actor_id} /> : undefined}
                 />
                 {selectedLog.ip_address && (
                   <InfoCard
@@ -512,9 +502,11 @@ function AuditLogsPage() {
                     icon={Terminal}
                     label="User Agent"
                     value={
-                      <span className="text-xs truncate block" title={selectedLog.user_agent}>
-                        {selectedLog.user_agent.split(' ')[0]}
-                      </span>
+                      <Tooltip content={selectedLog.user_agent} position="bottom">
+                        <span className="text-xs truncate block cursor-help">
+                          {selectedLog.user_agent.split(' ')[0]}
+                        </span>
+                      </Tooltip>
                     }
                   />
                 )}
