@@ -1,23 +1,27 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, useInView, useMotionValue, useTransform, animate } from 'framer-motion';
 import {
   Mail,
-  Shield,
   Zap,
   Calendar,
   Clock,
   Pencil,
-  Check,
-  X,
   Globe,
   UserCircle,
   Eye,
-  BadgeCheck,
   LogIn,
   RefreshCw,
   Loader2,
+  ExternalLink,
+  Building2,
+  Users,
+  Briefcase,
   type LucideIcon,
 } from 'lucide-react';
+
+const PAGE_TITLE = 'Profile';
+const PAGE_DESCRIPTION = 'Manage your account settings and preferences';
+
 import { AvatarEditDialog } from './avatar-edit-dialog';
 import { useAuthStore } from '../../stores/auth-store';
 import { useToast } from '../../stores/toast-store';
@@ -215,30 +219,47 @@ function EditDialog({
   onOpenChange,
   user,
   onSaved,
+  oauthProfileUrl,
+  providerName,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   user: NonNullable<ReturnType<typeof useAuthStore.getState>['user']>;
   onSaved: (u: Partial<User>) => void;
+  oauthProfileUrl?: string | null;
+  providerName?: string | null;
 }) {
   const { success, error } = useToast();
   const [saving, setSaving] = useState(false);
+  const isOAuthManaged = !!user.oauth_provider && !!oauthProfileUrl;
   const [form, setForm] = useState({
     first_name: user.first_name || '',
     last_name: user.last_name || '',
     email: user.email || '',
-    bio: user.profile?.bio || '',
+    about: user.profile?.about || '',
+    organization: user.profile?.organization || '',
+    department: user.profile?.department || '',
+    occupation: user.profile?.occupation || '',
   });
 
   const save = async () => {
     setSaving(true);
     try {
-      const updated = await api.put<Partial<User>>('/users/me/profile', {
-        first_name: form.first_name,
-        last_name: form.last_name,
-        email: form.email,
-        profile: { ...user.profile, bio: form.bio },
-      });
+      const payload: Record<string, unknown> = {
+        profile: {
+          ...user.profile,
+          about: form.about,
+          organization: form.organization,
+          department: form.department,
+          occupation: form.occupation,
+        },
+      };
+      if (!isOAuthManaged) {
+        payload.first_name = form.first_name;
+        payload.last_name = form.last_name;
+        payload.email = form.email;
+      }
+      const updated = await api.put<Partial<User>>('/users/me/profile', payload);
       onSaved(updated);
       success('Profile updated', 'Your profile has been updated successfully');
       onOpenChange(false);
@@ -257,26 +278,79 @@ function EditDialog({
           <DialogDescription>Update your profile information.</DialogDescription>
         </DialogHeader>
         <form id="pf" onSubmit={(e) => { e.preventDefault(); save(); }} className="space-y-4 mt-4" noValidate>
+          {isOAuthManaged && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-900/20 p-4 space-y-3">
+              <p className="text-sm text-amber-800 dark:text-amber-200">
+                Your name and email are managed by <span className="font-semibold">{providerName || 'your identity provider'}</span>.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => oauthProfileUrl && window.open(oauthProfileUrl, '_blank', 'noopener,noreferrer')}
+              >
+                <ExternalLink className="w-4 h-4 mr-2" />
+                Open {providerName || 'Provider'} Account
+              </Button>
+            </div>
+          )}
+          {!isOAuthManaged && (
+            <>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">First Name</label>
+                <Input value={form.first_name} onChange={(e) => setForm((f) => ({ ...f, first_name: e.target.value }))} placeholder="First name" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Last Name</label>
+                <Input value={form.last_name} onChange={(e) => setForm((f) => ({ ...f, last_name: e.target.value }))} placeholder="Last name" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Email</label>
+                <Input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} placeholder="Email" />
+              </div>
+            </>
+          )}
           <div className="space-y-2">
-            <label className="text-sm font-medium">First Name</label>
-            <Input value={form.first_name} onChange={(e) => setForm((f) => ({ ...f, first_name: e.target.value }))} placeholder="First name" />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Last Name</label>
-            <Input value={form.last_name} onChange={(e) => setForm((f) => ({ ...f, last_name: e.target.value }))} placeholder="Last name" />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Email</label>
-            <Input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} placeholder="Email" />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Bio</label>
+            <label className="text-sm font-medium">About</label>
             <Textarea
-              value={form.bio}
-              onChange={(e) => setForm((f) => ({ ...f, bio: e.target.value }))}
+              value={form.about}
+              onChange={(e) => setForm((f) => ({ ...f, about: e.target.value }))}
               placeholder="Tell us about yourself..."
               rows={3}
               className="resize-none"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Organization</label>
+              <Input
+                value={form.organization}
+                onChange={(e) => setForm((f) => ({ ...f, organization: e.target.value }))}
+                placeholder="Organization"
+                disabled={isOAuthManaged}
+                className={isOAuthManaged ? 'bg-muted' : ''}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Department</label>
+              <Input
+                value={form.department}
+                onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))}
+                placeholder="Department"
+                disabled={isOAuthManaged}
+                className={isOAuthManaged ? 'bg-muted' : ''}
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Occupation</label>
+            <Input
+              value={form.occupation}
+              onChange={(e) => setForm((f) => ({ ...f, occupation: e.target.value }))}
+              placeholder="Occupation / Job title"
+              disabled={isOAuthManaged}
+              className={isOAuthManaged ? 'bg-muted' : ''}
             />
           </div>
         </form>
@@ -299,11 +373,43 @@ export function ProfilePage() {
   const setUser = useAuthStore((s) => s.setUser);
   const { success, error } = useToast();
 
+
   const [editOpen, setEditOpen] = useState(false);
   const [avatarDialogOpen, setAvatarDialogOpen] = useState(false);
   const [avatarDialogKey, setAvatarDialogKey] = useState(0);
   const [avatarKey, setAvatarKey] = useState(() => Date.now());
   const [togglingVis, setTogglingVis] = useState(false);
+  const [authConfig, setAuthConfig] = useState<{ oauth_profile_url?: string | null; oauth_provider_name?: string | null } | null>(null);
+  const [syncing, setSyncing] = useState(false);
+
+  // Derived values (must be before useEffect hooks that depend on them)
+  const isOAuthUser = !!user?.oauth_provider;
+  const oauthProfileUrl = authConfig?.oauth_profile_url;
+  const providerName = authConfig?.oauth_provider_name || 'OAuth Provider';
+
+  useEffect(() => {
+    api.get<{ oauth_profile_url?: string | null; oauth_provider_name?: string | null }>('/auth/methods')
+      .then((data) => setAuthConfig(data))
+      .catch(() => setAuthConfig(null));
+  }, []);
+
+  // Reset syncing state on mount (in case we returned from a redirect)
+  useEffect(() => {
+    setSyncing(false);
+  }, []);
+
+  const startSync = useCallback(async () => {
+    setSyncing(true);
+    try {
+      const updated = await api.post<User>('/auth/oauth/sync', {});
+      setUser({ ...user, ...updated });
+      success('Profile synced', 'Your profile has been updated from ' + (providerName || 'provider'));
+    } catch (err: any) {
+      error('Sync failed', err?.message || 'Could not sync profile');
+    } finally {
+      setSyncing(false);
+    }
+  }, [user, providerName, setUser, success, error]);
 
   if (!user) return null;
 
@@ -345,7 +451,7 @@ export function ProfilePage() {
 
   return (
     <>
-      <EditDialog open={editOpen} onOpenChange={setEditOpen} user={user} onSaved={handleSaved} />
+      <EditDialog open={editOpen} onOpenChange={setEditOpen} user={user} onSaved={handleSaved} oauthProfileUrl={oauthProfileUrl} providerName={providerName} />
       <AvatarEditDialog
         key={avatarDialogKey}
         open={avatarDialogOpen}
@@ -360,12 +466,23 @@ export function ProfilePage() {
         onToggleGravatar={toggleGravatar}
       />
 
-      <motion.div className="space-y-6 max-w-5xl mx-auto" variants={containerVariants} initial="hidden" animate="visible">
-        {/* Page title */}
-        <motion.div variants={fadeUp}>
-          <h2 className="text-2xl font-bold">Profile</h2>
-          <p className="text-muted-foreground mt-1">Manage your account settings and preferences</p>
+      <div className="space-y-10 pb-10">
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-center gap-4"
+        >
+          <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+            <UserCircle className="w-6 h-6 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold">{PAGE_TITLE}</h2>
+            <p className="text-muted-foreground">{PAGE_DESCRIPTION}</p>
+          </div>
         </motion.div>
+
+        <motion.div className="space-y-6" variants={containerVariants} initial="hidden" animate="visible">
 
         {/* ── Header ── */}
         <SectionCard className="p-6 sm:p-8" orb="top-0 right-0 w-72 h-72 bg-primary/5 -translate-y-1/2 translate-x-1/3">
@@ -419,19 +536,60 @@ export function ProfilePage() {
               <div className="flex items-center justify-center sm:justify-start gap-2.5 mt-3 flex-wrap">
                 <RoleBadge role={user.role} />
                 <span className="text-sm text-muted-foreground">{user.email}</span>
+                {user.profile?.organization && (
+                  <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                    <Building2 className="w-3 h-3" />
+                    {user.profile.organization}
+                  </span>
+                )}
+                {user.profile?.department && (
+                  <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                    <Users className="w-3 h-3" />
+                    {user.profile.department}
+                  </span>
+                )}
+                {user.profile?.occupation && (
+                  <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                    <Briefcase className="w-3 h-3" />
+                    {user.profile.occupation}
+                  </span>
+                )}
               </div>
 
-              {user.profile?.bio && (
+              {user.profile?.about && (
                 <motion.p variants={fadeIn} className="text-sm text-muted-foreground mt-3 max-w-lg leading-relaxed">
-                  {user.profile.bio}
+                  {user.profile.about}
                 </motion.p>
               )}
             </div>
 
-            <Button variant="outline" className="shrink-0" onClick={() => setEditOpen(true)}>
-              <Pencil className="w-4 h-4 mr-2" />
-              Edit Profile
-            </Button>
+            {isOAuthUser && oauthProfileUrl ? (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  className="shrink-0"
+                  onClick={startSync}
+                  disabled={syncing}
+                  loading={syncing}
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Sync Profile
+                </Button>
+                <Button
+                  variant="outline"
+                  className="shrink-0"
+                  onClick={() => window.open(oauthProfileUrl, '_blank', 'noopener,noreferrer')}
+                >
+                  <ExternalLink className="w-4 h-4 mr-2" />
+                  Manage at {providerName}
+                </Button>
+              </div>
+            ) : (
+              <Button variant="outline" className="shrink-0" onClick={() => setEditOpen(true)}>
+                <Pencil className="w-4 h-4 mr-2" />
+                Edit Profile
+              </Button>
+            )}
           </div>
         </SectionCard>
 
@@ -445,19 +603,9 @@ export function ProfilePage() {
             <div className="divide-y divide-border/30">
               <DetailRow icon={UserCircle} label="Username" value={user.username} />
               <DetailRow icon={Mail} label="Email" value={user.email} />
-              <DetailRow icon={Shield} label="Role" value={user.role.replace('_', ' ')} />
-              <DetailRow
-                icon={user.is_active ? Check : X}
-                label="Status"
-                value={user.is_active ? 'Active' : 'Inactive'}
-                valueClass={user.is_active ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}
-              />
-              <DetailRow
-                icon={BadgeCheck}
-                label="Email Verified"
-                value={user.is_verified ? 'Verified' : 'Not Verified'}
-                valueClass={user.is_verified ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}
-              />
+              <DetailRow icon={Building2} label="Organization" value={user.profile?.organization || '—'} />
+              <DetailRow icon={Users} label="Department" value={user.profile?.department || '—'} />
+              <DetailRow icon={Briefcase} label="Occupation" value={user.profile?.occupation || '—'} />
               <DetailRow icon={LogIn} label="Total Logins" value={user.login_count.toLocaleString()} />
               <DetailRow icon={Calendar} label="Member Since" value={fmtDate(user.created_at)} />
               <DetailRow icon={Clock} label="Last Login" value={fmtDate(user.last_login)} />
@@ -515,6 +663,7 @@ export function ProfilePage() {
           </div>
         </div>
       </motion.div>
+      </div>
     </>
   );
 }

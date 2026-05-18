@@ -114,7 +114,7 @@ async def get_current_user(token: str = Depends(security_scheme), db: AsyncSessi
             
             # Update usage
             api_token.last_used_at = datetime.utcnow()
-            api_token.usage_count += 1
+            api_token.usage_count = (api_token.usage_count or 0) + 1
             await db.commit()
             
             # Return the associated user
@@ -148,7 +148,7 @@ async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends
     
     # Update login tracking
     user.last_login = datetime.utcnow()
-    user.login_count += 1
+    user.login_count = (user.login_count or 0) + 1
     
     # Update security tracking
     security = dict(user.security or {})
@@ -247,6 +247,7 @@ async def get_me(current_user: User = Depends(get_current_user)):
         "nuke_balance": current_user.nuke_balance,
         "profile": current_user.profile or {},
         "preferences": current_user.preferences or {},
+        "oauth_provider": current_user.oauth_provider,
         "is_active": current_user.is_active,
         "is_verified": current_user.is_verified,
         "login_count": current_user.login_count,
@@ -281,12 +282,14 @@ async def get_auth_methods():
     return {
         "methods": methods,
         "auth_mode": settings.auth_mode,
-        "oauth_enabled": oauth_service.is_configured and settings.auth_mode in ("oauth", "both")
+        "oauth_enabled": oauth_service.is_configured and settings.auth_mode in ("oauth", "both"),
+        "oauth_provider_name": settings.oauth_provider_name or None,
+        "oauth_profile_url": settings.oauth_profile_url or None,
     }
 
 
 @router.get("/oauth/login")
-async def oauth_login():
+async def oauth_login(sync: Optional[str] = None):
     """Redirect to OAuth provider authorization endpoint."""
     from app.services.oauth_service import oauth_service
     
@@ -302,6 +305,7 @@ async def oauth_login():
             detail="OAuth login is disabled"
         )
     
+    is_sync = sync == "1"
     state = oauth_service.generate_state()
     code_verifier = None
     code_challenge = None
@@ -312,6 +316,10 @@ async def oauth_login():
     # Store state in cookie for verification on callback
     from fastapi.responses import RedirectResponse
     authorize_url = await oauth_service.get_authorize_url(state, code_challenge)
+    
+    # For sync, add prompt=none so Keycloak doesn't show login page if session exists
+    if is_sync:
+        authorize_url += "&prompt=none"
     
     response = RedirectResponse(url=authorize_url)
     response.set_cookie(
@@ -327,6 +335,16 @@ async def oauth_login():
         response.set_cookie(
             key="oauth_verifier",
             value=code_verifier,
+            max_age=600,
+            httponly=True,
+            secure=settings.session_secure,
+            samesite=settings.session_samesite
+        )
+    
+    if is_sync:
+        response.set_cookie(
+            key="oauth_sync",
+            value="1",
             max_age=600,
             httponly=True,
             secure=settings.session_secure,
@@ -353,17 +371,41 @@ async def oauth_callback(
     # Use FRONTEND_URL if explicitly set (dev Vite server), otherwise use PUBLIC_URL (production Traefik)
     frontend_base = (settings.frontend_url or settings.public_url).rstrip('/')
     
+    # Check if this is a sync request for error handling
+    is_sync = request.cookies.get("oauth_sync") == "1"
+    
     if error:
         error_msg = error_description or error
+        if is_sync:
+            redirect_url = f"{frontend_base}/settings/profile?sync=error&msg={error_msg}"
+            response = RedirectResponse(url=redirect_url)
+            response.delete_cookie("oauth_state")
+            response.delete_cookie("oauth_verifier")
+            response.delete_cookie("oauth_sync")
+            return response
         redirect_url = f"{frontend_base}/login?error={error_msg}"
         return RedirectResponse(url=redirect_url)
     
     if not code:
+        if is_sync:
+            redirect_url = f"{frontend_base}/settings/profile?sync=error&msg=Missing+authorization+code"
+            response = RedirectResponse(url=redirect_url)
+            response.delete_cookie("oauth_state")
+            response.delete_cookie("oauth_verifier")
+            response.delete_cookie("oauth_sync")
+            return response
         return RedirectResponse(url=f"{frontend_base}/login?error=Missing authorization code")
     
     # Verify state to prevent CSRF
     stored_state = request.cookies.get("oauth_state")
     if not stored_state or stored_state != state:
+        if is_sync:
+            redirect_url = f"{frontend_base}/settings/profile?sync=error&msg=Invalid+state+parameter"
+            response = RedirectResponse(url=redirect_url)
+            response.delete_cookie("oauth_state")
+            response.delete_cookie("oauth_verifier")
+            response.delete_cookie("oauth_sync")
+            return response
         return RedirectResponse(url=f"{frontend_base}/login?error=Invalid state parameter")
     
     # Get PKCE verifier
@@ -417,8 +459,13 @@ async def oauth_callback(
                 user.first_name = user_data["first_name"]
             if user_data.get("last_name"):
                 user.last_name = user_data["last_name"]
-            if user_data.get("avatar_url"):
-                user.avatar_url = user_data["avatar_url"]
+            if user_data.get("email"):
+                user.email = user_data["email"]
+            # Merge extra OAuth profile fields (organization, department, about, etc.)
+            if user_data.get("extra_profile"):
+                profile = dict(user.profile or {})
+                profile.update(user_data["extra_profile"])
+                user.profile = profile
         else:
             # Create new user
             user = User(
@@ -426,20 +473,41 @@ async def oauth_callback(
                 email=user_data["email"],
                 first_name=user_data.get("first_name", ""),
                 last_name=user_data.get("last_name", ""),
-                avatar_url=user_data.get("avatar_url"),
                 oauth_provider="oauth",
                 oauth_id=user_data["oauth_id"],
                 role="user",
                 is_active=True,
-                is_verified=True
+                is_verified=True,
+                profile=user_data.get("extra_profile") or {},
             )
             db.add(user)
         
+        # Check if this is a sync request
+        is_sync = request.cookies.get("oauth_sync") == "1"
+        
+        if is_sync:
+            # Sync mode: update profile without creating new session
+            await db.commit()
+            await db.refresh(user)
+            redirect_url = f"{frontend_base}/settings/profile?sync=success"
+            response = RedirectResponse(url=redirect_url)
+            response.delete_cookie("oauth_state")
+            response.delete_cookie("oauth_verifier")
+            response.delete_cookie("oauth_sync")
+            return response
+        
+        # Normal login flow
+        security = dict(user.security or {})
+        
+        # Store OAuth refresh token for future sync
+        refresh_token = token_data.get("refresh_token")
+        if refresh_token:
+            from app.core.token_encryption import encrypt_token
+            security["oauth_refresh_token"] = encrypt_token(refresh_token)
+        
         # Update login tracking
         user.last_login = datetime.utcnow()
-        user.login_count += 1
-        
-        security = dict(user.security or {})
+        user.login_count = (user.login_count or 0) + 1
         security["last_login_at"] = datetime.utcnow().isoformat()
         security["oauth_login"] = True
         user.security = security
@@ -473,4 +541,111 @@ async def oauth_callback(
     except Exception as e:
         import traceback
         print(f"OAuth callback error: {traceback.format_exc()}")
+        
+        # Check if sync mode for error handling too
+        is_sync = request.cookies.get("oauth_sync") == "1"
+        if is_sync:
+            error_msg = str(e)
+            redirect_url = f"{frontend_base}/settings/profile?sync=error&msg={error_msg}"
+            response = RedirectResponse(url=redirect_url)
+            response.delete_cookie("oauth_state")
+            response.delete_cookie("oauth_verifier")
+            response.delete_cookie("oauth_sync")
+            return response
+        
         return RedirectResponse(url=f"{frontend_base}/login?error=OAuth authentication failed: {str(e)}")
+
+
+
+@router.post("/oauth/sync")
+async def oauth_sync(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Sync user profile from OAuth provider using stored refresh token."""
+    from app.services.oauth_service import oauth_service
+    from app.core.token_encryption import decrypt_token
+    import aiohttp
+    
+    if not current_user.oauth_provider or not current_user.security:
+        raise HTTPException(status_code=400, detail="Not an OAuth user")
+    
+    encrypted_refresh = current_user.security.get("oauth_refresh_token")
+    if not encrypted_refresh:
+        raise HTTPException(status_code=400, detail="No refresh token available. Please log out and log back in.")
+    
+    refresh_token = decrypt_token(encrypted_refresh)
+    if not refresh_token:
+        raise HTTPException(status_code=400, detail="Invalid refresh token. Please log out and log back in.")
+    
+    try:
+        # Load discovery for token endpoint
+        await oauth_service._load_discovery()
+        token_url = oauth_service._get_endpoint("token")
+        if not token_url:
+            raise HTTPException(status_code=500, detail="OAuth token URL not configured")
+        
+        # Exchange refresh token for access token
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10.0)) as session:
+            async with session.post(
+                token_url,
+                data={
+                    "grant_type": "refresh_token",
+                    "client_id": settings.oauth_client_id,
+                    "client_secret": settings.oauth_client_secret,
+                    "refresh_token": refresh_token,
+                }
+            ) as resp:
+                resp.raise_for_status()
+                token_data = await resp.json()
+        
+        access_token = token_data.get("access_token")
+        new_refresh_token = token_data.get("refresh_token")
+        if not access_token:
+            raise HTTPException(status_code=400, detail="Failed to refresh access token")
+        
+        # Update stored refresh token if a new one was issued
+        if new_refresh_token:
+            from app.core.token_encryption import encrypt_token
+            security = dict(current_user.security or {})
+            security["oauth_refresh_token"] = encrypt_token(new_refresh_token)
+            current_user.security = security
+        
+        # Fetch fresh userinfo
+        userinfo = await oauth_service.get_user_info(access_token)
+        if not userinfo:
+            id_token = token_data.get("id_token")
+            if id_token:
+                try:
+                    id_payload = jwt.decode(id_token, options={"verify_signature": False})
+                    userinfo = id_payload
+                except Exception:
+                    pass
+        
+        if not userinfo:
+            raise HTTPException(status_code=400, detail="Failed to get user information")
+        
+        # Extract and update user data
+        user_data = oauth_service.extract_user_data(userinfo)
+        
+        if user_data.get("first_name"):
+            current_user.first_name = user_data["first_name"]
+        if user_data.get("last_name"):
+            current_user.last_name = user_data["last_name"]
+        if user_data.get("email"):
+            current_user.email = user_data["email"]
+        if user_data.get("extra_profile"):
+            profile = dict(current_user.profile or {})
+            profile.update(user_data["extra_profile"])
+            current_user.profile = profile
+        
+        await db.commit()
+        await db.refresh(current_user)
+        
+        from app.api.users import serialize_user
+        return serialize_user(current_user)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")

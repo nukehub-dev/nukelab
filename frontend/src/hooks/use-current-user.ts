@@ -19,7 +19,7 @@ export function useCurrentUser(options: UseCurrentUserOptions = {}) {
       return user;
     },
     enabled,
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    staleTime: 0,
     retry: false,
   });
 }

@@ -109,6 +109,7 @@ class User(Base):
             "profile": self.profile or {},
             "preferences": self.preferences or {},
             "profile_visibility": self.profile_visibility or "private",
+            "oauth_provider": self.oauth_provider,
             "is_active": self.is_active,
             "is_verified": self.is_verified,
             "last_login": self.last_login.isoformat() if self.last_login else None,

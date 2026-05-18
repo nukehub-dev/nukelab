@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     oauth_token_url: str = ""
     oauth_userdata_url: str = ""
     oauth_logout_url: str = ""
+    oauth_profile_url: str = ""
     oauth_callback_url: str = ""
     oauth_scope: str = "openid profile email"
     oauth_username_claim: str = "preferred_username"

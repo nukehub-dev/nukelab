@@ -150,7 +150,6 @@ class OAuthService:
         username_claim = settings.oauth_username_claim
         email_claim = settings.oauth_email_claim
         name_claim = settings.oauth_name_claim
-        picture_claim = settings.oauth_picture_claim
         
         username = userinfo.get(username_claim) or userinfo.get("sub") or userinfo.get("email", "").split("@")[0]
         email = userinfo.get(email_claim) or userinfo.get("email", "")
@@ -164,15 +163,19 @@ class OAuthService:
             first_name = parts[0]
             last_name = parts[1] if len(parts) > 1 else ""
         
-        picture = userinfo.get(picture_claim) or userinfo.get("picture")
+        # Extract extra profile fields if provider sends them
+        extra_profile = {}
+        for key in ["organization", "department", "about", "occupation"]:
+            if key in userinfo:
+                extra_profile[key] = userinfo[key]
         
         return {
             "username": username,
             "email": email,
             "first_name": first_name,
             "last_name": last_name,
-            "avatar_url": picture,
             "oauth_id": userinfo.get("sub"),
+            "extra_profile": extra_profile,
         }
 
 

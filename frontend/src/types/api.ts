@@ -65,6 +65,7 @@ export interface User {
   created_at?: string;
   updated_at?: string;
   login_count: number;
+  oauth_provider?: string;
   profile?: Record<string, any>;
   preferences?: Record<string, any>;
   profile_visibility?: 'private' | 'public';

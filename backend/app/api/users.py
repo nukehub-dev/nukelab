@@ -61,6 +61,7 @@ class UserResponse(BaseModel):
     profile: dict
     preferences: dict
     profile_visibility: str
+    oauth_provider: Optional[str] = None
     is_active: bool
     is_verified: bool
     last_login: Optional[str]
@@ -100,6 +101,7 @@ def serialize_user(user: User) -> dict:
         "profile": user.profile or {},
         "preferences": user.preferences or {},
         "profile_visibility": user.profile_visibility or "private",
+        "oauth_provider": user.oauth_provider,
         "is_active": user.is_active,
         "is_verified": user.is_verified,
         "last_login": user.last_login.isoformat() if user.last_login else None,
