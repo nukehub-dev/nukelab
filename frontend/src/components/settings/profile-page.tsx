@@ -120,12 +120,12 @@ function DetailRow({
   valueClass?: string;
 }) {
   return (
-    <div className="flex items-center justify-between py-2.5">
-      <div className="flex items-center gap-3 text-sm text-muted-foreground">
+    <div className="flex items-center gap-4 py-2.5">
+      <div className="flex items-center gap-3 text-sm text-muted-foreground shrink-0">
         <Icon className="w-4 h-4 shrink-0" />
-        <span>{label}</span>
+        <span className="whitespace-nowrap">{label}</span>
       </div>
-      <span className={cn('text-sm font-medium text-right', valueClass)}>{value}</span>
+      <span className={cn('text-sm font-medium text-right ml-auto break-words', valueClass)}>{value}</span>
     </div>
   );
 }
@@ -486,7 +486,7 @@ export function ProfilePage() {
 
         {/* ── Header ── */}
         <SectionCard className="p-6 sm:p-8" orb="top-0 right-0 w-72 h-72 bg-primary/5 -translate-y-1/2 translate-x-1/3">
-          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 sm:gap-6">
+          <div className="flex flex-col xl:flex-row flex-wrap items-center xl:items-start gap-5 xl:gap-6">
             {/* Avatar */}
             <div
               className="relative shrink-0 cursor-pointer group"
@@ -528,73 +528,60 @@ export function ProfilePage() {
               </div>
             </div>
 
-            {/* Text */}
-            <div className="flex-1 min-w-0 text-center sm:text-left">
+            {/* Info */}
+            <div className="flex-1 min-w-0 text-center xl:text-left">
               <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{displayName}</h1>
-              <p className="text-muted-foreground mt-0.5">@{user.username}</p>
-
-              <div className="flex items-center justify-center sm:justify-start gap-2.5 mt-3 flex-wrap">
+              <div className="flex items-center justify-center xl:justify-start gap-2 mt-1.5 flex-wrap">
+                <p className="text-muted-foreground">@{user.username}</p>
                 <RoleBadge role={user.role} />
-                <span className="text-sm text-muted-foreground">{user.email}</span>
-                {user.profile?.organization && (
-                  <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-                    <Building2 className="w-3 h-3" />
-                    {user.profile.organization}
-                  </span>
-                )}
-                {user.profile?.department && (
-                  <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-                    <Users className="w-3 h-3" />
-                    {user.profile.department}
-                  </span>
-                )}
-                {user.profile?.occupation && (
-                  <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-                    <Briefcase className="w-3 h-3" />
-                    {user.profile.occupation}
-                  </span>
-                )}
               </div>
+              <p className="text-sm text-muted-foreground mt-1">{user.email}</p>
+            </div>
 
-              {user.profile?.about && (
-                <motion.p variants={fadeIn} className="text-sm text-muted-foreground mt-3 max-w-lg leading-relaxed">
-                  {user.profile.about}
-                </motion.p>
+            {/* Actions */}
+            <div className="shrink-0 flex flex-row gap-2 xl:flex-col order-4 xl:order-none">
+              {isOAuthUser && oauthProfileUrl ? (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open(oauthProfileUrl, '_blank', 'noopener,noreferrer')}
+                  >
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    Manage at {providerName}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={startSync}
+                    disabled={syncing}
+                    loading={syncing}
+                  >
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Sync Profile
+                  </Button>
+                </>
+              ) : (
+                <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+                  <Pencil className="w-4 h-4 mr-2" />
+                  Edit Profile
+                </Button>
               )}
             </div>
 
-            {isOAuthUser && oauthProfileUrl ? (
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  className="shrink-0"
-                  onClick={startSync}
-                  disabled={syncing}
-                  loading={syncing}
-                >
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Sync Profile
-                </Button>
-                <Button
-                  variant="outline"
-                  className="shrink-0"
-                  onClick={() => window.open(oauthProfileUrl, '_blank', 'noopener,noreferrer')}
-                >
-                  <ExternalLink className="w-4 h-4 mr-2" />
-                  Manage at {providerName}
-                </Button>
+            {/* About */}
+            {user.profile?.about && (
+              <div className="w-full order-3 xl:order-last xl:mt-4 rounded-xl bg-muted/40 border border-border/50 p-4">
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {user.profile.about}
+                </p>
               </div>
-            ) : (
-              <Button variant="outline" className="shrink-0" onClick={() => setEditOpen(true)}>
-                <Pencil className="w-4 h-4 mr-2" />
-                Edit Profile
-              </Button>
             )}
           </div>
         </SectionCard>
 
-        {/* ── Equal 2-column grid ── */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* ── 2-column grid (only on wide screens where sidebar + content fit) ── */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           {/* Left: Account Details */}
           <SectionCard className="p-6" delay={0.1}>
             <h3 className="text-lg font-semibold mb-1">Account Details</h3>
@@ -620,14 +607,15 @@ export function ProfilePage() {
               <h3 className="text-lg font-semibold mb-1">Credits</h3>
               <p className="text-xs text-muted-foreground mb-4">Your current NUKE balance</p>
 
-              <div className="flex items-center gap-5 p-5 rounded-xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border border-primary/15">
-                <div className="w-14 h-14 rounded-2xl bg-primary/20 flex items-center justify-center shrink-0">
-                  <Zap className="w-7 h-7 text-primary" />
+              <div className="flex items-center gap-4 p-4 sm:p-5 rounded-xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border border-primary/15">
+                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-primary/20 flex items-center justify-center shrink-0">
+                  <Zap className="w-6 h-6 sm:w-7 sm:h-7 text-primary" />
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Available Balance</p>
-                  <p className="text-3xl sm:text-4xl font-bold tracking-tight">
-                    <AnimatedNumber value={user.nuke_balance} /> <span className="text-lg text-muted-foreground font-semibold">NUKE</span>
+                <div className="min-w-0">
+                  <p className="text-sm text-muted-foreground whitespace-nowrap">Available Balance</p>
+                  <p className="text-2xl sm:text-3xl font-bold tracking-tight">
+                    <AnimatedNumber value={user.nuke_balance} />
+                    <span className="text-base sm:text-lg text-muted-foreground font-semibold ml-1">NUKE</span>
                   </p>
                 </div>
               </div>
