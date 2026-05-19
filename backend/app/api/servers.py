@@ -384,6 +384,10 @@ async def create_server(
             db.add(sv)
             # Increment volume server count
             await volume_service.increment_server_count(vm["volume_id"])
+            # Persist home-directory flag for privacy warnings even after deletion
+            home_mount_path = f"/home/{current_user.username}"
+            if vm["mount_path"] == home_mount_path:
+                await volume_service.mark_home_volume(vm["volume_id"])
         
         await db.commit()
         
@@ -1379,6 +1383,11 @@ async def update_server(
                 is_primary=vm.get("is_primary", False),
             )
             db.add(sv)
+            # Persist home-directory flag for privacy warnings even after deletion
+            owner = server_owner or current_user
+            home_mount_path = f"/home/{owner.username}"
+            if vm["mount_path"] == home_mount_path:
+                await volume_service.mark_home_volume(vm["volume_id"])
         
         # Update legacy fields
         primary = next((m for m in new_volume_mounts if m.get("is_primary")), new_volume_mounts[0] if new_volume_mounts else None)

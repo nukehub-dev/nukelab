@@ -12,6 +12,7 @@ export interface Volume {
   status: string;
   server_count: number;
   description?: string | null;
+  is_home_volume?: boolean;
   created_at: string;
   updated_at: string;
   workspace_count?: number;

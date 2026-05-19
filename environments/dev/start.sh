@@ -13,9 +13,20 @@ if ! id "$USERNAME" &> /dev/null; then
     echo "Created user: $USERNAME (uid: $(id -u $USERNAME))"
 fi
 
-# Ensure home directory exists and is owned by the user
+# Ensure home directory exists and is accessible.
+# We use chmod 777 on the mount point (non-recursive) instead of chown -R
+# to avoid two problems:
+#   1. Slow startup on large volumes (50GB / 100k files)
+#   2. Ownership fights when the same volume is shared across multiple users
 mkdir -p "/home/$USERNAME"
-chown -R "$USERNAME:$USERNAME" "/home/$USERNAME"
+chmod 777 "/home/$USERNAME"
+
+# If the home directory is empty (e.g., fresh named volume), copy default
+# dotfiles from /etc/skel so the user has a functional shell environment.
+if [ -z "$(ls -A /home/$USERNAME 2>/dev/null)" ]; then
+    cp -r /etc/skel/. /home/$USERNAME/ 2>/dev/null || true
+    chmod -R u+rw /home/$USERNAME 2>/dev/null || true
+fi
 
 # Start auth sidecar in background
 # This validates server access tokens locally using the public key

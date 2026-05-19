@@ -1,9 +1,13 @@
+import asyncio
+import logging
 import uuid
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from app.docker.client import DockerClient, get_docker_client
 from app.models.server import Server
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class ServerSpawner:
@@ -178,6 +182,31 @@ class ServerSpawner:
             
             # Start container
             await docker.start_container(container.id)
+            
+            # Fix volume permissions inside the container.
+            # Rootless Podman maps the host UID to container root, so named volumes
+            # appear as root-owned. We make the mount point itself world-writable
+            # (non-recursive) so the container user can read/write. This avoids:
+            #   - Slow recursive chown on large volumes (50GB / 100k files)
+            #   - Ownership fights when a volume is shared across multiple users
+            #     (each container would otherwise chown to its own user)
+            # /home/{username} is already handled by the container's /start.sh.
+            for mount in (volume_mounts or []):
+                mount_path = mount.get("mount_path", "/data")
+                # Skip the home directory — /start.sh manages that
+                if mount_path == f"/home/{username}":
+                    continue
+                try:
+                    exec_instance = await container.exec(
+                        ["chmod", "777", mount_path]
+                    )
+                    await exec_instance.start(detach=True)
+                    await asyncio.sleep(0.2)
+                except Exception as e:
+                    logger.warning(
+                        f"Could not fix permissions for {mount_path} in container "
+                        f"{container_name}: {e}"
+                    )
             
             # Determine primary volume_id from volume_mounts if provided
             primary_volume_id = None

@@ -79,8 +79,12 @@ class VolumeService:
 
     async def get_volume(self, volume_id: str) -> Optional[Volume]:
         """Get volume by ID"""
+        from sqlalchemy.orm import selectinload
         result = await self.db.execute(
-            select(Volume).where(Volume.id == volume_id)
+            select(Volume)
+            .options(selectinload(Volume.server_mounts))
+            .options(selectinload(Volume.owner))
+            .where(Volume.id == volume_id)
         )
         return result.scalar_one_or_none()
 
@@ -122,7 +126,9 @@ class VolumeService:
         conditions.append(Volume.visibility == "public")
 
         query = select(Volume).options(
-            selectinload(Volume.workspace_associations)
+            selectinload(Volume.workspace_associations),
+            selectinload(Volume.server_mounts),
+            selectinload(Volume.owner),
         ).where(or_(*conditions))
         result = await self.db.execute(query)
         return result.scalars().all()
@@ -260,6 +266,17 @@ class VolumeService:
         if volume:
             volume.server_count = max(0, volume.server_count - 1)
             await self.db.commit()
+
+    async def mark_home_volume(self, volume_id: str):
+        """Persistently mark a volume as having been used as a home directory.
+        This flag survives server deletion so users are always warned before sharing."""
+        volume = await self.get_volume(volume_id)
+        if volume:
+            if not volume.labels:
+                volume.labels = {}
+            if not volume.labels.get("was_home_volume"):
+                volume.labels["was_home_volume"] = True
+                await self.db.commit()
 
     def _parse_memory(self, memory_str: str) -> int:
         """Parse memory string to bytes"""

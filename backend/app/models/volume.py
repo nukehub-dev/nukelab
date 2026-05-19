@@ -66,4 +66,19 @@ class Volume(Base):
                 "username": self.owner.username,
                 "display_name": self.owner.display_name,
             }
+        # Detect if this volume is (or was) mounted as a home directory.
+        # We check a persistent label first so the warning survives server deletion,
+        # then fall back to current mounts for volumes that haven't been flagged yet.
+        if self.labels and self.labels.get("was_home_volume"):
+            data["is_home_volume"] = True
+        else:
+            home_mount_path = None
+            if "owner" not in inspect(self).unloaded and self.owner:
+                home_mount_path = f"/home/{self.owner.username}"
+            if "server_mounts" not in inspect(self).unloaded and self.server_mounts:
+                data["is_home_volume"] = any(
+                    sm.mount_path == home_mount_path for sm in self.server_mounts
+                ) if home_mount_path else False
+            else:
+                data["is_home_volume"] = False
         return data

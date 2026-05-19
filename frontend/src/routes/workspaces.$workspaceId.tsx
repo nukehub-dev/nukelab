@@ -192,9 +192,60 @@ function WorkspaceDetailPage() {
     );
   };
 
-  const handleAddVolume = (e: React.FormEvent) => {
+  const handleAddVolume = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedVolumeId) return;
+
+    const selectedVolume = availableVolumes.find((v: any) => v.id === selectedVolumeId);
+    const isHomeVolume = selectedVolume && selectedVolume.is_home_volume;
+    const isMountedOnServer = selectedVolume && selectedVolume.server_count > 0;
+
+    if (isHomeVolume) {
+      const confirmed = await confirm({
+        title: 'Share Home Directory Volume?',
+        description: `This volume is or was mounted as your home directory. Everyone in this workspace will be able to read and modify its contents.`,
+        confirmLabel: 'Share Anyway',
+        cancelLabel: 'Cancel',
+        variant: 'warning',
+        typeToConfirm: 'YES',
+        customContent: (
+          <div className="space-y-3">
+            <div className="rounded-md bg-amber-500/5 border border-amber-500/20 p-3">
+              <p className="text-xs font-medium text-amber-400 uppercase tracking-wider mb-2">Exposed data</p>
+              <ul className="text-sm text-amber-200/80 list-disc list-inside space-y-0.5">
+                <li>Personal files, dotfiles, shell configuration</li>
+                <li>SSH keys and credentials</li>
+                <li>Shell history, logs, cached data</li>
+              </ul>
+            </div>
+            <div className="rounded-md bg-blue-500/5 border border-blue-500/20 p-3">
+              <p className="text-xs font-medium text-blue-400 uppercase tracking-wider mb-2">Recommended alternatives</p>
+              <ul className="text-sm text-blue-200/80 list-disc list-inside space-y-0.5">
+                <li>Create a new volume mounted at /data or /project for shared work</li>
+                <li>Deploy a new server with a separate data volume</li>
+              </ul>
+              <Link
+                to="/servers"
+                className="inline-flex items-center gap-1 text-sm font-medium text-blue-400 hover:text-blue-300 mt-2"
+                onClick={() => setShowAddVolume(false)}
+              >
+                Go to Servers to deploy with a dedicated data volume →
+              </Link>
+            </div>
+          </div>
+        ),
+      });
+      if (!confirmed) return;
+    } else if (isMountedOnServer) {
+      const confirmed = await confirm({
+        title: 'Share Active Volume?',
+        description: `This volume (${selectedVolume.display_name}) is currently mounted on ${selectedVolume.server_count} server(s). Sharing it may allow workspace members to access or modify files that those servers are actively using. Are you sure you want to proceed?`,
+        confirmLabel: 'Share Anyway',
+        cancelLabel: 'Cancel',
+        variant: 'warning',
+      });
+      if (!confirmed) return;
+    }
 
     addVolume.mutate(
       { workspaceId, volumeId: selectedVolumeId, role: selectedVolumeRole },
