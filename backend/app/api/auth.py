@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Request
@@ -14,6 +15,8 @@ from app.db.session import get_db
 from app.models.user import User
 from app.models.api_token import ApiToken
 from app.core.security import get_user_permissions
+
+logger = logging.getLogger(__name__)
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -647,5 +650,6 @@ async def oauth_sync(
         
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
+    except Exception:
+        logger.exception("User sync failed")
+        raise HTTPException(status_code=500, detail="Sync failed. Please try again or contact support.")

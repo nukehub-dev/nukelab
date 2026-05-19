@@ -27,9 +27,11 @@ app = FastAPI(
 
 @app.exception_handler(429)
 async def rate_limit_exceeded_handler(request: Request, exc):
+    # Preserve the original error detail (quota reasons, rate limit info, etc.)
+    detail = getattr(exc, 'detail', 'Rate limit exceeded')
     return JSONResponse(
         status_code=429,
-        content={"detail": "Rate limit exceeded"}
+        content={"detail": detail}
     )
 
 # Audit middleware

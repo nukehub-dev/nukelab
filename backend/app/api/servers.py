@@ -2,12 +2,14 @@
 Server API endpoints with RBAC and ownership enforcement.
 """
 
+import logging
+import re
 from datetime import datetime, timedelta
 from typing import Optional
 from app.config import settings
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 
@@ -22,6 +24,8 @@ from app.docker.spawner import spawner
 import aiodocker
 from app.services.notification_service import NotificationService, broadcast_server_status_change
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 
@@ -31,8 +35,17 @@ class VolumeMountRequest(BaseModel):
     mode: str = "read_write"  # read_write, read_only
 
 
+# Docker-compatible name pattern used for container and volume names
+_SERVER_NAME_PATTERN = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9_-]*$')
+
 class ServerCreateRequest(BaseModel):
-    name: str
+    name: str = Field(
+        ...,
+        min_length=1,
+        max_length=64,
+        pattern=r'^[a-zA-Z0-9][a-zA-Z0-9_-]*$',
+        description="Server name must start with alphanumeric and contain only letters, numbers, underscores, and hyphens",
+    )
     plan_id: str
     environment_id: str
     volume_id: Optional[str] = None  # Deprecated: use volume_mounts
@@ -63,6 +76,8 @@ class ServerResponse(BaseModel):
     status_reason: str | None = None
     user_id: str | None = None
     username: str | None = None
+    plan_id: str | None = None
+    environment_id: str | None = None
     created_at: str | None = None
     started_at: str | None = None
     stopped_at: str | None = None
@@ -285,8 +300,12 @@ async def create_server(
         
         # Auto-create primary volume if none provided
         auto_created_volume = None
+        auto_created_volume_name = None
         if not volume_mounts:
-            volume_name = f"nukelab-server-{current_user.username}-{request.name}-data"
+            # Sanitize volume name to ensure Docker compatibility
+            safe_name = re.sub(r'[^a-zA-Z0-9_.-]', '-', request.name).lower()
+            volume_name = f"nukelab-server-{current_user.username}-{safe_name}-data"
+            auto_created_volume_name = volume_name
             auto_created_volume = await volume_service.create_volume(
                 name=volume_name,
                 display_name=f"{request.name} Data",
@@ -400,20 +419,66 @@ async def create_server(
             health_status=server.health_status,
             status_reason=server.status_reason,
             user_id=str(server.user_id),
+            plan_id=str(server.plan_id) if server.plan_id else None,
+            environment_id=str(server.environment_id) if server.environment_id else None,
             created_at=server.created_at.isoformat() if server.created_at else None,
             started_at=server.started_at.isoformat() if server.started_at else None,
         )
         
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         await db.rollback()
-        import traceback
-        print(f"ERROR spawning server: {e}")
-        print(traceback.format_exc())
+        
+        # Clean up auto-created Docker volume on failure to allow retries.
+        # DB record is rolled back automatically by db.rollback() above.
+        if auto_created_volume_name:
+            try:
+                from app.docker.client import get_docker_client
+                docker = await get_docker_client()
+                try:
+                    vol = await docker.client.volumes.get(auto_created_volume_name)
+                    await vol.delete()
+                    logger.info(f"Cleaned up Docker volume: {auto_created_volume_name}")
+                except Exception as e:
+                    logger.warning(f"Failed to delete Docker volume {auto_created_volume_name}: {e}")
+            except Exception as e:
+                logger.warning(f"Failed to clean up auto-created volume: {e}")
+        
+        # Delete orphaned DB volume record using a fresh session to avoid greenlet issues
+        if auto_created_volume_name:
+            try:
+                from app.db.session import async_session
+                from app.models.volume import Volume
+                async with async_session() as cleanup_db:
+                    result = await cleanup_db.execute(
+                        select(Volume).where(Volume.name == auto_created_volume_name)
+                    )
+                    vol = result.scalar_one_or_none()
+                    if vol:
+                        await cleanup_db.delete(vol)
+                        await cleanup_db.commit()
+                        logger.info(f"Cleaned up DB volume record: {auto_created_volume_name}")
+            except Exception as e:
+                logger.warning(f"Failed to clean up DB volume record: {e}")
+        
+        # Also clean up any container that may have been created
+        try:
+            from app.docker.client import get_docker_client
+            docker = await get_docker_client()
+            container_name = f"nukelab-server-{current_user.username}-{request.name}"
+            try:
+                container = await docker.client.containers.get(container_name)
+                await container.delete(force=True)
+            except Exception:
+                pass
+        except Exception:
+            pass
+        
+        logger.exception("Server creation failed")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to spawn server: {str(e)}"
+            detail="Failed to create server. Please try again or contact support."
         )
 
 
@@ -481,6 +546,8 @@ async def list_servers(
                 "stop_reason": s.stop_reason,
                 "user_id": str(s.user_id),
                 "username": s.user.username if s.user else None,
+                "plan_id": str(s.plan_id) if s.plan_id else None,
+                "environment_id": str(s.environment_id) if s.environment_id else None,
                 "created_at": s.created_at.isoformat() if s.created_at else None,
                 "started_at": s.started_at.isoformat() if s.started_at else None,
                 "stopped_at": s.stopped_at.isoformat() if s.stopped_at else None,
@@ -540,6 +607,8 @@ async def get_server(
         "total_cost": server.total_cost,
         "last_billed_at": server.last_billed_at.isoformat() if server.last_billed_at else None,
         "user_id": str(server.user_id),
+        "plan_id": str(server.plan_id) if server.plan_id else None,
+        "environment_id": str(server.environment_id) if server.environment_id else None,
     }
 
 
@@ -608,6 +677,8 @@ async def get_server_by_path(
         "last_billed_at": server.last_billed_at.isoformat() if server.last_billed_at else None,
         "user_id": str(server.user_id),
         "username": server.user.username if server.user else None,
+        "plan_id": str(server.plan_id) if server.plan_id else None,
+        "environment_id": str(server.environment_id) if server.environment_id else None,
     }
 
 
@@ -766,12 +837,11 @@ async def start_server(
             await db.commit()
             await broadcast_server_status_change(server.user_id, server_id, "running")
             return {"message": "Server started", "server_id": server_id, "status": "running"}
-        except Exception as e:
-            import traceback
-            print(f"Start server error: {traceback.format_exc()}")
+        except Exception:
+            logger.exception("Server start failed")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to start server: {str(e)}"
+                detail="Failed to start server. Please try again or contact support."
             )
     else:
         from app.services.environment_service import EnvironmentService
@@ -848,12 +918,11 @@ async def start_server(
 
             await broadcast_server_status_change(server.user_id, server_id, "running")
             return {"message": "Server started", "server_id": server_id, "status": "running"}
-        except Exception as e:
-            import traceback
-            print(f"Spawn server error: {traceback.format_exc()}")
+        except Exception:
+            logger.exception("Server spawn failed during restart")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to spawn server: {str(e)}"
+                detail="Failed to restart server. Please try again or contact support."
             )
 
 
@@ -936,10 +1005,11 @@ async def stop_server(
 
             await broadcast_server_status_change(server.user_id, server_id, "stopped")
             return {"message": "Server stopped", "server_id": server_id, "status": "stopped"}
-        except Exception as e:
+        except Exception:
+            logger.exception("Server stop failed")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to stop server: {str(e)}"
+                detail="Failed to stop server. Please try again or contact support."
             )
 
     server.status = "stopped"
@@ -1088,10 +1158,11 @@ async def restart_server(
 
             await broadcast_server_status_change(server.user_id, server_id, "running")
             return {"message": "Server restarted", "server_id": server_id, "status": "running"}
-        except Exception as e:
+        except Exception:
+            logger.exception("Server restart failed")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to restart server: {str(e)}"
+                detail="Failed to restart server. Please try again or contact support."
             )
     
     raise HTTPException(
@@ -1209,11 +1280,12 @@ async def update_server(
         if not plan.is_active:
             raise HTTPException(status_code=400, detail="Plan is not active")
         
-        # Check quota
+        # Check quota - exclude current server since we're replacing its resources
         quota_service = QuotaService(db)
         quota_check = await quota_service.check_spawn_allowed(
             user_id=str(current_user.id),
-            plan_id=request.plan_id
+            plan_id=request.plan_id,
+            exclude_server_id=str(server.id)
         )
         if not quota_check["allowed"]:
             raise HTTPException(status_code=429, detail=quota_check["reason"])
@@ -1335,38 +1407,48 @@ async def update_server(
         # Load current volume mounts for spawn
         spawn_mounts = await _load_server_volume_mounts(db, str(server.id))
         
-        new_server_container = await spawner.spawn(
-            user_id=str(server.user_id),
-            username=owner_username,
-            server_name=server.name,
-            environment=environment.slug if environment else "dev",
-            environment_id=str(server.environment_id) if server.environment_id else None,
-            image=environment.image if environment else None,
-            cpu=plan.cpu_limit if plan else server.allocated_cpu,
-            memory=plan.memory_limit if plan else server.allocated_memory,
-            disk=plan.disk_limit if plan else server.allocated_disk,
-            volume_mounts=spawn_mounts or None,
-            server_id=str(server.id),
-        )
-        
-        server.container_id = new_server_container.container_id
-        server.image = new_server_container.image
-        server.volume_id = new_server_container.volume_id
-        server.status = "running"
-        server.started_at = datetime.utcnow()
-        server.external_url = new_server_container.external_url
-        server.stop_reason = None
-        server.stopped_at = None
-        
-        # Increment new volume counts
-        if spawn_mounts:
-            for vm in spawn_mounts:
-                await volume_service.increment_server_count(vm["volume_id"])
-        elif server.volume_id:
-            await volume_service.increment_server_count(str(server.volume_id))
-        
-        await db.commit()
-        await broadcast_server_status_change(server.user_id, str(server.id), "running")
+        try:
+            new_server_container = await spawner.spawn(
+                user_id=str(server.user_id),
+                username=owner_username,
+                server_name=server.name,
+                environment=environment.slug if environment else "dev",
+                environment_id=str(server.environment_id) if server.environment_id else None,
+                image=environment.image if environment else None,
+                cpu=plan.cpu_limit if plan else server.allocated_cpu,
+                memory=plan.memory_limit if plan else server.allocated_memory,
+                disk=plan.disk_limit if plan else server.allocated_disk,
+                volume_mounts=spawn_mounts or None,
+                server_id=str(server.id),
+            )
+            
+            server.container_id = new_server_container.container_id
+            server.image = new_server_container.image
+            server.volume_id = new_server_container.volume_id
+            server.status = "running"
+            server.started_at = datetime.utcnow()
+            server.external_url = new_server_container.external_url
+            server.stop_reason = None
+            server.stopped_at = None
+            
+            # Increment new volume counts
+            if spawn_mounts:
+                for vm in spawn_mounts:
+                    await volume_service.increment_server_count(vm["volume_id"])
+            elif server.volume_id:
+                await volume_service.increment_server_count(str(server.volume_id))
+            
+            await db.commit()
+            await broadcast_server_status_change(server.user_id, str(server.id), "running")
+        except Exception:
+            logger.exception("Server recreate failed during update")
+            server.status = "stopped"
+            server.status_reason = "Failed to recreate container with new configuration. Please try starting the server again."
+            await db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to apply configuration changes. Please try again or contact support."
+            )
     
     return ServerResponse(
         id=str(server.id),
@@ -1383,6 +1465,8 @@ async def update_server(
         health_status=server.health_status,
         status_reason=server.status_reason,
         user_id=str(server.user_id),
+        plan_id=str(server.plan_id) if server.plan_id else None,
+        environment_id=str(server.environment_id) if server.environment_id else None,
         created_at=server.created_at.isoformat() if server.created_at else None,
         started_at=server.started_at.isoformat() if server.started_at else None,
     )
@@ -1548,10 +1632,11 @@ async def get_server_logs(
             "follow": follow,
             "status": "error",
         }
-    except Exception as e:
+    except Exception:
+        logger.exception("Server logs retrieval failed")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get logs: {str(e)}"
+            detail="Failed to retrieve logs. Please try again or contact support."
         )
 
 
@@ -1620,15 +1705,17 @@ async def create_server_access_token(
         
         return response
         
-    except ValueError as e:
+    except ValueError:
+        logger.exception("Access token rate limit exceeded")
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=str(e)
+            detail="Rate limit exceeded. Please try again later."
         )
-    except Exception as e:
+    except Exception:
+        logger.exception("Access token generation failed")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate access token: {str(e)}"
+            detail="Failed to generate access token. Please try again or contact support."
         )
 
 

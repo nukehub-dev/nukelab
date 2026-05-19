@@ -214,9 +214,13 @@ class DockerClient:
                 )
 
             if has_cpuset:
-                cpus = ",".join(str(i) for i in range(int(cpu_limit)))
+                # Cap affinity to available host cores to avoid failure
+                # when plan requests more cores than the host has
+                available_cores = os.cpu_count() or int(cpu_limit)
+                pinned_cores = min(int(cpu_limit), available_cores)
+                cpus = ",".join(str(i) for i in range(pinned_cores))
                 config["HostConfig"]["CpusetCpus"] = cpus
-                logger.info(f"Applied CPU affinity: cores {cpus}")
+                logger.info(f"Applied CPU affinity: cores {cpus} (requested {cpu_limit}, host has {available_cores})")
             else:
                 logger.warning(
                     f"CPU affinity requested but 'cpuset' cgroup controller "

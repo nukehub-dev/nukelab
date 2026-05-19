@@ -2,10 +2,13 @@
 Server schedule API endpoints.
 """
 
+import logging
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from app.api.auth import get_current_user
 from app.core.permissions import Permission
@@ -76,12 +79,14 @@ async def create_schedule(
             is_active=request.is_active
         )
         return schedule.to_dict()
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
+    except ValueError:
+        logger.exception("Schedule creation failed")
+        raise HTTPException(status_code=400, detail="Failed to create schedule. Please check your input and try again.")
+    except Exception:
+        logger.exception("Schedule creation failed")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create schedule: {str(e)}"
+            detail="Failed to create schedule. Please try again or contact support."
         )
 
 
@@ -108,12 +113,14 @@ async def update_schedule(
             is_active=request.is_active
         )
         return schedule.to_dict()
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
+    except ValueError:
+        logger.exception("Schedule update failed")
+        raise HTTPException(status_code=400, detail="Failed to update schedule. Please check your input and try again.")
+    except Exception:
+        logger.exception("Schedule update failed")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update schedule: {str(e)}"
+            detail="Failed to update schedule. Please try again or contact support."
         )
 
 

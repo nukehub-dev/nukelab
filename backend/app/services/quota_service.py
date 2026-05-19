@@ -74,19 +74,21 @@ class QuotaService:
         
         return quota
     
-    async def recalculate_usage(self, user_id: str) -> ResourceQuota:
+    async def recalculate_usage(self, user_id: str, exclude_server_id: Optional[str] = None) -> ResourceQuota:
         """Recalculate current usage from active servers"""
         
         quota = await self.get_or_create_user_quota(user_id)
         
         # Get all active servers for user
+        conditions = [
+            Server.user_id == uuid.UUID(user_id),
+            Server.status.in_(["running", "starting"])
+        ]
+        if exclude_server_id:
+            conditions.append(Server.id != uuid.UUID(exclude_server_id))
+        
         result = await self.db.execute(
-            select(Server).where(
-                and_(
-                    Server.user_id == uuid.UUID(user_id),
-                    Server.status.in_(["running", "starting"])
-                )
-            )
+            select(Server).where(and_(*conditions))
         )
         servers = result.scalars().all()
         
@@ -134,11 +136,12 @@ class QuotaService:
     async def check_spawn_allowed(
         self,
         user_id: str,
-        plan_id: str
+        plan_id: str,
+        exclude_server_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """Check if user can spawn a server with given plan"""
         
-        quota = await self.recalculate_usage(user_id)
+        quota = await self.recalculate_usage(user_id, exclude_server_id)
         
         # Get plan details
         result = await self.db.execute(

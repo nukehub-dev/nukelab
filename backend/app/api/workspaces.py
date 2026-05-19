@@ -2,10 +2,13 @@
 Shared Workspace API endpoints.
 """
 
+import logging
 from typing import Optional, List
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from app.api.auth import get_current_user
 from app.core.permissions import Permission
@@ -227,8 +230,9 @@ async def leave_workspace(
     
     try:
         success = await service.leave_workspace(workspace_id, str(current_user.id))
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except ValueError:
+        logger.exception("Failed to leave workspace")
+        raise HTTPException(status_code=400, detail="Failed to leave workspace. Please try again.")
     
     if success:
         await activity.log(
@@ -267,10 +271,12 @@ async def transfer_ownership(
             current_owner_id=str(current_user.id),
             new_owner_id=request.user_id
         )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except PermissionError as e:
-        raise HTTPException(status_code=403, detail=str(e))
+    except ValueError:
+        logger.exception("Failed to leave workspace")
+        raise HTTPException(status_code=400, detail="Failed to leave workspace. Please try again.")
+    except PermissionError:
+        logger.exception("Permission denied for invitation cancellation")
+        raise HTTPException(status_code=403, detail="You don't have permission to cancel this invitation.")
     
     if updated:
         await activity.log(
@@ -499,8 +505,9 @@ async def invite_member(
             invited_by=str(current_user.id),
             role=request.role
         )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except ValueError:
+        logger.exception("Failed to leave workspace")
+        raise HTTPException(status_code=400, detail="Failed to leave workspace. Please try again.")
     
     # Send notification to invited user
     notif_service = NotificationService(db)
@@ -539,8 +546,9 @@ async def accept_invitation(
     
     try:
         member = await service.accept_invitation(invitation_id, str(current_user.id))
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except ValueError:
+        logger.exception("Failed to leave workspace")
+        raise HTTPException(status_code=400, detail="Failed to leave workspace. Please try again.")
     
     # Log activity
     activity = ActivityService(db)
@@ -570,8 +578,9 @@ async def reject_invitation(
     
     try:
         await service.reject_invitation(invitation_id, str(current_user.id))
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except ValueError:
+        logger.exception("Failed to leave workspace")
+        raise HTTPException(status_code=400, detail="Failed to leave workspace. Please try again.")
     
     # Log activity
     activity = ActivityService(db)
@@ -601,8 +610,9 @@ async def cancel_invitation(
     
     try:
         success = await service.cancel_invitation(invitation_id, str(current_user.id))
-    except PermissionError as e:
-        raise HTTPException(status_code=403, detail=str(e))
+    except PermissionError:
+        logger.exception("Permission denied for invitation cancellation")
+        raise HTTPException(status_code=403, detail="You don't have permission to cancel this invitation.")
     
     if not success:
         raise HTTPException(status_code=404, detail="Invitation not found")
@@ -741,8 +751,9 @@ async def remove_member(
     
     try:
         success = await service.remove_member(workspace_id, user_id)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except ValueError:
+        logger.exception("Failed to leave workspace")
+        raise HTTPException(status_code=400, detail="Failed to leave workspace. Please try again.")
     
     if not success:
         raise HTTPException(status_code=404, detail="Member not found")
@@ -774,8 +785,9 @@ async def update_member_role(
     
     try:
         member = await service.update_member_role(workspace_id, user_id, request.role)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except ValueError:
+        logger.exception("Failed to leave workspace")
+        raise HTTPException(status_code=400, detail="Failed to leave workspace. Please try again.")
     
     if not member:
         raise HTTPException(status_code=404, detail="Member not found")

@@ -699,7 +699,7 @@ async def test_email(
         logger.error(f"Test email failed: {result['error']}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to send test email: {result['error']}"
+            detail="Failed to send test email. Please check your SMTP configuration and try again."
         )
 
     logger.info(f"Test email sent successfully to {to_email}")

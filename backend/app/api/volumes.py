@@ -2,12 +2,15 @@
 Volume API endpoints.
 """
 
+import logging
 from typing import Optional, List
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
+
+logger = logging.getLogger(__name__)
 
 from app.api.auth import get_current_user
 from app.core.permissions import Permission
@@ -166,8 +169,9 @@ async def delete_volume(
         success = await volume_service.delete_volume(volume_id)
         if not success:
             raise HTTPException(status_code=500, detail="Failed to delete volume")
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except ValueError:
+        logger.exception("Volume deletion failed")
+        raise HTTPException(status_code=400, detail="Failed to delete volume. Please try again.")
     
     return {"message": "Volume deleted", "volume_id": volume_id}
 
@@ -322,10 +326,11 @@ async def list_volume_files(
         
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
+        logger.exception("Volume file listing failed")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to list files: {str(e)}"
+            detail="Failed to list files. Please try again or contact support."
         )
 
 
@@ -424,8 +429,9 @@ async def download_volume_file(
         
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
+        logger.exception("Volume file download failed")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to download file: {str(e)}"
+            detail="Failed to download file. Please try again or contact support."
         )

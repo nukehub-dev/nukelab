@@ -61,6 +61,7 @@ type PendingOperation = {
 
 export function useServerActions() {
   const queryClient = useQueryClient();
+
   const [pendingOps, setPendingOps] = useState<PendingOperation[]>([]);
 
   const addPendingOp = useCallback((serverId: string, type: PendingOperation['type'], targetStatus: PendingOperation['targetStatus']) => {

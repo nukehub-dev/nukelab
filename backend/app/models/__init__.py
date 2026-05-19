@@ -18,5 +18,6 @@ from app.models.volume import Volume
 from app.models.volume_backup import VolumeBackup
 from app.models.server_volume import ServerVolume
 from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
+from app.models.workspace_invitation import WorkspaceInvitation
 from app.models.workspace_volume import WorkspaceVolume
 from app.models.server_access_token import ServerAccessToken

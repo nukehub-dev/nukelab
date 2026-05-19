@@ -28,6 +28,8 @@ export interface Server {
   external_url?: string;
   user_id?: string;
   username?: string;
+  plan_id?: string;
+  environment_id?: string;
   created_at?: string;
   container_id?: string;
   volume_id?: string;

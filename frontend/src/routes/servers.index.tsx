@@ -21,6 +21,7 @@ import { Button } from '../components/ui/button';
 import { Select, SelectItem } from '../components/ui/select';
 import { useConfirmDialog } from '../components/ui/confirm-dialog';
 import { ScheduleDialog } from '../components/server/schedule-dialog';
+import { DeployServerDialog } from '../components/server/deploy-server-dialog';
 
 export const Route = createFileRoute('/servers/')({
   component: ServersPage,
@@ -75,14 +76,6 @@ function ServersPage() {
   }
 
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [deployForm, setDeployForm] = useState({
-    name: '',
-    plan_id: '',
-    environment_id: '',
-  });
-  const [volumeMounts, setVolumeMounts] = useState<VolumeMountForm[]>([
-    { volume_id: '', mount_path: '', mode: 'read_write' },
-  ]);
 
   // Edit dialog state
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -95,13 +88,26 @@ function ServersPage() {
   const [editVolumeMounts, setEditVolumeMounts] = useState<VolumeMountForm[]>([
     { volume_id: '', mount_path: '', mode: 'read_write' },
   ]);
+  const [editVisibleError, setEditVisibleError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (editDialogOpen) {
+      setEditVisibleError(null);
+    }
+  }, [editDialogOpen]);
+
+  useEffect(() => {
+    if (updateServer.error) {
+      setEditVisibleError(updateServer.error.message);
+    }
+  }, [updateServer.error]);
 
   const openEditDialog = (server: ServerType) => {
     setEditServerId(server.id);
     setEditForm({
       name: server.name,
-      plan_id: (server as unknown as Record<string, string | undefined>).plan_id || '',
-      environment_id: (server as unknown as Record<string, string | undefined>).environment_id || '',
+      plan_id: server.plan_id || '',
+      environment_id: server.environment_id || '',
     });
     if (server.volume_mounts && server.volume_mounts.length > 0) {
       setEditVolumeMounts(
@@ -125,6 +131,7 @@ function ServersPage() {
 
   const handleEdit = (e: React.FormEvent) => {
     e.preventDefault();
+    setEditVisibleError(null);
     if (!editServerId) return;
 
     const mounts = editVolumeMounts
@@ -225,51 +232,7 @@ function ServersPage() {
     tableState.page * tableState.limit
   );
 
-  const handleDeploy = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!deployForm.environment_id) return;
 
-    const mounts = volumeMounts
-      .filter((m) => m.volume_id)
-      .map((m, idx) => ({
-        volume_id: m.volume_id,
-        mount_path: idx === 0 && !m.mount_path ? `/home/${user?.username || 'user'}` : (m.mount_path || '/data'),
-        mode: m.mode,
-      }));
-
-    createServer.mutate(
-      {
-        name: deployForm.name,
-        plan_id: deployForm.plan_id,
-        environment_id: deployForm.environment_id,
-        volume_mounts: mounts.length > 0 ? mounts : undefined,
-      },
-      {
-        onSuccess: () => {
-          setDialogOpen(false);
-          setDeployForm({ name: '', plan_id: '', environment_id: '' });
-          setVolumeMounts([{ volume_id: '', mount_path: '', mode: 'read_write' }]);
-        },
-      }
-    );
-  };
-
-  const addVolumeMount = () => {
-    setVolumeMounts((prev) => [
-      ...prev,
-      { volume_id: '', mount_path: '/data', mode: 'read_write' },
-    ]);
-  };
-
-  const removeVolumeMount = (index: number) => {
-    setVolumeMounts((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const updateVolumeMount = (index: number, field: keyof VolumeMountForm, value: string) => {
-    setVolumeMounts((prev) =>
-      prev.map((m, i) => (i === index ? { ...m, [field]: value } : m))
-    );
-  };
 
   const columns = useMemo<ColumnDef<ServerType>[]>(() => [
     {
@@ -694,143 +657,23 @@ function ServersPage() {
         />
       </ResourcePageLayout>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Deploy New Server</DialogTitle>
-            <DialogDescription>
-              Create and spawn a new simulation server.
-            </DialogDescription>
-          </DialogHeader>
-          <form id="deploy-form" onSubmit={handleDeploy} className="space-y-4 mt-4" noValidate>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Server Name *</label>
-              <Input
-                type="text"
-                required
-                value={deployForm.name}
-                onChange={(e) => setDeployForm({ ...deployForm, name: e.target.value })}
-                placeholder="my-simulation-server"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Plan *</label>
-              <Select
-                value={deployForm.plan_id}
-                onChange={(value) => setDeployForm({ ...deployForm, plan_id: value })}
-                placeholder="Select a plan..."
-              >
-                {plans.map((plan) => (
-                  <SelectItem key={plan.id} value={plan.id}>
-                    {plan.name} ({plan.cpu_limit} CPU / {plan.memory_limit})
-                  </SelectItem>
-                ))}
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Environment *</label>
-              <Select
-                value={deployForm.environment_id}
-                onChange={(value) => setDeployForm({ ...deployForm, environment_id: value })}
-                placeholder="Select an environment..."
-              >
-                {environments.map((env) => (
-                  <SelectItem key={env.id} value={env.id}>
-                    {env.name} ({env.slug})
-                  </SelectItem>
-                ))}
-              </Select>
-            </div>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium flex items-center gap-1.5">
-                  <HardDrive className="w-4 h-4" />
-                  Volume Mounts
-                </label>
-                <button
-                  type="button"
-                  onClick={addVolumeMount}
-                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Add Volume
-                </button>
-              </div>
-              
-              {volumeMounts.map((mount, index) => (
-                <div key={index} className="space-y-2 p-3 rounded-lg bg-surface/50 border border-border/50">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">
-                      {index === 0 ? 'Primary Mount' : `Additional Mount ${index}`}
-                    </span>
-                    {volumeMounts.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeVolumeMount(index)}
-                        className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-                  
-                  <Select
-                    value={mount.volume_id}
-                    onChange={(value) => updateVolumeMount(index, 'volume_id', value)}
-                    placeholder="Create new volume (default)"
-                  >
-                    <SelectItem value="">Create new volume</SelectItem>
-                    {volumes.map((vol) => (
-                      <SelectItem key={vol.id} value={vol.id}>
-                        {vol.display_name} ({vol.server_count > 0 ? `${vol.server_count} servers` : 'unused'})
-                      </SelectItem>
-                    ))}
-                  </Select>
-                  
-                  <div className="flex gap-2">
-                    <Input
-                      type="text"
-                      value={mount.mount_path}
-                      onChange={(e) => updateVolumeMount(index, 'mount_path', e.target.value)}
-                      placeholder={index === 0 ? `/home/${user?.username || 'user'}` : '/data'}
-                      className="flex-1 text-sm"
-                    />
-                    <div className="flex gap-1">
-                      <Button
-                        type="button"
-                        variant={mount.mode === 'read_write' ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => updateVolumeMount(index, 'mode', 'read_write')}
-                        className="text-xs px-2"
-                      >
-                        RW
-                      </Button>
-                      <Button
-                        type="button"
-                        variant={mount.mode === 'read_only' ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => updateVolumeMount(index, 'mode', 'read_only')}
-                        className="text-xs px-2"
-                      >
-                        RO
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </form>
-          <DialogFooter>
-            <Button variant="outline" type="button" onClick={() => { setDialogOpen(false); setVolumeMounts([{ volume_id: '', mount_path: '', mode: 'read_write' }]); }}>
-              Cancel
-            </Button>
-            <Button type="submit" form="deploy-form" loading={createServer.isPending || !deployForm.environment_id}>
-              {createServer.isPending ? 'Deploying...' : 'Deploy'}
-            </Button>
-          </DialogFooter>
-          <DialogClose onClick={() => setDialogOpen(false)} />
-        </DialogContent>
-      </Dialog>
+      <DeployServerDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        plans={plans}
+        environments={environments}
+        volumes={volumes}
+        defaultUsername={user?.username}
+        isPending={createServer.isPending}
+        error={createServer.error}
+        onDeploy={(data) => {
+          createServer.mutate(data, {
+            onSuccess: () => {
+              setDialogOpen(false);
+            },
+          });
+        }}
+      />
       {/* Edit Server Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
@@ -841,12 +684,21 @@ function ServersPage() {
             </DialogDescription>
           </DialogHeader>
           <form id="edit-form" onSubmit={handleEdit} className="space-y-4 mt-4" noValidate>
+            {editVisibleError && (
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+                <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-destructive">{editVisibleError}</p>
+              </div>
+            )}
             <div className="space-y-2">
               <label className="text-sm font-medium">Server Name</label>
               <Input
                 type="text"
                 value={editForm.name}
-                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                onChange={(e) => {
+                  setEditForm({ ...editForm, name: e.target.value });
+                  if (editVisibleError) setEditVisibleError(null);
+                }}
                 placeholder="my-simulation-server"
               />
             </div>
@@ -854,7 +706,10 @@ function ServersPage() {
               <label className="text-sm font-medium">Plan</label>
               <Select
                 value={editForm.plan_id}
-                onChange={(value) => setEditForm({ ...editForm, plan_id: value })}
+                onChange={(value) => {
+                  setEditForm({ ...editForm, plan_id: value });
+                  if (editVisibleError) setEditVisibleError(null);
+                }}
                 placeholder="Select a plan..."
               >
                 {plans.map((plan) => (
@@ -868,7 +723,10 @@ function ServersPage() {
               <label className="text-sm font-medium">Environment</label>
               <Select
                 value={editForm.environment_id}
-                onChange={(value) => setEditForm({ ...editForm, environment_id: value })}
+                onChange={(value) => {
+                  setEditForm({ ...editForm, environment_id: value });
+                  if (editVisibleError) setEditVisibleError(null);
+                }}
                 placeholder="Select an environment..."
               >
                 {environments.map((env) => (
