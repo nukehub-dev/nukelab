@@ -12,6 +12,28 @@ from app.models.user import User
 from app.config import settings
 
 
+async def broadcast_server_status_change(user_id, server_id: str, status: str, extra_data: Optional[dict] = None):
+    """Broadcast a server status change event to the user's WebSocket channel."""
+    try:
+        import redis.asyncio as redis_client
+        r = redis_client.from_url(settings.redis_url)
+        await r.publish(
+            f"user:{user_id}",
+            json.dumps({
+                "event": "server:status_changed",
+                "user_id": str(user_id),
+                "data": {
+                    "server_id": server_id,
+                    "status": status,
+                    **(extra_data or {})
+                }
+            })
+        )
+        await r.close()
+    except Exception:
+        pass
+
+
 class NotificationService:
     """Service for creating and managing user notifications."""
     

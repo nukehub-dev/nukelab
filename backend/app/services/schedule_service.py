@@ -12,6 +12,7 @@ from app.models.server_schedule import ServerSchedule
 from app.models.server import Server
 from app.models.notification import Notification
 from app.core.time_utils import parse_duration
+from app.services.notification_service import broadcast_server_status_change
 
 
 def _validate_cron(cron_expression: str) -> None:
@@ -198,6 +199,7 @@ class ScheduleService:
                         server.last_activity = datetime.utcnow()
                         success = True
                         message = f"Server '{server.name}' started by schedule"
+                        await broadcast_server_status_change(server.user_id, str(server.id), "running")
                 else:
                     # Need to respawn - this is complex, skip for now
                     message = "Server container missing, cannot auto-start"
@@ -209,6 +211,7 @@ class ScheduleService:
                     server.status = "stopped"
                     server.stopped_at = datetime.utcnow()
                     server.stop_reason = "scheduled_stop"
+                    await broadcast_server_status_change(server.user_id, str(server.id), "stopped", {"stop_reason": "scheduled_stop"})
                     
                     # Reconcile exact billing for final partial interval
                     if server.plan_id:
@@ -241,6 +244,7 @@ class ScheduleService:
                     server.last_activity = datetime.utcnow()
                     success = True
                     message = f"Server '{server.name}' restarted by schedule"
+                    await broadcast_server_status_change(server.user_id, str(server.id), "running")
             
             if success:
                 # Create notification

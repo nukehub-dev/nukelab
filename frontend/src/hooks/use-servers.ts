@@ -71,8 +71,9 @@ export function useServerActions() {
     setPendingOps((prev) => prev.filter((op) => op.serverId !== serverId));
   }, []);
 
-  // Watch servers data and clear pending ops when status matches target
-  // Use interval to check since queryClient reference is stable
+  // Watch servers data and clear pending ops when status matches target.
+  // Subscribe to query cache changes so we react instantly when the cache
+  // is updated (via WebSocket, mutation response, or refetch) instead of polling.
   useEffect(() => {
     const checkPendingOps = () => {
       const servers = queryClient.getQueryData<Server[]>(['servers']);
@@ -98,23 +99,29 @@ export function useServerActions() {
       });
     };
 
-    // Check immediately
+    // Check immediately on mount
     checkPendingOps();
-    
-    // Then check every second until all pending ops are cleared
-    const interval = setInterval(checkPendingOps, 1000);
-    return () => clearInterval(interval);
+
+    // Subscribe to query cache changes for instant reaction when ['servers'] updates
+    const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
+      if (event.type === 'updated' && event.query.queryKey[0] === 'servers') {
+        checkPendingOps();
+      }
+    });
+
+    return () => unsubscribe();
   }, [queryClient]);
 
-  // Auto-clear restart operations after timeout (docker restart is fast)
+  // Auto-clear operations after timeout to prevent buttons stuck loading forever
+  // if the cache update or refetch somehow fails
   useEffect(() => {
-    const restartOps = pendingOps.filter((op) => op.type === 'restart');
-    if (restartOps.length === 0) return;
+    const opsWithTimeout = pendingOps.filter((op) => op.type !== 'delete');
+    if (opsWithTimeout.length === 0) return;
 
-    const timers = restartOps.map((op) =>
+    const timers = opsWithTimeout.map((op) =>
       setTimeout(() => {
         removePendingOp(op.serverId);
-      }, 10000) // 10 second max for restart
+      }, op.type === 'restart' ? 15000 : 30000) // 15s for restart, 30s for start/stop
     );
 
     return () => timers.forEach(clearTimeout);
@@ -150,11 +157,18 @@ export function useServerActions() {
 
   const startServer = useMutation({
     mutationFn: (serverId: string) =>
-      api.post<{ message: string }>(`/servers/${serverId}/start`, {}),
+      api.post<{ message: string; server_id: string; status: Server['status'] }>(`/servers/${serverId}/start`, {}),
     onMutate: (serverId) => {
       addPendingOp(serverId, 'start', 'running');
     },
-    onSuccess: () => {
+    onSuccess: (data, serverId) => {
+      // Immediately update cache so UI reflects the new status without waiting
+      // for the slow list_servers refetch (which checks Docker status for all servers)
+      queryClient.setQueryData(['servers'], (old: Server[] | undefined) => {
+        if (!old) return old;
+        return old.map((s) => (s.id === serverId ? { ...s, status: data.status } : s));
+      });
+      removePendingOp(serverId);
       queryClient.invalidateQueries({ queryKey: ['servers'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
@@ -167,11 +181,18 @@ export function useServerActions() {
 
   const stopServer = useMutation({
     mutationFn: (serverId: string) =>
-      api.post<{ message: string }>(`/servers/${serverId}/stop`, {}),
+      api.post<{ message: string; server_id: string; status: Server['status'] }>(`/servers/${serverId}/stop`, {}),
     onMutate: (serverId) => {
       addPendingOp(serverId, 'stop', 'stopped');
     },
-    onSuccess: () => {
+    onSuccess: (data, serverId) => {
+      // Immediately update cache so UI reflects the new status without waiting
+      // for the slow list_servers refetch (which checks Docker status for all servers)
+      queryClient.setQueryData(['servers'], (old: Server[] | undefined) => {
+        if (!old) return old;
+        return old.map((s) => (s.id === serverId ? { ...s, status: data.status } : s));
+      });
+      removePendingOp(serverId);
       queryClient.invalidateQueries({ queryKey: ['servers'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
@@ -184,11 +205,18 @@ export function useServerActions() {
 
   const restartServer = useMutation({
     mutationFn: (serverId: string) =>
-      api.post<{ message: string }>(`/servers/${serverId}/restart`, {}),
+      api.post<{ message: string; server_id: string; status: Server['status'] }>(`/servers/${serverId}/restart`, {}),
     onMutate: (serverId) => {
       addPendingOp(serverId, 'restart', 'running');
     },
-    onSuccess: () => {
+    onSuccess: (data, serverId) => {
+      // Immediately update cache so UI reflects the new status without waiting
+      // for the slow list_servers refetch (which checks Docker status for all servers)
+      queryClient.setQueryData(['servers'], (old: Server[] | undefined) => {
+        if (!old) return old;
+        return old.map((s) => (s.id === serverId ? { ...s, status: data.status } : s));
+      });
+      removePendingOp(serverId);
       queryClient.invalidateQueries({ queryKey: ['servers'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
@@ -205,7 +233,14 @@ export function useServerActions() {
     onMutate: (serverId) => {
       addPendingOp(serverId, 'delete', 'deleted');
     },
-    onSuccess: () => {
+    onSuccess: (_, serverId) => {
+      // Immediately remove the server from cache so the row disappears
+      // without waiting for the slow list_servers refetch
+      queryClient.setQueryData(['servers'], (old: Server[] | undefined) => {
+        if (!old) return old;
+        return old.filter((s) => s.id !== serverId);
+      });
+      removePendingOp(serverId);
       queryClient.invalidateQueries({ queryKey: ['servers'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },

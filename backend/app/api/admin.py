@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, desc
 
 from app.api.auth import get_current_user
+from app.services.notification_service import broadcast_server_status_change
 from app.core.permissions import Permission
 from app.dependencies import require_permissions, PermissionChecker
 from app.db.session import get_db
@@ -302,6 +303,8 @@ async def bulk_server_action(
                 raise ValueError(f"Unknown action: {request.action}")
             
             await db.commit()
+            if request.action in ("start", "stop"):
+                await broadcast_server_status_change(server.user_id, str(server.id), server.status)
             results["success"].append(server_id)
         except Exception as e:
             results["failed"].append({"server_id": server_id, "error": str(e)})

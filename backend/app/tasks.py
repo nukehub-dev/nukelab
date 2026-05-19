@@ -167,6 +167,7 @@ def process_nuke_billing(self):
                             
                             # Reconcile exact billing for final partial interval
                             await credit_service.reconcile_server_billing(server, plan)
+                            await broadcast_server_status_change(server.user_id, str(server.id), "stopped", {"stop_reason": "credit_depleted"})
                             
                             # Create notification
                             notification = Notification(
@@ -287,6 +288,7 @@ def enforce_auto_stop(self):
                         server.status = "stopped"
                         server.stopped_at = now
                         server.stop_reason = stop_reason
+                        await broadcast_server_status_change(server.user_id, str(server.id), "stopped", {"stop_reason": stop_reason})
                         
                         # Decrement quota usage
                         if server.plan_id:

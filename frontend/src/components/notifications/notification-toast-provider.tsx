@@ -5,6 +5,7 @@ import { useAuthStore } from '../../stores/auth-store';
 import { useToast } from '../../stores/toast-store';
 import { isAuthenticated } from '../../hooks/use-auth';
 import type { Notification } from '../../hooks/use-notifications';
+import type { Server } from '../../types/api';
 
 const STORAGE_KEY = 'nukelab-last-notification-toast';
 
@@ -55,6 +56,23 @@ export function useNotificationToasts() {
   // Handle incoming notification events
   useEffect(() => {
     const cleanup = onMessage((message) => {
+      if (message.event === 'server:status_changed') {
+        const data = message.data as { server_id: string; status: Server['status']; stop_reason?: string };
+        if (!data?.server_id) return;
+
+        // Immediately update the servers cache so UI reflects the new status
+        // without waiting for the slow list_servers refetch
+        queryClient.setQueryData(['servers'], (old: Server[] | undefined) => {
+          if (!old) return old;
+          return old.map((s) =>
+            s.id === data.server_id
+              ? { ...s, status: data.status, stop_reason: data.stop_reason }
+              : s
+          );
+        });
+        return;
+      }
+
       if (message.event !== 'notification:new') return;
 
       const notification = message.data as Notification;

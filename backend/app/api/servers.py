@@ -20,7 +20,7 @@ from app.models.user import User
 from app.models.server import Server
 from app.docker.spawner import spawner
 import aiodocker
-from app.services.notification_service import NotificationService
+from app.services.notification_service import NotificationService, broadcast_server_status_change
 
 router = APIRouter()
 
@@ -672,6 +672,7 @@ async def start_server(
         try:
             actual_status = await spawner.get_status(server.container_id)
             if actual_status == "running":
+                await broadcast_server_status_change(server.user_id, server_id, "running")
                 return {"message": "Server already running", "server_id": server_id, "status": "running"}
             
             if actual_status in ("unknown", "stopped"):
@@ -731,6 +732,7 @@ async def start_server(
                     await volume_service.increment_server_count(str(server.volume_id))
                 
                 await db.commit()
+                await broadcast_server_status_change(server.user_id, server_id, "running")
                 return {"message": "Server container recreated and started", "server_id": server_id, "status": "running"}
             
             success = await spawner.start(server.container_id)
@@ -762,6 +764,7 @@ async def start_server(
             )
 
             await db.commit()
+            await broadcast_server_status_change(server.user_id, server_id, "running")
             return {"message": "Server started", "server_id": server_id, "status": "running"}
         except Exception as e:
             import traceback
@@ -843,6 +846,7 @@ async def start_server(
                 action_url=f"/servers/{server_id}"
             )
 
+            await broadcast_server_status_change(server.user_id, server_id, "running")
             return {"message": "Server started", "server_id": server_id, "status": "running"}
         except Exception as e:
             import traceback
@@ -879,6 +883,7 @@ async def stop_server(
                 server.status = "stopped"
                 server.container_id = None
                 await db.commit()
+                await broadcast_server_status_change(server.user_id, server_id, "stopped")
                 return {"message": "Server already stopped", "server_id": server_id, "status": "stopped"}
 
             # Delete container to remove Traefik route so frontend catch-all handles it
@@ -929,6 +934,7 @@ async def stop_server(
                 action_url=f"/servers/{server_id}"
             )
 
+            await broadcast_server_status_change(server.user_id, server_id, "stopped")
             return {"message": "Server stopped", "server_id": server_id, "status": "stopped"}
         except Exception as e:
             raise HTTPException(
@@ -947,6 +953,7 @@ async def stop_server(
         action_url=f"/servers/{server_id}"
     )
 
+    await broadcast_server_status_change(server.user_id, server_id, "stopped")
     return {"message": "Server stopped", "server_id": server_id, "status": "stopped"}
 
 
@@ -1060,6 +1067,7 @@ async def restart_server(
                     action_url=f"/servers/{server_id}"
                 )
 
+                await broadcast_server_status_change(server.user_id, server_id, "running")
                 return {"message": "Server container recreated and started", "server_id": server_id, "status": "running"}
             
             await spawner.stop(server.container_id)
@@ -1078,6 +1086,7 @@ async def restart_server(
                 action_url=f"/servers/{server_id}"
             )
 
+            await broadcast_server_status_change(server.user_id, server_id, "running")
             return {"message": "Server restarted", "server_id": server_id, "status": "running"}
         except Exception as e:
             raise HTTPException(
@@ -1305,6 +1314,8 @@ async def update_server(
             server.volume_id = uuid.UUID(primary["volume_id"])
     
     await db.commit()
+    if needs_recreate and server.status == "stopped":
+        await broadcast_server_status_change(server.user_id, str(server.id), "stopped")
     await db.refresh(server)
     
     # If container was deleted, respawn with new config
@@ -1355,6 +1366,7 @@ async def update_server(
             await volume_service.increment_server_count(str(server.volume_id))
         
         await db.commit()
+        await broadcast_server_status_change(server.user_id, str(server.id), "running")
     
     return ServerResponse(
         id=str(server.id),
