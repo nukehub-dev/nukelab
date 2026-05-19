@@ -19,6 +19,7 @@ import {
   Pin,
   PanelLeftClose,
   PanelLeft,
+  UserCircle,
 } from 'lucide-react';
 import { NukeLabLogo } from '../logo';
 import { useSidebarStore } from '../../stores/sidebar-store';
@@ -76,8 +77,7 @@ const navGroups: NavGroup[] = [
 const dockItems = [
   { label: 'Dashboard', icon: LayoutDashboard, href: '/' },
   { label: 'Servers', icon: Server, href: '/servers' },
-  { label: 'Environments', icon: Boxes, href: '/environments' },
-  { label: 'Plans', icon: CreditCard, href: '/plans' },
+  { label: 'Workspaces', icon: FolderOpen, href: '/workspaces' },
 ];
 
 const leftDockItems = [
@@ -86,8 +86,7 @@ const leftDockItems = [
 ];
 
 const rightDockItems = [
-  { label: 'Environments', icon: Boxes, href: '/environments' },
-  { label: 'Plans', icon: CreditCard, href: '/plans' },
+  { label: 'Workspaces', icon: FolderOpen, href: '/workspaces' },
 ];
 
 function canAccessItem(item: NavItem, hasPermission: (p: string) => boolean): boolean {
@@ -102,7 +101,14 @@ export function Sidebar() {
   const [showMore, setShowMore] = useState(false);
 
   const hasPermission = useAuthStore((state) => state.hasPermission);
+  const user = useAuthStore((state) => state.user);
   const isAuto = mode === 'auto';
+
+  const displayName = user?.first_name && user?.last_name
+    ? `${user.first_name} ${user.last_name}`
+    : user?.display_name || user?.username || 'User';
+  const initials = displayName.charAt(0).toUpperCase();
+  const avatarUrl = user?.avatar_url;
 
   const isActive = (href: string) => {
     if (href === '/') return location.pathname === '/';
@@ -258,47 +264,76 @@ export function Sidebar() {
         </nav>
 
         {/* Footer */}
-        <div className="border-t border-sidebar-border/50 p-4 shrink-0">
-          <div 
+        <div className="border-t border-sidebar-border/50 py-3 shrink-0">
+          {/* Expanded footer */}
+          <div
             className="space-y-3 transition-all duration-300"
             style={{ maxHeight: isOpen ? 300 : 0, opacity: isOpen ? 1 : 0, overflow: 'hidden' }}
           >
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-sm text-sidebar-foreground/80 shrink-0">Theme</span>
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1 bg-sidebar-accent rounded-lg p-1">
-                  <button onClick={() => setDarkMode(true)} className={cn("p-1.5 rounded-md transition-colors", isDark && !isOled && "bg-background text-foreground")}>
-                    <Moon className="w-4 h-4" />
-                  </button>
-                  <button onClick={() => setDarkMode(false)} className={cn("p-1.5 rounded-md transition-colors", !isDark && "bg-background text-foreground")}>
-                    <Sun className="w-4 h-4" />
-                  </button>
-                  <button onClick={() => { setDarkMode(true); setOledMode(!isOled); }} className={cn("p-1.5 rounded-md transition-colors", isOled && "bg-background text-foreground")}>
-                    <Monitor className="w-4 h-4" />
-                  </button>
+            {/* User */}
+            <Link
+              to="/settings/profile"
+              className={cn(
+                "flex items-center py-2 rounded-lg text-sm font-medium transition-all duration-300",
+                "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                isActive('/settings/profile')
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                  : "text-sidebar-foreground/80"
+              )}
+              style={{ paddingLeft: 11, paddingRight: 11, marginLeft: 4, marginRight: 4 }}
+            >
+              {avatarUrl ? (
+                <img
+                  src={avatarUrl}
+                  alt={displayName}
+                  className={cn("w-5 h-5 rounded-full object-cover shrink-0", isActive('/settings/profile') && "ring-2 ring-primary/50")}
+                />
+              ) : (
+                <div className={cn("w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary shrink-0", isActive('/settings/profile') && "bg-primary/30")}>
+                  {initials}
                 </div>
-                <div className="p-0.5">
-                  <NotificationCenter />
-                </div>
+              )}
+              <div className="min-w-0" style={{ marginLeft: 12 }}>
+                <p className="text-sm font-medium truncate leading-tight">{displayName}</p>
+                <p className="text-xs text-muted-foreground truncate">@{user?.username || 'user'}</p>
+              </div>
+            </Link>
+
+            {/* Theme + Actions */}
+            <div className="flex items-center justify-between gap-2 mx-1">
+              <div className="flex items-center gap-1 bg-sidebar-accent rounded-lg p-1">
+                <button onClick={() => setDarkMode(true)} className={cn("p-1.5 rounded-md transition-colors", isDark && !isOled && "bg-background text-foreground")}>
+                  <Moon className="w-4 h-4" />
+                </button>
+                <button onClick={() => setDarkMode(false)} className={cn("p-1.5 rounded-md transition-colors", !isDark && "bg-background text-foreground")}>
+                  <Sun className="w-4 h-4" />
+                </button>
+                <button onClick={() => { setDarkMode(true); setOledMode(!isOled); }} className={cn("p-1.5 rounded-md transition-colors", isOled && "bg-background text-foreground")}>
+                  <Monitor className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="flex items-center gap-1">
+                <NotificationCenter />
+                <Tooltip content="Log Out" position="right">
+                  <button
+                    onClick={() => {
+                      localStorage.removeItem('nukelab-token');
+                      document.cookie = 'nukelab_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+                      window.location.href = '/login';
+                    }}
+                    className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors text-destructive"
+                  >
+                    <LogOut className="w-4 h-4" />
+                  </button>
+                </Tooltip>
               </div>
             </div>
-
-            <button
-              onClick={() => {
-                localStorage.removeItem('nukelab-token');
-                document.cookie = 'nukelab_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-                window.location.href = '/login';
-              }}
-              className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm hover:bg-sidebar-accent transition-colors text-destructive"
-            >
-              <LogOut className="w-4 h-4" />
-              <span className="flex-1 text-left">Log Out</span>
-            </button>
           </div>
 
-          <div 
+          {/* Collapsed footer */}
+          <div
             className="flex flex-col items-center gap-2 transition-all duration-300 py-1"
-            style={{ maxHeight: !isOpen ? 120 : 0, opacity: !isOpen ? 1 : 0, overflow: 'hidden' }}
+            style={{ maxHeight: !isOpen ? 160 : 0, opacity: !isOpen ? 1 : 0, overflow: 'hidden' }}
           >
             <div className="p-0.5">
               <NotificationCenter />
@@ -308,13 +343,25 @@ export function Sidebar() {
                 {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
               </button>
             </Tooltip>
+            <Tooltip content="Profile" position="right">
+              <Link
+                to="/settings/profile"
+                className="rounded-lg hover:bg-sidebar-accent transition-colors"
+              >
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt={displayName} className="w-5 h-5 rounded-full object-cover" />
+                ) : (
+                  <UserCircle className="w-5 h-5" />
+                )}
+              </Link>
+            </Tooltip>
             <Tooltip content="Log Out" position="right">
-              <button 
+              <button
                 onClick={() => {
                   localStorage.removeItem('nukelab-token');
                   document.cookie = 'nukelab_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
                   window.location.href = '/login';
-                }} 
+                }}
                 className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors text-destructive"
               >
                 <LogOut className="w-4 h-4" />
@@ -326,7 +373,7 @@ export function Sidebar() {
 
       {/* Mobile Bottom Dock */}
       <nav className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 lg:hidden">
-        <div className="relative flex items-center bg-background/80 backdrop-blur-xl border border-border/50 rounded-full shadow-lg shadow-black/20 px-2 h-14">
+        <div className="relative flex items-center bg-background/80 backdrop-blur-xl border border-border/50 rounded-full shadow-lg shadow-black/20 px-2 h-14 overflow-visible">
           {/* Left items */}
           {visibleDockItems.filter(item => leftDockItems.some(l => l.href === item.href)).map((item) => (
             <Link
@@ -366,10 +413,11 @@ export function Sidebar() {
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              <item.icon className={cn("w-5 h-5", item.label === 'Environments' && "opacity-80")} />
+              <item.icon className="w-5 h-5" />
               <span className="text-[10px] font-medium hidden sm:inline">{item.label}</span>
             </Link>
           ))}
+          <NotificationCenter variant="dock" />
         </div>
       </nav>
 
@@ -390,10 +438,19 @@ export function Sidebar() {
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              drag="y"
+              dragConstraints={{ top: 0, bottom: 0 }}
+              dragElastic={{ top: 0, bottom: 0.35 }}
+              onDragEnd={(_, info) => {
+                if (info.offset.y > 80 || info.velocity.y > 500) {
+                  setShowMore(false);
+                }
+              }}
               className="fixed bottom-0 left-0 right-0 z-[60] lg:hidden"
             >
               <div className="bg-background/95 backdrop-blur-xl rounded-t-3xl border border-border/50 shadow-2xl">
-                <div className="flex justify-center pt-3 pb-1">
+                {/* Drag handle */}
+                <div className="flex justify-center pt-3 pb-1 cursor-grab active:cursor-grabbing">
                   <div className="w-12 h-1.5 rounded-full bg-muted-foreground/30" />
                 </div>
                 
