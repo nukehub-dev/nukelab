@@ -252,6 +252,55 @@ class VolumeService:
 
         return {"allowed": True}
 
+    async def check_aggregate_quota(
+        self,
+        volume_ids: List[str],
+        plan_disk_limit: str
+    ) -> Dict[str, Any]:
+        """Check if the total size of all mounted volumes is within plan limit.
+
+        This prevents users from circumventing per-volume checks by mounting
+        multiple volumes whose individual sizes are under the plan limit but
+        whose combined size exceeds it.
+        """
+        total_bytes = 0
+        volume_sizes = []
+
+        for volume_id in volume_ids:
+            volume = await self.get_volume(volume_id)
+            if not volume:
+                return {"allowed": False, "reason": f"Volume {volume_id} not found"}
+
+            # Update size before checking
+            await self.update_volume_size(volume_id)
+            await self.db.refresh(volume)
+
+            total_bytes += volume.size_bytes or 0
+            volume_sizes.append({
+                "volume_id": volume_id,
+                "size_bytes": volume.size_bytes or 0,
+                "name": volume.display_name or volume.name,
+            })
+
+        plan_bytes = self._parse_memory(plan_disk_limit)
+
+        if total_bytes > plan_bytes:
+            over_by = total_bytes - plan_bytes
+            return {
+                "allowed": False,
+                "reason": (
+                    f"Total mounted volume size ({self._human_size(total_bytes)}) exceeds "
+                    f"plan limit ({plan_disk_limit}). "
+                    f"Free up {self._human_size(over_by)} or upgrade your plan."
+                ),
+                "total_size": total_bytes,
+                "plan_limit": plan_bytes,
+                "over_by": over_by,
+                "volumes": volume_sizes,
+            }
+
+        return {"allowed": True}
+
     async def increment_server_count(self, volume_id: str):
         """Increment server count when a server mounts this volume"""
         volume = await self.get_volume(volume_id)

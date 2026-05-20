@@ -344,6 +344,15 @@ async def create_server(
                     detail=f"Volume {vol_id}: {quota_check['reason']}"
                 )
         
+        # Check aggregate volume quota — total of all mounted volumes must fit within plan
+        all_volume_ids = [vm["volume_id"] for vm in volume_mounts]
+        aggregate_check = await volume_service.check_aggregate_quota(all_volume_ids, plan.disk_limit)
+        if not aggregate_check["allowed"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=aggregate_check["reason"]
+            )
+        
         # Spawn the container using plan resources + environment image
         server = await spawner.spawn(
             user_id=str(current_user.id),
@@ -747,6 +756,15 @@ async def start_server(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail=quota_check["reason"]
                     )
+            
+            # Check aggregate volume quota
+            all_volume_ids = [vm["volume_id"] for vm in volume_mounts]
+            aggregate_check = await volume_service.check_aggregate_quota(all_volume_ids, plan.disk_limit)
+            if not aggregate_check["allowed"]:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=aggregate_check["reason"]
+                )
     
     if server.container_id:
         try:
@@ -1094,6 +1112,15 @@ async def restart_server(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail=quota_check["reason"]
                     )
+            
+            # Check aggregate volume quota
+            all_volume_ids = [vm["volume_id"] for vm in volume_mounts]
+            aggregate_check = await volume_service.check_aggregate_quota(all_volume_ids, plan.disk_limit)
+            if not aggregate_check["allowed"]:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=aggregate_check["reason"]
+                )
     
     if server.container_id:
         try:
@@ -1347,6 +1374,16 @@ async def update_server(
                 "mount_path": vm.mount_path or "/data",
                 "mode": vm.mode or "read_write",
             })
+        
+        # Check aggregate volume quota for the updated mount set
+        if new_volume_mounts and disk_limit:
+            all_volume_ids = [vm["volume_id"] for vm in new_volume_mounts]
+            aggregate_check = await volume_service.check_aggregate_quota(all_volume_ids, disk_limit)
+            if not aggregate_check["allowed"]:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=aggregate_check["reason"]
+                )
         
         # Mark first as primary if none specified
         has_primary = any(m.get("is_primary") for m in new_volume_mounts)

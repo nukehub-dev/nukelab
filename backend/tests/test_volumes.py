@@ -163,6 +163,90 @@ class TestVolumeService:
         await db_session.refresh(volume)
         assert volume.server_count == 0
 
+    @pytest.mark.asyncio
+    async def test_check_aggregate_quota_passes(self, db_session, test_user):
+        """Aggregate quota should pass when total volume sizes are within plan limit."""
+        from app.services.volume_service import VolumeService
+        from unittest.mock import AsyncMock, patch
+
+        service = VolumeService(db_session)
+        vol1 = await service.create_volume(
+            name="test-vol-agg-1",
+            display_name="Aggregate Volume 1",
+            owner_id=str(test_user.id),
+        )
+        vol2 = await service.create_volume(
+            name="test-vol-agg-2",
+            display_name="Aggregate Volume 2",
+            owner_id=str(test_user.id),
+        )
+
+        with patch.object(service, 'get_volume_size', new_callable=AsyncMock) as mock_size:
+            # 3GB + 4GB = 7GB total, under 10GB plan
+            mock_size.side_effect = [3221225472, 4294967296]
+
+            result = await service.check_aggregate_quota(
+                [str(vol1.id), str(vol2.id)], "10g"
+            )
+            assert result["allowed"] is True
+
+    @pytest.mark.asyncio
+    async def test_check_aggregate_quota_fails(self, db_session, test_user):
+        """Aggregate quota should fail when total volume sizes exceed plan limit."""
+        from app.services.volume_service import VolumeService
+        from unittest.mock import AsyncMock, patch
+
+        service = VolumeService(db_session)
+        vol1 = await service.create_volume(
+            name="test-vol-agg-fail-1",
+            display_name="Aggregate Fail Volume 1",
+            owner_id=str(test_user.id),
+        )
+        vol2 = await service.create_volume(
+            name="test-vol-agg-fail-2",
+            display_name="Aggregate Fail Volume 2",
+            owner_id=str(test_user.id),
+        )
+
+        with patch.object(service, 'get_volume_size', new_callable=AsyncMock) as mock_size:
+            # 6GB + 6GB = 12GB total, over 10GB plan
+            mock_size.side_effect = [6442450944, 6442450944]
+
+            result = await service.check_aggregate_quota(
+                [str(vol1.id), str(vol2.id)], "10g"
+            )
+            assert result["allowed"] is False
+            assert "total mounted volume size" in result["reason"].lower()
+            assert result["total_size"] == 12884901888
+            assert result["plan_limit"] == 10737418240
+            assert "volumes" in result
+            assert len(result["volumes"]) == 2
+
+    @pytest.mark.asyncio
+    async def test_check_aggregate_quota_single_volume(self, db_session, test_user):
+        """Aggregate quota with a single volume should behave like per-volume check."""
+        from app.services.volume_service import VolumeService
+        from unittest.mock import AsyncMock, patch
+
+        service = VolumeService(db_session)
+        vol = await service.create_volume(
+            name="test-vol-agg-single",
+            display_name="Aggregate Single Volume",
+            owner_id=str(test_user.id),
+        )
+
+        with patch.object(service, 'get_volume_size', new_callable=AsyncMock) as mock_size:
+            mock_size.return_value = 16106127360  # 15GB
+
+            result = await service.check_aggregate_quota([str(vol.id)], "10g")
+            assert result["allowed"] is False
+            assert result["total_size"] == 16106127360
+            assert result["plan_limit"] == 10737418240
+
+            # Should pass with 20GB plan
+            result = await service.check_aggregate_quota([str(vol.id)], "20g")
+            assert result["allowed"] is True
+
 
 class TestVolumeAPI:
     """Volume API endpoint tests."""
