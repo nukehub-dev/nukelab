@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { Palette, Bell, Shield, Users, UserCircle, ChevronRight, KeyRound } from 'lucide-react';
+import { Palette, Bell, UserCircle, ChevronRight, KeyRound } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
+import { useAuthStore } from '../stores/auth-store';
 import { cn } from '../lib/utils';
 
 interface SettingsCategory {
@@ -36,27 +36,11 @@ const categories: SettingsCategory[] = [
     color: 'bg-blue-500/10 text-blue-400',
   },
   {
-    label: 'Authentication',
-    description: 'Manage OAuth and local auth settings',
-    icon: Shield,
-    href: '/settings/authentication',
-    requiredPermission: PERMISSIONS.ADMIN_ACCESS,
-    color: 'bg-emerald-500/10 text-emerald-400',
-  },
-  {
     label: 'API Tokens',
     description: 'Manage personal access tokens for API and CLI access',
     icon: KeyRound,
     href: '/settings/tokens',
     color: 'bg-rose-500/10 text-rose-400',
-  },
-  {
-    label: 'Users',
-    description: 'Manage user accounts and roles',
-    icon: Users,
-    href: '/settings/users',
-    requiredPermission: PERMISSIONS.USERS_READ,
-    color: 'bg-amber-500/10 text-amber-400',
   },
 ];
 

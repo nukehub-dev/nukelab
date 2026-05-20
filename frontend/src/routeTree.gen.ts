@@ -30,11 +30,9 @@ import { Route as SettingsIndexRouteImport } from './routes/settings.index'
 import { Route as ServersIndexRouteImport } from './routes/servers.index'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as WorkspacesWorkspaceIdRouteImport } from './routes/workspaces.$workspaceId'
-import { Route as SettingsUsersRouteImport } from './routes/settings.users'
 import { Route as SettingsTokensRouteImport } from './routes/settings.tokens'
 import { Route as SettingsProfileRouteImport } from './routes/settings.profile'
 import { Route as SettingsNotificationsRouteImport } from './routes/settings.notifications'
-import { Route as SettingsAuthenticationRouteImport } from './routes/settings.authentication'
 import { Route as SettingsAppearanceRouteImport } from './routes/settings.appearance'
 import { Route as ServersServerIdRouteImport } from './routes/servers.$serverId'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
@@ -154,11 +152,6 @@ const WorkspacesWorkspaceIdRoute = WorkspacesWorkspaceIdRouteImport.update({
   path: '/$workspaceId',
   getParentRoute: () => WorkspacesRoute,
 } as any)
-const SettingsUsersRoute = SettingsUsersRouteImport.update({
-  id: '/users',
-  path: '/users',
-  getParentRoute: () => SettingsRoute,
-} as any)
 const SettingsTokensRoute = SettingsTokensRouteImport.update({
   id: '/tokens',
   path: '/tokens',
@@ -172,11 +165,6 @@ const SettingsProfileRoute = SettingsProfileRouteImport.update({
 const SettingsNotificationsRoute = SettingsNotificationsRouteImport.update({
   id: '/notifications',
   path: '/notifications',
-  getParentRoute: () => SettingsRoute,
-} as any)
-const SettingsAuthenticationRoute = SettingsAuthenticationRouteImport.update({
-  id: '/authentication',
-  path: '/authentication',
   getParentRoute: () => SettingsRoute,
 } as any)
 const SettingsAppearanceRoute = SettingsAppearanceRouteImport.update({
@@ -273,11 +261,9 @@ export interface FileRoutesByFullPath {
   '/admin/users': typeof AdminUsersRoute
   '/servers/$serverId': typeof ServersServerIdRouteWithChildren
   '/settings/appearance': typeof SettingsAppearanceRoute
-  '/settings/authentication': typeof SettingsAuthenticationRoute
   '/settings/notifications': typeof SettingsNotificationsRoute
   '/settings/profile': typeof SettingsProfileRoute
   '/settings/tokens': typeof SettingsTokensRoute
-  '/settings/users': typeof SettingsUsersRoute
   '/workspaces/$workspaceId': typeof WorkspacesWorkspaceIdRoute
   '/admin/': typeof AdminIndexRoute
   '/servers/': typeof ServersIndexRoute
@@ -310,11 +296,9 @@ export interface FileRoutesByTo {
   '/admin/users': typeof AdminUsersRoute
   '/servers/$serverId': typeof ServersServerIdRouteWithChildren
   '/settings/appearance': typeof SettingsAppearanceRoute
-  '/settings/authentication': typeof SettingsAuthenticationRoute
   '/settings/notifications': typeof SettingsNotificationsRoute
   '/settings/profile': typeof SettingsProfileRoute
   '/settings/tokens': typeof SettingsTokensRoute
-  '/settings/users': typeof SettingsUsersRoute
   '/workspaces/$workspaceId': typeof WorkspacesWorkspaceIdRoute
   '/admin': typeof AdminIndexRoute
   '/servers': typeof ServersIndexRoute
@@ -352,11 +336,9 @@ export interface FileRoutesById {
   '/admin/users': typeof AdminUsersRoute
   '/servers/$serverId': typeof ServersServerIdRouteWithChildren
   '/settings/appearance': typeof SettingsAppearanceRoute
-  '/settings/authentication': typeof SettingsAuthenticationRoute
   '/settings/notifications': typeof SettingsNotificationsRoute
   '/settings/profile': typeof SettingsProfileRoute
   '/settings/tokens': typeof SettingsTokensRoute
-  '/settings/users': typeof SettingsUsersRoute
   '/workspaces/$workspaceId': typeof WorkspacesWorkspaceIdRoute
   '/admin/': typeof AdminIndexRoute
   '/servers/': typeof ServersIndexRoute
@@ -395,11 +377,9 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/servers/$serverId'
     | '/settings/appearance'
-    | '/settings/authentication'
     | '/settings/notifications'
     | '/settings/profile'
     | '/settings/tokens'
-    | '/settings/users'
     | '/workspaces/$workspaceId'
     | '/admin/'
     | '/servers/'
@@ -432,11 +412,9 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/servers/$serverId'
     | '/settings/appearance'
-    | '/settings/authentication'
     | '/settings/notifications'
     | '/settings/profile'
     | '/settings/tokens'
-    | '/settings/users'
     | '/workspaces/$workspaceId'
     | '/admin'
     | '/servers'
@@ -473,11 +451,9 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/servers/$serverId'
     | '/settings/appearance'
-    | '/settings/authentication'
     | '/settings/notifications'
     | '/settings/profile'
     | '/settings/tokens'
-    | '/settings/users'
     | '/workspaces/$workspaceId'
     | '/admin/'
     | '/servers/'
@@ -656,13 +632,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WorkspacesWorkspaceIdRouteImport
       parentRoute: typeof WorkspacesRoute
     }
-    '/settings/users': {
-      id: '/settings/users'
-      path: '/users'
-      fullPath: '/settings/users'
-      preLoaderRoute: typeof SettingsUsersRouteImport
-      parentRoute: typeof SettingsRoute
-    }
     '/settings/tokens': {
       id: '/settings/tokens'
       path: '/tokens'
@@ -682,13 +651,6 @@ declare module '@tanstack/react-router' {
       path: '/notifications'
       fullPath: '/settings/notifications'
       preLoaderRoute: typeof SettingsNotificationsRouteImport
-      parentRoute: typeof SettingsRoute
-    }
-    '/settings/authentication': {
-      id: '/settings/authentication'
-      path: '/authentication'
-      fullPath: '/settings/authentication'
-      preLoaderRoute: typeof SettingsAuthenticationRouteImport
       parentRoute: typeof SettingsRoute
     }
     '/settings/appearance': {
@@ -840,21 +802,17 @@ const ServersRouteWithChildren =
 
 interface SettingsRouteChildren {
   SettingsAppearanceRoute: typeof SettingsAppearanceRoute
-  SettingsAuthenticationRoute: typeof SettingsAuthenticationRoute
   SettingsNotificationsRoute: typeof SettingsNotificationsRoute
   SettingsProfileRoute: typeof SettingsProfileRoute
   SettingsTokensRoute: typeof SettingsTokensRoute
-  SettingsUsersRoute: typeof SettingsUsersRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
 }
 
 const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsAppearanceRoute: SettingsAppearanceRoute,
-  SettingsAuthenticationRoute: SettingsAuthenticationRoute,
   SettingsNotificationsRoute: SettingsNotificationsRoute,
   SettingsProfileRoute: SettingsProfileRoute,
   SettingsTokensRoute: SettingsTokensRoute,
-  SettingsUsersRoute: SettingsUsersRoute,
   SettingsIndexRoute: SettingsIndexRoute,
 }
 
