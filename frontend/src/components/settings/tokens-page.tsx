@@ -33,13 +33,48 @@ import { EmptyState } from '../feedback/empty-state';
 import type { ApiToken, ApiTokenWithValue } from '../../types/api';
 
 const AVAILABLE_SCOPES = [
-  { value: 'servers:read', label: 'Read Servers', description: 'View server details and status' },
-  { value: 'servers:start', label: 'Start Servers', description: 'Start and stop servers' },
-  { value: 'servers:write', label: 'Manage Servers', description: 'Create and delete servers' },
-  { value: 'volumes:read', label: 'Read Volumes', description: 'View volume details' },
-  { value: 'volumes:write', label: 'Manage Volumes', description: 'Create and delete volumes' },
-  { value: 'user:read', label: 'Read User', description: 'View user profile information' },
-  { value: 'user:write', label: 'Write User', description: 'Update user profile' },
+  // Servers
+  { value: 'servers:read', label: 'Read Servers', description: 'View server details and status', category: 'Servers' },
+  { value: 'servers:start', label: 'Start Servers', description: 'Start servers', category: 'Servers' },
+  { value: 'servers:stop', label: 'Stop Servers', description: 'Stop servers', category: 'Servers' },
+  { value: 'servers:delete', label: 'Delete Servers', description: 'Delete servers', category: 'Servers' },
+  { value: 'servers:manage', label: 'Manage Servers', description: 'Full server management', category: 'Servers' },
+  // Volumes
+  { value: 'volumes:read', label: 'Read Volumes', description: 'View volume details', category: 'Volumes' },
+  { value: 'volumes:manage', label: 'Manage Volumes', description: 'Create and delete volumes', category: 'Volumes' },
+  // Workspaces
+  { value: 'workspaces:read', label: 'Read Workspaces', description: 'View workspace details', category: 'Workspaces' },
+  { value: 'workspaces:manage', label: 'Manage Workspaces', description: 'Create and manage workspaces', category: 'Workspaces' },
+  // User
+  { value: 'user:read', label: 'Read User', description: 'View user profile information', category: 'User' },
+  { value: 'user:update', label: 'Update User', description: 'Update user profile', category: 'User' },
+  // Credits
+  { value: 'credits:read', label: 'Read Credits', description: 'View credit balance and history', category: 'Credits' },
+  // Notifications
+  { value: 'notifications:read', label: 'Read Notifications', description: 'View notifications', category: 'Notifications' },
+  { value: 'notifications:write', label: 'Manage Notifications', description: 'Mark notifications as read', category: 'Notifications' },
+  // Analytics & Metrics
+  { value: 'analytics:read', label: 'Read Analytics', description: 'View analytics and usage data', category: 'Analytics' },
+  { value: 'metrics:read', label: 'Read Metrics', description: 'View system and server metrics', category: 'Analytics' },
+  { value: 'metrics:write', label: 'Write Metrics', description: 'Create metrics and alert rules', category: 'Analytics' },
+  { value: 'alerts:read', label: 'Read Alerts', description: 'View alert history', category: 'Analytics' },
+  { value: 'alerts:manage', label: 'Manage Alerts', description: 'Manage alert rules', category: 'Analytics' },
+  // Dashboard
+  { value: 'dashboard:read', label: 'Read Dashboard', description: 'Access dashboard data', category: 'Dashboard' },
+  // Preferences
+  { value: 'preferences:read', label: 'Read Preferences', description: 'View user preferences', category: 'Preferences' },
+  { value: 'preferences:write', label: 'Write Preferences', description: 'Update user preferences', category: 'Preferences' },
+  // Schedules
+  { value: 'schedules:read', label: 'Read Schedules', description: 'View scheduled tasks', category: 'Schedules' },
+  { value: 'schedules:write', label: 'Write Schedules', description: 'Create and manage schedules', category: 'Schedules' },
+  // Environments
+  { value: 'environments:read', label: 'Read Environments', description: 'View environment templates', category: 'Environments' },
+  { value: 'environments:write', label: 'Write Environments', description: 'Manage environment templates', category: 'Environments' },
+  // Plans & Quotas
+  { value: 'plans:read', label: 'Read Plans', description: 'View subscription plans', category: 'Plans' },
+  { value: 'quotas:read', label: 'Read Quotas', description: 'View resource quotas', category: 'Plans' },
+  // Bulk
+  { value: 'bulk:execute', label: 'Execute Bulk', description: 'Run bulk operations', category: 'Bulk' },
 ];
 
 const EXPIRATION_OPTIONS = [
@@ -379,32 +414,41 @@ function CreateTokenDialog({
             <p className="text-xs text-muted-foreground">
               Select the permissions this token will have.
             </p>
-            <div className="space-y-2 mt-2">
-              {AVAILABLE_SCOPES.map((scope) => (
-                <label
-                  key={scope.value}
-                  className={cn(
-                    'flex items-start gap-3 p-3 rounded-lg border transition-all cursor-pointer',
-                    selectedScopes.includes(scope.value)
-                      ? 'border-primary/30 bg-primary/5'
-                      : 'border-border/50 bg-card/30 hover:bg-card/50'
-                  )}
-                >
-                  <Checkbox
-                    checked={selectedScopes.includes(scope.value)}
-                    onChange={() => toggleScope(scope.value)}
-                    disabled={isCreating}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">{scope.label}</span>
-                      <code className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
-                        {scope.value}
-                      </code>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">{scope.description}</p>
+            <div className="space-y-4 mt-2 max-h-[400px] overflow-y-auto pr-1">
+              {Array.from(new Set(AVAILABLE_SCOPES.map((s) => s.category))).map((category) => (
+                <div key={category} className="space-y-2">
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    {category}
+                  </h4>
+                  <div className="space-y-1.5">
+                    {AVAILABLE_SCOPES.filter((s) => s.category === category).map((scope) => (
+                      <label
+                        key={scope.value}
+                        className={cn(
+                          'flex items-start gap-3 p-2.5 rounded-lg border transition-all cursor-pointer',
+                          selectedScopes.includes(scope.value)
+                            ? 'border-primary/30 bg-primary/5'
+                            : 'border-border/50 bg-card/30 hover:bg-card/50'
+                        )}
+                      >
+                        <Checkbox
+                          checked={selectedScopes.includes(scope.value)}
+                          onChange={() => toggleScope(scope.value)}
+                          disabled={isCreating}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium">{scope.label}</span>
+                            <code className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                              {scope.value}
+                            </code>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">{scope.description}</p>
+                        </div>
+                      </label>
+                    ))}
                   </div>
-                </label>
+                </div>
               ))}
             </div>
           </div>

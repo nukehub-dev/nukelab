@@ -10,7 +10,7 @@ from sqlalchemy import text
 import redis.asyncio as redis
 import psutil
 
-from app.api.auth import require_scopes, get_current_user
+from app.api.auth import require_scopes, get_current_user, require_jwt_auth
 from app.core.permissions import Permission
 from app.dependencies import require_permissions
 from app.db.session import get_db
@@ -27,7 +27,7 @@ async def health_check():
 
 @router.get("/detailed")
 async def detailed_health_check(
-    _scopes = Depends(require_scopes("admin:read")),
+    _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db),
     current_user = Depends(require_permissions(Permission.ADMIN_ACCESS))
 ):

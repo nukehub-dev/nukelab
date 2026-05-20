@@ -9,7 +9,7 @@ import shutil
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.auth import get_current_user, require_scopes
+from app.api.auth import get_current_user, require_scopes, require_jwt_auth
 from app.core.permissions import Permission
 from app.core.security import get_user_permissions
 from app.dependencies import require_permissions, PermissionChecker
@@ -383,7 +383,7 @@ async def list_users(
     sort_order: str = Query("desc", description="Sort order: asc, desc"),
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(20, ge=1, le=100, description="Items per page"),
-    _scopes = Depends(require_scopes("admin:read")),
+    _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permissions(Permission.USERS_READ))
 ):
@@ -408,7 +408,7 @@ async def list_users(
 @router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def create_user(
     request: UserCreateRequest,
-    _scopes = Depends(require_scopes("admin:write")),
+    _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permissions(Permission.USERS_CREATE))
 ):
@@ -504,7 +504,7 @@ async def update_user(
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(
     user_id: str,
-    _scopes = Depends(require_scopes("admin:write")),
+    _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permissions(Permission.USERS_DELETE))
 ):
@@ -525,7 +525,7 @@ async def delete_user(
 async def disable_user(
     user_id: str,
     request: DisableUserRequest,
-    _scopes = Depends(require_scopes("admin:write")),
+    _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permissions(Permission.USERS_UPDATE))
 ):
@@ -545,7 +545,7 @@ async def disable_user(
 @router.post("/{user_id}/impersonate")
 async def impersonate_user(
     user_id: str,
-    _scopes = Depends(require_scopes("admin:write")),
+    _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_permissions(Permission.USERS_IMPERSONATE))
 ):

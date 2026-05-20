@@ -497,8 +497,8 @@ class TestAdminEndpointScopeAccess:
     """API token scope enforcement on admin endpoints."""
 
     @pytest.mark.asyncio
-    async def test_api_token_with_admin_read_can_access_admin_stats(self, client, db_session, admin_user):
-        """Admin API token with admin:read should access /admin/stats."""
+    async def test_api_token_blocked_from_admin_endpoints(self, client, db_session, admin_user):
+        """Admin API tokens should be blocked from admin endpoints (JWT-only)."""
         from app.models.api_token import ApiToken
         from app.api.auth import get_password_hash
         import secrets
@@ -512,7 +512,7 @@ class TestAdminEndpointScopeAccess:
             name="Admin Read Token",
             token_hash=token_hash,
             token_prefix=token_prefix,
-            scopes=["admin:read"],
+            scopes=["admin:read", "admin:write"],
             is_active=True,
         )
         db_session.add(admin_api_token)
@@ -522,8 +522,9 @@ class TestAdminEndpointScopeAccess:
             "/api/admin/stats",
             headers={"Authorization": f"Bearer {raw_token}"},
         )
-        # Should succeed because admin user has admin permissions + token has admin:read
-        assert response.status_code == 200
+        # Admin endpoints are JWT-only: API tokens rejected regardless of scopes
+        assert response.status_code == 403
+        assert "JWT" in response.json()["detail"]
 
     @pytest.mark.asyncio
     async def test_api_token_without_admin_read_blocked_from_admin_stats(self, client, db_session, admin_user):
@@ -553,7 +554,7 @@ class TestAdminEndpointScopeAccess:
             headers={"Authorization": f"Bearer {raw_token}"},
         )
         assert response.status_code == 403
-        assert "admin:read" in response.json()["detail"]
+        assert "JWT" in response.json()["detail"]
 
     @pytest.mark.asyncio
     async def test_api_token_with_admin_read_blocked_from_admin_write(self, client, db_session, admin_user):
@@ -582,13 +583,13 @@ class TestAdminEndpointScopeAccess:
             headers={"Authorization": f"Bearer {raw_token}"},
             json={"action": "disable", "user_ids": []},
         )
-        # Should be blocked because write endpoint requires admin:write
+        # Admin endpoints are JWT-only
         assert response.status_code == 403
-        assert "admin:write" in response.json()["detail"]
+        assert "JWT" in response.json()["detail"]
 
     @pytest.mark.asyncio
-    async def test_api_token_with_admin_write_can_access_write_endpoint(self, client, db_session, admin_user):
-        """Admin API token with admin:write should access write endpoints."""
+    async def test_api_token_blocked_from_admin_write_endpoints(self, client, db_session, admin_user):
+        """Admin API tokens should be blocked from admin write endpoints (JWT-only)."""
         from app.models.api_token import ApiToken
         from app.api.auth import get_password_hash
         import secrets
@@ -613,9 +614,9 @@ class TestAdminEndpointScopeAccess:
             headers={"Authorization": f"Bearer {raw_token}"},
             json={"action": "disable", "user_ids": []},
         )
-        # 200 or 422 (validation error for empty user_ids) are both acceptable
-        # because scope check passed and it reached the endpoint logic
-        assert response.status_code in [200, 422]
+        # Admin endpoints are JWT-only: API tokens rejected regardless of scopes
+        assert response.status_code == 403
+        assert "JWT" in response.json()["detail"]
 
     @pytest.mark.asyncio
     async def test_jwt_admin_bypasses_scope_checks_on_admin_endpoints(self, client, admin_token):

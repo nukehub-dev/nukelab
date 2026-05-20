@@ -20,7 +20,6 @@ VALID_TOKEN_SCOPES = {
     "user:read", "user:update",
     "credits:read",
     "notifications:read", "notifications:write",
-    "admin:read", "admin:write",
     "analytics:read",
     "metrics:read", "metrics:write",
     "alerts:read", "alerts:manage",
