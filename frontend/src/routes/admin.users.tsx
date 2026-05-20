@@ -7,6 +7,7 @@ import { StatusBadge } from '../components/data/status-badge';
 import { useUsers, useUserActions } from '../hooks/use-users';
 import { useDataTable } from '../hooks/use-data-table';
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
+import { usePageGuard } from '../hooks/use-page-guard';
 import { formatDate, cn } from '../lib/utils';
 import type { User as UserType } from '../types/api';
 import type { ColumnDef, ColumnFiltersState, VisibilityState, SortingState } from '@tanstack/react-table';
@@ -24,6 +25,9 @@ export const Route = createFileRoute('/admin/users')({
 });
 
 function UsersPage() {
+  const allowed = usePageGuard({ permission: PERMISSIONS.USERS_READ });
+  if (!allowed) return null;
+
   const hasPermission = useAuthStore((state) => state.hasPermission);
   const canCreateUsers = hasPermission(PERMISSIONS.USERS_CREATE);
   const canUpdateUsers = hasPermission(PERMISSIONS.USERS_UPDATE);

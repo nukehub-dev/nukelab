@@ -14,20 +14,20 @@ router = APIRouter()
 
 # Valid token scopes for API token access control
 VALID_TOKEN_SCOPES = {
+    "analytics:read",
+    "credits:read",
+    "dashboard:read",
+    "environments:read",
+    "metrics:read",
+    "notifications:read", "notifications:write",
+    "plans:read",
+    "preferences:read", "preferences:write",
+    "quotas:read",
+    "schedules:read", "schedules:write",
     "servers:read", "servers:start", "servers:stop", "servers:delete", "servers:manage",
+    "user:read", "user:update",
     "volumes:read", "volumes:manage",
     "workspaces:read", "workspaces:manage",
-    "user:read", "user:update",
-    "credits:read",
-    "notifications:read", "notifications:write",
-    "analytics:read",
-    "metrics:read", "metrics:write",
-    "alerts:read", "alerts:manage",
-    "preferences:read", "preferences:write",
-    "schedules:read", "schedules:write",
-    "environments:read", "environments:write",
-    "plans:read", "quotas:read",
-    "bulk:execute", "dashboard:read",
 }
 
 

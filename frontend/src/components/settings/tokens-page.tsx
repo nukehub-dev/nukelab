@@ -56,9 +56,6 @@ const AVAILABLE_SCOPES = [
   // Analytics & Metrics
   { value: 'analytics:read', label: 'Read Analytics', description: 'View analytics and usage data', category: 'Analytics' },
   { value: 'metrics:read', label: 'Read Metrics', description: 'View system and server metrics', category: 'Analytics' },
-  { value: 'metrics:write', label: 'Write Metrics', description: 'Create metrics and alert rules', category: 'Analytics' },
-  { value: 'alerts:read', label: 'Read Alerts', description: 'View alert history', category: 'Analytics' },
-  { value: 'alerts:manage', label: 'Manage Alerts', description: 'Manage alert rules', category: 'Analytics' },
   // Dashboard
   { value: 'dashboard:read', label: 'Read Dashboard', description: 'Access dashboard data', category: 'Dashboard' },
   // Preferences
@@ -69,12 +66,10 @@ const AVAILABLE_SCOPES = [
   { value: 'schedules:write', label: 'Write Schedules', description: 'Create and manage schedules', category: 'Schedules' },
   // Environments
   { value: 'environments:read', label: 'Read Environments', description: 'View environment templates', category: 'Environments' },
-  { value: 'environments:write', label: 'Write Environments', description: 'Manage environment templates', category: 'Environments' },
   // Plans & Quotas
   { value: 'plans:read', label: 'Read Plans', description: 'View subscription plans', category: 'Plans' },
   { value: 'quotas:read', label: 'Read Quotas', description: 'View resource quotas', category: 'Plans' },
   // Bulk
-  { value: 'bulk:execute', label: 'Execute Bulk', description: 'Run bulk operations', category: 'Bulk' },
 ];
 
 const EXPIRATION_OPTIONS = [

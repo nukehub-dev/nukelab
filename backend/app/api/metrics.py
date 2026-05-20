@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, desc
 from pydantic import BaseModel
 
-from app.api.auth import get_current_user, require_scopes
+from app.api.auth import get_current_user, require_scopes, require_jwt_auth
 from app.core.permissions import Permission
 from app.dependencies import PermissionChecker
 from app.db.session import get_db
@@ -209,7 +209,7 @@ async def get_latest_system_metrics(
 @router.get("/alerts/rules")
 async def list_alert_rules(
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("alerts:read")),
+    _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
     """List all alert rules (admin only)"""
@@ -226,7 +226,7 @@ async def list_alert_rules(
 async def create_alert_rule(
     data: AlertRuleCreate,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("metrics:write")),
+    _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new alert rule (admin only)"""
@@ -263,7 +263,7 @@ async def create_alert_rule(
 async def get_alert_rule(
     rule_id: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("alerts:read")),
+    _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
     """Get alert rule details"""
@@ -288,7 +288,7 @@ async def update_alert_rule(
     rule_id: str,
     data: AlertRuleUpdate,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("metrics:write")),
+    _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
     """Update an alert rule"""
@@ -321,7 +321,7 @@ async def update_alert_rule(
 async def delete_alert_rule(
     rule_id: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("alerts:manage")),
+    _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete an alert rule"""
@@ -377,7 +377,7 @@ async def acknowledge_alert(
     alert_id: str,
     data: AlertAcknowledgeRequest,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("metrics:write")),
+    _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
     """Acknowledge an alert"""
@@ -394,7 +394,7 @@ async def acknowledge_alert(
 async def resolve_alert(
     alert_id: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("alerts:manage")),
+    _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
     """Resolve an alert"""

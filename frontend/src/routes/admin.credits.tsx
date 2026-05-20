@@ -16,6 +16,7 @@ import { useUsers } from '../hooks/use-users';
 import { useLowBalanceUsers } from '../hooks/use-credits';
 import { useDataTable } from '../hooks/use-data-table';
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
+import { usePageGuard } from '../hooks/use-page-guard';
 import { cn } from '../lib/utils';
 import { CreditAdjustDialog } from '../components/admin/credit-adjust-dialog';
 import { CreditHistoryDialog } from '../components/admin/credit-history-dialog';
@@ -32,6 +33,9 @@ export const Route = createFileRoute('/admin/credits')({
 });
 
 function CreditsAdminPage() {
+  const allowed = usePageGuard({ permission: PERMISSIONS.CREDITS_READ });
+  if (!allowed) return null;
+
   const hasPermission = useAuthStore((state) => state.hasPermission);
   const canGrant = hasPermission(PERMISSIONS.CREDITS_GRANT);
   const canDeduct = hasPermission(PERMISSIONS.CREDITS_DEDUCT);

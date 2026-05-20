@@ -27,12 +27,17 @@ import {
 } from '../hooks/use-email-settings';
 import { cn } from '../lib/utils';
 import { springs } from '../lib/animations';
+import { usePageGuard } from '../hooks/use-page-guard';
+import { PERMISSIONS } from '../stores/auth-store';
 
 export const Route = createFileRoute('/admin/settings')({
   component: AdminSettingsPage,
 });
 
 function AdminSettingsPage() {
+  const allowed = usePageGuard({ permission: PERMISSIONS.ADMIN_ACCESS });
+  if (!allowed) return null;
+
   const {
     data: config,
     isLoading: configLoading,

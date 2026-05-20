@@ -24,7 +24,7 @@ import {
 import { NukeLabLogo } from '../logo';
 import { useSidebarStore } from '../../stores/sidebar-store';
 import { useThemeStore } from '../../stores/theme-store';
-import { useAuthStore, PERMISSIONS } from '../../stores/auth-store';
+import { useAuthStore } from '../../stores/auth-store';
 import { cn } from '../../lib/utils';
 import { Tooltip } from '../ui/tooltip';
 import { NotificationCenter } from '../notifications/notification-center';
@@ -64,7 +64,7 @@ const navGroups: NavGroup[] = [
     label: 'System',
     items: [
       { label: 'Settings', icon: Settings, href: '/settings' },
-      { label: 'Administration', icon: Shield, href: '/admin', requiredPermission: PERMISSIONS.ADMIN_ACCESS },
+      { label: 'Administration', icon: Shield, href: '/admin', requiredPermission: undefined as any },
     ],
   },
 ];
@@ -84,8 +84,12 @@ const rightDockItems = [
   { label: 'Workspaces', icon: FolderOpen, href: '/workspaces' },
 ];
 
-function canAccessItem(item: NavItem, hasPermission: (p: string) => boolean): boolean {
-  if (!item.requiredPermission) return true;
+function canAccessItem(item: NavItem, hasPermission: (p: string) => boolean, canAccessAdminPanel: () => boolean): boolean {
+  if (!item.requiredPermission) {
+    // Administration link is special - check any admin permission
+    if (item.href === '/admin') return canAccessAdminPanel();
+    return true;
+  }
   return hasPermission(item.requiredPermission);
 }
 
@@ -96,6 +100,7 @@ export function Sidebar() {
   const [showMore, setShowMore] = useState(false);
 
   const hasPermission = useAuthStore((state) => state.hasPermission);
+  const canAccessAdmin = useAuthStore((state) => state.canAccessAdmin);
   const user = useAuthStore((state) => state.user);
   const isAuto = mode === 'auto';
 
@@ -132,11 +137,11 @@ export function Sidebar() {
   const visibleNavGroups = navGroups
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => canAccessItem(item, hasPermission)),
+      items: group.items.filter((item) => canAccessItem(item, hasPermission, canAccessAdmin)),
     }))
     .filter((group) => group.items.length > 0);
 
-  const visibleDockItems = dockItems.filter((item) => canAccessItem(item, hasPermission));
+  const visibleDockItems = dockItems.filter((item) => canAccessItem(item, hasPermission, canAccessAdmin));
 
   return (
     <>

@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.dependencies import get_current_user, require_permissions
-from app.api.auth import require_scopes
+from app.api.auth import require_scopes, require_jwt_auth
 from app.core.permissions import Permission
 from app.services.quota_service import QuotaService
 
@@ -31,7 +31,7 @@ async def get_my_quota(
 async def get_user_quota(
     user_id: str,
     current_user = Depends(require_permissions(Permission.QUOTA_READ)),
-    _scopes = Depends(require_scopes("admin:read")),
+    _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
     """Get specific user's quota (admin/moderator)"""
@@ -45,7 +45,7 @@ async def update_user_quota(
     user_id: str,
     data: dict,
     current_user = Depends(require_permissions(Permission.QUOTA_UPDATE)),
-    _scopes = Depends(require_scopes("admin:write")),
+    _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
     """Update user's quota limits (admin only)"""

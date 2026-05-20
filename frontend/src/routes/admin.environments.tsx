@@ -6,7 +6,8 @@ import { DataTable } from '../components/data/data-table';
 import { StatusBadge } from '../components/data/status-badge';
 import { useEnvironments, useEnvironmentActions } from '../hooks/use-environments';
 import { useDataTable } from '../hooks/use-data-table';
-import { useAuthStore } from '../stores/auth-store';
+import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
+import { usePageGuard } from '../hooks/use-page-guard';
 import { formatDate } from '../lib/utils';
 import type { Environment as EnvironmentType } from '../types/api';
 import type { ColumnDef, ColumnFiltersState, VisibilityState, SortingState } from '@tanstack/react-table';
@@ -24,6 +25,9 @@ export const Route = createFileRoute('/admin/environments')({
 });
 
 function EnvironmentsPage() {
+  const allowed = usePageGuard({ permissions: [PERMISSIONS.ENVIRONMENT_CREATE, PERMISSIONS.ENVIRONMENT_UPDATE, PERMISSIONS.ENVIRONMENT_DELETE] });
+  if (!allowed) return null;
+
   const { confirm, dialog } = useConfirmDialog();
   const canManageEnvironments = useAuthStore((state) => state.canManageEnvironments());
 

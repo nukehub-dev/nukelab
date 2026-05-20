@@ -6,7 +6,8 @@ import { DataTable } from '../components/data/data-table';
 import { StatusBadge } from '../components/data/status-badge';
 import { usePlans, usePlanActions } from '../hooks/use-plans';
 import { useDataTable } from '../hooks/use-data-table';
-import { useAuthStore } from '../stores/auth-store';
+import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
+import { usePageGuard } from '../hooks/use-page-guard';
 import { formatDate } from '../lib/utils';
 import type { Plan } from '../types/api';
 import type { ColumnDef, ColumnFiltersState, VisibilityState, SortingState } from '@tanstack/react-table';
@@ -24,6 +25,9 @@ export const Route = createFileRoute('/admin/plans')({
 });
 
 function PlansPage() {
+  const allowed = usePageGuard({ permissions: [PERMISSIONS.PLAN_CREATE, PERMISSIONS.PLAN_UPDATE, PERMISSIONS.PLAN_DELETE] });
+  if (!allowed) return null;
+
   const { confirm, dialog } = useConfirmDialog();
   const canManagePlans = useAuthStore((state) => state.canManagePlans());
 

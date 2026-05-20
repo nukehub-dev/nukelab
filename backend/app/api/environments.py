@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.dependencies import get_current_user, require_permissions
-from app.api.auth import require_scopes
+from app.api.auth import require_scopes, require_jwt_auth
 from app.core.permissions import Permission
 from app.services.environment_service import EnvironmentService
 
@@ -57,7 +57,7 @@ async def get_environment(
 async def create_environment(
     data: dict,
     current_user = Depends(require_permissions(Permission.ENVIRONMENT_CREATE)),
-    _scopes = Depends(require_scopes("environments:write")),
+    _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
     """Create new environment template (admin only)"""
@@ -86,7 +86,7 @@ async def update_environment(
     env_id: str,
     data: dict,
     current_user = Depends(require_permissions(Permission.ENVIRONMENT_UPDATE)),
-    _scopes = Depends(require_scopes("environments:write")),
+    _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
     """Update environment template (admin only)"""
@@ -99,7 +99,7 @@ async def update_environment(
 async def deactivate_environment(
     env_id: str,
     current_user = Depends(require_permissions(Permission.ENVIRONMENT_DELETE)),
-    _scopes = Depends(require_scopes("environments:write")),
+    _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
     """Deactivate environment template (admin only)"""
@@ -112,7 +112,7 @@ async def deactivate_environment(
 async def delete_environment(
     env_id: str,
     current_user = Depends(require_permissions(Permission.ENVIRONMENT_DELETE)),
-    _scopes = Depends(require_scopes("environments:write")),
+    _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
     """Permanently delete environment template (admin only)"""
@@ -125,7 +125,7 @@ async def delete_environment(
 async def activate_environment(
     env_id: str,
     current_user = Depends(require_permissions(Permission.ENVIRONMENT_UPDATE)),
-    _scopes = Depends(require_scopes("environments:write")),
+    _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
     """Activate environment template (admin only)"""
@@ -139,7 +139,7 @@ async def clone_environment(
     env_id: str,
     data: dict,
     current_user = Depends(require_permissions(Permission.ENVIRONMENT_CREATE)),
-    _scopes = Depends(require_scopes("environments:write")),
+    _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
     """Clone environment template (admin only)"""
