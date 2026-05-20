@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { cn } from '../lib/utils';
-import { Clock, CalendarDays, Sunrise, Sunset, RotateCcw, Zap, ChevronRight, ChevronLeft, ChevronUp } from 'lucide-react';
+import { Clock, CalendarDays, Sunrise, Sunset, RotateCcw, Zap, ChevronRight, ChevronLeft } from 'lucide-react';
 
 interface CronBuilderProps {
   value: string;
@@ -267,7 +267,6 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
               const isHourTick = i % 5 === 0;
               const angle = (i * 6 - 90) * (Math.PI / 180);
               const innerR = isHourTick ? 43 : 45;
-              const outerR = isHourTick ? 49 : 47;
               const x1 = 50 + innerR * Math.cos(angle);
               const y1 = 50 + innerR * Math.sin(angle);
               return (

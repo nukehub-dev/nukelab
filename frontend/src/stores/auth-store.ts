@@ -220,7 +220,7 @@ export const useAuthStore = create<AuthState>()(
     {
       name: 'nukelab-auth',
       version: 1,
-      migrate: (persistedState: unknown) => {
+      migrate: (_persistedState: unknown) => {
         // Reset cached user on version bump so fresh data is fetched
         return { user: null };
       },

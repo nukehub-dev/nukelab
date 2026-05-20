@@ -40,7 +40,7 @@ function Dialog({ open, onOpenChange, children }: DialogProps) {
           />
           {/* Mobile: Bottom Sheet */}
           <motion.div
-            className="fixed inset-x-0 bottom-0 z-50 max-h-[90vh] rounded-t-2xl bg-card/95 backdrop-blur-xl border-t border-border/50 flex flex-col overflow-hidden sm:opacity-0 sm:pointer-events-none"
+            className="fixed inset-x-0 bottom-0 z-50 max-h-[90vh] rounded-t-2xl bg-card/95 backdrop-blur-xl border-t border-border/50 flex flex-col overflow-hidden lg:opacity-0 lg:pointer-events-none"
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
@@ -65,7 +65,7 @@ function Dialog({ open, onOpenChange, children }: DialogProps) {
           </motion.div>
           {/* Desktop: Right Drawer */}
           <motion.div
-            className="fixed inset-y-0 right-0 z-50 w-[420px] max-w-full bg-card/95 backdrop-blur-xl border-l border-border/50 overflow-hidden opacity-0 pointer-events-none sm:opacity-100 sm:pointer-events-auto"
+            className="fixed inset-y-0 right-0 z-50 w-[420px] max-w-full bg-card/95 backdrop-blur-xl border-l border-border/50 overflow-hidden opacity-0 pointer-events-none lg:opacity-100 lg:pointer-events-auto"
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
@@ -131,7 +131,7 @@ const DialogFooter = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLD
   ({ className, ...props }, ref) => (
     <div
       ref={ref}
-      className={cn('flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-2 mt-6 pt-6 border-t border-border/50', className)}
+      className={cn('flex flex-col-reverse gap-2 lg:flex-row lg:justify-end lg:gap-2 mt-6 pt-6 border-t border-border/50', className)}
       {...props}
     />
   )
@@ -145,7 +145,7 @@ const DialogClose = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttribut
       className={cn(
         'absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-        'disabled:pointer-events-none hidden sm:block',
+        'disabled:pointer-events-none hidden lg:block',
         className
       )}
       {...props}

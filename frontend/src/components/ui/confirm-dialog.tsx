@@ -75,8 +75,7 @@ export function useConfirmDialog() {
   const config = variantConfig[state.variant ?? 'info'];
   const Icon = state.icon ?? config.icon;
 
-  const confirmDisabled =
-    state.typeToConfirm && typedText.toLowerCase().trim() !== state.typeToConfirm.toLowerCase().trim();
+  const confirmDisabled = !!state.typeToConfirm && typedText.toLowerCase().trim() !== state.typeToConfirm.toLowerCase().trim();
 
   const dialog = (
     <Modal open={state.isOpen} onOpenChange={(v) => handleClose(v)} showClose={false} className={state.typeToConfirm || state.customContent ? 'max-w-lg' : 'max-w-md'}>

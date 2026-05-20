@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { Users, Shield, UserCheck, UserX, Mail, Calendar, Pencil, Trash2, CreditCard, BadgeCheck, LogIn, Zap } from 'lucide-react';
+import { Users, Shield, UserCheck, UserX, Mail, Calendar, Pencil, Trash2, CreditCard, BadgeCheck, LogIn } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { ResourcePageLayout } from '../components/layout/resource-page-layout';
 import { DataTable } from '../components/data/data-table';

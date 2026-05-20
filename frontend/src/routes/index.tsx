@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, Link } from '@tanstack/react-router';
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
@@ -6,12 +6,13 @@ import {
   Server,
   Boxes,
   Activity,
-  Network,
   Users,
   Zap,
   TrendingUp,
   HardDrive,
   Globe,
+  FolderOpen,
+  CreditCard,
 } from 'lucide-react';
 import { FloatingHeader } from '../components/layout/floating-header';
 import { StatCard } from '../components/data/stat-card';
@@ -175,20 +176,20 @@ function DashboardPage() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[
                 { label: 'Deploy Server', icon: Server, color: 'bg-primary/10 text-primary', href: '/servers' },
-                { label: 'New Environment', icon: Boxes, color: 'bg-chart-2/10 text-chart-2', href: '/environments' },
-                { label: 'View Logs', icon: Activity, color: 'bg-chart-3/10 text-chart-3', href: '/servers' },
-                { label: 'Manage Network', icon: Network, color: 'bg-chart-4/10 text-chart-4', href: '/networks' },
+                { label: 'My Volumes', icon: HardDrive, color: 'bg-chart-2/10 text-chart-2', href: '/volumes' },
+                { label: 'Workspaces', icon: FolderOpen, color: 'bg-chart-3/10 text-chart-3', href: '/workspaces' },
+                { label: 'Browse Plans', icon: CreditCard, color: 'bg-chart-4/10 text-chart-4', href: '/plans' },
               ].map((action) => (
-                <a
+                <Link
                   key={action.label}
-                  href={action.href}
+                  to={action.href}
                   className="flex flex-col items-center gap-3 p-4 rounded-xl border border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-all duration-100 group"
                 >
                   <div className={`p-3 rounded-lg ${action.color}`}>
                     <action.icon className="w-5 h-5" />
                   </div>
                   <span className="text-sm font-medium">{action.label}</span>
-                </a>
+                </Link>
               ))}
             </div>
           </div>
