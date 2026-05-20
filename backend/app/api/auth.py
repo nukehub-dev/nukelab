@@ -2,7 +2,8 @@ import logging
 import secrets
 import uuid
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, List
+from dataclasses import dataclass
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm, HTTPBearer, HTTPAuthorizationCredentials
@@ -10,7 +11,7 @@ from pydantic import BaseModel
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, and_
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from app.config import settings
@@ -60,6 +61,15 @@ class CustomHTTPBearer(HTTPBearer):
 
 
 security_scheme = CustomHTTPBearer(auto_error=True)
+
+
+@dataclass
+class AuthContext:
+    """Authentication context carrying both user and auth method metadata."""
+    user: User
+    auth_method: str  # "jwt", "api_token"
+    token_scopes: List[str]
+    api_token_id: Optional[str] = None
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -125,61 +135,125 @@ async def revoke_refresh_token(plaintext: str, db: AsyncSession) -> bool:
     return False
 
 
-async def get_current_user(token: str = Depends(security_scheme), db: AsyncSession = Depends(get_db)):
+async def get_auth_context(
+    request: Request,
+    token: str = Depends(security_scheme),
+    db: AsyncSession = Depends(get_db)
+) -> AuthContext:
+    """Authenticate request and return AuthContext with user + auth metadata."""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    
-    # Get the original authorization header to determine scheme
-    # We need to check if this was a "Token" or "Bearer" request
-    # Since security_scheme strips the scheme, we need to look at the raw header
-    # But we don't have access to the request here... 
-    # Alternative: try JWT first, if that fails, try API token
-    
+
     # Try JWT first
-    user = None
     try:
         payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
         username: str = payload.get("sub")
         if username:
             result = await db.execute(select(User).where(User.username == username))
             user = result.scalar_one_or_none()
+            if user and user.is_active:
+                context = AuthContext(
+                    user=user,
+                    auth_method="jwt",
+                    token_scopes=[],
+                )
+                request.state.auth_context = context
+                return context
     except JWTError:
         pass
-    
-    if user:
-        return user
-    
-    # Try API token
+
+    # Try API token with fast prefix lookup
+    token_prefix = token[:16] if len(token) >= 16 else token
+
+    # Fast path: query by prefix
     result = await db.execute(
         select(ApiToken).where(
-            ApiToken.is_active == True,
-            ApiToken.revoked_at == None
+            and_(
+                ApiToken.token_prefix == token_prefix,
+                ApiToken.is_active == True,
+                ApiToken.revoked_at == None,
+            )
         )
     )
     api_tokens = result.scalars().all()
-    
+
     for api_token in api_tokens:
         if verify_password(token, api_token.token_hash):
-            # Check expiration
             if api_token.expires_at and api_token.expires_at < datetime.utcnow():
                 raise credentials_exception
-            
+
             # Update usage
             api_token.last_used_at = datetime.utcnow()
             api_token.usage_count = (api_token.usage_count or 0) + 1
             await db.commit()
-            
-            # Return the associated user
+
             result = await db.execute(select(User).where(User.id == api_token.user_id))
             user = result.scalar_one_or_none()
             if user and user.is_active:
-                return user
+                context = AuthContext(
+                    user=user,
+                    auth_method="api_token",
+                    token_scopes=api_token.scopes or [],
+                    api_token_id=str(api_token.id),
+                )
+                request.state.auth_context = context
+                return context
             raise credentials_exception
-    
+
     raise credentials_exception
+
+
+async def get_current_user(auth_context: AuthContext = Depends(get_auth_context)) -> User:
+    """Return the authenticated user (backward-compatible with existing endpoints)."""
+    return auth_context.user
+
+
+def require_scopes(*required_scopes: str):
+    """Dependency factory that enforces API token scope restrictions.
+
+    JWT-authenticated requests bypass scope checks (full user permissions).
+    API token requests must have at least one of the required scopes.
+
+    Usage:
+        @router.get("/servers")
+        async def list_servers(current_user: User = Depends(get_current_user)):
+            # Check scopes inline
+            checker = ScopeChecker(current_user, request)
+            checker.require("servers:read")
+            ...
+    """
+    async def checker(request: Request):
+        auth_context = getattr(request.state, "auth_context", None)
+        if not auth_context:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Not authenticated",
+            )
+
+        # JWT auth bypasses scope checks
+        if auth_context.auth_method == "jwt":
+            return
+
+        # API token auth must match required scopes
+        token_scopes = set(auth_context.token_scopes or [])
+
+        for scope in required_scopes:
+            if scope in token_scopes:
+                continue
+            # Support wildcard patterns like "servers:*"
+            if ":" in scope:
+                prefix = scope.split(":")[0]
+                if f"{prefix}:*" in token_scopes:
+                    continue
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Insufficient scope. Required: {scope}",
+            )
+
+    return checker
 
 
 @router.post("/login")

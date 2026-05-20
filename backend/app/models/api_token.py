@@ -12,6 +12,7 @@ class ApiToken(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String(255), nullable=False)
     token_hash = Column(String(255), nullable=False, index=True)
+    token_prefix = Column(String(16), nullable=True, index=True)
     scopes = Column(JSON, default=list)
     
     # Usage tracking

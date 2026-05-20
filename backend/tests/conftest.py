@@ -197,3 +197,31 @@ async def admin_token(admin_user):
     """Generate JWT token for admin user."""
     from app.api.auth import create_access_token
     return create_access_token(data={"sub": admin_user.username})
+
+
+@pytest_asyncio.fixture
+async def api_token(db_session, test_user):
+    """Create an API token for test user with default scopes."""
+    from app.models.api_token import ApiToken
+    from app.api.auth import get_password_hash
+    import secrets
+
+    raw_token = f"nukelab_{secrets.token_urlsafe(32)}"
+    token_hash = get_password_hash(raw_token)
+    token_prefix = raw_token[:16]
+
+    token = ApiToken(
+        user_id=test_user.id,
+        name="Test API Token",
+        token_hash=token_hash,
+        token_prefix=token_prefix,
+        scopes=["servers:read", "servers:start"],
+        is_active=True,
+    )
+    db_session.add(token)
+    await db_session.commit()
+    await db_session.refresh(token)
+
+    # Return both the DB object and the raw token for tests to use
+    from types import SimpleNamespace
+    return SimpleNamespace(db_token=token, raw_token=raw_token)

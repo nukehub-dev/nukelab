@@ -1,22 +1,49 @@
 import secrets
 from datetime import datetime, timedelta
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, HTTPException, status, Request
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
-from app.api.auth import get_current_user, get_password_hash, verify_password
+from app.api.auth import get_current_user, get_password_hash, verify_password, limiter, require_scopes
 from app.db.session import get_db
 from app.models.user import User
 from app.models.api_token import ApiToken
 
 router = APIRouter()
 
+# Valid token scopes for API token access control
+VALID_TOKEN_SCOPES = {
+    "servers:read",
+    "servers:start",
+    "servers:stop",
+    "servers:delete",
+    "volumes:read",
+    "volumes:manage",
+    "workspaces:read",
+    "workspaces:manage",
+    "user:read",
+    "user:update",
+    "credits:read",
+    "notifications:read",
+    "notifications:write",
+}
+
 
 class TokenCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255, description="Token name (e.g., 'VS Code', 'GitHub Actions')")
     scopes: List[str] = Field(default=["servers:read", "servers:start"], description="Permission scopes")
     expires_days: Optional[int] = Field(default=30, ge=1, le=365, description="Token expiration in days")
+
+    @field_validator('scopes', mode='before')
+    @classmethod
+    def validate_scope(cls, v):
+        if not isinstance(v, list):
+            raise ValueError("scopes must be a list")
+        for scope in v:
+            if scope not in VALID_TOKEN_SCOPES:
+                raise ValueError(f"Invalid scope: {scope}. Valid scopes: {', '.join(sorted(VALID_TOKEN_SCOPES))}")
+        return v
 
 
 class TokenResponse(BaseModel):
@@ -48,7 +75,9 @@ async def list_tokens(
 
 
 @router.post("", response_model=TokenCreateResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute")
 async def create_token(
+    request: Request,
     token_data: TokenCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
@@ -57,25 +86,27 @@ async def create_token(
     # Generate a secure random token
     raw_token = f"nukelab_{secrets.token_urlsafe(32)}"
     token_hash = get_password_hash(raw_token)
-    
+    token_prefix = raw_token[:16]
+
     # Calculate expiration
     expires_at = None
     if token_data.expires_days:
         expires_at = datetime.utcnow() + timedelta(days=token_data.expires_days)
-    
+
     # Create token record
     api_token = ApiToken(
         user_id=current_user.id,
         name=token_data.name,
         token_hash=token_hash,
+        token_prefix=token_prefix,
         scopes=token_data.scopes,
         expires_at=expires_at,
     )
-    
+
     db.add(api_token)
     await db.commit()
     await db.refresh(api_token)
-    
+
     # Return token with the raw token (only time it's shown)
     response = api_token.to_dict()
     response["token"] = raw_token
@@ -98,23 +129,25 @@ async def get_token(
         )
     )
     token = result.scalar_one_or_none()
-    
+
     if not token:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Token not found"
         )
-    
+
     return token.to_dict()
 
 
 @router.delete("/{token_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("30/minute")
 async def revoke_token(
+    request: Request,
     token_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Revoke (delete) an API token"""
+    """Revoke (soft-delete) an API token"""
     result = await db.execute(
         select(ApiToken).where(
             and_(
@@ -124,22 +157,24 @@ async def revoke_token(
         )
     )
     token = result.scalar_one_or_none()
-    
+
     if not token:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Token not found"
         )
-    
+
     token.is_active = False
     token.revoked_at = datetime.utcnow()
     await db.commit()
-    
+
     return None
 
 
 @router.delete("/{token_id}/permanent", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("30/minute")
 async def permanently_delete_token(
+    request: Request,
     token_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
@@ -154,21 +189,23 @@ async def permanently_delete_token(
         )
     )
     token = result.scalar_one_or_none()
-    
+
     if not token:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Token not found"
         )
-    
+
     await db.delete(token)
     await db.commit()
-    
+
     return None
 
 
 @router.post("/{token_id}/regenerate", response_model=TokenCreateResponse)
+@limiter.limit("5/minute")
 async def regenerate_token(
+    request: Request,
     token_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
@@ -183,33 +220,35 @@ async def regenerate_token(
         )
     )
     old_token = result.scalar_one_or_none()
-    
+
     if not old_token:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Token not found"
         )
-    
+
     # Revoke old token
     old_token.is_active = False
     old_token.revoked_at = datetime.utcnow()
-    
-    # Create new token with same settings
+
+    # Create new token with same settings but fresh expiration
     raw_token = f"nukelab_{secrets.token_urlsafe(32)}"
     token_hash = get_password_hash(raw_token)
-    
+    token_prefix = raw_token[:16]
+
     new_token = ApiToken(
         user_id=current_user.id,
         name=old_token.name,
         token_hash=token_hash,
+        token_prefix=token_prefix,
         scopes=old_token.scopes,
-        expires_at=old_token.expires_at,
+        expires_at=datetime.utcnow() + timedelta(days=30) if old_token.expires_at else None,
     )
-    
+
     db.add(new_token)
     await db.commit()
     await db.refresh(new_token)
-    
+
     response = new_token.to_dict()
     response["token"] = raw_token
     return response
@@ -231,13 +270,13 @@ async def get_token_usage(
         )
     )
     token = result.scalar_one_or_none()
-    
+
     if not token:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Token not found"
         )
-    
+
     return {
         "token_id": str(token.id),
         "name": token.name,
