@@ -215,7 +215,7 @@ async def api_token(db_session, test_user):
         name="Test API Token",
         token_hash=token_hash,
         token_prefix=token_prefix,
-        scopes=["servers:read", "servers:start"],
+        scopes=["servers:read", "servers:start", "user:read"],
         is_active=True,
     )
     db_session.add(token)

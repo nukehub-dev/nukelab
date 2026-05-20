@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
-from app.api.auth import get_current_user, get_password_hash, verify_password, limiter, require_scopes
+from app.api.auth import get_current_user, get_password_hash, verify_password, limiter, require_scopes, require_jwt_auth
 from app.db.session import get_db
 from app.models.user import User
 from app.models.api_token import ApiToken
@@ -14,19 +14,21 @@ router = APIRouter()
 
 # Valid token scopes for API token access control
 VALID_TOKEN_SCOPES = {
-    "servers:read",
-    "servers:start",
-    "servers:stop",
-    "servers:delete",
-    "volumes:read",
-    "volumes:manage",
-    "workspaces:read",
-    "workspaces:manage",
-    "user:read",
-    "user:update",
+    "servers:read", "servers:start", "servers:stop", "servers:delete", "servers:manage",
+    "volumes:read", "volumes:manage",
+    "workspaces:read", "workspaces:manage",
+    "user:read", "user:update",
     "credits:read",
-    "notifications:read",
-    "notifications:write",
+    "notifications:read", "notifications:write",
+    "admin:read", "admin:write",
+    "analytics:read",
+    "metrics:read", "metrics:write",
+    "alerts:read", "alerts:manage",
+    "preferences:read", "preferences:write",
+    "schedules:read", "schedules:write",
+    "environments:read", "environments:write",
+    "plans:read", "quotas:read",
+    "bulk:execute", "dashboard:read",
 }
 
 
@@ -64,6 +66,7 @@ class TokenCreateResponse(TokenResponse):
 @router.get("", response_model=List[TokenResponse])
 async def list_tokens(
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
     """List all API tokens for the current user"""
@@ -80,6 +83,7 @@ async def create_token(
     request: Request,
     token_data: TokenCreate,
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new API token. The token value is only returned once!"""
@@ -117,6 +121,7 @@ async def create_token(
 async def get_token(
     token_id: str,
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
     """Get a specific token by ID"""
@@ -145,6 +150,7 @@ async def revoke_token(
     request: Request,
     token_id: str,
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
     """Revoke (soft-delete) an API token"""
@@ -177,6 +183,7 @@ async def permanently_delete_token(
     request: Request,
     token_id: str,
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
     """Permanently delete an API token from the database"""
@@ -208,6 +215,7 @@ async def regenerate_token(
     request: Request,
     token_id: str,
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
     """Regenerate an API token (revokes old one, creates new with same settings)"""
@@ -258,6 +266,7 @@ async def regenerate_token(
 async def get_token_usage(
     token_id: str,
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
     """Get usage statistics for a token"""

@@ -219,13 +219,16 @@ def require_scopes(*required_scopes: str):
 
     Usage:
         @router.get("/servers")
-        async def list_servers(current_user: User = Depends(get_current_user)):
-            # Check scopes inline
-            checker = ScopeChecker(current_user, request)
-            checker.require("servers:read")
+        async def list_servers(
+            current_user: User = Depends(get_current_user),
+            _ = Depends(require_scopes("servers:read")),
+        ):
             ...
     """
-    async def checker(request: Request):
+    async def checker(
+        request: Request,
+        current_user: User = Depends(get_current_user),
+    ):
         auth_context = getattr(request.state, "auth_context", None)
         if not auth_context:
             raise HTTPException(
@@ -251,6 +254,40 @@ def require_scopes(*required_scopes: str):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Insufficient scope. Required: {scope}",
+            )
+
+    return checker
+
+
+def require_jwt_auth():
+    """Dependency factory that rejects API token authentication.
+
+    Token management and other sensitive operations should only be
+    accessible via JWT/session authentication, not scoped API tokens.
+
+    Usage:
+        @router.post("/tokens")
+        async def create_token(
+            current_user: User = Depends(get_current_user),
+            _ = Depends(require_jwt_auth()),
+        ):
+            ...
+    """
+    async def checker(
+        request: Request,
+        current_user: User = Depends(get_current_user),
+    ):
+        auth_context = getattr(request.state, "auth_context", None)
+        if not auth_context:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Not authenticated",
+            )
+
+        if auth_context.auth_method != "jwt":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="JWT authentication required for this operation",
             )
 
     return checker
@@ -423,7 +460,10 @@ async def verify_auth(request: Request, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/me")
-async def get_me(current_user: User = Depends(get_current_user)):
+async def get_me(
+    current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("user:read")),
+):
     return {
         "id": str(current_user.id),
         "username": current_user.username,
@@ -752,6 +792,8 @@ async def oauth_callback(
 @router.post("/oauth/sync")
 async def oauth_sync(
     current_user: User = Depends(get_current_user),
+    _jwt = Depends(require_jwt_auth()),
+    _scopes = Depends(require_scopes("user:update")),
     db: AsyncSession = Depends(get_db)
 ):
     """Sync user profile from OAuth provider using stored refresh token."""

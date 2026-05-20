@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
-from app.api.auth import get_current_user
+from app.api.auth import get_current_user, require_scopes
 from app.core.permissions import Permission
 from app.dependencies import PermissionChecker
 from app.db.session import get_db
@@ -40,6 +40,7 @@ class ScheduleUpdateRequest(BaseModel):
 async def list_schedules(
     server_id: str,
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("schedules:read")),
     db: AsyncSession = Depends(get_db)
 ):
     """List schedules for a server."""
@@ -59,6 +60,7 @@ async def create_schedule(
     server_id: str,
     request: ScheduleCreateRequest,
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("schedules:write")),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a schedule for a server."""
@@ -96,6 +98,7 @@ async def update_schedule(
     schedule_id: str,
     request: ScheduleUpdateRequest,
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("schedules:write")),
     db: AsyncSession = Depends(get_db)
 ):
     """Update a schedule."""
@@ -129,6 +132,7 @@ async def delete_schedule(
     server_id: str,
     schedule_id: str,
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("schedules:write")),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete a schedule."""

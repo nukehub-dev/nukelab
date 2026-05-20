@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
-from app.api.auth import get_current_user
+from app.api.auth import get_current_user, require_scopes
 from app.core.permissions import Permission
 from app.dependencies import PermissionChecker
 from app.db.session import get_db
@@ -64,6 +64,7 @@ class TransferOwnershipRequest(BaseModel):
 @router.get("/")
 async def list_workspaces(
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("workspaces:read")),
     db: AsyncSession = Depends(get_db)
 ):
     """List workspaces user has access to (owned, member, or invited)."""
@@ -90,6 +91,7 @@ async def list_workspaces(
 async def create_workspace(
     request: CreateWorkspaceRequest,
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("workspaces:manage")),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new shared workspace."""
@@ -108,6 +110,7 @@ async def create_workspace(
 async def get_workspace(
     workspace_id: str,
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("workspaces:read")),
     db: AsyncSession = Depends(get_db)
 ):
     """Get workspace details. Must be owner, member, or invited user."""
@@ -144,6 +147,7 @@ async def update_workspace(
     workspace_id: str,
     request: UpdateWorkspaceRequest,
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("workspaces:manage")),
     db: AsyncSession = Depends(get_db)
 ):
     """Update workspace. Must be owner or admin member."""
@@ -190,6 +194,7 @@ async def update_workspace(
 async def delete_workspace(
     workspace_id: str,
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("workspaces:manage")),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete workspace. Must be owner."""
@@ -215,6 +220,7 @@ async def delete_workspace(
 async def leave_workspace(
     workspace_id: str,
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("workspaces:manage")),
     db: AsyncSession = Depends(get_db)
 ):
     """Leave a workspace. Owner must transfer ownership first."""
@@ -255,6 +261,7 @@ async def transfer_ownership(
     workspace_id: str,
     request: TransferOwnershipRequest,
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("workspaces:manage")),
     db: AsyncSession = Depends(get_db)
 ):
     """Transfer workspace ownership to another member."""
@@ -300,6 +307,7 @@ async def get_workspace_activity(
     page: int = 1,
     limit: int = 20,
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("workspaces:read")),
     db: AsyncSession = Depends(get_db)
 ):
     """Get activity feed for a workspace. Must be member or owner."""
@@ -386,6 +394,7 @@ async def add_volume_to_workspace(
     workspace_id: str,
     request: AddVolumeRequest,
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("workspaces:manage")),
     db: AsyncSession = Depends(get_db)
 ):
     """Add a volume to workspace. Must be owner or admin."""
@@ -425,6 +434,7 @@ async def remove_volume_from_workspace(
     workspace_id: str,
     volume_id: str,
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("workspaces:manage")),
     db: AsyncSession = Depends(get_db)
 ):
     """Remove a volume from workspace. Must be owner or admin."""
@@ -451,6 +461,7 @@ async def update_volume_role(
     volume_id: str,
     request: UpdateVolumeRoleRequest,
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("workspaces:manage")),
     db: AsyncSession = Depends(get_db)
 ):
     """Update volume role in workspace. Must be owner or admin."""
@@ -481,6 +492,7 @@ async def invite_member(
     workspace_id: str,
     request: InviteMemberRequest,
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("workspaces:manage")),
     db: AsyncSession = Depends(get_db)
 ):
     """Invite a user to workspace. Must be owner or admin."""
@@ -539,6 +551,7 @@ async def accept_invitation(
     workspace_id: str,
     invitation_id: str,
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("workspaces:manage")),
     db: AsyncSession = Depends(get_db)
 ):
     """Accept a workspace invitation."""
@@ -571,6 +584,7 @@ async def reject_invitation(
     workspace_id: str,
     invitation_id: str,
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("workspaces:manage")),
     db: AsyncSession = Depends(get_db)
 ):
     """Reject a workspace invitation."""
@@ -603,6 +617,7 @@ async def cancel_invitation(
     workspace_id: str,
     invitation_id: str,
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("workspaces:manage")),
     db: AsyncSession = Depends(get_db)
 ):
     """Cancel a workspace invitation. Must be owner, admin, or the inviter."""
@@ -624,6 +639,7 @@ async def cancel_invitation(
 async def list_invitations(
     workspace_id: str,
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("workspaces:read")),
     db: AsyncSession = Depends(get_db)
 ):
     """List pending invitations for a workspace. Must be owner or admin."""
@@ -651,6 +667,7 @@ async def list_workspace_members(
     search: Optional[str] = None,
     role: Optional[str] = None,
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("workspaces:read")),
     db: AsyncSession = Depends(get_db)
 ):
     """List workspace members with pagination. Must be member or owner."""
@@ -695,6 +712,7 @@ async def list_workspace_volumes(
     sort_order: str = "desc",
     search: Optional[str] = None,
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("workspaces:read")),
     db: AsyncSession = Depends(get_db)
 ):
     """List workspace volumes with pagination. Must be member or owner."""
@@ -734,6 +752,7 @@ async def remove_member(
     workspace_id: str,
     user_id: str,
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("workspaces:manage")),
     db: AsyncSession = Depends(get_db)
 ):
     """Remove a member from workspace. Must be owner or admin."""
@@ -767,6 +786,7 @@ async def update_member_role(
     user_id: str,
     request: UpdateMemberRequest,
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("workspaces:manage")),
     db: AsyncSession = Depends(get_db)
 ):
     """Update member role. Must be owner or admin."""

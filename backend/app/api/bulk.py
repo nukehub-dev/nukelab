@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from app.api.auth import get_current_user
+from app.api.auth import get_current_user, require_scopes
 from app.core.permissions import Permission
 from app.core.security import has_permission
 from app.dependencies import require_permissions
@@ -35,8 +35,9 @@ class BulkActionResponse(BaseModel):
 @router.post("/servers/bulk-action", response_model=BulkActionResponse)
 async def bulk_server_action(
     request: BulkServerActionRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("bulk:execute")),
+    db: AsyncSession = Depends(get_db)
 ):
     """Perform bulk action on servers"""
     

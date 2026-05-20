@@ -5,7 +5,7 @@ Analytics API endpoints.
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.auth import get_current_user
+from app.api.auth import get_current_user, require_scopes
 from app.core.permissions import Permission
 from app.dependencies import PermissionChecker
 from app.db.session import get_db
@@ -20,6 +20,7 @@ async def get_user_usage(
     user_id: str,
     days: int = 30,
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("analytics:read")),
     db: AsyncSession = Depends(get_db)
 ):
     """Get usage trends for a user."""
@@ -36,6 +37,7 @@ async def get_user_usage(
 async def get_global_usage(
     days: int = 30,
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("analytics:read")),
     db: AsyncSession = Depends(get_db)
 ):
     """Get platform-wide usage statistics. Admin only."""
@@ -51,6 +53,7 @@ async def get_top_consumers(
     days: int = 30,
     limit: int = 10,
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("analytics:read")),
     db: AsyncSession = Depends(get_db)
 ):
     """Get top credit consumers. Admin only."""
@@ -64,6 +67,7 @@ async def get_top_consumers(
 @router.get("/environments")
 async def get_environment_usage(
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("analytics:read")),
     db: AsyncSession = Depends(get_db)
 ):
     """Get usage by environment. Admin only."""
@@ -77,6 +81,7 @@ async def get_environment_usage(
 @router.get("/plans")
 async def get_plan_usage(
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("analytics:read")),
     db: AsyncSession = Depends(get_db)
 ):
     """Get usage by plan. Admin only."""

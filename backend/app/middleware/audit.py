@@ -136,6 +136,17 @@ class AuditMiddleware(BaseHTTPMiddleware):
         except JWTError:
             return None
 
+    def _get_auth_info(self, request: Request) -> Dict[str, Any]:
+        """Extract authentication method and scopes from request state."""
+        auth_context = getattr(request.state, 'auth_context', None)
+        if not auth_context:
+            return {"auth_method": "anonymous"}
+        info = {"auth_method": auth_context.auth_method}
+        if auth_context.auth_method == "api_token":
+            info["token_scopes"] = auth_context.token_scopes
+            info["api_token_id"] = auth_context.api_token_id
+        return info
+
     async def _log_activity(
         self,
         request: Request,
@@ -188,6 +199,9 @@ class AuditMiddleware(BaseHTTPMiddleware):
             "path": path,
             "status_code": response.status_code,
         }
+
+        # Enrich with auth info
+        details.update(self._get_auth_info(request))
 
         # Enrich with actor info if available
         if user:

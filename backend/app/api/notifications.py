@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func
 from datetime import datetime
 
-from app.api.auth import get_current_user
+from app.api.auth import get_current_user, require_scopes
 from app.db.session import get_db
 from app.models.user import User
 from app.models.notification import Notification
@@ -64,7 +64,8 @@ async def list_notifications(
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("notifications:read")),
 ):
     """Get current user's notifications"""
     
@@ -108,7 +109,8 @@ async def list_notifications(
 @router.get("/unread-count")
 async def get_unread_count(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("notifications:read")),
 ):
     """Get unread notification count"""
     query = select(func.count()).where(
@@ -124,7 +126,8 @@ async def get_unread_count(
 async def mark_as_read(
     notification_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("notifications:write")),
 ):
     """Mark a notification as read"""
     result = await db.execute(
@@ -150,7 +153,8 @@ async def mark_as_read(
 @router.put("/read-all")
 async def mark_all_as_read(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("notifications:write")),
 ):
     """Mark all notifications as read"""
     result = await db.execute(
@@ -177,7 +181,8 @@ async def mark_all_as_read(
 async def delete_notification(
     notification_id: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("notifications:write")),
 ):
     """Delete a notification"""
     result = await db.execute(
@@ -209,6 +214,7 @@ async def create_notification(
     severity: str = "info",
     action_url: Optional[str] = None,
     extra_data: Optional[dict] = None,
+    _ = Depends(require_scopes("notifications:write")),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):

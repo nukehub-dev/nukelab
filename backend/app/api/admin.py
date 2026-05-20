@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, desc
 
-from app.api.auth import get_current_user
+from app.api.auth import get_current_user, require_scopes, require_jwt_auth
 from app.services.notification_service import broadcast_server_status_change
 from app.core.permissions import Permission
 from app.dependencies import require_permissions, PermissionChecker
@@ -49,6 +49,7 @@ class BulkCreditGrantRequest(BaseModel):
 @router.get("/stats")
 async def get_admin_stats(
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _scopes = Depends(require_scopes("admin:read")),
     db: AsyncSession = Depends(get_db)
 ):
     """Get admin dashboard statistics"""
@@ -147,6 +148,7 @@ async def admin_list_users(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _scopes = Depends(require_scopes("admin:read")),
     db: AsyncSession = Depends(get_db)
 ):
     """List all users with admin view"""
@@ -181,6 +183,7 @@ async def admin_list_users(
 async def bulk_user_action(
     request: BulkActionRequest,
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _scopes = Depends(require_scopes("admin:write")),
     db: AsyncSession = Depends(get_db)
 ):
     """Perform bulk action on users"""
@@ -218,6 +221,7 @@ async def admin_list_servers(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _scopes = Depends(require_scopes("admin:read")),
     db: AsyncSession = Depends(get_db)
 ):
     """List all servers (admin view)"""
@@ -269,6 +273,7 @@ async def admin_list_servers(
 async def bulk_server_action(
     request: BulkServerActionRequest,
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _scopes = Depends(require_scopes("admin:write")),
     db: AsyncSession = Depends(get_db)
 ):
     """Perform bulk action on servers"""
@@ -321,6 +326,7 @@ async def bulk_server_action(
 @router.get("/credits/summary")
 async def admin_credit_summary(
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _scopes = Depends(require_scopes("admin:read")),
     db: AsyncSession = Depends(get_db)
 ):
     """Get credit system summary"""
@@ -379,6 +385,7 @@ async def admin_credit_summary(
 async def bulk_grant_credits(
     request: BulkCreditGrantRequest,
     current_user: User = Depends(require_permissions(Permission.CREDITS_GRANT)),
+    _scopes = Depends(require_scopes("admin:write")),
     db: AsyncSession = Depends(get_db)
 ):
     """Grant credits to multiple users"""
@@ -415,6 +422,7 @@ async def get_activity_logs(
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=100),
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _scopes = Depends(require_scopes("admin:read")),
     db: AsyncSession = Depends(get_db)
 ):
     """Get activity logs with filtering"""
@@ -462,6 +470,7 @@ async def get_activity_logs(
 @router.get("/system/health")
 async def admin_system_health(
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _scopes = Depends(require_scopes("admin:read")),
     db: AsyncSession = Depends(get_db)
 ):
     """Get system health status"""
@@ -492,10 +501,11 @@ async def export_activity_logs(
     to_date: Optional[datetime] = Query(None),
     limit: int = Query(1000, ge=1, le=10000),
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _scopes = Depends(require_scopes("admin:read")),
     db: AsyncSession = Depends(get_db)
 ):
     """Export activity logs (admin only)"""
-    from app.api.auth import get_current_user
+    from app.api.auth import get_current_user, require_scopes, require_jwt_auth
     
     query = select(ActivityLog)
     
@@ -552,7 +562,8 @@ async def export_activity_logs(
 
 @router.get("/permissions")
 async def get_permission_matrix(
-    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS))
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _scopes = Depends(require_scopes("admin:read")),
 ):
     """Get current role-permission matrix"""
     matrix = {}
@@ -574,7 +585,8 @@ class UpdateRolePermissionsRequest(BaseModel):
 async def update_role_permissions(
     role: str,
     request: UpdateRolePermissionsRequest,
-    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS))
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _scopes = Depends(require_scopes("admin:write")),
 ):
     """Update permissions for a role (except super_admin which always has ALL)"""
     if role == "super_admin":
@@ -629,7 +641,8 @@ class EmailTestRequest(BaseModel):
 
 @router.get("/email-config", response_model=EmailConfigResponse)
 async def get_email_config(
-    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS))
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _scopes = Depends(require_scopes("admin:read")),
 ):
     """Get current email/SMTP configuration (password hidden)"""
     import logging
@@ -651,7 +664,8 @@ async def get_email_config(
 @router.post("/email-test")
 async def test_email(
     request: EmailTestRequest,
-    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS))
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _scopes = Depends(require_scopes("admin:write")),
 ):
     """Send a test email to verify SMTP configuration"""
     from app.services.email_service import EmailService
@@ -712,7 +726,8 @@ async def test_email(
 
 @router.get("/email-status")
 async def get_email_status(
-    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS))
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _scopes = Depends(require_scopes("admin:read")),
 ):
     """Check SMTP connectivity status"""
     from app.services.email_service import EmailService

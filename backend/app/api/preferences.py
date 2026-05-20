@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.auth import get_current_user
+from app.api.auth import get_current_user, require_scopes
 from app.config import settings
 from app.db.session import get_db
 from app.models.user import User
@@ -85,6 +85,7 @@ def get_default_preferences() -> dict:
 @router.get("/")
 async def get_preferences(
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("preferences:read")),
     db: AsyncSession = Depends(get_db)
 ):
     """Get current user's preferences"""
@@ -101,6 +102,7 @@ async def get_preferences(
 async def update_preferences(
     request: PreferencesUpdateRequest,
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("preferences:write")),
     db: AsyncSession = Depends(get_db)
 ):
     """Update current user's preferences"""
@@ -165,6 +167,7 @@ async def update_preferences(
 @router.delete("/")
 async def reset_preferences(
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("preferences:write")),
     db: AsyncSession = Depends(get_db)
 ):
     """Reset preferences to defaults"""

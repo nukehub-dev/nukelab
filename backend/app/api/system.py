@@ -12,6 +12,7 @@ from app.core.permissions import Permission
 from app.models.user import User
 from app.models.server import Server
 from app.config import settings
+from app.api.auth import require_scopes
 
 router = APIRouter(tags=["system"])
 
@@ -39,7 +40,8 @@ async def health_check():
 
 @router.get("/config")
 async def get_system_config(
-    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS))
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _scopes = Depends(require_scopes("admin:read")),
 ):
     """Get system configuration (admin only)"""
     return {
@@ -54,7 +56,8 @@ async def get_system_config(
 @router.put("/config")
 async def update_system_config(
     config: SystemConfigUpdate,
-    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS))
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _scopes = Depends(require_scopes("admin:write")),
 ):
     """Update system configuration (admin only)"""
     updates = {}
@@ -81,7 +84,8 @@ async def update_system_config(
 async def toggle_maintenance(
     enabled: bool,
     message: Optional[str] = None,
-    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS))
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _scopes = Depends(require_scopes("admin:write")),
 ):
     """Toggle maintenance mode (admin only)"""
     settings.maintenance_mode = enabled
@@ -100,6 +104,7 @@ async def toggle_maintenance(
 @router.get("/stats")
 async def get_system_stats(
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _scopes = Depends(require_scopes("admin:read")),
     db: AsyncSession = Depends(get_db)
 ):
     """Get system statistics (admin only)"""

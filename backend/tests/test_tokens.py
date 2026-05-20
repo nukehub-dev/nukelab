@@ -385,3 +385,273 @@ class TestScopeEnforcement:
             headers={"Authorization": f"Bearer {raw_token}"},
         )
         assert me_resp.status_code == 200
+
+
+class TestJwtOnlyEndpoints:
+    """Token management should reject API token authentication."""
+
+    @pytest.mark.asyncio
+    async def test_api_token_cannot_create_token(self, client, api_token):
+        """API token should be rejected for POST /tokens."""
+        response = await client.post(
+            "/api/tokens",
+            json={"name": "Hacked", "scopes": ["servers:read"]},
+            headers={"Authorization": f"Bearer {api_token.raw_token}"},
+        )
+        assert response.status_code == 403
+        assert "JWT authentication required" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_api_token_cannot_list_tokens(self, client, api_token):
+        """API token should be rejected for GET /tokens."""
+        response = await client.get(
+            "/api/tokens",
+            headers={"Authorization": f"Bearer {api_token.raw_token}"},
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_api_token_cannot_revoke_token(self, client, api_token):
+        """API token should be rejected for DELETE /tokens/{id}."""
+        response = await client.delete(
+            f"/api/tokens/{api_token.db_token.id}",
+            headers={"Authorization": f"Bearer {api_token.raw_token}"},
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_api_token_cannot_regenerate_token(self, client, api_token):
+        """API token should be rejected for POST /tokens/{id}/regenerate."""
+        response = await client.post(
+            f"/api/tokens/{api_token.db_token.id}/regenerate",
+            headers={"Authorization": f"Bearer {api_token.raw_token}"},
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_jwt_can_access_token_management(self, client, user_token):
+        """JWT should be allowed for token management."""
+        response = await client.get(
+            "/api/tokens",
+            headers={"Authorization": f"Bearer {user_token}"},
+        )
+        assert response.status_code == 200
+
+
+class TestScopedEndpointAccess:
+    """API token scope enforcement on real endpoints."""
+
+    @pytest.mark.asyncio
+    async def test_api_token_without_servers_read_blocked(self, client, db_session, test_user):
+        """Token without servers:read should be blocked from /servers."""
+        from app.models.api_token import ApiToken
+        from app.api.auth import get_password_hash
+        import secrets
+
+        raw_token = f"nukelab_{secrets.token_urlsafe(32)}"
+        token_hash = get_password_hash(raw_token)
+        token_prefix = raw_token[:16]
+
+        narrow_token = ApiToken(
+            user_id=test_user.id,
+            name="No Servers Token",
+            token_hash=token_hash,
+            token_prefix=token_prefix,
+            scopes=["user:read"],
+            is_active=True,
+        )
+        db_session.add(narrow_token)
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/servers/",
+            headers={"Authorization": f"Bearer {raw_token}"},
+            follow_redirects=False,
+        )
+        assert response.status_code == 403
+        assert "servers:read" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_api_token_with_servers_read_allowed(self, client, api_token):
+        """Token with servers:read should access /servers."""
+        response = await client.get(
+            "/api/servers/",
+            headers={"Authorization": f"Bearer {api_token.raw_token}"},
+            follow_redirects=False,
+        )
+        # 200 or 307 redirect are both acceptable
+        assert response.status_code in [200, 307]
+
+    @pytest.mark.asyncio
+    async def test_jwt_always_has_full_access(self, client, user_token):
+        """JWT should never be blocked by scope checks."""
+        response = await client.get(
+            "/api/servers/",
+            headers={"Authorization": f"Bearer {user_token}"},
+            follow_redirects=False,
+        )
+        assert response.status_code in [200, 307]
+
+
+class TestAdminEndpointScopeAccess:
+    """API token scope enforcement on admin endpoints."""
+
+    @pytest.mark.asyncio
+    async def test_api_token_with_admin_read_can_access_admin_stats(self, client, db_session, admin_user):
+        """Admin API token with admin:read should access /admin/stats."""
+        from app.models.api_token import ApiToken
+        from app.api.auth import get_password_hash
+        import secrets
+
+        raw_token = f"nukelab_{secrets.token_urlsafe(32)}"
+        token_hash = get_password_hash(raw_token)
+        token_prefix = raw_token[:16]
+
+        admin_api_token = ApiToken(
+            user_id=admin_user.id,
+            name="Admin Read Token",
+            token_hash=token_hash,
+            token_prefix=token_prefix,
+            scopes=["admin:read"],
+            is_active=True,
+        )
+        db_session.add(admin_api_token)
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/admin/stats",
+            headers={"Authorization": f"Bearer {raw_token}"},
+        )
+        # Should succeed because admin user has admin permissions + token has admin:read
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_api_token_without_admin_read_blocked_from_admin_stats(self, client, db_session, admin_user):
+        """Admin API token without admin:read should be blocked from /admin/stats."""
+        from app.models.api_token import ApiToken
+        from app.api.auth import get_password_hash
+        import secrets
+
+        raw_token = f"nukelab_{secrets.token_urlsafe(32)}"
+        token_hash = get_password_hash(raw_token)
+        token_prefix = raw_token[:16]
+
+        # Token has only user-level scopes, no admin scopes
+        narrow_token = ApiToken(
+            user_id=admin_user.id,
+            name="No Admin Token",
+            token_hash=token_hash,
+            token_prefix=token_prefix,
+            scopes=["user:read", "servers:read"],
+            is_active=True,
+        )
+        db_session.add(narrow_token)
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/admin/stats",
+            headers={"Authorization": f"Bearer {raw_token}"},
+        )
+        assert response.status_code == 403
+        assert "admin:read" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_api_token_with_admin_read_blocked_from_admin_write(self, client, db_session, admin_user):
+        """Admin API token with only admin:read should be blocked from write endpoints."""
+        from app.models.api_token import ApiToken
+        from app.api.auth import get_password_hash
+        import secrets
+
+        raw_token = f"nukelab_{secrets.token_urlsafe(32)}"
+        token_hash = get_password_hash(raw_token)
+        token_prefix = raw_token[:16]
+
+        admin_read_token = ApiToken(
+            user_id=admin_user.id,
+            name="Admin Read Only Token",
+            token_hash=token_hash,
+            token_prefix=token_prefix,
+            scopes=["admin:read"],
+            is_active=True,
+        )
+        db_session.add(admin_read_token)
+        await db_session.commit()
+
+        response = await client.post(
+            "/api/admin/users/bulk-action",
+            headers={"Authorization": f"Bearer {raw_token}"},
+            json={"action": "disable", "user_ids": []},
+        )
+        # Should be blocked because write endpoint requires admin:write
+        assert response.status_code == 403
+        assert "admin:write" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_api_token_with_admin_write_can_access_write_endpoint(self, client, db_session, admin_user):
+        """Admin API token with admin:write should access write endpoints."""
+        from app.models.api_token import ApiToken
+        from app.api.auth import get_password_hash
+        import secrets
+
+        raw_token = f"nukelab_{secrets.token_urlsafe(32)}"
+        token_hash = get_password_hash(raw_token)
+        token_prefix = raw_token[:16]
+
+        admin_write_token = ApiToken(
+            user_id=admin_user.id,
+            name="Admin Write Token",
+            token_hash=token_hash,
+            token_prefix=token_prefix,
+            scopes=["admin:read", "admin:write"],
+            is_active=True,
+        )
+        db_session.add(admin_write_token)
+        await db_session.commit()
+
+        response = await client.post(
+            "/api/admin/users/bulk-action",
+            headers={"Authorization": f"Bearer {raw_token}"},
+            json={"action": "disable", "user_ids": []},
+        )
+        # 200 or 422 (validation error for empty user_ids) are both acceptable
+        # because scope check passed and it reached the endpoint logic
+        assert response.status_code in [200, 422]
+
+    @pytest.mark.asyncio
+    async def test_jwt_admin_bypasses_scope_checks_on_admin_endpoints(self, client, admin_token):
+        """JWT admin token should never be blocked by scope checks on admin endpoints."""
+        response = await client.get(
+            "/api/admin/stats",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_regular_user_api_token_blocked_by_role_not_scope(self, client, db_session, test_user):
+        """Regular user with admin:read scope should still be blocked by require_permissions."""
+        from app.models.api_token import ApiToken
+        from app.api.auth import get_password_hash
+        import secrets
+
+        raw_token = f"nukelab_{secrets.token_urlsafe(32)}"
+        token_hash = get_password_hash(raw_token)
+        token_prefix = raw_token[:16]
+
+        # Regular user tries to get admin scope
+        fake_admin_token = ApiToken(
+            user_id=test_user.id,
+            name="Fake Admin Token",
+            token_hash=token_hash,
+            token_prefix=token_prefix,
+            scopes=["admin:read"],
+            is_active=True,
+        )
+        db_session.add(fake_admin_token)
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/admin/stats",
+            headers={"Authorization": f"Bearer {raw_token}"},
+        )
+        # Should be blocked by require_permissions (role check) before scope check
+        assert response.status_code == 403

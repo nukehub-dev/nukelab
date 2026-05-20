@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.dependencies import get_current_user, require_permissions
+from app.api.auth import require_scopes
 from app.core.permissions import Permission
 from app.services.plan_service import PlanService
 
@@ -21,6 +22,7 @@ async def list_plans(
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=100),
     current_user = Depends(get_current_user),
+    _ = Depends(require_scopes("plans:read")),
     db: AsyncSession = Depends(get_db)
 ):
     """List server plans (filtered by user's role)"""
@@ -39,6 +41,7 @@ async def list_plans(
 async def get_plan(
     plan_id: str,
     current_user = Depends(get_current_user),
+    _ = Depends(require_scopes("plans:read")),
     db: AsyncSession = Depends(get_db)
 ):
     """Get plan details"""
@@ -53,6 +56,7 @@ async def get_plan(
 async def create_plan(
     data: dict,
     current_user = Depends(require_permissions(Permission.PLAN_CREATE)),
+    _scopes = Depends(require_scopes("admin:write")),
     db: AsyncSession = Depends(get_db)
 ):
     """Create new server plan (admin only)"""
@@ -81,6 +85,7 @@ async def update_plan(
     plan_id: str,
     data: dict,
     current_user = Depends(require_permissions(Permission.PLAN_UPDATE)),
+    _scopes = Depends(require_scopes("admin:write")),
     db: AsyncSession = Depends(get_db)
 ):
     """Update server plan (admin only)"""
@@ -93,6 +98,7 @@ async def update_plan(
 async def deactivate_plan(
     plan_id: str,
     current_user = Depends(require_permissions(Permission.PLAN_DELETE)),
+    _scopes = Depends(require_scopes("admin:write")),
     db: AsyncSession = Depends(get_db)
 ):
     """Deactivate server plan (admin only)"""
@@ -105,6 +111,7 @@ async def deactivate_plan(
 async def delete_plan(
     plan_id: str,
     current_user = Depends(require_permissions(Permission.PLAN_DELETE)),
+    _scopes = Depends(require_scopes("admin:write")),
     db: AsyncSession = Depends(get_db)
 ):
     """Permanently delete server plan (admin only)"""
@@ -117,6 +124,7 @@ async def delete_plan(
 async def activate_plan(
     plan_id: str,
     current_user = Depends(require_permissions(Permission.PLAN_UPDATE)),
+    _scopes = Depends(require_scopes("admin:write")),
     db: AsyncSession = Depends(get_db)
 ):
     """Activate server plan (admin only)"""

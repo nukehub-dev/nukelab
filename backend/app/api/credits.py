@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.auth import get_current_user
+from app.api.auth import get_current_user, require_scopes
 from app.core.permissions import Permission
 from app.dependencies import PermissionChecker, require_permissions
 from app.db.session import get_db
@@ -34,6 +34,7 @@ class DeductCreditsRequest(BaseModel):
 @router.get("/")
 async def get_my_credits(
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("credits:read")),
     db: AsyncSession = Depends(get_db)
 ):
     """Get current user's credit balance and summary"""
@@ -58,6 +59,7 @@ async def get_my_credit_history(
     sort_by: str = Query("created_at", description="Sort column"),
     sort_order: str = Query("desc", description="Sort order: asc or desc"),
     current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("credits:read")),
     db: AsyncSession = Depends(get_db)
 ):
     """Get current user's credit transaction history"""
@@ -82,6 +84,7 @@ async def get_my_credit_history(
 async def get_user_credits(
     user_id: str,
     current_user: User = Depends(require_permissions(Permission.CREDITS_READ)),
+    _scopes = Depends(require_scopes("credits:read")),
     db: AsyncSession = Depends(get_db)
 ):
     """Get any user's credit balance (Admin only)"""
@@ -106,6 +109,7 @@ async def get_user_credit_history(
     sort_by: str = Query("created_at"),
     sort_order: str = Query("desc"),
     current_user: User = Depends(require_permissions(Permission.CREDITS_READ)),
+    _scopes = Depends(require_scopes("credits:read")),
     db: AsyncSession = Depends(get_db)
 ):
     """Get any user's credit transaction history (Admin only)"""
@@ -129,6 +133,7 @@ async def grant_credits_to_user(
     user_id: str,
     request: GrantCreditsRequest,
     current_user: User = Depends(require_permissions(Permission.CREDITS_GRANT)),
+    _scopes = Depends(require_scopes("admin:write")),
     db: AsyncSession = Depends(get_db)
 ):
     """Grant credits to a user (Admin only)"""
@@ -160,6 +165,7 @@ async def deduct_credits_from_user(
     user_id: str,
     request: DeductCreditsRequest,
     current_user: User = Depends(require_permissions(Permission.CREDITS_DEDUCT)),
+    _scopes = Depends(require_scopes("admin:write")),
     db: AsyncSession = Depends(get_db)
 ):
     """Deduct credits from a user (Admin only)"""
@@ -192,6 +198,7 @@ async def get_low_balance_users(
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(50, ge=1, le=500, description="Items per page"),
     current_user: User = Depends(require_permissions(Permission.CREDITS_READ)),
+    _scopes = Depends(require_scopes("admin:read")),
     db: AsyncSession = Depends(get_db)
 ):
     """Get users with low credit balance (Admin only)"""

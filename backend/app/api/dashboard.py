@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func
 from typing import Optional
 
-from app.api.auth import get_current_user
+from app.api.auth import get_current_user, require_scopes
 from app.core.permissions import Permission
 from app.core.security import has_permission
 from app.dependencies import require_permissions
@@ -23,6 +23,7 @@ router = APIRouter()
 
 @router.get("/")
 async def get_dashboard(
+    _ = Depends(require_scopes("dashboard:read")),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -121,6 +122,7 @@ async def get_dashboard(
 async def get_activity_feed(
     limit: int = 20,
     offset: int = 0,
+    _ = Depends(require_scopes("dashboard:read")),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
