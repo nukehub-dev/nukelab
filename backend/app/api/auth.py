@@ -1,9 +1,12 @@
 import logging
+import secrets
+import uuid
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm, HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import BaseModel
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +17,7 @@ from app.config import settings
 from app.db.session import get_db
 from app.models.user import User
 from app.models.api_token import ApiToken
+from app.models.refresh_token import RefreshToken
 from app.core.security import get_user_permissions
 
 logger = logging.getLogger(__name__)
@@ -71,6 +75,54 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=settings.jwt_expire_minutes))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+
+
+async def create_refresh_token_for_user(
+    user_id: str,
+    db: AsyncSession,
+    user_agent: Optional[str] = None,
+    ip_address: Optional[str] = None,
+) -> str:
+    """Create a new refresh token, store hashed version in DB, return plaintext."""
+    plaintext = secrets.token_urlsafe(32)
+    token_hash = pwd_context.hash(plaintext)
+    expires_at = datetime.utcnow() + timedelta(days=settings.jwt_refresh_expire_days)
+
+    refresh_token = RefreshToken(
+        user_id=uuid.UUID(user_id),
+        token_hash=token_hash,
+        expires_at=expires_at,
+        user_agent=user_agent,
+        ip_address=ip_address,
+    )
+    db.add(refresh_token)
+    await db.commit()
+    return plaintext
+
+
+async def verify_refresh_token(plaintext: str, db: AsyncSession) -> Optional[RefreshToken]:
+    """Verify a refresh token by checking all non-revoked, non-expired tokens for the user."""
+    result = await db.execute(
+        select(RefreshToken).where(
+            RefreshToken.revoked_at == None,
+            RefreshToken.expires_at > datetime.utcnow(),
+        )
+    )
+    tokens = result.scalars().all()
+    for rt in tokens:
+        if pwd_context.verify(plaintext, rt.token_hash):
+            return rt
+    return None
+
+
+async def revoke_refresh_token(plaintext: str, db: AsyncSession) -> bool:
+    """Revoke a refresh token."""
+    rt = await verify_refresh_token(plaintext, db)
+    if rt:
+        rt.revoked_at = datetime.utcnow()
+        await db.commit()
+        return True
+    return False
 
 
 async def get_current_user(token: str = Depends(security_scheme), db: AsyncSession = Depends(get_db)):
@@ -161,7 +213,16 @@ async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends
     await db.commit()
     
     access_token = create_access_token(data={"sub": user.username})
-    response = JSONResponse(content={"access_token": access_token, "token_type": "bearer"})
+    refresh_token = await create_refresh_token_for_user(
+        str(user.id), db,
+        user_agent=request.headers.get("user-agent"),
+        ip_address=get_remote_address(request),
+    )
+    response = JSONResponse(content={
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+    })
     response.set_cookie(
         key="nukelab_token",
         value=access_token,
@@ -170,6 +231,55 @@ async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends
         secure=settings.session_secure,
         samesite=settings.session_samesite,
     )
+    return response
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+@router.post("/refresh")
+async def refresh_token_endpoint(request: RefreshRequest, db: AsyncSession = Depends(get_db)):
+    """Exchange a refresh token for a new access token + new refresh token (rotation)."""
+    rt = await verify_refresh_token(request.refresh_token, db)
+    if not rt:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired refresh token")
+
+    # Revoke the old token
+    rt.revoked_at = datetime.utcnow()
+    rt.last_used_at = datetime.utcnow()
+
+    # Get user
+    result = await db.execute(select(User).where(User.id == rt.user_id))
+    user = result.scalar_one_or_none()
+    if not user or not user.is_active:
+        await db.commit()
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
+
+    # Create new tokens
+    access_token = create_access_token(data={"sub": user.username})
+    new_refresh_token = await create_refresh_token_for_user(
+        str(user.id), db,
+        user_agent=rt.user_agent,
+        ip_address=rt.ip_address,
+    )
+    await db.commit()
+
+    return {
+        "access_token": access_token,
+        "refresh_token": new_refresh_token,
+        "token_type": "bearer",
+    }
+
+
+@router.post("/logout")
+async def logout_endpoint(request: Request, body: Optional[RefreshRequest] = None, db: AsyncSession = Depends(get_db)):
+    """Revoke refresh token and clear cookies."""
+    if body and body.refresh_token:
+        await revoke_refresh_token(body.refresh_token, db)
+
+    response = JSONResponse(content={"message": "Logged out successfully"})
+    response.delete_cookie("nukelab_token")
     return response
 
 
@@ -520,11 +630,16 @@ async def oauth_callback(
         
         # Create JWT token
         access_token_jwt = create_access_token(data={"sub": user.username})
-        
-        # Redirect to frontend with token
-        redirect_url = f"{frontend_base}/login?token={access_token_jwt}"
+        refresh_token_plain = await create_refresh_token_for_user(
+            str(user.id), db,
+            user_agent=request.headers.get("user-agent"),
+            ip_address=get_remote_address(request),
+        )
+
+        # Redirect to frontend with tokens
+        redirect_url = f"{frontend_base}/login?token={access_token_jwt}&refresh={refresh_token_plain}"
         response = RedirectResponse(url=redirect_url)
-        
+
         # Set cookies
         response.set_cookie(
             key="nukelab_token",
@@ -534,11 +649,11 @@ async def oauth_callback(
             secure=settings.session_secure,
             samesite=settings.session_samesite
         )
-        
+
         # Clear OAuth cookies
         response.delete_cookie("oauth_state")
         response.delete_cookie("oauth_verifier")
-        
+
         return response
         
     except Exception as e:

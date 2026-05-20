@@ -99,6 +99,25 @@ export function Sidebar() {
   const user = useAuthStore((state) => state.user);
   const isAuto = mode === 'auto';
 
+  const handleLogout = async () => {
+    const refreshToken = localStorage.getItem('nukelab-refresh');
+    if (refreshToken) {
+      try {
+        await fetch(`${window.location.origin}/api/auth/logout`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: refreshToken }),
+        });
+      } catch {
+        // Ignore errors — always clear local state
+      }
+    }
+    localStorage.removeItem('nukelab-token');
+    localStorage.removeItem('nukelab-refresh');
+    document.cookie = 'nukelab_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+    window.location.href = '/login';
+  };
+
   const displayName = user?.first_name && user?.last_name
     ? `${user.first_name} ${user.last_name}`
     : user?.display_name || user?.username || 'User';
@@ -311,11 +330,7 @@ export function Sidebar() {
                 <NotificationCenter />
                 <Tooltip content="Log Out" position="right">
                   <button
-                    onClick={() => {
-                      localStorage.removeItem('nukelab-token');
-                      document.cookie = 'nukelab_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-                      window.location.href = '/login';
-                    }}
+                    onClick={handleLogout}
                     className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors text-destructive"
                   >
                     <LogOut className="w-4 h-4" />
@@ -352,11 +367,7 @@ export function Sidebar() {
             </Tooltip>
             <Tooltip content="Log Out" position="right">
               <button
-                onClick={() => {
-                  localStorage.removeItem('nukelab-token');
-                  document.cookie = 'nukelab_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-                  window.location.href = '/login';
-                }}
+                onClick={handleLogout}
                 className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors text-destructive"
               >
                 <LogOut className="w-4 h-4" />
@@ -478,11 +489,7 @@ export function Sidebar() {
                   
                   <div className="pt-4 border-t border-border/50">
                     <button
-                      onClick={() => {
-                        localStorage.removeItem('nukelab-token');
-                        document.cookie = 'nukelab_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-                        window.location.href = '/login';
-                      }}
+                      onClick={handleLogout}
                       className="flex items-center gap-2 w-full px-4 py-3 rounded-xl text-sm hover:bg-muted transition-colors text-destructive"
                     >
                       <LogOut className="w-4 h-4" />

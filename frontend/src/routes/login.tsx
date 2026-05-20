@@ -37,10 +37,12 @@ function LoginPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token');
+    const refresh = params.get('refresh');
     const errMsg = params.get('error');
     if (errMsg) { setError(decodeURIComponent(errMsg)); window.history.replaceState({}, '', '/login'); }
     if (token) {
       localStorage.setItem('nukelab-token', token);
+      if (refresh) localStorage.setItem('nukelab-refresh', refresh);
       document.cookie = `nukelab_token=${token}; path=/; SameSite=Lax`;
       navigate({ to: '/' });
     }
@@ -66,6 +68,7 @@ function LoginPage() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.detail || 'Login failed');
       localStorage.setItem('nukelab-token', data.access_token);
+      if (data.refresh_token) localStorage.setItem('nukelab-refresh', data.refresh_token);
       document.cookie = `nukelab_token=${data.access_token}; path=/; SameSite=Lax`;
       navigate({ to: '/' });
     } catch (err: any) {

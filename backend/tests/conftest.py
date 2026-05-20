@@ -62,6 +62,7 @@ TRUNCATE_TABLES = [
     "health_checks",
     "activity_logs",
     "server_plans",
+    "refresh_tokens",
     "users",
 ]
 

@@ -22,8 +22,21 @@ export function isAuthenticated(): boolean {
   return !!localStorage.getItem('nukelab-token');
 }
 
-export function logout(): void {
+export async function logout(): Promise<void> {
+  const refreshToken = localStorage.getItem('nukelab-refresh');
+  if (refreshToken) {
+    try {
+      await fetch(`${import.meta.env.VITE_API_URL || '/api'}/auth/logout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+    } catch {
+      // Ignore errors — always clear local state
+    }
+  }
   localStorage.removeItem('nukelab-token');
+  localStorage.removeItem('nukelab-refresh');
   // Clear server auth cookie
   document.cookie = 'nukelab_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
   // Clear auth store user

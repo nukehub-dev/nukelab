@@ -82,6 +82,30 @@ type ValidationResult struct {
 	Expiry     int64  `json:"exp,omitempty"`
 }
 
+// extractClientIP extracts the real client IP from the request.
+// Priority: X-Forwarded-For, X-Real-Ip, RemoteAddr
+func extractClientIP(r *http.Request) string {
+	// Check X-Forwarded-For (may contain multiple IPs, take the first)
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		if idx := strings.Index(xff, ","); idx != -1 {
+			return strings.TrimSpace(xff[:idx])
+		}
+		return strings.TrimSpace(xff)
+	}
+
+	// Check X-Real-Ip
+	if xri := r.Header.Get("X-Real-Ip"); xri != "" {
+		return strings.TrimSpace(xri)
+	}
+
+	// Fallback to RemoteAddr (strip port)
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
+
 // AuthSidecar is the main authentication sidecar instance.
 type AuthSidecar struct {
 	config     *Config
@@ -267,7 +291,8 @@ func (a *AuthSidecar) extractToken(r *http.Request) string {
 }
 
 // validateToken validates a JWT token and returns the result.
-func (a *AuthSidecar) validateToken(tokenString string) (*ValidationResult, error) {
+// clientIP is the real client IP for optional IP binding validation.
+func (a *AuthSidecar) validateToken(tokenString string, clientIP string) (*ValidationResult, error) {
 	if !a.config.AuthEnabled {
 		return &ValidationResult{Valid: true, Error: "auth_disabled"}, nil
 	}
@@ -311,6 +336,18 @@ func (a *AuthSidecar) validateToken(tokenString string) (*ValidationResult, erro
 	sub, ok := claims["sub"].(string)
 	if !ok || sub == "" {
 		return &ValidationResult{Valid: false, Error: "missing_subject"}, nil
+	}
+
+	// Validate IP binding (if present in token)
+	if tokenIP, ok := claims["client_ip"].(string); ok && tokenIP != "" {
+		if tokenIP != clientIP {
+			a.logger.Printf("WARN: IP mismatch: token=%s request=%s", tokenIP, clientIP)
+			return &ValidationResult{
+				Valid:    false,
+				Error:    "ip_mismatch",
+				ServerID: aud,
+			}, nil
+		}
 	}
 
 	// Extract token type
@@ -374,7 +411,7 @@ func (a *AuthSidecar) ValidateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate token
-	result, err := a.validateToken(token)
+	result, err := a.validateToken(token, extractClientIP(r))
 	if err != nil {
 		a.logger.Printf("ERROR: Token validation error: %v", err)
 		http.Error(w, `{"error":"validation_error"}`, http.StatusInternalServerError)
@@ -426,7 +463,7 @@ func (a *AuthSidecar) AuthRequestHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Validate token
-	result, err := a.validateToken(token)
+	result, err := a.validateToken(token, extractClientIP(r))
 	if err != nil {
 		a.logger.Printf("ERROR: Token validation error: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)

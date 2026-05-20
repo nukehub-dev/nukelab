@@ -176,7 +176,10 @@ class ServerAuthService:
             "type": token_type,
             "ver": "1",
         }
-        
+
+        if client_ip:
+            claims["client_ip"] = client_ip
+
         if custom_claims:
             claims.update(custom_claims)
         

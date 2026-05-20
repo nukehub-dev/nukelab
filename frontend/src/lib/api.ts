@@ -18,8 +18,72 @@ export const queryClient = new QueryClient({
   },
 });
 
-function getToken(): string {
+function getAccessToken(): string {
   return localStorage.getItem('nukelab-token') || '';
+}
+
+function getRefreshToken(): string {
+  return localStorage.getItem('nukelab-refresh') || '';
+}
+
+function setTokens(access: string, refresh: string) {
+  localStorage.setItem('nukelab-token', access);
+  localStorage.setItem('nukelab-refresh', refresh);
+  document.cookie = `nukelab_token=${access}; path=/; SameSite=Lax`;
+}
+
+function clearTokens() {
+  localStorage.removeItem('nukelab-token');
+  localStorage.removeItem('nukelab-refresh');
+  document.cookie = 'nukelab_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+}
+
+function redirectToLogin() {
+  if (window.location.pathname !== '/login') {
+    window.location.href = '/login';
+  }
+}
+
+let isRefreshing = false;
+let refreshPromise: Promise<boolean> | null = null;
+
+async function doRefresh(): Promise<boolean> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return false;
+
+  try {
+    const response = await fetch(`${API_BASE}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+
+    if (!response.ok) {
+      clearTokens();
+      return false;
+    }
+
+    const data = await response.json();
+    setTokens(data.access_token, data.refresh_token);
+    return true;
+  } catch {
+    clearTokens();
+    return false;
+  }
+}
+
+async function refreshAccessToken(): Promise<boolean> {
+  if (isRefreshing && refreshPromise) {
+    return refreshPromise;
+  }
+
+  isRefreshing = true;
+  refreshPromise = doRefresh().finally(() => {
+    isRefreshing = false;
+    refreshPromise = null;
+  });
+
+  return refreshPromise;
 }
 
 async function parseJson<T>(response: Response): Promise<T> {
@@ -27,97 +91,108 @@ async function parseJson<T>(response: Response): Promise<T> {
   return text ? JSON.parse(text) : undefined as T;
 }
 
-async function handleAuthError(response: Response): Promise<never> {
+async function apiFetch<T>(
+  path: string,
+  options: RequestInit = {}
+): Promise<T> {
+  const makeRequest = (token: string): Promise<Response> =>
+    fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
+
+  // First attempt
+  let response = await makeRequest(getAccessToken());
+
+  // If 401, try to refresh and retry once
   if (response.status === 401) {
-    localStorage.removeItem('nukelab-token');
-    // Only redirect if not already on login page
-    if (window.location.pathname !== '/login') {
-      window.location.href = '/login';
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      response = await makeRequest(getAccessToken());
+    } else {
+      redirectToLogin();
+      throw new Error('Session expired. Please log in again.');
     }
-    throw new Error('Session expired. Please log in again.');
   }
-  // Try to get detailed error message from response body
-  let detail = response.statusText;
-  try {
-    const body = await response.json();
-    detail = body.detail || body.message || response.statusText;
-  } catch {
-    // ignore JSON parse errors
+
+  if (!response.ok) {
+    // Try to get detailed error message from response body
+    let detail = response.statusText;
+    try {
+      const body = await response.json();
+      detail = body.detail || body.message || response.statusText;
+    } catch {
+      // ignore JSON parse errors
+    }
+    throw new Error(`${detail}`);
   }
-  throw new Error(`${detail}`);
+
+  return parseJson<T>(response);
 }
 
 export const api = {
   async get<T>(path: string): Promise<T> {
-    const response = await fetch(`${API_BASE}${path}`, {
-      headers: {
-        'Authorization': `Bearer ${getToken()}`,
-        'Content-Type': 'application/json',
-      },
-    });
-    if (!response.ok) await handleAuthError(response);
-    return parseJson<T>(response);
+    return apiFetch<T>(path);
   },
 
   async post<T>(path: string, data: unknown): Promise<T> {
-    const response = await fetch(`${API_BASE}${path}`, {
+    return apiFetch<T>(path, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${getToken()}`,
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify(data),
     });
-    if (!response.ok) await handleAuthError(response);
-    return parseJson<T>(response);
   },
 
   async put<T>(path: string, data: unknown): Promise<T> {
-    const response = await fetch(`${API_BASE}${path}`, {
+    return apiFetch<T>(path, {
       method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${getToken()}`,
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify(data),
     });
-    if (!response.ok) await handleAuthError(response);
-    return parseJson<T>(response);
   },
 
   async patch<T>(path: string, data: unknown): Promise<T> {
-    const response = await fetch(`${API_BASE}${path}`, {
+    return apiFetch<T>(path, {
       method: 'PATCH',
-      headers: {
-        'Authorization': `Bearer ${getToken()}`,
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify(data),
     });
-    if (!response.ok) await handleAuthError(response);
-    return parseJson<T>(response);
   },
 
   async delete<T>(path: string): Promise<T> {
-    const response = await fetch(`${API_BASE}${path}`, {
+    return apiFetch<T>(path, {
       method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${getToken()}`,
-        'Content-Type': 'application/json',
-      },
     });
-    if (!response.ok) await handleAuthError(response);
-    return parseJson<T>(response);
   },
 
   async download(path: string, filename?: string): Promise<void> {
     const response = await fetch(`${API_BASE}${path}`, {
       headers: {
-        'Authorization': `Bearer ${getToken()}`,
+        'Authorization': `Bearer ${getAccessToken()}`,
       },
     });
-    if (!response.ok) await handleAuthError(response);
-    
+
+    if (response.status === 401) {
+      const refreshed = await refreshAccessToken();
+      if (refreshed) {
+        return this.download(path, filename);
+      }
+      redirectToLogin();
+      throw new Error('Session expired. Please log in again.');
+    }
+
+    if (!response.ok) {
+      let detail = response.statusText;
+      try {
+        const body = await response.json();
+        detail = body.detail || body.message || response.statusText;
+      } catch {
+        // ignore
+      }
+      throw new Error(`${detail}`);
+    }
+
     const blob = await response.blob();
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
