@@ -139,6 +139,18 @@ async def update_volume(
         checker = PermissionChecker(current_user)
         checker.require(Permission.ADMIN_ACCESS)
     
+    # Validate max_size_bytes cannot be set below current size
+    if request.max_size_bytes is not None and volume.size_bytes is not None:
+        if request.max_size_bytes < volume.size_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"Cannot set volume limit ({request.max_size_bytes} bytes) "
+                    f"below current volume size ({volume.size_bytes} bytes). "
+                    f"Free up {volume.size_bytes - request.max_size_bytes} bytes first."
+                )
+            )
+    
     updated = await volume_service.update_volume(
         volume_id=volume_id,
         display_name=request.display_name,

@@ -25,6 +25,7 @@ import { Card, CardContent } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { Select, SelectItem } from '../components/ui/select';
 import { Textarea } from '../components/ui/textarea';
+import { Slider } from '../components/ui/slider';
 import { Button } from '../components/ui/button';
 import { Tooltip } from '../components/ui/tooltip';
 import { useConfirmDialog } from '../components/ui/confirm-dialog';
@@ -239,12 +240,17 @@ function VolumesPage() {
   const [createForm, setCreateForm] = useState({
     display_name: '',
     description: '',
+    max_size_gb: 10,
   });
   const [editForm, setEditForm] = useState({
     id: '',
     display_name: '',
     description: '',
+    max_size_gb: 10,
+    current_size_bytes: 0,
   });
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
   const [browsingVolume, setBrowsingVolume] = useState<{ id: string; name: string } | null>(null);
 
   // Calculate stats
@@ -304,14 +310,21 @@ function VolumesPage() {
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
+    setCreateError(null);
     if (!createForm.display_name.trim()) return;
     
+    const max_size_bytes = createForm.max_size_gb * 1024 * 1024 * 1024;
+    
     createVolume.mutate(
-      { display_name: createForm.display_name, description: createForm.description || undefined },
+      { 
+        display_name: createForm.display_name, 
+        description: createForm.description || undefined,
+        max_size_bytes: max_size_bytes > 0 ? max_size_bytes : undefined,
+      },
       {
         onSuccess: () => {
           setShowCreateDialog(false);
-          setCreateForm({ display_name: '', description: '' });
+          setCreateForm({ display_name: '', description: '', max_size_gb: 10 });
         },
       }
     );
@@ -322,13 +335,27 @@ function VolumesPage() {
       id: volume.id,
       display_name: volume.display_name,
       description: volume.description || '',
+      max_size_gb: volume.max_size_bytes ? Math.round(volume.max_size_bytes / (1024 * 1024 * 1024)) : 10,
+      current_size_bytes: volume.size_bytes || 0,
     });
+    setEditError(null);
     setShowEditDialog(true);
   };
 
   const handleUpdate = (e: React.FormEvent) => {
     e.preventDefault();
+    setEditError(null);
     if (!editForm.display_name.trim()) return;
+
+    const max_size_bytes = editForm.max_size_gb * 1024 * 1024 * 1024;
+    
+    // Validate: cannot set limit below current size
+    if (max_size_bytes > 0 && max_size_bytes < editForm.current_size_bytes) {
+      setEditError(
+        `Cannot set limit below current volume size (${formatBytes(editForm.current_size_bytes)}).`
+      );
+      return;
+    }
 
     updateVolume.mutate(
       {
@@ -336,12 +363,13 @@ function VolumesPage() {
         data: {
           display_name: editForm.display_name,
           description: editForm.description || undefined,
+          max_size_bytes: max_size_bytes > 0 ? max_size_bytes : undefined,
         },
       },
       {
         onSuccess: () => {
           setShowEditDialog(false);
-          setEditForm({ id: '', display_name: '', description: '' });
+          setEditForm({ id: '', display_name: '', description: '', max_size_gb: 10, current_size_bytes: 0 });
         },
       }
     );
@@ -514,14 +542,45 @@ function VolumesPage() {
             <DialogDescription>Create a new storage volume.</DialogDescription>
           </DialogHeader>
           <form id="create-volume-form" onSubmit={handleCreate} className="space-y-4 mt-4">
+            {createError && (
+              <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive">
+                {createError}
+              </div>
+            )}
             <div className="space-y-2">
               <label className="text-sm font-medium">Display Name *</label>
               <Input
                 value={createForm.display_name}
                 onChange={(e) => setCreateForm({ ...createForm, display_name: e.target.value })}
                 placeholder="My Project Data"
-                required
               />
+            </div>
+            <div className="space-y-3">
+              <label className="text-sm font-medium">Size Limit</label>
+              <div className="flex items-center gap-3">
+                <Slider
+                  min={1}
+                  max={500}
+                  step={1}
+                  value={createForm.max_size_gb}
+                  onChange={(value) => setCreateForm({ ...createForm, max_size_gb: value })}
+                />
+                <Input
+                  type="number"
+                  min={1}
+                  max={500}
+                  value={createForm.max_size_gb}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value, 10);
+                    setCreateForm({ ...createForm, max_size_gb: isNaN(val) ? 1 : Math.max(1, Math.min(500, val)) });
+                  }}
+                  className="w-20 text-center"
+                />
+                <span className="text-sm text-muted-foreground w-8">GB</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Maximum capacity for this volume. You can change this later.
+              </p>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Description</label>
@@ -553,14 +612,52 @@ function VolumesPage() {
             <DialogDescription>Update volume details.</DialogDescription>
           </DialogHeader>
           <form id="edit-volume-form" onSubmit={handleUpdate} className="space-y-4 mt-4">
+            {editError && (
+              <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive">
+                {editError}
+              </div>
+            )}
             <div className="space-y-2">
               <label className="text-sm font-medium">Display Name *</label>
               <Input
                 value={editForm.display_name}
                 onChange={(e) => setEditForm({ ...editForm, display_name: e.target.value })}
                 placeholder="My Project Data"
-                required
               />
+            </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">Size Limit</label>
+                <span className="text-xs text-muted-foreground">
+                  Current: {formatBytes(editForm.current_size_bytes)}
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                <Slider
+                  min={1}
+                  max={500}
+                  step={1}
+                  value={Math.max(1, editForm.max_size_gb)}
+                  onChange={(value) => setEditForm({ ...editForm, max_size_gb: value })}
+                />
+                <Input
+                  type="number"
+                  min={1}
+                  max={500}
+                  value={editForm.max_size_gb}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value, 10);
+                    setEditForm({ ...editForm, max_size_gb: isNaN(val) ? 1 : Math.max(1, Math.min(500, val)) });
+                  }}
+                  className="w-20 text-center"
+                />
+                <span className="text-sm text-muted-foreground w-8">GB</span>
+              </div>
+              {editForm.current_size_bytes > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Cannot set limit below current volume size ({formatBytes(editForm.current_size_bytes)}).
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Description</label>

@@ -565,7 +565,6 @@ function PlansPage() {
                 >Name *</label>
                 <Input
                   type="text"
-                  required
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   placeholder="Basic"
@@ -578,7 +577,6 @@ function PlansPage() {
                   >Slug *</label>
                   <Input
                     type="text"
-                    required
                     value={formData.slug}
                     onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
                     placeholder="basic"

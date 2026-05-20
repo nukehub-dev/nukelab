@@ -533,7 +533,6 @@ function WorkspacesListPage() {
                   value={newWorkspace.name}
                   onChange={(e) => setNewWorkspace({ ...newWorkspace, name: e.target.value })}
                   placeholder="My Workspace"
-                  required
                 />
               </div>
               <div className="space-y-2">

@@ -35,6 +35,7 @@ interface VolumeMountData {
   volume_id: string;
   mount_path: string;
   mode: string;
+  max_size_bytes?: number;
 }
 
 interface CreateServerData {

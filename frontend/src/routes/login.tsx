@@ -377,7 +377,6 @@ function LoginCard({ error, hasLocal, hasOAuth, authMethods, handleOAuth, handle
                       value={username}
                       onChange={e => setUsername(e.target.value)}
                       placeholder="Enter your username"
-                      required
                       className="w-full px-3.5 py-2.5 rounded-lg bg-input/60 border border-border/60 text-sm placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all group-hover:border-border"
                     />
                   </div>
@@ -391,7 +390,6 @@ function LoginCard({ error, hasLocal, hasOAuth, authMethods, handleOAuth, handle
                       value={password}
                       onChange={e => setPassword(e.target.value)}
                       placeholder="••••••••"
-                      required
                       className="w-full px-3.5 py-2.5 pr-10 rounded-lg bg-input/60 border border-border/60 text-sm placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all group-hover:border-border"
                     />
                     <button

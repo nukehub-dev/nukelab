@@ -576,7 +576,6 @@ function UsersPage() {
               >Username</label>
               <Input
                 type="text"
-                required
                 disabled={!!editingUser}
                 value={formData.username}
                 onChange={(e) => setFormData({ ...formData, username: e.target.value })}
@@ -589,7 +588,6 @@ function UsersPage() {
               >Email</label>
               <Input
                 type="email"
-                required
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 placeholder="john@example.com"
@@ -602,7 +600,6 @@ function UsersPage() {
                 >Password</label>
                 <Input
                   type="password"
-                  required={!editingUser}
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   placeholder="Min 6 characters"

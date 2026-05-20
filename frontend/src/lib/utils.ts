@@ -59,6 +59,26 @@ export function formatDuration(seconds: number): string {
   return `${secs}s`;
 }
 
+/** Parse a Docker-style memory/disk string (e.g. "10g", "512m") to bytes */
+export function parseMemoryString(memoryStr: string): number {
+  if (!memoryStr) return 0;
+  const str = memoryStr.toLowerCase().trim();
+  const multipliers: Record<string, number> = {
+    b: 1,
+    k: 1024,
+    m: 1024 ** 2,
+    g: 1024 ** 3,
+    t: 1024 ** 4,
+  };
+  for (const suffix of Object.keys(multipliers)) {
+    if (str.endsWith(suffix)) {
+      const num = parseFloat(str.slice(0, -suffix.length));
+      return Math.floor(num * multipliers[suffix]);
+    }
+  }
+  return parseInt(str, 10) || 0;
+}
+
 export function formatDate(date: Date | string): string {
   const d = typeof date === 'string' ? new Date(date) : date;
   return new Intl.DateTimeFormat('en-US', {

@@ -135,10 +135,10 @@ class VolumeAccessService:
                     access = "read_only"
                 else:
                     # volume_role is "read_write"
-                    if member.role == "viewer":
+                    if member.role == "read_only":
                         access = "read_only"
                     else:
-                        # admin, editor, read_write members get RW
+                        # admin, read_write members get RW
                         access = "read_write"
                 workspace_access = self._most_restrictive(
                     workspace_access, access

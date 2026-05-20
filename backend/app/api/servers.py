@@ -33,6 +33,7 @@ class VolumeMountRequest(BaseModel):
     volume_id: str
     mount_path: str = "/data"
     mode: str = "read_write"  # read_write, read_only
+    max_size_bytes: Optional[int] = None  # For auto-created volumes when volume_id is empty
 
 
 # Docker-compatible name pattern used for container and volume names
@@ -285,12 +286,26 @@ async def create_server(
         volume_mounts = []
         
         if request.volume_mounts:
-            for vm in request.volume_mounts:
-                volume_mounts.append({
+            for idx, vm in enumerate(request.volume_mounts):
+                mount_data = {
                     "volume_id": vm.volume_id,
                     "mount_path": vm.mount_path or "/data",
                     "mode": vm.mode or "read_write",
-                })
+                    "max_size_bytes": vm.max_size_bytes,
+                }
+                # Auto-create volume for empty volume_id mounts
+                if not vm.volume_id:
+                    safe_name = re.sub(r'[^a-zA-Z0-9_.-]', '-', request.name).lower()
+                    suffix = "data" if idx == 0 else f"data-{idx}"
+                    volume_name = f"nukelab-server-{current_user.username}-{safe_name}-{suffix}"
+                    new_vol = await volume_service.create_volume(
+                        name=volume_name,
+                        display_name=f"{request.name} {suffix.title()}",
+                        owner_id=str(current_user.id),
+                        max_size_bytes=vm.max_size_bytes or volume_service._parse_memory(plan.disk_limit),
+                    )
+                    mount_data["volume_id"] = str(new_vol.id)
+                volume_mounts.append(mount_data)
         elif request.volume_id:
             # Legacy single-volume support
             volume_mounts.append({
@@ -331,9 +346,16 @@ async def create_server(
             mode = vm["mode"]
             
             if not await volume_access.can_access_volume(vol_id, str(current_user.id), mode):
+                vol = await volume_service.get_volume(vol_id)
+                vol_name = vol.display_name if vol else vol_id
+                mode_label = "read-write" if mode == "read_write" else "read-only"
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"You don't have permission to use volume {vol_id} in {mode} mode"
+                    detail=(
+                        f"Volume '{vol_name}' cannot be mounted as {mode_label}. "
+                        f"You may have read-only access via a shared workspace. "
+                        f"Contact the workspace owner to request write access."
+                    )
                 )
             
             # Check quota for each volume
@@ -1348,32 +1370,56 @@ async def update_server(
     
     # Validate and apply volume mounts change
     new_volume_mounts = None
+    disk_limit = None
     if request.volume_mounts is not None:
         new_volume_mounts = []
-        for vm in request.volume_mounts:
-            if not await volume_access.can_access_volume(vm.volume_id, str(current_user.id), vm.mode):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"You don't have permission to use volume {vm.volume_id} in {vm.mode} mode"
-                )
-            # Check quota for each volume
-            plan = None
-            if server.plan_id:
-                plan_service = PlanService(db)
-                plan = await plan_service.get_by_id(str(server.plan_id))
-            disk_limit = plan.disk_limit if plan else server.allocated_disk
-            quota_check = await volume_service.check_quota(vm.volume_id, disk_limit)
-            if not quota_check["allowed"]:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Volume {vm.volume_id}: {quota_check['reason']}"
-                )
-            
-            new_volume_mounts.append({
+        plan = None
+        if server.plan_id:
+            plan_service = PlanService(db)
+            plan = await plan_service.get_by_id(str(server.plan_id))
+        disk_limit = plan.disk_limit if plan else server.allocated_disk
+        
+        for idx, vm in enumerate(request.volume_mounts):
+            mount_data = {
                 "volume_id": vm.volume_id,
                 "mount_path": vm.mount_path or "/data",
                 "mode": vm.mode or "read_write",
-            })
+            }
+            
+            # Auto-create volume for empty volume_id mounts
+            if not vm.volume_id:
+                safe_name = re.sub(r'[^a-zA-Z0-9_.-]', '-', server.name).lower()
+                suffix = "data" if idx == 0 else f"data-{idx}"
+                volume_name = f"nukelab-server-{current_user.username}-{safe_name}-{suffix}"
+                new_vol = await volume_service.create_volume(
+                    name=volume_name,
+                    display_name=f"{server.name} {suffix.title()}",
+                    owner_id=str(current_user.id),
+                    max_size_bytes=vm.max_size_bytes or volume_service._parse_memory(disk_limit) if disk_limit else None,
+                )
+                mount_data["volume_id"] = str(new_vol.id)
+            else:
+                if not await volume_access.can_access_volume(vm.volume_id, str(current_user.id), vm.mode):
+                    vol = await volume_service.get_volume(vm.volume_id)
+                    vol_name = vol.display_name if vol else vm.volume_id
+                    mode_label = "read-write" if vm.mode == "read_write" else "read-only"
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail=(
+                            f"Volume '{vol_name}' cannot be mounted as {mode_label}. "
+                            f"You may have read-only access via a shared workspace. "
+                            f"Contact the workspace owner to request write access."
+                        )
+                    )
+                # Check quota for each volume
+                quota_check = await volume_service.check_quota(vm.volume_id, disk_limit)
+                if not quota_check["allowed"]:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Volume {vm.volume_id}: {quota_check['reason']}"
+                    )
+            
+            new_volume_mounts.append(mount_data)
         
         # Check aggregate volume quota for the updated mount set
         if new_volume_mounts and disk_limit:
@@ -1431,6 +1477,11 @@ async def update_server(
             )
             db.add(sv)
             # Persist home-directory flag for privacy warnings even after deletion
+            if 'server_owner' not in locals():
+                from sqlalchemy import select as sa_select
+                from app.models.user import User
+                result = await db.execute(sa_select(User).where(User.id == server.user_id))
+                server_owner = result.scalar_one_or_none()
             owner = server_owner or current_user
             home_mount_path = f"/home/{owner.username}"
             if vm["mount_path"] == home_mount_path:

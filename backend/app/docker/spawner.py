@@ -177,7 +177,7 @@ class ServerSpawner:
                 cpu_limit=cpu,
                 memory_limit=memory,
                 disk_limit=disk,
-                volumes={k: v if isinstance(v, str) else v['bind'] for k, v in volumes.items()},
+                volumes=volumes,
             )
             
             # Start container

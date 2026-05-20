@@ -548,7 +548,6 @@ function EnvironmentsPage() {
               >Name *</label>
               <Input
                 type="text"
-                required
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 placeholder="Ubuntu 22.04"
@@ -561,7 +560,6 @@ function EnvironmentsPage() {
                 >Slug *</label>
                 <Input
                   type="text"
-                  required
                   value={formData.slug}
                   onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
                   placeholder="ubuntu-2204"
@@ -574,7 +572,6 @@ function EnvironmentsPage() {
               >Docker Image *</label>
               <Input
                 type="text"
-                required
                 value={formData.image}
                 onChange={(e) => setFormData({ ...formData, image: e.target.value })}
                 placeholder="ubuntu:22.04"

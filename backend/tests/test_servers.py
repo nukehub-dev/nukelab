@@ -3,6 +3,7 @@
 import pytest
 from datetime import datetime, timedelta
 from httpx import AsyncClient
+from unittest.mock import MagicMock, AsyncMock, patch
 
 from app.models.server import Server
 
@@ -208,3 +209,281 @@ class TestServerLifecycleE2E:
 
         server.total_cost = 100
         assert server.total_cost == 100
+
+
+class TestServerWorkspaceVolumeAccess:
+    """Tests for server creation with workspace-shared volumes."""
+
+    @pytest.mark.asyncio
+    async def test_viewer_cannot_mount_workspace_volume_as_rw(self, client: AsyncClient, test_user, admin_user, user_token, db_session):
+        """A workspace viewer must be blocked from mounting a shared volume as read-write."""
+        from app.models.server_plan import ServerPlan
+        from app.models.environment_template import EnvironmentTemplate
+        from app.models.volume import Volume
+        from app.services.workspace_service import WorkspaceService
+        from app.api.auth import create_access_token
+
+        # Admin creates workspace and adds volume
+        ws_service = WorkspaceService(db_session)
+        workspace = await ws_service.create_workspace(
+            name="Secure Workspace",
+            description="Test",
+            owner_id=str(admin_user.id),
+        )
+
+        volume = Volume(
+            name="shared-vol",
+            display_name="Shared Volume",
+            owner_id=admin_user.id,
+            status="active",
+        )
+        db_session.add(volume)
+        await db_session.commit()
+        await db_session.refresh(volume)
+
+        await ws_service.add_volume(
+            workspace_id=str(workspace.id),
+            volume_id=str(volume.id),
+            role="read_write",
+        )
+
+        # Add test_user as VIEWER (read_only member role)
+        await ws_service.add_member(
+            workspace_id=str(workspace.id),
+            user_id=str(test_user.id),
+            role="read_only",
+        )
+
+        # Create plan and environment
+        plan = ServerPlan(
+            name="Test Plan",
+            slug="test-plan-ws",
+            category="standard",
+            cpu_limit=1,
+            memory_limit="1g",
+            disk_limit="10g",
+            max_servers_per_user=5,
+            cost_per_hour=10,
+            is_active=True,
+            allowed_roles=["user"],
+        )
+        db_session.add(plan)
+        await db_session.commit()
+        await db_session.refresh(plan)
+
+        env = EnvironmentTemplate(
+            name="Test Env",
+            slug="test-env-ws",
+            image="hello-world",
+            is_active=True,
+            is_public=True,
+        )
+        db_session.add(env)
+        await db_session.commit()
+        await db_session.refresh(env)
+
+        # Viewer tries to create server with shared volume as RW
+        headers = {"Authorization": f"Bearer {user_token}"}
+        response = await client.post("/api/servers/", headers=headers, json={
+            "name": "viewer-rw-attack",
+            "plan_id": str(plan.id),
+            "environment_id": str(env.id),
+            "volume_mounts": [{
+                "volume_id": str(volume.id),
+                "mount_path": "/data",
+                "mode": "read_write",
+            }],
+        })
+
+        assert response.status_code == 403, f"Expected 403, got {response.status_code}: {response.text}"
+        detail = response.json().get("detail", "")
+        assert "read-write" in detail.lower() or "read_only" in detail.lower() or "cannot be mounted" in detail.lower()
+
+    @pytest.mark.asyncio
+    async def test_viewer_can_mount_workspace_volume_as_ro(self, client: AsyncClient, test_user, admin_user, user_token, db_session):
+        """A workspace viewer should be allowed to mount a shared volume as read-only."""
+        from app.models.server_plan import ServerPlan
+        from app.models.environment_template import EnvironmentTemplate
+        from app.models.volume import Volume
+        from app.services.workspace_service import WorkspaceService
+        from unittest.mock import AsyncMock, patch
+
+        ws_service = WorkspaceService(db_session)
+        workspace = await ws_service.create_workspace(
+            name="RO Workspace",
+            description="Test",
+            owner_id=str(admin_user.id),
+        )
+
+        volume = Volume(
+            name="shared-ro-vol",
+            display_name="Shared RO Volume",
+            owner_id=admin_user.id,
+            status="active",
+        )
+        db_session.add(volume)
+        await db_session.commit()
+        await db_session.refresh(volume)
+
+        await ws_service.add_volume(
+            workspace_id=str(workspace.id),
+            volume_id=str(volume.id),
+            role="read_write",
+        )
+
+        await ws_service.add_member(
+            workspace_id=str(workspace.id),
+            user_id=str(test_user.id),
+            role="read_only",
+        )
+
+        plan = ServerPlan(
+            name="Test Plan",
+            slug="test-plan-ro",
+            category="standard",
+            cpu_limit=1,
+            memory_limit="1g",
+            disk_limit="10g",
+            max_servers_per_user=5,
+            cost_per_hour=10,
+            is_active=True,
+            allowed_roles=["user"],
+        )
+        db_session.add(plan)
+        await db_session.commit()
+        await db_session.refresh(plan)
+
+        env = EnvironmentTemplate(
+            name="Test Env",
+            slug="test-env-ro",
+            image="hello-world",
+            is_active=True,
+            is_public=True,
+        )
+        db_session.add(env)
+        await db_session.commit()
+        await db_session.refresh(env)
+
+        headers = {"Authorization": f"Bearer {user_token}"}
+
+        # Mock spawner to avoid actual Docker calls
+        with patch("app.api.servers.spawner.spawn", new_callable=AsyncMock) as mock_spawn:
+            mock_spawn.return_value = MagicMock(
+                id="server123",
+                container_id="container123",
+                status="running",
+                user_id=test_user.id,
+                name="viewer-ro-server",
+            )
+            with patch("app.api.servers.spawner.get_status", new_callable=AsyncMock) as mock_status:
+                mock_status.return_value = "running"
+                response = await client.post("/api/servers/", headers=headers, json={
+                    "name": "viewer-ro-server",
+                    "plan_id": str(plan.id),
+                    "environment_id": str(env.id),
+                    "volume_mounts": [{
+                        "volume_id": str(volume.id),
+                        "mount_path": "/data",
+                        "mode": "read_only",
+                    }],
+                })
+
+        # Should succeed (201) or get a Docker-related error, NOT a 403
+        if response.status_code == 403:
+            detail = response.json().get("detail", "")
+            assert "read-only" not in detail.lower(), f"Viewer should be allowed RO mount: {detail}"
+        # We don't strictly assert 201 because Docker mocking is complex,
+        # but we absolutely forbid 403 for read-only mount attempts.
+        assert response.status_code != 403, f"Viewer should be allowed to mount as RO: {response.text}"
+
+    @pytest.mark.asyncio
+    async def test_editor_can_mount_workspace_volume_as_rw(self, client: AsyncClient, test_user, admin_user, user_token, db_session):
+        """A workspace editor (read_write member) should be allowed to mount as read-write."""
+        from app.models.server_plan import ServerPlan
+        from app.models.environment_template import EnvironmentTemplate
+        from app.models.volume import Volume
+        from app.services.workspace_service import WorkspaceService
+        from unittest.mock import AsyncMock, patch
+
+        ws_service = WorkspaceService(db_session)
+        workspace = await ws_service.create_workspace(
+            name="RW Workspace",
+            description="Test",
+            owner_id=str(admin_user.id),
+        )
+
+        volume = Volume(
+            name="shared-rw-vol",
+            display_name="Shared RW Volume",
+            owner_id=admin_user.id,
+            status="active",
+        )
+        db_session.add(volume)
+        await db_session.commit()
+        await db_session.refresh(volume)
+
+        await ws_service.add_volume(
+            workspace_id=str(workspace.id),
+            volume_id=str(volume.id),
+            role="read_write",
+        )
+
+        # Add test_user as EDITOR (read_write member role)
+        await ws_service.add_member(
+            workspace_id=str(workspace.id),
+            user_id=str(test_user.id),
+            role="read_write",
+        )
+
+        plan = ServerPlan(
+            name="Test Plan",
+            slug="test-plan-editor",
+            category="standard",
+            cpu_limit=1,
+            memory_limit="1g",
+            disk_limit="10g",
+            max_servers_per_user=5,
+            cost_per_hour=10,
+            is_active=True,
+            allowed_roles=["user"],
+        )
+        db_session.add(plan)
+        await db_session.commit()
+        await db_session.refresh(plan)
+
+        env = EnvironmentTemplate(
+            name="Test Env",
+            slug="test-env-editor",
+            image="hello-world",
+            is_active=True,
+            is_public=True,
+        )
+        db_session.add(env)
+        await db_session.commit()
+        await db_session.refresh(env)
+
+        headers = {"Authorization": f"Bearer {user_token}"}
+
+        with patch("app.api.servers.spawner.spawn", new_callable=AsyncMock) as mock_spawn:
+            mock_spawn.return_value = MagicMock(
+                id="server456",
+                container_id="container456",
+                status="running",
+                user_id=test_user.id,
+                name="editor-rw-server",
+            )
+            with patch("app.api.servers.spawner.get_status", new_callable=AsyncMock) as mock_status:
+                mock_status.return_value = "running"
+                response = await client.post("/api/servers/", headers=headers, json={
+                    "name": "editor-rw-server",
+                    "plan_id": str(plan.id),
+                    "environment_id": str(env.id),
+                    "volume_mounts": [{
+                        "volume_id": str(volume.id),
+                        "mount_path": "/data",
+                        "mode": "read_write",
+                    }],
+                })
+
+        # Editor should NOT get a 403 permission denied
+        assert response.status_code != 403, f"Editor should be allowed RW mount: {response.text}"

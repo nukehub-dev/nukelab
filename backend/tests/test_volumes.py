@@ -216,7 +216,7 @@ class TestVolumeService:
                 [str(vol1.id), str(vol2.id)], "10g"
             )
             assert result["allowed"] is False
-            assert "total mounted volume size" in result["reason"].lower()
+            assert "total mounted volume capacity" in result["reason"].lower()
             assert result["total_size"] == 12884901888
             assert result["plan_limit"] == 10737418240
             assert "volumes" in result

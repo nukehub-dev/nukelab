@@ -262,6 +262,9 @@ class VolumeService:
         This prevents users from circumventing per-volume checks by mounting
         multiple volumes whose individual sizes are under the plan limit but
         whose combined size exceeds it.
+
+        Uses max_size_bytes when available (potential capacity) otherwise falls
+        back to size_bytes (current usage) for a conservative check.
         """
         total_bytes = 0
         volume_sizes = []
@@ -275,10 +278,14 @@ class VolumeService:
             await self.update_volume_size(volume_id)
             await self.db.refresh(volume)
 
-            total_bytes += volume.size_bytes or 0
+            # Use max_size_bytes if set, otherwise fall back to current size_bytes
+            effective_size = volume.max_size_bytes if volume.max_size_bytes is not None else (volume.size_bytes or 0)
+            total_bytes += effective_size
             volume_sizes.append({
                 "volume_id": volume_id,
                 "size_bytes": volume.size_bytes or 0,
+                "max_size_bytes": volume.max_size_bytes,
+                "effective_size": effective_size,
                 "name": volume.display_name or volume.name,
             })
 
@@ -289,7 +296,7 @@ class VolumeService:
             return {
                 "allowed": False,
                 "reason": (
-                    f"Total mounted volume size ({self._human_size(total_bytes)}) exceeds "
+                    f"Total mounted volume capacity ({self._human_size(total_bytes)}) exceeds "
                     f"plan limit ({plan_disk_limit}). "
                     f"Free up {self._human_size(over_by)} or upgrade your plan."
                 ),

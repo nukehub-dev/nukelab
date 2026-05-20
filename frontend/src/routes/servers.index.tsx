@@ -13,7 +13,7 @@ import { usePlans } from '../hooks/use-plans';
 import { useVolumes } from '../hooks/use-volumes';
 import { useDataTable } from '../hooks/use-data-table';
 import { useAuthStore } from '../stores/auth-store';
-import { formatDate } from '../lib/utils';
+import { formatDate, formatBytes, formatPlanResource, parseMemoryString } from '../lib/utils';
 import type { Server as ServerType } from '../types/api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '../components/ui/dialog';
 import { Input } from '../components/ui/input';
@@ -73,6 +73,7 @@ function ServersPage() {
     volume_id: string;
     mount_path: string;
     mode: 'read_write' | 'read_only';
+    max_size_gb: number;
   }
 
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -86,7 +87,7 @@ function ServersPage() {
     environment_id: '',
   });
   const [editVolumeMounts, setEditVolumeMounts] = useState<VolumeMountForm[]>([
-    { volume_id: '', mount_path: '', mode: 'read_write' },
+    { volume_id: '', mount_path: '', mode: 'read_write', max_size_gb: 10 },
   ]);
   const [editVisibleError, setEditVisibleError] = useState<string | null>(null);
 
@@ -115,6 +116,9 @@ function ServersPage() {
           volume_id: m.volume_id,
           mount_path: m.mount_path,
           mode: m.mode,
+          max_size_gb: m.volume?.max_size_bytes
+            ? Math.round(m.volume.max_size_bytes / (1024 * 1024 * 1024))
+            : 10,
         }))
       );
     } else {
@@ -123,6 +127,7 @@ function ServersPage() {
           volume_id: server.volume_id || '',
           mount_path: server.volume_mode ? `/home/${user?.username || 'user'}` : '',
           mode: (server.volume_mode as 'read_write' | 'read_only') || 'read_write',
+          max_size_gb: 10,
         },
       ]);
     }
@@ -134,13 +139,12 @@ function ServersPage() {
     setEditVisibleError(null);
     if (!editServerId) return;
 
-    const mounts = editVolumeMounts
-      .filter((m) => m.volume_id)
-      .map((m, idx) => ({
-        volume_id: m.volume_id,
-        mount_path: idx === 0 && !m.mount_path ? `/home/${user?.username || 'user'}` : (m.mount_path || '/data'),
-        mode: m.mode,
-      }));
+    const mounts = editVolumeMounts.map((m, idx) => ({
+      volume_id: m.volume_id,
+      mount_path: idx === 0 && !m.mount_path ? `/home/${user?.username || 'user'}` : (m.mount_path || '/data'),
+      mode: m.mode,
+      max_size_bytes: !m.volume_id ? m.max_size_gb * 1024 * 1024 * 1024 : undefined,
+    }));
 
     updateServer.mutate(
       {
@@ -164,7 +168,7 @@ function ServersPage() {
   const addEditVolumeMount = () => {
     setEditVolumeMounts((prev) => [
       ...prev,
-      { volume_id: '', mount_path: '/data', mode: 'read_write' },
+      { volume_id: '', mount_path: '/data', mode: 'read_write', max_size_gb: 10 },
     ]);
   };
 
@@ -172,7 +176,7 @@ function ServersPage() {
     setEditVolumeMounts((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const updateEditVolumeMount = (index: number, field: keyof VolumeMountForm, value: string) => {
+  const updateEditVolumeMount = (index: number, field: keyof VolumeMountForm, value: string | number) => {
     setEditVolumeMounts((prev) =>
       prev.map((m, i) => (i === index ? { ...m, [field]: value } : m))
     );
@@ -676,7 +680,7 @@ function ServersPage() {
       />
       {/* Edit Server Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-lg overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Server</DialogTitle>
             <DialogDescription>
@@ -714,7 +718,7 @@ function ServersPage() {
               >
                 {plans.map((plan) => (
                   <SelectItem key={plan.id} value={plan.id}>
-                    {plan.name} ({plan.cpu_limit} CPU / {plan.memory_limit})
+                    {plan.name} ({plan.cpu_limit} CPU / {plan.memory_limit} / {formatPlanResource(plan.disk_limit)} disk)
                   </SelectItem>
                 ))}
               </Select>
@@ -751,68 +755,149 @@ function ServersPage() {
                   Add Volume
                 </button>
               </div>
-              
-              {editVolumeMounts.map((mount, index) => (
-                <div key={index} className="space-y-2 p-3 rounded-lg bg-surface/50 border border-border/50">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">
-                      {index === 0 ? 'Primary Mount' : `Additional Mount ${index}`}
-                    </span>
-                    {editVolumeMounts.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeEditVolumeMount(index)}
-                        className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
+
+              {/* Capacity indicator */}
+              {(() => {
+                const selectedPlan = plans.find((p) => p.id === editForm.plan_id);
+                if (!selectedPlan) return null;
+                const planDiskBytes = parseMemoryString(selectedPlan.disk_limit);
+                const totalBytes = editVolumeMounts.reduce((sum, mount) => {
+                  if (!mount.volume_id) {
+                    return sum + mount.max_size_gb * 1024 * 1024 * 1024;
+                  }
+                  const vol = volumes.find((v) => v.id === mount.volume_id);
+                  return sum + (vol?.max_size_bytes || vol?.size_bytes || 0);
+                }, 0);
+                const isOver = planDiskBytes > 0 && totalBytes > planDiskBytes;
+                const pct = planDiskBytes > 0 ? Math.min(100, (totalBytes / planDiskBytes) * 100) : 0;
+                return (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">
+                        Plan capacity: {formatPlanResource(selectedPlan.disk_limit)}
+                      </span>
+                      <span className={isOver ? 'text-destructive font-medium' : 'text-muted-foreground'}>
+                        {formatBytes(totalBytes)} / {formatPlanResource(selectedPlan.disk_limit)}
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-300 ${
+                          isOver ? 'bg-destructive' : pct > 80 ? 'bg-amber-500' : 'bg-emerald-500'
+                        }`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    {isOver && (
+                      <p className="text-xs text-destructive">
+                        Total volume capacity exceeds plan disk limit.
+                      </p>
                     )}
                   </div>
-                  
-                  <Select
-                    value={mount.volume_id}
-                    onChange={(value) => updateEditVolumeMount(index, 'volume_id', value)}
-                    placeholder="Select a volume..."
-                  >
-                    <SelectItem value="">Create new volume</SelectItem>
-                    {volumes.map((vol) => (
-                      <SelectItem key={vol.id} value={vol.id}>
-                        {vol.display_name} ({vol.server_count > 0 ? `${vol.server_count} servers` : 'unused'})
-                      </SelectItem>
-                    ))}
-                  </Select>
-                  
-                  <div className="flex gap-2">
-                    <Input
-                      type="text"
-                      value={mount.mount_path}
-                      onChange={(e) => updateEditVolumeMount(index, 'mount_path', e.target.value)}
-                      placeholder={index === 0 ? `/home/${user?.username || 'user'}` : '/data'}
-                      className="flex-1 text-sm"
-                    />
-                    <div className="flex gap-1">
-                      <Button
-                        type="button"
-                        variant={mount.mode === 'read_write' ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => updateEditVolumeMount(index, 'mode', 'read_write')}
-                        className="text-xs px-2"
-                      >
-                        RW
-                      </Button>
-                      <Button
-                        type="button"
-                        variant={mount.mode === 'read_only' ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => updateEditVolumeMount(index, 'mode', 'read_only')}
-                        className="text-xs px-2"
-                      >
-                        RO
-                      </Button>
+                );
+              })()}
+              
+              {editVolumeMounts.map((mount, index) => {
+                const selectedVol = volumes.find((v) => v.id === mount.volume_id);
+                const isNewVolume = !mount.volume_id;
+                return (
+                  <div key={index} className="space-y-2 p-3 rounded-lg bg-surface/50 border border-border/50">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">
+                        {index === 0 ? 'Primary Mount' : `Additional Mount ${index}`}
+                      </span>
+                      {editVolumeMounts.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeEditVolumeMount(index)}
+                          className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                    
+                    <Select
+                      value={mount.volume_id}
+                      onChange={(value) => updateEditVolumeMount(index, 'volume_id', value)}
+                      placeholder="Select a volume..."
+                    >
+                      <SelectItem value="">Create new volume</SelectItem>
+                      {volumes.map((vol) => (
+                        <SelectItem key={vol.id} value={vol.id}>
+                          {vol.display_name}
+                          {' '}
+                          {vol.max_size_bytes
+                            ? `(${formatBytes(vol.max_size_bytes)} limit${vol.size_bytes > 0 ? `, ${formatBytes(vol.size_bytes)} used` : ''})`
+                            : vol.size_bytes > 0
+                              ? `(${formatBytes(vol.size_bytes)} used)`
+                              : '(unused)'}
+                        </SelectItem>
+                      ))}
+                    </Select>
+
+                    {/* Size input for new volumes */}
+                    {isNewVolume && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">Size:</span>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={500}
+                          value={mount.max_size_gb}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value, 10);
+                            updateEditVolumeMount(index, 'max_size_gb', String(isNaN(val) ? 1 : Math.max(1, Math.min(500, val))));
+                          }}
+                          className="w-20 text-sm"
+                        />
+                        <span className="text-xs text-muted-foreground">GB</span>
+                      </div>
+                    )}
+
+                    {/* Show existing volume size info */}
+                    {selectedVol && (
+                      <div className="text-xs text-muted-foreground">
+                        {selectedVol.max_size_bytes
+                          ? `Capacity: ${formatBytes(selectedVol.max_size_bytes)}${selectedVol.size_bytes > 0 ? ` • Used: ${formatBytes(selectedVol.size_bytes)}` : ''}`
+                          : selectedVol.size_bytes > 0
+                            ? `Used: ${formatBytes(selectedVol.size_bytes)}`
+                            : 'Empty volume'}
+                      </div>
+                    )}
+                    
+                    <div className="flex gap-2">
+                      <Input
+                        type="text"
+                        value={mount.mount_path}
+                        onChange={(e) => updateEditVolumeMount(index, 'mount_path', e.target.value)}
+                        placeholder={index === 0 ? `/home/${user?.username || 'user'}` : '/data'}
+                        className="flex-1 text-sm"
+                      />
+                      <div className="flex gap-1">
+                        <Button
+                          type="button"
+                          variant={mount.mode === 'read_write' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => updateEditVolumeMount(index, 'mode', 'read_write')}
+                          className="text-xs px-2"
+                        >
+                          RW
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={mount.mode === 'read_only' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => updateEditVolumeMount(index, 'mode', 'read_only')}
+                          className="text-xs px-2"
+                        >
+                          RO
+                        </Button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
             
             <div className="flex items-center gap-2 p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
@@ -826,9 +911,23 @@ function ServersPage() {
             <Button variant="outline" type="button" onClick={() => { setEditDialogOpen(false); setEditServerId(null); }}>
               Cancel
             </Button>
-            <Button type="submit" form="edit-form" loading={updateServer.isPending}>
-              {updateServer.isPending ? 'Saving...' : 'Save Changes'}
-            </Button>
+            {(() => {
+              const selectedPlan = plans.find((p) => p.id === editForm.plan_id);
+              const planDiskBytes = selectedPlan ? parseMemoryString(selectedPlan.disk_limit) : 0;
+              const totalBytes = editVolumeMounts.reduce((sum, mount) => {
+                if (!mount.volume_id) {
+                  return sum + mount.max_size_gb * 1024 * 1024 * 1024;
+                }
+                const vol = volumes.find((v) => v.id === mount.volume_id);
+                return sum + (vol?.max_size_bytes || vol?.size_bytes || 0);
+              }, 0);
+              const isOver = planDiskBytes > 0 && totalBytes > planDiskBytes;
+              return (
+                <Button type="submit" form="edit-form" loading={updateServer.isPending} disabled={isOver}>
+                  {updateServer.isPending ? 'Saving...' : 'Save Changes'}
+                </Button>
+              );
+            })()}
           </DialogFooter>
           <DialogClose onClick={() => setEditDialogOpen(false)} />
         </DialogContent>

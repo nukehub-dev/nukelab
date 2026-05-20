@@ -13,11 +13,13 @@ export interface ServerVolumeMount {
   mount_path: string;
   mode: 'read_write' | 'read_only';
   is_primary?: boolean;
+  max_size_bytes?: number | null;
   volume?: {
     id: string;
     name: string;
     display_name: string;
     size_bytes: number;
+    max_size_bytes?: number | null;
   };
 }
 
