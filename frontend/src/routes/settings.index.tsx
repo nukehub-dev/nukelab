@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { Palette, Bell, UserCircle, ChevronRight, KeyRound, Settings } from 'lucide-react';
+import { Palette, Bell, UserCircle, ChevronRight, KeyRound, Settings, Zap } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { cn } from '../lib/utils';
 
@@ -35,6 +35,13 @@ const categories: SettingsCategory[] = [
     color: 'bg-blue-500/10 text-blue-400',
   },
   {
+    label: 'Credits',
+    description: 'View your credit balance and transaction history',
+    icon: Zap,
+    href: '/settings/credits',
+    color: 'bg-amber-500/10 text-amber-400',
+  },
+  {
     label: 'API Tokens',
     description: 'Manage personal access tokens for API and CLI access',
     icon: KeyRound,
@@ -64,7 +71,7 @@ function SettingsIndexPage() {
         </div>
       </motion.div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {categories.map((category, i) => (
           <motion.div
             key={category.label}

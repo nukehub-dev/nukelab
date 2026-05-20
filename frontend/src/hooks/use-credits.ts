@@ -32,6 +32,40 @@ export function useCreditSummary(userId: string) {
   });
 }
 
+export function useMyCreditSummary() {
+  return useQuery({
+    queryKey: ['credits', 'my-summary'],
+    queryFn: async () => {
+      const response = await api.get<{ user_id: string; balance: number; daily_allowance: number; summary: CreditSummary }>(
+        '/credits/'
+      );
+      return response;
+    },
+  });
+}
+
+export function useMyCreditHistory(params: CreditHistoryParams = {}) {
+  return useQuery({
+    queryKey: ['credits', 'my-history', params],
+    queryFn: async () => {
+      const searchParams = new URLSearchParams();
+      if (params.transaction_type) searchParams.set('transaction_type', params.transaction_type);
+      if (params.from_date) searchParams.set('from_date', params.from_date);
+      if (params.to_date) searchParams.set('to_date', params.to_date);
+      if (params.page) searchParams.set('page', String(params.page));
+      if (params.limit) searchParams.set('limit', String(params.limit));
+      if (params.sort_by) searchParams.set('sort_by', params.sort_by);
+      if (params.sort_order) searchParams.set('sort_order', params.sort_order);
+
+      const queryString = searchParams.toString();
+      const response = await api.get<CreditHistoryResponse>(
+        `/credits/history${queryString ? `?${queryString}` : ''}`
+      );
+      return response;
+    },
+  });
+}
+
 export function useCreditHistory(userId: string, params: CreditHistoryParams = {}) {
   return useQuery({
     queryKey: ['credits', 'history', userId, params],

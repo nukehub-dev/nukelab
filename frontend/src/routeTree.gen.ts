@@ -33,6 +33,7 @@ import { Route as WorkspacesWorkspaceIdRouteImport } from './routes/workspaces.$
 import { Route as SettingsTokensRouteImport } from './routes/settings.tokens'
 import { Route as SettingsProfileRouteImport } from './routes/settings.profile'
 import { Route as SettingsNotificationsRouteImport } from './routes/settings.notifications'
+import { Route as SettingsCreditsRouteImport } from './routes/settings.credits'
 import { Route as SettingsAppearanceRouteImport } from './routes/settings.appearance'
 import { Route as ServersServerIdRouteImport } from './routes/servers.$serverId'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
@@ -167,6 +168,11 @@ const SettingsNotificationsRoute = SettingsNotificationsRouteImport.update({
   path: '/notifications',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsCreditsRoute = SettingsCreditsRouteImport.update({
+  id: '/credits',
+  path: '/credits',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SettingsAppearanceRoute = SettingsAppearanceRouteImport.update({
   id: '/appearance',
   path: '/appearance',
@@ -261,6 +267,7 @@ export interface FileRoutesByFullPath {
   '/admin/users': typeof AdminUsersRoute
   '/servers/$serverId': typeof ServersServerIdRouteWithChildren
   '/settings/appearance': typeof SettingsAppearanceRoute
+  '/settings/credits': typeof SettingsCreditsRoute
   '/settings/notifications': typeof SettingsNotificationsRoute
   '/settings/profile': typeof SettingsProfileRoute
   '/settings/tokens': typeof SettingsTokensRoute
@@ -296,6 +303,7 @@ export interface FileRoutesByTo {
   '/admin/users': typeof AdminUsersRoute
   '/servers/$serverId': typeof ServersServerIdRouteWithChildren
   '/settings/appearance': typeof SettingsAppearanceRoute
+  '/settings/credits': typeof SettingsCreditsRoute
   '/settings/notifications': typeof SettingsNotificationsRoute
   '/settings/profile': typeof SettingsProfileRoute
   '/settings/tokens': typeof SettingsTokensRoute
@@ -336,6 +344,7 @@ export interface FileRoutesById {
   '/admin/users': typeof AdminUsersRoute
   '/servers/$serverId': typeof ServersServerIdRouteWithChildren
   '/settings/appearance': typeof SettingsAppearanceRoute
+  '/settings/credits': typeof SettingsCreditsRoute
   '/settings/notifications': typeof SettingsNotificationsRoute
   '/settings/profile': typeof SettingsProfileRoute
   '/settings/tokens': typeof SettingsTokensRoute
@@ -377,6 +386,7 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/servers/$serverId'
     | '/settings/appearance'
+    | '/settings/credits'
     | '/settings/notifications'
     | '/settings/profile'
     | '/settings/tokens'
@@ -412,6 +422,7 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/servers/$serverId'
     | '/settings/appearance'
+    | '/settings/credits'
     | '/settings/notifications'
     | '/settings/profile'
     | '/settings/tokens'
@@ -451,6 +462,7 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/servers/$serverId'
     | '/settings/appearance'
+    | '/settings/credits'
     | '/settings/notifications'
     | '/settings/profile'
     | '/settings/tokens'
@@ -653,6 +665,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsNotificationsRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/credits': {
+      id: '/settings/credits'
+      path: '/credits'
+      fullPath: '/settings/credits'
+      preLoaderRoute: typeof SettingsCreditsRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/settings/appearance': {
       id: '/settings/appearance'
       path: '/appearance'
@@ -802,6 +821,7 @@ const ServersRouteWithChildren =
 
 interface SettingsRouteChildren {
   SettingsAppearanceRoute: typeof SettingsAppearanceRoute
+  SettingsCreditsRoute: typeof SettingsCreditsRoute
   SettingsNotificationsRoute: typeof SettingsNotificationsRoute
   SettingsProfileRoute: typeof SettingsProfileRoute
   SettingsTokensRoute: typeof SettingsTokensRoute
@@ -810,6 +830,7 @@ interface SettingsRouteChildren {
 
 const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsAppearanceRoute: SettingsAppearanceRoute,
+  SettingsCreditsRoute: SettingsCreditsRoute,
   SettingsNotificationsRoute: SettingsNotificationsRoute,
   SettingsProfileRoute: SettingsProfileRoute,
   SettingsTokensRoute: SettingsTokensRoute,
