@@ -288,9 +288,12 @@ export function NotificationCenter({ variant = 'default' }: NotificationCenterPr
 
       let left = rect.right + gap;
       let top = rect.top;
+      let originX: 'left' | 'right' = 'left';
+      let originY: 'top' | 'bottom' = 'top';
 
       if (left + dropdownWidth > window.innerWidth - gap) {
         left = rect.left - dropdownWidth - gap;
+        originX = 'right';
       }
 
       const spaceBelow = window.innerHeight - rect.bottom - gap;
@@ -298,10 +301,13 @@ export function NotificationCenter({ variant = 'default' }: NotificationCenterPr
 
       if (actualHeight <= spaceBelow) {
         top = rect.bottom + gap;
+        originY = 'top';
       } else if (actualHeight <= spaceAbove) {
         top = rect.top - actualHeight - gap;
+        originY = 'bottom';
       } else {
         top = rect.bottom + gap;
+        originY = 'top';
         if (top + actualHeight > window.innerHeight - gap) {
           top = Math.max(gap, window.innerHeight - actualHeight - gap);
         }
@@ -316,6 +322,7 @@ export function NotificationCenter({ variant = 'default' }: NotificationCenterPr
       dropdown.style.zIndex = '9999';
       dropdown.style.width = `${dropdownWidth}px`;
       dropdown.style.maxHeight = `${MAX_DROPDOWN_HEIGHT}px`;
+      dropdown.style.transformOrigin = `${originY} ${originX}`;
     };
 
     positionDropdown();
@@ -455,20 +462,28 @@ export function NotificationCenter({ variant = 'default' }: NotificationCenterPr
       )}
 
       {/* Desktop: floating dropdown */}
-      {isOpen && !isMobile && createPortal(
-        <div
-          ref={dropdownRef}
-          className="bg-popover/80 backdrop-blur-xl border border-border/50 rounded-2xl shadow-2xl shadow-black/20 overflow-hidden flex flex-col"
-          style={{
-            position: 'fixed',
-            zIndex: 9999,
-            width: '360px',
-            maxWidth: 'calc(100vw - 2rem)',
-            maxHeight: `${MAX_DROPDOWN_HEIGHT}px`,
-          }}
-        >
-          <NotificationPanel {...panelProps} />
-        </div>,
+      {!isMobile && createPortal(
+        <AnimatePresence>
+          {isOpen && (
+            <motion.div
+              ref={dropdownRef}
+              className="bg-popover/80 backdrop-blur-xl border border-border/50 rounded-2xl shadow-2xl shadow-black/20 overflow-hidden flex flex-col"
+              style={{
+                position: 'fixed',
+                zIndex: 9999,
+                width: '360px',
+                maxWidth: 'calc(100vw - 2rem)',
+                maxHeight: `${MAX_DROPDOWN_HEIGHT}px`,
+              }}
+              initial={{ opacity: 0, scale: 0.82 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ type: 'spring', stiffness: 450, damping: 28 }}
+            >
+              <NotificationPanel {...panelProps} />
+            </motion.div>
+          )}
+        </AnimatePresence>,
         document.body
       )}
 
