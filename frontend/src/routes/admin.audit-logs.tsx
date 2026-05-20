@@ -397,6 +397,7 @@ function AuditLogsPage() {
         title="Audit Logs"
         subtitle="Platform activity monitoring"
         icon={FileText}
+        backTo="/admin"
         stats={[
           { title: 'Total Events', value: totalEvents, icon: FileText, iconColor: 'text-blue-400', bgColor: 'bg-blue-500/10' },
           { title: 'Security', value: securityEvents, icon: Shield, iconColor: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },

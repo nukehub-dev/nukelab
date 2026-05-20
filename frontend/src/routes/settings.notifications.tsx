@@ -1,5 +1,5 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { Bell, Server, CreditCard, AlertTriangle, Calendar, Users, Check, Loader2 } from 'lucide-react';
+import { createFileRoute, Link } from '@tanstack/react-router';
+import { Bell, Server, CreditCard, AlertTriangle, Calendar, Users, Check, Loader2, ArrowLeft } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -160,20 +160,26 @@ function NotificationsSettingsPage() {
   );
 
   return (
-    <div className="space-y-10 pb-10">
+    <div className="min-h-screen p-6 lg:p-10 space-y-10">
       {/* Header */}
       <motion.div
-        initial={{ opacity: 0, y: -10 }}
+        initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="flex items-center justify-between"
       >
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
-            <Bell className="w-6 h-6 text-primary" />
+        <div className="flex items-center gap-3">
+          <Link
+            to="/settings"
+            className="p-2 rounded-lg hover:bg-accent transition-colors shrink-0 inline-flex"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
+          <div className="p-2 rounded-xl bg-primary/10">
+            <Bell className="w-5 h-5 text-primary" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold">Notifications</h2>
-            <p className="text-muted-foreground">Configure notification preferences</p>
+            <h1 className="text-xl font-bold">Notifications</h1>
+            <p className="text-sm text-muted-foreground">Configure notification preferences</p>
           </div>
         </div>
         <div className="flex items-center gap-4">

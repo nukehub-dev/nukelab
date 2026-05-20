@@ -1,4 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
+import { Link } from '@tanstack/react-router';
 import { cn } from '../../lib/utils';
 import { StatCard } from '../data/stat-card';
 import { ActionButton } from '../actions/action-button';
@@ -16,6 +18,7 @@ interface PageHeaderProps {
     loading?: boolean;
     disabled?: boolean;
   }>;
+  backTo?: string;
   className?: string;
 }
 
@@ -25,6 +28,7 @@ export function FloatingHeader({
   icon: Icon,
   stats,
   actions,
+  backTo,
   className,
 }: PageHeaderProps) {
   return (
@@ -35,6 +39,14 @@ export function FloatingHeader({
       )}
     >
       <div className="flex items-center gap-4 px-6 lg:px-10 py-6">
+        {backTo && (
+          <Link
+            to={backTo}
+            className="p-2 rounded-lg hover:bg-accent transition-colors shrink-0 inline-flex"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
+        )}
         {Icon && (
           <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-primary/10">
             <Icon className="w-5 h-5 text-primary" />

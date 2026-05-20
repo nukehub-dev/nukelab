@@ -19,9 +19,6 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-const PAGE_TITLE = 'Profile';
-const PAGE_DESCRIPTION = 'Manage your account settings and preferences';
-
 import { AvatarEditDialog } from './avatar-edit-dialog';
 import { useAuthStore } from '../../stores/auth-store';
 import { useToast } from '../../stores/toast-store';
@@ -467,21 +464,6 @@ export function ProfilePage() {
       />
 
       <div className="space-y-10 pb-10">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex items-center gap-4"
-        >
-          <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
-            <UserCircle className="w-6 h-6 text-primary" />
-          </div>
-          <div>
-            <h2 className="text-2xl font-bold">{PAGE_TITLE}</h2>
-            <p className="text-muted-foreground">{PAGE_DESCRIPTION}</p>
-          </div>
-        </motion.div>
-
         <motion.div className="space-y-6" variants={containerVariants} initial="hidden" animate="visible">
 
         {/* ── Header ── */}

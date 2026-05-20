@@ -176,14 +176,7 @@ export function TokensPage() {
       />
 
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold">API Tokens</h2>
-            <p className="text-muted-foreground mt-1">
-              Manage personal access tokens for programmatic access
-            </p>
-          </div>
+        <div className="flex justify-end">
           <Button onClick={() => setShowCreateDialog(true)} className="gap-2">
             <Plus className="w-4 h-4" />
             Create Token

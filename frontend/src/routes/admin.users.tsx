@@ -500,6 +500,7 @@ function UsersPage() {
         title="Users"
         subtitle="Manage platform users"
         icon={Users}
+        backTo="/admin"
         stats={stats}
         actions={canManageUsers ? [
           { 

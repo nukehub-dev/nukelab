@@ -61,15 +61,10 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
-    label: 'Preferences',
+    label: 'System',
     items: [
       { label: 'Settings', icon: Settings, href: '/settings' },
-    ],
-  },
-  {
-    label: 'Administration',
-    items: [
-      { label: 'Admin Dashboard', icon: Shield, href: '/admin', requiredPermission: PERMISSIONS.ADMIN_ACCESS },
+      { label: 'Administration', icon: Shield, href: '/admin', requiredPermission: PERMISSIONS.ADMIN_ACCESS },
     ],
   },
 ];

@@ -554,6 +554,7 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
         title="Server Management"
         subtitle="Manage all platform servers"
         icon={Server}
+        backTo="/admin"
         stats={stats}
         actions={[
           {

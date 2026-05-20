@@ -494,6 +494,7 @@ function PlansPage() {
         title="Plans"
         subtitle="Manage server plans"
         icon={CreditCard}
+        backTo="/admin"
         stats={stats}
         actions={canManagePlans ? [
           { 

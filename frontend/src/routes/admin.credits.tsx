@@ -1,4 +1,4 @@
-import { createFileRoute, useSearch } from '@tanstack/react-router';
+import { createFileRoute, useSearch, Link } from '@tanstack/react-router';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
@@ -10,6 +10,7 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  ArrowLeft,
 } from 'lucide-react';
 import { useUsers } from '../hooks/use-users';
 import { useLowBalanceUsers } from '../hooks/use-credits';
@@ -294,16 +295,25 @@ function CreditsAdminPage() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="min-h-screen p-6 lg:p-10 space-y-8">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex items-center justify-between"
+        className="flex items-center gap-3"
       >
+        <Link
+          to="/admin"
+          className="p-2 rounded-lg hover:bg-accent transition-colors shrink-0 inline-flex"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </Link>
+        <div className="p-2 rounded-xl bg-primary/10">
+          <CreditCard className="w-5 h-5 text-primary" />
+        </div>
         <div>
-          <h2 className="text-2xl font-bold">Credit Management</h2>
-          <p className="text-muted-foreground mt-1">
+          <h1 className="text-xl font-bold">Credit Management</h1>
+          <p className="text-sm text-muted-foreground">
             Manage user credits, view transaction history, and monitor low balances
           </p>
         </div>

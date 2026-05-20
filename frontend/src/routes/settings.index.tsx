@@ -1,7 +1,6 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { Palette, Bell, UserCircle, ChevronRight, KeyRound } from 'lucide-react';
+import { Palette, Bell, UserCircle, ChevronRight, KeyRound, Settings } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { useAuthStore } from '../stores/auth-store';
 import { cn } from '../lib/utils';
 
 interface SettingsCategory {
@@ -49,21 +48,24 @@ export const Route = createFileRoute('/settings/')({
 });
 
 function SettingsIndexPage() {
-  const hasPermission = useAuthStore((state) => state.hasPermission);
-
-  const visibleCategories = categories.filter(c => !c.requiredPermission || hasPermission(c.requiredPermission));
-
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold">Settings</h2>
-          <p className="text-muted-foreground mt-1">Manage your platform preferences and configuration</p>
+    <div className="min-h-screen p-6 lg:p-10 space-y-8">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex items-center gap-3"
+      >
+        <div className="p-2 rounded-xl bg-primary/10">
+          <Settings className="w-5 h-5 text-primary" />
         </div>
-      </div>
+        <div>
+          <h1 className="text-2xl font-bold">Settings</h1>
+          <p className="text-sm text-muted-foreground">Manage your platform preferences and configuration</p>
+        </div>
+      </motion.div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {visibleCategories.map((category, i) => (
+        {categories.map((category, i) => (
           <motion.div
             key={category.label}
             initial={{ opacity: 0, y: 20 }}

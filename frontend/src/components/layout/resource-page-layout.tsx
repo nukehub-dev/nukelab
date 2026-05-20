@@ -15,6 +15,7 @@ interface ResourcePageLayoutProps {
     loading?: boolean;
     disabled?: boolean;
   }>;
+  backTo?: string;
   filters?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
@@ -26,6 +27,7 @@ export function ResourcePageLayout({
   icon,
   stats,
   actions,
+  backTo,
   filters,
   children,
   className,
@@ -38,6 +40,7 @@ export function ResourcePageLayout({
         icon={icon}
         stats={stats}
         actions={actions}
+        backTo={backTo}
       />
 
       <div className="p-6 lg:p-10 space-y-6">

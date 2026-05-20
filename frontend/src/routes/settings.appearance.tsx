@@ -1,6 +1,6 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, Link } from '@tanstack/react-router';
 import { motion } from 'framer-motion';
-import { Palette, Moon, Sun, Monitor, Check, Sidebar } from 'lucide-react';
+import { Palette, Moon, Sun, Monitor, Check, Sidebar, ArrowLeft } from 'lucide-react';
 import { useThemeStore } from '../stores/theme-store';
 import { useSidebarStore } from '../stores/sidebar-store';
 import { THEME_VALUES, THEME_PREVIEWS, ACCENT_COLORS } from '../types/theme';
@@ -12,33 +12,39 @@ export const Route = createFileRoute('/settings/appearance')({
 });
 
 function AppearanceSettingsPage() {
-  const { 
-    theme, 
-    isDark, 
-    isOled, 
-    accentColor, 
-    setTheme, 
-    setDarkMode, 
-    setOledMode, 
-    setAccentColor 
+  const {
+    theme,
+    isDark,
+    isOled,
+    accentColor,
+    setTheme,
+    setDarkMode,
+    setOledMode,
+    setAccentColor
   } = useThemeStore();
-  
+
   const { mode, setMode } = useSidebarStore();
 
   return (
-    <div className="space-y-10 pb-10">
+    <div className="min-h-screen p-6 lg:p-10 space-y-10">
       {/* Header */}
       <motion.div
-        initial={{ opacity: 0, y: -10 }}
+        initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex items-center gap-4"
+        className="flex items-center gap-3"
       >
-        <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
-          <Palette className="w-6 h-6 text-primary" />
+        <Link
+          to="/settings"
+          className="p-2 rounded-lg hover:bg-accent transition-colors shrink-0 inline-flex"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </Link>
+        <div className="p-2 rounded-xl bg-primary/10">
+          <Palette className="w-5 h-5 text-primary" />
         </div>
         <div>
-          <h2 className="text-2xl font-bold">Appearance</h2>
-          <p className="text-muted-foreground">Customize the look and feel of NukeLab</p>
+          <h1 className="text-xl font-bold">Appearance</h1>
+          <p className="text-sm text-muted-foreground">Customize the look and feel of NukeLab</p>
         </div>
       </motion.div>
 
@@ -229,13 +235,13 @@ function AppearanceSettingsPage() {
   );
 }
 
-function SettingsSection({ 
-  title, 
-  description, 
-  children 
-}: { 
-  title?: string; 
-  description?: string; 
+function SettingsSection({
+  title,
+  description,
+  children
+}: {
+  title?: string;
+  description?: string;
   children: React.ReactNode;
 }) {
   return (

@@ -479,6 +479,7 @@ function EnvironmentsPage() {
         title="Environments"
         subtitle="Manage deployment environments"
         icon={Boxes}
+        backTo="/admin"
         stats={stats}
         actions={canManageEnvironments ? [
           { 

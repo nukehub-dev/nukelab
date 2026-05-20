@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, Link } from '@tanstack/react-router';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
@@ -8,6 +8,7 @@ import {
   CreditCard,
   TrendingUp,
   Activity,
+  ArrowLeft,
 } from 'lucide-react';
 import {
   useGlobalUsage,
@@ -84,6 +85,12 @@ function AnalyticsDashboard() {
         className="flex flex-col md:flex-row md:items-center md:justify-between gap-4"
       >
         <div className="flex items-center gap-3">
+          <Link
+            to="/admin"
+            className="p-2 rounded-lg hover:bg-accent transition-colors shrink-0 inline-flex"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
           <div className="p-2 rounded-lg bg-primary/10">
             <BarChart3 className="w-5 h-5 text-primary" />
           </div>

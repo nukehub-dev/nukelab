@@ -111,15 +111,15 @@ function AdminSettingsPage() {
   ];
 
   return (
-    <div className="space-y-6">
-      <div className="px-2">
-        <PageHeader
-          title="System Settings"
-          subtitle="Configure platform-wide settings and integrations"
-          icon={Server}
-        />
-      </div>
+    <div className="min-h-screen space-y-6">
+      <PageHeader
+        title="System Settings"
+        subtitle="Configure platform-wide settings and integrations"
+        icon={Server}
+        backTo="/admin"
+      />
 
+      <div className="px-6 lg:px-10 pb-10 space-y-6">
       {/* Email Configuration Card */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -297,6 +297,7 @@ function AdminSettingsPage() {
           </>
         )}
       </motion.div>
+      </div>
     </div>
   );
 }
