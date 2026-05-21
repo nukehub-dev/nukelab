@@ -299,7 +299,16 @@ async def transfer_ownership(
                 "to_user_id": request.user_id,
             }
         )
-    
+
+        # Notify new owner
+        notif_service = NotificationService(db)
+        await notif_service.ownership_transferred(
+            user_id=request.user_id,
+            workspace_name=workspace.name,
+            previous_owner=current_user.display_name or current_user.username,
+            action_url=f"/workspaces/{workspace_id}"
+        )
+
     return updated.to_dict()
 
 
@@ -566,13 +575,25 @@ async def accept_invitation(
 ):
     """Accept a workspace invitation."""
     service = WorkspaceService(db)
-    
+
+    # Get workspace for notification
+    workspace = await service.get_workspace(workspace_id)
+    workspace_name = workspace.name if workspace else "Unknown"
+
     try:
         member = await service.accept_invitation(invitation_id, str(current_user.id))
     except ValueError as e:
         logger.exception("Failed to accept invitation")
         raise HTTPException(status_code=400, detail=str(e))
-    
+
+    # Notify user they were added
+    notif_service = NotificationService(db)
+    await notif_service.workspace_member_added(
+        user_id=current_user.id,
+        workspace_name=workspace_name,
+        action_url=f"/workspaces/{workspace_id}"
+    )
+
     # Log activity
     activity = ActivityService(db)
     await activity.log(
@@ -585,7 +606,7 @@ async def accept_invitation(
             "username": current_user.username,
         }
     )
-    
+
     return member.to_dict()
 
 
@@ -782,15 +803,26 @@ async def remove_member(
                 detail="You don't have permission to remove members from this workspace"
             )
     
+    # Get workspace name before removal for notification
+    workspace_name = workspace.name
+
     try:
         success = await service.remove_member(workspace_id, user_id)
     except ValueError as e:
         logger.exception("Failed to remove member")
         raise HTTPException(status_code=400, detail=str(e))
-    
+
     if not success:
         raise HTTPException(status_code=404, detail="Member not found")
-    
+
+    # Notify removed member
+    notif_service = NotificationService(db)
+    await notif_service.workspace_member_removed(
+        user_id=user_id,
+        workspace_name=workspace_name,
+        action_url=f"/workspaces"
+    )
+
     return {"message": "Member removed", "user_id": user_id}
 
 

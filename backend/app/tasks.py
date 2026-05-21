@@ -120,7 +120,7 @@ def process_nuke_billing(self):
         from app.models.server import Server
         from app.models.server_plan import ServerPlan
         from app.models.user import User
-        from app.models.notification import Notification
+        from app.services.notification_service import NotificationService
         from app.services.credit_service import CreditService
         from datetime import datetime, timedelta
         from app.config import settings
@@ -169,15 +169,13 @@ def process_nuke_billing(self):
                             await credit_service.reconcile_server_billing(server, plan)
                             await broadcast_server_status_change(server.user_id, str(server.id), "stopped", {"stop_reason": "credit_depleted"})
                             
-                            # Create notification
-                            notification = Notification(
+                            # Notify user
+                            notif_service = NotificationService(db)
+                            await notif_service.server_stopped(
                                 user_id=server.user_id,
-                                title="Server Stopped",
-                                message=f"Server '{server.name}' was stopped due to insufficient NUKE credits.",
-                                type="server",
-                                severity="warning"
+                                server_name=server.name,
+                                reason="insufficient NUKE credits"
                             )
-                            db.add(notification)
                             stopped_count += 1
                         except Exception as e:
                             print(f"Error stopping server {server.id}: {e}")
@@ -200,14 +198,11 @@ def process_nuke_billing(self):
                     # Warn user if credits getting low
                     new_balance = current_balance - billing_amount
                     if new_balance <= plan.cost_per_hour * 2:
-                        notification = Notification(
+                        notif_service = NotificationService(db)
+                        await notif_service.low_balance(
                             user_id=server.user_id,
-                            title="Low NUKE Credits",
-                            message=f"Server '{server.name}' is running low on credits. Balance: {new_balance} NUKE.",
-                            type="credit",
-                            severity="warning"
+                            balance=new_balance
                         )
-                        db.add(notification)
                 
                 except Exception as e:
                     print(f"Error billing server {server.id}: {e}")
@@ -228,7 +223,7 @@ def enforce_auto_stop(self):
         from sqlalchemy import select
         from app.models.server import Server
         from app.models.server_plan import ServerPlan
-        from app.models.notification import Notification
+        from app.services.notification_service import NotificationService
         from datetime import datetime, timedelta
         from app.core.time_utils import parse_duration
         from app.config import settings
@@ -269,14 +264,12 @@ def enforce_auto_stop(self):
                                 stop_reason = "idle_timeout"
                             elif idle_duration >= (idle_timeout_seconds - settings.server_warn_before_stop):
                                 # Send warning notification
-                                warning = Notification(
+                                notif_service = NotificationService(db)
+                                await notif_service.server_idle_warning(
                                     user_id=server.user_id,
-                                    title="Server Idle Warning",
-                                    message=f"Server '{server.name}' will stop soon due to inactivity. Last activity: {int(idle_duration/60)} minutes ago.",
-                                    type="server",
-                                    severity="warning"
+                                    server_name=server.name,
+                                    idle_minutes=int(idle_duration / 60)
                                 )
-                                db.add(warning)
                                 warned_count += 1
                     except Exception as e:
                         print(f"Error checking idle timeout for server {server.id}: {e}")
@@ -297,20 +290,17 @@ def enforce_auto_stop(self):
                                 plan_id=str(server.plan_id)
                             )
                         
-                        # Create notification
+                        # Notify user
+                        notif_service = NotificationService(db)
                         reason_messages = {
-                            "max_runtime_exceeded": f"Server '{server.name}' stopped because it exceeded the maximum runtime limit.",
-                            "idle_timeout": f"Server '{server.name}' stopped due to inactivity.",
+                            "max_runtime_exceeded": "exceeded the maximum runtime limit",
+                            "idle_timeout": "inactivity",
                         }
-                        
-                        notification = Notification(
+                        await notif_service.server_stopped(
                             user_id=server.user_id,
-                            title="Server Stopped",
-                            message=reason_messages.get(stop_reason, f"Server '{server.name}' was stopped automatically."),
-                            type="server",
-                            severity="info"
+                            server_name=server.name,
+                            reason=reason_messages.get(stop_reason, "automatic stop")
                         )
-                        db.add(notification)
                         stopped_count += 1
                     except Exception as e:
                         print(f"Error auto-stopping server {server.id}: {e}")
@@ -332,7 +322,7 @@ def process_server_queue(self):
         from app.models.server_queue import ServerQueue
         from app.models.server_plan import ServerPlan
         from app.models.user import User
-        from app.models.notification import Notification
+        from app.services.notification_service import NotificationService
         from app.services.resource_pool_service import ResourcePoolService
         from app.services.credit_service import CreditService
         from app.services.quota_service import QuotaService
@@ -363,14 +353,11 @@ def process_server_queue(self):
                 entry.status = "cancelled"
                 entry.error_message = "Queue timeout - server was not started within 1 hour"
                 
-                notification = Notification(
+                notif_service = NotificationService(db)
+                await notif_service.queue_timeout(
                     user_id=entry.user_id,
-                    title="Queue Timeout",
-                    message=f"Server '{entry.server_name}' was removed from the queue due to timeout.",
-                    type="server",
-                    severity="warning"
+                    server_name=entry.server_name
                 )
-                db.add(notification)
                 timeout_count += 1
             
             # Process queue - try to start next available server
@@ -477,14 +464,11 @@ def process_server_queue(self):
                     next_entry.started_at = datetime.utcnow()
                     
                     # Notify user
-                    notification = Notification(
+                    notif_service = NotificationService(db)
+                    await notif_service.server_started(
                         user_id=next_entry.user_id,
-                        title="Server Started",
-                        message=f"Your queued server '{next_entry.server_name}' has been started.",
-                        type="server",
-                        severity="success"
+                        server_name=next_entry.server_name
                     )
-                    db.add(notification)
                     started_count += 1
                     
                 except Exception as e:
@@ -493,14 +477,12 @@ def process_server_queue(self):
                     next_entry.retry_count += 1
                     
                     # Notify user of failure
-                    notification = Notification(
+                    notif_service = NotificationService(db)
+                    await notif_service.server_failed(
                         user_id=next_entry.user_id,
-                        title="Server Start Failed",
-                        message=f"Failed to start queued server '{next_entry.server_name}': {str(e)}",
-                        type="server",
-                        severity="error"
+                        server_name=next_entry.server_name,
+                        error=str(e)
                     )
-                    db.add(notification)
             
             await db.commit()
             return f"Started {started_count} queued servers, timed out {timeout_count} entries"

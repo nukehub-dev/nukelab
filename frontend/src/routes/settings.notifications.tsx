@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { Bell, Server, CreditCard, AlertTriangle, Calendar, Users, Check, Loader2, ArrowLeft } from 'lucide-react';
+import { Bell, Server, CreditCard, AlertTriangle, Calendar, Users, Check, Loader2, ArrowLeft, HardDrive, FolderOpen, Key } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -18,12 +18,23 @@ const EVENT_ICONS: Record<string, React.ElementType> = {
   server_start: Server,
   server_stop: Server,
   server_ready: Server,
+  server_failed: Server,
+  server_backup_completed: Server,
   credit_low: CreditCard,
   credit_granted: CreditCard,
   queue_position: Users,
   schedule_run: Calendar,
   alert_fired: AlertTriangle,
   maintenance: AlertTriangle,
+  workspace_invite: Users,
+  workspace_member_added: Users,
+  workspace_member_removed: Users,
+  ownership_transferred: FolderOpen,
+  volume_created: HardDrive,
+  volume_near_limit: HardDrive,
+  volume_deleted: HardDrive,
+
+  api_key_created: Key,
 };
 
 interface EventPreference {
@@ -38,12 +49,23 @@ const defaultEvents: EventPreference[] = [
   { event: 'server_start', label: 'Server Started', description: 'When a server is started', channels: { email: false, webhook: false, in_app: true } },
   { event: 'server_stop', label: 'Server Stopped', description: 'When a server is stopped', channels: { email: false, webhook: false, in_app: true } },
   { event: 'server_ready', label: 'Server Ready', description: 'When a server is ready to use', channels: { email: true, webhook: false, in_app: true } },
+  { event: 'server_failed', label: 'Server Failed', description: 'When a server fails to start', channels: { email: true, webhook: false, in_app: true } },
+  { event: 'server_backup_completed', label: 'Backup Completed', description: 'When a server backup finishes', channels: { email: true, webhook: false, in_app: true } },
   { event: 'credit_low', label: 'Low Credits', description: 'When your credit balance is low', channels: { email: true, webhook: true, in_app: true } },
   { event: 'credit_granted', label: 'Credits Granted', description: 'When credits are added to your account', channels: { email: true, webhook: false, in_app: true } },
   { event: 'queue_position', label: 'Queue Position', description: 'Updates on your queue position', channels: { email: false, webhook: false, in_app: true } },
   { event: 'schedule_run', label: 'Schedule Executed', description: 'When a scheduled task runs', channels: { email: false, webhook: false, in_app: true } },
   { event: 'alert_fired', label: 'Alert Fired', description: 'When a system alert is triggered', channels: { email: true, webhook: true, in_app: true } },
   { event: 'maintenance', label: 'Maintenance Mode', description: 'System maintenance notifications', channels: { email: true, webhook: true, in_app: true } },
+  { event: 'workspace_invite', label: 'Workspace Invitation', description: 'When you are invited to a workspace', channels: { email: true, webhook: false, in_app: true } },
+  { event: 'workspace_member_added', label: 'Added to Workspace', description: 'When you are added to a workspace', channels: { email: true, webhook: false, in_app: true } },
+  { event: 'workspace_member_removed', label: 'Removed from Workspace', description: 'When you are removed from a workspace', channels: { email: true, webhook: false, in_app: true } },
+  { event: 'ownership_transferred', label: 'Ownership Transferred', description: 'When workspace ownership is transferred to you', channels: { email: true, webhook: false, in_app: true } },
+  { event: 'volume_created', label: 'Volume Created', description: 'When a new volume is provisioned', channels: { email: false, webhook: false, in_app: true } },
+  { event: 'volume_near_limit', label: 'Volume Near Limit', description: 'When a volume reaches 90% capacity', channels: { email: true, webhook: false, in_app: true } },
+  { event: 'volume_deleted', label: 'Volume Deleted', description: 'When a volume is permanently removed', channels: { email: true, webhook: false, in_app: true } },
+
+  { event: 'api_key_created', label: 'API Key Created', description: 'When a new API key is generated', channels: { email: true, webhook: false, in_app: true } },
 ];
 
 function NotificationsSettingsPage() {

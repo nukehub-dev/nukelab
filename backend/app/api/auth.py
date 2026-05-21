@@ -329,6 +329,7 @@ async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends
         user_agent=request.headers.get("user-agent"),
         ip_address=get_remote_address(request),
     )
+
     response = JSONResponse(content={
         "access_token": access_token,
         "refresh_token": refresh_token,

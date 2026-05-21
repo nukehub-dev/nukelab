@@ -280,6 +280,18 @@ class VolumeService:
         if size_bytes is not None:
             volume.size_bytes = size_bytes
             await self.db.commit()
+
+            # Warn if volume is near limit (90%)
+            if volume.max_size_bytes and volume.max_size_bytes > 0:
+                usage_pct = int((size_bytes / volume.max_size_bytes) * 100)
+                if usage_pct >= 90:
+                    from app.services.notification_service import NotificationService
+                    notif_service = NotificationService(self.db)
+                    await notif_service.volume_near_limit(
+                        user_id=volume.owner_id,
+                        volume_name=volume.display_name or volume.name,
+                        usage_pct=usage_pct
+                    )
         return size_bytes
 
     async def get_volume_size(self, name: str, mountpoint: Optional[str] = None) -> Optional[int]:

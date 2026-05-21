@@ -2,7 +2,7 @@ import uuid
 import hashlib
 from datetime import datetime
 from sqlalchemy import Column, String, Boolean, DateTime, Integer, JSON
-from sqlalchemy.dialects.postgresql import UUID, INET
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.db.base import Base
 
@@ -41,17 +41,16 @@ class User(Base):
     preferences = Column(JSON, default=dict)
     
     # Security tracking
-    # Stores: last_ip, login_count, failed_attempts, locked_until, mfa_enabled
+    # Stores: login_count, failed_attempts, locked_until, mfa_enabled
     security = Column(JSON, default=dict)
-    
+
     # Status
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
     email_verified_at = Column(DateTime, nullable=True)
-    
+
     # Audit
     last_login = Column(DateTime, nullable=True)
-    last_ip_address = Column(INET, nullable=True)
     login_count = Column(Integer, default=0)
     
     created_at = Column(DateTime, default=datetime.utcnow)

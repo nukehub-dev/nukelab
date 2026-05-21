@@ -20,6 +20,7 @@ from app.models.user import User
 from app.models.volume import Volume
 from app.services.volume_service import VolumeService
 from app.services.volume_access_service import VolumeAccessService
+from app.services.notification_service import NotificationService
 
 router = APIRouter()
 
@@ -74,7 +75,14 @@ async def create_volume(
         max_size_bytes=request.max_size_bytes,
         description=request.description,
     )
-    
+
+    # Notify user
+    notif_service = NotificationService(db)
+    await notif_service.volume_created(
+        user_id=current_user.id,
+        volume_name=request.display_name or volume_name
+    )
+
     return volume.to_dict()
 
 
@@ -182,6 +190,9 @@ async def delete_volume(
         checker = PermissionChecker(current_user)
         checker.require(Permission.ADMIN_ACCESS)
     
+    # Get volume name before deletion for notification
+    volume_name = volume.display_name or volume.name
+
     try:
         success = await volume_service.delete_volume(volume_id)
         if not success:
@@ -189,7 +200,14 @@ async def delete_volume(
     except ValueError:
         logger.exception("Volume deletion failed")
         raise HTTPException(status_code=400, detail="Failed to delete volume. Please try again.")
-    
+
+    # Notify user
+    notif_service = NotificationService(db)
+    await notif_service.volume_deleted(
+        user_id=volume.owner_id,
+        volume_name=volume_name
+    )
+
     return {"message": "Volume deleted", "volume_id": volume_id}
 
 

@@ -288,7 +288,7 @@ async def change_my_password(
         request.current_password,
         request.new_password
     )
-    
+
     return {"message": "Password changed successfully"}
 
 @router.get("/{user_id}/profile")

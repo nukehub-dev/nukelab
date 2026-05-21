@@ -75,7 +75,18 @@ class BackupService:
             backup.size_bytes = size_bytes
             backup.completed_at = datetime.utcnow()
             await self.db.commit()
-            
+
+            # Notify user if user_id is available
+            if backup.user_id:
+                from app.services.notification_service import NotificationService
+                notif_service = NotificationService(self.db)
+                size_str = f"{size_bytes / (1024*1024):.1f} MB" if size_bytes else "0 B"
+                await notif_service.server_backup_completed(
+                    user_id=backup.user_id,
+                    server_name=volume_name,
+                    backup_size=size_str
+                )
+
             return {
                 "id": backup_id,
                 "volume_name": volume_name,
