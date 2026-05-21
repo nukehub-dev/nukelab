@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { usePlans } from '../hooks/use-plans';
 import { useAuthStore } from '../stores/auth-store';
 import { springs } from '../lib/animations';
-import { cn } from '../lib/utils';
+import { cn, formatPlanResource } from '../lib/utils';
 import { ResourcePageLayout } from '../components/layout/resource-page-layout';
 import { Input } from '../components/ui/input';
 import { Card, CardContent } from '../components/ui/card';
@@ -69,13 +69,13 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
               <span className="text-muted-foreground flex items-center gap-1.5">
                 <MemoryStick className="w-3.5 h-3.5" /> Memory
               </span>
-              <span className="font-medium">{plan.memory_limit}</span>
+              <span className="font-medium">{formatPlanResource(plan.memory_limit)}</span>
             </div>
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground flex items-center gap-1.5">
                 <HardDrive className="w-3.5 h-3.5" /> Disk
               </span>
-              <span className="font-medium">{plan.disk_limit}</span>
+              <span className="font-medium">{formatPlanResource(plan.disk_limit)}</span>
             </div>
             {plan.gpu_limit > 0 && (
               <div className="flex items-center justify-between text-sm">

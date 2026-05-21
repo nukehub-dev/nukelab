@@ -12,7 +12,7 @@ import { useDataTable } from '../hooks/use-data-table';
 import { useThemeStore } from '../stores/theme-store';
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
 import { usePageGuard } from '../hooks/use-page-guard';
-import { formatDate } from '../lib/utils';
+import { formatDate, formatPlanResource } from '../lib/utils';
 import type { Plan } from '../types/api';
 import type { ColumnDef, ColumnFiltersState, VisibilityState, SortingState } from '@tanstack/react-table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '../components/ui/dialog';
@@ -290,7 +290,7 @@ function PlansPage() {
         >
           <MemoryStick className="w-3.5 h-3.5 text-muted-foreground" />
           <span className="text-sm"
-          >{row.getValue('memory_limit')}</span>
+          >{formatPlanResource(row.getValue('memory_limit') as string)}</span>
         </div>
       ),
     },
@@ -302,7 +302,7 @@ function PlansPage() {
         >
           <HardDrive className="w-3.5 h-3.5 text-muted-foreground" />
           <span className="text-sm"
-          >{row.getValue('disk_limit')}</span>
+          >{formatPlanResource(row.getValue('disk_limit') as string)}</span>
         </div>
       ),
     },
@@ -476,7 +476,7 @@ function PlansPage() {
         <code className="text-xs bg-muted px-1.5 py-0.5 rounded"
         >{plan.slug}</code>
         <span className="text-muted-foreground"
-        >{plan.cpu_limit} CPU · {plan.memory_limit} RAM</span>
+        >{plan.cpu_limit} CPU · {formatPlanResource(plan.memory_limit)} RAM</span>
       </div>
       {canManagePlans ? (
         <div className="flex items-center justify-between pt-1">
