@@ -236,9 +236,9 @@ async def leave_workspace(
     
     try:
         success = await service.leave_workspace(workspace_id, str(current_user.id))
-    except ValueError:
+    except ValueError as e:
         logger.exception("Failed to leave workspace")
-        raise HTTPException(status_code=400, detail="Failed to leave workspace. Please try again.")
+        raise HTTPException(status_code=400, detail=str(e))
     
     if success:
         await activity.log(
@@ -278,12 +278,12 @@ async def transfer_ownership(
             current_owner_id=str(current_user.id),
             new_owner_id=request.user_id
         )
-    except ValueError:
-        logger.exception("Failed to leave workspace")
-        raise HTTPException(status_code=400, detail="Failed to leave workspace. Please try again.")
+    except ValueError as e:
+        logger.exception("Failed to transfer ownership")
+        raise HTTPException(status_code=400, detail=str(e))
     except PermissionError:
-        logger.exception("Permission denied for invitation cancellation")
-        raise HTTPException(status_code=403, detail="You don't have permission to cancel this invitation.")
+        logger.exception("Permission denied for ownership transfer")
+        raise HTTPException(status_code=403, detail="You don't have permission to transfer ownership.")
     
     if updated:
         await activity.log(
@@ -517,9 +517,9 @@ async def invite_member(
             invited_by=str(current_user.id),
             role=request.role
         )
-    except ValueError:
-        logger.exception("Failed to leave workspace")
-        raise HTTPException(status_code=400, detail="Failed to leave workspace. Please try again.")
+    except ValueError as e:
+        logger.exception("Failed to invite member")
+        raise HTTPException(status_code=400, detail=str(e))
     
     # Send notification to invited user
     notif_service = NotificationService(db)
@@ -559,9 +559,9 @@ async def accept_invitation(
     
     try:
         member = await service.accept_invitation(invitation_id, str(current_user.id))
-    except ValueError:
-        logger.exception("Failed to leave workspace")
-        raise HTTPException(status_code=400, detail="Failed to leave workspace. Please try again.")
+    except ValueError as e:
+        logger.exception("Failed to accept invitation")
+        raise HTTPException(status_code=400, detail=str(e))
     
     # Log activity
     activity = ActivityService(db)
@@ -592,9 +592,9 @@ async def reject_invitation(
     
     try:
         await service.reject_invitation(invitation_id, str(current_user.id))
-    except ValueError:
-        logger.exception("Failed to leave workspace")
-        raise HTTPException(status_code=400, detail="Failed to leave workspace. Please try again.")
+    except ValueError as e:
+        logger.exception("Failed to reject invitation")
+        raise HTTPException(status_code=400, detail=str(e))
     
     # Log activity
     activity = ActivityService(db)
@@ -770,9 +770,9 @@ async def remove_member(
     
     try:
         success = await service.remove_member(workspace_id, user_id)
-    except ValueError:
-        logger.exception("Failed to leave workspace")
-        raise HTTPException(status_code=400, detail="Failed to leave workspace. Please try again.")
+    except ValueError as e:
+        logger.exception("Failed to remove member")
+        raise HTTPException(status_code=400, detail=str(e))
     
     if not success:
         raise HTTPException(status_code=404, detail="Member not found")
@@ -805,9 +805,9 @@ async def update_member_role(
     
     try:
         member = await service.update_member_role(workspace_id, user_id, request.role)
-    except ValueError:
-        logger.exception("Failed to leave workspace")
-        raise HTTPException(status_code=400, detail="Failed to leave workspace. Please try again.")
+    except ValueError as e:
+        logger.exception("Failed to update member role")
+        raise HTTPException(status_code=400, detail=str(e))
     
     if not member:
         raise HTTPException(status_code=404, detail="Member not found")

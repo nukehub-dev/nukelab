@@ -27,7 +27,14 @@ class TestUserModel:
         expected_hash = hashlib.md5("test@example.com".lower().strip().encode()).hexdigest()
         expected_url = f"https://www.gravatar.com/avatar/{expected_hash}?s=200&d=identicon&r=pg"
         
+        # Direct gravatar generation always works
         assert test_user.get_gravatar_url() == expected_url
+        
+        # Gravatar is disabled by default for privacy
+        assert test_user.get_avatar_url() == ""
+        
+        # When explicitly enabled, should return Gravatar URL
+        test_user.preferences = {"use_gravatar": True}
         assert test_user.get_avatar_url() == expected_url
 
     @pytest.mark.asyncio

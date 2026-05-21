@@ -1,6 +1,17 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
+import { useToast } from '../stores/toast-store';
 import type { WorkspaceActivity } from '../types/api';
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  return 'An unexpected error occurred';
+}
 
 export interface Workspace {
   id: string;
@@ -118,6 +129,7 @@ export function useWorkspace(workspaceId: string) {
 
 export function useCreateWorkspace() {
   const queryClient = useQueryClient();
+  const { error: showError } = useToast();
   return useMutation({
     mutationFn: async (data: { name: string; description?: string }) => {
       const response = await api.post<Workspace>('/workspaces/', data);
@@ -126,11 +138,15 @@ export function useCreateWorkspace() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['workspaces'] });
     },
+    onError: (err) => {
+      showError('Failed to create workspace', getErrorMessage(err));
+    },
   });
 }
 
 export function useUpdateWorkspace() {
   const queryClient = useQueryClient();
+  const { error: showError } = useToast();
   return useMutation({
     mutationFn: async ({ workspaceId, data }: { workspaceId: string; data: Partial<Workspace> }) => {
       const response = await api.put<Workspace>(`/workspaces/${workspaceId}`, data);
@@ -140,11 +156,15 @@ export function useUpdateWorkspace() {
       queryClient.invalidateQueries({ queryKey: ['workspaces'] });
       queryClient.invalidateQueries({ queryKey: ['workspace', variables.workspaceId] });
     },
+    onError: (err) => {
+      showError('Failed to update workspace', getErrorMessage(err));
+    },
   });
 }
 
 export function useDeleteWorkspace() {
   const queryClient = useQueryClient();
+  const { error: showError } = useToast();
   return useMutation({
     mutationFn: async (workspaceId: string) => {
       await api.delete(`/workspaces/${workspaceId}`);
@@ -152,11 +172,15 @@ export function useDeleteWorkspace() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['workspaces'] });
     },
+    onError: (err) => {
+      showError('Failed to delete workspace', getErrorMessage(err));
+    },
   });
 }
 
 export function useAddWorkspaceMember() {
   const queryClient = useQueryClient();
+  const { error: showError } = useToast();
   return useMutation({
     mutationFn: async ({ workspaceId, userId, role }: { workspaceId: string; userId: string; role: string }) => {
       const response = await api.post<WorkspaceMember>(`/workspaces/${workspaceId}/members`, {
@@ -168,11 +192,15 @@ export function useAddWorkspaceMember() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['workspace', variables.workspaceId] });
     },
+    onError: (err) => {
+      showError('Failed to add member', getErrorMessage(err));
+    },
   });
 }
 
 export function useRemoveWorkspaceMember() {
   const queryClient = useQueryClient();
+  const { error: showError } = useToast();
   return useMutation({
     mutationFn: async ({ workspaceId, userId }: { workspaceId: string; userId: string }) => {
       await api.delete(`/workspaces/${workspaceId}/members/${userId}`);
@@ -180,11 +208,15 @@ export function useRemoveWorkspaceMember() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['workspace', variables.workspaceId] });
     },
+    onError: (err) => {
+      showError('Failed to remove member', getErrorMessage(err));
+    },
   });
 }
 
 export function useUpdateMemberRole() {
   const queryClient = useQueryClient();
+  const { error: showError } = useToast();
   return useMutation({
     mutationFn: async ({ workspaceId, userId, role }: { workspaceId: string; userId: string; role: string }) => {
       const response = await api.put<WorkspaceMember>(`/workspaces/${workspaceId}/members/${userId}`, { role });
@@ -193,11 +225,15 @@ export function useUpdateMemberRole() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['workspace', variables.workspaceId] });
     },
+    onError: (err) => {
+      showError('Failed to update member role', getErrorMessage(err));
+    },
   });
 }
 
 export function useAddWorkspaceVolume() {
   const queryClient = useQueryClient();
+  const { error: showError } = useToast();
   return useMutation({
     mutationFn: async ({ workspaceId, volumeId, role }: { workspaceId: string; volumeId: string; role: string }) => {
       const response = await api.post<WorkspaceVolume>(`/workspaces/${workspaceId}/volumes`, {
@@ -210,11 +246,15 @@ export function useAddWorkspaceVolume() {
       queryClient.invalidateQueries({ queryKey: ['workspace', variables.workspaceId] });
       queryClient.invalidateQueries({ queryKey: ['workspaces'] });
     },
+    onError: (err) => {
+      showError('Failed to add volume', getErrorMessage(err));
+    },
   });
 }
 
 export function useRemoveWorkspaceVolume() {
   const queryClient = useQueryClient();
+  const { error: showError } = useToast();
   return useMutation({
     mutationFn: async ({ workspaceId, volumeId }: { workspaceId: string; volumeId: string }) => {
       await api.delete(`/workspaces/${workspaceId}/volumes/${volumeId}`);
@@ -223,11 +263,15 @@ export function useRemoveWorkspaceVolume() {
       queryClient.invalidateQueries({ queryKey: ['workspace', variables.workspaceId] });
       queryClient.invalidateQueries({ queryKey: ['workspaces'] });
     },
+    onError: (err) => {
+      showError('Failed to remove volume', getErrorMessage(err));
+    },
   });
 }
 
 export function useUpdateVolumeRole() {
   const queryClient = useQueryClient();
+  const { error: showError } = useToast();
   return useMutation({
     mutationFn: async ({ workspaceId, volumeId, role }: { workspaceId: string; volumeId: string; role: string }) => {
       const response = await api.put<WorkspaceVolume>(`/workspaces/${workspaceId}/volumes/${volumeId}`, { role });
@@ -236,11 +280,15 @@ export function useUpdateVolumeRole() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['workspace', variables.workspaceId] });
     },
+    onError: (err) => {
+      showError('Failed to update volume access', getErrorMessage(err));
+    },
   });
 }
 
 export function useInviteWorkspaceMember() {
   const queryClient = useQueryClient();
+  const { error: showError } = useToast();
   return useMutation({
     mutationFn: async ({ workspaceId, userId, role }: { workspaceId: string; userId: string; role: string }) => {
       const response = await api.post<WorkspaceInvitation>(`/workspaces/${workspaceId}/invitations`, {
@@ -252,11 +300,15 @@ export function useInviteWorkspaceMember() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['workspace', variables.workspaceId] });
     },
+    onError: (err) => {
+      showError('Failed to send invitation', getErrorMessage(err));
+    },
   });
 }
 
 export function useAcceptInvitation() {
   const queryClient = useQueryClient();
+  const { error: showError } = useToast();
   return useMutation({
     mutationFn: async ({ workspaceId, invitationId }: { workspaceId: string; invitationId: string }) => {
       const response = await api.post<WorkspaceMember>(`/workspaces/${workspaceId}/invitations/${invitationId}/accept`, {});
@@ -266,11 +318,15 @@ export function useAcceptInvitation() {
       queryClient.invalidateQueries({ queryKey: ['workspace', variables.workspaceId] });
       queryClient.invalidateQueries({ queryKey: ['workspaces'] });
     },
+    onError: (err) => {
+      showError('Failed to accept invitation', getErrorMessage(err));
+    },
   });
 }
 
 export function useRejectInvitation() {
   const queryClient = useQueryClient();
+  const { error: showError } = useToast();
   return useMutation({
     mutationFn: async ({ workspaceId, invitationId }: { workspaceId: string; invitationId: string }) => {
       await api.post(`/workspaces/${workspaceId}/invitations/${invitationId}/reject`, {});
@@ -279,11 +335,15 @@ export function useRejectInvitation() {
       queryClient.invalidateQueries({ queryKey: ['workspace', variables.workspaceId] });
       queryClient.invalidateQueries({ queryKey: ['workspaces'] });
     },
+    onError: (err) => {
+      showError('Failed to decline invitation', getErrorMessage(err));
+    },
   });
 }
 
 export function useCancelInvitation() {
   const queryClient = useQueryClient();
+  const { error: showError } = useToast();
   return useMutation({
     mutationFn: async ({ workspaceId, invitationId }: { workspaceId: string; invitationId: string }) => {
       await api.delete(`/workspaces/${workspaceId}/invitations/${invitationId}`);
@@ -291,11 +351,15 @@ export function useCancelInvitation() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['workspace', variables.workspaceId] });
     },
+    onError: (err) => {
+      showError('Failed to cancel invitation', getErrorMessage(err));
+    },
   });
 }
 
 export function useLeaveWorkspace() {
   const queryClient = useQueryClient();
+  const { error: showError } = useToast();
   return useMutation({
     mutationFn: async (workspaceId: string) => {
       await api.post(`/workspaces/${workspaceId}/leave`, {});
@@ -304,11 +368,15 @@ export function useLeaveWorkspace() {
       queryClient.invalidateQueries({ queryKey: ['workspace', workspaceId] });
       queryClient.invalidateQueries({ queryKey: ['workspaces'] });
     },
+    onError: (err) => {
+      showError('Failed to leave workspace', getErrorMessage(err));
+    },
   });
 }
 
 export function useTransferOwnership() {
   const queryClient = useQueryClient();
+  const { error: showError } = useToast();
   return useMutation({
     mutationFn: async ({ workspaceId, userId }: { workspaceId: string; userId: string }) => {
       await api.post(`/workspaces/${workspaceId}/transfer`, { user_id: userId });
@@ -316,6 +384,9 @@ export function useTransferOwnership() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['workspace', variables.workspaceId] });
       queryClient.invalidateQueries({ queryKey: ['workspaces'] });
+    },
+    onError: (err) => {
+      showError('Failed to transfer ownership', getErrorMessage(err));
     },
   });
 }
