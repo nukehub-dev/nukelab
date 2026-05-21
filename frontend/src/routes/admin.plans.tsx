@@ -1,11 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { CreditCard, Cpu, MemoryStick, HardDrive, CheckCircle2, XCircle, Pencil, Trash2, Users, Building2, Shield, User } from 'lucide-react';
+import { CreditCard, Cpu, MemoryStick, HardDrive, CheckCircle2, XCircle, Pencil, Trash2, Users, Building2, Shield, User, Headset, UserCircle } from 'lucide-react';
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { ResourcePageLayout } from '../components/layout/resource-page-layout';
 import { DataTable } from '../components/data/data-table';
 import { StatusBadge } from '../components/data/status-badge';
 import { usePlans, usePlanActions, usePlanUsers, usePlanWorkspaces, usePlanAccessActions } from '../hooks/use-plans';
-import { useUsers } from '../hooks/use-users';
+import { useQueryClient } from '@tanstack/react-query';
+import { useDiscoverUsers } from '../hooks/use-users';
 import { useWorkspaces } from '../hooks/use-workspaces';
 import { useDataTable } from '../hooks/use-data-table';
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
@@ -18,18 +19,21 @@ import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import { Textarea } from '../components/ui/textarea';
 import { Checkbox } from '../components/ui/checkbox';
+import { Combobox } from '../components/ui/combobox';
 import { motion } from 'framer-motion';
 import { Tooltip } from '../components/ui/tooltip';
 import { useConfirmDialog } from '../components/ui/confirm-dialog';
+import type { PlanUserAccess, PlanWorkspaceAccess } from '../hooks/use-plans';
 
 export const Route = createFileRoute('/admin/plans')({
   component: PlansPage,
 });
 
 const ROLE_OPTIONS = [
+  { value: 'guest', label: 'Guest', icon: UserCircle },
   { value: 'user', label: 'User', icon: User },
+  { value: 'support', label: 'Support', icon: Headset },
   { value: 'moderator', label: 'Moderator', icon: Shield },
-  { value: 'admin', label: 'Admin', icon: Shield },
 ];
 
 function PlansPage() {
@@ -101,16 +105,14 @@ function PlansPage() {
     cost_per_hour: 10,
     cooldown_seconds: 0,
     requires_approval: false,
-    allowed_roles: ['user'] as string[],
+    is_public: false,
+    visible_to_roles: ['user'] as string[],
     priority: 0,
   });
 
   // Access management dialog
   const [accessDialogOpen, setAccessDialogOpen] = useState(false);
   const [accessPlan, setAccessPlan] = useState<Plan | null>(null);
-  const [accessTab, setAccessTab] = useState<'users' | 'workspaces'>('users');
-  const [userSearch, setUserSearch] = useState('');
-  const [workspaceSearch, setWorkspaceSearch] = useState('');
 
   const plans = data?.data || [];
   const pagination = data?.pagination;
@@ -130,7 +132,8 @@ function PlansPage() {
       cost_per_hour: 10,
       cooldown_seconds: 0,
       requires_approval: false,
-      allowed_roles: ['user'],
+      is_public: false,
+      visible_to_roles: ['user'],
       priority: 0,
     });
     setDialogOpen(true);
@@ -151,7 +154,8 @@ function PlansPage() {
       cost_per_hour: plan.cost_per_hour,
       cooldown_seconds: plan.cooldown_seconds,
       requires_approval: plan.requires_approval,
-      allowed_roles: plan.allowed_roles || ['user'],
+      is_public: plan.is_public,
+      visible_to_roles: plan.visible_to_roles || ['user'],
       priority: plan.priority,
     });
     setDialogOpen(true);
@@ -159,9 +163,6 @@ function PlansPage() {
 
   const openAccessDialog = (plan: Plan) => {
     setAccessPlan(plan);
-    setAccessTab('users');
-    setUserSearch('');
-    setWorkspaceSearch('');
     setAccessDialogOpen(true);
   };
 
@@ -182,7 +183,8 @@ function PlansPage() {
           cost_per_hour: formData.cost_per_hour,
           cooldown_seconds: formData.cooldown_seconds,
           requires_approval: formData.requires_approval,
-          allowed_roles: formData.allowed_roles,
+          is_public: formData.is_public,
+          visible_to_roles: formData.visible_to_roles,
           priority: formData.priority,
         },
       });
@@ -200,7 +202,8 @@ function PlansPage() {
         cost_per_hour: formData.cost_per_hour,
         cooldown_seconds: formData.cooldown_seconds,
         requires_approval: formData.requires_approval,
-        allowed_roles: formData.allowed_roles,
+        is_public: formData.is_public,
+        visible_to_roles: formData.visible_to_roles,
         priority: formData.priority,
       });
     }
@@ -208,14 +211,16 @@ function PlansPage() {
   };
 
   const toggleRole = (role: string, checked: boolean) => {
+    // Admin always has access — cannot be toggled off
+    if (role === 'admin') return;
     setFormData((prev) => {
-      const current = new Set(prev.allowed_roles);
+      const current = new Set(prev.visible_to_roles);
       if (checked) {
         current.add(role);
       } else {
         current.delete(role);
       }
-      return { ...prev, allowed_roles: Array.from(current) };
+      return { ...prev, visible_to_roles: Array.from(current) };
     });
   };
 
@@ -744,23 +749,38 @@ function PlansPage() {
                 />
               </div>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Allowed Roles</label>
-              <div className="flex flex-wrap gap-4">
-                {ROLE_OPTIONS.map((role) => (
-                  <label key={role.value} className="flex items-center gap-2 cursor-pointer">
-                    <Checkbox
-                      checked={formData.allowed_roles.includes(role.value)}
-                      onChange={(checked) => toggleRole(role.value, checked)}
-                    />
-                    <span className="text-sm">{role.label}</span>
+            <label className="flex items-center gap-3 cursor-pointer group"
+            >
+              <Checkbox
+                checked={formData.is_public}
+                onChange={(checked) => setFormData({ ...formData, is_public: checked })}
+              />
+              <span className="text-sm">Public — visible to all users</span>
+            </label>
+            {!formData.is_public && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Visible to Roles</label>
+                <div className="flex flex-wrap gap-4">
+                  {/* Admin always has access */}
+                  <label className="flex items-center gap-2 cursor-not-allowed opacity-60">
+                    <Checkbox checked disabled onChange={() => {}} />
+                    <span className="text-sm">Admin</span>
                   </label>
-                ))}
+                  {ROLE_OPTIONS.filter((r) => r.value !== 'admin').map((role) => (
+                    <label key={role.value} className="flex items-center gap-2 cursor-pointer">
+                      <Checkbox
+                        checked={formData.visible_to_roles.includes(role.value)}
+                        onChange={(checked) => toggleRole(role.value, checked)}
+                      />
+                      <span className="text-sm">{role.label}</span>
+                    </label>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Admin always has access. Only users with the selected roles (plus direct/workspace access) can see this plan.
+                </p>
               </div>
-              <p className="text-xs text-muted-foreground">
-                If no roles are selected, the plan will be visible to all users.
-              </p>
-            </div>
+            )}
             <label className="flex items-center gap-3 cursor-pointer group"
             >
               <Checkbox
@@ -808,34 +828,296 @@ function AccessManagementDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const [tab, setTab] = useState<'users' | 'workspaces'>('users');
-  const [userSearch, setUserSearch] = useState('');
-  const [workspaceSearch, setWorkspaceSearch] = useState('');
 
+  // ─── Users Tab State ───
+  const usersTable = useDataTable({ defaultLimit: 10, defaultSortBy: 'granted_at' });
+  const [usersSorting, setUsersSorting] = useState<SortingState>([{ id: 'granted_at', desc: true }]);
+  const [usersRowSelection, setUsersRowSelection] = useState<Record<string, boolean>>({});
+  const [usersColumnFilters, setUsersColumnFilters] = useState<ColumnFiltersState>([]);
+  const [usersColumnVisibility, setUsersColumnVisibility] = useState<VisibilityState>({});
+  const [selectedUserId, setSelectedUserId] = useState('');
+
+  // ─── Workspaces Tab State ───
+  const workspacesTable = useDataTable({ defaultLimit: 10, defaultSortBy: 'granted_at' });
+  const [workspacesSorting, setWorkspacesSorting] = useState<SortingState>([{ id: 'granted_at', desc: true }]);
+  const [workspacesRowSelection, setWorkspacesRowSelection] = useState<Record<string, boolean>>({});
+  const [workspacesColumnFilters, setWorkspacesColumnFilters] = useState<ColumnFiltersState>([]);
+  const [workspacesColumnVisibility, setWorkspacesColumnVisibility] = useState<VisibilityState>({});
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState('');
+
+  const queryClient = useQueryClient();
+
+  // Invalidate queries when dialog opens
+  useEffect(() => {
+    if (open && plan) {
+      queryClient.invalidateQueries({ queryKey: ['plans', plan.id, 'users'] });
+      queryClient.invalidateQueries({ queryKey: ['plans', plan.id, 'workspaces'] });
+    }
+  }, [open, plan.id, queryClient]);
+
+  // ─── Data ───
   const { data: planUsers, isLoading: usersLoading } = usePlanUsers(plan.id);
   const { data: planWorkspaces, isLoading: workspacesLoading } = usePlanWorkspaces(plan.id);
   const { grantUserAccess, revokeUserAccess, grantWorkspaceAccess, revokeWorkspaceAccess } = usePlanAccessActions();
 
-  const { data: allUsers } = useUsers({ search: userSearch, limit: 20 });
+  const { data: discoverableUsers } = useDiscoverUsers();
   const { data: allWorkspaces } = useWorkspaces();
 
-  const userIds = useMemo(() => new Set(planUsers?.map((u) => u.user_id) || []), [planUsers]);
-  const workspaceIds = useMemo(() => new Set(planWorkspaces?.map((w) => w.workspace_id) || []), [planWorkspaces]);
+  // ─── Computed: available options for combobox ───
+  const assignedUserIds = useMemo(() => new Set(planUsers?.map((u) => u.user_id) || []), [planUsers]);
+  const assignedWorkspaceIds = useMemo(() => new Set(planWorkspaces?.map((w) => w.workspace_id) || []), [planWorkspaces]);
 
+  const availableUserOptions = useMemo(() => {
+    return (discoverableUsers || [])
+      .filter((u) => !assignedUserIds.has(u.id))
+      .map((u) => ({
+        value: u.id,
+        label: `${u.display_name || u.username} (@${u.username})`,
+        image: u.avatar_url,
+      }));
+  }, [discoverableUsers, assignedUserIds]);
+
+  const availableWorkspaceOptions = useMemo(() => {
+    return (allWorkspaces || [])
+      .filter((w) => !assignedWorkspaceIds.has(w.id))
+      .map((w) => ({
+        value: w.id,
+        label: `${w.name} (${w.member_count} members)`,
+        description: w.owner_name ? `Owner: ${w.owner_name}${w.owner_username ? ` (@${w.owner_username})` : ''}` : undefined,
+      }));
+  }, [allWorkspaces, assignedWorkspaceIds]);
+
+  // ─── Client-side filter + paginate for Users ───
   const filteredUsers = useMemo(() => {
-    return (allUsers?.data || []).filter((u) => !userIds.has(u.id));
-  }, [allUsers, userIds]);
+    let data = planUsers || [];
+    if (usersTable.state.search) {
+      const q = usersTable.state.search.toLowerCase();
+      data = data.filter(
+        (u) =>
+          (u.username && u.username.toLowerCase().includes(q)) ||
+          (u.display_name && u.display_name.toLowerCase().includes(q)) ||
+          u.user_id.toLowerCase().includes(q)
+      );
+    }
+    // Sort
+    const sortKey = usersSorting[0]?.id as keyof PlanUserAccess;
+    const desc = usersSorting[0]?.desc;
+    if (sortKey) {
+      data = [...data].sort((a, b) => {
+        const av = (a[sortKey] ?? '') as string;
+        const bv = (b[sortKey] ?? '') as string;
+        const cmp = av.localeCompare(bv);
+        return desc ? -cmp : cmp;
+      });
+    }
+    return data;
+  }, [planUsers, usersTable.state.search, usersSorting]);
 
+  const paginatedUsers = useMemo(() => {
+    const start = (usersTable.state.page - 1) * usersTable.state.limit;
+    return filteredUsers.slice(start, start + usersTable.state.limit);
+  }, [filteredUsers, usersTable.state.page, usersTable.state.limit]);
+
+  const usersTotalPages = Math.max(1, Math.ceil(filteredUsers.length / usersTable.state.limit));
+
+  // ─── Client-side filter + paginate for Workspaces ───
   const filteredWorkspaces = useMemo(() => {
-    const list = allWorkspaces || [];
-    const filtered = workspaceSearch.length >= 1
-      ? list.filter((w) => w.name.toLowerCase().includes(workspaceSearch.toLowerCase()))
-      : list;
-    return filtered.filter((w) => !workspaceIds.has(w.id));
-  }, [allWorkspaces, workspaceIds, workspaceSearch]);
+    let data = planWorkspaces || [];
+    if (workspacesTable.state.search) {
+      const q = workspacesTable.state.search.toLowerCase();
+      data = data.filter(
+        (w) =>
+          (w.workspace_name && w.workspace_name.toLowerCase().includes(q)) ||
+          w.workspace_id.toLowerCase().includes(q)
+      );
+    }
+    // Sort
+    const sortKey = workspacesSorting[0]?.id as keyof PlanWorkspaceAccess;
+    const desc = workspacesSorting[0]?.desc;
+    if (sortKey) {
+      data = [...data].sort((a, b) => {
+        const av = (a[sortKey] ?? '') as string;
+        const bv = (b[sortKey] ?? '') as string;
+        const cmp = av.localeCompare(bv);
+        return desc ? -cmp : cmp;
+      });
+    }
+    return data;
+  }, [planWorkspaces, workspacesTable.state.search, workspacesSorting]);
+
+  const paginatedWorkspaces = useMemo(() => {
+    const start = (workspacesTable.state.page - 1) * workspacesTable.state.limit;
+    return filteredWorkspaces.slice(start, start + workspacesTable.state.limit);
+  }, [filteredWorkspaces, workspacesTable.state.page, workspacesTable.state.limit]);
+
+  const workspacesTotalPages = Math.max(1, Math.ceil(filteredWorkspaces.length / workspacesTable.state.limit));
+
+  // ─── Columns ───
+  const userColumns: ColumnDef<PlanUserAccess>[] = [
+    {
+      accessorKey: 'username',
+      header: 'User',
+      cell: ({ row }) => {
+        const access = row.original;
+        return (
+          <div className="flex items-center gap-3">
+            <div className="p-1.5 rounded flex-shrink-0 bg-primary/10">
+              <User className="w-3.5 h-3.5 text-primary" />
+            </div>
+            <div>
+              <p className="text-sm font-medium">{access.display_name || access.username || 'Unknown'}</p>
+              {access.username && <p className="text-xs text-muted-foreground">@{access.username}</p>}
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: 'granted_by_username',
+      header: 'Granted By',
+      cell: ({ row }) => (
+        <span className="text-xs text-muted-foreground">
+          {row.original.granted_by_username || 'System'}
+        </span>
+      ),
+    },
+    {
+      accessorKey: 'granted_at',
+      header: 'Granted',
+      cell: ({ row }) => row.original.granted_at ? formatDate(row.original.granted_at) : '-',
+    },
+    {
+      id: 'actions',
+      header: '',
+      cell: ({ row }) => (
+        <Tooltip content="Remove access">
+          <button
+            onClick={() => revokeUserAccess.mutate({ planId: plan.id, userId: row.original.user_id })}
+            disabled={revokeUserAccess.isPending}
+            className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors inline-flex"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </Tooltip>
+      ),
+      enableSorting: false,
+      size: 50,
+    },
+  ];
+
+  const workspaceColumns: ColumnDef<PlanWorkspaceAccess>[] = [
+    {
+      accessorKey: 'workspace_name',
+      header: 'Workspace',
+      cell: ({ row }) => {
+        const access = row.original;
+        return (
+          <div className="flex items-center gap-3">
+            <div className="p-1.5 rounded flex-shrink-0 bg-primary/10">
+              <Building2 className="w-3.5 h-3.5 text-primary" />
+            </div>
+            <div>
+              <p className="text-sm font-medium">{access.workspace_name || 'Unknown'}</p>
+              {access.owner_name && (
+                <p className="text-xs text-muted-foreground">
+                  Owner: {access.owner_name}
+                  {access.owner_username && <span className="opacity-60"> (@{access.owner_username})</span>}
+                </p>
+              )}
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: 'granted_by_username',
+      header: 'Granted By',
+      cell: ({ row }) => (
+        <span className="text-xs text-muted-foreground">
+          {row.original.granted_by_username || 'System'}
+        </span>
+      ),
+    },
+    {
+      accessorKey: 'granted_at',
+      header: 'Granted',
+      cell: ({ row }) => row.original.granted_at ? formatDate(row.original.granted_at) : '-',
+    },
+    {
+      id: 'actions',
+      header: '',
+      cell: ({ row }) => (
+        <Tooltip content="Remove access">
+          <button
+            onClick={() => revokeWorkspaceAccess.mutate({ planId: plan.id, workspaceId: row.original.workspace_id })}
+            disabled={revokeWorkspaceAccess.isPending}
+            className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors inline-flex"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </Tooltip>
+      ),
+      enableSorting: false,
+      size: 50,
+    },
+  ];
+
+  // ─── Mobile card renderers ───
+  const userMobileCard = (access: PlanUserAccess) => (
+    <div className="p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="p-1 rounded flex-shrink-0 bg-primary/10">
+            <User className="w-3 h-3 text-primary" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-medium truncate">{access.display_name || access.username || 'Unknown'}</p>
+            {access.username && <p className="text-xs text-muted-foreground truncate">@{access.username}</p>}
+          </div>
+        </div>
+        <button
+          onClick={() => revokeUserAccess.mutate({ planId: plan.id, userId: access.user_id })}
+          disabled={revokeUserAccess.isPending}
+          className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors inline-flex shrink-0"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+
+  const workspaceMobileCard = (access: PlanWorkspaceAccess) => (
+    <div className="p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="p-1 rounded flex-shrink-0 bg-primary/10">
+            <Building2 className="w-3 h-3 text-primary" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-medium truncate">{access.workspace_name || 'Unknown'}</p>
+            {access.owner_name && (
+              <p className="text-xs text-muted-foreground truncate">
+                Owner: {access.owner_name}
+                {access.owner_username && <span className="opacity-60"> (@{access.owner_username})</span>}
+              </p>
+            )}
+          </div>
+        </div>
+        <button
+          onClick={() => revokeWorkspaceAccess.mutate({ planId: plan.id, workspaceId: access.workspace_id })}
+          disabled={revokeWorkspaceAccess.isPending}
+          className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors inline-flex shrink-0"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  );
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+    <Dialog open={open} onOpenChange={onOpenChange} size="xl">
+      <DialogContent className="overflow-hidden flex flex-col">
+        <DialogClose onClick={() => onOpenChange(false)} />
         <DialogHeader>
           <DialogTitle>Manage Access: {plan.name}</DialogTitle>
           <DialogDescription>
@@ -843,6 +1125,7 @@ function AccessManagementDialog({
           </DialogDescription>
         </DialogHeader>
 
+        {/* Tabs */}
         <div className="flex gap-2 mt-2">
           <button
             type="button"
@@ -870,141 +1153,140 @@ function AccessManagementDialog({
           </button>
         </div>
 
-        {tab === 'users' ? (
-          <div className="space-y-4 mt-2">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Add User</label>
-              <Input
-                type="text"
-                value={userSearch}
-                onChange={(e) => setUserSearch(e.target.value)}
-                placeholder="Search users by name or username..."
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto min-h-0 mt-4 space-y-4">
+          {tab === 'users' ? (
+            <>
+              {/* Add User */}
+              <div className="flex items-end gap-3">
+                <div className="flex-1">
+                  <label className="text-sm font-medium mb-1.5 block">Add User</label>
+                  <Combobox
+                    value={selectedUserId}
+                    onChange={setSelectedUserId}
+                    options={availableUserOptions}
+                    placeholder="Select a user..."
+                    searchPlaceholder="Search users..."
+                  />
+                </div>
+                <Button
+                  onClick={() => {
+                    if (!selectedUserId) return;
+                    grantUserAccess.mutate(
+                      { planId: plan.id, userId: selectedUserId },
+                      { onSuccess: () => setSelectedUserId('') }
+                    );
+                  }}
+                  disabled={!selectedUserId || grantUserAccess.isPending}
+                  loading={grantUserAccess.isPending}
+                >
+                  Add
+                </Button>
+              </div>
+
+              {/* Users Table */}
+              <DataTable
+                columns={userColumns}
+                data={paginatedUsers}
+                totalCount={filteredUsers.length}
+                pageCount={usersTotalPages}
+                page={usersTable.state.page}
+                limit={usersTable.state.limit}
+                sorting={usersSorting}
+                rowSelection={usersRowSelection}
+                columnFilters={usersColumnFilters}
+                columnVisibility={usersColumnVisibility}
+                globalFilter={usersTable.state.search}
+                isLoading={usersLoading}
+                onPageChange={usersTable.setPage}
+                onLimitChange={usersTable.setLimit}
+                onSortingChange={setUsersSorting}
+                onRowSelectionChange={setUsersRowSelection}
+                onColumnFiltersChange={setUsersColumnFilters}
+                onColumnVisibilityChange={setUsersColumnVisibility}
+                onGlobalFilterChange={usersTable.setSearch}
+                getRowId={(row) => row.user_id}
+                searchable
+                searchPlaceholder="Search assigned users..."
+                mobileCardRenderer={userMobileCard}
+                enableRowSelection={false}
+                emptyState={
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Users className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">No users have direct access</p>
+                    <p className="text-xs mt-1">Use the dropdown above to grant access</p>
+                  </div>
+                }
               />
-              {userSearch.length >= 2 && filteredUsers.length > 0 && (
-                <div className="border border-border rounded-lg overflow-hidden">
-                  {filteredUsers.slice(0, 5).map((user) => (
-                    <button
-                      key={user.id}
-                      type="button"
-                      onClick={() => {
-                        grantUserAccess.mutate({ planId: plan.id, userId: user.id });
-                        setUserSearch('');
-                      }}
-                      className="w-full flex items-center gap-3 px-3 py-2 text-sm hover:bg-accent text-left transition-colors"
-                    >
-                      <User className="w-4 h-4 text-muted-foreground" />
-                      <div>
-                        <div className="font-medium">{user.display_name || user.username}</div>
-                        <div className="text-xs text-muted-foreground">@{user.username}</div>
-                      </div>
-                    </button>
-                  ))}
+            </>
+          ) : (
+            <>
+              {/* Add Workspace */}
+              <div className="flex items-end gap-3">
+                <div className="flex-1">
+                  <label className="text-sm font-medium mb-1.5 block">Add Workspace</label>
+                  <Combobox
+                    value={selectedWorkspaceId}
+                    onChange={setSelectedWorkspaceId}
+                    options={availableWorkspaceOptions}
+                    placeholder="Select a workspace..."
+                    searchPlaceholder="Search workspaces..."
+                  />
                 </div>
-              )}
-              {userSearch.length >= 2 && filteredUsers.length === 0 && (
-                <p className="text-xs text-muted-foreground">No users found.</p>
-              )}
-            </div>
+                <Button
+                  onClick={() => {
+                    if (!selectedWorkspaceId) return;
+                    grantWorkspaceAccess.mutate(
+                      { planId: plan.id, workspaceId: selectedWorkspaceId },
+                      { onSuccess: () => setSelectedWorkspaceId('') }
+                    );
+                  }}
+                  disabled={!selectedWorkspaceId || grantWorkspaceAccess.isPending}
+                  loading={grantWorkspaceAccess.isPending}
+                >
+                  Add
+                </Button>
+              </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Assigned Users</label>
-              {usersLoading ? (
-                <p className="text-sm text-muted-foreground">Loading...</p>
-              ) : planUsers && planUsers.length > 0 ? (
-                <div className="border border-border rounded-lg divide-y divide-border">
-                  {planUsers.map((access) => (
-                    <div key={access.user_id} className="flex items-center justify-between px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <User className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-sm">
-                          {access.display_name || access.username || access.user_id}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => revokeUserAccess.mutate({ planId: plan.id, userId: access.user_id })}
-                        disabled={revokeUserAccess.isPending}
-                        className="text-xs text-destructive hover:underline"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">No users have direct access.</p>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-4 mt-2">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Add Workspace</label>
-              <Input
-                type="text"
-                value={workspaceSearch}
-                onChange={(e) => setWorkspaceSearch(e.target.value)}
-                placeholder="Search workspaces by name..."
+              {/* Workspaces Table */}
+              <DataTable
+                columns={workspaceColumns}
+                data={paginatedWorkspaces}
+                totalCount={filteredWorkspaces.length}
+                pageCount={workspacesTotalPages}
+                page={workspacesTable.state.page}
+                limit={workspacesTable.state.limit}
+                sorting={workspacesSorting}
+                rowSelection={workspacesRowSelection}
+                columnFilters={workspacesColumnFilters}
+                columnVisibility={workspacesColumnVisibility}
+                globalFilter={workspacesTable.state.search}
+                isLoading={workspacesLoading}
+                onPageChange={workspacesTable.setPage}
+                onLimitChange={workspacesTable.setLimit}
+                onSortingChange={setWorkspacesSorting}
+                onRowSelectionChange={setWorkspacesRowSelection}
+                onColumnFiltersChange={setWorkspacesColumnFilters}
+                onColumnVisibilityChange={setWorkspacesColumnVisibility}
+                onGlobalFilterChange={workspacesTable.setSearch}
+                getRowId={(row) => row.workspace_id}
+                searchable
+                searchPlaceholder="Search assigned workspaces..."
+                mobileCardRenderer={workspaceMobileCard}
+                enableRowSelection={false}
+                emptyState={
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Building2 className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">No workspaces have access</p>
+                    <p className="text-xs mt-1">Use the dropdown above to grant access</p>
+                  </div>
+                }
               />
-              {workspaceSearch.length >= 1 && filteredWorkspaces.length > 0 && (
-                <div className="border border-border rounded-lg overflow-hidden">
-                  {filteredWorkspaces.slice(0, 5).map((ws) => (
-                    <button
-                      key={ws.id}
-                      type="button"
-                      onClick={() => {
-                        grantWorkspaceAccess.mutate({ planId: plan.id, workspaceId: ws.id });
-                        setWorkspaceSearch('');
-                      }}
-                      className="w-full flex items-center gap-3 px-3 py-2 text-sm hover:bg-accent text-left transition-colors"
-                    >
-                      <Building2 className="w-4 h-4 text-muted-foreground" />
-                      <div>
-                        <div className="font-medium">{ws.name}</div>
-                        <div className="text-xs text-muted-foreground">{ws.member_count} members</div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-              {workspaceSearch.length >= 1 && filteredWorkspaces.length === 0 && (
-                <p className="text-xs text-muted-foreground">No workspaces found.</p>
-              )}
-            </div>
+            </>
+          )}
+        </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Assigned Workspaces</label>
-              {workspacesLoading ? (
-                <p className="text-sm text-muted-foreground">Loading...</p>
-              ) : planWorkspaces && planWorkspaces.length > 0 ? (
-                <div className="border border-border rounded-lg divide-y divide-border">
-                  {planWorkspaces.map((access) => (
-                    <div key={access.workspace_id} className="flex items-center justify-between px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <Building2 className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-sm">
-                          {access.workspace_name || access.workspace_id}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => revokeWorkspaceAccess.mutate({ planId: plan.id, workspaceId: access.workspace_id })}
-                        disabled={revokeWorkspaceAccess.isPending}
-                        className="text-xs text-destructive hover:underline"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">No workspaces have access.</p>
-              )}
-            </div>
-          </div>
-        )}
-
-        <DialogFooter>
+        <DialogFooter className="mt-4">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Close
           </Button>

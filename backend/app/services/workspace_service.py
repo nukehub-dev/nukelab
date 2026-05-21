@@ -209,6 +209,7 @@ class WorkspaceService:
     ) -> List[SharedWorkspace]:
         """List workspaces accessible to user (owned, member of, or invited to)"""
         query = select(SharedWorkspace).options(
+            selectinload(SharedWorkspace.owner),
             selectinload(SharedWorkspace.members).selectinload(WorkspaceMember.user),
             selectinload(SharedWorkspace.invitations)
         )

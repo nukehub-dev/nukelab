@@ -49,7 +49,8 @@ interface CreatePlanData {
   cost_per_hour?: number;
   cooldown_seconds?: number;
   requires_approval?: boolean;
-  allowed_roles?: string[];
+  is_public?: boolean;
+  visible_to_roles?: string[];
   priority?: number;
 }
 
@@ -65,7 +66,8 @@ interface UpdatePlanData {
   cost_per_hour?: number;
   cooldown_seconds?: number;
   requires_approval?: boolean;
-  allowed_roles?: string[];
+  is_public?: boolean;
+  visible_to_roles?: string[];
   priority?: number;
   is_active?: boolean;
 }
@@ -174,6 +176,8 @@ export interface PlanWorkspaceAccess {
   expires_at?: string;
   workspace_name?: string;
   granted_by_username?: string;
+  owner_name?: string;
+  owner_username?: string;
 }
 
 export function usePlanUsers(planId: string | undefined) {
@@ -184,6 +188,7 @@ export function usePlanUsers(planId: string | undefined) {
       return response.data;
     },
     enabled: !!planId,
+    staleTime: 0,
   });
 }
 
@@ -195,6 +200,7 @@ export function usePlanWorkspaces(planId: string | undefined) {
       return response.data;
     },
     enabled: !!planId,
+    staleTime: 0,
   });
 }
 
@@ -205,8 +211,16 @@ export function usePlanAccessActions() {
   const grantUserAccess = useMutation({
     mutationFn: ({ planId, userId }: { planId: string; userId: string }) =>
       api.post<{ success: boolean; data: PlanUserAccess }>(`/plans/${planId}/users/${userId}`, {}),
-    onSuccess: (_, { planId }) => {
-      queryClient.invalidateQueries({ queryKey: ['plans', planId, 'users'] });
+    onSuccess: async (result, { planId }) => {
+      // Immediately update cache with returned data for instant UI feedback
+      queryClient.setQueryData(['plans', planId, 'users'], (old: PlanUserAccess[] | undefined) => {
+        if (!old) return [result.data];
+        // Avoid duplicates
+        if (old.some((u) => u.user_id === result.data.user_id)) return old;
+        return [...old, result.data];
+      });
+      // Then refetch to ensure consistency
+      await queryClient.refetchQueries({ queryKey: ['plans', planId, 'users'], type: 'active' });
       success('Access granted', 'User has been granted access to this plan');
     },
     onError: (err) => {
@@ -217,8 +231,13 @@ export function usePlanAccessActions() {
   const revokeUserAccess = useMutation({
     mutationFn: ({ planId, userId }: { planId: string; userId: string }) =>
       api.delete<{ success: boolean }>(`/plans/${planId}/users/${userId}`),
-    onSuccess: (_, { planId }) => {
-      queryClient.invalidateQueries({ queryKey: ['plans', planId, 'users'] });
+    onSuccess: async (_, { planId, userId }) => {
+      // Immediately remove from cache
+      queryClient.setQueryData(['plans', planId, 'users'], (old: PlanUserAccess[] | undefined) => {
+        if (!old) return [];
+        return old.filter((u) => u.user_id !== userId);
+      });
+      await queryClient.refetchQueries({ queryKey: ['plans', planId, 'users'], type: 'active' });
       success('Access revoked', 'User access has been revoked');
     },
     onError: (err) => {
@@ -229,8 +248,13 @@ export function usePlanAccessActions() {
   const grantWorkspaceAccess = useMutation({
     mutationFn: ({ planId, workspaceId }: { planId: string; workspaceId: string }) =>
       api.post<{ success: boolean; data: PlanWorkspaceAccess }>(`/plans/${planId}/workspaces/${workspaceId}`, {}),
-    onSuccess: (_, { planId }) => {
-      queryClient.invalidateQueries({ queryKey: ['plans', planId, 'workspaces'] });
+    onSuccess: async (result, { planId }) => {
+      queryClient.setQueryData(['plans', planId, 'workspaces'], (old: PlanWorkspaceAccess[] | undefined) => {
+        if (!old) return [result.data];
+        if (old.some((w) => w.workspace_id === result.data.workspace_id)) return old;
+        return [...old, result.data];
+      });
+      await queryClient.refetchQueries({ queryKey: ['plans', planId, 'workspaces'], type: 'active' });
       success('Access granted', 'Workspace has been granted access to this plan');
     },
     onError: (err) => {
@@ -241,8 +265,12 @@ export function usePlanAccessActions() {
   const revokeWorkspaceAccess = useMutation({
     mutationFn: ({ planId, workspaceId }: { planId: string; workspaceId: string }) =>
       api.delete<{ success: boolean }>(`/plans/${planId}/workspaces/${workspaceId}`),
-    onSuccess: (_, { planId }) => {
-      queryClient.invalidateQueries({ queryKey: ['plans', planId, 'workspaces'] });
+    onSuccess: async (_, { planId, workspaceId }) => {
+      queryClient.setQueryData(['plans', planId, 'workspaces'], (old: PlanWorkspaceAccess[] | undefined) => {
+        if (!old) return [];
+        return old.filter((w) => w.workspace_id !== workspaceId);
+      });
+      await queryClient.refetchQueries({ queryKey: ['plans', planId, 'workspaces'], type: 'active' });
       success('Access revoked', 'Workspace access has been revoked');
     },
     onError: (err) => {

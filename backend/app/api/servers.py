@@ -203,8 +203,11 @@ async def create_server(
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
     
-    # Check role-based plan access
-    if plan.allowed_roles and current_user.role not in plan.allowed_roles:
+    # Check plan access (public, role-based, direct, or workspace)
+    can_use = await plan_service.can_user_use_plan(
+        str(plan.id), current_user.role, str(current_user.id)
+    )
+    if not can_use:
         raise HTTPException(status_code=403, detail="Plan not available for your role")
     
     if not plan.is_active:
@@ -738,6 +741,16 @@ async def start_server(
     if str(server.user_id) != str(current_user.id):
         checker.require(Permission.SERVERS_MANAGE)
     
+    # Check plan access — user may have lost access since creation
+    if server.plan_id:
+        from app.services.plan_service import PlanService
+        plan_service = PlanService(db)
+        can_use = await plan_service.can_user_use_plan(
+            str(server.plan_id), current_user.role, str(current_user.id)
+        )
+        if not can_use:
+            raise HTTPException(status_code=403, detail="Plan no longer available for your account")
+    
     # Check NUKE credits before starting
     if settings.credits_enabled and server.plan_id:
         from app.services.plan_service import PlanService
@@ -1094,6 +1107,16 @@ async def restart_server(
     if str(server.user_id) != str(current_user.id):
         checker.require(Permission.SERVERS_MANAGE)
     
+    # Check plan access — user may have lost access since creation
+    if server.plan_id:
+        from app.services.plan_service import PlanService
+        plan_service = PlanService(db)
+        can_use = await plan_service.can_user_use_plan(
+            str(server.plan_id), current_user.role, str(current_user.id)
+        )
+        if not can_use:
+            raise HTTPException(status_code=403, detail="Plan no longer available for your account")
+    
     # Check NUKE credits before restarting
     if settings.credits_enabled and server.plan_id:
         from app.services.plan_service import PlanService
@@ -1338,7 +1361,10 @@ async def update_server(
         plan = await plan_service.get_by_id(request.plan_id)
         if not plan:
             raise HTTPException(status_code=404, detail="Plan not found")
-        if plan.allowed_roles and current_user.role not in plan.allowed_roles:
+        can_use = await plan_service.can_user_use_plan(
+            str(plan.id), current_user.role, str(current_user.id)
+        )
+        if not can_use:
             raise HTTPException(status_code=403, detail="Plan not available for your role")
         if not plan.is_active:
             raise HTTPException(status_code=400, detail="Plan is not active")

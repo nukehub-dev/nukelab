@@ -54,7 +54,7 @@ class TestServerVolumeIntegration:
             max_servers_per_user=5,
             cost_per_hour=10,
             is_active=True,
-            allowed_roles=["user"]
+            visible_to_roles=["user"]
         )
         db_session.add(plan)
         await db_session.commit()
@@ -167,7 +167,7 @@ class TestServerLifecycleE2E:
             max_servers_per_user=5,
             cost_per_hour=10,
             is_active=True,
-            allowed_roles=["user"]
+            visible_to_roles=["user"]
         )
         db_session.add(plan)
         await db_session.commit()
@@ -265,7 +265,7 @@ class TestServerWorkspaceVolumeAccess:
             max_servers_per_user=5,
             cost_per_hour=10,
             is_active=True,
-            allowed_roles=["user"],
+            visible_to_roles=["user"],
         )
         db_session.add(plan)
         await db_session.commit()
@@ -347,7 +347,7 @@ class TestServerWorkspaceVolumeAccess:
             max_servers_per_user=5,
             cost_per_hour=10,
             is_active=True,
-            allowed_roles=["user"],
+            visible_to_roles=["user"],
         )
         db_session.add(plan)
         await db_session.commit()
@@ -445,7 +445,7 @@ class TestServerWorkspaceVolumeAccess:
             max_servers_per_user=5,
             cost_per_hour=10,
             is_active=True,
-            allowed_roles=["user"],
+            visible_to_roles=["user"],
         )
         db_session.add(plan)
         await db_session.commit()
@@ -487,3 +487,184 @@ class TestServerWorkspaceVolumeAccess:
 
         # Editor should NOT get a 403 permission denied
         assert response.status_code != 403, f"Editor should be allowed RW mount: {response.text}"
+
+
+class TestServerPlanAccessValidation:
+    """Tests for plan access validation on start/restart."""
+
+    @pytest.mark.asyncio
+    async def test_start_blocked_when_plan_access_revoked(self, client: AsyncClient, test_user, user_token, db_session):
+        """User should be blocked from starting a server if their plan access was revoked."""
+        from app.models.server_plan import ServerPlan
+        from app.models.environment_template import EnvironmentTemplate
+        from app.models.server import Server
+
+        plan = ServerPlan(
+            name="Restricted Plan",
+            slug="restricted-plan",
+            category="cpu",
+            cpu_limit=1,
+            memory_limit="1g",
+            disk_limit="10g",
+            max_servers_per_user=1,
+            cost_per_hour=1,
+            is_active=True,
+            visible_to_roles=["user"],
+        )
+        db_session.add(plan)
+        await db_session.commit()
+        await db_session.refresh(plan)
+
+        env = EnvironmentTemplate(
+            name="Test Env",
+            slug="test-env-restricted",
+            image="hello-world",
+            is_active=True,
+            is_public=True,
+        )
+        db_session.add(env)
+        await db_session.commit()
+        await db_session.refresh(env)
+
+        server = Server(
+            name="restricted-server",
+            user_id=test_user.id,
+            plan_id=plan.id,
+            environment_id=env.id,
+            status="stopped",
+            container_id=None,
+        )
+        db_session.add(server)
+        await db_session.commit()
+        await db_session.refresh(server)
+
+        # Revoke user access by changing plan to admin-only
+        plan.visible_to_roles = ["admin"]
+        await db_session.commit()
+
+        headers = {"Authorization": f"Bearer {user_token}"}
+        response = await client.post(f"/api/servers/{server.id}/start", headers=headers)
+
+        assert response.status_code == 403
+        assert "no longer available" in response.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_restart_blocked_when_plan_access_revoked(self, client: AsyncClient, test_user, user_token, db_session):
+        """User should be blocked from restarting a server if their plan access was revoked."""
+        from app.models.server_plan import ServerPlan
+        from app.models.environment_template import EnvironmentTemplate
+        from app.models.server import Server
+
+        plan = ServerPlan(
+            name="Restricted Plan 2",
+            slug="restricted-plan-2",
+            category="cpu",
+            cpu_limit=1,
+            memory_limit="1g",
+            disk_limit="10g",
+            max_servers_per_user=1,
+            cost_per_hour=1,
+            is_active=True,
+            visible_to_roles=["user"],
+        )
+        db_session.add(plan)
+        await db_session.commit()
+        await db_session.refresh(plan)
+
+        env = EnvironmentTemplate(
+            name="Test Env 2",
+            slug="test-env-restricted-2",
+            image="hello-world",
+            is_active=True,
+            is_public=True,
+        )
+        db_session.add(env)
+        await db_session.commit()
+        await db_session.refresh(env)
+
+        server = Server(
+            name="restricted-server-2",
+            user_id=test_user.id,
+            plan_id=plan.id,
+            environment_id=env.id,
+            status="stopped",
+            container_id=None,
+        )
+        db_session.add(server)
+        await db_session.commit()
+        await db_session.refresh(server)
+
+        # Revoke access by deactivating the plan
+        plan.is_active = False
+        await db_session.commit()
+
+        headers = {"Authorization": f"Bearer {user_token}"}
+        response = await client.post(f"/api/servers/{server.id}/restart", headers=headers)
+
+        assert response.status_code == 403
+        assert "no longer available" in response.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_start_allowed_when_plan_access_valid(self, client: AsyncClient, test_user, user_token, db_session):
+        """User should be allowed to start a server when plan access is still valid."""
+        from app.models.server_plan import ServerPlan
+        from app.models.environment_template import EnvironmentTemplate
+        from app.models.server import Server
+        from unittest.mock import AsyncMock, patch, MagicMock
+
+        plan = ServerPlan(
+            name="Valid Plan",
+            slug="valid-plan",
+            category="cpu",
+            cpu_limit=1,
+            memory_limit="1g",
+            disk_limit="10g",
+            max_servers_per_user=1,
+            cost_per_hour=1,
+            is_active=True,
+            visible_to_roles=["user"],
+        )
+        db_session.add(plan)
+        await db_session.commit()
+        await db_session.refresh(plan)
+
+        env = EnvironmentTemplate(
+            name="Test Env Valid",
+            slug="test-env-valid",
+            image="hello-world",
+            is_active=True,
+            is_public=True,
+        )
+        db_session.add(env)
+        await db_session.commit()
+        await db_session.refresh(env)
+
+        server = Server(
+            name="valid-server",
+            user_id=test_user.id,
+            plan_id=plan.id,
+            environment_id=env.id,
+            status="stopped",
+            container_id=None,
+        )
+        db_session.add(server)
+        await db_session.commit()
+        await db_session.refresh(server)
+
+        headers = {"Authorization": f"Bearer {user_token}"}
+
+        # Mock spawner to avoid Docker calls — plan access check should pass
+        with patch("app.api.servers.spawner.spawn", new_callable=AsyncMock) as mock_spawn:
+            mock_spawn.return_value = MagicMock(
+                id=str(server.id),
+                container_id="container-valid",
+                status="running",
+                user_id=test_user.id,
+                name="valid-server",
+            )
+            with patch("app.api.servers.spawner.get_status", new_callable=AsyncMock) as mock_status:
+                mock_status.return_value = "running"
+                response = await client.post(f"/api/servers/{server.id}/start", headers=headers)
+
+        # Should NOT be blocked by plan access (may still fail on Docker, but not 403)
+        assert response.status_code != 403, f"Should not be blocked by plan access: {response.text}"

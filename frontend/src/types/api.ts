@@ -112,7 +112,8 @@ export interface Plan {
   cost_per_hour: number;
   cooldown_seconds: number;
   requires_approval: boolean;
-  allowed_roles: string[];
+  is_public: boolean;
+  visible_to_roles: string[];
   is_active: boolean;
   priority: number;
   created_at: string;

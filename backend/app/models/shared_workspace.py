@@ -32,11 +32,21 @@ class SharedWorkspace(Base):
             volume_count = len(self.volume_associations) if self.volume_associations else 0
         except:
             volume_count = 0
+        owner_name = None
+        owner_username = None
+        try:
+            if self.owner:
+                owner_name = self.owner.display_name or self.owner.username
+                owner_username = self.owner.username
+        except:
+            pass
         return {
             "id": str(self.id),
             "name": self.name,
             "description": self.description,
             "owner_id": str(self.owner_id),
+            "owner_name": owner_name,
+            "owner_username": owner_username,
             "is_active": self.is_active,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,

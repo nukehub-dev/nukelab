@@ -38,7 +38,8 @@ class ServerPlan(Base):
     
     # Restrictions
     requires_approval = Column(Boolean, default=False)
-    allowed_roles = Column(JSON, default=list)
+    is_public = Column(Boolean, default=False)
+    visible_to_roles = Column(JSON, default=list)
     
     # Status
     is_active = Column(Boolean, default=True)
@@ -73,7 +74,8 @@ class ServerPlan(Base):
             "allow_scheduling": self.allow_scheduling,
             "allow_snapshots": self.allow_snapshots,
             "requires_approval": self.requires_approval,
-            "allowed_roles": self.allowed_roles or [],
+            "is_public": self.is_public,
+            "visible_to_roles": self.visible_to_roles or [],
             "is_active": self.is_active,
             "priority": self.priority,
             "created_at": self.created_at.isoformat() if self.created_at else None,

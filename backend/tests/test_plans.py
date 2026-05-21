@@ -52,7 +52,7 @@ class TestPlanCRUD:
                 "max_servers_per_user": 3,
                 "cost_per_hour": 2,
                 "requires_approval": False,
-                "allowed_roles": ["user", "moderator"],
+                "visible_to_roles": ["user", "moderator"],
                 "priority": 0
             }
         )
@@ -103,14 +103,14 @@ class TestPlanVisibility:
             name="Admin Plan", slug="admin-only-plan", category="cpu",
             cpu_limit=1, memory_limit="1g", disk_limit="10g",
             max_servers_per_user=1, cost_per_hour=1,
-            allowed_roles=["admin"], is_active=True
+            visible_to_roles=["admin"], is_active=True
         )
         # Create plan for users
         user_plan = ServerPlan(
             name="User Plan", slug="user-plan", category="cpu",
             cpu_limit=1, memory_limit="1g", disk_limit="10g",
             max_servers_per_user=1, cost_per_hour=1,
-            allowed_roles=["user"], is_active=True
+            visible_to_roles=["user"], is_active=True
         )
         db_session.add_all([admin_plan, user_plan])
         await db_session.commit()
@@ -132,7 +132,7 @@ class TestPlanVisibility:
             name="Admin Direct Plan", slug="admin-direct-plan", category="cpu",
             cpu_limit=1, memory_limit="1g", disk_limit="10g",
             max_servers_per_user=1, cost_per_hour=1,
-            allowed_roles=["admin"], is_active=True
+            visible_to_roles=["admin"], is_active=True
         )
         db_session.add(plan)
         await db_session.commit()
@@ -161,7 +161,7 @@ class TestPlanVisibility:
             name="Admin Workspace Plan", slug="admin-workspace-plan", category="cpu",
             cpu_limit=1, memory_limit="1g", disk_limit="10g",
             max_servers_per_user=1, cost_per_hour=1,
-            allowed_roles=["admin"], is_active=True
+            visible_to_roles=["admin"], is_active=True
         )
         db_session.add(plan)
         await db_session.commit()
@@ -195,13 +195,13 @@ class TestPlanVisibility:
         assert "admin-workspace-plan" in slugs
 
     @pytest.mark.asyncio
-    async def test_empty_allowed_roles_visible_to_all(self, client, db_session, test_user, user_token):
-        """Plans with empty allowed_roles should be visible to all."""
+    async def test_public_plan_visible_to_all(self, client, db_session, test_user, user_token):
+        """Public plans should be visible to all users."""
         plan = ServerPlan(
-            name="Global Plan", slug="global-plan", category="cpu",
+            name="Public Plan", slug="public-plan", category="cpu",
             cpu_limit=1, memory_limit="1g", disk_limit="10g",
             max_servers_per_user=1, cost_per_hour=1,
-            allowed_roles=[], is_active=True
+            is_public=True, visible_to_roles=["admin"], is_active=True
         )
         db_session.add(plan)
         await db_session.commit()
@@ -212,7 +212,7 @@ class TestPlanVisibility:
         )
         data = response.json()
         slugs = [p["slug"] for p in data["data"]["items"]]
-        assert "global-plan" in slugs
+        assert "public-plan" in slugs
 
 
 class TestPlanUserAccess:
@@ -225,7 +225,7 @@ class TestPlanUserAccess:
             name="Restricted Plan", slug="restricted-plan", category="cpu",
             cpu_limit=1, memory_limit="1g", disk_limit="10g",
             max_servers_per_user=1, cost_per_hour=1,
-            allowed_roles=["admin"], is_active=True
+            visible_to_roles=["admin"], is_active=True
         )
         db_session.add(plan)
         await db_session.commit()
@@ -247,7 +247,7 @@ class TestPlanUserAccess:
             name="Revoke Plan", slug="revoke-plan", category="cpu",
             cpu_limit=1, memory_limit="1g", disk_limit="10g",
             max_servers_per_user=1, cost_per_hour=1,
-            allowed_roles=["admin"], is_active=True
+            visible_to_roles=["admin"], is_active=True
         )
         db_session.add(plan)
         await db_session.commit()
@@ -273,7 +273,7 @@ class TestPlanUserAccess:
             name="List Users Plan", slug="list-users-plan", category="cpu",
             cpu_limit=1, memory_limit="1g", disk_limit="10g",
             max_servers_per_user=1, cost_per_hour=1,
-            allowed_roles=["admin"], is_active=True
+            visible_to_roles=["admin"], is_active=True
         )
         db_session.add(plan)
         await db_session.commit()
@@ -300,7 +300,7 @@ class TestPlanUserAccess:
             name="Dup Plan", slug="dup-plan", category="cpu",
             cpu_limit=1, memory_limit="1g", disk_limit="10g",
             max_servers_per_user=1, cost_per_hour=1,
-            allowed_roles=["admin"], is_active=True
+            visible_to_roles=["admin"], is_active=True
         )
         db_session.add(plan)
         await db_session.commit()
@@ -328,7 +328,7 @@ class TestPlanWorkspaceAccess:
             name="WS Restricted Plan", slug="ws-restricted-plan", category="cpu",
             cpu_limit=1, memory_limit="1g", disk_limit="10g",
             max_servers_per_user=1, cost_per_hour=1,
-            allowed_roles=["admin"], is_active=True
+            visible_to_roles=["admin"], is_active=True
         )
         workspace = SharedWorkspace(name="Test WS", owner_id=test_user.id, is_active=True)
         db_session.add_all([plan, workspace])
@@ -352,7 +352,7 @@ class TestPlanWorkspaceAccess:
             name="WS Revoke Plan", slug="ws-revoke-plan", category="cpu",
             cpu_limit=1, memory_limit="1g", disk_limit="10g",
             max_servers_per_user=1, cost_per_hour=1,
-            allowed_roles=["admin"], is_active=True
+            visible_to_roles=["admin"], is_active=True
         )
         workspace = SharedWorkspace(name="Test WS 2", owner_id=test_user.id, is_active=True)
         db_session.add_all([plan, workspace])
@@ -380,7 +380,7 @@ class TestPlanWorkspaceAccess:
             name="List WS Plan", slug="list-ws-plan", category="cpu",
             cpu_limit=1, memory_limit="1g", disk_limit="10g",
             max_servers_per_user=1, cost_per_hour=1,
-            allowed_roles=["admin"], is_active=True
+            visible_to_roles=["admin"], is_active=True
         )
         workspace = SharedWorkspace(name="Test WS 3", owner_id=test_user.id, is_active=True)
         db_session.add_all([plan, workspace])
@@ -409,7 +409,7 @@ class TestPlanWorkspaceAccess:
             name="WS Dup Plan", slug="ws-dup-plan", category="cpu",
             cpu_limit=1, memory_limit="1g", disk_limit="10g",
             max_servers_per_user=1, cost_per_hour=1,
-            allowed_roles=["admin"], is_active=True
+            visible_to_roles=["admin"], is_active=True
         )
         workspace = SharedWorkspace(name="Test WS 4", owner_id=test_user.id, is_active=True)
         db_session.add_all([plan, workspace])

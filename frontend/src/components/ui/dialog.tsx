@@ -8,9 +8,18 @@ interface DialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   children: React.ReactNode;
+  size?: 'default' | 'lg' | 'xl' | '2xl' | 'full';
 }
 
-function Dialog({ open, onOpenChange, children }: DialogProps) {
+const sizeClasses: Record<string, string> = {
+  default: 'w-[420px]',
+  lg: 'w-[560px]',
+  xl: 'w-[800px]',
+  '2xl': 'w-[1000px]',
+  full: 'w-[90vw]',
+};
+
+function Dialog({ open, onOpenChange, children, size = 'default' }: DialogProps) {
   React.useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onOpenChange(false);
@@ -24,6 +33,8 @@ function Dialog({ open, onOpenChange, children }: DialogProps) {
       document.body.style.overflow = '';
     };
   }, [open, onOpenChange]);
+
+  const widthClass = sizeClasses[size] || sizeClasses.default;
 
   return (
     <AnimatePresence>
@@ -65,7 +76,10 @@ function Dialog({ open, onOpenChange, children }: DialogProps) {
           </motion.div>
           {/* Desktop: Right Drawer */}
           <motion.div
-            className="fixed inset-y-0 right-0 z-50 w-[420px] max-w-full bg-card/95 backdrop-blur-xl border-l border-border/50 overflow-hidden opacity-0 pointer-events-none lg:opacity-100 lg:pointer-events-auto"
+            className={cn(
+              'fixed inset-y-0 right-0 z-50 max-w-full bg-card/95 backdrop-blur-xl border-l border-border/50 overflow-hidden opacity-0 pointer-events-none lg:opacity-100 lg:pointer-events-auto',
+              widthClass
+            )}
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
@@ -145,7 +159,7 @@ const DialogClose = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttribut
       className={cn(
         'absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-        'disabled:pointer-events-none hidden lg:block',
+        'disabled:pointer-events-none',
         className
       )}
       {...props}

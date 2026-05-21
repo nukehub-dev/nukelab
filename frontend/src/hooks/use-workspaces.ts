@@ -18,6 +18,8 @@ export interface Workspace {
   name: string;
   description?: string;
   owner_id: string;
+  owner_name?: string;
+  owner_username?: string;
   is_active: boolean;
   created_at?: string;
   updated_at?: string;

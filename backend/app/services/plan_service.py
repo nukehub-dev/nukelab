@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func
+from sqlalchemy.orm import selectinload
 from fastapi import HTTPException, status
 
 from app.models.server_plan import ServerPlan
@@ -111,17 +112,21 @@ class PlanService:
         # Filter plans by visibility
         visible_plans = []
         for plan in plans:
+            # Public plans are visible to all
+            public_visible = plan.is_public
+            # Admin/super_admin always have access
+            admin_visible = user_role in ('admin', 'super_admin')
             # Role-based visibility
             role_visible = (
-                not plan.allowed_roles
-                or (user_role and user_role in plan.allowed_roles)
+                user_role and plan.visible_to_roles
+                and user_role in plan.visible_to_roles
             )
             # Direct user access
             user_visible = plan.id in user_plan_ids
             # Workspace access
             workspace_visible = plan.id in workspace_plan_ids
             
-            if role_visible or user_visible or workspace_visible:
+            if public_visible or admin_visible or role_visible or user_visible or workspace_visible:
                 visible_plans.append(plan)
         
         return {
@@ -146,7 +151,8 @@ class PlanService:
         cost_per_hour: int = 10,
         cooldown_seconds: int = 0,
         requires_approval: bool = False,
-        allowed_roles: Optional[List[str]] = None,
+        is_public: bool = False,
+        visible_to_roles: Optional[List[str]] = None,
         priority: int = 0
     ) -> ServerPlan:
         """Create new server plan"""
@@ -172,7 +178,8 @@ class PlanService:
             cost_per_hour=cost_per_hour,
             cooldown_seconds=cooldown_seconds,
             requires_approval=requires_approval,
-            allowed_roles=allowed_roles or [],
+            is_public=is_public,
+            visible_to_roles=visible_to_roles or [],
             priority=priority
         )
         
@@ -233,8 +240,16 @@ class PlanService:
         if not plan or not plan.is_active:
             return False
         
+        # Admin/super_admin always have access
+        if user_role in ('admin', 'super_admin'):
+            return True
+        
+        # Public plans are usable by all
+        if plan.is_public:
+            return True
+        
         # Role-based check
-        if not plan.allowed_roles or user_role in plan.allowed_roles:
+        if plan.visible_to_roles and user_role in plan.visible_to_roles:
             return True
         
         # Direct user access
@@ -269,8 +284,11 @@ class PlanService:
     async def list_plan_users(self, plan_id: str) -> List[Dict[str, Any]]:
         """List users with direct access to a plan"""
         result = await self.db.execute(
-            select(UserPlanAccess).where(
-                UserPlanAccess.plan_id == uuid.UUID(plan_id)
+            select(UserPlanAccess)
+            .where(UserPlanAccess.plan_id == uuid.UUID(plan_id))
+            .options(
+                selectinload(UserPlanAccess.user),
+                selectinload(UserPlanAccess.granted_by_user)
             )
         )
         accesses = result.scalars().all()
@@ -329,9 +347,13 @@ class PlanService:
     
     async def list_plan_workspaces(self, plan_id: str) -> List[Dict[str, Any]]:
         """List workspaces with access to a plan"""
+        from app.models.shared_workspace import SharedWorkspace
         result = await self.db.execute(
-            select(WorkspacePlanAccess).where(
-                WorkspacePlanAccess.plan_id == uuid.UUID(plan_id)
+            select(WorkspacePlanAccess)
+            .where(WorkspacePlanAccess.plan_id == uuid.UUID(plan_id))
+            .options(
+                selectinload(WorkspacePlanAccess.workspace).selectinload(SharedWorkspace.owner),
+                selectinload(WorkspacePlanAccess.granted_by_user)
             )
         )
         accesses = result.scalars().all()
@@ -340,6 +362,9 @@ class PlanService:
             item = access.to_dict()
             if access.workspace:
                 item["workspace_name"] = access.workspace.name
+                if access.workspace.owner:
+                    item["owner_name"] = access.workspace.owner.display_name or access.workspace.owner.username
+                    item["owner_username"] = access.workspace.owner.username
             if access.granted_by_user:
                 item["granted_by_username"] = access.granted_by_user.username
             data.append(item)

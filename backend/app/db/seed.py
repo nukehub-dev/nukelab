@@ -96,7 +96,7 @@ async def seed_plans(db: AsyncSession):
             "cost_per_hour": 8,
             "priority": 3,
             "requires_approval": True,
-            "allowed_roles": ["admin", "super_admin"],
+            "visible_to_roles": [],
         },
     ]
     
