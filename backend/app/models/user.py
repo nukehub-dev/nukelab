@@ -66,6 +66,7 @@ class User(Base):
     workspace_memberships = relationship("WorkspaceMember", back_populates="user", cascade="all, delete-orphan")
     workspace_invitations_received = relationship("WorkspaceInvitation", foreign_keys="WorkspaceInvitation.user_id", back_populates="user", cascade="all, delete-orphan")
     workspace_invitations_sent = relationship("WorkspaceInvitation", foreign_keys="WorkspaceInvitation.invited_by", back_populates="inviter", cascade="all, delete-orphan")
+    plan_access = relationship("UserPlanAccess", back_populates="user", cascade="all, delete-orphan", foreign_keys="UserPlanAccess.user_id")
 
     def __repr__(self):
         return f"<User {self.username}>"

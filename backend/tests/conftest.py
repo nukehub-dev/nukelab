@@ -53,6 +53,8 @@ TRUNCATE_TABLES = [
     "environment_templates",
     "server_volumes",
     "workspace_volumes",
+    "user_plan_access",
+    "workspace_plan_access",
     "workspace_members",
     "shared_workspaces",
     "servers",

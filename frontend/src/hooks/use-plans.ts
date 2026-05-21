@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
+import { useToast } from '../stores/toast-store';
 import type { Plan } from '../types/api';
 
 interface PlansQueryParams {
@@ -69,14 +70,29 @@ interface UpdatePlanData {
   is_active?: boolean;
 }
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  return 'An unexpected error occurred';
+}
+
 export function usePlanActions() {
   const queryClient = useQueryClient();
+  const { success, error: showError } = useToast();
 
   const createPlan = useMutation({
     mutationFn: (data: CreatePlanData) =>
       api.post<{ success: boolean; data: Plan }>('/plans/', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['plans'] });
+      success('Plan created', 'New plan has been created successfully');
+    },
+    onError: (err) => {
+      showError('Failed to create plan', getErrorMessage(err));
     },
   });
 
@@ -85,6 +101,10 @@ export function usePlanActions() {
       api.put<{ success: boolean; data: Plan }>(`/plans/${planId}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['plans'] });
+      success('Plan updated', 'Plan has been updated successfully');
+    },
+    onError: (err) => {
+      showError('Failed to update plan', getErrorMessage(err));
     },
   });
 
@@ -93,6 +113,10 @@ export function usePlanActions() {
       api.delete<{ success: boolean }>(`/plans/${planId}/permanent`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['plans'] });
+      success('Plan deleted', 'Plan has been permanently deleted');
+    },
+    onError: (err) => {
+      showError('Failed to delete plan', getErrorMessage(err));
     },
   });
 
@@ -101,6 +125,10 @@ export function usePlanActions() {
       api.post<{ success: boolean }>(`/plans/${planId}/activate`, {}),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['plans'] });
+      success('Plan activated', 'Plan has been activated');
+    },
+    onError: (err) => {
+      showError('Failed to activate plan', getErrorMessage(err));
     },
   });
 
@@ -109,6 +137,10 @@ export function usePlanActions() {
       api.delete<{ success: boolean }>(`/plans/${planId}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['plans'] });
+      success('Plan deactivated', 'Plan has been deactivated');
+    },
+    onError: (err) => {
+      showError('Failed to deactivate plan', getErrorMessage(err));
     },
   });
 
@@ -118,5 +150,110 @@ export function usePlanActions() {
     deletePlan,
     activatePlan,
     deactivatePlan,
+  };
+}
+
+// ─── Plan Access Management ───
+
+export interface PlanUserAccess {
+  user_id: string;
+  plan_id: string;
+  granted_by?: string;
+  granted_at?: string;
+  expires_at?: string;
+  username?: string;
+  display_name?: string;
+  granted_by_username?: string;
+}
+
+export interface PlanWorkspaceAccess {
+  workspace_id: string;
+  plan_id: string;
+  granted_by?: string;
+  granted_at?: string;
+  expires_at?: string;
+  workspace_name?: string;
+  granted_by_username?: string;
+}
+
+export function usePlanUsers(planId: string | undefined) {
+  return useQuery({
+    queryKey: ['plans', planId, 'users'],
+    queryFn: async () => {
+      const response = await api.get<{ success: boolean; data: PlanUserAccess[] }>(`/plans/${planId}/users`);
+      return response.data;
+    },
+    enabled: !!planId,
+  });
+}
+
+export function usePlanWorkspaces(planId: string | undefined) {
+  return useQuery({
+    queryKey: ['plans', planId, 'workspaces'],
+    queryFn: async () => {
+      const response = await api.get<{ success: boolean; data: PlanWorkspaceAccess[] }>(`/plans/${planId}/workspaces`);
+      return response.data;
+    },
+    enabled: !!planId,
+  });
+}
+
+export function usePlanAccessActions() {
+  const queryClient = useQueryClient();
+  const { success, error: showError } = useToast();
+
+  const grantUserAccess = useMutation({
+    mutationFn: ({ planId, userId }: { planId: string; userId: string }) =>
+      api.post<{ success: boolean; data: PlanUserAccess }>(`/plans/${planId}/users/${userId}`, {}),
+    onSuccess: (_, { planId }) => {
+      queryClient.invalidateQueries({ queryKey: ['plans', planId, 'users'] });
+      success('Access granted', 'User has been granted access to this plan');
+    },
+    onError: (err) => {
+      showError('Failed to grant access', getErrorMessage(err));
+    },
+  });
+
+  const revokeUserAccess = useMutation({
+    mutationFn: ({ planId, userId }: { planId: string; userId: string }) =>
+      api.delete<{ success: boolean }>(`/plans/${planId}/users/${userId}`),
+    onSuccess: (_, { planId }) => {
+      queryClient.invalidateQueries({ queryKey: ['plans', planId, 'users'] });
+      success('Access revoked', 'User access has been revoked');
+    },
+    onError: (err) => {
+      showError('Failed to revoke access', getErrorMessage(err));
+    },
+  });
+
+  const grantWorkspaceAccess = useMutation({
+    mutationFn: ({ planId, workspaceId }: { planId: string; workspaceId: string }) =>
+      api.post<{ success: boolean; data: PlanWorkspaceAccess }>(`/plans/${planId}/workspaces/${workspaceId}`, {}),
+    onSuccess: (_, { planId }) => {
+      queryClient.invalidateQueries({ queryKey: ['plans', planId, 'workspaces'] });
+      success('Access granted', 'Workspace has been granted access to this plan');
+    },
+    onError: (err) => {
+      showError('Failed to grant access', getErrorMessage(err));
+    },
+  });
+
+  const revokeWorkspaceAccess = useMutation({
+    mutationFn: ({ planId, workspaceId }: { planId: string; workspaceId: string }) =>
+      api.delete<{ success: boolean }>(`/plans/${planId}/workspaces/${workspaceId}`),
+    onSuccess: (_, { planId }) => {
+      queryClient.invalidateQueries({ queryKey: ['plans', planId, 'workspaces'] });
+      success('Access revoked', 'Workspace access has been revoked');
+    },
+    onError: (err) => {
+      showError('Failed to revoke access', getErrorMessage(err));
+    },
+  });
+
+  return {
+    grantUserAccess,
+    revokeUserAccess,
+    grantWorkspaceAccess,
+    revokeWorkspaceAccess,
   };
 }

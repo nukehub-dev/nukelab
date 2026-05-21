@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 from sqlalchemy import Column, String, Text, Boolean, DateTime, Integer, Float, JSON, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 from app.db.base import Base
 
 class ServerPlan(Base):
@@ -48,6 +49,10 @@ class ServerPlan(Base):
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    user_access = relationship("UserPlanAccess", back_populates="plan", cascade="all, delete-orphan")
+    workspace_access = relationship("WorkspacePlanAccess", back_populates="plan", cascade="all, delete-orphan")
     
     def to_dict(self):
         return {

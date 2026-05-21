@@ -1,6 +1,11 @@
 """Tests for Plans API endpoints."""
 
 import pytest
+from sqlalchemy import select
+
+from app.models.server_plan import ServerPlan
+from app.models.plan_access import UserPlanAccess, WorkspacePlanAccess
+from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
 
 
 class TestPlansList:
@@ -85,3 +90,340 @@ class TestPlanFeatures:
         data = response.json()
         # Just verify we get plans back
         assert data is not None
+
+
+class TestPlanVisibility:
+    """Plan visibility filtering tests."""
+
+    @pytest.mark.asyncio
+    async def test_role_based_visibility(self, client, db_session, test_user, user_token):
+        """User should see plans matching their role."""
+        # Create plan for admin only
+        admin_plan = ServerPlan(
+            name="Admin Plan", slug="admin-only-plan", category="cpu",
+            cpu_limit=1, memory_limit="1g", disk_limit="10g",
+            max_servers_per_user=1, cost_per_hour=1,
+            allowed_roles=["admin"], is_active=True
+        )
+        # Create plan for users
+        user_plan = ServerPlan(
+            name="User Plan", slug="user-plan", category="cpu",
+            cpu_limit=1, memory_limit="1g", disk_limit="10g",
+            max_servers_per_user=1, cost_per_hour=1,
+            allowed_roles=["user"], is_active=True
+        )
+        db_session.add_all([admin_plan, user_plan])
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/plans/",
+            headers={"Authorization": f"Bearer {user_token}"}
+        )
+        data = response.json()
+        slugs = [p["slug"] for p in data["data"]["items"]]
+        assert "user-plan" in slugs
+        assert "admin-only-plan" not in slugs
+
+    @pytest.mark.asyncio
+    async def test_direct_user_access_visibility(self, client, db_session, test_user, user_token):
+        """User should see plans they have direct access to."""
+        # Create admin-only plan
+        plan = ServerPlan(
+            name="Admin Direct Plan", slug="admin-direct-plan", category="cpu",
+            cpu_limit=1, memory_limit="1g", disk_limit="10g",
+            max_servers_per_user=1, cost_per_hour=1,
+            allowed_roles=["admin"], is_active=True
+        )
+        db_session.add(plan)
+        await db_session.commit()
+        await db_session.refresh(plan)
+
+        # Grant user direct access
+        access = UserPlanAccess(
+            plan_id=plan.id, user_id=test_user.id, granted_at=__import__('datetime').datetime.utcnow()
+        )
+        db_session.add(access)
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/plans/",
+            headers={"Authorization": f"Bearer {user_token}"}
+        )
+        data = response.json()
+        slugs = [p["slug"] for p in data["data"]["items"]]
+        assert "admin-direct-plan" in slugs
+
+    @pytest.mark.asyncio
+    async def test_workspace_access_visibility(self, client, db_session, test_user, user_token):
+        """User should see plans accessible via their workspace membership."""
+        # Create admin-only plan
+        plan = ServerPlan(
+            name="Admin Workspace Plan", slug="admin-workspace-plan", category="cpu",
+            cpu_limit=1, memory_limit="1g", disk_limit="10g",
+            max_servers_per_user=1, cost_per_hour=1,
+            allowed_roles=["admin"], is_active=True
+        )
+        db_session.add(plan)
+        await db_session.commit()
+        await db_session.refresh(plan)
+
+        # Create workspace with user as member
+        workspace = SharedWorkspace(
+            name="Test Workspace", owner_id=test_user.id, is_active=True
+        )
+        db_session.add(workspace)
+        await db_session.commit()
+        await db_session.refresh(workspace)
+
+        member = WorkspaceMember(workspace_id=workspace.id, user_id=test_user.id, role="read_write")
+        db_session.add(member)
+        await db_session.commit()
+
+        # Grant workspace access to plan
+        ws_access = WorkspacePlanAccess(
+            plan_id=plan.id, workspace_id=workspace.id, granted_at=__import__('datetime').datetime.utcnow()
+        )
+        db_session.add(ws_access)
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/plans/",
+            headers={"Authorization": f"Bearer {user_token}"}
+        )
+        data = response.json()
+        slugs = [p["slug"] for p in data["data"]["items"]]
+        assert "admin-workspace-plan" in slugs
+
+    @pytest.mark.asyncio
+    async def test_empty_allowed_roles_visible_to_all(self, client, db_session, test_user, user_token):
+        """Plans with empty allowed_roles should be visible to all."""
+        plan = ServerPlan(
+            name="Global Plan", slug="global-plan", category="cpu",
+            cpu_limit=1, memory_limit="1g", disk_limit="10g",
+            max_servers_per_user=1, cost_per_hour=1,
+            allowed_roles=[], is_active=True
+        )
+        db_session.add(plan)
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/plans/",
+            headers={"Authorization": f"Bearer {user_token}"}
+        )
+        data = response.json()
+        slugs = [p["slug"] for p in data["data"]["items"]]
+        assert "global-plan" in slugs
+
+
+class TestPlanUserAccess:
+    """User plan access management tests."""
+
+    @pytest.mark.asyncio
+    async def test_grant_user_access_as_admin(self, client, admin_token, db_session, test_user):
+        """Admin should be able to grant user access to a plan."""
+        plan = ServerPlan(
+            name="Restricted Plan", slug="restricted-plan", category="cpu",
+            cpu_limit=1, memory_limit="1g", disk_limit="10g",
+            max_servers_per_user=1, cost_per_hour=1,
+            allowed_roles=["admin"], is_active=True
+        )
+        db_session.add(plan)
+        await db_session.commit()
+        await db_session.refresh(plan)
+
+        response = await client.post(
+            f"/api/plans/{plan.id}/users/{test_user.id}",
+            headers={"Authorization": f"Bearer {admin_token}"}
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+
+    @pytest.mark.asyncio
+    async def test_revoke_user_access_as_admin(self, client, admin_token, db_session, test_user):
+        """Admin should be able to revoke user access."""
+        plan = ServerPlan(
+            name="Revoke Plan", slug="revoke-plan", category="cpu",
+            cpu_limit=1, memory_limit="1g", disk_limit="10g",
+            max_servers_per_user=1, cost_per_hour=1,
+            allowed_roles=["admin"], is_active=True
+        )
+        db_session.add(plan)
+        await db_session.commit()
+        await db_session.refresh(plan)
+
+        access = UserPlanAccess(plan_id=plan.id, user_id=test_user.id)
+        db_session.add(access)
+        await db_session.commit()
+
+        response = await client.delete(
+            f"/api/plans/{plan.id}/users/{test_user.id}",
+            headers={"Authorization": f"Bearer {admin_token}"}
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+
+    @pytest.mark.asyncio
+    async def test_list_plan_users_as_admin(self, client, admin_token, db_session, test_user):
+        """Admin should be able to list users with plan access."""
+        plan = ServerPlan(
+            name="List Users Plan", slug="list-users-plan", category="cpu",
+            cpu_limit=1, memory_limit="1g", disk_limit="10g",
+            max_servers_per_user=1, cost_per_hour=1,
+            allowed_roles=["admin"], is_active=True
+        )
+        db_session.add(plan)
+        await db_session.commit()
+        await db_session.refresh(plan)
+
+        access = UserPlanAccess(plan_id=plan.id, user_id=test_user.id)
+        db_session.add(access)
+        await db_session.commit()
+
+        response = await client.get(
+            f"/api/plans/{plan.id}/users",
+            headers={"Authorization": f"Bearer {admin_token}"}
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert len(data["data"]) == 1
+
+    @pytest.mark.asyncio
+    async def test_grant_user_access_duplicate_fails(self, client, admin_token, db_session, test_user):
+        """Granting duplicate user access should fail."""
+        plan = ServerPlan(
+            name="Dup Plan", slug="dup-plan", category="cpu",
+            cpu_limit=1, memory_limit="1g", disk_limit="10g",
+            max_servers_per_user=1, cost_per_hour=1,
+            allowed_roles=["admin"], is_active=True
+        )
+        db_session.add(plan)
+        await db_session.commit()
+        await db_session.refresh(plan)
+
+        access = UserPlanAccess(plan_id=plan.id, user_id=test_user.id)
+        db_session.add(access)
+        await db_session.commit()
+
+        response = await client.post(
+            f"/api/plans/{plan.id}/users/{test_user.id}",
+            headers={"Authorization": f"Bearer {admin_token}"}
+        )
+        
+        assert response.status_code == 409
+
+
+class TestPlanWorkspaceAccess:
+    """Workspace plan access management tests."""
+
+    @pytest.mark.asyncio
+    async def test_grant_workspace_access_as_admin(self, client, admin_token, db_session, test_user):
+        """Admin should be able to grant workspace access to a plan."""
+        plan = ServerPlan(
+            name="WS Restricted Plan", slug="ws-restricted-plan", category="cpu",
+            cpu_limit=1, memory_limit="1g", disk_limit="10g",
+            max_servers_per_user=1, cost_per_hour=1,
+            allowed_roles=["admin"], is_active=True
+        )
+        workspace = SharedWorkspace(name="Test WS", owner_id=test_user.id, is_active=True)
+        db_session.add_all([plan, workspace])
+        await db_session.commit()
+        await db_session.refresh(plan)
+        await db_session.refresh(workspace)
+
+        response = await client.post(
+            f"/api/plans/{plan.id}/workspaces/{workspace.id}",
+            headers={"Authorization": f"Bearer {admin_token}"}
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+
+    @pytest.mark.asyncio
+    async def test_revoke_workspace_access_as_admin(self, client, admin_token, db_session, test_user):
+        """Admin should be able to revoke workspace access."""
+        plan = ServerPlan(
+            name="WS Revoke Plan", slug="ws-revoke-plan", category="cpu",
+            cpu_limit=1, memory_limit="1g", disk_limit="10g",
+            max_servers_per_user=1, cost_per_hour=1,
+            allowed_roles=["admin"], is_active=True
+        )
+        workspace = SharedWorkspace(name="Test WS 2", owner_id=test_user.id, is_active=True)
+        db_session.add_all([plan, workspace])
+        await db_session.commit()
+        await db_session.refresh(plan)
+        await db_session.refresh(workspace)
+
+        access = WorkspacePlanAccess(plan_id=plan.id, workspace_id=workspace.id)
+        db_session.add(access)
+        await db_session.commit()
+
+        response = await client.delete(
+            f"/api/plans/{plan.id}/workspaces/{workspace.id}",
+            headers={"Authorization": f"Bearer {admin_token}"}
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+
+    @pytest.mark.asyncio
+    async def test_list_plan_workspaces_as_admin(self, client, admin_token, db_session, test_user):
+        """Admin should be able to list workspaces with plan access."""
+        plan = ServerPlan(
+            name="List WS Plan", slug="list-ws-plan", category="cpu",
+            cpu_limit=1, memory_limit="1g", disk_limit="10g",
+            max_servers_per_user=1, cost_per_hour=1,
+            allowed_roles=["admin"], is_active=True
+        )
+        workspace = SharedWorkspace(name="Test WS 3", owner_id=test_user.id, is_active=True)
+        db_session.add_all([plan, workspace])
+        await db_session.commit()
+        await db_session.refresh(plan)
+        await db_session.refresh(workspace)
+
+        access = WorkspacePlanAccess(plan_id=plan.id, workspace_id=workspace.id)
+        db_session.add(access)
+        await db_session.commit()
+
+        response = await client.get(
+            f"/api/plans/{plan.id}/workspaces",
+            headers={"Authorization": f"Bearer {admin_token}"}
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert len(data["data"]) == 1
+
+    @pytest.mark.asyncio
+    async def test_grant_workspace_access_duplicate_fails(self, client, admin_token, db_session, test_user):
+        """Granting duplicate workspace access should fail."""
+        plan = ServerPlan(
+            name="WS Dup Plan", slug="ws-dup-plan", category="cpu",
+            cpu_limit=1, memory_limit="1g", disk_limit="10g",
+            max_servers_per_user=1, cost_per_hour=1,
+            allowed_roles=["admin"], is_active=True
+        )
+        workspace = SharedWorkspace(name="Test WS 4", owner_id=test_user.id, is_active=True)
+        db_session.add_all([plan, workspace])
+        await db_session.commit()
+        await db_session.refresh(plan)
+        await db_session.refresh(workspace)
+
+        access = WorkspacePlanAccess(plan_id=plan.id, workspace_id=workspace.id)
+        db_session.add(access)
+        await db_session.commit()
+
+        response = await client.post(
+            f"/api/plans/{plan.id}/workspaces/{workspace.id}",
+            headers={"Authorization": f"Bearer {admin_token}"}
+        )
+        
+        assert response.status_code == 409

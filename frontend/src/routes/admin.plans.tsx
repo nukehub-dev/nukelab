@@ -1,10 +1,12 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { CreditCard, Cpu, MemoryStick, HardDrive, CheckCircle2, XCircle, Pencil, Trash2 } from 'lucide-react';
+import { CreditCard, Cpu, MemoryStick, HardDrive, CheckCircle2, XCircle, Pencil, Trash2, Users, Building2, Shield, User } from 'lucide-react';
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { ResourcePageLayout } from '../components/layout/resource-page-layout';
 import { DataTable } from '../components/data/data-table';
 import { StatusBadge } from '../components/data/status-badge';
-import { usePlans, usePlanActions } from '../hooks/use-plans';
+import { usePlans, usePlanActions, usePlanUsers, usePlanWorkspaces, usePlanAccessActions } from '../hooks/use-plans';
+import { useUsers } from '../hooks/use-users';
+import { useWorkspaces } from '../hooks/use-workspaces';
 import { useDataTable } from '../hooks/use-data-table';
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
 import { usePageGuard } from '../hooks/use-page-guard';
@@ -23,6 +25,12 @@ import { useConfirmDialog } from '../components/ui/confirm-dialog';
 export const Route = createFileRoute('/admin/plans')({
   component: PlansPage,
 });
+
+const ROLE_OPTIONS = [
+  { value: 'user', label: 'User', icon: User },
+  { value: 'moderator', label: 'Moderator', icon: Shield },
+  { value: 'admin', label: 'Admin', icon: Shield },
+];
 
 function PlansPage() {
   const allowed = usePageGuard({ permissions: [PERMISSIONS.PLAN_CREATE, PERMISSIONS.PLAN_UPDATE, PERMISSIONS.PLAN_DELETE] });
@@ -93,9 +101,16 @@ function PlansPage() {
     cost_per_hour: 10,
     cooldown_seconds: 0,
     requires_approval: false,
-    allowed_roles: ['user'],
+    allowed_roles: ['user'] as string[],
     priority: 0,
   });
+
+  // Access management dialog
+  const [accessDialogOpen, setAccessDialogOpen] = useState(false);
+  const [accessPlan, setAccessPlan] = useState<Plan | null>(null);
+  const [accessTab, setAccessTab] = useState<'users' | 'workspaces'>('users');
+  const [userSearch, setUserSearch] = useState('');
+  const [workspaceSearch, setWorkspaceSearch] = useState('');
 
   const plans = data?.data || [];
   const pagination = data?.pagination;
@@ -142,6 +157,14 @@ function PlansPage() {
     setDialogOpen(true);
   };
 
+  const openAccessDialog = (plan: Plan) => {
+    setAccessPlan(plan);
+    setAccessTab('users');
+    setUserSearch('');
+    setWorkspaceSearch('');
+    setAccessDialogOpen(true);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (editingPlan) {
@@ -182,6 +205,18 @@ function PlansPage() {
       });
     }
     setDialogOpen(false);
+  };
+
+  const toggleRole = (role: string, checked: boolean) => {
+    setFormData((prev) => {
+      const current = new Set(prev.allowed_roles);
+      if (checked) {
+        current.add(role);
+      } else {
+        current.delete(role);
+      }
+      return { ...prev, allowed_roles: Array.from(current) };
+    });
   };
 
   const columns: ColumnDef<Plan>[] = [
@@ -308,6 +343,14 @@ function PlansPage() {
                 
               >
                 <Pencil className="w-4 h-4" />
+              </motion.button>
+            </Tooltip>
+            <Tooltip content="Manage Access">
+              <motion.button
+                onClick={() => openAccessDialog(plan)}
+                className="inline-flex p-1.5 rounded-lg hover:bg-violet-500/10 text-violet-400 transition-colors"
+              >
+                <Users className="w-4 h-4" />
               </motion.button>
             </Tooltip>
             {plan.is_active ? (
@@ -443,6 +486,14 @@ function PlansPage() {
               <Pencil className="w-4 h-4" />
             </button>
           </Tooltip>
+          <Tooltip content="Manage Access">
+            <button
+              onClick={() => openAccessDialog(plan)}
+              className="p-1.5 rounded-lg hover:bg-violet-500/10 text-violet-400 transition-colors inline-flex"
+            >
+              <Users className="w-4 h-4" />
+            </button>
+          </Tooltip>
           {plan.is_active ? (
             <Tooltip content="Deactivate">
               <button
@@ -484,11 +535,11 @@ function PlansPage() {
           </Tooltip>
         </div>
       </div>
-      ) : (
-        <div className="text-sm text-muted-foreground pt-1">
-          {plan.cost_per_hour} nukes/hr
-        </div>
-      )}
+    ) : (
+      <div className="text-sm text-muted-foreground pt-1">
+        {plan.cost_per_hour} nukes/hr
+      </div>
+    )}
     </div>
   );
 
@@ -544,6 +595,7 @@ function PlansPage() {
         />
       </ResourcePageLayout>
 
+      {/* Create/Edit Dialog */}
       {canManagePlans && (
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}
       >
@@ -692,6 +744,23 @@ function PlansPage() {
                 />
               </div>
             </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Allowed Roles</label>
+              <div className="flex flex-wrap gap-4">
+                {ROLE_OPTIONS.map((role) => (
+                  <label key={role.value} className="flex items-center gap-2 cursor-pointer">
+                    <Checkbox
+                      checked={formData.allowed_roles.includes(role.value)}
+                      onChange={(checked) => toggleRole(role.value, checked)}
+                    />
+                    <span className="text-sm">{role.label}</span>
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                If no roles are selected, the plan will be visible to all users.
+              </p>
+            </div>
             <label className="flex items-center gap-3 cursor-pointer group"
             >
               <Checkbox
@@ -713,7 +782,234 @@ function PlansPage() {
         </DialogContent>
       </Dialog>
       )}
+
+      {/* Access Management Dialog */}
+      {canManagePlans && accessPlan && (
+        <AccessManagementDialog
+          plan={accessPlan}
+          open={accessDialogOpen}
+          onOpenChange={setAccessDialogOpen}
+        />
+      )}
       {dialog}
     </>
+  );
+}
+
+// ─── Access Management Dialog ───
+
+function AccessManagementDialog({
+  plan,
+  open,
+  onOpenChange,
+}: {
+  plan: Plan;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [tab, setTab] = useState<'users' | 'workspaces'>('users');
+  const [userSearch, setUserSearch] = useState('');
+  const [workspaceSearch, setWorkspaceSearch] = useState('');
+
+  const { data: planUsers, isLoading: usersLoading } = usePlanUsers(plan.id);
+  const { data: planWorkspaces, isLoading: workspacesLoading } = usePlanWorkspaces(plan.id);
+  const { grantUserAccess, revokeUserAccess, grantWorkspaceAccess, revokeWorkspaceAccess } = usePlanAccessActions();
+
+  const { data: allUsers } = useUsers({ search: userSearch, limit: 20 });
+  const { data: allWorkspaces } = useWorkspaces();
+
+  const userIds = useMemo(() => new Set(planUsers?.map((u) => u.user_id) || []), [planUsers]);
+  const workspaceIds = useMemo(() => new Set(planWorkspaces?.map((w) => w.workspace_id) || []), [planWorkspaces]);
+
+  const filteredUsers = useMemo(() => {
+    return (allUsers?.data || []).filter((u) => !userIds.has(u.id));
+  }, [allUsers, userIds]);
+
+  const filteredWorkspaces = useMemo(() => {
+    const list = allWorkspaces || [];
+    const filtered = workspaceSearch.length >= 1
+      ? list.filter((w) => w.name.toLowerCase().includes(workspaceSearch.toLowerCase()))
+      : list;
+    return filtered.filter((w) => !workspaceIds.has(w.id));
+  }, [allWorkspaces, workspaceIds, workspaceSearch]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Manage Access: {plan.name}</DialogTitle>
+          <DialogDescription>
+            Control which users and workspaces can access this plan.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex gap-2 mt-2">
+          <button
+            type="button"
+            onClick={() => setTab('users')}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+              tab === 'users'
+                ? 'bg-primary/10 text-primary'
+                : 'text-muted-foreground hover:bg-accent'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            Users ({planUsers?.length || 0})
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('workspaces')}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+              tab === 'workspaces'
+                ? 'bg-primary/10 text-primary'
+                : 'text-muted-foreground hover:bg-accent'
+            }`}
+          >
+            <Building2 className="w-4 h-4" />
+            Workspaces ({planWorkspaces?.length || 0})
+          </button>
+        </div>
+
+        {tab === 'users' ? (
+          <div className="space-y-4 mt-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Add User</label>
+              <Input
+                type="text"
+                value={userSearch}
+                onChange={(e) => setUserSearch(e.target.value)}
+                placeholder="Search users by name or username..."
+              />
+              {userSearch.length >= 2 && filteredUsers.length > 0 && (
+                <div className="border border-border rounded-lg overflow-hidden">
+                  {filteredUsers.slice(0, 5).map((user) => (
+                    <button
+                      key={user.id}
+                      type="button"
+                      onClick={() => {
+                        grantUserAccess.mutate({ planId: plan.id, userId: user.id });
+                        setUserSearch('');
+                      }}
+                      className="w-full flex items-center gap-3 px-3 py-2 text-sm hover:bg-accent text-left transition-colors"
+                    >
+                      <User className="w-4 h-4 text-muted-foreground" />
+                      <div>
+                        <div className="font-medium">{user.display_name || user.username}</div>
+                        <div className="text-xs text-muted-foreground">@{user.username}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {userSearch.length >= 2 && filteredUsers.length === 0 && (
+                <p className="text-xs text-muted-foreground">No users found.</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Assigned Users</label>
+              {usersLoading ? (
+                <p className="text-sm text-muted-foreground">Loading...</p>
+              ) : planUsers && planUsers.length > 0 ? (
+                <div className="border border-border rounded-lg divide-y divide-border">
+                  {planUsers.map((access) => (
+                    <div key={access.user_id} className="flex items-center justify-between px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <User className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-sm">
+                          {access.display_name || access.username || access.user_id}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => revokeUserAccess.mutate({ planId: plan.id, userId: access.user_id })}
+                        disabled={revokeUserAccess.isPending}
+                        className="text-xs text-destructive hover:underline"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No users have direct access.</p>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4 mt-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Add Workspace</label>
+              <Input
+                type="text"
+                value={workspaceSearch}
+                onChange={(e) => setWorkspaceSearch(e.target.value)}
+                placeholder="Search workspaces by name..."
+              />
+              {workspaceSearch.length >= 1 && filteredWorkspaces.length > 0 && (
+                <div className="border border-border rounded-lg overflow-hidden">
+                  {filteredWorkspaces.slice(0, 5).map((ws) => (
+                    <button
+                      key={ws.id}
+                      type="button"
+                      onClick={() => {
+                        grantWorkspaceAccess.mutate({ planId: plan.id, workspaceId: ws.id });
+                        setWorkspaceSearch('');
+                      }}
+                      className="w-full flex items-center gap-3 px-3 py-2 text-sm hover:bg-accent text-left transition-colors"
+                    >
+                      <Building2 className="w-4 h-4 text-muted-foreground" />
+                      <div>
+                        <div className="font-medium">{ws.name}</div>
+                        <div className="text-xs text-muted-foreground">{ws.member_count} members</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {workspaceSearch.length >= 1 && filteredWorkspaces.length === 0 && (
+                <p className="text-xs text-muted-foreground">No workspaces found.</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Assigned Workspaces</label>
+              {workspacesLoading ? (
+                <p className="text-sm text-muted-foreground">Loading...</p>
+              ) : planWorkspaces && planWorkspaces.length > 0 ? (
+                <div className="border border-border rounded-lg divide-y divide-border">
+                  {planWorkspaces.map((access) => (
+                    <div key={access.workspace_id} className="flex items-center justify-between px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <Building2 className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-sm">
+                          {access.workspace_name || access.workspace_id}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => revokeWorkspaceAccess.mutate({ planId: plan.id, workspaceId: access.workspace_id })}
+                        disabled={revokeWorkspaceAccess.isPending}
+                        className="text-xs text-destructive hover:underline"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No workspaces have access.</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Close
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

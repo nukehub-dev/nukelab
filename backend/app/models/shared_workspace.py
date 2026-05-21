@@ -21,6 +21,7 @@ class SharedWorkspace(Base):
     members = relationship("WorkspaceMember", back_populates="workspace", cascade="all, delete-orphan")
     volume_associations = relationship("WorkspaceVolume", back_populates="workspace", cascade="all, delete-orphan")
     invitations = relationship("WorkspaceInvitation", back_populates="workspace", cascade="all, delete-orphan")
+    plan_access = relationship("WorkspacePlanAccess", back_populates="workspace", cascade="all, delete-orphan")
     
     def to_dict(self):
         try:

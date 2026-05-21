@@ -6,10 +6,12 @@ import uuid
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, func
+from sqlalchemy import select, and_, func
 from fastapi import HTTPException, status
 
 from app.models.server_plan import ServerPlan
+from app.models.plan_access import UserPlanAccess, WorkspacePlanAccess
+from app.models.shared_workspace import WorkspaceMember
 
 
 class PlanService:
@@ -37,6 +39,7 @@ class PlanService:
         category: Optional[str] = None,
         is_active: Optional[bool] = None,
         user_role: Optional[str] = None,
+        user_id: Optional[str] = None,
         page: int = 1,
         limit: int = 50
     ) -> Dict[str, Any]:
@@ -50,12 +53,11 @@ class PlanService:
             filters.append(ServerPlan.category == category)
         if is_active is not None:
             filters.append(ServerPlan.is_active == is_active)
-        # Note: Role filtering is done in Python due to PostgreSQL JSON comparison limitations
         
         if filters:
             query = query.where(and_(*filters))
         
-        # Count total
+        # Count total (before visibility filtering)
         count_query = select(func.count()).select_from(query.subquery())
         total_result = await self.db.execute(count_query)
         total = total_result.scalar()
@@ -65,17 +67,65 @@ class PlanService:
         query = query.offset((page - 1) * limit).limit(limit)
         
         result = await self.db.execute(query)
-        plans = result.scalars().all()
+        plans = list(result.scalars().all())
         
-        # Filter by user role in Python (PostgreSQL JSON comparison limitation)
-        if user_role:
-            plans = [
-                plan for plan in plans
-                if not plan.allowed_roles or user_role in plan.allowed_roles
-            ]
+        # If no user context, return all (e.g., admin view)
+        if not user_role and not user_id:
+            return {
+                "items": [plan.to_dict() for plan in plans],
+                "total": total,
+                "page": page,
+                "limit": limit,
+                "pages": (total + limit - 1) // limit
+            }
+        
+        # Gather visibility data in bulk
+        plan_ids = [plan.id for plan in plans]
+        user_plan_ids = set()
+        workspace_plan_ids = set()
+        
+        if user_id and plan_ids:
+            # Direct user access
+            user_access_result = await self.db.execute(
+                select(UserPlanAccess.plan_id).where(
+                    UserPlanAccess.user_id == uuid.UUID(user_id),
+                    UserPlanAccess.plan_id.in_(plan_ids)
+                )
+            )
+            user_plan_ids = {row[0] for row in user_access_result.all()}
+            
+            # Workspace-based access: find workspaces the user is in
+            # that have access to any of these plans
+            workspace_access_result = await self.db.execute(
+                select(WorkspacePlanAccess.plan_id).where(
+                    WorkspacePlanAccess.plan_id.in_(plan_ids),
+                    WorkspacePlanAccess.workspace_id.in_(
+                        select(WorkspaceMember.workspace_id).where(
+                            WorkspaceMember.user_id == uuid.UUID(user_id)
+                        )
+                    )
+                )
+            )
+            workspace_plan_ids = {row[0] for row in workspace_access_result.all()}
+        
+        # Filter plans by visibility
+        visible_plans = []
+        for plan in plans:
+            # Role-based visibility
+            role_visible = (
+                not plan.allowed_roles
+                or (user_role and user_role in plan.allowed_roles)
+            )
+            # Direct user access
+            user_visible = plan.id in user_plan_ids
+            # Workspace access
+            workspace_visible = plan.id in workspace_plan_ids
+            
+            if role_visible or user_visible or workspace_visible:
+                visible_plans.append(plan)
         
         return {
-            "items": [plan.to_dict() for plan in plans],
+            "items": [plan.to_dict() for plan in visible_plans],
             "total": total,
             "page": page,
             "limit": limit,
@@ -177,13 +227,160 @@ class PlanService:
         await self.db.delete(plan)
         await self.db.commit()
     
-    async def can_user_use_plan(self, plan_id: str, user_role: str) -> bool:
-        """Check if a user role can use a plan"""
+    async def can_user_use_plan(self, plan_id: str, user_role: str, user_id: Optional[str] = None) -> bool:
+        """Check if a user can use a plan"""
         plan = await self.get_by_id(plan_id)
         if not plan or not plan.is_active:
             return False
         
-        if not plan.allowed_roles:
+        # Role-based check
+        if not plan.allowed_roles or user_role in plan.allowed_roles:
             return True
         
-        return user_role in plan.allowed_roles
+        # Direct user access
+        if user_id:
+            access = await self.db.execute(
+                select(UserPlanAccess).where(
+                    UserPlanAccess.plan_id == uuid.UUID(plan_id),
+                    UserPlanAccess.user_id == uuid.UUID(user_id)
+                )
+            )
+            if access.scalar_one_or_none():
+                return True
+            
+            # Workspace-based access
+            workspace_access = await self.db.execute(
+                select(WorkspacePlanAccess).where(
+                    WorkspacePlanAccess.plan_id == uuid.UUID(plan_id),
+                    WorkspacePlanAccess.workspace_id.in_(
+                        select(WorkspaceMember.workspace_id).where(
+                            WorkspaceMember.user_id == uuid.UUID(user_id)
+                        )
+                    )
+                )
+            )
+            if workspace_access.scalar_one_or_none():
+                return True
+        
+        return False
+    
+    # ─── User Plan Access ───
+    
+    async def list_plan_users(self, plan_id: str) -> List[Dict[str, Any]]:
+        """List users with direct access to a plan"""
+        result = await self.db.execute(
+            select(UserPlanAccess).where(
+                UserPlanAccess.plan_id == uuid.UUID(plan_id)
+            )
+        )
+        accesses = result.scalars().all()
+        data = []
+        for access in accesses:
+            item = access.to_dict()
+            if access.user:
+                item["username"] = access.user.username
+                item["display_name"] = access.user.display_name
+            if access.granted_by_user:
+                item["granted_by_username"] = access.granted_by_user.username
+            data.append(item)
+        return data
+    
+    async def grant_user_access(self, plan_id: str, user_id: str, granted_by: Optional[str] = None) -> UserPlanAccess:
+        """Grant a user access to a plan"""
+        plan = await self.get_by_id(plan_id)
+        if not plan:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")
+        
+        # Check if already exists
+        existing = await self.db.execute(
+            select(UserPlanAccess).where(
+                UserPlanAccess.plan_id == uuid.UUID(plan_id),
+                UserPlanAccess.user_id == uuid.UUID(user_id)
+            )
+        )
+        if existing.scalar_one_or_none():
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User already has access to this plan")
+        
+        access = UserPlanAccess(
+            plan_id=uuid.UUID(plan_id),
+            user_id=uuid.UUID(user_id),
+            granted_by=uuid.UUID(granted_by) if granted_by else None,
+            granted_at=datetime.utcnow()
+        )
+        self.db.add(access)
+        await self.db.commit()
+        await self.db.refresh(access)
+        return access
+    
+    async def revoke_user_access(self, plan_id: str, user_id: str) -> None:
+        """Revoke a user's access to a plan"""
+        result = await self.db.execute(
+            select(UserPlanAccess).where(
+                UserPlanAccess.plan_id == uuid.UUID(plan_id),
+                UserPlanAccess.user_id == uuid.UUID(user_id)
+            )
+        )
+        access = result.scalar_one_or_none()
+        if access:
+            await self.db.delete(access)
+            await self.db.commit()
+    
+    # ─── Workspace Plan Access ───
+    
+    async def list_plan_workspaces(self, plan_id: str) -> List[Dict[str, Any]]:
+        """List workspaces with access to a plan"""
+        result = await self.db.execute(
+            select(WorkspacePlanAccess).where(
+                WorkspacePlanAccess.plan_id == uuid.UUID(plan_id)
+            )
+        )
+        accesses = result.scalars().all()
+        data = []
+        for access in accesses:
+            item = access.to_dict()
+            if access.workspace:
+                item["workspace_name"] = access.workspace.name
+            if access.granted_by_user:
+                item["granted_by_username"] = access.granted_by_user.username
+            data.append(item)
+        return data
+    
+    async def grant_workspace_access(self, plan_id: str, workspace_id: str, granted_by: Optional[str] = None) -> WorkspacePlanAccess:
+        """Grant a workspace access to a plan"""
+        plan = await self.get_by_id(plan_id)
+        if not plan:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")
+        
+        # Check if already exists
+        existing = await self.db.execute(
+            select(WorkspacePlanAccess).where(
+                WorkspacePlanAccess.plan_id == uuid.UUID(plan_id),
+                WorkspacePlanAccess.workspace_id == uuid.UUID(workspace_id)
+            )
+        )
+        if existing.scalar_one_or_none():
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Workspace already has access to this plan")
+        
+        access = WorkspacePlanAccess(
+            plan_id=uuid.UUID(plan_id),
+            workspace_id=uuid.UUID(workspace_id),
+            granted_by=uuid.UUID(granted_by) if granted_by else None,
+            granted_at=datetime.utcnow()
+        )
+        self.db.add(access)
+        await self.db.commit()
+        await self.db.refresh(access)
+        return access
+    
+    async def revoke_workspace_access(self, plan_id: str, workspace_id: str) -> None:
+        """Revoke a workspace's access to a plan"""
+        result = await self.db.execute(
+            select(WorkspacePlanAccess).where(
+                WorkspacePlanAccess.plan_id == uuid.UUID(plan_id),
+                WorkspacePlanAccess.workspace_id == uuid.UUID(workspace_id)
+            )
+        )
+        access = result.scalar_one_or_none()
+        if access:
+            await self.db.delete(access)
+            await self.db.commit()

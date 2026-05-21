@@ -22,3 +22,4 @@ from app.models.workspace_invitation import WorkspaceInvitation
 from app.models.workspace_volume import WorkspaceVolume
 from app.models.server_access_token import ServerAccessToken
 from app.models.refresh_token import RefreshToken
+from app.models.plan_access import UserPlanAccess, WorkspacePlanAccess
