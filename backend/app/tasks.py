@@ -61,6 +61,110 @@ def cleanup_inactive_servers(self):
 
 
 @celery_app.task(bind=True)
+def shutdown_idle_servers(self):
+    """Stop servers that have been idle beyond user preference timeout"""
+    async def _enforce():
+        from sqlalchemy import select
+        from app.models.server import Server
+        from app.models.server_plan import ServerPlan
+        from app.models.user import User
+        from app.services.notification_service import NotificationService
+        from app.services.credit_service import CreditService
+        from app.services.quota_service import QuotaService
+        from app.container.spawner import spawner
+        from datetime import datetime, timedelta
+        
+        async with AsyncSessionLocal() as db:
+            stopped_count = 0
+            warned_count = 0
+            
+            # Get all running servers with their users
+            result = await db.execute(
+                select(Server, User).join(
+                    User, Server.user_id == User.id
+                ).where(Server.status.in_(["running", "healthy"]))
+            )
+            servers = result.all()
+            
+            for server, user in servers:
+                prefs = user.preferences or {}
+                
+                # Skip if user disabled idle shutdown
+                if not prefs.get("idle_shutdown_enabled", True):
+                    continue
+                
+                timeout_mins = prefs.get("idle_shutdown_timeout", 30)
+                cutoff = datetime.utcnow() - timedelta(minutes=timeout_mins)
+                
+                # Determine last activity time
+                last_activity = server.last_activity or server.started_at
+                if not last_activity:
+                    continue
+                
+                if last_activity >= cutoff:
+                    continue
+                
+                # Server is idle beyond user threshold — stop it
+                try:
+                    if server.container_id:
+                        actual_status = await spawner.get_status(server.container_id)
+                        if actual_status in ("stopped", "unknown"):
+                            server.status = "stopped"
+                            server.container_id = None
+                            await db.commit()
+                            continue
+                        
+                        await spawner.delete(server.container_id)
+                        server.container_id = None
+                    
+                    server.status = "stopped"
+                    server.stopped_at = datetime.utcnow()
+                    server.stop_reason = "idle_timeout"
+                    
+                    # Reconcile billing
+                    if server.plan_id:
+                        credit_service = CreditService(db)
+                        plan_result = await db.execute(
+                            select(ServerPlan).where(ServerPlan.id == server.plan_id)
+                        )
+                        plan = plan_result.scalar_one_or_none()
+                        if plan:
+                            await credit_service.reconcile_server_billing(server, plan)
+                    
+                    # Decrement quota
+                    if server.plan_id:
+                        quota_service = QuotaService(db)
+                        await quota_service.decrement_usage(
+                            user_id=str(user.id),
+                            plan_id=str(server.plan_id)
+                        )
+                    
+                    await db.commit()
+                    
+                    # Notify user
+                    notif_service = NotificationService(db)
+                    await notif_service.server_stopped(
+                        user_id=user.id,
+                        server_name=server.name,
+                        reason=f"inactivity ({timeout_mins} minutes)"
+                    )
+                    
+                    from app.services.notification_service import broadcast_server_status_change
+                    await broadcast_server_status_change(user.id, str(server.id), "stopped")
+                    stopped_count += 1
+                
+                except Exception as e:
+                    print(f"Error auto-stopping idle server {server.id}: {e}")
+            
+            return f"Stopped {stopped_count} idle servers"
+    
+    try:
+        return _run_async(_enforce())
+    except Exception as e:
+        return f"Error in idle shutdown enforcement: {e}"
+
+
+@celery_app.task(bind=True)
 def collect_container_metrics(self):
     """Collect Docker container metrics for all running containers"""
     try:

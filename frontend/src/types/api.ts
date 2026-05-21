@@ -210,6 +210,26 @@ export interface PublicProfile {
   created_at?: string;
 }
 
+export interface UserPreferences {
+  theme?: string;
+  accent_color?: string | null;
+  oled_mode?: boolean;
+  use_gravatar?: boolean;
+  language?: string;
+  timezone?: string;
+  default_environment?: string;
+  default_plan?: string;
+  sidebar_collapsed?: boolean;
+  sidebar_pinned?: boolean;
+  density?: 'compact' | 'comfortable';
+  pinned_workspace_ids?: string[];
+  notifications?: Record<string, any>;
+  dashboard?: Record<string, any>;
+  idle_shutdown_enabled?: boolean;
+  idle_shutdown_timeout?: number;
+  stop_on_logout?: boolean;
+}
+
 export interface ApiError {
   detail: string;
 }

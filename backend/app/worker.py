@@ -44,6 +44,10 @@ celery_app.conf.update(
             'task': 'app.tasks.enforce_auto_stop',
             'schedule': 60.0,  # Every 60 seconds
         },
+        'shutdown-idle-servers': {
+            'task': 'app.tasks.shutdown_idle_servers',
+            'schedule': 300.0,  # Every 5 minutes
+        },
         'process-server-queue': {
             'task': 'app.tasks.process_server_queue',
             'schedule': 30.0,  # Every 30 seconds

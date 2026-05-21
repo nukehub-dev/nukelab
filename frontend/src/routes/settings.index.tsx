@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { Palette, Bell, UserCircle, ChevronRight, KeyRound, Settings, Zap } from 'lucide-react';
+import { Palette, Bell, UserCircle, ChevronRight, KeyRound, Settings, Zap, Server } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { cn } from '../lib/utils';
 
@@ -26,6 +26,13 @@ const categories: SettingsCategory[] = [
     icon: Palette,
     href: '/settings/appearance',
     color: 'bg-violet-500/10 text-violet-400',
+  },
+  {
+    label: 'Server Behavior',
+    description: 'Configure auto-shutdown and server lifecycle settings',
+    icon: Server,
+    href: '/settings/servers',
+    color: 'bg-emerald-500/10 text-emerald-400',
   },
   {
     label: 'Notifications',

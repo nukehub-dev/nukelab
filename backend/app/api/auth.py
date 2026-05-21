@@ -19,6 +19,9 @@ from app.db.session import get_db
 from app.models.user import User
 from app.models.api_token import ApiToken
 from app.models.refresh_token import RefreshToken
+from app.models.server import Server
+from app.container.spawner import spawner
+from app.services.notification_service import NotificationService, broadcast_server_status_change
 from app.core.security import get_user_permissions
 
 logger = logging.getLogger(__name__)
@@ -386,7 +389,78 @@ async def refresh_token_endpoint(request: RefreshRequest, db: AsyncSession = Dep
 
 @router.post("/logout")
 async def logout_endpoint(request: Request, body: Optional[RefreshRequest] = None, db: AsyncSession = Depends(get_db)):
-    """Revoke refresh token and clear cookies."""
+    """Revoke refresh token, clear cookies, optionally stop all running servers."""
+    user = None
+    
+    # Identify user from refresh token if provided
+    if body and body.refresh_token:
+        rt = await verify_refresh_token(body.refresh_token, db)
+        if rt:
+            user = rt.user
+    
+    # Stop all running servers if user preference is enabled
+    if user:
+        prefs = user.preferences or {}
+        if prefs.get("stop_on_logout", False):
+            result = await db.execute(
+                select(Server).where(
+                    Server.user_id == user.id,
+                    Server.status.in_(["running", "healthy"])
+                )
+            )
+            servers = result.scalars().all()
+            
+            for server in servers:
+                if server.container_id:
+                    try:
+                        actual_status = await spawner.get_status(server.container_id)
+                        if actual_status in ("stopped", "unknown"):
+                            server.status = "stopped"
+                            server.container_id = None
+                            continue
+                        
+                        await spawner.delete(server.container_id)
+                        server.container_id = None
+                        server.status = "stopped"
+                        server.stopped_at = datetime.utcnow()
+                        
+                        # Reconcile billing
+                        if server.plan_id:
+                            from app.services.credit_service import CreditService
+                            from app.models.server_plan import ServerPlan
+                            credit_service = CreditService(db)
+                            plan_result = await db.execute(
+                                select(ServerPlan).where(ServerPlan.id == server.plan_id)
+                            )
+                            plan = plan_result.scalar_one_or_none()
+                            if plan:
+                                await credit_service.reconcile_server_billing(server, plan)
+                        
+                        # Decrement quota
+                        if server.plan_id:
+                            from app.services.quota_service import QuotaService
+                            quota_service = QuotaService(db)
+                            await quota_service.decrement_usage(
+                                user_id=str(user.id),
+                                plan_id=str(server.plan_id)
+                            )
+                        
+                        # Notify user
+                        notif_service = NotificationService(db)
+                        await notif_service.server_stopped(
+                            user_id=user.id,
+                            server_name=server.name,
+                            reason="logged out"
+                        )
+                        
+                        await broadcast_server_status_change(user.id, str(server.id), "stopped")
+                    except Exception:
+                        logger.exception(f"Failed to stop server {server.id} on logout")
+                        continue
+            
+            await db.commit()
+    
+    # Revoke refresh token
     if body and body.refresh_token:
         await revoke_refresh_token(body.refresh_token, db)
 

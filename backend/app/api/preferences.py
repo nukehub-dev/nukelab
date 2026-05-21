@@ -32,6 +32,9 @@ class PreferencesUpdateRequest(BaseModel):
     sidebar_pinned: Optional[bool] = Field(None, description="Sidebar pinned state")
     density: Optional[str] = Field(None, description="UI density: compact, comfortable")
     pinned_workspace_ids: Optional[list] = Field(None, description="List of pinned workspace IDs")
+    idle_shutdown_enabled: Optional[bool] = Field(None, description="Auto-stop idle servers")
+    idle_shutdown_timeout: Optional[int] = Field(None, description="Minutes of inactivity before shutdown (5-240)")
+    stop_on_logout: Optional[bool] = Field(None, description="Stop all servers on explicit logout")
 
 
 class PreferencesResponse(BaseModel):
@@ -49,6 +52,9 @@ class PreferencesResponse(BaseModel):
     sidebar_pinned: bool
     density: str
     pinned_workspace_ids: list
+    idle_shutdown_enabled: bool
+    idle_shutdown_timeout: int
+    stop_on_logout: bool
 
 
 def get_default_preferences() -> dict:
@@ -84,7 +90,10 @@ def get_default_preferences() -> dict:
             "show_inactive_servers": False,
             "auto_refresh_interval": 30,
             "metrics_time_range": "1h"
-        }
+        },
+        "idle_shutdown_enabled": True,
+        "idle_shutdown_timeout": 15,
+        "stop_on_logout": False,
     }
 
 
@@ -147,6 +156,13 @@ async def update_preferences(
         update_data["notifications"] = request.notifications
     if request.dashboard is not None:
         update_data["dashboard"] = request.dashboard
+    if request.idle_shutdown_enabled is not None:
+        update_data["idle_shutdown_enabled"] = request.idle_shutdown_enabled
+    if request.idle_shutdown_timeout is not None:
+        # Clamp between 5 and 240 minutes
+        update_data["idle_shutdown_timeout"] = max(5, min(request.idle_shutdown_timeout, 240))
+    if request.stop_on_logout is not None:
+        update_data["stop_on_logout"] = request.stop_on_logout
     
     # Merge with existing preferences
     new_prefs = {**current_prefs, **update_data}
