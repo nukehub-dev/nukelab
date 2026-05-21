@@ -6,6 +6,7 @@ import { DataTable } from '../components/data/data-table';
 import { StatusBadge } from '../components/data/status-badge';
 import { useEnvironments, useEnvironmentActions } from '../hooks/use-environments';
 import { useDataTable } from '../hooks/use-data-table';
+import { useThemeStore } from '../stores/theme-store';
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
 import { usePageGuard } from '../hooks/use-page-guard';
 import { formatDate } from '../lib/utils';
@@ -524,6 +525,7 @@ function EnvironmentsPage() {
           filters={filters}
           searchable
           searchPlaceholder="Search environments..."
+          density={useThemeStore().density}
           mobileCardRenderer={mobileCardRenderer}
           enableRowSelection={canManageEnvironments}
         />

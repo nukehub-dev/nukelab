@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { ResourcePageLayout } from '../components/layout/resource-page-layout';
 import { DataTable } from '../components/data/data-table';
+import { useThemeStore } from '../stores/theme-store';
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
 import { useDataTable } from '../hooks/use-data-table';
 import { useAuditLogs } from '../hooks/use-audit-logs';
@@ -440,6 +441,7 @@ function AuditLogsPage() {
           filters={filters}
           searchable
           searchPlaceholder="Search audit logs..."
+          density={useThemeStore().density}
           mobileCardRenderer={mobileCardRenderer}
           enableRowSelection={false}
           defaultMobileView={false}

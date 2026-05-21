@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { motion } from 'framer-motion';
-import { Palette, Moon, Sun, Monitor, Check, Sidebar, ArrowLeft } from 'lucide-react';
+import { Palette, Moon, Sun, Monitor, Check, Sidebar, ArrowLeft, MonitorSmartphone, Maximize2 } from 'lucide-react';
 import { useThemeStore } from '../stores/theme-store';
 import { useSidebarStore } from '../stores/sidebar-store';
 import { THEME_VALUES, THEME_PREVIEWS, ACCENT_COLORS } from '../types/theme';
@@ -17,10 +17,12 @@ function AppearanceSettingsPage() {
     isDark,
     isOled,
     accentColor,
+    density,
     setTheme,
     setDarkMode,
     setOledMode,
-    setAccentColor
+    setAccentColor,
+    setDensity
   } = useThemeStore();
 
   const { mode, setMode } = useSidebarStore();
@@ -173,6 +175,43 @@ function AppearanceSettingsPage() {
                 >
                   <Monitor className="w-4 h-4" />
                   OLED
+                </button>
+              </div>
+            </div>
+
+            {/* Density */}
+            <div className="flex items-center justify-between py-5">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <MonitorSmartphone className="w-4 h-4 text-muted-foreground" />
+                  <h3 className="text-base font-semibold">Density</h3>
+                </div>
+                <p className="text-sm text-muted-foreground">Compact or comfortable spacing</p>
+              </div>
+              <div className="flex items-center gap-2 p-1 bg-muted rounded-xl shrink-0">
+                <button
+                  onClick={() => setDensity('comfortable')}
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+                    density === 'comfortable'
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Maximize2 className="w-4 h-4" />
+                  Comfortable
+                </button>
+                <button
+                  onClick={() => setDensity('compact')}
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+                    density === 'compact'
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <MonitorSmartphone className="w-4 h-4" />
+                  Compact
                 </button>
               </div>
             </div>

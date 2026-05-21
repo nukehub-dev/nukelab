@@ -59,6 +59,7 @@ interface DataTableProps<TData> {
   mobileCardRenderer?: (row: TData) => React.ReactNode;
   enableRowSelection?: boolean;
   defaultMobileView?: boolean;
+  density?: 'compact' | 'comfortable';
 }
 
 export function DataTable<TData>({
@@ -92,6 +93,7 @@ export function DataTable<TData>({
   mobileCardRenderer,
   enableRowSelection = true,
   defaultMobileView = true,
+  density = 'comfortable',
 }: DataTableProps<TData>) {
   const [showMobile, setShowMobile] = useState(defaultMobileView);
 
@@ -184,7 +186,10 @@ export function DataTable<TData>({
                         <th
                           key={header.id}
                           className={cn(
-                            'h-10 px-2 sm:px-4 text-left align-middle font-medium text-muted-foreground',
+                            density === 'compact'
+                              ? 'h-7 px-2 py-1 text-[11px]'
+                              : 'h-10 px-2 sm:px-4 text-sm',
+                            'text-left align-middle font-medium text-muted-foreground',
                             header.column.getCanSort() && 'cursor-pointer select-none hover:text-foreground'
                           )}
                           style={{ width: header.getSize() }}
@@ -229,7 +234,12 @@ export function DataTable<TData>({
                         {row.getVisibleCells().map((cell) => (
                           <td
                             key={cell.id}
-                            className="p-2 sm:p-4 align-middle whitespace-nowrap"
+                            className={cn(
+                              density === 'compact'
+                                ? 'px-2 py-1 text-xs'
+                                : 'p-2 sm:p-4 text-sm',
+                              'align-middle whitespace-nowrap'
+                            )}
                           >
                             {flexRender(cell.column.columnDef.cell, cell.getContext())}
                           </td>

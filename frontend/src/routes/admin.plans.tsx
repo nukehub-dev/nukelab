@@ -9,6 +9,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useDiscoverUsers } from '../hooks/use-users';
 import { useWorkspaces } from '../hooks/use-workspaces';
 import { useDataTable } from '../hooks/use-data-table';
+import { useThemeStore } from '../stores/theme-store';
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
 import { usePageGuard } from '../hooks/use-page-guard';
 import { formatDate } from '../lib/utils';
@@ -595,6 +596,7 @@ function PlansPage() {
           filters={filters}
           searchable
           searchPlaceholder="Search plans..."
+          density={useThemeStore().density}
           mobileCardRenderer={mobileCardRenderer}
           enableRowSelection={canManagePlans}
         />
@@ -1208,7 +1210,8 @@ function AccessManagementDialog({
                 getRowId={(row) => row.user_id}
                 searchable
                 searchPlaceholder="Search assigned users..."
-                mobileCardRenderer={userMobileCard}
+                density={useThemeStore().density}
+          mobileCardRenderer={userMobileCard}
                 enableRowSelection={false}
                 emptyState={
                   <div className="text-center py-8 text-muted-foreground">
@@ -1272,7 +1275,8 @@ function AccessManagementDialog({
                 getRowId={(row) => row.workspace_id}
                 searchable
                 searchPlaceholder="Search assigned workspaces..."
-                mobileCardRenderer={workspaceMobileCard}
+                density={useThemeStore().density}
+          mobileCardRenderer={workspaceMobileCard}
                 enableRowSelection={false}
                 emptyState={
                   <div className="text-center py-8 text-muted-foreground">

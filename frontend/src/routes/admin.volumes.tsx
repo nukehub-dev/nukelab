@@ -6,6 +6,7 @@ import { DataTable } from '../components/data/data-table';
 import { StatusBadge } from '../components/data/status-badge';
 import { useAdminVolumes, useAdminVolumeActions, type AdminVolume } from '../hooks/use-admin-volumes';
 import { useDataTable } from '../hooks/use-data-table';
+import { useThemeStore } from '../stores/theme-store';
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
 import { usePageGuard } from '../hooks/use-page-guard';
 import { useConfirmDialog } from '../components/ui/confirm-dialog';
@@ -412,6 +413,7 @@ function VolumesAdminPage() {
           filters={filters}
           searchable
           searchPlaceholder="Search volumes..."
+          density={useThemeStore().density}
           mobileCardRenderer={mobileCardRenderer}
         />
       </ResourcePageLayout>

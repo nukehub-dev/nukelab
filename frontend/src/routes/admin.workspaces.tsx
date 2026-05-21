@@ -6,6 +6,7 @@ import { DataTable } from '../components/data/data-table';
 import { StatusBadge } from '../components/data/status-badge';
 import { useAdminWorkspaces, useAdminWorkspaceActions, type AdminWorkspace } from '../hooks/use-admin-workspaces';
 import { useDataTable } from '../hooks/use-data-table';
+import { useThemeStore } from '../stores/theme-store';
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
 import { usePageGuard } from '../hooks/use-page-guard';
 import { useConfirmDialog } from '../components/ui/confirm-dialog';
@@ -350,6 +351,7 @@ function WorkspacesAdminPage() {
           filters={filters}
           searchable
           searchPlaceholder="Search workspaces..."
+          density={useThemeStore().density}
           mobileCardRenderer={mobileCardRenderer}
         />
       </ResourcePageLayout>

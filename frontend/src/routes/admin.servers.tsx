@@ -12,6 +12,7 @@ import { useEnvironments } from '../hooks/use-environments';
 import { usePlans } from '../hooks/use-plans';
 import { useVolumes } from '../hooks/use-volumes';
 import { useDataTable } from '../hooks/use-data-table';
+import { useThemeStore } from '../stores/theme-store';
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
 import { PermissionGuard } from '../components/permission-guard';
 import { formatDate } from '../lib/utils';
@@ -590,6 +591,7 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
           filters={filters}
           searchable
           searchPlaceholder="Search by name, status, or owner..."
+          density={useThemeStore().density}
           mobileCardRenderer={mobileCardRenderer}
           enableRowSelection={enableManagement}
         />

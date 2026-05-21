@@ -5,6 +5,7 @@ import { ResourcePageLayout } from '../components/layout/resource-page-layout';
 import { DataTable } from '../components/data/data-table';
 import { useQuotas, useQuotaActions, type UserQuota } from '../hooks/use-quotas';
 import { useDataTable } from '../hooks/use-data-table';
+import { useThemeStore } from '../stores/theme-store';
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
 import { usePageGuard } from '../hooks/use-page-guard';
 import type { ColumnDef, ColumnFiltersState, VisibilityState, SortingState } from '@tanstack/react-table';
@@ -325,6 +326,7 @@ function QuotasPage() {
           getRowId={(row) => row.user_id}
           searchable
           searchPlaceholder="Search users..."
+          density={useThemeStore().density}
           mobileCardRenderer={mobileCard}
         />
       </ResourcePageLayout>

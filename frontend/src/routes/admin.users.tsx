@@ -6,6 +6,7 @@ import { DataTable } from '../components/data/data-table';
 import { StatusBadge } from '../components/data/status-badge';
 import { useUsers, useUserActions } from '../hooks/use-users';
 import { useDataTable } from '../hooks/use-data-table';
+import { useThemeStore } from '../stores/theme-store';
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
 import { usePageGuard } from '../hooks/use-page-guard';
 import { formatDate, cn } from '../lib/utils';
@@ -545,6 +546,7 @@ function UsersPage() {
           filters={filters}
           searchable
           searchPlaceholder="Search users..."
+          density={useThemeStore().density}
           mobileCardRenderer={mobileCardRenderer}
           enableRowSelection={canManageUsers}
         />

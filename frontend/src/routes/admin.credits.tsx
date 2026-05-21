@@ -15,6 +15,7 @@ import {
 import { useUsers } from '../hooks/use-users';
 import { useLowBalanceUsers } from '../hooks/use-credits';
 import { useDataTable } from '../hooks/use-data-table';
+import { useThemeStore } from '../stores/theme-store';
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
 import { usePageGuard } from '../hooks/use-page-guard';
 import { cn } from '../lib/utils';
@@ -458,6 +459,7 @@ function CreditsAdminPage() {
           getRowId={(row) => row.id}
           searchable
           searchPlaceholder="Search users..."
+          density={useThemeStore().density}
           mobileCardRenderer={mobileCardRenderer}
         />
       </motion.div>

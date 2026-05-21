@@ -15,6 +15,7 @@ import {
   Clock,
   LayoutGrid,
   List,
+  Pin,
 } from 'lucide-react';
 import {
   useWorkspaces,
@@ -24,6 +25,8 @@ import {
 import { springs } from '../lib/animations';
 import { cn } from '../lib/utils';
 import { useAuthStore } from '../stores/auth-store';
+import { useThemeStore } from '../stores/theme-store';
+import { useWorkspacePins } from '../hooks/use-workspace-pins';
 import { ResourcePageLayout } from '../components/layout/resource-page-layout';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -55,12 +58,18 @@ function formatDate(dateString?: string) {
 function WorkspaceCard({ 
   workspace, 
   index, 
-  onDelete 
+  onDelete,
+  isPinned,
+  onTogglePin,
 }: { 
   workspace: any; 
   index: number; 
   onDelete?: () => void;
+  isPinned?: boolean;
+  onTogglePin?: () => void;
 }) {
+  const { density } = useThemeStore();
+  const compact = density === 'compact';
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -71,8 +80,8 @@ function WorkspaceCard({
         to="/workspaces/$workspaceId"
         params={{ workspaceId: workspace.id }}
       >
-        <Card variant="bubble" interactive className="overflow-hidden group">
-          <CardContent className="p-5">
+        <Card variant="bubble" interactive className={cn("overflow-hidden group", isPinned && "ring-1 ring-primary/30")}>
+          <CardContent className={compact ? 'p-3' : 'p-5'}>
             {/* Header */}
             <div className="flex items-start justify-between mb-4 gap-2">
               <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -102,6 +111,25 @@ function WorkspaceCard({
               </div>
               
               <div className="flex items-center gap-1 shrink-0">
+                {onTogglePin && (
+                  <Tooltip content={isPinned ? 'Unpin workspace' : 'Pin workspace'}>
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onTogglePin();
+                      }}
+                      className={cn(
+                        "p-1.5 rounded-lg transition-colors",
+                        isPinned
+                          ? "text-primary hover:text-primary/80"
+                          : "text-muted-foreground hover:text-primary"
+                      )}
+                    >
+                      <Pin className={cn("w-3.5 h-3.5", isPinned && "fill-primary")} />
+                    </button>
+                  </Tooltip>
+                )}
                 {onDelete && (
                   <Tooltip content="Delete workspace">
                     <button
@@ -151,11 +179,17 @@ function WorkspaceListRow({
   workspace,
   index,
   onDelete,
+  isPinned,
+  onTogglePin,
 }: {
   workspace: any;
   index: number;
   onDelete?: () => void;
+  isPinned?: boolean;
+  onTogglePin?: () => void;
 }) {
+  const { density } = useThemeStore();
+  const compact = density === 'compact';
   return (
     <motion.div
       initial={{ opacity: 0, x: -10 }}
@@ -166,8 +200,8 @@ function WorkspaceListRow({
         to="/workspaces/$workspaceId"
         params={{ workspaceId: workspace.id }}
       >
-        <Card variant="bubble" interactive className="overflow-hidden group">
-          <CardContent className="p-4">
+        <Card variant="bubble" interactive className={cn("overflow-hidden group", isPinned && "ring-1 ring-primary/30")}>
+          <CardContent className={compact ? 'p-2.5' : 'p-4'}>
             <div className="flex items-center gap-4">
               <div className="p-2 rounded-xl bg-primary/10 shrink-0">
                 <FolderOpen className="w-4 h-4 text-primary" />
@@ -203,6 +237,25 @@ function WorkspaceListRow({
                 </div>
                 <span>{formatDate(workspace.created_at)}</span>
               </div>
+              {onTogglePin && (
+                <Tooltip content={isPinned ? 'Unpin workspace' : 'Pin workspace'}>
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onTogglePin();
+                    }}
+                    className={cn(
+                      "p-1.5 rounded-lg transition-colors shrink-0",
+                      isPinned
+                        ? "text-primary hover:text-primary/80"
+                        : "text-muted-foreground hover:text-primary"
+                    )}
+                  >
+                    <Pin className={cn("w-3.5 h-3.5", isPinned && "fill-primary")} />
+                  </button>
+                </Tooltip>
+              )}
               {onDelete && (
                 <Tooltip content="Delete workspace">
                   <button
@@ -234,6 +287,7 @@ function WorkspacesListPage() {
   const createWorkspace = useCreateWorkspace();
   const deleteWorkspace = useDeleteWorkspace();
   const { confirm, dialog } = useConfirmDialog();
+  const { isPinned, togglePin } = useWorkspacePins();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<FilterTab>('all');
@@ -267,8 +321,13 @@ function WorkspacesListPage() {
       result = result.filter((w) => w.has_pending_invitation);
     }
 
-    // Sort
+    // Sort by user selection, then pin status
     result = [...result].sort((a, b) => {
+      // Pin status always takes priority
+      const aPinned = isPinned(a.id) ? 1 : 0;
+      const bPinned = isPinned(b.id) ? 1 : 0;
+      if (aPinned !== bPinned) return bPinned - aPinned;
+
       switch (sortBy) {
         case 'name_asc':
           return a.name.localeCompare(b.name);
@@ -286,7 +345,7 @@ function WorkspacesListPage() {
     });
 
     return result;
-  }, [workspaces, searchQuery, activeFilter, sortBy]);
+  }, [workspaces, searchQuery, activeFilter, sortBy, isPinned]);
 
   const filterCounts = useMemo(() => ({
     all: workspaces.length,
@@ -495,6 +554,8 @@ function WorkspacesListPage() {
                   workspace={workspace}
                   index={index}
                   onDelete={() => handleDelete(workspace)}
+                  isPinned={isPinned(workspace.id)}
+                  onTogglePin={() => togglePin(workspace.id)}
                 />
               ))}
             </AnimatePresence>
@@ -508,6 +569,8 @@ function WorkspacesListPage() {
                   workspace={workspace}
                   index={index}
                   onDelete={() => handleDelete(workspace)}
+                  isPinned={isPinned(workspace.id)}
+                  onTogglePin={() => togglePin(workspace.id)}
                 />
               ))}
             </AnimatePresence>

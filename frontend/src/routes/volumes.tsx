@@ -18,6 +18,7 @@ import { useState, useMemo } from 'react';
 import { ResourcePageLayout } from '../components/layout/resource-page-layout';
 import { useVolumes, useCreateVolume, useDeleteVolume, useUpdateVolume } from '../hooks/use-volumes';
 import { useCurrentUser } from '../hooks/use-current-user';
+import { useThemeStore } from '../stores/theme-store';
 import { FileBrowser } from '../components/volume-file-browser';
 import { SkeletonCard } from '../components/feedback/skeleton';
 import { EmptyState } from '../components/feedback/empty-state';
@@ -55,6 +56,8 @@ function VolumeCard({
   onEdit?: () => void;
   isOwner: boolean;
 }) {
+  const { density } = useThemeStore();
+  const compact = density === 'compact';
   const sizePercent = volume.size_bytes > 0 && volume.max_size_bytes && volume.max_size_bytes > 0
     ? (volume.size_bytes / volume.max_size_bytes) * 100
     : 0;
@@ -68,7 +71,7 @@ function VolumeCard({
       transition={{ delay: index * 0.05, ...springs.gentle }}
     >
       <Card variant="bubble" interactive className="overflow-hidden">
-        <CardContent className="p-5">
+        <CardContent className={compact ? 'p-3' : 'p-5'}>
           {/* Header */}
           <div className="flex items-start justify-between mb-4 gap-2">
             <div className="flex items-center gap-3 min-w-0 flex-1">

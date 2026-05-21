@@ -8,10 +8,12 @@ interface ThemeState {
   isDark: boolean;
   isOled: boolean;
   accentColor: AccentColor;
+  density: 'compact' | 'comfortable';
   setTheme: (theme: ApplicationTheme) => void;
   setDarkMode: (isDark: boolean) => void;
   setOledMode: (isOled: boolean) => void;
   setAccentColor: (color: AccentColor) => void;
+  setDensity: (density: 'compact' | 'comfortable') => void;
 }
 
 export const useThemeStore = create<ThemeState>()(
@@ -21,6 +23,7 @@ export const useThemeStore = create<ThemeState>()(
       isDark: true,
       isOled: false,
       accentColor: 'default',
+      density: 'comfortable',
       setTheme: (theme) => {
         set({ theme });
         applyTheme(theme);
@@ -36,6 +39,9 @@ export const useThemeStore = create<ThemeState>()(
       setAccentColor: (color) => {
         set({ accentColor: color });
         applyAccentColor(color);
+      },
+      setDensity: (density) => {
+        set({ density });
       },
     }),
     {

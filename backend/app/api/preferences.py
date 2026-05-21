@@ -30,6 +30,8 @@ class PreferencesUpdateRequest(BaseModel):
     dashboard: Optional[dict] = Field(None, description="Dashboard preferences")
     sidebar_collapsed: Optional[bool] = Field(None, description="Sidebar collapsed state")
     sidebar_pinned: Optional[bool] = Field(None, description="Sidebar pinned state")
+    density: Optional[str] = Field(None, description="UI density: compact, comfortable")
+    pinned_workspace_ids: Optional[list] = Field(None, description="List of pinned workspace IDs")
 
 
 class PreferencesResponse(BaseModel):
@@ -45,6 +47,8 @@ class PreferencesResponse(BaseModel):
     dashboard: dict
     sidebar_collapsed: bool
     sidebar_pinned: bool
+    density: str
+    pinned_workspace_ids: list
 
 
 def get_default_preferences() -> dict:
@@ -60,6 +64,8 @@ def get_default_preferences() -> dict:
         "default_plan": "small",
         "sidebar_collapsed": False,
         "sidebar_pinned": True,
+        "density": "comfortable",
+        "pinned_workspace_ids": [],
         "notifications": {
             "email": {
                 "server_events": True,
@@ -133,6 +139,10 @@ async def update_preferences(
         update_data["sidebar_collapsed"] = request.sidebar_collapsed
     if request.sidebar_pinned is not None:
         update_data["sidebar_pinned"] = request.sidebar_pinned
+    if request.density is not None:
+        update_data["density"] = request.density
+    if request.pinned_workspace_ids is not None:
+        update_data["pinned_workspace_ids"] = request.pinned_workspace_ids
     if request.notifications is not None:
         update_data["notifications"] = request.notifications
     if request.dashboard is not None:
