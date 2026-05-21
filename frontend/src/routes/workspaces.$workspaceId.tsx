@@ -786,19 +786,18 @@ function WorkspaceDetailPage() {
       >
         <div className="flex items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-3 min-w-0">
-            <Tooltip content="Back to workspaces">
-              <Link
-                to="/workspaces"
-                className="p-2 rounded-lg hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors flex-shrink-0 inline-flex"
-              >
-                <ArrowLeft className="w-4 h-4" />
-              </Link>
-            </Tooltip>
+            <Link
+              to="/workspaces"
+              className="p-2 rounded-lg hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors flex-shrink-0 inline-flex"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </Link>
             <div className="p-2 rounded-xl bg-primary/10 shrink-0">
               <FolderOpen className="w-4 h-4 text-primary" />
             </div>
             <div className="min-w-0">
               <h1 className="text-xl font-bold truncate">{workspace.name}</h1>
+              <code className="text-[10px] text-muted-foreground">{workspace.id}</code>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">

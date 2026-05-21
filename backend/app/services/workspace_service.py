@@ -234,6 +234,84 @@ class WorkspaceService:
         result = await self.db.execute(query)
         return result.scalars().all()
     
+    async def list_all_workspaces(
+        self,
+        page: int = 1,
+        limit: int = 20,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        search: Optional[str] = None,
+        status: Optional[str] = None,
+        owner_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """List ALL workspaces (admin view) with pagination, sorting, and filtering."""
+        query = (
+            select(SharedWorkspace)
+            .options(
+                selectinload(SharedWorkspace.owner),
+                selectinload(SharedWorkspace.members),
+                selectinload(SharedWorkspace.volume_associations),
+            )
+        )
+        
+        count_query = select(func.count()).select_from(SharedWorkspace)
+        
+        # Apply status filter
+        if status is not None:
+            is_active = status.lower() == "active"
+            query = query.where(SharedWorkspace.is_active == is_active)
+            count_query = count_query.where(SharedWorkspace.is_active == is_active)
+        
+        # Apply owner filter
+        if owner_id:
+            query = query.where(SharedWorkspace.owner_id == owner_id)
+            count_query = count_query.where(SharedWorkspace.owner_id == owner_id)
+        
+        # Apply search (workspace name or owner username)
+        if search:
+            search_pattern = f"%{search}%"
+            search_filter = or_(
+                SharedWorkspace.name.ilike(search_pattern),
+                User.username.ilike(search_pattern),
+            )
+            query = query.join(User, SharedWorkspace.owner_id == User.id).where(search_filter)
+            count_query = count_query.join(User, SharedWorkspace.owner_id == User.id).where(search_filter)
+        else:
+            # Still join User for sorting by username
+            query = query.join(User, SharedWorkspace.owner_id == User.id)
+        
+        # Get total count
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar() or 0
+        
+        # Apply sorting
+        sort_column_map = {
+            "name": SharedWorkspace.name,
+            "created_at": SharedWorkspace.created_at,
+            "updated_at": SharedWorkspace.updated_at,
+            "username": User.username,
+        }
+        sort_column = sort_column_map.get(sort_by, SharedWorkspace.created_at)
+        
+        if sort_order == "desc":
+            query = query.order_by(sort_column.desc())
+        else:
+            query = query.order_by(sort_column.asc())
+        
+        # Apply pagination
+        offset = (page - 1) * limit
+        query = query.offset(offset).limit(limit)
+        
+        result = await self.db.execute(query)
+        workspaces = result.scalars().all()
+        
+        return {
+            "workspaces": [w.to_dict() for w in workspaces],
+            "total": total,
+            "page": page,
+            "limit": limit,
+        }
+    
     async def update_workspace(
         self,
         workspace_id: str,

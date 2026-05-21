@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { Gauge, Pencil, Server, Cpu, HardDrive, MemoryStick, CircuitBoard } from 'lucide-react';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { ResourcePageLayout } from '../components/layout/resource-page-layout';
 import { DataTable } from '../components/data/data-table';
 import { useQuotas, useQuotaActions, type UserQuota } from '../hooks/use-quotas';
@@ -40,15 +40,12 @@ function QuotasPage() {
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
 
   // Sync React Table column filters with API filter state
-  const prevColumnFiltersRef = useRef<ColumnFiltersState>([]);
   useEffect(() => {
-    const currentIds = new Set(columnFilters.map(f => f.id));
     columnFilters.forEach((filter) => {
       if (filter.value !== undefined && filter.value !== null) {
         // no-op for now — quotas don't have column filters
       }
     });
-    prevColumnFiltersRef.current = columnFilters;
   }, [columnFilters]);
 
   const { data, isLoading, isError, error } = useQuotas({
@@ -113,9 +110,9 @@ function QuotasPage() {
     : 0;
 
   const stats = [
-    { title: 'Users', value: totalUsers, icon: Gauge, iconColor: 'text-blue-400', bgColor: 'bg-blue-400/10' },
-    { title: 'Avg Servers', value: avgServers, icon: Server, iconColor: 'text-emerald-400', bgColor: 'bg-emerald-400/10' },
-    { title: 'Avg CPU', value: `${avgCpu} cores`, icon: Cpu, iconColor: 'text-orange-400', bgColor: 'bg-orange-400/10' },
+    { title: 'Users', value: totalUsers, icon: Gauge, iconColor: 'text-blue-400', bgColor: 'bg-blue-500/10' },
+    { title: 'Avg Servers', value: avgServers, icon: Server, iconColor: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
+    { title: 'Avg CPU', value: `${avgCpu} cores`, icon: Cpu, iconColor: 'text-orange-400', bgColor: 'bg-orange-500/10' },
   ];
 
   const columns: ColumnDef<UserQuota>[] = [
@@ -228,7 +225,7 @@ function QuotasPage() {
     },
     ...(canUpdateQuotas ? [{
       id: 'actions' as const,
-      header: '',
+      header: 'Actions',
       cell: ({ row }: { row: { original: UserQuota } }) => (
         <Tooltip content="Edit Quota">
           <button
@@ -247,26 +244,16 @@ function QuotasPage() {
   // Mobile card
   const mobileCard = (q: UserQuota) => (
     <div className="p-3 space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-            <span className="text-xs font-medium text-primary">{q.username.slice(0, 2).toUpperCase()}</span>
-          </div>
-          <div>
-            <p className="text-sm font-medium">{q.username}</p>
-            <p className="text-xs text-muted-foreground">{q.role}</p>
-          </div>
+      <div className="flex items-center gap-2">
+        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+          <span className="text-xs font-medium text-primary">{q.username.slice(0, 2).toUpperCase()}</span>
         </div>
-        {canUpdateQuotas && (
-          <button
-            onClick={() => openEditDialog(q)}
-            className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex"
-          >
-            <Pencil className="w-4 h-4" />
-          </button>
-        )}
+        <div>
+          <p className="text-sm font-medium">{q.username}</p>
+          <p className="text-xs text-muted-foreground">{q.role}</p>
+        </div>
       </div>
-      <div className="grid grid-cols-2 gap-2 text-xs">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">
         <div className="flex items-center gap-1.5 text-muted-foreground">
           <Server className="w-3 h-3" />
           {q.usage.servers} / {q.limits.max_servers_total} servers
@@ -283,6 +270,18 @@ function QuotasPage() {
           <HardDrive className="w-3 h-3" />
           {q.limits.max_disk_total}
         </div>
+        {canUpdateQuotas && (
+          <div className="ml-auto">
+            <Tooltip content="Edit Quota">
+              <button
+                onClick={() => openEditDialog(q)}
+                className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex"
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+            </Tooltip>
+          </div>
+        )}
       </div>
     </div>
   );

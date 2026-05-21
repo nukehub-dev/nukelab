@@ -11,6 +11,8 @@ import {
   ChevronRight,
   LayoutDashboard,
   Gauge,
+  FolderOpen,
+  HardDrive,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
@@ -89,6 +91,22 @@ const categories: AdminCategory[] = [
     href: '/admin/quotas',
     requiredPermission: PERMISSIONS.QUOTA_READ,
     color: 'bg-teal-500/10 text-teal-400',
+  },
+  {
+    label: 'Workspaces',
+    description: 'Manage all platform workspaces',
+    icon: FolderOpen,
+    href: '/admin/workspaces',
+    requiredPermission: PERMISSIONS.ADMIN_ACCESS,
+    color: 'bg-indigo-500/10 text-indigo-400',
+  },
+  {
+    label: 'Volumes',
+    description: 'Manage all platform storage volumes',
+    icon: HardDrive,
+    href: '/admin/volumes',
+    requiredPermission: PERMISSIONS.ADMIN_ACCESS,
+    color: 'bg-pink-500/10 text-pink-400',
   },
   {
     label: 'Permissions',

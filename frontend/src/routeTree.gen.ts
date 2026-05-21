@@ -36,6 +36,8 @@ import { Route as SettingsNotificationsRouteImport } from './routes/settings.not
 import { Route as SettingsCreditsRouteImport } from './routes/settings.credits'
 import { Route as SettingsAppearanceRouteImport } from './routes/settings.appearance'
 import { Route as ServersServerIdRouteImport } from './routes/servers.$serverId'
+import { Route as AdminWorkspacesRouteImport } from './routes/admin.workspaces'
+import { Route as AdminVolumesRouteImport } from './routes/admin.volumes'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
 import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
 import { Route as AdminServersRouteImport } from './routes/admin.servers'
@@ -184,6 +186,16 @@ const ServersServerIdRoute = ServersServerIdRouteImport.update({
   path: '/$serverId',
   getParentRoute: () => ServersRoute,
 } as any)
+const AdminWorkspacesRoute = AdminWorkspacesRouteImport.update({
+  id: '/workspaces',
+  path: '/workspaces',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminVolumesRoute = AdminVolumesRouteImport.update({
+  id: '/volumes',
+  path: '/volumes',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminUsersRoute = AdminUsersRouteImport.update({
   id: '/users',
   path: '/users',
@@ -272,6 +284,8 @@ export interface FileRoutesByFullPath {
   '/admin/servers': typeof AdminServersRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
+  '/admin/volumes': typeof AdminVolumesRoute
+  '/admin/workspaces': typeof AdminWorkspacesRoute
   '/servers/$serverId': typeof ServersServerIdRouteWithChildren
   '/settings/appearance': typeof SettingsAppearanceRoute
   '/settings/credits': typeof SettingsCreditsRoute
@@ -309,6 +323,8 @@ export interface FileRoutesByTo {
   '/admin/servers': typeof AdminServersRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
+  '/admin/volumes': typeof AdminVolumesRoute
+  '/admin/workspaces': typeof AdminWorkspacesRoute
   '/servers/$serverId': typeof ServersServerIdRouteWithChildren
   '/settings/appearance': typeof SettingsAppearanceRoute
   '/settings/credits': typeof SettingsCreditsRoute
@@ -351,6 +367,8 @@ export interface FileRoutesById {
   '/admin/servers': typeof AdminServersRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
+  '/admin/volumes': typeof AdminVolumesRoute
+  '/admin/workspaces': typeof AdminWorkspacesRoute
   '/servers/$serverId': typeof ServersServerIdRouteWithChildren
   '/settings/appearance': typeof SettingsAppearanceRoute
   '/settings/credits': typeof SettingsCreditsRoute
@@ -394,6 +412,8 @@ export interface FileRouteTypes {
     | '/admin/servers'
     | '/admin/settings'
     | '/admin/users'
+    | '/admin/volumes'
+    | '/admin/workspaces'
     | '/servers/$serverId'
     | '/settings/appearance'
     | '/settings/credits'
@@ -431,6 +451,8 @@ export interface FileRouteTypes {
     | '/admin/servers'
     | '/admin/settings'
     | '/admin/users'
+    | '/admin/volumes'
+    | '/admin/workspaces'
     | '/servers/$serverId'
     | '/settings/appearance'
     | '/settings/credits'
@@ -472,6 +494,8 @@ export interface FileRouteTypes {
     | '/admin/servers'
     | '/admin/settings'
     | '/admin/users'
+    | '/admin/volumes'
+    | '/admin/workspaces'
     | '/servers/$serverId'
     | '/settings/appearance'
     | '/settings/credits'
@@ -698,6 +722,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ServersServerIdRouteImport
       parentRoute: typeof ServersRoute
     }
+    '/admin/workspaces': {
+      id: '/admin/workspaces'
+      path: '/workspaces'
+      fullPath: '/admin/workspaces'
+      preLoaderRoute: typeof AdminWorkspacesRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/volumes': {
+      id: '/admin/volumes'
+      path: '/volumes'
+      fullPath: '/admin/volumes'
+      preLoaderRoute: typeof AdminVolumesRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/users': {
       id: '/admin/users'
       path: '/users'
@@ -796,6 +834,8 @@ interface AdminRouteChildren {
   AdminServersRoute: typeof AdminServersRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
   AdminUsersRoute: typeof AdminUsersRoute
+  AdminVolumesRoute: typeof AdminVolumesRoute
+  AdminWorkspacesRoute: typeof AdminWorkspacesRoute
   AdminIndexRoute: typeof AdminIndexRoute
 }
 
@@ -810,6 +850,8 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminServersRoute: AdminServersRoute,
   AdminSettingsRoute: AdminSettingsRoute,
   AdminUsersRoute: AdminUsersRoute,
+  AdminVolumesRoute: AdminVolumesRoute,
+  AdminWorkspacesRoute: AdminWorkspacesRoute,
   AdminIndexRoute: AdminIndexRoute,
 }
 

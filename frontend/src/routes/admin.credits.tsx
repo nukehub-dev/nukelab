@@ -206,31 +206,27 @@ function CreditsAdminPage() {
     },
     {
       id: 'actions',
-      header: '',
+      header: 'Actions',
       cell: ({ row }) => {
         const user = row.original;
         return (
-          <div className="flex items-center justify-end gap-1">
+          <div className="flex items-center gap-1">
             <Tooltip content="View History">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="w-8 h-8"
+              <button
                 onClick={() => handleViewHistory(user)}
+                className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex"
               >
                 <History className="w-4 h-4" />
-              </Button>
+              </button>
             </Tooltip>
             {canManageCredits && (
               <Tooltip content="Adjust Credits">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="w-8 h-8 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
+                <button
                   onClick={() => handleAdjust(user)}
+                  className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-colors inline-flex"
                 >
                   <CreditCard className="w-4 h-4" />
-                </Button>
+                </button>
               </Tooltip>
             )}
           </div>
@@ -282,16 +278,24 @@ function CreditsAdminPage() {
             <div className="text-[10px] text-muted-foreground">NUKE</div>
           </div>
         </div>
-        <div className="flex items-center justify-end gap-2">
-          <Button size="sm" variant="outline" onClick={() => handleViewHistory(user)}>
-            <History className="w-3.5 h-3.5 mr-1" />
-            History
-          </Button>
+        <div className="flex items-center justify-end gap-1">
+          <Tooltip content="View History">
+            <button
+              onClick={() => handleViewHistory(user)}
+              className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex"
+            >
+              <History className="w-4 h-4" />
+            </button>
+          </Tooltip>
           {canManageCredits && (
-            <Button size="sm" variant="outline" onClick={() => handleAdjust(user)}>
-              <CreditCard className="w-3.5 h-3.5 mr-1" />
-              Adjust
-            </Button>
+            <Tooltip content="Adjust Credits">
+              <button
+                onClick={() => handleAdjust(user)}
+                className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-colors inline-flex"
+              >
+                <CreditCard className="w-4 h-4" />
+              </button>
+            </Tooltip>
           )}
         </div>
       </div>

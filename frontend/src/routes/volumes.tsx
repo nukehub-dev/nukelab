@@ -194,20 +194,23 @@ function VolumeCard({
             </div>
           )}
 
-          {/* Status & Date */}
-          <div className="flex items-center justify-between text-xs">
-            {volume.status !== 'active' && (
-              <span className={cn(
-                "px-2 py-0.5 rounded-full",
-                volume.status === 'over_limit' ? "bg-red-500/10 text-red-400" :
-                volume.status === 'archived' ? "bg-amber-500/10 text-amber-400" :
-                "bg-muted/50 text-muted-foreground"
-              )}>
-                {volume.status}
-              </span>
-            )}
+          {/* ID, Status & Date */}
+          <div className="flex items-center justify-between text-xs gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              {volume.status !== 'active' && (
+                <span className={cn(
+                  "px-2 py-0.5 rounded-full shrink-0",
+                  volume.status === 'over_limit' ? "bg-red-500/10 text-red-400" :
+                  volume.status === 'archived' ? "bg-amber-500/10 text-amber-400" :
+                  "bg-muted/50 text-muted-foreground"
+                )}>
+                  {volume.status}
+                </span>
+              )}
+              <code className="text-[10px] text-muted-foreground truncate">{volume.id}</code>
+            </div>
             {volume.created_at && (
-              <span className={cn("text-muted-foreground", volume.status === 'active' && "ml-auto")}>
+              <span className="text-muted-foreground shrink-0">
                 {new Date(volume.created_at).toLocaleDateString(undefined, {
                   year: 'numeric',
                   month: 'short',

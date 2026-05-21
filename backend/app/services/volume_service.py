@@ -133,6 +133,92 @@ class VolumeService:
         result = await self.db.execute(query)
         return result.scalars().all()
 
+    async def list_all_volumes(
+        self,
+        page: int = 1,
+        limit: int = 20,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        search: Optional[str] = None,
+        status: Optional[str] = None,
+        visibility: Optional[str] = None,
+        owner_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """List ALL volumes (admin view) with pagination, sorting, and filtering."""
+        from app.models.user import User
+        
+        query = (
+            select(Volume)
+            .options(
+                selectinload(Volume.owner),
+                selectinload(Volume.workspace_associations),
+            )
+        )
+        
+        count_query = select(func.count()).select_from(Volume)
+        
+        # Apply status filter
+        if status:
+            query = query.where(Volume.status == status)
+            count_query = count_query.where(Volume.status == status)
+        
+        # Apply visibility filter
+        if visibility:
+            query = query.where(Volume.visibility == visibility)
+            count_query = count_query.where(Volume.visibility == visibility)
+        
+        # Apply owner filter
+        if owner_id:
+            query = query.where(Volume.owner_id == owner_id)
+            count_query = count_query.where(Volume.owner_id == owner_id)
+        
+        # Apply search (volume name/display_name or owner username)
+        if search:
+            search_pattern = f"%{search}%"
+            search_filter = or_(
+                Volume.name.ilike(search_pattern),
+                Volume.display_name.ilike(search_pattern),
+                User.username.ilike(search_pattern),
+            )
+            query = query.join(User, Volume.owner_id == User.id).where(search_filter)
+            count_query = count_query.join(User, Volume.owner_id == User.id).where(search_filter)
+        else:
+            # Still join User for sorting by username
+            query = query.join(User, Volume.owner_id == User.id)
+        
+        # Get total count
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar() or 0
+        
+        # Apply sorting
+        sort_column_map = {
+            "name": Volume.name,
+            "display_name": Volume.display_name,
+            "created_at": Volume.created_at,
+            "size_bytes": Volume.size_bytes,
+            "username": User.username,
+        }
+        sort_column = sort_column_map.get(sort_by, Volume.created_at)
+        
+        if sort_order == "desc":
+            query = query.order_by(sort_column.desc())
+        else:
+            query = query.order_by(sort_column.asc())
+        
+        # Apply pagination
+        offset = (page - 1) * limit
+        query = query.offset(offset).limit(limit)
+        
+        result = await self.db.execute(query)
+        volumes = result.scalars().all()
+        
+        return {
+            "volumes": [v.to_dict() for v in volumes],
+            "total": total,
+            "page": page,
+            "limit": limit,
+        }
+
     async def update_volume(
         self,
         volume_id: str,

@@ -11,8 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 logger = logging.getLogger(__name__)
 
 from app.api.auth import get_current_user, require_scopes
-from app.core.permissions import Permission
-from app.dependencies import PermissionChecker
 from app.db.session import get_db
 from app.models.user import User
 from app.services.workspace_service import WorkspaceService
@@ -159,8 +157,10 @@ async def update_workspace(
     
     # Check permission
     if not await service.can_manage_workspace(workspace_id, str(current_user.id)):
-        checker = PermissionChecker(current_user)
-        checker.require(Permission.ADMIN_ACCESS)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to update this workspace"
+        )
     
     updated = await service.update_workspace(
         workspace_id=workspace_id,
@@ -204,10 +204,12 @@ async def delete_workspace(
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found")
     
-    # Only owner or admin can delete
+    # Only owner can delete via regular API
     if str(workspace.owner_id) != str(current_user.id):
-        checker = PermissionChecker(current_user)
-        checker.require(Permission.ADMIN_ACCESS)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the workspace owner can delete this workspace"
+        )
     
     success = await service.delete_workspace(workspace_id)
     if not success:
@@ -406,8 +408,10 @@ async def add_volume_to_workspace(
         raise HTTPException(status_code=404, detail="Workspace not found")
     
     if not await service.can_manage_workspace(workspace_id, str(current_user.id)):
-        checker = PermissionChecker(current_user)
-        checker.require(Permission.ADMIN_ACCESS)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to manage this workspace's volumes"
+        )
     
     # Verify user can manage the volume
     if not await volume_access.can_manage_volume(request.volume_id, str(current_user.id)):
@@ -445,8 +449,10 @@ async def remove_volume_from_workspace(
         raise HTTPException(status_code=404, detail="Workspace not found")
     
     if not await service.can_manage_workspace(workspace_id, str(current_user.id)):
-        checker = PermissionChecker(current_user)
-        checker.require(Permission.ADMIN_ACCESS)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to manage this workspace's volumes"
+        )
     
     success = await service.remove_volume(workspace_id, volume_id)
     if not success:
@@ -472,8 +478,10 @@ async def update_volume_role(
         raise HTTPException(status_code=404, detail="Workspace not found")
     
     if not await service.can_manage_workspace(workspace_id, str(current_user.id)):
-        checker = PermissionChecker(current_user)
-        checker.require(Permission.ADMIN_ACCESS)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to manage this workspace's volumes"
+        )
     
     if request.role not in ("read_only", "read_write"):
         raise HTTPException(status_code=400, detail="Invalid role. Must be: read_only, read_write")
@@ -503,8 +511,10 @@ async def invite_member(
         raise HTTPException(status_code=404, detail="Workspace not found")
     
     if not await service.can_manage_workspace(workspace_id, str(current_user.id)):
-        checker = PermissionChecker(current_user)
-        checker.require(Permission.ADMIN_ACCESS)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to invite members to this workspace"
+        )
     
     # Validate role
     if request.role not in ("read_only", "read_write", "admin"):
@@ -646,8 +656,10 @@ async def list_invitations(
     service = WorkspaceService(db)
     
     if not await service.can_manage_workspace(workspace_id, str(current_user.id)):
-        checker = PermissionChecker(current_user)
-        checker.require(Permission.ADMIN_ACCESS)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to view this workspace's invitations"
+        )
     
     workspace = await service.get_workspace(workspace_id)
     if not workspace:
@@ -765,8 +777,10 @@ async def remove_member(
     # Can remove self, or must be owner/admin
     if str(current_user.id) != user_id:
         if not await service.can_manage_workspace(workspace_id, str(current_user.id)):
-            checker = PermissionChecker(current_user)
-            checker.require(Permission.ADMIN_ACCESS)
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have permission to remove members from this workspace"
+            )
     
     try:
         success = await service.remove_member(workspace_id, user_id)
@@ -797,8 +811,10 @@ async def update_member_role(
         raise HTTPException(status_code=404, detail="Workspace not found")
     
     if not await service.can_manage_workspace(workspace_id, str(current_user.id)):
-        checker = PermissionChecker(current_user)
-        checker.require(Permission.ADMIN_ACCESS)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to update member roles in this workspace"
+        )
     
     if request.role not in ("read_only", "read_write", "admin"):
         raise HTTPException(status_code=400, detail="Invalid role. Must be: read_only, read_write, admin")

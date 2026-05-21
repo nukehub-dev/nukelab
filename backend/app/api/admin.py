@@ -19,8 +19,13 @@ from app.models.user import User
 from app.models.server import Server
 from app.models.credit_transaction import CreditTransaction
 from app.models.activity_log import ActivityLog
+from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
+from app.models.workspace_volume import WorkspaceVolume
+from app.models.volume import Volume
 from app.services.user_service import UserService
 from app.services.credit_service import CreditService
+from app.services.workspace_service import WorkspaceService
+from app.services.volume_service import VolumeService
 from app.core.roles import ROLE_PERMISSIONS, get_role_permissions, VALID_ROLES
 from app.config import settings
 
@@ -772,3 +777,301 @@ async def get_email_status(
             "host": service.smtp_host,
             "port": service.smtp_port
         }
+
+
+# ========== Workspace Management (Admin) ==========
+
+class UpdateWorkspaceRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+@router.get("/workspaces")
+async def admin_list_workspaces(
+    search: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    owner_id: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    sort_by: str = Query("created_at"),
+    sort_order: str = Query("desc"),
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _jwt = Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db)
+):
+    """List all workspaces (admin view)"""
+    service = WorkspaceService(db)
+    result = await service.list_all_workspaces(
+        page=page,
+        limit=limit,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        search=search,
+        status=status,
+        owner_id=owner_id,
+    )
+    
+    return {
+        "workspaces": result["workspaces"],
+        "pagination": {
+            "page": result["page"],
+            "limit": result["limit"],
+            "total": result["total"],
+            "total_pages": (result["total"] + result["limit"] - 1) // result["limit"]
+        }
+    }
+
+
+@router.get("/workspaces/{workspace_id}")
+async def admin_get_workspace(
+    workspace_id: str,
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _jwt = Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get workspace details (admin view)"""
+    service = WorkspaceService(db)
+    workspace = await service.get_workspace(workspace_id)
+    
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    
+    return {
+        "workspace": workspace.to_dict(),
+        "members": [m.to_dict() for m in workspace.members] if workspace.members else [],
+        "volumes": [v.to_dict() for v in workspace.volume_associations] if workspace.volume_associations else [],
+        "invitations": [i.to_dict() for i in workspace.invitations] if workspace.invitations else [],
+    }
+
+
+@router.put("/workspaces/{workspace_id}")
+async def admin_update_workspace(
+    workspace_id: str,
+    request: UpdateWorkspaceRequest,
+    current_user: User = Depends(require_permissions(Permission.WORKSPACES_MANAGE)),
+    _jwt = Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update workspace (admin)"""
+    service = WorkspaceService(db)
+    workspace = await service.update_workspace(
+        workspace_id=workspace_id,
+        name=request.name,
+        description=request.description,
+        is_active=request.is_active,
+    )
+    
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    
+    return {
+        "success": True,
+        "workspace": workspace.to_dict(),
+        "message": "Workspace updated successfully"
+    }
+
+
+@router.delete("/workspaces/{workspace_id}")
+async def admin_delete_workspace(
+    workspace_id: str,
+    current_user: User = Depends(require_permissions(Permission.WORKSPACES_MANAGE)),
+    _jwt = Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete workspace (admin)"""
+    service = WorkspaceService(db)
+    workspace = await service.get_workspace(workspace_id)
+    
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    
+    success = await service.delete_workspace(workspace_id)
+    
+    return {
+        "success": success,
+        "message": "Workspace deleted successfully"
+    }
+
+
+@router.get("/workspaces/{workspace_id}/members")
+async def admin_list_workspace_members(
+    workspace_id: str,
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    search: Optional[str] = Query(None),
+    role: Optional[str] = Query(None),
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _jwt = Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db)
+):
+    """List workspace members (admin view)"""
+    service = WorkspaceService(db)
+    result = await service.list_workspace_members(
+        workspace_id=workspace_id,
+        page=page,
+        limit=limit,
+        search=search,
+        role=role,
+    )
+    
+    return {
+        "members": result["members"],
+        "pagination": {
+            "page": result["page"],
+            "limit": result["limit"],
+            "total": result["total"],
+            "total_pages": (result["total"] + result["limit"] - 1) // result["limit"]
+        }
+    }
+
+
+@router.get("/workspaces/{workspace_id}/volumes")
+async def admin_list_workspace_volumes(
+    workspace_id: str,
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    search: Optional[str] = Query(None),
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _jwt = Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db)
+):
+    """List workspace volumes (admin view)"""
+    service = WorkspaceService(db)
+    result = await service.list_workspace_volumes(
+        workspace_id=workspace_id,
+        page=page,
+        limit=limit,
+        search=search,
+    )
+    
+    return {
+        "volumes": result["volumes"],
+        "pagination": {
+            "page": result["page"],
+            "limit": result["limit"],
+            "total": result["total"],
+            "total_pages": (result["total"] + result["limit"] - 1) // result["limit"]
+        }
+    }
+
+
+# ========== Volume Management (Admin) ==========
+
+class UpdateVolumeRequest(BaseModel):
+    display_name: Optional[str] = None
+    description: Optional[str] = None
+    visibility: Optional[str] = None
+    status: Optional[str] = None
+    max_size_bytes: Optional[int] = None
+
+
+@router.get("/volumes")
+async def admin_list_volumes(
+    search: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    visibility: Optional[str] = Query(None),
+    owner_id: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    sort_by: str = Query("created_at"),
+    sort_order: str = Query("desc"),
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _jwt = Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db)
+):
+    """List all volumes (admin view)"""
+    service = VolumeService(db)
+    result = await service.list_all_volumes(
+        page=page,
+        limit=limit,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        search=search,
+        status=status,
+        visibility=visibility,
+        owner_id=owner_id,
+    )
+    
+    return {
+        "volumes": result["volumes"],
+        "pagination": {
+            "page": result["page"],
+            "limit": result["limit"],
+            "total": result["total"],
+            "total_pages": (result["total"] + result["limit"] - 1) // result["limit"]
+        }
+    }
+
+
+@router.get("/volumes/{volume_id}")
+async def admin_get_volume(
+    volume_id: str,
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _jwt = Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get volume details (admin view)"""
+    service = VolumeService(db)
+    volume = await service.get_volume(volume_id)
+    
+    if not volume:
+        raise HTTPException(status_code=404, detail="Volume not found")
+    
+    return {
+        "volume": volume.to_dict(),
+    }
+
+
+@router.put("/volumes/{volume_id}")
+async def admin_update_volume(
+    volume_id: str,
+    request: UpdateVolumeRequest,
+    current_user: User = Depends(require_permissions(Permission.VOLUMES_MANAGE)),
+    _jwt = Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update volume (admin)"""
+    service = VolumeService(db)
+    volume = await service.update_volume(
+        volume_id=volume_id,
+        display_name=request.display_name,
+        description=request.description,
+        visibility=request.visibility,
+        status=request.status,
+        max_size_bytes=request.max_size_bytes,
+    )
+    
+    if not volume:
+        raise HTTPException(status_code=404, detail="Volume not found")
+    
+    return {
+        "success": True,
+        "volume": volume.to_dict(),
+        "message": "Volume updated successfully"
+    }
+
+
+@router.delete("/volumes/{volume_id}")
+async def admin_delete_volume(
+    volume_id: str,
+    current_user: User = Depends(require_permissions(Permission.VOLUMES_MANAGE)),
+    _jwt = Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete volume (admin)"""
+    service = VolumeService(db)
+    volume = await service.get_volume(volume_id)
+    
+    if not volume:
+        raise HTTPException(status_code=404, detail="Volume not found")
+    
+    try:
+        success = await service.delete_volume(volume_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+    return {
+        "success": success,
+        "message": "Volume deleted successfully"
+    }

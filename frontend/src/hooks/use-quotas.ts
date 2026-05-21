@@ -79,7 +79,7 @@ export function useQuotaActions() {
   const updateQuota = useMutation({
     mutationFn: ({ userId, limits }: UpdateQuotaData) =>
       api.put<{ success: boolean; data: { limits: QuotaLimits }; message: string }>(`/quotas/${userId}`, limits),
-    onSuccess: (_data, variables) => {
+    onSuccess: (_data, _variables) => {
       queryClient.invalidateQueries({ queryKey: ['quotas'] });
       success('Quota updated', `Resource limits updated for user`);
     },
