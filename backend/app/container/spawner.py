@@ -3,7 +3,7 @@ import logging
 import uuid
 from datetime import datetime
 from typing import Optional, List, Dict, Any
-from app.container.client import DockerClient, get_docker_client
+from app.container.client import ContainerClient, get_container_client
 from app.models.server import Server
 from app.config import settings
 
@@ -12,20 +12,20 @@ logger = logging.getLogger(__name__)
 
 class ServerSpawner:
     def __init__(self):
-        self.docker: Optional[DockerClient] = None
+        self.container_client: Optional[ContainerClient] = None
     
-    async def _get_docker(self):
-        if not self.docker:
-            self.docker = await get_docker_client()
-        return self.docker
+    async def _get_container_client(self):
+        if not self.container_client:
+            self.container_client = await get_container_client()
+        return self.container_client
     
     async def _ensure_volume(self, volume_name: str):
         """Create a named Docker volume if it doesn't exist."""
-        docker = await self._get_docker()
+        container_client = await self._get_container_client()
         try:
-            await docker.client.volumes.get(volume_name)
+            await container_client.client.volumes.get(volume_name)
         except Exception:
-            await docker.client.volumes.create({
+            await container_client.client.volumes.create({
                 "Name": volume_name,
                 "Labels": {
                     "nukelab.managed": "true",
@@ -53,7 +53,7 @@ class ServerSpawner:
         Args:
             volume_mounts: List of dicts with keys: volume_id, mount_path, mode
         """
-        docker = await self._get_docker()
+        container_client = await self._get_container_client()
         
         # Use existing server ID or generate new one
         server_id = server_id or str(uuid.uuid4())
@@ -142,11 +142,11 @@ class ServerSpawner:
             # Check if image exists locally first, then try to pull
             try:
                 # Try to inspect image locally
-                await docker.client.images.get(image)
+                await container_client.client.images.get(image)
             except Exception:
                 # Try to pull if not found locally
                 try:
-                    await docker.pull_image(image)
+                    await container_client.pull_image(image)
                 except Exception:
                     # Fallback to dev image if specific env not built
                     # (nukelab-dev has nginx and stays running)
@@ -168,7 +168,7 @@ class ServerSpawner:
                 binds.append(bind_str)
             
             # Create container
-            container = await docker.create_container(
+            container = await container_client.create_container(
                 name=container_name,
                 image=image,
                 env=environment,
@@ -181,7 +181,7 @@ class ServerSpawner:
             )
             
             # Start container
-            await docker.start_container(container.id)
+            await container_client.start_container(container.id)
             
             # Fix volume permissions inside the container.
             # Rootless Podman maps the host UID to container root, so named volumes
@@ -238,7 +238,7 @@ class ServerSpawner:
         except Exception as e:
             # Cleanup on failure
             try:
-                container = await docker.client.containers.get(container_name)
+                container = await container_client.client.containers.get(container_name)
                 await container.delete(force=True)
             except:
                 pass
@@ -246,9 +246,9 @@ class ServerSpawner:
     
     async def start(self, container_id: str) -> bool:
         """Start a server container"""
-        docker = await self._get_docker()
+        container_client = await self._get_container_client()
         try:
-            await docker.start_container(container_id)
+            await container_client.start_container(container_id)
             return True
         except Exception as e:
             print(f"Error starting container: {e}")
@@ -256,9 +256,9 @@ class ServerSpawner:
     
     async def stop(self, container_id: str) -> bool:
         """Stop a server container"""
-        docker = await self._get_docker()
+        container_client = await self._get_container_client()
         try:
-            await docker.stop_container(container_id)
+            await container_client.stop_container(container_id)
             return True
         except Exception as e:
             print(f"Error stopping container: {e}")
@@ -266,9 +266,9 @@ class ServerSpawner:
     
     async def delete(self, container_id: str) -> bool:
         """Delete a server container"""
-        docker = await self._get_docker()
+        container_client = await self._get_container_client()
         try:
-            await docker.delete_container(container_id, force=True)
+            await container_client.delete_container(container_id, force=True)
             return True
         except Exception as e:
             print(f"Error deleting container: {e}")
@@ -276,9 +276,9 @@ class ServerSpawner:
     
     async def get_status(self, container_id: str) -> str:
         """Get container status"""
-        docker = await self._get_docker()
+        container_client = await self._get_container_client()
         try:
-            info = await docker.get_container_info(container_id)
+            info = await container_client.get_container_info(container_id)
             state = info.get("State", {})
             if state.get("Running"):
                 return "running"

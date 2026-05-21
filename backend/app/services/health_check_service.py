@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.container.client import get_fresh_docker_client
+from app.container.client import get_fresh_container_client
 from app.models.health_check import HealthCheck
 from app.models.server import Server
 
@@ -31,10 +31,10 @@ class HealthCheckService:
 
     async def _check_container(self, server: Server):
         """Check health of a single container"""
-        docker = None
+        container_client = None
         try:
-            docker = await get_fresh_docker_client()
-            container = await docker.client.containers.get(server.container_id)
+            container_client = await get_fresh_container_client()
+            container = await container_client.client.containers.get(server.container_id)
             info = await container.show()
             state = info.get('State', {})
 
@@ -90,9 +90,9 @@ class HealthCheckService:
             self.db.add(health_check)
             await self.db.commit()
         finally:
-            if docker and docker.client:
+            if container_client and container_client.client:
                 try:
-                    await docker.client.close()
+                    await container_client.client.close()
                 except Exception:
                     pass
 

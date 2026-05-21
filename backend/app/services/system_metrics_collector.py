@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Dict
 from app.db.session import AsyncSessionLocal
 from app.models.system_metric import SystemMetric
-from app.container.client import get_fresh_docker_client
+from app.container.client import get_fresh_container_client
 from app.config import settings
 import redis.asyncio as redis
 
@@ -48,10 +48,10 @@ class SystemMetricsCollector:
         docker_containers_total = 0
         docker_images_total = 0
         active_servers_count = 0
-        docker = None
+        container_client = None
         try:
-            docker = await get_fresh_docker_client()
-            containers = await docker.list_containers()
+            container_client = await get_fresh_container_client()
+            containers = await container_client.list_containers()
             docker_containers_total = len(containers)
             docker_containers_running = sum(
                 1 for c in containers if c.get('State') == 'running'
@@ -65,14 +65,14 @@ class SystemMetricsCollector:
                         active_servers_count += 1
                 except Exception:
                     pass
-            images = await docker.client.images.list()
+            images = await container_client.client.images.list()
             docker_images_total = len(images)
         except Exception:
             pass
         finally:
-            if docker and docker.client:
+            if container_client and container_client.client:
                 try:
-                    await docker.client.close()
+                    await container_client.client.close()
                 except Exception:
                     pass
 

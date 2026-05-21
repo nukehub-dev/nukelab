@@ -470,10 +470,10 @@ async def create_server(
         # DB record is rolled back automatically by db.rollback() above.
         if auto_created_volume_name:
             try:
-                from app.container.client import get_docker_client
-                docker = await get_docker_client()
+                from app.container.client import get_container_client
+                container_client = await get_container_client()
                 try:
-                    vol = await docker.client.volumes.get(auto_created_volume_name)
+                    vol = await container_client.client.volumes.get(auto_created_volume_name)
                     await vol.delete()
                     logger.info(f"Cleaned up Docker volume: {auto_created_volume_name}")
                 except Exception as e:
@@ -500,11 +500,11 @@ async def create_server(
         
         # Also clean up any container that may have been created
         try:
-            from app.container.client import get_docker_client
-            docker = await get_docker_client()
+            from app.container.client import get_container_client
+            container_client = await get_container_client()
             container_name = f"nukelab-server-{current_user.username}-{request.name}"
             try:
-                container = await docker.client.containers.get(container_name)
+                container = await container_client.client.containers.get(container_name)
                 await container.delete(force=True)
             except Exception:
                 pass
@@ -1718,7 +1718,7 @@ async def get_server_logs(
             except ValueError:
                 pass
         
-        logs = await spawner.docker.get_container_logs(
+        logs = await spawner.container_client.get_container_logs(
             container_id=server.container_id,
             tail=tail,
             since=since_timestamp,

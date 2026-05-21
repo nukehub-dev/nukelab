@@ -76,8 +76,8 @@ async def detailed_health_check(
     
     # Docker check
     try:
-        from app.container.client import docker_client
-        version = await docker_client.version()
+        from app.container.client import container_client
+        version = await container_client.version()
         health_data["services"]["docker"] = {
             "status": "healthy",
             "version": version.get("Version", "unknown")

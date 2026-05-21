@@ -3,7 +3,7 @@ import json
 from datetime import datetime
 from typing import Dict, List, Optional
 import aiodocker
-from app.container.client import get_fresh_docker_client
+from app.container.client import get_fresh_container_client
 from app.models.server_metric import ServerMetric
 import redis.asyncio as redis
 from app.config import settings
@@ -15,14 +15,14 @@ class MetricsCollector:
     """
 
     def __init__(self):
-        self.docker = None
+        self.container_client = None
         self.redis_client = None
         self._running = False
 
-    async def _get_docker(self):
+    async def _get_container_client(self):
         """Get a fresh Docker client for each collection cycle."""
-        docker = await get_fresh_docker_client()
-        return docker
+        container_client = await get_fresh_container_client()
+        return container_client
 
     async def _get_redis(self):
         if not self.redis_client:
@@ -31,11 +31,11 @@ class MetricsCollector:
 
     async def collect_all(self):
         """Collect metrics for all running containers"""
-        docker = None
+        container_client = None
         containers = []
         try:
-            docker = await self._get_docker()
-            containers = await docker.list_containers(
+            container_client = await self._get_container_client()
+            containers = await container_client.list_containers(
                 filters={"status": ["running"], "label": ["nukelab.server.id"]}
             )
         except Exception:
@@ -57,18 +57,18 @@ class MetricsCollector:
                 pass
         
         # Close docker client after all processing is done
-        if docker and docker.client:
+        if container_client and container_client.client:
             try:
-                await docker.client.close()
+                await container_client.client.close()
             except Exception:
                 pass
 
     async def _collect_container_metrics(self, container_id, server_id):
         """Collect metrics for a single container"""
-        docker = None
+        container_client = None
         try:
-            docker = await get_fresh_docker_client()
-            container = await docker.client.containers.get(container_id)
+            container_client = await get_fresh_container_client()
+            container = await container_client.client.containers.get(container_id)
             stats_list = await container.stats(stream=False)
             
             # stats() returns a list with one dict item when stream=False
@@ -76,19 +76,19 @@ class MetricsCollector:
             if not isinstance(stats, dict):
                 return
 
-            metrics = self._parse_docker_stats(stats, server_id, container_id)
+            metrics = self._parse_container_stats(stats, server_id, container_id)
             await self._persist_metrics(metrics)
             await self._broadcast_metrics(metrics)
         except Exception:
             pass
         finally:
-            if docker and docker.client:
+            if container_client and container_client.client:
                 try:
-                    await docker.client.close()
+                    await container_client.client.close()
                 except Exception:
                     pass
 
-    def _parse_docker_stats(self, stats: dict, server_id: str, container_id: str) -> dict:
+    def _parse_container_stats(self, stats: dict, server_id: str, container_id: str) -> dict:
         """Parse raw Docker stats into normalized metrics"""
 
         cpu_stats = stats.get('cpu_stats', {})

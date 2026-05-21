@@ -13,7 +13,7 @@ from app.models.volume import Volume
 from app.models.server import Server
 from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
 from app.models.workspace_volume import WorkspaceVolume
-from app.container.client import get_docker_client
+from app.container.client import get_container_client
 from app.config import settings
 
 
@@ -51,10 +51,10 @@ class VolumeService:
         visibility: str = "private"
     ) -> Volume:
         """Create a new volume record and Docker volume"""
-        docker = await get_docker_client()
+        container_client = await get_container_client()
 
         # Create Docker volume
-        await docker.client.volumes.create({
+        await container_client.client.volumes.create({
             "Name": name,
             "Labels": {
                 "nukelab.managed": "true",
@@ -172,9 +172,9 @@ class VolumeService:
             raise ValueError(f"Volume is still mounted by {volume.server_count} server(s)")
 
         # Delete Docker volume
-        docker = await get_docker_client()
+        container_client = await get_container_client()
         try:
-            vol = await docker.client.volumes.get(volume.name)
+            vol = await container_client.client.volumes.get(volume.name)
             await vol.delete()
         except Exception:
             pass

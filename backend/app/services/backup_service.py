@@ -179,8 +179,8 @@ class BackupService:
         
         if not volume:
             # Create volume
-            docker = await volume_service.get_docker_client()
-            await docker.client.volumes.create(
+            container_client = await volume_service.get_container_client()
+            await container_client.client.volumes.create(
                 name=volume_name,
                 labels={"nukelab.managed": "true"}
             )

@@ -8,8 +8,8 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 
-class TestDockerClientBindFormatting:
-    """Unit tests for DockerClient.create_container bind string formatting.
+class TestContainerClientBindFormatting:
+    """Unit tests for ContainerClient.create_container bind string formatting.
 
     These tests verify that the Docker client correctly appends :ro / :rw
     to bind mount strings based on the mode in the volumes dict.
@@ -17,10 +17,10 @@ class TestDockerClientBindFormatting:
 
     @pytest.mark.asyncio
     async def test_dict_volume_with_ro_mode(self):
-        """DockerClient should append ':ro' when mode is 'ro' in dict."""
-        from app.container.client import DockerClient
+        """ContainerClient should append ':ro' when mode is 'ro' in dict."""
+        from app.container.client import ContainerClient
 
-        client = DockerClient()
+        client = ContainerClient()
         client.client = MagicMock()
         client.client.containers.create = AsyncMock(return_value=MagicMock())
 
@@ -41,10 +41,10 @@ class TestDockerClientBindFormatting:
 
     @pytest.mark.asyncio
     async def test_dict_volume_with_rw_mode(self):
-        """DockerClient should append ':rw' when mode is 'rw' in dict."""
-        from app.container.client import DockerClient
+        """ContainerClient should append ':rw' when mode is 'rw' in dict."""
+        from app.container.client import ContainerClient
 
-        client = DockerClient()
+        client = ContainerClient()
         client.client = MagicMock()
         client.client.containers.create = AsyncMock(return_value=MagicMock())
 
@@ -64,9 +64,9 @@ class TestDockerClientBindFormatting:
     @pytest.mark.asyncio
     async def test_mixed_ro_and_rw_mounts(self):
         """Multiple mounts with different modes should each get correct suffix."""
-        from app.container.client import DockerClient
+        from app.container.client import ContainerClient
 
-        client = DockerClient()
+        client = ContainerClient()
         client.client = MagicMock()
         client.client.containers.create = AsyncMock(return_value=MagicMock())
 
@@ -90,9 +90,9 @@ class TestDockerClientBindFormatting:
     @pytest.mark.asyncio
     async def test_string_volume_has_no_mode_suffix(self):
         """Legacy string-format volumes should not have a mode suffix."""
-        from app.container.client import DockerClient
+        from app.container.client import ContainerClient
 
-        client = DockerClient()
+        client = ContainerClient()
         client.client = MagicMock()
         client.client.containers.create = AsyncMock(return_value=MagicMock())
 

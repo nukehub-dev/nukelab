@@ -7,7 +7,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-class DockerClient:
+class ContainerClient:
     def __init__(self):
         self.client: Optional[aiodocker.Docker] = None
         self._available_cgroup_controllers: Optional[Set[str]] = None
@@ -355,17 +355,17 @@ class DockerClient:
         return int(memory_str)
 
 # Singleton instance
-docker_client = DockerClient()
+container_client = ContainerClient()
 
-async def get_docker_client():
+async def get_container_client():
     """Get initialized Docker client"""
-    if not docker_client.client:
-        await docker_client.connect()
-    return docker_client
+    if not container_client.client:
+        await container_client.connect()
+    return container_client
 
 
-async def get_fresh_docker_client():
+async def get_fresh_container_client():
     """Get a fresh Docker client instance (for Celery workers)."""
-    client = DockerClient()
+    client = ContainerClient()
     await client.connect()
     return client
