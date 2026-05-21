@@ -10,6 +10,7 @@ import {
   Settings,
   ChevronRight,
   LayoutDashboard,
+  Gauge,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
@@ -80,6 +81,14 @@ const categories: AdminCategory[] = [
     href: '/admin/plans',
     requiredPermission: PERMISSIONS.PLAN_CREATE,
     color: 'bg-orange-500/10 text-orange-400',
+  },
+  {
+    label: 'Quotas',
+    description: 'Manage per-user resource limits',
+    icon: Gauge,
+    href: '/admin/quotas',
+    requiredPermission: PERMISSIONS.QUOTA_READ,
+    color: 'bg-teal-500/10 text-teal-400',
   },
   {
     label: 'Permissions',

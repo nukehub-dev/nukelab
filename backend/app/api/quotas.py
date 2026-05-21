@@ -27,6 +27,21 @@ async def get_my_quota(
     return {"success": True, "data": quota.to_dict()}
 
 
+@router.get("/all")
+async def list_all_quotas(
+    search: Optional[str] = None,
+    page: int = 1,
+    limit: int = 50,
+    current_user = Depends(require_permissions(Permission.QUOTA_READ)),
+    _jwt = Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db)
+):
+    """List all users with their quotas (admin)"""
+    service = QuotaService(db)
+    result = await service.list_quotas(search=search, page=page, limit=limit)
+    return {"success": True, "data": result}
+
+
 @router.get("/{user_id}")
 async def get_user_quota(
     user_id: str,

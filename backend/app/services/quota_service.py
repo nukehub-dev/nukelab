@@ -44,6 +44,74 @@ class QuotaService:
         )
         return result.scalar_one_or_none()
     
+    async def list_quotas(
+        self,
+        search: Optional[str] = None,
+        page: int = 1,
+        limit: int = 50
+    ) -> Dict[str, Any]:
+        """List all users with their quota limits (admin view)"""
+        from app.models.user import User
+        from sqlalchemy import func
+        
+        # Build base query: all active users left joined with their quotas
+        query = select(User, ResourceQuota).outerjoin(
+            ResourceQuota, User.id == ResourceQuota.user_id
+        ).where(User.is_active == True)
+        
+        # Apply search filter
+        if search:
+            search_lower = f"%{search.lower()}%"
+            query = query.where(
+                func.lower(User.username).like(search_lower) |
+                func.lower(User.email).like(search_lower) |
+                func.lower(func.coalesce(User.first_name, '')).like(search_lower) |
+                func.lower(func.coalesce(User.last_name, '')).like(search_lower)
+            )
+        
+        # Count total
+        count_query = select(func.count()).select_from(query.subquery())
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar()
+        
+        # Pagination
+        query = query.order_by(User.created_at.desc())
+        query = query.offset((page - 1) * limit).limit(limit)
+        
+        result = await self.db.execute(query)
+        rows = result.all()
+        
+        items = []
+        default_limits = {
+            "max_cpu_total": 8.0,
+            "max_memory_total": "16g",
+            "max_disk_total": "100g",
+            "max_gpu_total": 0,
+            "max_servers_total": 5,
+        }
+        
+        for user, quota in rows:
+            limits = quota.to_dict()["limits"] if quota else default_limits
+            usage = quota.to_dict()["usage"] if quota else {k: 0 for k in ["cpu", "memory_mb", "disk_mb", "gpu", "servers"]}
+            items.append({
+                "user_id": str(user.id),
+                "username": user.username,
+                "display_name": user.display_name,
+                "email": user.email,
+                "role": user.role,
+                "limits": limits,
+                "usage": usage,
+                "quota_id": str(quota.id) if quota else None,
+            })
+        
+        return {
+            "items": items,
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "pages": (total + limit - 1) // limit,
+        }
+    
     async def update_user_quota(
         self,
         user_id: str,
@@ -133,6 +201,15 @@ class QuotaService:
         else:
             return int(float(mem_str))
     
+    def _format_memory(self, mem_mb: int) -> str:
+        """Format MB to human-readable string"""
+        if mem_mb >= 1024 * 1024:
+            return f"{mem_mb / (1024 * 1024):.1f} TB"
+        elif mem_mb >= 1024:
+            return f"{mem_mb / 1024:.1f} GB"
+        else:
+            return f"{mem_mb} MB"
+    
     async def check_spawn_allowed(
         self,
         user_id: str,
@@ -182,32 +259,38 @@ class QuotaService:
         
         # Check CPU limit
         if quota.usage_cpu + plan.cpu_limit > quota.max_cpu_total:
+            available = max(0, quota.max_cpu_total - quota.usage_cpu)
             return {
                 "allowed": False,
-                "reason": f"CPU quota exceeded (using {quota.usage_cpu}/{quota.max_cpu_total} cores)"
+                "reason": f"CPU limit exceeded. This plan needs {plan.cpu_limit} cores, but you only have {available:.1f} cores available (limit: {quota.max_cpu_total} cores, currently using: {quota.usage_cpu} cores)."
             }
         
         # Check memory limit
         plan_memory_mb = self._parse_memory(plan.memory_limit)
-        if quota.usage_memory_mb + plan_memory_mb > self._parse_memory(quota.max_memory_total):
+        max_memory_mb = self._parse_memory(quota.max_memory_total)
+        if quota.usage_memory_mb + plan_memory_mb > max_memory_mb:
+            available_mb = max(0, max_memory_mb - quota.usage_memory_mb)
             return {
                 "allowed": False,
-                "reason": f"Memory quota exceeded"
+                "reason": f"Memory limit exceeded. This plan needs {self._format_memory(plan_memory_mb)}, but you only have {self._format_memory(available_mb)} available (limit: {self._format_memory(max_memory_mb)}, currently using: {self._format_memory(quota.usage_memory_mb)})."
             }
         
         # Check disk limit
         plan_disk_mb = self._parse_memory(plan.disk_limit)
-        if quota.usage_disk_mb + plan_disk_mb > self._parse_memory(quota.max_disk_total):
+        max_disk_mb = self._parse_memory(quota.max_disk_total)
+        if quota.usage_disk_mb + plan_disk_mb > max_disk_mb:
+            available_mb = max(0, max_disk_mb - quota.usage_disk_mb)
             return {
                 "allowed": False,
-                "reason": f"Disk quota exceeded"
+                "reason": f"Disk limit exceeded. This plan needs {self._format_memory(plan_disk_mb)}, but you only have {self._format_memory(available_mb)} available (limit: {self._format_memory(max_disk_mb)}, currently using: {self._format_memory(quota.usage_disk_mb)})."
             }
         
         # Check GPU limit
         if quota.usage_gpu + plan.gpu_limit > quota.max_gpu_total:
+            available = max(0, quota.max_gpu_total - quota.usage_gpu)
             return {
                 "allowed": False,
-                "reason": f"GPU quota exceeded"
+                "reason": f"GPU limit exceeded. This plan needs {plan.gpu_limit} GPU(s), but you only have {available} available (limit: {quota.max_gpu_total} GPU(s), currently using: {quota.usage_gpu})."
             }
         
         return {
