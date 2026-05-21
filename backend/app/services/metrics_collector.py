@@ -3,7 +3,7 @@ import json
 from datetime import datetime
 from typing import Dict, List, Optional
 import aiodocker
-from app.docker.client import get_fresh_docker_client
+from app.container.client import get_fresh_docker_client
 from app.models.server_metric import ServerMetric
 import redis.asyncio as redis
 from app.config import settings

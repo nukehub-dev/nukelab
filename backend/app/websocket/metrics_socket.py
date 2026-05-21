@@ -25,7 +25,7 @@ log_streams: Dict[str, asyncio.Task] = {}
 
 async def stream_logs_to_websocket(websocket: WebSocket, server_id: str, container_id: str, tail: int = 100):
     """Stream container logs to a WebSocket connection"""
-    from app.docker.client import get_docker_client
+    from app.container.client import get_docker_client
     
     try:
         docker = await get_docker_client()

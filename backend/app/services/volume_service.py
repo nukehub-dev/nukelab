@@ -13,7 +13,7 @@ from app.models.volume import Volume
 from app.models.server import Server
 from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
 from app.models.workspace_volume import WorkspaceVolume
-from app.docker.client import get_docker_client
+from app.container.client import get_docker_client
 from app.config import settings
 
 

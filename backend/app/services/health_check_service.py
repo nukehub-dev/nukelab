@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.docker.client import get_fresh_docker_client
+from app.container.client import get_fresh_docker_client
 from app.models.health_check import HealthCheck
 from app.models.server import Server
 

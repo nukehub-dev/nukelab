@@ -277,7 +277,7 @@ async def bulk_server_action(
     db: AsyncSession = Depends(get_db)
 ):
     """Perform bulk action on servers"""
-    from app.docker.spawner import spawner
+    from app.container.spawner import spawner
     
     results = {"success": [], "failed": []}
     

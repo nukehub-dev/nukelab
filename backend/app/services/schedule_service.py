@@ -170,7 +170,7 @@ class ScheduleService:
     
     async def execute_schedule(self, schedule: ServerSchedule) -> Dict[str, Any]:
         """Execute a schedule action on a server"""
-        from app.docker.spawner import spawner
+        from app.container.spawner import spawner
         from app.services.quota_service import QuotaService
         
         # Get server

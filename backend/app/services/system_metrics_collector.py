@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Dict
 from app.db.session import AsyncSessionLocal
 from app.models.system_metric import SystemMetric
-from app.docker.client import get_fresh_docker_client
+from app.container.client import get_fresh_docker_client
 from app.config import settings
 import redis.asyncio as redis
 

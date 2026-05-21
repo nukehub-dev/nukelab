@@ -18,7 +18,7 @@ class TestDockerClientBindFormatting:
     @pytest.mark.asyncio
     async def test_dict_volume_with_ro_mode(self):
         """DockerClient should append ':ro' when mode is 'ro' in dict."""
-        from app.docker.client import DockerClient
+        from app.container.client import DockerClient
 
         client = DockerClient()
         client.client = MagicMock()
@@ -42,7 +42,7 @@ class TestDockerClientBindFormatting:
     @pytest.mark.asyncio
     async def test_dict_volume_with_rw_mode(self):
         """DockerClient should append ':rw' when mode is 'rw' in dict."""
-        from app.docker.client import DockerClient
+        from app.container.client import DockerClient
 
         client = DockerClient()
         client.client = MagicMock()
@@ -64,7 +64,7 @@ class TestDockerClientBindFormatting:
     @pytest.mark.asyncio
     async def test_mixed_ro_and_rw_mounts(self):
         """Multiple mounts with different modes should each get correct suffix."""
-        from app.docker.client import DockerClient
+        from app.container.client import DockerClient
 
         client = DockerClient()
         client.client = MagicMock()
@@ -90,7 +90,7 @@ class TestDockerClientBindFormatting:
     @pytest.mark.asyncio
     async def test_string_volume_has_no_mode_suffix(self):
         """Legacy string-format volumes should not have a mode suffix."""
-        from app.docker.client import DockerClient
+        from app.container.client import DockerClient
 
         client = DockerClient()
         client.client = MagicMock()
@@ -121,7 +121,7 @@ class TestSpawnerVolumeDictBuilding:
     @pytest.mark.asyncio
     async def test_spawner_builds_ro_volume_dict(self, db_session, test_user):
         """Spawner should produce volumes dict with mode='ro' for read_only mounts."""
-        from app.docker.spawner import ServerSpawner
+        from app.container.spawner import ServerSpawner
         from app.models.volume import Volume
 
         volume = Volume(
@@ -161,7 +161,7 @@ class TestSpawnerVolumeDictBuilding:
     @pytest.mark.asyncio
     async def test_spawner_builds_rw_volume_dict(self, db_session, test_user):
         """Spawner should produce volumes dict with mode='rw' for read_write mounts."""
-        from app.docker.spawner import ServerSpawner
+        from app.container.spawner import ServerSpawner
         from app.models.volume import Volume
 
         volume = Volume(

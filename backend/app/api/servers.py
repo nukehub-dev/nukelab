@@ -20,7 +20,7 @@ from app.dependencies import PermissionChecker
 from app.db.session import get_db
 from app.models.user import User
 from app.models.server import Server
-from app.docker.spawner import spawner
+from app.container.spawner import spawner
 import aiodocker
 from app.services.notification_service import NotificationService, broadcast_server_status_change
 
@@ -470,7 +470,7 @@ async def create_server(
         # DB record is rolled back automatically by db.rollback() above.
         if auto_created_volume_name:
             try:
-                from app.docker.client import get_docker_client
+                from app.container.client import get_docker_client
                 docker = await get_docker_client()
                 try:
                     vol = await docker.client.volumes.get(auto_created_volume_name)
@@ -500,7 +500,7 @@ async def create_server(
         
         # Also clean up any container that may have been created
         try:
-            from app.docker.client import get_docker_client
+            from app.container.client import get_docker_client
             docker = await get_docker_client()
             container_name = f"nukelab-server-{current_user.username}-{request.name}"
             try:

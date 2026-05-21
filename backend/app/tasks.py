@@ -157,7 +157,7 @@ def process_nuke_billing(self):
                 if current_balance <= 0:
                     # Auto-stop server if credits depleted
                     if settings.server_auto_stop_on_depletion:
-                        from app.docker.spawner import spawner
+                        from app.container.spawner import spawner
                         try:
                             await spawner.delete(server.container_id)
                             server.container_id = None
@@ -232,7 +232,7 @@ def enforce_auto_stop(self):
         from datetime import datetime, timedelta
         from app.core.time_utils import parse_duration
         from app.config import settings
-        from app.docker.spawner import spawner
+        from app.container.spawner import spawner
         from app.services.quota_service import QuotaService
         
         async with AsyncSessionLocal() as db:
@@ -336,7 +336,7 @@ def process_server_queue(self):
         from app.services.resource_pool_service import ResourcePoolService
         from app.services.credit_service import CreditService
         from app.services.quota_service import QuotaService
-        from app.docker.spawner import spawner
+        from app.container.spawner import spawner
         from app.core.time_utils import parse_duration
         from datetime import datetime, timedelta
         from app.config import settings
