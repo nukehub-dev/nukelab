@@ -13,6 +13,7 @@ import {
   RefreshCw,
   ExternalLink,
   Bug,
+  Wrench,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { PageHeader } from '../components/layout/page-header';
@@ -25,10 +26,15 @@ import {
   useEmailStatus,
   useEmailTest,
 } from '../hooks/use-email-settings';
+import {
+  useSystemConfig,
+  useUpdateSystemConfig,
+} from '../hooks/use-system-config';
 import { cn } from '../lib/utils';
 import { springs } from '../lib/animations';
 import { usePageGuard } from '../hooks/use-page-guard';
 import { PERMISSIONS } from '../stores/auth-store';
+import { Switch } from '../components/ui/switch';
 
 export const Route = createFileRoute('/admin/settings')({
   component: AdminSettingsPage,
@@ -55,6 +61,51 @@ function AdminSettingsPage() {
   const { success, error } = useToast();
   const [testEmail, setTestEmail] = useState('');
   const [showDiagnostics, setShowDiagnostics] = useState(false);
+
+  // Maintenance mode state
+  const {
+    data: sysConfig,
+    isLoading: sysLoading,
+    refetch: refetchSysConfig,
+  } = useSystemConfig();
+  const updateSysConfig = useUpdateSystemConfig();
+
+  const handleMaintenanceToggle = (checked: boolean) => {
+    updateSysConfig.mutate(
+      {
+        maintenance_mode: checked,
+        maintenance_message: sysConfig?.maintenance_message || 'System under maintenance',
+      },
+      {
+        onSuccess: () => {
+          success(
+            checked ? 'Maintenance mode enabled' : 'Maintenance mode disabled',
+            checked
+              ? 'Non-admin users will see a maintenance banner.'
+              : 'The platform is now fully accessible.'
+          );
+        },
+        onError: (err: any) => {
+          error(
+            'Failed to update maintenance mode',
+            err?.response?.data?.detail || err.message
+          );
+        },
+      }
+    );
+  };
+
+  const handleMaintenanceMessageChange = (value: string) => {
+    updateSysConfig.mutate(
+      { maintenance_message: value },
+      {
+        onSuccess: () => success('Message updated', 'Maintenance message saved.'),
+        onError: (err: any) => {
+          error('Failed to update message', err?.response?.data?.detail || err.message);
+        },
+      }
+    );
+  };
 
   const handleTestEmail = () => {
     emailTest.mutate(testEmail || undefined, {
@@ -125,6 +176,98 @@ function AdminSettingsPage() {
       />
 
       <div className="px-6 lg:px-10 pb-10 space-y-6">
+        {/* Maintenance Mode Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ ...springs.gentle, delay: 0.05 }}
+          className="bubble space-y-5 p-6"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
+                <Wrench className="w-5 h-5 text-amber-400" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-base">Maintenance Mode</h3>
+                <p className="text-xs text-muted-foreground">
+                  Control platform availability and display a message to users
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {!sysLoading && sysConfig && (
+                <div
+                  className={cn(
+                    'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border',
+                    sysConfig.maintenance_mode
+                      ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                      : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                  )}
+                >
+                  {sysConfig.maintenance_mode ? (
+                    <AlertCircle className="w-3.5 h-3.5" />
+                  ) : (
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                  )}
+                  {sysConfig.maintenance_mode ? 'Active' : 'Inactive'}
+                </div>
+              )}
+              <Tooltip content="Refresh status">
+                <button
+                  onClick={() => refetchSysConfig()}
+                  className="p-1.5 rounded-lg hover:bg-accent transition-colors"
+                >
+                  <RefreshCw className={cn('w-4 h-4 text-muted-foreground', sysLoading && 'animate-spin')} />
+                </button>
+              </Tooltip>
+            </div>
+          </div>
+
+          {sysLoading ? (
+            <div className="h-24 bg-muted/50 rounded-xl animate-pulse" />
+          ) : (
+            <div className="space-y-5">
+              {/* Toggle */}
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Enable Maintenance Mode</p>
+                  <p className="text-xs text-muted-foreground">
+                    When active, non-admin users will see a maintenance banner
+                  </p>
+                </div>
+                <Switch
+                  checked={sysConfig?.maintenance_mode || false}
+                  onCheckedChange={handleMaintenanceToggle}
+                  disabled={updateSysConfig.isPending}
+                />
+              </div>
+
+              {/* Message input */}
+              <div>
+                <label className="text-xs text-muted-foreground mb-1.5 block">
+                  Maintenance message
+                </label>
+                <Input
+                  value={sysConfig?.maintenance_message || ''}
+                  onChange={(e) => handleMaintenanceMessageChange(e.target.value)}
+                  placeholder="System under maintenance"
+                  disabled={updateSysConfig.isPending}
+                  className="h-9"
+                />
+              </div>
+
+              <div className="flex items-start gap-2 text-xs text-muted-foreground bg-muted/20 p-3 rounded-xl">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <span>
+                  Admin users can still access the platform during maintenance mode.
+                  Use this to perform upgrades or critical maintenance without kicking admins out.
+                </span>
+              </div>
+            </div>
+          )}
+        </motion.div>
+
       {/* Email Configuration Card */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}

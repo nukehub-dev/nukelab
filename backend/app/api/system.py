@@ -1,7 +1,7 @@
 from typing import Optional
 from datetime import datetime
 from pydantic import BaseModel
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -13,6 +13,7 @@ from app.models.user import User
 from app.models.server import Server
 from app.config import settings
 from app.api.auth import require_scopes, require_jwt_auth
+from app.services.setting_service import SettingService
 
 router = APIRouter(tags=["system"])
 
@@ -42,14 +43,18 @@ async def health_check():
 async def get_system_config(
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
     _jwt = Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db)
 ):
     """Get system configuration (admin only)"""
+    service = SettingService(db)
+    maint = await service.get_maintenance()
+    
     return {
         "app_name": settings.app_name,
         "app_env": settings.app_env,
         "app_debug": settings.app_debug,
-        "maintenance_mode": settings.maintenance_mode,
-        "maintenance_message": settings.maintenance_message,
+        "maintenance_mode": maint["maintenance_mode"],
+        "maintenance_message": maint["maintenance_message"],
     }
 
 
@@ -58,17 +63,20 @@ async def update_system_config(
     config: SystemConfigUpdate,
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
     _jwt = Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db)
 ):
     """Update system configuration (admin only)"""
+    service = SettingService(db)
     updates = {}
     
-    if config.maintenance_mode is not None:
-        settings.maintenance_mode = config.maintenance_mode
-        updates["maintenance_mode"] = config.maintenance_mode
-    
-    if config.maintenance_message is not None:
-        settings.maintenance_message = config.maintenance_message
-        updates["maintenance_message"] = config.maintenance_message
+    if config.maintenance_mode is not None or config.maintenance_message is not None:
+        await service.save_maintenance(
+            enabled=config.maintenance_mode if config.maintenance_mode is not None else settings.maintenance_mode,
+            message=config.maintenance_message if config.maintenance_message is not None else None,
+        )
+        updates["maintenance_mode"] = settings.maintenance_mode
+        if config.maintenance_message is not None:
+            updates["maintenance_message"] = config.maintenance_message
     
     if config.daily_allowance_default is not None:
         updates["daily_allowance_default"] = config.daily_allowance_default
@@ -86,13 +94,13 @@ async def toggle_maintenance(
     message: Optional[str] = None,
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
     _jwt = Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db)
 ):
     """Toggle maintenance mode (admin only)"""
-    settings.maintenance_mode = enabled
-    if message:
-        settings.maintenance_message = message
-    elif enabled:
-        settings.maintenance_message = "System under maintenance"
+    service = SettingService(db)
+    
+    final_message = message or (settings.maintenance_message if not enabled else "System under maintenance")
+    await service.save_maintenance(enabled=enabled, message=final_message)
     
     return {
         "success": True,

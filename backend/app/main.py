@@ -34,6 +34,10 @@ async def rate_limit_exceeded_handler(request: Request, exc):
         content={"detail": detail}
     )
 
+# Maintenance middleware (must be before auth-dependent middleware)
+from app.middleware.maintenance import MaintenanceMiddleware
+app.add_middleware(MaintenanceMiddleware)
+
 # Audit middleware
 from app.middleware.audit import AuditMiddleware
 app.add_middleware(AuditMiddleware)
@@ -89,6 +93,16 @@ async def startup():
     except Exception as e:
         print(f"Warning: Failed to seed data: {e}")
     
+    # Load dynamic system settings from database
+    try:
+        from app.db.session import AsyncSessionLocal
+        from app.services.setting_service import SettingService
+        async with AsyncSessionLocal() as db:
+            service = SettingService(db)
+            await service.load_into_config()
+    except Exception as e:
+        print(f"Warning: Failed to load system settings from DB: {e}")
+    
     # Start Redis listener for metrics broadcasting
     try:
         import asyncio
@@ -104,4 +118,13 @@ async def root():
 
 @app.get("/health")
 async def health():
+    if settings.maintenance_mode:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "maintenance",
+                "message": settings.maintenance_message
+            }
+        )
     return {"status": "healthy"}

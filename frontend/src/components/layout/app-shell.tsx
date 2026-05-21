@@ -1,11 +1,13 @@
 import { useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from '@tanstack/react-router';
+import { AlertTriangle } from 'lucide-react';
 import { useThemeStore } from '../../stores/theme-store';
 import { useSidebarStore } from '../../stores/sidebar-store';
 import { useCurrentUser } from '../../hooks/use-current-user';
 import { useGlobalShortcuts } from '../../hooks/use-keyboard-shortcuts';
 import { useFavicon } from '../../lib/favicon';
 import { useNotificationToasts } from '../notifications/notification-toast-provider';
+import { useHealth } from '../../hooks/use-health';
 import { Sidebar } from './sidebar';
 import { ToastProvider } from '../feedback/toast';
 import { ShortcutsModal } from '../feedback/shortcuts-modal';
@@ -22,6 +24,8 @@ export function AppShell() {
   const isLoginPage = location.pathname === '/login';
   const isGatewayPage = location.pathname.startsWith('/user/');
   const isDashboard = location.pathname === '/';
+  const { data: health } = useHealth();
+  const isMaintenance = health?.status === 'maintenance';
 
   // Dynamic favicon with theme color
   useFavicon();
@@ -81,7 +85,26 @@ export function AppShell() {
       <ToastProvider />
       <ShortcutsModal />
 
-      <div className="flex min-h-screen bg-background text-foreground relative z-10">
+      {/* Maintenance banner */}
+      {isMaintenance && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="fixed top-0 left-0 right-0 z-[60] bg-amber-500/10 border-b border-amber-500/20 backdrop-blur-sm"
+        >
+          <div className="flex items-center justify-center gap-2 px-4 py-2 text-amber-400 text-sm">
+            <AlertTriangle className="w-4 h-4" />
+            <span className="font-medium">
+              {health?.message || 'System under maintenance'}
+            </span>
+          </div>
+        </motion.div>
+      )}
+
+      <div className={cn(
+        "flex min-h-screen bg-background text-foreground relative z-10",
+        isMaintenance && "pt-9"
+      )}>
         <Sidebar />
 
         <motion.main

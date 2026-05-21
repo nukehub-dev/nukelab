@@ -66,6 +66,7 @@ TRUNCATE_TABLES = [
     "server_plans",
     "refresh_tokens",
     "users",
+    "system_settings",
 ]
 
 
@@ -191,14 +192,68 @@ async def admin_user(db_session):
 async def user_token(test_user):
     """Generate JWT token for test user."""
     from app.api.auth import create_access_token
-    return create_access_token(data={"sub": test_user.username})
+    return create_access_token(data={"sub": test_user.username, "role": test_user.role})
 
 
 @pytest_asyncio.fixture
 async def admin_token(admin_user):
     """Generate JWT token for admin user."""
     from app.api.auth import create_access_token
-    return create_access_token(data={"sub": admin_user.username})
+    return create_access_token(data={"sub": admin_user.username, "role": admin_user.role})
+
+
+@pytest_asyncio.fixture
+async def moderator_user(db_session):
+    """Create a moderator test user."""
+    user = User(
+        username="moduser",
+        email="mod@example.com",
+        password_hash=get_password_hash("modpass123"),
+        first_name="Mod",
+        last_name="User",
+        role="moderator",
+        is_active=True,
+        is_verified=True,
+        nuke_balance=200,
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    yield user
+
+
+@pytest_asyncio.fixture
+async def moderator_token(moderator_user):
+    """Generate JWT token for moderator user."""
+    from app.api.auth import create_access_token
+    return create_access_token(data={"sub": moderator_user.username, "role": moderator_user.role})
+
+
+@pytest_asyncio.fixture
+async def superadmin_user(db_session):
+    """Create a super_admin test user."""
+    user = User(
+        username="superadmin",
+        email="super@example.com",
+        password_hash=get_password_hash("superpass123"),
+        first_name="Super",
+        last_name="Admin",
+        role="super_admin",
+        is_active=True,
+        is_verified=True,
+        nuke_balance=1000,
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    yield user
+
+
+@pytest_asyncio.fixture
+async def superadmin_token(superadmin_user):
+    """Generate JWT token for super_admin user."""
+    from app.api.auth import create_access_token
+    return create_access_token(data={"sub": superadmin_user.username, "role": superadmin_user.role})
 
 
 @pytest_asyncio.fixture

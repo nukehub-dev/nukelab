@@ -326,7 +326,7 @@ async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends
     
     await db.commit()
     
-    access_token = create_access_token(data={"sub": user.username})
+    access_token = create_access_token(data={"sub": user.username, "role": user.role})
     refresh_token = await create_refresh_token_for_user(
         str(user.id), db,
         user_agent=request.headers.get("user-agent"),
@@ -372,7 +372,7 @@ async def refresh_token_endpoint(request: RefreshRequest, db: AsyncSession = Dep
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
 
     # Create new tokens
-    access_token = create_access_token(data={"sub": user.username})
+    access_token = create_access_token(data={"sub": user.username, "role": user.role})
     new_refresh_token = await create_refresh_token_for_user(
         str(user.id), db,
         user_agent=rt.user_agent,
@@ -818,7 +818,7 @@ async def oauth_callback(
         await db.refresh(user)
         
         # Create JWT token
-        access_token_jwt = create_access_token(data={"sub": user.username})
+        access_token_jwt = create_access_token(data={"sub": user.username, "role": user.role})
         refresh_token_plain = await create_refresh_token_for_user(
             str(user.id), db,
             user_agent=request.headers.get("user-agent"),
