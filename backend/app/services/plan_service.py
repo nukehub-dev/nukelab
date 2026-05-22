@@ -13,6 +13,8 @@ from fastapi import HTTPException, status
 from app.models.server_plan import ServerPlan
 from app.models.plan_access import UserPlanAccess, WorkspacePlanAccess
 from app.models.shared_workspace import WorkspaceMember
+from app.core.permissions import Permission
+from app.core.roles import get_role_permissions
 
 
 class PlanService:
@@ -115,7 +117,8 @@ class PlanService:
             # Public plans are visible to all
             public_visible = plan.is_public
             # Admin/super_admin always have access
-            admin_visible = user_role in ('admin', 'super_admin')
+            user_perms = get_role_permissions(user_role) if user_role else []
+            admin_visible = Permission.ADMIN_ACCESS in user_perms or Permission.ALL in user_perms
             # Role-based visibility
             role_visible = (
                 user_role and plan.visible_to_roles
@@ -241,7 +244,8 @@ class PlanService:
             return False
         
         # Admin/super_admin always have access
-        if user_role in ('admin', 'super_admin'):
+        user_perms = get_role_permissions(user_role) if user_role else []
+        if Permission.ADMIN_ACCESS in user_perms or Permission.ALL in user_perms:
             return True
         
         # Public plans are usable by all
