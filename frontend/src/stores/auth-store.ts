@@ -185,13 +185,13 @@ export const useAuthStore = create<AuthState>()(
       getRole: () => (get().user?.role as UserRole) || 'guest',
       getRoleLevel: () => getRoleLevel(get().user?.role),
 
-      // Role checks - each includes roles above it
-      isSuperAdmin: () => get().user?.role === 'super_admin',
-      isAdmin: () => ['admin', 'super_admin'].includes(get().user?.role || ''),
-      isModerator: () => ['moderator', 'admin', 'super_admin'].includes(get().user?.role || ''),
-      isSupport: () => ['support', 'moderator', 'admin', 'super_admin'].includes(get().user?.role || ''),
-      isUser: () => ['user', 'support', 'moderator', 'admin', 'super_admin'].includes(get().user?.role || ''),
-      isGuest: () => !get().user || ['guest'].includes(get().user?.role || ''),
+      // Role checks - now permission-based for consistency and robustness
+      isSuperAdmin: () => get().hasPermission(PERMISSIONS.ALL),
+      isAdmin: () => get().hasPermission(PERMISSIONS.ADMIN_ACCESS),
+      isModerator: () => get().hasPermission(PERMISSIONS.SERVERS_READ_ALL) && !get().hasPermission(PERMISSIONS.ADMIN_ACCESS),
+      isSupport: () => get().hasPermission(PERMISSIONS.RESOURCES_READ_ALL) && !get().hasPermission(PERMISSIONS.SERVERS_READ_ALL),
+      isUser: () => get().hasPermission(PERMISSIONS.SERVERS_START) && !get().hasPermission(PERMISSIONS.RESOURCES_READ_ALL),
+      isGuest: () => !get().user || (get().hasPermission(PERMISSIONS.SERVERS_READ_OWN) && !get().hasPermission(PERMISSIONS.SERVERS_START)),
 
       // Raw permission checks
       hasPermission: (permission: string) => checkPermission(get().user, permission),

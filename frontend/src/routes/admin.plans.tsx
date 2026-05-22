@@ -212,8 +212,8 @@ function PlansPage() {
   };
 
   const toggleRole = (role: string, checked: boolean) => {
-    // Admin always has access — cannot be toggled off
-    if (role === 'admin') return;
+    // Admin and super_admin always have access — cannot be toggled off
+    if (role === 'admin' || role === 'super_admin') return;
     setFormData((prev) => {
       const current = new Set(prev.visible_to_roles);
       if (checked) {

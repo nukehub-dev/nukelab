@@ -378,7 +378,7 @@ function UsersPage() {
   ];
 
   const activeUsers = users.filter((u) => u.is_active).length;
-  const adminUsers = users.filter((u) => u.role === 'admin').length;
+  const adminUsers = users.filter((u) => u.role === 'admin' || u.role === 'super_admin').length;
 
   const stats = [
     { title: 'Total Users', value: pagination?.total || users.length, icon: Users, iconColor: 'text-blue-400', bgColor: 'bg-blue-500/10' },
