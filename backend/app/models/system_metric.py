@@ -1,12 +1,15 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Float, Integer, BigInteger, DateTime
+from sqlalchemy import Column, String, Float, Integer, BigInteger, DateTime, Index
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.base import Base
 
 
 class SystemMetric(Base):
     __tablename__ = "system_metrics"
+    __table_args__ = (
+        Index('ix_system_metrics_collected_at', 'collected_at'),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     host = Column(String(255), nullable=False, default="localhost")

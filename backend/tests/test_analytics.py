@@ -8,11 +8,13 @@ from sqlalchemy import select
 
 from app.models.server import Server
 from app.models.server_metric import ServerMetric
+from app.models.daily_server_metric import DailyServerMetric
 from app.models.credit_transaction import CreditTransaction
 from app.models.server_plan import ServerPlan
 from app.models.volume import Volume
 from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
 from app.services.analytics_service import AnalyticsService
+from app.services.retention_service import RetentionService
 
 
 class TestAnalyticsService:
@@ -611,3 +613,156 @@ class TestAnalyticsAPI:
         resp = await client.get("/api/analytics/plans", headers=headers)
         
         assert resp.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_date_range_params(self, client: AsyncClient, admin_token):
+        """Analytics endpoints should accept from/to date parameters."""
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        from_date = "2024-01-01T00:00:00"
+        to_date = "2024-01-31T23:59:59"
+        
+        resp = await client.get(
+            f"/api/analytics/platform-metrics?from={from_date}&to={to_date}",
+            headers=headers
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "metrics" in data
+
+    @pytest.mark.asyncio
+    async def test_invalid_date_range(self, client: AsyncClient, admin_token):
+        """Invalid date ranges should return 422."""
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        
+        # to_date before from_date
+        resp = await client.get(
+            "/api/analytics/platform-metrics?from=2024-02-01&to=2024-01-01",
+            headers=headers
+        )
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_export_endpoint(self, client: AsyncClient, admin_token):
+        """Export endpoint should return data for admin."""
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        payload = {
+            "metric": "user-growth",
+            "format": "json",
+            "from": "2024-01-01T00:00:00",
+            "to": "2024-01-31T23:59:59"
+        }
+        resp = await client.post("/api/analytics/export", json=payload, headers=headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "data" in data
+
+    @pytest.mark.asyncio
+    async def test_export_requires_admin(self, client: AsyncClient, user_token):
+        """Export endpoint should be admin-only."""
+        headers = {"Authorization": f"Bearer {user_token}"}
+        payload = {"metric": "platform-metrics", "format": "json"}
+        resp = await client.post("/api/analytics/export", json=payload, headers=headers)
+        assert resp.status_code == 403
+
+
+class TestDailyServerMetricRollups:
+    """Tests for DailyServerMetric rollup functionality."""
+
+    @pytest.mark.asyncio
+    async def test_rollup_fallback_to_raw(self, db_session, test_user):
+        """Short windows should use raw metrics, not rollups."""
+        server = Server(
+            id=uuid_mod.uuid4(),
+            name="rollup-test-server",
+            user_id=test_user.id,
+            status="running",
+            container_id="rollup-container",
+            created_at=datetime.utcnow() - timedelta(days=1),
+        )
+        db_session.add(server)
+        await db_session.flush()
+
+        metric = ServerMetric(
+            id=uuid_mod.uuid4(),
+            server_id=server.id,
+            container_id=server.container_id,
+            cpu_percent=50.0,
+            memory_percent=60.0,
+            collected_at=datetime.utcnow() - timedelta(days=1),
+        )
+        db_session.add(metric)
+        await db_session.commit()
+
+        service = AnalyticsService(db_session)
+        # 7-day window should use raw metrics
+        result = await service.get_platform_metrics(days=7)
+        assert len(result) >= 1
+        assert result[0]["avg_cpu"] == 50.0
+
+    @pytest.mark.asyncio
+    async def test_rollup_usage_long_window(self, db_session, test_user):
+        """Long windows should use rollups when available."""
+        server = Server(
+            id=uuid_mod.uuid4(),
+            name="rollup-long-server",
+            user_id=test_user.id,
+            status="running",
+            container_id="rollup-long-container",
+            created_at=datetime.utcnow() - timedelta(days=10),
+        )
+        db_session.add(server)
+        await db_session.flush()
+
+        rollup = DailyServerMetric(
+            id=uuid_mod.uuid4(),
+            server_id=server.id,
+            date=(datetime.utcnow() - timedelta(days=5)).date(),
+            avg_cpu=42.0,
+            peak_cpu=80.0,
+            avg_memory=55.0,
+            peak_memory=90.0,
+            avg_network_rx=1000000,
+            avg_network_tx=500000,
+            avg_disk_read=100000,
+            avg_disk_write=50000,
+            data_points=100,
+        )
+        db_session.add(rollup)
+        await db_session.commit()
+
+        service = AnalyticsService(db_session)
+        # 30-day window should use rollups
+        result = await service.get_platform_metrics(days=30)
+        assert len(result) >= 1
+        # Should get the rollup value
+        day_result = [r for r in result if r["avg_cpu"] == 42.0]
+        assert len(day_result) >= 1
+
+
+class TestRetentionService:
+    """Tests for RetentionService."""
+
+    @pytest.mark.asyncio
+    async def test_get_default_policy(self, db_session):
+        """RetentionService should return default policy when DB is empty."""
+        service = RetentionService(db_session)
+        policy = await service.get_policy()
+        assert "metrics_retention_days" in policy
+        assert policy["metrics_retention_days"] == 30
+        assert "cleanup_enabled" in policy
+        assert policy["cleanup_enabled"] is True
+
+    @pytest.mark.asyncio
+    async def test_set_and_get_policy(self, db_session):
+        """RetentionService should persist and return updated policy."""
+        service = RetentionService(db_session)
+        await service.set_policy({"metrics_retention_days": 60})
+        policy = await service.get_policy()
+        assert policy["metrics_retention_days"] == 60
+
+    @pytest.mark.asyncio
+    async def test_set_invalid_policy(self, db_session):
+        """RetentionService should reject invalid values."""
+        service = RetentionService(db_session)
+        with pytest.raises(ValueError):
+            await service.set_policy({"metrics_retention_days": 3})  # Below minimum

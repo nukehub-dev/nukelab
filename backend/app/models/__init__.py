@@ -24,3 +24,5 @@ from app.models.server_access_token import ServerAccessToken
 from app.models.refresh_token import RefreshToken
 from app.models.plan_access import UserPlanAccess, WorkspacePlanAccess
 from app.models.system_setting import SystemSetting
+from app.models.daily_server_metric import DailyServerMetric
+from app.models.login_event import LoginEvent

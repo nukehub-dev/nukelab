@@ -1,6 +1,23 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 
+export interface DateRangeParams {
+  days?: number;
+  from?: string;
+  to?: string;
+}
+
+function buildQueryString(params: DateRangeParams): string {
+  const qs = new URLSearchParams();
+  if (params.from && params.to) {
+    qs.set('from', params.from);
+    qs.set('to', params.to);
+  } else {
+    qs.set('days', String(params.days ?? 30));
+  }
+  return qs.toString();
+}
+
 export interface DailyUsage {
   date: string;
   avg_cpu: number;
@@ -78,6 +95,11 @@ export interface UserGrowthData {
   count: number;
 }
 
+export interface LoginEventData {
+  date: string;
+  count: number;
+}
+
 export interface PlatformMetricsData {
   date: string;
   avg_cpu: number;
@@ -131,64 +153,89 @@ export interface PlanUsage {
   server_count: number;
 }
 
-export function useUserUsage(userId: string, days: number = 30) {
+export function useUserUsage(userId: string, params: DateRangeParams = {}) {
+  const qs = buildQueryString(params);
   return useQuery({
-    queryKey: ['analytics', 'user', userId, days],
+    queryKey: ['analytics', 'user', userId, params],
     queryFn: async () => {
-      const response = await api.get<UserUsageData>(`/analytics/users/${userId}/usage?days=${days}`);
+      const response = await api.get<UserUsageData>(`/analytics/users/${userId}/usage?${qs}`);
       return response;
     },
     enabled: !!userId,
   });
 }
 
-export function useGlobalUsage(days: number = 30) {
+export function useGlobalUsage(params: DateRangeParams = {}) {
+  const qs = buildQueryString(params);
   return useQuery({
-    queryKey: ['analytics', 'global', days],
+    queryKey: ['analytics', 'global', params],
     queryFn: async () => {
-      const response = await api.get<GlobalUsageData>(`/analytics/global?days=${days}`);
+      const response = await api.get<GlobalUsageData>(`/analytics/global?${qs}`);
       return response;
     },
+    staleTime: 0,
   });
 }
 
-export function useTopConsumers(days: number = 30, limit: number = 10) {
+export function useTopConsumers(params: DateRangeParams & { limit?: number } = {}) {
+  const { limit = 10, ...dateParams } = params;
+  const qs = new URLSearchParams(buildQueryString(dateParams));
+  qs.set('limit', String(limit));
   return useQuery({
-    queryKey: ['analytics', 'top-consumers', days, limit],
+    queryKey: ['analytics', 'top-consumers', params],
     queryFn: async () => {
-      const response = await api.get<{ consumers: TopConsumer[] }>(`/analytics/top-consumers?days=${days}&limit=${limit}`);
+      const response = await api.get<{ consumers: TopConsumer[] }>(`/analytics/top-consumers?${qs}`);
       return response.consumers;
     },
+    staleTime: 0,
   });
 }
 
-export function useCreditFlow(days: number = 30) {
+export function useCreditFlow(params: DateRangeParams = {}) {
+  const qs = buildQueryString(params);
   return useQuery({
-    queryKey: ['analytics', 'credit-flow', days],
+    queryKey: ['analytics', 'credit-flow', params],
     queryFn: async () => {
-      const response = await api.get<{ credit_flow: CreditFlowData[] }>(`/analytics/credit-flow?days=${days}`);
+      const response = await api.get<{ credit_flow: CreditFlowData[] }>(`/analytics/credit-flow?${qs}`);
       return response.credit_flow;
     },
+    staleTime: 0,
   });
 }
 
-export function useUserGrowth(days: number = 30) {
+export function useUserGrowth(params: DateRangeParams = {}) {
+  const qs = buildQueryString(params);
   return useQuery({
-    queryKey: ['analytics', 'user-growth', days],
+    queryKey: ['analytics', 'user-growth', params],
     queryFn: async () => {
-      const response = await api.get<{ user_growth: UserGrowthData[] }>(`/analytics/user-growth?days=${days}`);
+      const response = await api.get<{ user_growth: UserGrowthData[] }>(`/analytics/user-growth?${qs}`);
       return response.user_growth;
     },
+    staleTime: 0,
   });
 }
 
-export function usePlatformMetrics(days: number = 30) {
+export function useLoginEvents(params: DateRangeParams = {}) {
+  const qs = buildQueryString(params);
   return useQuery({
-    queryKey: ['analytics', 'platform-metrics', days],
+    queryKey: ['analytics', 'logins', params],
     queryFn: async () => {
-      const response = await api.get<{ metrics: PlatformMetricsData[] }>(`/analytics/platform-metrics?days=${days}`);
+      const response = await api.get<{ login_events: LoginEventData[] }>(`/analytics/logins?${qs}`);
+      return response.login_events;
+    },
+    staleTime: 0,
+  });
+}
+
+export function usePlatformMetrics(params: DateRangeParams = {}) {
+  const qs = buildQueryString(params);
+  return useQuery({
+    queryKey: ['analytics', 'platform-metrics', params],
+    queryFn: async () => {
+      const response = await api.get<{ metrics: PlatformMetricsData[] }>(`/analytics/platform-metrics?${qs}`);
       return response.metrics;
     },
+    staleTime: 0,
   });
 }
 

@@ -17,6 +17,10 @@ import {
   FolderOpen,
   Layers,
   ActivitySquare,
+  Download,
+  GitCommit,
+  ToggleLeft,
+  ToggleRight,
 } from 'lucide-react';
 import {
   useGlobalUsage,
@@ -28,12 +32,16 @@ import {
   usePlatformMetrics,
   useVolumeAnalytics,
   useWorkspaceAnalytics,
+  useLoginEvents,
 } from '../hooks/use-analytics';
 import { StatCard } from '../components/data/stat-card';
 import { MetricsAreaChart, formatters } from '../components/charts/area-chart';
 import { TimeSeriesBarChart } from '../components/charts/time-series-bar-chart';
 import { GaugeChart } from '../components/charts/gauge-chart';
 import { SegmentedBar } from '../components/charts/segmented-bar';
+import { CalendarHeatmap } from '../components/charts/calendar-heatmap';
+import { DateRangePicker, type DateRange } from '../components/ui/date-range-picker';
+import { exportToCSV, exportToJSON } from '../lib/export';
 import { springs } from '../lib/animations';
 import { cn } from '../lib/utils';
 import { usePageGuard } from '../hooks/use-page-guard';
@@ -46,6 +54,23 @@ export const Route = createFileRoute('/admin/analytics')({
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                           */
 /* ------------------------------------------------------------------ */
+
+function getDefaultDateRange(): DateRange {
+  const to = new Date().toISOString().split('T')[0];
+  const from = new Date();
+  from.setDate(from.getDate() - 29);
+  return { from: from.toISOString().split('T')[0], to };
+}
+
+function getPreviousPeriod(range: DateRange): DateRange {
+  const from = new Date(range.from);
+  const to = new Date(range.to);
+  const diff = to.getTime() - from.getTime();
+  return {
+    from: new Date(from.getTime() - diff - 86400000).toISOString().split('T')[0],
+    to: new Date(from.getTime() - 86400000).toISOString().split('T')[0],
+  };
+}
 
 function SectionHeader({
   icon: Icon,
@@ -110,6 +135,46 @@ function formatHours(hours: number): string {
   return `${Math.round(hours)} hrs`;
 }
 
+function ExportButton({ data, filename }: { data: unknown[]; filename: string }) {
+  const [open, setOpen] = useState(false);
+  if (!data.length) return null;
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((s) => !s)}
+        className="p-1.5 rounded-md hover:bg-accent transition-colors text-muted-foreground"
+      >
+        <Download className="w-3.5 h-3.5" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-full mt-1 z-50 min-w-[100px] rounded-lg border bg-popover shadow-lg p-1">
+            <button
+              onClick={() => {
+                exportToCSV(data as Record<string, unknown>[], filename);
+                setOpen(false);
+              }}
+              className="w-full text-left px-2.5 py-1.5 rounded-md text-sm hover:bg-accent transition-colors"
+            >
+              CSV
+            </button>
+            <button
+              onClick={() => {
+                exportToJSON(data, filename);
+                setOpen(false);
+              }}
+              className="w-full text-left px-2.5 py-1.5 rounded-md text-sm hover:bg-accent transition-colors"
+            >
+              JSON
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /*  Main Component                                                    */
 /* ------------------------------------------------------------------ */
@@ -118,16 +183,25 @@ function AnalyticsDashboard() {
   const allowed = usePageGuard({ permission: PERMISSIONS.ANALYTICS_READ });
   if (!allowed) return null;
 
-  const [days, setDays] = useState(30);
+  const [dateRange, setDateRange] = useState<DateRange>(getDefaultDateRange);
+  const [compareMode, setCompareMode] = useState(false);
+  const [heatmapTab, setHeatmapTab] = useState<'signups' | 'credits' | 'servers' | 'logins'>('signups');
+
+  const dateParams = { from: dateRange.from, to: dateRange.to };
+  const prevParams = compareMode ? getPreviousPeriod(dateRange) : undefined;
 
   /* Data hooks */
-  const { data: globalUsage, isLoading: globalLoading } = useGlobalUsage(days);
-  const { data: topConsumers } = useTopConsumers(days, 10);
+  const { data: globalUsage, isLoading: globalLoading } = useGlobalUsage(dateParams);
+  const { data: globalUsagePrev } = useGlobalUsage(prevParams ?? {});
+  const { data: topConsumers } = useTopConsumers({ ...dateParams, limit: 100 });
   const { data: environmentUsage } = useEnvironmentUsage();
   const { data: planUsage } = usePlanUsage();
-  const { data: creditFlow, isLoading: creditLoading } = useCreditFlow(days);
-  const { data: userGrowth, isLoading: growthLoading } = useUserGrowth(days);
-  const { data: platformMetrics, isLoading: metricsLoading } = usePlatformMetrics(days);
+  const { data: creditFlow, isLoading: creditLoading } = useCreditFlow(dateParams);
+  const { data: creditFlowPrev } = useCreditFlow(prevParams ?? {});
+  const { data: userGrowth, isLoading: growthLoading } = useUserGrowth(dateParams);
+  const { data: loginEvents } = useLoginEvents(dateParams);
+  const { data: platformMetrics, isLoading: metricsLoading } = usePlatformMetrics(dateParams);
+  const { data: platformMetricsPrev } = usePlatformMetrics(prevParams ?? {});
   const { data: volumeAnalytics, isLoading: volumeLoading } = useVolumeAnalytics();
   const { data: workspaceAnalytics, isLoading: workspaceLoading } = useWorkspaceAnalytics();
 
@@ -151,6 +225,16 @@ function AnalyticsDashboard() {
     [creditFlow]
   );
 
+  const creditFlowDataPrev = useMemo(
+    () =>
+      creditFlowPrev?.map((d) => ({
+        timestamp: d.date,
+        consumedPrev: d.credits_consumed,
+        grantedPrev: d.credits_granted,
+      })) || [],
+    [creditFlowPrev]
+  );
+
   const userGrowthData = useMemo(
     () =>
       userGrowth?.map((d) => ({
@@ -168,6 +252,16 @@ function AnalyticsDashboard() {
         memory: d.avg_memory,
       })) || [],
     [platformMetrics]
+  );
+
+  const platformMetricsDataPrev = useMemo(
+    () =>
+      platformMetricsPrev?.map((d) => ({
+        timestamp: d.date,
+        cpuPrev: d.avg_cpu,
+        memoryPrev: d.avg_memory,
+      })) || [],
+    [platformMetricsPrev]
   );
 
   const serverStatusSegments = useMemo(() => {
@@ -199,6 +293,36 @@ function AnalyticsDashboard() {
     [userGrowth]
   );
 
+  /* Comparison helpers */
+  const comparePct = (curr: number, prev: number) => {
+    if (!prev) return curr > 0 ? 100 : 0;
+    return ((curr - prev) / prev) * 100;
+  };
+
+  const heatmapData = useMemo(() => {
+    if (heatmapTab === 'signups') {
+      return (
+        userGrowth?.map((d) => ({ date: d.date, value: d.count })) || []
+      );
+    }
+    if (heatmapTab === 'credits') {
+      return (
+        creditFlow?.map((d) => ({ date: d.date, value: d.credits_consumed })) || []
+      );
+    }
+    if (heatmapTab === 'logins') {
+      return (
+        loginEvents?.map((d) => ({ date: d.date, value: d.count })) || []
+      );
+    }
+    return (
+      globalUsage?.server_creation_by_day?.map((d) => ({
+        date: d.date,
+        value: d.count,
+      })) || []
+    );
+  }, [heatmapTab, userGrowth, creditFlow, loginEvents, globalUsage]);
+
   return (
     <div className="min-h-screen p-6 lg:p-10 space-y-10">
       {/* Header */}
@@ -226,21 +350,24 @@ function AnalyticsDashboard() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {[7, 30, 90].map((d) => (
-            <button
-              key={d}
-              onClick={() => setDays(d)}
-              className={cn(
-                'px-3 py-1.5 rounded-lg text-sm font-medium transition-colors',
-                days === d
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
-              )}
-            >
-              {d}d
-            </button>
-          ))}
+        <div className="flex items-center gap-3 flex-wrap">
+          <DateRangePicker value={dateRange} onChange={setDateRange} />
+          <button
+            onClick={() => setCompareMode((v) => !v)}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border',
+              compareMode
+                ? 'bg-primary text-primary-foreground border-primary'
+                : 'bg-background text-muted-foreground hover:bg-accent'
+            )}
+          >
+            {compareMode ? (
+              <ToggleRight className="w-4 h-4" />
+            ) : (
+              <ToggleLeft className="w-4 h-4" />
+            )}
+            Compare
+          </button>
         </div>
       </motion.div>
 
@@ -264,16 +391,29 @@ function AnalyticsDashboard() {
               <StatCard
                 title="Total Users"
                 value={globalUsage?.total_users ?? 0}
-                subtitle={`${globalUsage?.new_users ?? 0} new in last ${days}d`}
+                subtitle={`${globalUsage?.new_users ?? 0} new in period`}
                 icon={Users}
                 iconColor="text-chart-1"
                 bgColor="bg-chart-1/10"
                 variant="compact"
+                trend={
+                  compareMode && globalUsagePrev
+                    ? {
+                        value: Math.abs(
+                          comparePct(globalUsage?.new_users ?? 0, globalUsagePrev?.new_users ?? 0)
+                        ),
+                        direction:
+                          (globalUsage?.new_users ?? 0) >= (globalUsagePrev?.new_users ?? 0)
+                            ? 'up'
+                            : 'down',
+                      }
+                    : undefined
+                }
               />
               <StatCard
                 title="Active Users"
                 value={globalUsage?.active_users ?? 0}
-                subtitle={`Last ${days} days`}
+                subtitle="In selected period"
                 icon={Activity}
                 iconColor="text-chart-2"
                 bgColor="bg-chart-2/10"
@@ -297,6 +437,23 @@ function AnalyticsDashboard() {
                 iconColor="text-chart-4"
                 bgColor="bg-chart-4/10"
                 variant="compact"
+                trend={
+                  compareMode && globalUsagePrev
+                    ? {
+                        value: Math.abs(
+                          comparePct(
+                            globalUsage?.total_credits_consumed ?? 0,
+                            globalUsagePrev?.total_credits_consumed ?? 0
+                          )
+                        ),
+                        direction:
+                          (globalUsage?.total_credits_consumed ?? 0) >=
+                          (globalUsagePrev?.total_credits_consumed ?? 0)
+                            ? 'up'
+                            : 'down',
+                      }
+                    : undefined
+                }
               />
               <StatCard
                 title="Running Servers"
@@ -310,7 +467,7 @@ function AnalyticsDashboard() {
               <StatCard
                 title="New Signups"
                 value={globalUsage?.new_users ?? 0}
-                subtitle={`Last ${days} days`}
+                subtitle="In selected period"
                 icon={UserPlus}
                 iconColor="text-chart-5"
                 bgColor="bg-chart-5/10"
@@ -329,7 +486,7 @@ function AnalyticsDashboard() {
               <StatCard
                 title="Avg Platform CPU"
                 value={`${globalUsage?.avg_platform_cpu ?? 0}%`}
-                subtitle={`Avg over last ${days}d`}
+                subtitle="Avg over period"
                 icon={Cpu}
                 iconColor="text-cyan-400"
                 bgColor="bg-cyan-500/10"
@@ -364,13 +521,46 @@ function AnalyticsDashboard() {
                       Consumed vs granted per day
                     </p>
                   </div>
-                  <CreditCard className="w-4 h-4 text-muted-foreground mt-1" />
+                  <div className="flex items-center gap-2">
+                    <ExportButton
+                      data={creditFlow || []}
+                      filename={`credit-flow-${dateRange.from}-to-${dateRange.to}`}
+                    />
+                    <CreditCard className="w-4 h-4 text-muted-foreground mt-1" />
+                  </div>
                 </div>
                 <MetricsAreaChart
-                  data={creditFlowData}
+                  data={
+                    compareMode && creditFlowPrev
+                      ? creditFlowData.map((d) => {
+                          const prev = creditFlowDataPrev.find(
+                            (p) => p.timestamp === d.timestamp
+                          );
+                          return {
+                            ...d,
+                            consumedPrev: prev?.consumedPrev ?? 0,
+                            grantedPrev: prev?.grantedPrev ?? 0,
+                          };
+                        })
+                      : creditFlowData
+                  }
                   series={[
                     { key: 'consumed', name: 'Consumed', color: 'var(--destructive)' },
                     { key: 'granted', name: 'Granted', color: 'var(--chart-2)' },
+                    ...(compareMode
+                      ? [
+                          {
+                            key: 'consumedPrev' as const,
+                            name: 'Consumed (prev)',
+                            color: 'var(--destructive)',
+                          },
+                          {
+                            key: 'grantedPrev' as const,
+                            name: 'Granted (prev)',
+                            color: 'var(--chart-2)',
+                          },
+                        ]
+                      : []),
                   ]}
                   height={240}
                   yTickFormatter={(v) => String(Math.round(v))}
@@ -391,7 +581,13 @@ function AnalyticsDashboard() {
                       New signups per day
                     </p>
                   </div>
-                  <UserPlus className="w-4 h-4 text-muted-foreground mt-1" />
+                  <div className="flex items-center gap-2">
+                    <ExportButton
+                      data={userGrowth || []}
+                      filename={`user-growth-${dateRange.from}-to-${dateRange.to}`}
+                    />
+                    <UserPlus className="w-4 h-4 text-muted-foreground mt-1" />
+                  </div>
                 </div>
                 <TimeSeriesBarChart
                   data={userGrowthData}
@@ -431,13 +627,46 @@ function AnalyticsDashboard() {
                       Average CPU & Memory across all servers
                     </p>
                   </div>
-                  <Cpu className="w-4 h-4 text-muted-foreground mt-1" />
+                  <div className="flex items-center gap-2">
+                    <ExportButton
+                      data={platformMetrics || []}
+                      filename={`platform-metrics-${dateRange.from}-to-${dateRange.to}`}
+                    />
+                    <Cpu className="w-4 h-4 text-muted-foreground mt-1" />
+                  </div>
                 </div>
                 <MetricsAreaChart
-                  data={platformMetricsData}
+                  data={
+                    compareMode && platformMetricsPrev
+                      ? platformMetricsData.map((d) => {
+                          const prev = platformMetricsDataPrev.find(
+                            (p) => p.timestamp === d.timestamp
+                          );
+                          return {
+                            ...d,
+                            cpuPrev: prev?.cpuPrev ?? 0,
+                            memoryPrev: prev?.memoryPrev ?? 0,
+                          };
+                        })
+                      : platformMetricsData
+                  }
                   series={[
                     { key: 'cpu', name: 'CPU %', color: 'var(--chart-1)' },
                     { key: 'memory', name: 'Memory %', color: 'var(--chart-2)' },
+                    ...(compareMode
+                      ? [
+                          {
+                            key: 'cpuPrev' as const,
+                            name: 'CPU % (prev)',
+                            color: 'var(--chart-1)',
+                          },
+                          {
+                            key: 'memoryPrev' as const,
+                            name: 'Memory % (prev)',
+                            color: 'var(--chart-2)',
+                          },
+                        ]
+                      : []),
                   ]}
                   height={240}
                   yTickFormatter={(v) => `${Math.round(v)}%`}
@@ -508,6 +737,40 @@ function AnalyticsDashboard() {
             </>
           )}
         </div>
+      </section>
+
+      {/* ── Activity Patterns (Calendar Heatmap) ── */}
+      <section>
+        <SectionHeader icon={GitCommit} title="Activity Patterns" delay={0.18} />
+        <motion.div
+          className="bubble p-5"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.22, ...springs.gentle }}
+        >
+          <div className="flex items-center gap-2 mb-4">
+            {(['signups', 'credits', 'servers', 'logins'] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setHeatmapTab(tab)}
+                className={cn(
+                  'px-3 py-1 rounded-lg text-sm font-medium transition-colors',
+                  heatmapTab === tab
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                )}
+              >
+                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              </button>
+            ))}
+          </div>
+          <CalendarHeatmap
+            data={heatmapData}
+            from={dateRange.from || getDefaultDateRange().from}
+            to={dateRange.to || getDefaultDateRange().to}
+            metric={heatmapTab}
+          />
+        </motion.div>
       </section>
 
       {/* ── Storage & Collaboration ── */}
@@ -671,7 +934,13 @@ function AnalyticsDashboard() {
                   New servers per day
                 </p>
               </div>
-              <Activity className="w-4 h-4 text-muted-foreground mt-1" />
+              <div className="flex items-center gap-2">
+                <ExportButton
+                  data={globalUsage?.server_creation_by_day || []}
+                  filename={`server-creation-${dateRange.from}-to-${dateRange.to}`}
+                />
+                <Activity className="w-4 h-4 text-muted-foreground mt-1" />
+              </div>
             </div>
             <MetricsAreaChart
               data={serverCreationData}
@@ -697,8 +966,8 @@ function AnalyticsDashboard() {
               </div>
               <TrendingUp className="w-4 h-4 text-muted-foreground mt-1" />
             </div>
-            <div className="space-y-2">
-              {topConsumers?.slice(0, 5).map((consumer, index) => (
+            <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
+              {topConsumers?.map((consumer, index) => (
                 <div
                   key={consumer.user_id}
                   className="flex items-center justify-between p-3 rounded-lg bg-surface/50 border border-border/50"

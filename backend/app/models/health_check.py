@@ -1,12 +1,15 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Integer, DateTime, Text, ForeignKey
+from sqlalchemy import Column, String, Integer, DateTime, Text, ForeignKey, Index
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.base import Base
 
 
 class HealthCheck(Base):
     __tablename__ = "health_checks"
+    __table_args__ = (
+        Index('ix_health_checks_checked_at', 'checked_at'),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     server_id = Column(UUID(as_uuid=True), ForeignKey("servers.id", ondelete="CASCADE"), nullable=False)

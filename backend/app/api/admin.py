@@ -1075,3 +1075,36 @@ async def admin_delete_volume(
         "success": success,
         "message": "Volume deleted successfully"
     }
+
+
+# ========== Retention Policy Management ==========
+
+from app.services.retention_service import RetentionService
+
+
+@router.get("/retention")
+async def get_retention_policy(
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _jwt = Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get current data retention policy."""
+    service = RetentionService(db)
+    policy = await service.get_policy()
+    return {"retention_policy": policy}
+
+
+@router.put("/retention")
+async def update_retention_policy(
+    request: dict,
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _jwt = Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update data retention policy."""
+    service = RetentionService(db)
+    try:
+        policy = await service.set_policy(request)
+        return {"retention_policy": policy, "success": True}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))

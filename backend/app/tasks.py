@@ -629,3 +629,206 @@ def evaluate_schedules(self):
         return _run_async(_evaluate())
     except Exception as e:
         return f"Error evaluating schedules: {e}"
+
+
+@celery_app.task(bind=True)
+def rollup_server_metrics(self):
+    """Aggregate raw ServerMetric rows into DailyServerMetric every night."""
+    async def _rollup():
+        from sqlalchemy import select, func, and_, insert, update
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        from app.models.server_metric import ServerMetric
+        from app.models.daily_server_metric import DailyServerMetric
+        from app.db.session import AsyncSessionLocal
+        from datetime import datetime, timedelta, date
+
+        async with AsyncSessionLocal() as db:
+            # Process the last 7 days (to catch up if missed)
+            end_date = date.today()
+            start_date = end_date - timedelta(days=7)
+
+            # Find all distinct (server_id, date) pairs in the raw metrics
+            day_trunc = func.date_trunc('day', ServerMetric.collected_at)
+            result = await db.execute(
+                select(
+                    ServerMetric.server_id,
+                    func.date(ServerMetric.collected_at).label('metric_date')
+                ).where(
+                    and_(
+                        func.date(ServerMetric.collected_at) >= start_date,
+                        func.date(ServerMetric.collected_at) <= end_date,
+                    )
+                ).distinct()
+            )
+            pairs = result.all()
+
+            upserted = 0
+            for server_id, metric_date in pairs:
+                # Compute aggregates for this server/day
+                agg_result = await db.execute(
+                    select(
+                        func.avg(ServerMetric.cpu_percent).label('avg_cpu'),
+                        func.max(ServerMetric.cpu_percent).label('peak_cpu'),
+                        func.avg(ServerMetric.memory_percent).label('avg_memory'),
+                        func.max(ServerMetric.memory_percent).label('peak_memory'),
+                        func.avg(ServerMetric.network_rx_bytes).label('avg_network_rx'),
+                        func.avg(ServerMetric.network_tx_bytes).label('avg_network_tx'),
+                        func.avg(ServerMetric.disk_read_bytes).label('avg_disk_read'),
+                        func.avg(ServerMetric.disk_write_bytes).label('avg_disk_write'),
+                        func.avg(ServerMetric.gpu_percent).label('avg_gpu'),
+                        func.max(ServerMetric.gpu_percent).label('peak_gpu'),
+                        func.count().label('data_points')
+                    ).where(
+                        and_(
+                            ServerMetric.server_id == server_id,
+                            func.date(ServerMetric.collected_at) == metric_date,
+                        )
+                    )
+                )
+                row = agg_result.one()
+
+                # Upsert into daily_server_metrics
+                stmt = pg_insert(DailyServerMetric).values(
+                    server_id=server_id,
+                    date=metric_date,
+                    avg_cpu=row.avg_cpu,
+                    peak_cpu=row.peak_cpu,
+                    avg_memory=row.avg_memory,
+                    peak_memory=row.peak_memory,
+                    avg_network_rx=row.avg_network_rx,
+                    avg_network_tx=row.avg_network_tx,
+                    avg_disk_read=row.avg_disk_read,
+                    avg_disk_write=row.avg_disk_write,
+                    avg_gpu=row.avg_gpu,
+                    peak_gpu=row.peak_gpu,
+                    data_points=row.data_points,
+                ).on_conflict_do_update(
+                    index_elements=['server_id', 'date'],
+                    set_={
+                        'avg_cpu': row.avg_cpu,
+                        'peak_cpu': row.peak_cpu,
+                        'avg_memory': row.avg_memory,
+                        'peak_memory': row.peak_memory,
+                        'avg_network_rx': row.avg_network_rx,
+                        'avg_network_tx': row.avg_network_tx,
+                        'avg_disk_read': row.avg_disk_read,
+                        'avg_disk_write': row.avg_disk_write,
+                        'avg_gpu': row.avg_gpu,
+                        'peak_gpu': row.peak_gpu,
+                        'data_points': row.data_points,
+                    }
+                )
+                await db.execute(stmt)
+                upserted += 1
+
+            await db.commit()
+            return f"Upserted {upserted} daily rollup rows for {start_date} to {end_date}"
+
+    try:
+        return _run_async(_rollup())
+    except Exception as e:
+        return f"Error rolling up server metrics: {e}"
+
+
+@celery_app.task(bind=True)
+def cleanup_expired_data(self):
+    """Delete expired raw data based on retention settings."""
+    async def _cleanup():
+        from sqlalchemy import delete, text
+        from app.models.server_metric import ServerMetric
+        from app.models.system_metric import SystemMetric
+        from app.models.health_check import HealthCheck
+        from app.models.alert_history import AlertHistory
+        from app.models.activity_log import ActivityLog
+        from app.models.notification import Notification
+        from app.models.daily_server_metric import DailyServerMetric
+        from app.models.system_setting import SystemSetting
+        from app.db.session import AsyncSessionLocal
+        from datetime import datetime, timedelta
+
+        async with AsyncSessionLocal() as db:
+            # Helper to read retention setting
+            async def get_retention_days(key: str, default: int) -> int:
+                result = await db.execute(
+                    select(SystemSetting.value).where(SystemSetting.key == key)
+                )
+                row = result.scalar_one_or_none()
+                if row:
+                    try:
+                        return int(row)
+                    except ValueError:
+                        pass
+                return default
+
+            cleanup_enabled = await get_retention_days("cleanup_enabled", 1)  # 1 = true
+            if not cleanup_enabled:
+                return "Cleanup disabled"
+
+            metrics_days = await get_retention_days("metrics_retention_days", 30)
+            system_metrics_days = await get_retention_days("system_metrics_retention_days", 90)
+            health_check_days = await get_retention_days("health_check_retention_days", 30)
+            alert_history_days = await get_retention_days("alert_history_retention_days", 90)
+            activity_log_days = await get_retention_days("activity_log_retention_days", 365)
+            notification_days = await get_retention_days("notification_retention_days", 30)
+            daily_rollup_days = await get_retention_days("daily_rollup_retention_days", 730)
+
+            now = datetime.utcnow()
+            deleted = {}
+
+            # Server metrics
+            cutoff = now - timedelta(days=metrics_days)
+            result = await db.execute(
+                delete(ServerMetric).where(ServerMetric.collected_at < cutoff)
+            )
+            deleted['server_metrics'] = result.rowcount
+
+            # System metrics
+            cutoff = now - timedelta(days=system_metrics_days)
+            result = await db.execute(
+                delete(SystemMetric).where(SystemMetric.collected_at < cutoff)
+            )
+            deleted['system_metrics'] = result.rowcount
+
+            # Health checks
+            cutoff = now - timedelta(days=health_check_days)
+            result = await db.execute(
+                delete(HealthCheck).where(HealthCheck.checked_at < cutoff)
+            )
+            deleted['health_checks'] = result.rowcount
+
+            # Alert history
+            cutoff = now - timedelta(days=alert_history_days)
+            result = await db.execute(
+                delete(AlertHistory).where(AlertHistory.created_at < cutoff)
+            )
+            deleted['alert_history'] = result.rowcount
+
+            # Activity logs
+            cutoff = now - timedelta(days=activity_log_days)
+            result = await db.execute(
+                delete(ActivityLog).where(ActivityLog.created_at < cutoff)
+            )
+            deleted['activity_logs'] = result.rowcount
+
+            # Notifications
+            cutoff = now - timedelta(days=notification_days)
+            result = await db.execute(
+                delete(Notification).where(Notification.created_at < cutoff)
+            )
+            deleted['notifications'] = result.rowcount
+
+            # Daily rollups
+            cutoff = now - timedelta(days=daily_rollup_days)
+            result = await db.execute(
+                delete(DailyServerMetric).where(DailyServerMetric.date < cutoff.date())
+            )
+            deleted['daily_rollups'] = result.rowcount
+
+            await db.commit()
+            total = sum(deleted.values())
+            return f"Cleanup complete. Deleted {total} rows: {deleted}"
+
+    try:
+        return _run_async(_cleanup())
+    except Exception as e:
+        return f"Error in cleanup: {e}"

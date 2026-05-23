@@ -56,6 +56,14 @@ celery_app.conf.update(
             'task': 'app.tasks.evaluate_schedules',
             'schedule': 60.0,  # Every 60 seconds
         },
+        'rollup-server-metrics': {
+            'task': 'app.tasks.rollup_server_metrics',
+            'schedule': 'crontab(hour=3, minute=0)',  # Daily at 3 AM
+        },
+        'cleanup-expired-data': {
+            'task': 'app.tasks.cleanup_expired_data',
+            'schedule': 'crontab(hour=4, minute=0)',  # Daily at 4 AM
+        },
     },
 )
 

@@ -2,8 +2,9 @@ import { useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Activity, Cpu, HardDrive, Network, Zap, ArrowDown, ArrowUp } from 'lucide-react';
 import { useDashboardMetrics } from '../../hooks/use-dashboard-metrics';
+import { useServers } from '../../hooks/use-servers';
 import { MetricsAreaChart, formatters } from './area-chart';
-import { MetricsBarChart } from './bar-chart';
+import { HorizontalBarChart } from './horizontal-bar-chart';
 import { SemiCircularGauge } from './semi-circular-gauge';
 import { cn, formatBytes } from '../../lib/utils';
 import { springs } from '../../lib/animations';
@@ -106,18 +107,28 @@ function ChartCard({ title, subtitle, icon: Icon, children, delay = 0 }: ChartCa
 
 export function MetricsDashboard() {
   const { metrics, currentMetrics, serverMetrics, isLoading, isLive } = useDashboardMetrics();
+  const { data: servers } = useServers();
 
   const serverBarData = useMemo(() => {
-    return Object.entries(serverMetrics).map(([id, metrics]) => ({
-      label: `Server ${id.slice(0, 8)}`,
-      value: metrics.cpu,
-      color: metrics.cpu > 80
-        ? 'var(--destructive)'
-        : metrics.cpu > 60
-          ? 'var(--chart-3)'
-          : 'var(--chart-2)',
-    }));
-  }, [serverMetrics]);
+    const serverMap = new Map(servers?.map((s) => [s.id, s]) ?? []);
+    return Object.entries(serverMetrics)
+      .map(([id, metrics]) => {
+        const server = serverMap.get(id);
+        const label = server?.username && server?.name
+          ? `${server.username}/${server.name}`
+          : `Server ${id.slice(0, 8)}`;
+        return {
+          label,
+          value: metrics.cpu,
+          color: metrics.cpu > 80
+            ? 'var(--destructive)'
+            : metrics.cpu > 60
+              ? 'var(--chart-3)'
+              : 'var(--chart-2)',
+        };
+      })
+      .sort((a, b) => b.value - a.value);
+  }, [serverMetrics, servers]);
 
   // Prepare chart data with proper timestamps
   const chartData = useMemo(() => {
@@ -293,13 +304,24 @@ export function MetricsDashboard() {
               <h3 className="text-sm font-semibold">Server CPU Comparison</h3>
               <Cpu className="w-4 h-4 text-muted-foreground" />
             </div>
-            <MetricsBarChart
-              data={serverBarData}
-              height={200}
-              showAxis
-              showGrid
-              horizontal
-            />
+            {serverBarData.every((d) => d.value === 0) ? (
+              <div className="flex flex-col items-center justify-center py-10 text-center">
+                <Cpu className="w-8 h-8 text-muted-foreground/30 mb-3" />
+                <p className="text-sm text-muted-foreground font-medium">No active server metrics</p>
+                <p className="text-xs text-muted-foreground/60 mt-1 max-w-xs">
+                  Servers are either powered off or not reporting metrics yet.
+                  Start a server to see real-time CPU usage here.
+                </p>
+              </div>
+            ) : (
+              <div className="py-2">
+                <HorizontalBarChart
+                  data={serverBarData}
+                  maxValue={100}
+                  valueFormatter={(v) => `${v.toFixed(1)}%`}
+                />
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

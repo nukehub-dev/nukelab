@@ -34,6 +34,8 @@ import {
 import { StatCard } from '../components/data/stat-card';
 import { EmptyState } from '../components/feedback/empty-state';
 import { Button } from '../components/ui/button';
+import { DateRangePicker, type DateRange } from '../components/ui/date-range-picker';
+import { exportToCSV } from '../lib/export';
 import { springs } from '../lib/animations';
 import { cn, formatBytes } from '../lib/utils';
 
@@ -41,10 +43,20 @@ export const Route = createFileRoute('/usage')({
   component: UsagePage,
 });
 
+function getDefaultDateRange(): DateRange {
+  const to = new Date().toISOString().split('T')[0];
+  const from = new Date();
+  from.setDate(from.getDate() - 29);
+  return { from: from.toISOString().split('T')[0], to };
+}
+
 function UsagePage() {
   const { data: user } = useCurrentUser();
-  const [days, setDays] = useState(30);
-  const { data: usage, isLoading } = useUserUsage(user?.id || '', days);
+  const [dateRange, setDateRange] = useState<DateRange>(getDefaultDateRange);
+  const { data: usage, isLoading } = useUserUsage(user?.id || '', {
+    from: dateRange.from,
+    to: dateRange.to,
+  });
 
   const hasData = usage && usage.daily_usage && usage.daily_usage.length > 0;
 
@@ -87,40 +99,19 @@ function UsagePage() {
 
   const handleExport = () => {
     if (!usage?.daily_usage) return;
-    const headers = [
-      'Date',
-      'Avg CPU %',
-      'Peak CPU %',
-      'Avg Memory %',
-      'Peak Memory %',
-      'Network RX',
-      'Network TX',
-      'Disk Read',
-      'Disk Write',
-      'Data Points',
-    ];
-    const rows = usage.daily_usage.map((d) => [
-      d.date,
-      d.avg_cpu.toFixed(2),
-      d.peak_cpu.toFixed(2),
-      d.avg_memory.toFixed(2),
-      d.peak_memory.toFixed(2),
-      formatBytes(d.avg_network_rx),
-      formatBytes(d.avg_network_tx),
-      formatBytes(d.avg_disk_read),
-      formatBytes(d.avg_disk_write),
-      d.data_points,
-    ]);
-    const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `usage-report-${days}d.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const data = usage.daily_usage.map((d) => ({
+      Date: d.date,
+      'Avg CPU %': d.avg_cpu.toFixed(2),
+      'Peak CPU %': d.peak_cpu.toFixed(2),
+      'Avg Memory %': d.avg_memory.toFixed(2),
+      'Peak Memory %': d.peak_memory.toFixed(2),
+      'Network RX': d.avg_network_rx,
+      'Network TX': d.avg_network_tx,
+      'Disk Read': d.avg_disk_read,
+      'Disk Write': d.avg_disk_write,
+      'Data Points': d.data_points,
+    }));
+    exportToCSV(data, `usage-report-${dateRange.from}-to-${dateRange.to}`);
   };
 
   if (!isLoading && !hasData) {
@@ -176,24 +167,11 @@ function UsagePage() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {[7, 30, 90].map((d) => (
-            <button
-              key={d}
-              onClick={() => setDays(d)}
-              className={cn(
-                'px-3 py-1.5 rounded-lg text-sm font-medium transition-colors',
-                days === d
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
-              )}
-            >
-              {d}d
-            </button>
-          ))}
+          <DateRangePicker value={dateRange} onChange={setDateRange} />
           <Button
             variant="outline"
             size="sm"
-            className="gap-2 ml-2"
+            className="gap-2"
             onClick={handleExport}
             disabled={!hasData}
           >
@@ -208,7 +186,7 @@ function UsagePage() {
         <StatCard
           title="Total Cost"
           value={`${usage?.total_cost || 0} NUKE`}
-          subtitle={`Last ${days} days`}
+          subtitle={`Period cost`}
           icon={CreditCard}
           iconColor="text-chart-1"
           bgColor="bg-chart-1/10"
@@ -249,7 +227,7 @@ function UsagePage() {
         <StatCard
           title="Active Days"
           value={usage?.active_days || 0}
-          subtitle={`of ${days} days`}
+          subtitle={`of ${usage?.period_days || 0} days`}
           icon={Calendar}
           iconColor="text-chart-4"
           bgColor="bg-chart-4/10"
@@ -606,4 +584,3 @@ function UsagePage() {
     </div>
   );
 }
-

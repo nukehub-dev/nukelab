@@ -1,11 +1,14 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Integer, DateTime, Text, ForeignKey, JSON
+from sqlalchemy import Column, String, Integer, DateTime, Text, ForeignKey, JSON, Index
 from sqlalchemy.dialects.postgresql import UUID, INET
 from app.db.base import Base
 
 class CreditTransaction(Base):
     __tablename__ = "credit_transactions"
+    __table_args__ = (
+        Index('ix_credit_transactions_created_at', 'created_at'),
+    )
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)

@@ -1,12 +1,16 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Float, Integer, BigInteger, DateTime, ForeignKey
+from sqlalchemy import Column, String, Float, Integer, BigInteger, DateTime, ForeignKey, Index
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.base import Base
 
 
 class ServerMetric(Base):
     __tablename__ = "server_metrics"
+    __table_args__ = (
+        Index('ix_server_metrics_collected_at', 'collected_at'),
+        Index('ix_server_metrics_server_id_collected_at', 'server_id', 'collected_at'),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     server_id = Column(UUID(as_uuid=True), ForeignKey("servers.id", ondelete="CASCADE"), nullable=False)

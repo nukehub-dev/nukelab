@@ -38,6 +38,9 @@ yarn-error.log*
 out/
 dist/
 
+# Tanstack Tmp
+.tanstack/
+
 # IDEs
 .idea/
 .vscode/

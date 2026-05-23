@@ -17,6 +17,7 @@ from slowapi.util import get_remote_address
 from app.config import settings
 from app.db.session import get_db
 from app.models.user import User
+from app.models.login_event import LoginEvent
 from app.models.api_token import ApiToken
 from app.models.refresh_token import RefreshToken
 from app.models.server import Server
@@ -323,6 +324,15 @@ async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends
     security = dict(user.security or {})
     security["last_login_at"] = datetime.utcnow().isoformat()
     user.security = security
+    
+    # Record login event
+    db.add(LoginEvent(
+        user_id=user.id,
+        timestamp=datetime.utcnow(),
+        method="password",
+        ip_address=get_remote_address(request),
+        user_agent=request.headers.get("user-agent"),
+    ))
     
     await db.commit()
     
@@ -813,6 +823,15 @@ async def oauth_callback(
         security["last_login_at"] = datetime.utcnow().isoformat()
         security["oauth_login"] = True
         user.security = security
+        
+        # Record login event
+        db.add(LoginEvent(
+            user_id=user.id,
+            timestamp=datetime.utcnow(),
+            method="oauth",
+            ip_address=get_remote_address(request),
+            user_agent=request.headers.get("user-agent"),
+        ))
         
         await db.commit()
         await db.refresh(user)

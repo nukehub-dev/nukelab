@@ -14,6 +14,8 @@ import {
   ExternalLink,
   Bug,
   Wrench,
+  Database,
+  Save,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { PageHeader } from '../components/layout/page-header';
@@ -30,6 +32,11 @@ import {
   useSystemConfig,
   useUpdateSystemConfig,
 } from '../hooks/use-system-config';
+import {
+  useRetentionPolicy,
+  useUpdateRetentionPolicy,
+  type RetentionPolicy,
+} from '../hooks/use-retention';
 import { cn } from '../lib/utils';
 import { springs } from '../lib/animations';
 import { usePageGuard } from '../hooks/use-page-guard';
@@ -120,6 +127,61 @@ function AdminSettingsPage() {
       },
     });
   };
+
+  // Retention policy state
+  const {
+    data: retentionPolicy,
+    isLoading: retentionLoading,
+    refetch: refetchRetention,
+  } = useRetentionPolicy();
+  const updateRetention = useUpdateRetentionPolicy();
+
+  const [retentionEdits, setRetentionEdits] = useState<Partial<RetentionPolicy>>({});
+
+  const handleRetentionChange = (key: keyof RetentionPolicy, value: number | boolean) => {
+    setRetentionEdits((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleSaveRetention = () => {
+    if (Object.keys(retentionEdits).length === 0) return;
+    updateRetention.mutate(retentionEdits, {
+      onSuccess: () => {
+        success('Retention policy updated', 'Data lifecycle settings saved.');
+        setRetentionEdits({});
+      },
+      onError: (err: any) => {
+        error('Failed to update retention policy', err?.response?.data?.detail || err.message);
+      },
+    });
+  };
+
+  const retentionGroups = [
+    {
+      title: 'Real-Time Metrics',
+      description: 'High-resolution data collected every few minutes. Large volume, short retention.',
+      fields: [
+        { key: 'metrics_retention_days' as const, label: 'Server Metrics', desc: 'Per-server CPU, memory, network, disk stats', min: 7, max: 365 },
+        { key: 'system_metrics_retention_days' as const, label: 'System Metrics', desc: 'Platform-wide resource usage', min: 7, max: 730 },
+        { key: 'health_check_retention_days' as const, label: 'Health Checks', desc: 'Service health probe results', min: 7, max: 365 },
+      ],
+    },
+    {
+      title: 'Event History',
+      description: 'User actions, system events, and alerts. Medium volume.',
+      fields: [
+        { key: 'alert_history_retention_days' as const, label: 'Alert History', desc: 'Triggered alerts and their status', min: 7, max: 730 },
+        { key: 'activity_log_retention_days' as const, label: 'Activity Logs', desc: 'User actions (create, delete, update)', min: 30, max: 1825 },
+        { key: 'notification_retention_days' as const, label: 'Notifications', desc: 'In-app and email notifications sent', min: 7, max: 365 },
+      ],
+    },
+    {
+      title: 'Aggregated Analytics',
+      description: 'Daily summaries used for long-term trend analysis. Small volume, keep longer.',
+      fields: [
+        { key: 'daily_rollup_retention_days' as const, label: 'Daily Rollups', desc: 'Pre-aggregated daily stats for fast queries', min: 30, max: 1825 },
+      ],
+    },
+  ];
 
   const isLoading = configLoading || statusLoading;
   const hasError = configError || statusError;
@@ -443,6 +505,192 @@ function AdminSettingsPage() {
               </div>
             )}
           </>
+        )}
+      </motion.div>
+
+      {/* Data Lifecycle Card */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ ...springs.gentle, delay: 0.1 }}
+        className="bubble space-y-5 p-6"
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+              <Database className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-base">Data Lifecycle</h3>
+              <p className="text-xs text-muted-foreground">
+                Configure how long analytics and system data is retained
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {!retentionLoading && retentionPolicy && (
+              <div
+                className={cn(
+                  'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border',
+                  retentionPolicy.cleanup_enabled
+                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                    : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                )}
+              >
+                {retentionPolicy.cleanup_enabled ? (
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                ) : (
+                  <AlertCircle className="w-3.5 h-3.5" />
+                )}
+                Cleanup {retentionPolicy.cleanup_enabled ? 'Enabled' : 'Disabled'}
+              </div>
+            )}
+            <Tooltip content="Refresh policy">
+              <button
+                onClick={() => refetchRetention()}
+                className="p-1.5 rounded-lg hover:bg-accent transition-colors"
+              >
+                <RefreshCw className={cn('w-4 h-4 text-muted-foreground', retentionLoading && 'animate-spin')} />
+              </button>
+            </Tooltip>
+          </div>
+        </div>
+
+        {retentionLoading ? (
+          <div className="space-y-4">
+            <div className="h-20 bg-muted/50 rounded-xl animate-pulse" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {Array.from({ length: 7 }).map((_, i) => (
+                <div key={i} className="h-16 bg-muted/50 rounded-xl animate-pulse" />
+              ))}
+            </div>
+          </div>
+        ) : !retentionPolicy ? (
+          <div className="text-center py-8 text-muted-foreground">
+            <p className="text-sm">Failed to load retention policy</p>
+          </div>
+        ) : (
+          <div className="space-y-5">
+            {/* How it works explainer */}
+            <div className="p-4 rounded-xl bg-muted/20 border border-border/30 space-y-2">
+              <p className="text-sm font-medium">How data flows through the system</p>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span className="px-2 py-1 rounded-md bg-background border border-border/40">Raw metrics collected every 1–5 min</span>
+                <span className="text-muted-foreground/50">→</span>
+                <span className="px-2 py-1 rounded-md bg-background border border-border/40">Daily rollups generated at 3 AM</span>
+                <span className="text-muted-foreground/50">→</span>
+                <span className="px-2 py-1 rounded-md bg-background border border-border/40">Expired data deleted at cleanup hour</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Analytics dashboards use <strong>raw metrics</strong> for the last 7 days and <strong>daily rollups</strong> for older periods.
+                Reducing retention deletes data permanently — the analytics heatmap and charts will show gaps.
+              </p>
+            </div>
+
+            {/* Retention days — grouped */}
+            <div className="space-y-5">
+              {retentionGroups.map((group) => (
+                <div key={group.title} className="space-y-2">
+                  <div>
+                    <p className="text-sm font-medium">{group.title}</p>
+                    <p className="text-xs text-muted-foreground">{group.description}</p>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {group.fields.map((field) => {
+                      const currentValue = retentionEdits[field.key] ?? retentionPolicy[field.key];
+                      return (
+                        <div
+                          key={field.key}
+                          className="flex items-center justify-between p-3 rounded-xl bg-muted/30 border border-border/30"
+                        >
+                          <div className="min-w-0 pr-3">
+                            <p className="text-sm font-medium">{field.label}</p>
+                            <p className="text-[11px] text-muted-foreground">{field.desc}</p>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <input
+                              type="number"
+                              min={field.min}
+                              max={field.max}
+                              value={currentValue}
+                              onChange={(e) => handleRetentionChange(field.key, parseInt(e.target.value, 10) || field.min)}
+                              className="w-16 h-8 px-1 text-sm font-medium text-right bg-background border border-border/50 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
+                            />
+                            <span className="text-xs text-muted-foreground">d</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Cleanup toggle + hour */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 pt-2 border-t border-border/30">
+              <div className="flex items-center justify-between flex-1 w-full">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Auto Cleanup</p>
+                  <p className="text-xs text-muted-foreground">
+                    Automatically purge expired data daily
+                  </p>
+                </div>
+                <Switch
+                  checked={(retentionEdits.cleanup_enabled ?? retentionPolicy.cleanup_enabled) as boolean}
+                  onCheckedChange={(v) => handleRetentionChange('cleanup_enabled', v)}
+                  disabled={updateRetention.isPending}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Run at</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={23}
+                  value={retentionEdits.cleanup_run_hour ?? retentionPolicy.cleanup_run_hour}
+                  onChange={(e) => handleRetentionChange('cleanup_run_hour', parseInt(e.target.value, 10) || 0)}
+                  className="w-16 h-8 px-2 text-sm font-medium text-center bg-background border border-border/50 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+                <span className="text-sm text-muted-foreground">:00 UTC</span>
+              </div>
+            </div>
+
+            {/* Save button */}
+            <div className="flex items-center justify-end gap-3">
+              {Object.keys(retentionEdits).length > 0 && (
+                <button
+                  onClick={() => setRetentionEdits({})}
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Reset
+                </button>
+              )}
+              <Button
+                onClick={handleSaveRetention}
+                disabled={updateRetention.isPending || Object.keys(retentionEdits).length === 0}
+                className="h-9"
+              >
+                {updateRetention.isPending ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4" />
+                )}
+                <span className="ml-2">Save Changes</span>
+              </Button>
+            </div>
+
+            {/* Impact warning */}
+            <div className="flex items-start gap-2.5 text-xs bg-amber-100 dark:bg-amber-500/10 border border-amber-300 dark:border-amber-500/20 text-amber-800 dark:text-amber-400 p-3 rounded-xl">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="font-semibold">Reducing retention permanently deletes data</p>
+                <p className="text-amber-700 dark:text-amber-400/90">
+                  If you change Server Metrics from 30 → 7 days, all metrics older than 7 days are gone forever.
+                  The analytics page will show empty charts for that period. Daily rollups are not affected.
+                </p>
+              </div>
+            </div>
+          </div>
         )}
       </motion.div>
       </div>
