@@ -16,7 +16,7 @@ import {
   useEnvironmentUsage,
   usePlanUsage,
 } from '../hooks/use-analytics';
-import { MetricsAreaChart } from '../components/charts/area-chart';
+import { MetricsAreaChart, formatters } from '../components/charts/area-chart';
 import { springs } from '../lib/animations';
 import { cn } from '../lib/utils';
 import { usePageGuard } from '../hooks/use-page-guard';
@@ -176,6 +176,7 @@ function AnalyticsDashboard() {
             series={[{ key: 'count', name: 'Servers', color: 'var(--chart-1)' }]}
             height={240}
             yTickFormatter={(v) => String(Math.round(v))}
+            xTickFormatter={formatters.date}
           />
         </motion.div>
 

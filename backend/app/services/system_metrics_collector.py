@@ -1,3 +1,4 @@
+import asyncio
 import json
 import psutil
 from datetime import datetime
@@ -18,8 +19,7 @@ class SystemMetricsCollector:
         # CPU - call twice: first to initialize, second to get actual value
         # psutil.cpu_percent returns 0.0 on first call in a new process
         psutil.cpu_percent(interval=None)
-        import time
-        time.sleep(0.5)  # Short delay for measurement
+        await asyncio.sleep(0.5)  # Short delay for measurement
         cpu_percent = psutil.cpu_percent(interval=None)
         cpu_count = psutil.cpu_count()
         try:

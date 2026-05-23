@@ -14,6 +14,7 @@ export interface DailyUsage {
   avg_gpu: number;
   peak_gpu: number;
   data_points: number;
+  daily_cost: number;
 }
 
 export interface ServerBreakdown {

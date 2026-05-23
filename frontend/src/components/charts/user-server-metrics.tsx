@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Cpu, HardDrive, Network, Server, Activity } from 'lucide-react';
-import { useWebSocket } from '../../hooks/use-websocket';
+import { useSharedWebSocket } from '../../hooks/use-shared-websocket';
 import { GaugeChart } from './gauge-chart';
 import { formatBytes } from '../../lib/utils';
 import { springs } from '../../lib/animations';
@@ -137,7 +137,7 @@ export function UserServerMetrics({ servers }: UserServerMetricsProps) {
     [servers]
   );
 
-  const { isConnected, subscribe, unsubscribe, onMessage } = useWebSocket({ autoConnect: true });
+  const { isConnected, subscribe, unsubscribe, onMessage } = useSharedWebSocket();
   const subscribedRef = useRef<Set<string>>(new Set());
 
   const [serverMetrics, setServerMetrics] = useState<Record<string, ServerMetricData>>({});

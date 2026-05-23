@@ -60,6 +60,26 @@ class AnalyticsService:
         
         daily_data = result.all()
         
+        # Get daily cost
+        day_trunc_tx = func.date_trunc('day', CreditTransaction.created_at)
+        result = await self.db.execute(
+            select(
+                day_trunc_tx.label('day'),
+                func.sum(CreditTransaction.amount).label('daily_cost')
+            ).where(
+                and_(
+                    CreditTransaction.user_id == user_id,
+                    CreditTransaction.type == "server_usage",
+                    CreditTransaction.created_at >= since
+                )
+            ).group_by(
+                day_trunc_tx
+            ).order_by(
+                day_trunc_tx
+            )
+        )
+        daily_costs = {day.isoformat() if day else None: abs(int(cost or 0)) for day, cost in result.all()}
+        
         # Get total cost
         result = await self.db.execute(
             select(func.sum(CreditTransaction.amount)).where(
@@ -151,6 +171,7 @@ class AnalyticsService:
                     "avg_gpu": float(avg_gpu or 0) if avg_gpu else 0,
                     "peak_gpu": float(peak_gpu or 0) if peak_gpu else 0,
                     "data_points": data_points,
+                    "daily_cost": daily_costs.get(day.isoformat() if day else None, 0),
                 }
                 for day, avg_cpu, peak_cpu, avg_memory, peak_memory, avg_network_rx, avg_network_tx, avg_disk_read, avg_disk_write, avg_gpu, peak_gpu, data_points in daily_data
             ],

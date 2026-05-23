@@ -1,23 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Activity, Cpu, HardDrive, Network, Zap, ArrowDown, ArrowUp } from 'lucide-react';
-import { useWebSocket } from '../../hooks/use-websocket';
 import { useDashboardMetrics } from '../../hooks/use-dashboard-metrics';
 import { MetricsAreaChart, formatters } from './area-chart';
 import { MetricsBarChart } from './bar-chart';
 import { SemiCircularGauge } from './semi-circular-gauge';
 import { cn, formatBytes } from '../../lib/utils';
 import { springs } from '../../lib/animations';
-
-interface ServerMetrics {
-  cpu_usage: number;
-  memory_usage: number;
-  memory_total: number;
-  disk_usage: number;
-  disk_total: number;
-  network_rx: number;
-  network_tx: number;
-}
 
 interface MetricCardProps {
   title: string;
@@ -116,53 +105,15 @@ function ChartCard({ title, subtitle, icon: Icon, children, delay = 0 }: ChartCa
 }
 
 export function MetricsDashboard() {
-  const { metrics, currentMetrics, isLoading, isLive } = useDashboardMetrics();
-  const { onMessage } = useWebSocket({ autoConnect: true });
-  const [serverMetrics, setServerMetrics] = useState<Record<string, ServerMetrics>>({});
-  
-  // Handle server-specific metrics for the bar chart
-  useMemo(() => {
-    const unsubscribe = onMessage((message) => {
-      if (message.event === 'metrics:server' || message.event === 'metrics:all') {
-        const raw = message.data as Partial<ServerMetrics & {
-          server_id: string;
-          cpu_percent?: number;
-          memory_percent?: number;
-          memory_used?: number;
-          disk_read_bytes?: number;
-          disk_write_bytes?: number;
-          network_rx_bytes?: number;
-          network_tx_bytes?: number;
-        }>;
-        if (!raw.server_id) return;
-
-        const data: ServerMetrics = {
-          cpu_usage: Number(raw.cpu_usage ?? raw.cpu_percent) || 0,
-          memory_usage: Number(raw.memory_usage ?? raw.memory_percent ?? raw.memory_used) || 0,
-          memory_total: Number(raw.memory_total) || 0,
-          disk_usage: Number(raw.disk_usage ?? raw.disk_read_bytes) || 0,
-          disk_total: Number(raw.disk_total) || 0,
-          network_rx: Number(raw.network_rx ?? raw.network_rx_bytes) || 0,
-          network_tx: Number(raw.network_tx ?? raw.network_tx_bytes) || 0,
-        };
-
-        setServerMetrics((prev) => ({
-          ...prev,
-          [raw.server_id!]: data,
-        }));
-      }
-    });
-
-    return unsubscribe;
-  }, [onMessage]);
+  const { metrics, currentMetrics, serverMetrics, isLoading, isLive } = useDashboardMetrics();
 
   const serverBarData = useMemo(() => {
     return Object.entries(serverMetrics).map(([id, metrics]) => ({
       label: `Server ${id.slice(0, 8)}`,
-      value: metrics.cpu_usage,
-      color: metrics.cpu_usage > 80
+      value: metrics.cpu,
+      color: metrics.cpu > 80
         ? 'var(--destructive)'
-        : metrics.cpu_usage > 60
+        : metrics.cpu > 60
           ? 'var(--chart-3)'
           : 'var(--chart-2)',
     }));

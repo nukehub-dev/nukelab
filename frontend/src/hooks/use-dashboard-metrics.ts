@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import { useWebSocket } from './use-websocket';
+import { useSharedWebSocket } from './use-shared-websocket';
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
 
 export interface DashboardMetricPoint {
@@ -131,10 +131,11 @@ export function useDashboardMetrics() {
     networkRx: 0,
     networkTx: 0,
   });
+  const [serverMetrics, setServerMetrics] = useState<Record<string, { cpu: number; memoryPercent: number; memoryUsed: number; memoryTotal: number; diskRead: number; diskWrite: number; networkRx: number; networkTx: number }>>({});
   const hasInitializedRef = useRef(false);
   const canViewSystemMetrics = useAuthStore((state) => state.hasPermission(PERMISSIONS.ADMIN_ACCESS));
 
-  const { isConnected, subscribe, onMessage } = useWebSocket({ autoConnect: true });
+  const { isConnected, subscribe, unsubscribe, onMessage } = useSharedWebSocket();
 
   // 1. Fetch historical system metrics from REST API (admin only)
   const { data: historyData, isLoading: isHistoryLoading } = useQuery({
@@ -178,13 +179,16 @@ export function useDashboardMetrics() {
   useEffect(() => {
     if (isConnected && canViewSystemMetrics) {
       subscribe('global');
+      return () => {
+        unsubscribe('global');
+      };
     }
-  }, [isConnected, subscribe, canViewSystemMetrics]);
+  }, [isConnected, subscribe, unsubscribe, canViewSystemMetrics]);
 
   // 4. Handle incoming WebSocket messages (admin only for system metrics)
   useEffect(() => {
     if (!canViewSystemMetrics) return;
-    
+
     const unsubscribeHandler = onMessage((message) => {
       if (message.event === 'metrics:system') {
         const data = message.data as {
@@ -225,6 +229,36 @@ export function useDashboardMetrics() {
           return next.slice(-MAX_POINTS);
         });
       }
+
+      if (message.event === 'metrics:all' || message.event === 'metrics:server') {
+        const raw = message.data as {
+          server_id?: string;
+          cpu_percent?: number;
+          memory_percent?: number;
+          memory_used?: number;
+          memory_total?: number;
+          disk_read_bytes?: number;
+          disk_write_bytes?: number;
+          network_rx_bytes?: number;
+          network_tx_bytes?: number;
+        };
+
+        if (!raw.server_id) return;
+
+        setServerMetrics((prev) => ({
+          ...prev,
+          [raw.server_id!]: {
+            cpu: Number(raw.cpu_percent) || 0,
+            memoryPercent: Number(raw.memory_percent) || 0,
+            memoryUsed: Number(raw.memory_used) || 0,
+            memoryTotal: Number(raw.memory_total) || 0,
+            diskRead: Number(raw.disk_read_bytes) || 0,
+            diskWrite: Number(raw.disk_write_bytes) || 0,
+            networkRx: Number(raw.network_rx_bytes) || 0,
+            networkTx: Number(raw.network_tx_bytes) || 0,
+          },
+        }));
+      }
     });
 
     return unsubscribeHandler;
@@ -233,6 +267,7 @@ export function useDashboardMetrics() {
   return {
     metrics,
     currentMetrics,
+    serverMetrics,
     isLoading: isHistoryLoading && metrics.length === 0,
     isLive: isConnected,
   };

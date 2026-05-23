@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import { useWebSocket } from './use-websocket';
+import { useSharedWebSocket } from './use-shared-websocket';
 
 export interface ServerMetricPoint {
   timestamp: string;
@@ -87,7 +87,7 @@ export function useServerMetrics(serverId: string | undefined) {
   });
   const hasInitializedRef = useRef(false);
 
-  const { isConnected, subscribe, unsubscribe, onMessage } = useWebSocket({ autoConnect: true });
+  const { isConnected, subscribe, unsubscribe, onMessage } = useSharedWebSocket();
 
   // 1. Fetch historical data from REST API on mount
   const { data: historyData, isLoading: isHistoryLoading } = useQuery({

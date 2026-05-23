@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from '@tanstack/react-router';
+import { createFileRoute } from '@tanstack/react-router';
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
@@ -17,12 +17,9 @@ import {
   Database,
   BarChart3,
   LineChart,
-  BarChart3 as BarChartIcon,
-  Users,
 } from 'lucide-react';
-import { useUserUsage, useGlobalUsage } from '../hooks/use-analytics';
+import { useUserUsage } from '../hooks/use-analytics';
 import { useCurrentUser } from '../hooks/use-current-user';
-import { useAuthStore } from '../stores/auth-store';
 import { MetricsAreaChart, formatters } from '../components/charts/area-chart';
 import {
   BarChart,
@@ -46,12 +43,8 @@ export const Route = createFileRoute('/usage')({
 
 function UsagePage() {
   const { data: user } = useCurrentUser();
-  const hasPermission = useAuthStore((state) => state.hasPermission);
-  const canViewAnalytics = hasPermission('analytics:read');
   const [days, setDays] = useState(30);
-  const [viewMode, setViewMode] = useState<'personal' | 'platform'>('personal');
   const { data: usage, isLoading } = useUserUsage(user?.id || '', days);
-  const { data: globalUsage, isLoading: globalLoading } = useGlobalUsage(days);
 
   const hasData = usage && usage.daily_usage && usage.daily_usage.length > 0;
 
@@ -89,8 +82,7 @@ function UsagePage() {
   const memorySparkline = useMemo(() => usage?.daily_usage?.map((d) => d.avg_memory) || [], [usage]);
   const costSparkline = useMemo(() => {
     if (!usage?.daily_usage) return [];
-    // Calculate daily cost from server breakdown or use avg as fallback
-    return usage.daily_usage.map((d) => d.avg_cpu + d.avg_memory); // Proxy for daily activity level
+    return usage.daily_usage.map((d) => d.daily_cost);
   }, [usage]);
 
   const handleExport = () => {
@@ -184,32 +176,6 @@ function UsagePage() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {canViewAnalytics && (
-            <div className="flex items-center bg-input/80 border border-input/50 rounded-lg p-0.5 mr-2">
-              <button
-                onClick={() => setViewMode('personal')}
-                className={cn(
-                  'px-3 py-1 rounded-md text-sm font-medium transition-colors',
-                  viewMode === 'personal'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                My Usage
-              </button>
-              <button
-                onClick={() => setViewMode('platform')}
-                className={cn(
-                  'px-3 py-1 rounded-md text-sm font-medium transition-colors',
-                  viewMode === 'platform'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                Platform
-              </button>
-            </div>
-          )}
           {[7, 30, 90].map((d) => (
             <button
               key={d}
@@ -224,34 +190,19 @@ function UsagePage() {
               {d}d
             </button>
           ))}
-          {viewMode === 'personal' && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-2 ml-2"
-              onClick={handleExport}
-              disabled={!hasData}
-            >
-              <Download className="w-4 h-4" />
-              Export
-            </Button>
-          )}
-          {viewMode === 'platform' && (
-            <Link
-              to="/admin/analytics"
-              className="inline-flex items-center justify-center rounded-lg text-sm font-medium border border-input bg-background hover:bg-accent hover:text-accent-foreground h-8 px-3 gap-2 ml-2"
-            >
-              <BarChartIcon className="w-4 h-4" />
-              Full Analytics
-            </Link>
-          )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2 ml-2"
+            onClick={handleExport}
+            disabled={!hasData}
+          >
+            <Download className="w-4 h-4" />
+            Export
+          </Button>
         </div>
       </motion.div>
 
-      {viewMode === 'platform' ? (
-        <PlatformUsageView days={days} globalUsage={globalUsage} isLoading={globalLoading} />
-      ) : (
-        <>
       {/* KPI Cards Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
@@ -652,111 +603,7 @@ function UsagePage() {
           </div>
         </motion.div>
       </div>
-        </>
-      )}
     </div>
   );
 }
 
-// Platform Usage View Component
-function PlatformUsageView({
-  days,
-  globalUsage,
-  isLoading,
-}: {
-  days: number;
-  globalUsage: any;
-  isLoading: boolean;
-}) {
-  if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-24 bg-muted/50 rounded-xl animate-pulse" />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  const serverCreations = globalUsage?.server_creation_by_day || [];
-  const totalCredits = globalUsage?.total_credits_consumed || 0;
-  const activeUsers = globalUsage?.active_users || 0;
-
-  return (
-    <div className="space-y-8">
-      {/* Platform Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="Active Users"
-          value={activeUsers}
-          subtitle={`Last ${days} days`}
-          icon={Users}
-          iconColor="text-chart-1"
-          bgColor="bg-chart-1/10"
-          variant="compact"
-        />
-        <StatCard
-          title="Credits Consumed"
-          value={totalCredits}
-          subtitle={`Last ${days} days`}
-          icon={CreditCard}
-          iconColor="text-chart-2"
-          bgColor="bg-chart-2/10"
-          variant="compact"
-        />
-        <StatCard
-          title="Servers Created"
-          value={serverCreations.reduce((sum: number, d: any) => sum + d.count, 0)}
-          subtitle={`Last ${days} days`}
-          icon={Server}
-          iconColor="text-chart-3"
-          bgColor="bg-chart-3/10"
-          variant="compact"
-        />
-        <StatCard
-          title="Daily Avg"
-          value={serverCreations.length > 0 ? (serverCreations.reduce((sum: number, d: any) => sum + d.count, 0) / serverCreations.length).toFixed(1) : '0'}
-          subtitle="servers/day"
-          icon={BarChartIcon}
-          iconColor="text-chart-4"
-          bgColor="bg-chart-4/10"
-          variant="compact"
-        />
-      </div>
-
-      {/* Server Creation Timeline */}
-      {serverCreations.length > 0 && (
-        <motion.div
-          className="bubble p-5 overflow-hidden"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1, ...springs.gentle }}
-        >
-          <div className="mb-4">
-            <h3 className="text-base font-semibold flex items-center gap-2">
-              <Server className="w-4 h-4 text-primary" />
-              Server Creations
-            </h3>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              Daily server creation activity
-            </p>
-          </div>
-          <div className="h-[300px] w-full">
-            <MetricsAreaChart
-              data={serverCreations.map((d: any) => ({
-                timestamp: d.date,
-                count: d.count,
-              }))}
-              series={[{ key: 'count', name: 'Servers Created', color: 'var(--chart-1)' }]}
-              height={300}
-              yTickFormatter={(v) => String(Math.round(v))}
-              xTickFormatter={formatters.date}
-            />
-          </div>
-        </motion.div>
-      )}
-    </div>
-  );
-}

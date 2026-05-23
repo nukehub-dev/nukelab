@@ -1,9 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useWebSocket } from '../../hooks/use-websocket';
+import { useSharedWebSocket } from '../../hooks/use-shared-websocket';
 import { useAuthStore } from '../../stores/auth-store';
 import { useToast } from '../../stores/toast-store';
-import { isAuthenticated } from '../../hooks/use-auth';
 import type { Notification } from '../../hooks/use-notifications';
 import type { Server } from '../../types/api';
 
@@ -38,11 +37,7 @@ export function useNotificationToasts() {
   const lastToastTimeRef = useRef<string>(getLastToastTime());
   const { info, success, warning, error } = useToast();
 
-  // Only connect when both user object and JWT token are present
-  const canConnect = !!(user && isAuthenticated());
-  const { isConnected, subscribe, unsubscribe, onMessage } = useWebSocket({
-    autoConnect: canConnect,
-  });
+  const { isConnected, subscribe, unsubscribe, onMessage } = useSharedWebSocket();
 
   // Subscribe to user-specific room when connected
   useEffect(() => {

@@ -61,7 +61,8 @@ async def get_top_consumers(
     checker.require(Permission.ADMIN_ACCESS)
     
     service = AnalyticsService(db)
-    return await service.get_top_consumers(days, limit)
+    consumers = await service.get_top_consumers(days, limit)
+    return {"consumers": consumers}
 
 
 @router.get("/environments")
@@ -75,7 +76,8 @@ async def get_environment_usage(
     checker.require(Permission.ADMIN_ACCESS)
     
     service = AnalyticsService(db)
-    return await service.get_environment_usage()
+    environments = await service.get_environment_usage()
+    return {"environments": environments}
 
 
 @router.get("/plans")
@@ -89,4 +91,5 @@ async def get_plan_usage(
     checker.require(Permission.ADMIN_ACCESS)
     
     service = AnalyticsService(db)
-    return await service.get_plan_usage()
+    plans = await service.get_plan_usage()
+    return {"plans": plans}
