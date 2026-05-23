@@ -10,6 +10,8 @@ from app.models.server import Server
 from app.models.server_metric import ServerMetric
 from app.models.credit_transaction import CreditTransaction
 from app.models.server_plan import ServerPlan
+from app.models.volume import Volume
+from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
 from app.services.analytics_service import AnalyticsService
 
 
@@ -204,11 +206,11 @@ class TestAnalyticsService:
         
         assert result["total_cost"] == 150
         assert result["prev_cost"] == 100
-        assert result["cost_trend"] == 50.0  # (150-100)/100 * 100
+        assert result["cost_trend"] == 50.0
 
     @pytest.mark.asyncio
     async def test_get_global_usage(self, db_session, test_user):
-        """get_global_usage should return platform-wide stats."""
+        """get_global_usage should return platform-wide stats with new fields."""
         server = Server(
             id=uuid_mod.uuid4(),
             name="global-test-server",
@@ -216,6 +218,7 @@ class TestAnalyticsService:
             status="running",
             container_id="test-container",
             created_at=datetime.utcnow() - timedelta(days=1),
+            started_at=datetime.utcnow() - timedelta(days=1),
         )
         db_session.add(server)
         await db_session.commit()
@@ -226,6 +229,17 @@ class TestAnalyticsService:
         assert result["period_days"] == 7
         assert result["active_users"] >= 1
         assert len(result["server_creation_by_day"]) >= 1
+        # New fields
+        assert "total_users" in result
+        assert "new_users" in result
+        assert "total_servers" in result
+        assert "running_servers" in result
+        assert "server_status_breakdown" in result
+        assert "avg_platform_cpu" in result
+        assert "avg_platform_memory" in result
+        assert "total_runtime_hours" in result
+        assert result["total_servers"] >= 1
+        assert result["running_servers"] >= 1
 
     @pytest.mark.asyncio
     async def test_get_top_consumers(self, db_session, test_user):
@@ -259,6 +273,154 @@ class TestAnalyticsService:
         assert result[0]["user_id"] == str(test_user.id)
         assert result[0]["username"] == test_user.username
         assert result[0]["credits_consumed"] == 200
+
+    @pytest.mark.asyncio
+    async def test_get_credit_flow(self, db_session, test_user):
+        """get_credit_flow should return daily consumed vs granted."""
+        # Consumed transaction
+        tx1 = CreditTransaction(
+            id=uuid_mod.uuid4(),
+            user_id=test_user.id,
+            amount=-100,
+            balance_after=900,
+            type="server_usage",
+            created_at=datetime.utcnow() - timedelta(days=1),
+        )
+        db_session.add(tx1)
+        
+        # Granted transaction
+        tx2 = CreditTransaction(
+            id=uuid_mod.uuid4(),
+            user_id=test_user.id,
+            amount=50,
+            balance_after=950,
+            type="grant",
+            created_at=datetime.utcnow() - timedelta(days=1),
+        )
+        db_session.add(tx2)
+        await db_session.commit()
+        
+        service = AnalyticsService(db_session)
+        result = await service.get_credit_flow(days=7)
+        
+        assert len(result) >= 1
+        day_data = result[-1]
+        assert "date" in day_data
+        assert "credits_consumed" in day_data
+        assert "credits_granted" in day_data
+        assert day_data["credits_consumed"] == 100
+        assert day_data["credits_granted"] == 50
+
+    @pytest.mark.asyncio
+    async def test_get_user_growth(self, db_session, test_user):
+        """get_user_growth should return daily new signups."""
+        service = AnalyticsService(db_session)
+        result = await service.get_user_growth(days=7)
+        
+        # test_user was created recently so should appear
+        assert len(result) >= 1
+        day_data = result[-1]
+        assert "date" in day_data
+        assert "count" in day_data
+        assert day_data["count"] >= 1
+
+    @pytest.mark.asyncio
+    async def test_get_platform_metrics(self, db_session, test_user):
+        """get_platform_metrics should return daily aggregated resource usage."""
+        server = Server(
+            id=uuid_mod.uuid4(),
+            name="metrics-server",
+            user_id=test_user.id,
+            status="running",
+            container_id="metrics-container",
+            created_at=datetime.utcnow() - timedelta(days=1),
+        )
+        db_session.add(server)
+        await db_session.flush()
+        
+        metric = ServerMetric(
+            id=uuid_mod.uuid4(),
+            server_id=server.id,
+            container_id=server.container_id,
+            cpu_percent=45.5,
+            memory_percent=60.0,
+            network_rx_bytes=1000000,
+            network_tx_bytes=500000,
+            disk_read_bytes=100000,
+            disk_write_bytes=50000,
+            collected_at=datetime.utcnow() - timedelta(days=1),
+        )
+        db_session.add(metric)
+        await db_session.commit()
+        
+        service = AnalyticsService(db_session)
+        result = await service.get_platform_metrics(days=7)
+        
+        assert len(result) >= 1
+        day_data = result[-1]
+        assert "date" in day_data
+        assert "avg_cpu" in day_data
+        assert "peak_cpu" in day_data
+        assert "avg_memory" in day_data
+        assert "peak_memory" in day_data
+        assert day_data["avg_cpu"] == 45.5
+        assert day_data["avg_memory"] == 60.0
+
+    @pytest.mark.asyncio
+    async def test_get_volume_analytics(self, db_session, test_user):
+        """get_volume_analytics should return storage stats."""
+        volume = Volume(
+            id=uuid_mod.uuid4(),
+            name="test-vol",
+            display_name="Test Volume",
+            owner_id=test_user.id,
+            size_bytes=1073741824,  # 1 GB
+            max_size_bytes=2147483648,  # 2 GB
+            status="active",
+            visibility="private",
+        )
+        db_session.add(volume)
+        await db_session.commit()
+        
+        service = AnalyticsService(db_session)
+        result = await service.get_volume_analytics()
+        
+        assert result["total_volumes"] == 1
+        assert result["total_storage_used_gb"] == 1.0
+        assert result["total_storage_capacity_gb"] == 2.0
+        assert result["storage_utilization_percent"] == 50.0
+        assert len(result["volumes_by_visibility"]) >= 1
+        assert len(result["volumes_by_status"]) >= 1
+
+    @pytest.mark.asyncio
+    async def test_get_workspace_analytics(self, db_session, test_user, admin_user):
+        """get_workspace_analytics should return workspace stats."""
+        workspace = SharedWorkspace(
+            id=uuid_mod.uuid4(),
+            name="Test Workspace",
+            owner_id=test_user.id,
+            is_active=True,
+        )
+        db_session.add(workspace)
+        await db_session.flush()
+        
+        member = WorkspaceMember(
+            workspace_id=workspace.id,
+            user_id=admin_user.id,
+            role="read_write",
+        )
+        db_session.add(member)
+        await db_session.commit()
+        
+        service = AnalyticsService(db_session)
+        result = await service.get_workspace_analytics()
+        
+        assert result["total_workspaces"] == 1
+        assert result["total_members"] == 1
+        assert result["avg_members_per_workspace"] == 1.0
+        assert result["unique_workspace_users"] >= 1
+        assert result["total_users"] >= 2
+        assert result["workspace_adoption_rate"] > 0
 
 
 class TestAnalyticsAPI:
@@ -314,6 +476,9 @@ class TestAnalyticsAPI:
         assert data["period_days"] == 7
         assert "active_users" in data
         assert "total_credits_consumed" in data
+        assert "total_users" in data
+        assert "total_servers" in data
+        assert "server_status_breakdown" in data
 
     @pytest.mark.asyncio
     async def test_top_consumers_requires_admin(self, client: AsyncClient, user_token):
@@ -330,7 +495,106 @@ class TestAnalyticsAPI:
         resp = await client.get("/api/analytics/top-consumers?days=7&limit=5", headers=headers)
         
         assert resp.status_code == 200
-        assert isinstance(resp.json(), list)
+        data = resp.json()
+        assert "consumers" in data
+        assert isinstance(data["consumers"], list)
+
+    @pytest.mark.asyncio
+    async def test_credit_flow_requires_admin(self, client: AsyncClient, user_token):
+        """Credit flow should be admin-only."""
+        headers = {"Authorization": f"Bearer {user_token}"}
+        resp = await client.get("/api/analytics/credit-flow?days=7", headers=headers)
+        
+        assert resp.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_credit_flow_admin(self, client: AsyncClient, admin_token):
+        """Admin should be able to view credit flow."""
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        resp = await client.get("/api/analytics/credit-flow?days=7", headers=headers)
+        
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "credit_flow" in data
+        assert isinstance(data["credit_flow"], list)
+
+    @pytest.mark.asyncio
+    async def test_user_growth_requires_admin(self, client: AsyncClient, user_token):
+        """User growth should be admin-only."""
+        headers = {"Authorization": f"Bearer {user_token}"}
+        resp = await client.get("/api/analytics/user-growth?days=7", headers=headers)
+        
+        assert resp.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_user_growth_admin(self, client: AsyncClient, admin_token):
+        """Admin should be able to view user growth."""
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        resp = await client.get("/api/analytics/user-growth?days=7", headers=headers)
+        
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "user_growth" in data
+        assert isinstance(data["user_growth"], list)
+
+    @pytest.mark.asyncio
+    async def test_platform_metrics_requires_admin(self, client: AsyncClient, user_token):
+        """Platform metrics should be admin-only."""
+        headers = {"Authorization": f"Bearer {user_token}"}
+        resp = await client.get("/api/analytics/platform-metrics?days=7", headers=headers)
+        
+        assert resp.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_platform_metrics_admin(self, client: AsyncClient, admin_token):
+        """Admin should be able to view platform metrics."""
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        resp = await client.get("/api/analytics/platform-metrics?days=7", headers=headers)
+        
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "metrics" in data
+        assert isinstance(data["metrics"], list)
+
+    @pytest.mark.asyncio
+    async def test_volume_analytics_requires_admin(self, client: AsyncClient, user_token):
+        """Volume analytics should be admin-only."""
+        headers = {"Authorization": f"Bearer {user_token}"}
+        resp = await client.get("/api/analytics/volumes", headers=headers)
+        
+        assert resp.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_volume_analytics_admin(self, client: AsyncClient, admin_token):
+        """Admin should be able to view volume analytics."""
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        resp = await client.get("/api/analytics/volumes", headers=headers)
+        
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "total_volumes" in data
+        assert "total_storage_used_gb" in data
+        assert "storage_utilization_percent" in data
+
+    @pytest.mark.asyncio
+    async def test_workspace_analytics_requires_admin(self, client: AsyncClient, user_token):
+        """Workspace analytics should be admin-only."""
+        headers = {"Authorization": f"Bearer {user_token}"}
+        resp = await client.get("/api/analytics/workspaces", headers=headers)
+        
+        assert resp.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_workspace_analytics_admin(self, client: AsyncClient, admin_token):
+        """Admin should be able to view workspace analytics."""
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        resp = await client.get("/api/analytics/workspaces", headers=headers)
+        
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "total_workspaces" in data
+        assert "total_members" in data
+        assert "workspace_adoption_rate" in data
 
     @pytest.mark.asyncio
     async def test_environments_requires_admin(self, client: AsyncClient, user_token):

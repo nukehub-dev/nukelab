@@ -51,12 +51,72 @@ export interface GlobalUsageData {
   }[];
   total_credits_consumed: number;
   active_users: number;
+  total_users: number;
+  new_users: number;
+  total_servers: number;
+  running_servers: number;
+  server_status_breakdown: Record<string, number>;
+  avg_platform_cpu: number;
+  avg_platform_memory: number;
+  total_runtime_hours: number;
 }
 
 export interface TopConsumer {
   user_id: string;
   username: string;
   credits_consumed: number;
+}
+
+export interface CreditFlowData {
+  date: string;
+  credits_consumed: number;
+  credits_granted: number;
+}
+
+export interface UserGrowthData {
+  date: string;
+  count: number;
+}
+
+export interface PlatformMetricsData {
+  date: string;
+  avg_cpu: number;
+  peak_cpu: number;
+  avg_memory: number;
+  peak_memory: number;
+  avg_network_rx: number;
+  avg_network_tx: number;
+  avg_disk_read: number;
+  avg_disk_write: number;
+  data_points: number;
+}
+
+export interface VolumeVisibilityItem {
+  visibility: string;
+  count: number;
+}
+
+export interface VolumeStatusItem {
+  status: string;
+  count: number;
+}
+
+export interface VolumeAnalytics {
+  total_volumes: number;
+  total_storage_used_gb: number;
+  total_storage_capacity_gb: number;
+  storage_utilization_percent: number;
+  volumes_by_visibility: VolumeVisibilityItem[];
+  volumes_by_status: VolumeStatusItem[];
+}
+
+export interface WorkspaceAnalytics {
+  total_workspaces: number;
+  total_members: number;
+  avg_members_per_workspace: number;
+  workspace_adoption_rate: number;
+  unique_workspace_users: number;
+  total_users: number;
 }
 
 export interface EnvironmentUsage {
@@ -98,6 +158,56 @@ export function useTopConsumers(days: number = 30, limit: number = 10) {
     queryFn: async () => {
       const response = await api.get<{ consumers: TopConsumer[] }>(`/analytics/top-consumers?days=${days}&limit=${limit}`);
       return response.consumers;
+    },
+  });
+}
+
+export function useCreditFlow(days: number = 30) {
+  return useQuery({
+    queryKey: ['analytics', 'credit-flow', days],
+    queryFn: async () => {
+      const response = await api.get<{ credit_flow: CreditFlowData[] }>(`/analytics/credit-flow?days=${days}`);
+      return response.credit_flow;
+    },
+  });
+}
+
+export function useUserGrowth(days: number = 30) {
+  return useQuery({
+    queryKey: ['analytics', 'user-growth', days],
+    queryFn: async () => {
+      const response = await api.get<{ user_growth: UserGrowthData[] }>(`/analytics/user-growth?days=${days}`);
+      return response.user_growth;
+    },
+  });
+}
+
+export function usePlatformMetrics(days: number = 30) {
+  return useQuery({
+    queryKey: ['analytics', 'platform-metrics', days],
+    queryFn: async () => {
+      const response = await api.get<{ metrics: PlatformMetricsData[] }>(`/analytics/platform-metrics?days=${days}`);
+      return response.metrics;
+    },
+  });
+}
+
+export function useVolumeAnalytics() {
+  return useQuery({
+    queryKey: ['analytics', 'volumes'],
+    queryFn: async () => {
+      const response = await api.get<VolumeAnalytics>('/analytics/volumes');
+      return response;
+    },
+  });
+}
+
+export function useWorkspaceAnalytics() {
+  return useQuery({
+    queryKey: ['analytics', 'workspaces'],
+    queryFn: async () => {
+      const response = await api.get<WorkspaceAnalytics>('/analytics/workspaces');
+      return response;
     },
   });
 }

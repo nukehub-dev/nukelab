@@ -65,6 +65,82 @@ async def get_top_consumers(
     return {"consumers": consumers}
 
 
+@router.get("/credit-flow")
+async def get_credit_flow(
+    days: int = 30,
+    current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("analytics:read")),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get daily credit flow (consumed vs granted). Admin only."""
+    checker = PermissionChecker(current_user)
+    checker.require(Permission.ADMIN_ACCESS)
+    
+    service = AnalyticsService(db)
+    flow = await service.get_credit_flow(days)
+    return {"credit_flow": flow}
+
+
+@router.get("/user-growth")
+async def get_user_growth(
+    days: int = 30,
+    current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("analytics:read")),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get daily new user signups. Admin only."""
+    checker = PermissionChecker(current_user)
+    checker.require(Permission.ADMIN_ACCESS)
+    
+    service = AnalyticsService(db)
+    growth = await service.get_user_growth(days)
+    return {"user_growth": growth}
+
+
+@router.get("/platform-metrics")
+async def get_platform_metrics(
+    days: int = 30,
+    current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("analytics:read")),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get platform-wide resource metrics over time. Admin only."""
+    checker = PermissionChecker(current_user)
+    checker.require(Permission.ADMIN_ACCESS)
+    
+    service = AnalyticsService(db)
+    metrics = await service.get_platform_metrics(days)
+    return {"metrics": metrics}
+
+
+@router.get("/volumes")
+async def get_volume_analytics(
+    current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("analytics:read")),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get storage/volume analytics. Admin only."""
+    checker = PermissionChecker(current_user)
+    checker.require(Permission.ADMIN_ACCESS)
+    
+    service = AnalyticsService(db)
+    return await service.get_volume_analytics()
+
+
+@router.get("/workspaces")
+async def get_workspace_analytics(
+    current_user: User = Depends(get_current_user),
+    _ = Depends(require_scopes("analytics:read")),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get workspace collaboration analytics. Admin only."""
+    checker = PermissionChecker(current_user)
+    checker.require(Permission.ADMIN_ACCESS)
+    
+    service = AnalyticsService(db)
+    return await service.get_workspace_analytics()
+
+
 @router.get("/environments")
 async def get_environment_usage(
     current_user: User = Depends(get_current_user),
