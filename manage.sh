@@ -204,6 +204,69 @@ is_backend_container_running() {
     $COMPOSE -f "$COMPOSE_FILE" ps 2>/dev/null | grep -q 'Up .*nukelab-backend'
 }
 
+# ─── CPU Lib Volume ────────────────────────────────────────────────────────
+setup_cpu_lib_volume() {
+    local vol_name="nukelab-cpu-lib"
+    local c_file="$DIR/backend/app/lib/nukelab/libnukelab_cpu.c"
+
+    if [ ! -f "$c_file" ]; then
+        warn "CPU mask source not found: $c_file"
+        return
+    fi
+
+    # Skip if volume already exists
+    if $CONTAINER_ENGINE volume inspect "$vol_name" > /dev/null 2>&1; then
+        return
+    fi
+
+    step "Setting up CPU mask library..."
+
+    # Create volume
+    $CONTAINER_ENGINE volume create "$vol_name" > /dev/null
+    ok "Created volume: $vol_name"
+
+    # Build .so inside a temporary gcc container
+    log "Building libnukelab_cpu.so (one-time)..."
+    local tmp_name="nukelab-tmp-build-cpu-lib"
+    local build_image="docker.io/library/gcc:latest"
+
+    # Pull gcc image if not present
+    if ! $CONTAINER_ENGINE image exists "$build_image" 2>/dev/null; then
+        log "Pulling $build_image..."
+        $CONTAINER_ENGINE pull "$build_image" > /dev/null 2>&1 || {
+            warn "Failed to pull $build_image"
+            warn "Check your internet connection or container registry access"
+            return
+        }
+    fi
+
+    # Create temp container with volume mounted
+    $CONTAINER_ENGINE run --rm -d \
+        --name "$tmp_name" \
+        -v "$vol_name:/dst" \
+        -v "$c_file:/src/libnukelab_cpu.c:ro" \
+        "$build_image" \
+        sleep 3600 > /dev/null 2>&1 || {
+        warn "Failed to start build container"
+        return
+    }
+
+    # Compile
+    $CONTAINER_ENGINE exec "$tmp_name" \
+        gcc -shared -fPIC -o /dst/libnukelab_cpu.so /src/libnukelab_cpu.c -ldl
+
+    local exit_code=$?
+    $CONTAINER_ENGINE rm -f "$tmp_name" > /dev/null 2>&1
+
+    if [ $exit_code -ne 0 ]; then
+        err "Failed to build libnukelab_cpu.so"
+        $CONTAINER_ENGINE volume rm "$vol_name" > /dev/null 2>&1 || true
+        return
+    fi
+
+    ok "Built and stored libnukelab_cpu.so in volume"
+}
+
 has_conda_env() {
     command -v conda > /dev/null 2>&1 && conda env list | grep -q "nukelab-backend"
 }
@@ -225,6 +288,8 @@ wait_for_backend() {
 # ─── Command Implementations ───────────────────────────────────────────────
 
 cmd_start() {
+    setup_cpu_lib_volume
+
     if $USE_CONDA_MODE; then
         if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
             die "--conda only works with backend target. Use:\n  ./manage.sh start backend --conda"
@@ -316,6 +381,8 @@ cmd_restart() {
 }
 
 cmd_build() {
+    setup_cpu_lib_volume
+
     step "Building..."
     
     if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then

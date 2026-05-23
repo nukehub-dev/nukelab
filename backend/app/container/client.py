@@ -1,4 +1,6 @@
+import io
 import os
+import tarfile
 import uuid
 from typing import Optional, Set
 import aiodocker
@@ -8,11 +10,15 @@ import logging
 logger = logging.getLogger(__name__)
 
 class ContainerClient:
+    VOLUME_CPU_LIB = "nukelab-cpu-lib"
+    CPU_LIB_TARGET = "/usr/local/lib/nukelab"
+
     def __init__(self):
         self.client: Optional[aiodocker.Docker] = None
         self._available_cgroup_controllers: Optional[Set[str]] = None
         self._storage_support: Optional[bool] = None
         self._lxcfs_support: Optional[bool] = None
+        self._cpu_lib_volume_ready: bool = False
 
     async def connect(self):
         """Connect to Docker/Podman socket"""
@@ -98,6 +104,92 @@ class ContainerClient:
         
         return mounts
 
+    def _get_cpu_env(self, cpu_limit: Optional[float]) -> dict:
+        """
+        Return environment variables that tell common libraries how many
+        threads/cores to use, and set LD_PRELOAD to intercept sysconf()
+        so programs see the plan's CPU count instead of host cores.
+        """
+        if not cpu_limit or cpu_limit < 1:
+            cpu_limit = os.cpu_count() or 1
+        n = int(cpu_limit)
+        return {
+            "OMP_NUM_THREADS": str(n),
+            "MKL_NUM_THREADS": str(n),
+            "OPENBLAS_NUM_THREADS": str(n),
+            "VECLIB_MAXIMUM_THREADS": str(n),
+            "NUMEXPR_NUM_THREADS": str(n),
+            "NUKELAB_CPU_COUNT": str(n),
+            "LD_PRELOAD": "/usr/local/lib/nukelab/libnukelab_cpu.so",
+        }
+
+    async def _inject_cpu_files(self, container, cpu_limit: Optional[float]) -> None:
+        """Inject system-wide CPU masking files into the container.
+
+        Writes:
+          - /etc/ld.so.preload   (root-only, survives any env clearing)
+          - /etc/profile.d/nukelab-cpu.sh  (login shells get env vars)
+        """
+        if not cpu_limit or cpu_limit < 1:
+            cpu_limit = os.cpu_count() or 1
+        n = int(cpu_limit)
+
+        # /etc/ld.so.preload — system-wide library preload, root-only
+        preload_path = "/usr/local/lib/nukelab/libnukelab_cpu.so"
+        ld_preload = f"{preload_path}\n"
+
+        # /etc/profile.d/nukelab-cpu.sh — env vars for login shells
+        profile_script = (
+            f"export LD_PRELOAD={preload_path}\n"
+            f"export NUKELAB_CPU_COUNT={n}\n"
+            f"export OMP_NUM_THREADS={n}\n"
+            f"export MKL_NUM_THREADS={n}\n"
+            f"export OPENBLAS_NUM_THREADS={n}\n"
+            f"export VECLIB_MAXIMUM_THREADS={n}\n"
+            f"export NUMEXPR_NUM_THREADS={n}\n"
+        )
+
+        tar_buffer = io.BytesIO()
+        with tarfile.open(fileobj=tar_buffer, mode="w") as tar:
+            # /etc/ld.so.preload
+            data = ld_preload.encode("utf-8")
+            info = tarfile.TarInfo(name="ld.so.preload")
+            info.size = len(data)
+            info.mode = 0o644
+            tar.addfile(info, io.BytesIO(data))
+
+            # /etc/profile.d/nukelab-cpu.sh
+            data = profile_script.encode("utf-8")
+            info = tarfile.TarInfo(name="profile.d/nukelab-cpu.sh")
+            info.size = len(data)
+            info.mode = 0o644
+            tar.addfile(info, io.BytesIO(data))
+
+        tar_buffer.seek(0)
+
+        try:
+            await container.put_archive("/etc", tar_buffer.read())
+        except Exception as e:
+            logger.warning(f"Failed to inject CPU system files: {e}")
+
+    async def _ensure_cpu_lib_volume(self) -> None:
+        """Ensure the CPU mask library volume is mounted into containers.
+
+        The volume is created and populated by manage.sh during startup.
+        The backend only checks for its existence and mounts it.
+        """
+        if self._cpu_lib_volume_ready:
+            return
+
+        try:
+            await self.client.volumes.get(self.VOLUME_CPU_LIB)
+            self._cpu_lib_volume_ready = True
+        except Exception:
+            logger.warning(
+                f"Volume {self.VOLUME_CPU_LIB} not found. "
+                f"Run './manage.sh start' or './manage.sh build' to create it."
+            )
+
     async def _check_storage_support(self) -> bool:
         """Check if storage limits are supported (requires XFS with pquota, ZFS, etc.)"""
         if self._storage_support is not None:
@@ -156,7 +248,7 @@ class ContainerClient:
             "Image": image,
             "Cmd": command.split() if command else None,
             "Labels": labels or {},
-            "Env": [f"{k}={v}" for k, v in (env or {}).items()],
+            "Env": [f"{k}={v}" for k, v in (env or {}).items()] + [f"{k}={v}" for k, v in self._get_cpu_env(cpu_limit).items()],
             "HostConfig": {
                 "NetworkMode": network or settings.docker_network,
                 "PublishAllPorts": False,
@@ -191,7 +283,7 @@ class ContainerClient:
                 config["HostConfig"]["Binds"] = []
             config["HostConfig"]["Binds"].extend(lxcfs_mounts)
             logger.info(f"Mounted lxcfs /proc files: {len(lxcfs_mounts)} files")
-
+        
         # --- CPU limits with graceful fallback ---
         if cpu_limit:
             controllers = await self._get_available_controllers()
@@ -261,7 +353,19 @@ class ContainerClient:
                     f"Disk limits will not be enforced."
                 )
 
+        # --- CPU mask library volume (read-only) ---
+        await self._ensure_cpu_lib_volume()
+        if self._cpu_lib_volume_ready:
+            config["HostConfig"].setdefault("Mounts", [])
+            config["HostConfig"]["Mounts"].append({
+                "Type": "volume",
+                "Source": self.VOLUME_CPU_LIB,
+                "Target": self.CPU_LIB_TARGET,
+                "ReadOnly": True,
+            })
+
         container = await self.client.containers.create(config, name=name)
+        await self._inject_cpu_files(container, cpu_limit)
         return container
 
     async def start_container(self, container_id: str):
