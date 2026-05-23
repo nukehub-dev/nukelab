@@ -69,14 +69,24 @@ class MetricsCollector:
         try:
             container_client = await get_fresh_container_client()
             container = await container_client.client.containers.get(container_id)
-            stats_list = await container.stats(stream=False)
-            
-            # stats() returns a list with one dict item when stream=False
-            stats = stats_list[0] if isinstance(stats_list, list) and stats_list else stats_list
-            if not isinstance(stats, dict):
+
+            # Take two readings 1 second apart for accurate CPU delta.
+            # Container's built-in precpu_stats comes from an arbitrary previous
+            # query time — could be seconds or minutes ago — making CPU %
+            # completely unreliable from a single snapshot.
+            stats1_list = await container.stats(stream=False)
+            stats1 = stats1_list[0] if isinstance(stats1_list, list) and stats1_list else stats1_list
+            if not isinstance(stats1, dict):
                 return
 
-            metrics = self._parse_container_stats(stats, server_id, container_id)
+            await asyncio.sleep(1.0)
+
+            stats2_list = await container.stats(stream=False)
+            stats2 = stats2_list[0] if isinstance(stats2_list, list) and stats2_list else stats2_list
+            if not isinstance(stats2, dict):
+                return
+
+            metrics = self._parse_container_stats(stats1, stats2, server_id, container_id)
             await self._persist_metrics(metrics)
             await self._broadcast_metrics(metrics)
         except Exception:
@@ -88,11 +98,12 @@ class MetricsCollector:
                 except Exception:
                     pass
 
-    def _parse_container_stats(self, stats: dict, server_id: str, container_id: str) -> dict:
-        """Parse raw Docker stats into normalized metrics"""
+    def _parse_container_stats(self, stats1: dict, stats2: dict, server_id: str, container_id: str) -> dict:
+        """Parse raw container stats into normalized metrics using two 1-second-apart samples"""
 
-        cpu_stats = stats.get('cpu_stats', {})
-        precpu_stats = stats.get('precpu_stats', {})
+        # Use stats2 as the "current" and stats1 as the "previous"
+        cpu_stats = stats2.get('cpu_stats', {})
+        precpu_stats = stats1.get('cpu_stats', {})  # previous reading
 
         cpu_usage = cpu_stats.get('cpu_usage', {})
         precpu_usage = precpu_stats.get('cpu_usage', {})
@@ -107,26 +118,33 @@ class MetricsCollector:
         )
 
         cpu_percent = 0.0
-        cpu_count = 1
-        if system_delta > 0 and cpu_delta > 0:
-            percpu = cpu_usage.get('percpu_usage', [])
-            cpu_count = len(percpu) if percpu else 1
-            cpu_percent = (cpu_delta / system_delta) * cpu_count * 100.0
+        # online_cpus is the cgroup-visible CPU count (respects CpusetCpus).
+        # percpu_usage is often empty on cgroup v2, so we prefer online_cpus.
+        cpu_count = cpu_stats.get('online_cpus') or len(cpu_usage.get('percpu_usage', [])) or 1
 
-        # Memory
-        memory_stats = stats.get('memory_stats', {})
+        if system_delta > 0 and cpu_delta >= 0:
+            # cpu_delta and system_delta are both scoped to the same cgroup,
+            # so the ratio directly gives the utilization percentage.
+            # No need to multiply by cpu_count — that would overcount.
+            cpu_percent = (cpu_delta / system_delta) * 100.0
+
+        # Cap at reasonable max to catch calculation glitches
+        cpu_percent = min(cpu_percent, cpu_count * 100.0)
+
+        # Memory (doesn't need delta — instantaneous reading)
+        memory_stats = stats2.get('memory_stats', {})
         memory_usage = memory_stats.get('usage', 0)
         memory_limit = memory_stats.get('limit', 1)
         memory_percent = (memory_usage / memory_limit) * 100.0 if memory_limit > 0 else 0
 
-        # Disk I/O
-        blkio_stats = stats.get('blkio_stats', {})
+        # Disk I/O (cumulative counters — no delta needed for instantaneous)
+        blkio_stats = stats2.get('blkio_stats', {})
         io_service_bytes = blkio_stats.get('io_service_bytes_recursive', [])
         disk_read = sum(item['value'] for item in io_service_bytes if item.get('op') == 'Read')
         disk_write = sum(item['value'] for item in io_service_bytes if item.get('op') == 'Write')
 
-        # Network
-        networks = stats.get('networks', {})
+        # Network (cumulative counters)
+        networks = stats2.get('networks', {})
         network_rx = sum(n.get('rx_bytes', 0) for n in networks.values())
         network_tx = sum(n.get('tx_bytes', 0) for n in networks.values())
         network_rx_packets = sum(n.get('rx_packets', 0) for n in networks.values())
@@ -154,7 +172,7 @@ class MetricsCollector:
             'network_tx_packets': network_tx_packets,
             'network_rx_errors': network_rx_errors,
             'network_tx_errors': network_tx_errors,
-            'pids': stats.get('pids_stats', {}).get('current', 0),
+            'pids': stats2.get('pids_stats', {}).get('current', 0),
             'collected_at': datetime.utcnow(),
         }
 
