@@ -207,7 +207,7 @@ is_backend_container_running() {
 # ─── CPU Lib Volume ────────────────────────────────────────────────────────
 setup_cpu_lib_volume() {
     local vol_name="nukelab-cpu-lib"
-    local c_file="$DIR/backend/app/lib/nukelab/libnukelab_cpu.c"
+    local c_file="$DIR/resources/lib/nukelab/libnukelab_cpu.c"
 
     if [ ! -f "$c_file" ]; then
         warn "CPU mask source not found: $c_file"
