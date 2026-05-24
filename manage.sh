@@ -39,7 +39,7 @@ RESET=$'\033[0m'
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" > /dev/null 2>&1 && pwd)"
 cd "$DIR"
 FRONTEND_PID_FILE="$DIR/.frontend.pid"
-COMPOSE_FILE="$DIR/docker-compose.yml"
+COMPOSE_FILE="$DIR/compose.yml"
 DEV_COMPOSE_FILE="$DIR/.nukelab-dev-compose.yml"
 COMPOSE_ARGS=(-f "$COMPOSE_FILE")
 

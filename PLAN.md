@@ -1160,7 +1160,7 @@ GET    /api/system/stats            # Platform statistics
   - [ ] `backend/` — FastAPI with asyncpg, Pydantic, Docker SDK
   - [ ] `database/` — PostgreSQL 18 schema and migrations
   - [ ] `environments/` — Environment Dockerfiles
-  - [ ] `docker-compose.yml` — Full stack orchestration
+  - [ ] `compose.yml` — Full stack orchestration
   - [ ] `infrastructure/traefik/` — Traefik configuration
 
 - [ ] **Database Setup**
@@ -1799,7 +1799,7 @@ nukelab/
 │   ├── build-environments.sh        # Build all environments
 │   └── backup.sh                    # Backup script
 │
-├── docker-compose.yml               # Development stack
+├── compose.yml                      # Development stack
 ├── docker-compose.prod.yml          # Production stack
 
 ├── README.md                        # Project documentation

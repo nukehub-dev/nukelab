@@ -125,7 +125,7 @@ ls /var/lib/lxcfs/proc/
 Mount lxcfs into the **backend** container so it can detect and propagate lxcfs to user containers:
 
 ```yaml
-# docker-compose.yml (backend service)
+# compose.yml (backend service)
 services:
   backend:
     volumes:
@@ -312,7 +312,7 @@ podman inspect nukelab-server-<username>-<servername> --format '{{json .HostConf
 # Install lxcfs
 sudo apt install lxcfs && sudo systemctl enable --now lxcfs
 
-# Add to docker-compose.yml backend volumes:
+# Add to compose.yml backend volumes:
 # - /var/lib/lxcfs:/var/lib/lxcfs:ro
 
 # Restart backend
@@ -357,7 +357,7 @@ xfs_quota -x -c 'report -p' /var/lib/docker
 
 **Cause:** `/var/lib/lxcfs` not mounted into backend container.
 
-**Fix:** Add volume mount to `docker-compose.yml`:
+**Fix:** Add volume mount to `compose.yml`:
 ```yaml
 backend:
   volumes:

@@ -131,7 +131,7 @@ nukelab/
 │   └── dev/                # NukeIDE dev environment
 ├── database/                # Schema and migrations
 ├── phases/                 # Implementation phases
-├── docker-compose.yml      # All services
+├── compose.yml             # All services
 ├── manage.sh               # Management script (Docker/Podman)
 └── README.md
 ```
