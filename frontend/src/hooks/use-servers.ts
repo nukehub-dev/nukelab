@@ -149,7 +149,7 @@ export function useServerActions() {
   });
 
   const updateServer = useMutation({
-    mutationFn: ({ serverId, data }: { serverId: string; data: UpdateServerData }) =>
+    mutationFn: ({ serverId, data }: { serverId: string; data: UpdateServerData & { reason?: string } }) =>
       api.patch<Server>(`/servers/${serverId}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['servers'] });
@@ -158,12 +158,13 @@ export function useServerActions() {
   });
 
   const startServer = useMutation({
-    mutationFn: (serverId: string) =>
-      api.post<{ message: string; server_id: string; status: Server['status'] }>(`/servers/${serverId}/start`, {}),
-    onMutate: (serverId) => {
-      addPendingOp(serverId, 'start', 'running');
+    mutationFn: ({ serverId, reason }: { serverId: string; reason?: string }) =>
+      api.post<{ message: string; server_id: string; status: Server['status'] }>(`/servers/${serverId}/start`, { reason }),
+    onMutate: (variables) => {
+      addPendingOp(variables.serverId, 'start', 'running');
     },
-    onSuccess: (data, serverId) => {
+    onSuccess: (data, variables) => {
+      const serverId = variables.serverId;
       // Immediately update cache so UI reflects the new status without waiting
       // for the slow list_servers refetch (which checks Docker status for all servers)
       queryClient.setQueryData(['servers'], (old: Server[] | undefined) => {
@@ -174,20 +175,21 @@ export function useServerActions() {
       queryClient.invalidateQueries({ queryKey: ['servers'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
-    onError: (error: Error, serverId) => {
-      removePendingOp(serverId);
+    onError: (error: Error, variables) => {
+      removePendingOp(variables.serverId);
       console.error('Failed to start server:', error.message);
       useToastStore.getState().addToast({ type: 'error', title: 'Failed to start server', message: error.message, duration: 8000 });
     },
   });
 
   const stopServer = useMutation({
-    mutationFn: (serverId: string) =>
-      api.post<{ message: string; server_id: string; status: Server['status'] }>(`/servers/${serverId}/stop`, {}),
-    onMutate: (serverId) => {
-      addPendingOp(serverId, 'stop', 'stopped');
+    mutationFn: ({ serverId, reason }: { serverId: string; reason?: string }) =>
+      api.post<{ message: string; server_id: string; status: Server['status'] }>(`/servers/${serverId}/stop`, { reason }),
+    onMutate: (variables) => {
+      addPendingOp(variables.serverId, 'stop', 'stopped');
     },
-    onSuccess: (data, serverId) => {
+    onSuccess: (data, variables) => {
+      const serverId = variables.serverId;
       // Immediately update cache so UI reflects the new status without waiting
       // for the slow list_servers refetch (which checks Docker status for all servers)
       queryClient.setQueryData(['servers'], (old: Server[] | undefined) => {
@@ -198,20 +200,21 @@ export function useServerActions() {
       queryClient.invalidateQueries({ queryKey: ['servers'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
-    onError: (error: Error, serverId) => {
-      removePendingOp(serverId);
+    onError: (error: Error, variables) => {
+      removePendingOp(variables.serverId);
       console.error('Failed to stop server:', error.message);
       useToastStore.getState().addToast({ type: 'error', title: 'Failed to stop server', message: error.message, duration: 8000 });
     },
   });
 
   const restartServer = useMutation({
-    mutationFn: (serverId: string) =>
-      api.post<{ message: string; server_id: string; status: Server['status'] }>(`/servers/${serverId}/restart`, {}),
-    onMutate: (serverId) => {
-      addPendingOp(serverId, 'restart', 'running');
+    mutationFn: ({ serverId, reason }: { serverId: string; reason?: string }) =>
+      api.post<{ message: string; server_id: string; status: Server['status'] }>(`/servers/${serverId}/restart`, { reason }),
+    onMutate: (variables) => {
+      addPendingOp(variables.serverId, 'restart', 'running');
     },
-    onSuccess: (data, serverId) => {
+    onSuccess: (data, variables) => {
+      const serverId = variables.serverId;
       // Immediately update cache so UI reflects the new status without waiting
       // for the slow list_servers refetch (which checks Docker status for all servers)
       queryClient.setQueryData(['servers'], (old: Server[] | undefined) => {
@@ -222,20 +225,21 @@ export function useServerActions() {
       queryClient.invalidateQueries({ queryKey: ['servers'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
-    onError: (error: Error, serverId) => {
-      removePendingOp(serverId);
+    onError: (error: Error, variables) => {
+      removePendingOp(variables.serverId);
       console.error('Failed to restart server:', error.message);
       useToastStore.getState().addToast({ type: 'error', title: 'Failed to restart server', message: error.message, duration: 8000 });
     },
   });
 
   const deleteServer = useMutation({
-    mutationFn: (serverId: string) =>
-      api.delete<{ message: string }>(`/servers/${serverId}`),
-    onMutate: (serverId) => {
-      addPendingOp(serverId, 'delete', 'deleted');
+    mutationFn: ({ serverId, reason }: { serverId: string; reason?: string }) =>
+      api.delete<{ message: string }>(`/servers/${serverId}`, reason ? { reason } : undefined),
+    onMutate: (variables) => {
+      addPendingOp(variables.serverId, 'delete', 'deleted');
     },
-    onSuccess: (_, serverId) => {
+    onSuccess: (_, variables) => {
+      const serverId = variables.serverId;
       // Immediately remove the server from cache so the row disappears
       // without waiting for the slow list_servers refetch
       queryClient.setQueryData(['servers'], (old: Server[] | undefined) => {
@@ -246,8 +250,8 @@ export function useServerActions() {
       queryClient.invalidateQueries({ queryKey: ['servers'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
-    onError: (error: Error, serverId) => {
-      removePendingOp(serverId);
+    onError: (error: Error, variables) => {
+      removePendingOp(variables.serverId);
       console.error('Failed to delete server:', error.message);
       useToastStore.getState().addToast({ type: 'error', title: 'Failed to delete server', message: error.message, duration: 8000 });
     },

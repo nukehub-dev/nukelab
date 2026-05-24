@@ -2,7 +2,7 @@
 Bulk Operations API endpoints.
 """
 
-from typing import List, Dict
+from typing import List, Dict, Optional
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +11,8 @@ from sqlalchemy import select
 from app.api.auth import get_current_user, require_jwt_auth
 from app.core.permissions import Permission
 from app.core.security import has_permission
+from app.services.activity_service import ActivityService
+from app.services.notification_service import NotificationService
 from app.dependencies import require_permissions
 from app.db.session import get_db
 from app.models.user import User
@@ -22,6 +24,7 @@ router = APIRouter()
 class BulkServerActionRequest(BaseModel):
     action: str  # start, stop, restart, delete
     server_ids: List[str]
+    reason: Optional[str] = None
 
 
 class BulkActionResponse(BaseModel):
@@ -55,7 +58,7 @@ async def bulk_server_action(
     elif request.action == "stop":
         PermissionChecker = require_permissions(Permission.SERVERS_STOP)
     elif request.action == "restart":
-        PermissionChecker = require_permissions(Permission.SERVERS_MANAGE)
+        PermissionChecker = require_permissions(Permission.SERVERS_ACCESS_OTHERS)
     elif request.action == "delete":
         PermissionChecker = require_permissions(Permission.SERVERS_DELETE)
     
@@ -76,10 +79,31 @@ async def bulk_server_action(
             
             # Check ownership
             if str(server.user_id) != str(current_user.id):
-                # Need permission to manage other users' servers
-                if not has_permission(current_user, Permission.SERVERS_MANAGE):
+                # Need permission to access other users' servers
+                if not has_permission(current_user, Permission.SERVERS_ACCESS_OTHERS):
                     failed.append({"server_id": server_id, "error": "Permission denied"})
                     continue
+                
+                # Audit cross-user bulk action
+                activity_service = ActivityService(db)
+                await activity_service.log(
+                    action=f"server.bulk_{request.action}",
+                    target_type="server",
+                    target_id=str(server.id),
+                    actor_id=str(current_user.id),
+                    details={"reason": request.reason or "No reason provided", "server_name": server.name},
+                )
+                
+                notif_service = NotificationService(db)
+                await notif_service.create(
+                    user_id=server.user_id,
+                    title="Server Accessed",
+                    message=f"{current_user.username or 'An admin'} performed {request.action} on your server '{server.name}' with reason: {request.reason or 'No reason provided'}",
+                    type="server",
+                    severity="warning",
+                    action_url=f"/servers/{server.id}",
+                    event_key="server_accessed",
+                )
             
             # Perform action
             if request.action == "start":

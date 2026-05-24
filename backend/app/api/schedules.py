@@ -4,7 +4,7 @@ Server schedule API endpoints.
 
 import logging
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,7 +18,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.models.server import Server
 from app.services.schedule_service import ScheduleService
-from app.api.servers import get_server_with_permission_check
+from app.api.servers import get_server_with_permission_check, _audit_cross_user_access
 
 router = APIRouter()
 
@@ -28,6 +28,7 @@ class ScheduleCreateRequest(BaseModel):
     cron_expression: str
     timezone: str = "UTC"
     is_active: bool = True
+    reason: Optional[str] = None
 
 
 class ScheduleUpdateRequest(BaseModel):
@@ -35,17 +36,19 @@ class ScheduleUpdateRequest(BaseModel):
     cron_expression: Optional[str] = None
     timezone: Optional[str] = None
     is_active: Optional[bool] = None
+    reason: Optional[str] = None
 
 
 @router.get("/servers/{server_id}/schedules")
 async def list_schedules(
     server_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     _ = Depends(require_permissions(Permission.SERVERS_READ_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """List schedules for a server."""
-    await get_server_with_permission_check(server_id, current_user, db)
+    await get_server_with_permission_check(server_id, current_user, db, request)
     
     service = ScheduleService(db)
     schedules = await service.get_schedules_for_server(
@@ -59,13 +62,18 @@ async def list_schedules(
 @router.post("/servers/{server_id}/schedules")
 async def create_schedule(
     server_id: str,
-    request: ScheduleCreateRequest,
+    http_request: Request,
+    body: ScheduleCreateRequest,
     current_user: User = Depends(get_current_user),
     _ = Depends(require_permissions(Permission.SERVERS_MANAGE)),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a schedule for a server."""
-    server = await get_server_with_permission_check(server_id, current_user, db)
+    server = await get_server_with_permission_check(server_id, current_user, db, http_request)
+    
+    # Audit cross-user schedule creation
+    if str(server.user_id) != str(current_user.id):
+        await _audit_cross_user_access(server, current_user, db, "server.schedule.create", body.reason)
     
     checker = PermissionChecker(current_user)
     checker.require(Permission.SERVERS_START)
@@ -97,13 +105,18 @@ async def create_schedule(
 async def update_schedule(
     server_id: str,
     schedule_id: str,
-    request: ScheduleUpdateRequest,
+    http_request: Request,
+    body: ScheduleUpdateRequest,
     current_user: User = Depends(get_current_user),
     _ = Depends(require_permissions(Permission.SERVERS_MANAGE)),
     db: AsyncSession = Depends(get_db)
 ):
     """Update a schedule."""
-    await get_server_with_permission_check(server_id, current_user, db)
+    server = await get_server_with_permission_check(server_id, current_user, db, http_request)
+    
+    # Audit cross-user schedule update
+    if str(server.user_id) != str(current_user.id):
+        await _audit_cross_user_access(server, current_user, db, "server.schedule.update", body.reason)
     
     service = ScheduleService(db)
     
@@ -132,12 +145,18 @@ async def update_schedule(
 async def delete_schedule(
     server_id: str,
     schedule_id: str,
+    request: Request,
+    reason: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     _ = Depends(require_permissions(Permission.SERVERS_MANAGE)),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete a schedule."""
-    await get_server_with_permission_check(server_id, current_user, db)
+    server = await get_server_with_permission_check(server_id, current_user, db, request)
+    
+    # Audit cross-user schedule deletion
+    if str(server.user_id) != str(current_user.id):
+        await _audit_cross_user_access(server, current_user, db, "server.schedule.delete", reason)
     
     service = ScheduleService(db)
     

@@ -34,6 +34,7 @@ ROLE_PERMISSIONS = {
         Permission.SERVERS_STOP,
         Permission.SERVERS_DELETE,
         Permission.SERVERS_MANAGE,
+        Permission.SERVERS_ACCESS_OTHERS,
         # Environment management
         Permission.ENVIRONMENT_CREATE,
         Permission.ENVIRONMENT_READ,
@@ -80,6 +81,7 @@ ROLE_PERMISSIONS = {
         Permission.SERVERS_STOP,
         Permission.SERVERS_DELETE,
         Permission.SERVERS_MANAGE,
+        Permission.SERVERS_ACCESS_OTHERS,
         # Environment (read only)
         Permission.ENVIRONMENT_READ,
         # Plan (read only)

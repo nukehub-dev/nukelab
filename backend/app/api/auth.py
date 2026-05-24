@@ -12,6 +12,7 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
+from sqlalchemy.orm import selectinload
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from app.config import settings
@@ -117,7 +118,9 @@ async def create_refresh_token_for_user(
 async def verify_refresh_token(plaintext: str, db: AsyncSession) -> Optional[RefreshToken]:
     """Verify a refresh token by checking all non-revoked, non-expired tokens for the user."""
     result = await db.execute(
-        select(RefreshToken).where(
+        select(RefreshToken)
+        .options(selectinload(RefreshToken.user))
+        .where(
             RefreshToken.revoked_at == None,
             RefreshToken.expires_at > datetime.utcnow(),
         )

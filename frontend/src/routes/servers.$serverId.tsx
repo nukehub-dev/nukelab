@@ -26,7 +26,9 @@ import {
 import { MetricsAreaChart, formatters } from '../components/charts/area-chart';
 import { SemiCircularGauge } from '../components/charts/semi-circular-gauge';
 import { StatusBadge } from '../components/data/status-badge';
-import { useServers, useServerActions, useServerLogs } from '../hooks/use-servers';
+import { useServers, useServerLogs } from '../hooks/use-servers';
+import { useServerActionsWithReason } from '../hooks/use-server-actions-with-reason';
+import { useAuthStore } from '../stores/auth-store';
 import { LogViewer } from '../components/log-viewer';
 import { ScheduleDialog } from '../components/server/schedule-dialog';
 import { useServerMetrics } from '../hooks/use-server-metrics';
@@ -108,12 +110,18 @@ function MetricCard({
 
 function ExternalUrlLink({
   server,
-  startServer,
+  onStart,
+  requestReason,
   isOperationPending,
+  canAccess,
+  isOwnServer,
 }: {
   server: { id: string; status: string; username?: string; name: string; external_url?: string };
-  startServer: { mutateAsync: (id: string) => Promise<unknown> };
+  onStart: () => Promise<boolean>;
+  requestReason: () => Promise<string | null>;
   isOperationPending: (serverId: string, type?: 'start' | 'stop' | 'restart' | 'delete') => boolean;
+  canAccess: boolean;
+  isOwnServer: boolean;
 }) {
   const gatewayUrl = server.username
     ? `/user/${server.username}/${server.name}`
@@ -121,8 +129,13 @@ function ExternalUrlLink({
 
   const handleOpen = async (e: React.MouseEvent) => {
     e.preventDefault();
+    if (!canAccess) return;
     if (server.status !== 'running') {
-      await startServer.mutateAsync(server.id);
+      const started = await onStart();
+      if (!started) return;
+    } else if (!isOwnServer) {
+      const reason = await requestReason();
+      if (reason === null) return;
     }
     if (gatewayUrl) {
       window.open(gatewayUrl, '_blank', 'noopener,noreferrer');
@@ -130,6 +143,14 @@ function ExternalUrlLink({
   };
 
   const anyPending = isOperationPending(server.id);
+
+  if (!canAccess) {
+    return (
+      <span className="text-sm text-muted-foreground inline-flex items-center gap-1 min-w-0">
+        <span className="truncate">{server.external_url}</span>
+      </span>
+    );
+  }
 
   return (
     <button
@@ -150,7 +171,11 @@ function ServerDetailPage() {
   const { serverId } = Route.useParams();
   const router = useRouter();
   const { data: servers = [] } = useServers();
-  const { startServer, stopServer, restartServer, deleteServer, isOperationPending } = useServerActions();
+  const { startServer, stopServer, restartServer, deleteServer, startServerAsync, promptAccessReason, isOperationPending, dialog: reasonDialog } = useServerActionsWithReason();
+  const user = useAuthStore((state) => state.user);
+  const canAccessOthersServers = useAuthStore((state) => state.canAccessOthersServers());
+  const canAccessServer = (s: typeof server) => !user || !s || s.user_id === user.id || canAccessOthersServers;
+  const isOwnServer = (s: typeof server) => !user || !s || s.user_id === user.id;
   const { metrics, currentMetrics, isLive } = useServerMetrics(serverId);
   const [activeTab, setActiveTab] = useState<'overview' | 'logs'>('overview');
   const [logsPaused, setLogsPaused] = useState(false);
@@ -240,7 +265,7 @@ function ServerDetailPage() {
         <div className="flex items-center gap-2 flex-wrap shrink-0">
           {server.status === 'stopped' && (
             <button
-              onClick={() => startServer.mutate(server.id)}
+              onClick={() => startServer(server)}
               disabled={isOperationPending(server.id, 'start')}
               className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-all duration-100 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
             >
@@ -256,7 +281,7 @@ function ServerDetailPage() {
           {server.status === 'running' && (
             <>
               <button
-                onClick={() => stopServer.mutate(server.id)}
+                onClick={() => stopServer(server)}
                 disabled={isOperationPending(server.id, 'stop')}
                 className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-all duration-100 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
               >
@@ -269,7 +294,7 @@ function ServerDetailPage() {
                 <span className="sm:hidden">{isOperationPending(server.id, 'stop') ? '...' : 'Stop'}</span>
               </button>
               <button
-                onClick={() => restartServer.mutate(server.id)}
+                onClick={() => restartServer(server)}
                 disabled={isOperationPending(server.id, 'restart')}
                 className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-all duration-100 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
               >
@@ -299,7 +324,7 @@ function ServerDetailPage() {
                 cancelLabel: 'Cancel',
                 variant: 'danger',
               });
-              if (confirmed) deleteServer.mutate(server.id);
+              if (confirmed) deleteServer(server);
             }}
             disabled={isOperationPending(server.id, 'delete')}
             className="inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/20 transition-all duration-100 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
@@ -451,7 +476,7 @@ function ServerDetailPage() {
               </div>
               <div className="min-w-0 flex-1 overflow-hidden">
                 <p className="text-xs text-muted-foreground mb-1">External URL</p>
-                <ExternalUrlLink server={server} startServer={startServer} isOperationPending={isOperationPending} />
+                <ExternalUrlLink server={server} onStart={() => startServerAsync(server)} requestReason={() => promptAccessReason(server, 'open')} isOperationPending={isOperationPending} canAccess={canAccessServer(server)} isOwnServer={isOwnServer(server)} />
               </div>
             </div>
           )}
@@ -720,6 +745,7 @@ function ServerDetailPage() {
         </motion.div>
       )}
       {dialog}
+      {reasonDialog}
     </div>
   );
 }

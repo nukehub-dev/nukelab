@@ -76,6 +76,7 @@ const PERMISSION_LABELS: Record<string, string> = {
   'servers:stop': 'Stop Servers',
   'servers:delete': 'Delete Servers',
   'servers:manage': 'Manage Servers',
+  'servers:access_others': 'Access All Servers',
   'resources:read_own': 'Read Own Resources',
   'resources:read_all': 'Read All Resources',
   'environment:create': 'Create Environments',

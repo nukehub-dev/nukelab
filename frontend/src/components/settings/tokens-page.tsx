@@ -39,6 +39,7 @@ const AVAILABLE_SCOPES = [
   { value: 'servers:stop', label: 'Stop Servers', description: 'Stop servers', category: 'Servers' },
   { value: 'servers:delete', label: 'Delete Servers', description: 'Delete servers', category: 'Servers' },
   { value: 'servers:manage', label: 'Manage Servers', description: 'Full server management', category: 'Servers' },
+  { value: 'servers:access_others', label: 'Access All Servers', description: 'Start, stop, and manage servers owned by other users', category: 'Servers' },
   // Volumes
   { value: 'volumes:read_own', label: 'Read Own Volumes', description: 'View own volume details', category: 'Volumes' },
   { value: 'volumes:read_all', label: 'Read All Volumes', description: 'View all volume details', category: 'Volumes' },

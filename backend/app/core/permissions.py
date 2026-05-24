@@ -21,6 +21,7 @@ class Permission:
     SERVERS_STOP = "servers:stop"
     SERVERS_DELETE = "servers:delete"
     SERVERS_MANAGE = "servers:manage"
+    SERVERS_ACCESS_OTHERS = "servers:access_others"
     
     # Environment management
     ENVIRONMENT_CREATE = "environment:create"
@@ -81,6 +82,7 @@ class Permission:
             cls.SERVERS_STOP,
             cls.SERVERS_DELETE,
             cls.SERVERS_MANAGE,
+            cls.SERVERS_ACCESS_OTHERS,
             cls.ENVIRONMENT_CREATE,
             cls.ENVIRONMENT_READ,
             cls.ENVIRONMENT_UPDATE,

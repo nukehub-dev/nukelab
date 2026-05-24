@@ -132,6 +132,20 @@ async def clean_tables(db_session):
     yield
 
 
+@pytest.fixture(autouse=True)
+def reset_role_permissions():
+    """Reset in-memory role permissions to defaults before each test.
+    
+    Some tests modify ROLE_PERMISSIONS in memory (e.g. test_permissions.py).
+    This fixture ensures subsequent tests start with clean defaults.
+    """
+    from app.core.roles import ROLE_PERMISSIONS, _DEFAULT_ROLE_PERMISSIONS
+    # Restore defaults in-place so all imported references see the change
+    for role, perms in _DEFAULT_ROLE_PERMISSIONS.items():
+        ROLE_PERMISSIONS[role] = list(perms)
+    yield
+
+
 @pytest_asyncio.fixture
 async def client(db_session):
     """Create test client with overridden database dependency."""
@@ -220,6 +234,33 @@ async def moderator_user(db_session):
     await db_session.commit()
     await db_session.refresh(user)
     yield user
+
+
+@pytest_asyncio.fixture
+async def support_user(db_session):
+    """Create a support test user (no SERVERS_ACCESS_OTHERS)."""
+    user = User(
+        username="supportuser",
+        email="support@example.com",
+        password_hash=get_password_hash("supportpass123"),
+        first_name="Support",
+        last_name="User",
+        role="support",
+        is_active=True,
+        is_verified=True,
+        nuke_balance=100,
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    yield user
+
+
+@pytest_asyncio.fixture
+async def support_token(support_user):
+    """Generate JWT token for support user."""
+    from app.api.auth import create_access_token
+    return create_access_token(data={"sub": support_user.username, "role": support_user.role})
 
 
 @pytest_asyncio.fixture

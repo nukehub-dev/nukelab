@@ -28,6 +28,7 @@ export const PERMISSIONS = {
   SERVERS_STOP: 'servers:stop',
   SERVERS_DELETE: 'servers:delete',
   SERVERS_MANAGE: 'servers:manage',
+  SERVERS_ACCESS_OTHERS: 'servers:access_others',
   ENVIRONMENT_CREATE: 'environment:create',
   ENVIRONMENT_READ: 'environment:read',
   ENVIRONMENT_UPDATE: 'environment:update',
@@ -80,6 +81,7 @@ interface AuthState {
   canDeleteUsers: () => boolean;
   canViewAllServers: () => boolean;
   canManageServers: () => boolean;
+  canAccessOthersServers: () => boolean;
   canStartStopServers: () => boolean;
   canDeleteServers: () => boolean;
   canManageEnvironments: () => boolean;
@@ -124,6 +126,7 @@ function checkPermission(user: User | null, permission: string): boolean {
     case PERMISSIONS.SERVERS_READ_ALL:
     case PERMISSIONS.SERVERS_MANAGE:
     case PERMISSIONS.SERVERS_DELETE:
+    case PERMISSIONS.SERVERS_ACCESS_OTHERS:
       return roleLevel >= ROLE_LEVELS.moderator;
     case PERMISSIONS.SERVERS_START:
     case PERMISSIONS.SERVERS_STOP:
@@ -199,6 +202,7 @@ export const useAuthStore = create<AuthState>()(
       canDeleteUsers: () => get().hasPermission(PERMISSIONS.USERS_DELETE),
 
       canManageServers: () => get().hasPermission(PERMISSIONS.SERVERS_MANAGE),
+      canAccessOthersServers: () => get().hasPermission(PERMISSIONS.SERVERS_ACCESS_OTHERS),
       canViewAllServers: () => get().hasPermission(PERMISSIONS.SERVERS_READ_ALL),
 
       canStartStopServers: () => get().hasAnyPermission([PERMISSIONS.SERVERS_START, PERMISSIONS.SERVERS_STOP]),

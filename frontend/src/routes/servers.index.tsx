@@ -8,6 +8,7 @@ import { ResourcePageLayout } from '../components/layout/resource-page-layout';
 import { DataTable } from '../components/data/data-table';
 import { StatusBadge } from '../components/data/status-badge';
 import { useServers, useServerActions } from '../hooks/use-servers';
+import { useReasonDialog } from '../hooks/use-reason-dialog';
 import { useEnvironments } from '../hooks/use-environments';
 import { usePlans } from '../hooks/use-plans';
 import { useVolumes } from '../hooks/use-volumes';
@@ -31,6 +32,7 @@ function ServersPage() {
   const { confirm, dialog } = useConfirmDialog();
   const { data: servers = [], isLoading, isError, error } = useServers();
   const { createServer, updateServer, startServer, stopServer, restartServer, deleteServer, isOperationPending } = useServerActions();
+  const { prompt, dialog: reasonDialog } = useReasonDialog();
   const { data: envData } = useEnvironments({ is_active: true, limit: 100 });
   const { data: plansData } = usePlans({ is_active: true, limit: 100 });
   const { data: volumesData } = useVolumes();
@@ -291,7 +293,13 @@ function ServersPage() {
         const handleOpen = async (e: React.MouseEvent) => {
           e.preventDefault();
           if (server.status !== 'running') {
-            await startServer.mutateAsync(server.id);
+            await startServer.mutateAsync({ serverId: server.id });
+          } else if (server.user_id !== user?.id) {
+            const reason = await prompt({
+              description: `You are about to open a server owned by ${server.username || 'another user'}. Please provide a reason.`,
+              actionLabel: 'Open',
+            });
+            if (reason === null) return;
           }
           window.open(gatewayUrl, '_blank', 'noopener,noreferrer');
         };
@@ -350,7 +358,7 @@ function ServersPage() {
             {server.status === 'stopped' && (
               <Tooltip content={isOperationPending(server.id, 'start') ? 'Starting...' : 'Start'}>
                 <button
-                  onClick={() => startServer.mutate(server.id)}
+                  onClick={() => startServer.mutate({ serverId: server.id })}
                   disabled={isOperationPending(server.id, 'start')}
                   className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-all duration-100 inline-flex disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
                 >
@@ -366,7 +374,7 @@ function ServersPage() {
               <>
                 <Tooltip content={isOperationPending(server.id, 'stop') ? 'Stopping...' : 'Stop'}>
                   <button
-                    onClick={() => stopServer.mutate(server.id)}
+                    onClick={() => stopServer.mutate({ serverId: server.id })}
                     disabled={isOperationPending(server.id, 'stop')}
                     className="p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-all duration-100 inline-flex disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
                   >
@@ -379,7 +387,7 @@ function ServersPage() {
                 </Tooltip>
                 <Tooltip content={isOperationPending(server.id, 'restart') ? 'Restarting...' : 'Restart'}>
                   <button
-                    onClick={() => restartServer.mutate(server.id)}
+                    onClick={() => restartServer.mutate({ serverId: server.id })}
                     disabled={isOperationPending(server.id, 'restart')}
                     className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-all duration-100 inline-flex disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
                   >
@@ -402,7 +410,7 @@ function ServersPage() {
                     cancelLabel: 'Cancel',
                     variant: 'danger',
                   });
-                  if (confirmed) deleteServer.mutate(server.id);
+                  if (confirmed) deleteServer.mutate({ serverId: server.id });
                 }}
                 disabled={isOperationPending(server.id, 'delete')}
                 className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-all duration-100 inline-flex disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
@@ -441,21 +449,21 @@ function ServersPage() {
       label: 'Start',
       icon: <Play className="w-4 h-4" />,
       onClick: (ids: string[]) => {
-        ids.forEach((id) => startServer.mutate(id));
+        ids.forEach((id) => startServer.mutate({ serverId: id }));
       },
     },
     {
       label: 'Stop',
       icon: <Square className="w-4 h-4" />,
       onClick: (ids: string[]) => {
-        ids.forEach((id) => stopServer.mutate(id));
+        ids.forEach((id) => stopServer.mutate({ serverId: id }));
       },
     },
     {
       label: 'Restart',
       icon: <RotateCcw className="w-4 h-4" />,
       onClick: (ids: string[]) => {
-        ids.forEach((id) => restartServer.mutate(id));
+        ids.forEach((id) => restartServer.mutate({ serverId: id }));
       },
     },
     {
@@ -469,7 +477,7 @@ function ServersPage() {
           cancelLabel: 'Cancel',
           variant: 'danger',
         });
-        if (confirmed) ids.forEach((id) => deleteServer.mutate(id));
+        if (confirmed) ids.forEach((id) => deleteServer.mutate({ serverId: id }));
       },
       variant: 'destructive' as const,
     },
@@ -503,7 +511,13 @@ function ServersPage() {
             onClick={async (e) => {
               e.preventDefault();
               if (server.status !== 'running') {
-                await startServer.mutateAsync(server.id);
+                await startServer.mutateAsync({ serverId: server.id });
+              } else if (server.user_id !== user?.id) {
+                const reason = await prompt({
+                  description: `You are about to open a server owned by ${server.username || 'another user'}. Please provide a reason.`,
+                  actionLabel: 'Open',
+                });
+                if (reason === null) return;
               }
               const gatewayUrl = server.username
                 ? `/user/${server.username}/${server.name}`
@@ -546,7 +560,7 @@ function ServersPage() {
           {server.status === 'stopped' && (
             <Tooltip content={isOperationPending(server.id, 'start') ? 'Starting...' : 'Start'}>
               <button
-                onClick={() => startServer.mutate(server.id)}
+                onClick={() => startServer.mutate({ serverId: server.id })}
                 disabled={isOperationPending(server.id, 'start')}
                 className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-all duration-100 inline-flex disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
               >
@@ -562,7 +576,7 @@ function ServersPage() {
             <>
               <Tooltip content={isOperationPending(server.id, 'stop') ? 'Stopping...' : 'Stop'}>
                 <button
-                  onClick={() => stopServer.mutate(server.id)}
+                  onClick={() => stopServer.mutate({ serverId: server.id })}
                   disabled={isOperationPending(server.id, 'stop')}
                   className="p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-all duration-100 inline-flex disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
                 >
@@ -575,7 +589,7 @@ function ServersPage() {
               </Tooltip>
               <Tooltip content={isOperationPending(server.id, 'restart') ? 'Restarting...' : 'Restart'}>
                 <button
-                  onClick={() => restartServer.mutate(server.id)}
+                  onClick={() => restartServer.mutate({ serverId: server.id })}
                   disabled={isOperationPending(server.id, 'restart')}
                   className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-all duration-100 inline-flex disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
                 >
@@ -598,7 +612,7 @@ function ServersPage() {
                   cancelLabel: 'Cancel',
                   variant: 'danger',
                 });
-                if (confirmed) deleteServer.mutate(server.id);
+                if (confirmed) deleteServer.mutate({ serverId: server.id });
               }}
               disabled={isOperationPending(server.id, 'delete')}
               className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-all duration-100 inline-flex disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
@@ -941,6 +955,7 @@ function ServersPage() {
       />
 
       {dialog}
+      {reasonDialog}
     </>
   );
 }

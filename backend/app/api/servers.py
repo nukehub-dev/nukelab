@@ -23,6 +23,7 @@ from app.models.server import Server
 from app.container.spawner import spawner
 import aiodocker
 from app.services.notification_service import NotificationService, broadcast_server_status_change
+from app.services.activity_service import ActivityService
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,11 @@ class ServerUpdateRequest(BaseModel):
     plan_id: Optional[str] = None
     environment_id: Optional[str] = None
     volume_mounts: Optional[list[VolumeMountRequest]] = None
+    reason: Optional[str] = None
+
+
+class ReasonRequest(BaseModel):
+    reason: Optional[str] = None
 
 
 class ServerResponse(BaseModel):
@@ -88,11 +94,13 @@ async def get_server_with_permission_check(
     server_id: str,
     current_user: User,
     db: AsyncSession,
+    request: Request,
     require_ownership: bool = True
 ) -> Server:
     """
     Get server and check permissions.
-    Admins can access any server, users can only access their own.
+    Admins can access any server via JWT only, users can only access their own.
+    API tokens cannot be used for cross-user server access.
     """
     result = await db.execute(
         select(Server).where(Server.id == server_id)
@@ -103,10 +111,56 @@ async def get_server_with_permission_check(
         raise HTTPException(status_code=404, detail="Server not found")
     
     if require_ownership and str(server.user_id) != str(current_user.id):
+        # Cross-user access requires JWT authentication — API tokens are not allowed
+        auth_context = getattr(request.state, "auth_context", None)
+        if not auth_context or auth_context.auth_method != "jwt":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cross-user server access requires JWT authentication. Please log in via the web interface."
+            )
         checker = PermissionChecker(current_user)
-        checker.require(Permission.SERVERS_MANAGE)
+        checker.require(Permission.SERVERS_ACCESS_OTHERS)
     
     return server
+
+
+async def _audit_cross_user_access(
+    server: Server,
+    current_user: User,
+    db: AsyncSession,
+    action: str,
+    reason: Optional[str] = None
+):
+    """Log audit trail and notify owner when admin accesses another user's server.
+    Raises 400 if reason is not provided for cross-user access."""
+    if str(server.user_id) == str(current_user.id):
+        return
+    
+    if not reason or not reason.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A reason is required for cross-user server access"
+        )
+    
+    activity_service = ActivityService(db)
+    await activity_service.log(
+        action=action,
+        target_type="server",
+        target_id=str(server.id),
+        actor_id=str(current_user.id),
+        details={"reason": reason, "server_name": server.name},
+    )
+    
+    notif_service = NotificationService(db)
+    await notif_service.create(
+        user_id=server.user_id,
+        title="Server Accessed",
+        message=f"{current_user.username or 'An admin'} accessed your server '{server.name}' with reason: {reason or 'No reason provided'}",
+        type="server",
+        severity="warning",
+        action_url=f"/servers/{server.id}",
+        event_key="server_accessed",
+    )
 
 
 async def _load_server_volume_mounts(db: AsyncSession, server_id: str) -> list:
@@ -604,12 +658,13 @@ async def list_servers(
 @router.get("/{server_id}")
 async def get_server(
     server_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     _ = Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.SERVERS_READ_ALL)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get server details. Users can view own, admins can view any."""
-    server = await get_server_with_permission_check(server_id, current_user, db)
+    server = await get_server_with_permission_check(server_id, current_user, db, request)
 
     if server.container_id:
         try:
@@ -678,7 +733,7 @@ async def get_server_by_path(
     # Permission check - users can only access their own unless admin
     if str(server.user_id) != str(current_user.id):
         checker = PermissionChecker(current_user)
-        checker.require(Permission.SERVERS_MANAGE)
+        checker.require(Permission.SERVERS_ACCESS_OTHERS)
 
     # Sync status with actual container state
     if server.container_id:
@@ -727,19 +782,22 @@ async def get_server_by_path(
 @router.post("/{server_id}/start")
 async def start_server(
     server_id: str,
+    http_request: Request,
+    body: ReasonRequest = ReasonRequest(),
     current_user: User = Depends(get_current_user),
     _ = Depends(require_permissions(Permission.SERVERS_START)),
     db: AsyncSession = Depends(get_db)
 ):
     """Start a stopped server."""
-    server = await get_server_with_permission_check(server_id, current_user, db)
+    server = await get_server_with_permission_check(server_id, current_user, db, http_request)
     
     checker = PermissionChecker(current_user)
     checker.require(Permission.SERVERS_START)
     
     # Check if trying to start someone else's server
     if str(server.user_id) != str(current_user.id):
-        checker.require(Permission.SERVERS_MANAGE)
+        checker.require(Permission.SERVERS_ACCESS_OTHERS)
+        await _audit_cross_user_access(server, current_user, db, "server.start", body.reason)
     
     # Check plan access — user may have lost access since creation
     if server.plan_id:
@@ -991,19 +1049,22 @@ async def start_server(
 @router.post("/{server_id}/stop")
 async def stop_server(
     server_id: str,
+    http_request: Request,
+    body: ReasonRequest = ReasonRequest(),
     current_user: User = Depends(get_current_user),
     _ = Depends(require_permissions(Permission.SERVERS_STOP)),
     db: AsyncSession = Depends(get_db)
 ):
     """Stop a server."""
-    server = await get_server_with_permission_check(server_id, current_user, db)
+    server = await get_server_with_permission_check(server_id, current_user, db, http_request)
 
     checker = PermissionChecker(current_user)
     checker.require(Permission.SERVERS_STOP)
 
     # Check if trying to stop someone else's server
     if str(server.user_id) != str(current_user.id):
-        checker.require(Permission.SERVERS_MANAGE)
+        checker.require(Permission.SERVERS_ACCESS_OTHERS)
+        await _audit_cross_user_access(server, current_user, db, "server.stop", body.reason)
 
     # Load volume mounts for count management
     volume_mounts = await _load_server_volume_mounts(db, str(server.id))
@@ -1093,19 +1154,22 @@ async def stop_server(
 @router.post("/{server_id}/restart")
 async def restart_server(
     server_id: str,
+    http_request: Request,
+    body: ReasonRequest = ReasonRequest(),
     current_user: User = Depends(get_current_user),
     _ = Depends(require_permissions(Permission.SERVERS_START)),
     db: AsyncSession = Depends(get_db)
 ):
     """Restart a server."""
-    server = await get_server_with_permission_check(server_id, current_user, db)
+    server = await get_server_with_permission_check(server_id, current_user, db, http_request)
     
     checker = PermissionChecker(current_user)
     checker.require_any([Permission.SERVERS_STOP, Permission.SERVERS_START])
     
     # Check if trying to restart someone else's server
     if str(server.user_id) != str(current_user.id):
-        checker.require(Permission.SERVERS_MANAGE)
+        checker.require(Permission.SERVERS_ACCESS_OTHERS)
+        await _audit_cross_user_access(server, current_user, db, "server.restart", body.reason)
     
     # Check plan access — user may have lost access since creation
     if server.plan_id:
@@ -1257,19 +1321,22 @@ async def restart_server(
 @router.delete("/{server_id}")
 async def delete_server(
     server_id: str,
+    request: Request,
+    reason: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     _ = Depends(require_permissions(Permission.SERVERS_DELETE)),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete a server."""
-    server = await get_server_with_permission_check(server_id, current_user, db)
+    server = await get_server_with_permission_check(server_id, current_user, db, request)
     
     checker = PermissionChecker(current_user)
     checker.require(Permission.SERVERS_DELETE)
     
     # Check if trying to delete someone else's server
     if str(server.user_id) != str(current_user.id):
-        checker.require(Permission.SERVERS_MANAGE)
+        checker.require(Permission.SERVERS_ACCESS_OTHERS)
+        await _audit_cross_user_access(server, current_user, db, "server.delete", reason)
     
     # Load volume mounts for count management
     volume_mounts = await _load_server_volume_mounts(db, str(server.id))
@@ -1315,26 +1382,32 @@ async def delete_server(
 @router.get("/{server_id}/volumes")
 async def get_server_volumes(
     server_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     _ = Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.SERVERS_READ_ALL)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get volume mounts for a server."""
-    server = await get_server_with_permission_check(server_id, current_user, db)
+    server = await get_server_with_permission_check(server_id, current_user, db, request)
     return {"volume_mounts": await _get_server_volume_mounts(db, str(server.id))}
 
 
 @router.patch("/{server_id}", response_model=ServerResponse)
 async def update_server(
     server_id: str,
-    request: ServerUpdateRequest,
+    http_request: Request,
+    body: ServerUpdateRequest,
     current_user: User = Depends(get_current_user),
     _ = Depends(require_permissions(Permission.SERVERS_MANAGE)),
     db: AsyncSession = Depends(get_db)
 ):
     """Update server configuration. Any config change that affects the container
     triggers a recreate (stop → delete → spawn with new config)."""
-    server = await get_server_with_permission_check(server_id, current_user, db)
+    server = await get_server_with_permission_check(server_id, current_user, db, http_request)
+    
+    # Audit cross-user config updates
+    if str(server.user_id) != str(current_user.id):
+        await _audit_cross_user_access(server, current_user, db, "server.update", body.reason)
     
     from app.services.quota_service import QuotaService
     from app.services.plan_service import PlanService
@@ -1654,12 +1727,13 @@ async def test_metric(
 @router.post("/{server_id}/activity")
 async def ping_server_activity(
     server_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     _ = Depends(require_permissions(Permission.SERVERS_START)),
     db: AsyncSession = Depends(get_db)
 ):
     """Update last_activity timestamp for a server. Called when user accesses the server."""
-    server = await get_server_with_permission_check(server_id, current_user, db)
+    server = await get_server_with_permission_check(server_id, current_user, db, request)
     
     if server.status != "running":
         raise HTTPException(status_code=400, detail="Server is not running")
@@ -1715,6 +1789,7 @@ async def get_server_queue_status(
 @router.get("/{server_id}/logs")
 async def get_server_logs(
     server_id: str,
+    request: Request,
     tail: int = 100,
     since: Optional[str] = None,
     follow: bool = False,
@@ -1723,7 +1798,7 @@ async def get_server_logs(
     db: AsyncSession = Depends(get_db)
 ):
     """Get server container logs."""
-    server = await get_server_with_permission_check(server_id, current_user, db)
+    server = await get_server_with_permission_check(server_id, current_user, db, request)
     
     if not server.container_id:
         return {
@@ -1786,10 +1861,15 @@ class ServerAccessTokenResponse(BaseModel):
     server_id: str
 
 
+class ServerAccessTokenRequest(BaseModel):
+    reason: Optional[str] = None
+
+
 @router.post("/{server_id}/access-token")
 async def create_server_access_token(
     server_id: str,
     request: Request,
+    body: ServerAccessTokenRequest,
     current_user: User = Depends(get_current_user),
     _ = Depends(require_permissions(Permission.SERVERS_START)),
     db: AsyncSession = Depends(get_db)
@@ -1798,14 +1878,18 @@ async def create_server_access_token(
     
     Returns the token as an HttpOnly cookie for secure browser access.
     The cookie is scoped to path=/ and expires with the token (5 minutes default).
+    A reason is required for cross-user access.
     """
-    server = await get_server_with_permission_check(server_id, current_user, db)
+    server = await get_server_with_permission_check(server_id, current_user, db, request)
     
     if server.status != "running":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Server must be running to generate access token"
         )
+    
+    # Audit cross-user access (enforces reason for non-owners)
+    await _audit_cross_user_access(server, current_user, db, "server_access", body.reason)
     
     from app.services.server_auth_service import server_auth_service
     
@@ -1860,12 +1944,13 @@ async def create_server_access_token(
 @router.get("/{server_id}/access-stats")
 async def get_server_access_stats(
     server_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     _ = Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.SERVERS_READ_ALL)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get access statistics for a server."""
-    server = await get_server_with_permission_check(server_id, current_user, db)
+    server = await get_server_with_permission_check(server_id, current_user, db, request)
     from app.services.server_auth_service import server_auth_service
     stats = await server_auth_service.get_server_access_stats(db, server.id)
     return {"server_id": server_id, **stats}

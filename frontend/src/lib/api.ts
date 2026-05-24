@@ -160,8 +160,9 @@ export const api = {
     });
   },
 
-  async delete<T>(path: string): Promise<T> {
-    return apiFetch<T>(path, {
+  async delete<T>(path: string, queryParams?: Record<string, string>): Promise<T> {
+    const queryString = queryParams ? '?' + new URLSearchParams(queryParams).toString() : '';
+    return apiFetch<T>(path + queryString, {
       method: 'DELETE',
     });
   },

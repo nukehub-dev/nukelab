@@ -7,7 +7,8 @@ import { type ColumnDef, type SortingState, type ColumnFiltersState, type Visibi
 import { ResourcePageLayout } from '../components/layout/resource-page-layout';
 import { DataTable } from '../components/data/data-table';
 import { StatusBadge } from '../components/data/status-badge';
-import { useServers, useServerActions } from '../hooks/use-servers';
+import { useServers } from '../hooks/use-servers';
+import { useServerActionsWithReason } from '../hooks/use-server-actions-with-reason';
 import { useEnvironments } from '../hooks/use-environments';
 import { usePlans } from '../hooks/use-plans';
 import { useVolumes } from '../hooks/use-volumes';
@@ -37,7 +38,10 @@ function AdminServersPage() {
 function AdminServersContent({ enableManagement }: { enableManagement: boolean }) {
   const { confirm, dialog } = useConfirmDialog();
   const { data: servers = [], isLoading, isError, error } = useServers();
-  const { createServer, startServer, stopServer, restartServer, deleteServer, isOperationPending } = useServerActions();
+  const { createServer, startServer, stopServer, restartServer, deleteServer, startServerAsync, promptAccessReason, isOperationPending, dialog: reasonDialog } = useServerActionsWithReason();
+  const user = useAuthStore((state) => state.user);
+  const canAccessOthersServers = useAuthStore((state) => state.canAccessOthersServers());
+  const canAccessServer = (server: ServerType) => !user || server.user_id === user.id || canAccessOthersServers;
   const { data: envData } = useEnvironments({ is_active: true, limit: 100 });
   const { data: plansData } = usePlans({ is_active: true, limit: 100 });
   const { data: volumesData } = useVolumes();
@@ -228,13 +232,22 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
 
         const handleOpen = async (e: React.MouseEvent) => {
           e.preventDefault();
+          if (!canAccessServer(server)) return;
           if (server.status !== 'running') {
-            await startServer.mutateAsync(server.id);
+            const started = await startServerAsync(server);
+            if (!started) return;
+          } else {
+            const reason = await promptAccessReason(server, 'open');
+            if (reason === null) return;
           }
           window.open(gatewayUrl, '_blank', 'noopener,noreferrer');
         };
 
         const anyPending = isOperationPending(server.id);
+
+        if (!canAccessServer(server)) {
+          return <span className="text-muted-foreground">—</span>;
+        }
 
         return (
           <button
@@ -272,7 +285,7 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
             {server.status === 'stopped' && (
               <Tooltip content={isOperationPending(server.id, 'start') ? 'Starting...' : 'Start'}>
                 <button
-                  onClick={() => startServer.mutate(server.id)}
+                  onClick={() => startServer(server)}
                   disabled={isOperationPending(server.id, 'start')}
                   className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-all duration-100 inline-flex disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
                 >
@@ -288,7 +301,7 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
               <>
                 <Tooltip content={isOperationPending(server.id, 'stop') ? 'Stopping...' : 'Stop'}>
                   <button
-                    onClick={() => stopServer.mutate(server.id)}
+                    onClick={() => stopServer(server)}
                     disabled={isOperationPending(server.id, 'stop')}
                     className="p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-all duration-100 inline-flex disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
                   >
@@ -301,7 +314,7 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
                 </Tooltip>
                 <Tooltip content={isOperationPending(server.id, 'restart') ? 'Restarting...' : 'Restart'}>
                   <button
-                    onClick={() => restartServer.mutate(server.id)}
+                    onClick={() => restartServer(server)}
                     disabled={isOperationPending(server.id, 'restart')}
                     className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-all duration-100 inline-flex disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
                   >
@@ -324,7 +337,7 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
                     cancelLabel: 'Cancel',
                     variant: 'danger',
                   });
-                  if (confirmed) deleteServer.mutate(server.id);
+                  if (confirmed) deleteServer(server);
                 }}
                 disabled={isOperationPending(server.id, 'delete')}
                 className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-all duration-100 inline-flex disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
@@ -341,7 +354,7 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
       },
       enableSorting: false,
     }] : []),
-  ], [enableManagement, isOperationPending, startServer, stopServer, restartServer, deleteServer, confirm]);
+  ], [enableManagement, isOperationPending, startServer, stopServer, restartServer, deleteServer, confirm, startServerAsync, user, canAccessOthersServers]);
 
   const activeServers = servers.filter((s) => s.status === 'running').length;
   const parseMemory = (mem: string | undefined) => {
@@ -364,21 +377,30 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
       label: 'Start',
       icon: <Play className="w-4 h-4" />,
       onClick: (ids: string[]) => {
-        ids.forEach((id) => startServer.mutate(id));
+        ids.forEach((id) => {
+          const s = servers.find((srv) => srv.id === id);
+          if (s) startServer(s);
+        });
       },
     },
     {
       label: 'Stop',
       icon: <Square className="w-4 h-4" />,
       onClick: (ids: string[]) => {
-        ids.forEach((id) => stopServer.mutate(id));
+        ids.forEach((id) => {
+          const s = servers.find((srv) => srv.id === id);
+          if (s) stopServer(s);
+        });
       },
     },
     {
       label: 'Restart',
       icon: <RotateCcw className="w-4 h-4" />,
       onClick: (ids: string[]) => {
-        ids.forEach((id) => restartServer.mutate(id));
+        ids.forEach((id) => {
+          const s = servers.find((srv) => srv.id === id);
+          if (s) restartServer(s);
+        });
       },
     },
     {
@@ -392,7 +414,12 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
           cancelLabel: 'Cancel',
           variant: 'danger',
         });
-        if (confirmed) ids.forEach((id) => deleteServer.mutate(id));
+        if (confirmed) {
+          ids.forEach((id) => {
+            const s = servers.find((srv) => srv.id === id);
+            if (s) deleteServer(s);
+          });
+        }
       },
       variant: 'destructive' as const,
     },
@@ -446,12 +473,13 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
         Created: {formatDate(server.created_at || '')}
       </div>
       <div className="flex items-center justify-between pt-1">
-        {server.external_url && (
+        {server.external_url && canAccessServer(server) && (
           <button
             onClick={async (e) => {
               e.preventDefault();
               if (server.status !== 'running') {
-                await startServer.mutateAsync(server.id);
+                const started = await startServerAsync(server);
+                if (!started) return;
               }
               const gatewayUrl = server.username
                 ? `/user/${server.username}/${server.name}`
@@ -479,7 +507,7 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
             {server.status === 'stopped' && (
               <Tooltip content={isOperationPending(server.id, 'start') ? 'Starting...' : 'Start'}>
                 <button
-                  onClick={() => startServer.mutate(server.id)}
+                  onClick={() => startServer(server)}
                   disabled={isOperationPending(server.id, 'start')}
                   className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-all duration-100 inline-flex disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
                 >
@@ -495,7 +523,7 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
               <>
                 <Tooltip content={isOperationPending(server.id, 'stop') ? 'Stopping...' : 'Stop'}>
                   <button
-                    onClick={() => stopServer.mutate(server.id)}
+                    onClick={() => stopServer(server)}
                     disabled={isOperationPending(server.id, 'stop')}
                     className="p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-all duration-100 inline-flex disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
                   >
@@ -508,7 +536,7 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
                 </Tooltip>
                 <Tooltip content={isOperationPending(server.id, 'restart') ? 'Restarting...' : 'Restart'}>
                   <button
-                    onClick={() => restartServer.mutate(server.id)}
+                    onClick={() => restartServer(server)}
                     disabled={isOperationPending(server.id, 'restart')}
                     className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-all duration-100 inline-flex disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
                   >
@@ -531,7 +559,7 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
                     cancelLabel: 'Cancel',
                     variant: 'danger',
                   });
-                  if (confirmed) deleteServer.mutate(server.id);
+                  if (confirmed) deleteServer(server);
                 }}
                 disabled={isOperationPending(server.id, 'delete')}
                 className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-all duration-100 inline-flex disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
@@ -614,6 +642,7 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
         }}
       />
       {dialog}
+      {reasonDialog}
     </>
   );
 }

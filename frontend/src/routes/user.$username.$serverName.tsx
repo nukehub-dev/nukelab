@@ -18,7 +18,9 @@ import {
   Terminal,
   Sparkles,
 } from 'lucide-react';
-import { useServerByPath, useServerActions } from '../hooks/use-servers';
+import { useServerByPath } from '../hooks/use-servers';
+import { useServerActionsWithReason } from '../hooks/use-server-actions-with-reason';
+import { useAuthStore } from '../stores/auth-store';
 import { StatusBadge } from '../components/data/status-badge';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -28,7 +30,7 @@ import { useQueryClient } from '@tanstack/react-query';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
-async function getServerAccessToken(serverId: string): Promise<void> {
+async function getServerAccessToken(serverId: string, reason?: string): Promise<void> {
   const token = localStorage.getItem('nukelab-token') || '';
   const response = await fetch(`${API_BASE}/servers/${serverId}/access-token`, {
     method: 'POST',
@@ -36,6 +38,7 @@ async function getServerAccessToken(serverId: string): Promise<void> {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
+    body: JSON.stringify({ reason }),
     credentials: 'include',
   });
   if (!response.ok) {
@@ -490,8 +493,10 @@ function StoppedState({ server, username, onStart, isStarting }: {
 function ServerGatewayPage() {
   const { username, serverName } = Route.useParams();
   const { data: server, isLoading, isError, error } = useServerByPath(username, serverName);
-  const { startServer } = useServerActions();
+  const { startServerAsync, promptAccessReason, dialog: reasonDialog } = useServerActionsWithReason();
   const queryClient = useQueryClient();
+  const user = useAuthStore((state) => state.user);
+  const isOwnServer = server ? server.user_id === user?.id : true;
 
   const [isStarting, setIsStarting] = useState(false);
   const [pollCount, setPollCount] = useState(0);
@@ -543,6 +548,13 @@ function ServerGatewayPage() {
         return;
       }
 
+      // For cross-user access, don't auto-redirect; show manual open button
+      // so user can provide a reason via prompt
+      if (!isOwnServer) {
+        setManualOpenReady(true);
+        return;
+      }
+
       sessionStorage.setItem(redirectKey, 'true');
 
       const getAccessTokenAndRedirect = async () => {
@@ -560,52 +572,88 @@ function ServerGatewayPage() {
       }, 3000);
       return () => clearTimeout(timeout);
     }
-  }, [server?.status, server?.id, server?.external_url]);
+  }, [server?.status, server?.id, server?.external_url, isOwnServer]);
 
   const handleStart = useCallback(async () => {
     if (!server) return;
     setIsStarting(true);
     try {
-      await startServer.mutateAsync(server.id);
+      await startServerAsync(server);
       queryClient.invalidateQueries({ queryKey: ['server-by-path', username, serverName] });
     } catch {
       setIsStarting(false);
     }
-  }, [server, startServer, queryClient, username, serverName]);
+  }, [server, startServerAsync, queryClient, username, serverName]);
 
   const handleManualOpen = useCallback(async () => {
     const targetUrl = server?.external_url || window.location.href;
+    let reason: string | undefined;
+    if (!isOwnServer && server) {
+      const entered = await promptAccessReason(server, 'open');
+      if (entered === null) return;
+      reason = entered || undefined;
+    }
     try {
       if (server?.id) {
-        await getServerAccessToken(server.id);
+        await getServerAccessToken(server.id, reason);
       }
       window.location.href = targetUrl;
     } catch (err) {
       setTokenError(err instanceof Error ? err.message : 'Failed to get access token');
     }
-  }, [server?.id, server?.external_url]);
+  }, [server, isOwnServer, promptAccessReason]);
 
   if (isLoading) {
-    return <LoadingState />;
+    return (
+      <>
+        <LoadingState />
+        {reasonDialog}
+      </>
+    );
   }
 
   if (isError || !server) {
-    return <ErrorState serverName={serverName} error={error} />;
+    return (
+      <>
+        <ErrorState serverName={serverName} error={error} />
+        {reasonDialog}
+      </>
+    );
   }
 
   // Server is running - either redirecting or show manual open button
   if (server.status === 'running') {
     if (manualOpenReady) {
-      return <ManualOpenState server={server} username={username} onOpen={handleManualOpen} tokenError={tokenError} />;
+      return (
+        <>
+          <ManualOpenState server={server} username={username} onOpen={handleManualOpen} tokenError={tokenError} />
+          {reasonDialog}
+        </>
+      );
     }
-    return <RunningRedirectState server={server} />;
+    return (
+      <>
+        <RunningRedirectState server={server} />
+        {reasonDialog}
+      </>
+    );
   }
 
   // Server is starting/pending
   if (server.status === 'pending' || server.status === 'error' || isStarting) {
-    return <StartingState server={server} username={username} pollCount={pollCount} elapsedSeconds={elapsedSeconds} />;
+    return (
+      <>
+        <StartingState server={server} username={username} pollCount={pollCount} elapsedSeconds={elapsedSeconds} />
+        {reasonDialog}
+      </>
+    );
   }
 
   // Server is stopped - show start option
-  return <StoppedState server={server} username={username} onStart={handleStart} isStarting={isStarting || startServer.isPending} />;
+  return (
+    <>
+      <StoppedState server={server} username={username} onStart={handleStart} isStarting={isStarting || false} />
+      {reasonDialog}
+    </>
+  );
 }
