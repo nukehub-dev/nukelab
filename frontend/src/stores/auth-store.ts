@@ -28,8 +28,6 @@ export const PERMISSIONS = {
   SERVERS_STOP: 'servers:stop',
   SERVERS_DELETE: 'servers:delete',
   SERVERS_MANAGE: 'servers:manage',
-  RESOURCES_READ_OWN: 'resources:read_own',
-  RESOURCES_READ_ALL: 'resources:read_all',
   ENVIRONMENT_CREATE: 'environment:create',
   ENVIRONMENT_READ: 'environment:read',
   ENVIRONMENT_UPDATE: 'environment:update',
@@ -40,13 +38,16 @@ export const PERMISSIONS = {
   PLAN_DELETE: 'plan:delete',
   QUOTA_READ: 'quota:read',
   QUOTA_UPDATE: 'quota:update',
-  CREDITS_READ: 'credits:read',
+  CREDITS_READ_OWN: 'credits:read_own',
+  CREDITS_READ_ALL: 'credits:read_all',
   CREDITS_GRANT: 'credits:grant',
   CREDITS_DEDUCT: 'credits:deduct',
   ANALYTICS_READ: 'analytics:read',
-  WORKSPACES_READ: 'workspaces:read',
+  WORKSPACES_READ_OWN: 'workspaces:read_own',
+  WORKSPACES_READ_ALL: 'workspaces:read_all',
   WORKSPACES_MANAGE: 'workspaces:manage',
-  VOLUMES_READ: 'volumes:read',
+  VOLUMES_READ_OWN: 'volumes:read_own',
+  VOLUMES_READ_ALL: 'volumes:read_all',
   VOLUMES_MANAGE: 'volumes:manage',
 
   AUDIT_READ: 'audit:read',
@@ -129,10 +130,6 @@ function checkPermission(user: User | null, permission: string): boolean {
       return roleLevel >= ROLE_LEVELS.user;
     case PERMISSIONS.SERVERS_READ_OWN:
       return roleLevel >= ROLE_LEVELS.guest;
-    case PERMISSIONS.RESOURCES_READ_ALL:
-      return roleLevel >= ROLE_LEVELS.support;
-    case PERMISSIONS.RESOURCES_READ_OWN:
-      return roleLevel >= ROLE_LEVELS.guest;
     case PERMISSIONS.ENVIRONMENT_CREATE:
     case PERMISSIONS.ENVIRONMENT_UPDATE:
     case PERMISSIONS.ENVIRONMENT_DELETE:
@@ -148,8 +145,10 @@ function checkPermission(user: User | null, permission: string): boolean {
     case PERMISSIONS.QUOTA_READ:
     case PERMISSIONS.QUOTA_UPDATE:
       return roleLevel >= ROLE_LEVELS.admin;
-    case PERMISSIONS.CREDITS_READ:
+    case PERMISSIONS.CREDITS_READ_OWN:
       return roleLevel >= ROLE_LEVELS.user;
+    case PERMISSIONS.CREDITS_READ_ALL:
+      return roleLevel >= ROLE_LEVELS.support;
     case PERMISSIONS.CREDITS_GRANT:
     case PERMISSIONS.CREDITS_DEDUCT:
       return roleLevel >= ROLE_LEVELS.admin;
@@ -158,8 +157,12 @@ function checkPermission(user: User | null, permission: string): boolean {
       return roleLevel >= ROLE_LEVELS.admin;
     case PERMISSIONS.ANALYTICS_READ:
       return roleLevel >= ROLE_LEVELS.support;
-    case PERMISSIONS.WORKSPACES_READ:
-    case PERMISSIONS.VOLUMES_READ:
+    case PERMISSIONS.WORKSPACES_READ_OWN:
+    case PERMISSIONS.VOLUMES_READ_OWN:
+      return roleLevel >= ROLE_LEVELS.user;
+    case PERMISSIONS.WORKSPACES_READ_ALL:
+    case PERMISSIONS.VOLUMES_READ_ALL:
+      return roleLevel >= ROLE_LEVELS.support;
     case PERMISSIONS.WORKSPACES_MANAGE:
     case PERMISSIONS.VOLUMES_MANAGE:
       return roleLevel >= ROLE_LEVELS.admin;
@@ -181,8 +184,8 @@ export const useAuthStore = create<AuthState>()(
       isSuperAdmin: () => get().hasPermission(PERMISSIONS.ALL),
       isAdmin: () => get().hasPermission(PERMISSIONS.ADMIN_ACCESS),
       isModerator: () => get().hasPermission(PERMISSIONS.SERVERS_READ_ALL) && !get().hasPermission(PERMISSIONS.ADMIN_ACCESS),
-      isSupport: () => get().hasPermission(PERMISSIONS.RESOURCES_READ_ALL) && !get().hasPermission(PERMISSIONS.SERVERS_READ_ALL),
-      isUser: () => get().hasPermission(PERMISSIONS.SERVERS_START) && !get().hasPermission(PERMISSIONS.RESOURCES_READ_ALL),
+      isSupport: () => get().hasPermission(PERMISSIONS.VOLUMES_READ_ALL) && !get().hasPermission(PERMISSIONS.SERVERS_READ_ALL),
+      isUser: () => get().hasPermission(PERMISSIONS.SERVERS_START) && !get().hasPermission(PERMISSIONS.VOLUMES_READ_ALL),
       isGuest: () => !get().user || (get().hasPermission(PERMISSIONS.SERVERS_READ_OWN) && !get().hasPermission(PERMISSIONS.SERVERS_START)),
 
       // Raw permission checks
@@ -212,7 +215,6 @@ export const useAuthStore = create<AuthState>()(
           PERMISSIONS.USERS_DELETE,
           PERMISSIONS.SERVERS_READ_ALL,
           PERMISSIONS.SERVERS_MANAGE,
-          PERMISSIONS.RESOURCES_READ_ALL,
           PERMISSIONS.ENVIRONMENT_CREATE,
           PERMISSIONS.ENVIRONMENT_UPDATE,
           PERMISSIONS.ENVIRONMENT_DELETE,
@@ -228,7 +230,7 @@ export const useAuthStore = create<AuthState>()(
         ]),
       canManageCredits: () => get().hasAnyPermission([PERMISSIONS.CREDITS_GRANT, PERMISSIONS.CREDITS_DEDUCT]),
 
-      canViewCredits: () => get().hasPermission(PERMISSIONS.CREDITS_READ),
+      canViewCredits: () => get().hasPermission(PERMISSIONS.CREDITS_READ_OWN),
       canViewAudit: () => get().hasPermission(PERMISSIONS.AUDIT_READ),
     }),
     {

@@ -524,7 +524,7 @@ async def create_server(
 @router.get("/")
 async def list_servers(
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.RESOURCES_READ_OWN)),
+    _ = Depends(require_permissions(Permission.SERVERS_READ_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """List servers. Users see own servers, admins see all."""
@@ -605,7 +605,7 @@ async def list_servers(
 async def get_server(
     server_id: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.RESOURCES_READ_OWN)),
+    _ = Depends(require_permissions(Permission.SERVERS_READ_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get server details. Users can view own, admins can view any."""
@@ -658,7 +658,7 @@ async def get_server_by_path(
     username: str,
     server_name: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.RESOURCES_READ_OWN)),
+    _ = Depends(require_permissions(Permission.SERVERS_READ_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get server by username and server name. Used by server gateway page."""
@@ -1316,7 +1316,7 @@ async def delete_server(
 async def get_server_volumes(
     server_id: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.RESOURCES_READ_OWN)),
+    _ = Depends(require_permissions(Permission.SERVERS_READ_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get volume mounts for a server."""
@@ -1609,7 +1609,7 @@ async def update_server(
 async def test_metric(
     server_id: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.RESOURCES_READ_OWN)),
+    _ = Depends(require_permissions(Permission.SERVERS_READ_OWN)),
 ):
     """Send a test metric via Redis pub/sub to verify WebSocket pipeline."""
     import json
@@ -1674,7 +1674,7 @@ async def ping_server_activity(
 async def get_server_queue_status(
     server_id: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.RESOURCES_READ_OWN)),
+    _ = Depends(require_permissions(Permission.SERVERS_READ_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get queue status for a server that is waiting in queue."""
@@ -1719,7 +1719,7 @@ async def get_server_logs(
     since: Optional[str] = None,
     follow: bool = False,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.RESOURCES_READ_OWN)),
+    _ = Depends(require_permissions(Permission.SERVERS_READ_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get server container logs."""
@@ -1861,7 +1861,7 @@ async def create_server_access_token(
 async def get_server_access_stats(
     server_id: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.RESOURCES_READ_OWN)),
+    _ = Depends(require_permissions(Permission.SERVERS_READ_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get access statistics for a server."""

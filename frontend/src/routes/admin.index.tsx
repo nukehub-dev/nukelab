@@ -65,7 +65,7 @@ const categories: AdminCategory[] = [
     description: 'Manage user credits and balances',
     icon: CreditCard,
     href: '/admin/credits',
-    requiredPermission: PERMISSIONS.CREDITS_READ,
+    requiredPermission: PERMISSIONS.CREDITS_READ_ALL,
     color: 'bg-rose-500/10 text-rose-400',
   },
   {
@@ -97,7 +97,7 @@ const categories: AdminCategory[] = [
     description: 'Manage all platform workspaces',
     icon: FolderOpen,
     href: '/admin/workspaces',
-    requiredPermission: PERMISSIONS.ADMIN_ACCESS,
+    requiredPermission: PERMISSIONS.WORKSPACES_READ_ALL,
     color: 'bg-indigo-500/10 text-indigo-400',
   },
   {
@@ -105,7 +105,7 @@ const categories: AdminCategory[] = [
     description: 'Manage all platform storage volumes',
     icon: HardDrive,
     href: '/admin/volumes',
-    requiredPermission: PERMISSIONS.ADMIN_ACCESS,
+    requiredPermission: PERMISSIONS.VOLUMES_READ_ALL,
     color: 'bg-pink-500/10 text-pink-400',
   },
   {

@@ -40,16 +40,19 @@ const AVAILABLE_SCOPES = [
   { value: 'servers:delete', label: 'Delete Servers', description: 'Delete servers', category: 'Servers' },
   { value: 'servers:manage', label: 'Manage Servers', description: 'Full server management', category: 'Servers' },
   // Volumes
-  { value: 'volumes:read', label: 'Read Volumes', description: 'View volume details', category: 'Volumes' },
+  { value: 'volumes:read_own', label: 'Read Own Volumes', description: 'View own volume details', category: 'Volumes' },
+  { value: 'volumes:read_all', label: 'Read All Volumes', description: 'View all volume details', category: 'Volumes' },
   { value: 'volumes:manage', label: 'Manage Volumes', description: 'Create and delete volumes', category: 'Volumes' },
   // Workspaces
-  { value: 'workspaces:read', label: 'Read Workspaces', description: 'View workspace details', category: 'Workspaces' },
+  { value: 'workspaces:read_own', label: 'Read Own Workspaces', description: 'View own workspace details', category: 'Workspaces' },
+  { value: 'workspaces:read_all', label: 'Read All Workspaces', description: 'View all workspace details', category: 'Workspaces' },
   { value: 'workspaces:manage', label: 'Manage Workspaces', description: 'Create and manage workspaces', category: 'Workspaces' },
   // User
   { value: 'user:read', label: 'Read User', description: 'View user profile information', category: 'User' },
   { value: 'user:update', label: 'Update User', description: 'Update user profile', category: 'User' },
   // Credits
-  { value: 'credits:read', label: 'Read Credits', description: 'View credit balance and history', category: 'Credits' },
+  { value: 'credits:read_own', label: 'Read Own Credits', description: 'View own credit balance and history', category: 'Credits' },
+  { value: 'credits:read_all', label: 'Read All Credits', description: 'View all credit balances and history', category: 'Credits' },
   // Notifications
   { value: 'notifications:read', label: 'Read Notifications', description: 'View notifications', category: 'Notifications' },
   { value: 'notifications:write', label: 'Manage Notifications', description: 'Mark notifications as read', category: 'Notifications' },

@@ -606,10 +606,6 @@ async def get_user_resources(
     current_user: User = Depends(get_current_user)
 ):
     """Get user's resource usage statistics"""
-    checker = PermissionChecker(current_user)
-    if str(current_user.id) != user_id:
-        checker.require(Permission.RESOURCES_READ_ALL)
-    
     service = UserService(db)
     stats = await service.get_user_stats(user_id)
     

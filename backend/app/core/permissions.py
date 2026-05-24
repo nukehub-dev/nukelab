@@ -22,10 +22,6 @@ class Permission:
     SERVERS_DELETE = "servers:delete"
     SERVERS_MANAGE = "servers:manage"
     
-    # Resources
-    RESOURCES_READ_OWN = "resources:read_own"
-    RESOURCES_READ_ALL = "resources:read_all"
-    
     # Environment management
     ENVIRONMENT_CREATE = "environment:create"
     ENVIRONMENT_READ = "environment:read"
@@ -43,7 +39,8 @@ class Permission:
     QUOTA_UPDATE = "quota:update"
     
     # Credit management
-    CREDITS_READ = "credits:read"
+    CREDITS_READ_OWN = "credits:read_own"
+    CREDITS_READ_ALL = "credits:read_all"
     CREDITS_GRANT = "credits:grant"
     CREDITS_DEDUCT = "credits:deduct"
     
@@ -51,11 +48,13 @@ class Permission:
     ANALYTICS_READ = "analytics:read"
 
     # Workspace management
-    WORKSPACES_READ = "workspaces:read"
+    WORKSPACES_READ_OWN = "workspaces:read_own"
+    WORKSPACES_READ_ALL = "workspaces:read_all"
     WORKSPACES_MANAGE = "workspaces:manage"
 
     # Volume management
-    VOLUMES_READ = "volumes:read"
+    VOLUMES_READ_OWN = "volumes:read_own"
+    VOLUMES_READ_ALL = "volumes:read_all"
     VOLUMES_MANAGE = "volumes:manage"
 
     # Audit
@@ -82,8 +81,6 @@ class Permission:
             cls.SERVERS_STOP,
             cls.SERVERS_DELETE,
             cls.SERVERS_MANAGE,
-            cls.RESOURCES_READ_OWN,
-            cls.RESOURCES_READ_ALL,
             cls.ENVIRONMENT_CREATE,
             cls.ENVIRONMENT_READ,
             cls.ENVIRONMENT_UPDATE,
@@ -94,13 +91,16 @@ class Permission:
             cls.PLAN_DELETE,
             cls.QUOTA_READ,
             cls.QUOTA_UPDATE,
-            cls.CREDITS_READ,
+            cls.CREDITS_READ_OWN,
+            cls.CREDITS_READ_ALL,
             cls.CREDITS_GRANT,
             cls.CREDITS_DEDUCT,
             cls.ANALYTICS_READ,
-            cls.WORKSPACES_READ,
+            cls.WORKSPACES_READ_OWN,
+            cls.WORKSPACES_READ_ALL,
             cls.WORKSPACES_MANAGE,
-            cls.VOLUMES_READ,
+            cls.VOLUMES_READ_OWN,
+            cls.VOLUMES_READ_ALL,
             cls.VOLUMES_MANAGE,
             cls.AUDIT_READ,
             cls.ADMIN_ACCESS,

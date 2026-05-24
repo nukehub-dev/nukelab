@@ -32,8 +32,6 @@ ROLE_PERMISSIONS = {
         Permission.SERVERS_STOP,
         Permission.SERVERS_DELETE,
         Permission.SERVERS_MANAGE,
-        # Resources (full)
-        Permission.RESOURCES_READ_ALL,
         # Environment management
         Permission.ENVIRONMENT_CREATE,
         Permission.ENVIRONMENT_READ,
@@ -48,16 +46,16 @@ ROLE_PERMISSIONS = {
         Permission.QUOTA_READ,
         Permission.QUOTA_UPDATE,
         # Credit management
-        Permission.CREDITS_READ,
+        Permission.CREDITS_READ_ALL,
         Permission.CREDITS_GRANT,
         Permission.CREDITS_DEDUCT,
         # Analytics
         Permission.ANALYTICS_READ,
         # Workspaces
-        Permission.WORKSPACES_READ,
+        Permission.WORKSPACES_READ_ALL,
         Permission.WORKSPACES_MANAGE,
         # Volumes
-        Permission.VOLUMES_READ,
+        Permission.VOLUMES_READ_ALL,
         Permission.VOLUMES_MANAGE,
         # Audit
         Permission.AUDIT_READ,
@@ -76,20 +74,18 @@ ROLE_PERMISSIONS = {
         Permission.SERVERS_STOP,
         Permission.SERVERS_DELETE,
         Permission.SERVERS_MANAGE,
-        # Resources (full)
-        Permission.RESOURCES_READ_ALL,
         # Environment (read only)
         Permission.ENVIRONMENT_READ,
         # Plan (read only)
         Permission.PLAN_READ,
         # Credits (view only)
-        Permission.CREDITS_READ,
+        Permission.CREDITS_READ_ALL,
         # Analytics (read only)
         Permission.ANALYTICS_READ,
         # Workspaces (read only)
-        Permission.WORKSPACES_READ,
+        Permission.WORKSPACES_READ_ALL,
         # Volumes (read only)
-        Permission.VOLUMES_READ,
+        Permission.VOLUMES_READ_ALL,
     ],
     
     "support": [
@@ -99,16 +95,14 @@ ROLE_PERMISSIONS = {
         Permission.SERVERS_READ_ALL,
         Permission.SERVERS_START,
         Permission.SERVERS_STOP,
-        # Resources (read all)
-        Permission.RESOURCES_READ_ALL,
         # Credits (view only)
-        Permission.CREDITS_READ,
+        Permission.CREDITS_READ_ALL,
         # Analytics (read only)
         Permission.ANALYTICS_READ,
         # Workspaces (read only)
-        Permission.WORKSPACES_READ,
+        Permission.WORKSPACES_READ_ALL,
         # Volumes (read only)
-        Permission.VOLUMES_READ,
+        Permission.VOLUMES_READ_ALL,
     ],
     
     "user": [
@@ -117,24 +111,21 @@ ROLE_PERMISSIONS = {
         Permission.SERVERS_START,
         Permission.SERVERS_STOP,
         Permission.SERVERS_DELETE,
-        # Own resources
-        Permission.RESOURCES_READ_OWN,
         # Credits (view own)
-        Permission.CREDITS_READ,
+        Permission.CREDITS_READ_OWN,
         # Workspaces (read only)
-        Permission.WORKSPACES_READ,
+        Permission.WORKSPACES_READ_OWN,
         # Volumes (read only)
-        Permission.VOLUMES_READ,
+        Permission.VOLUMES_READ_OWN,
     ],
 
     "guest": [
         # Read-only access to own resources
         Permission.SERVERS_READ_OWN,
-        Permission.RESOURCES_READ_OWN,
         # Workspaces (read only)
-        Permission.WORKSPACES_READ,
+        Permission.WORKSPACES_READ_OWN,
         # Volumes (read only)
-        Permission.VOLUMES_READ,
+        Permission.VOLUMES_READ_OWN,
     ],
 }
 

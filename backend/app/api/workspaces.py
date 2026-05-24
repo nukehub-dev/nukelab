@@ -64,7 +64,7 @@ class TransferOwnershipRequest(BaseModel):
 @router.get("/")
 async def list_workspaces(
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.WORKSPACES_READ, Permission.RESOURCES_READ_OWN)),
+    _ = Depends(require_permissions(Permission.WORKSPACES_READ_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """List workspaces user has access to (owned, member, or invited)."""
@@ -110,7 +110,7 @@ async def create_workspace(
 async def get_workspace(
     workspace_id: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.WORKSPACES_READ, Permission.RESOURCES_READ_OWN)),
+    _ = Depends(require_permissions(Permission.WORKSPACES_READ_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get workspace details. Must be owner, member, or invited user."""
@@ -320,7 +320,7 @@ async def get_workspace_activity(
     page: int = 1,
     limit: int = 20,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.WORKSPACES_READ, Permission.RESOURCES_READ_OWN)),
+    _ = Depends(require_permissions(Permission.WORKSPACES_READ_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get activity feed for a workspace. Must be member or owner."""
@@ -672,7 +672,7 @@ async def cancel_invitation(
 async def list_invitations(
     workspace_id: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.WORKSPACES_READ, Permission.RESOURCES_READ_OWN)),
+    _ = Depends(require_permissions(Permission.WORKSPACES_READ_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """List pending invitations for a workspace. Must be owner or admin."""
@@ -702,7 +702,7 @@ async def list_workspace_members(
     search: Optional[str] = None,
     role: Optional[str] = None,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.WORKSPACES_READ, Permission.RESOURCES_READ_OWN)),
+    _ = Depends(require_permissions(Permission.WORKSPACES_READ_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """List workspace members with pagination. Must be member or owner."""
@@ -747,7 +747,7 @@ async def list_workspace_volumes(
     sort_order: str = "desc",
     search: Optional[str] = None,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.WORKSPACES_READ, Permission.RESOURCES_READ_OWN)),
+    _ = Depends(require_permissions(Permission.WORKSPACES_READ_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """List workspace volumes with pagination. Must be member or owner."""

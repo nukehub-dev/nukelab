@@ -34,7 +34,7 @@ export const Route = createFileRoute('/admin/credits')({
 });
 
 function CreditsAdminPage() {
-  const allowed = usePageGuard({ permission: PERMISSIONS.CREDITS_READ });
+  const allowed = usePageGuard({ permission: PERMISSIONS.CREDITS_READ_ALL });
   if (!allowed) return null;
 
   const hasPermission = useAuthStore((state) => state.hasPermission);
