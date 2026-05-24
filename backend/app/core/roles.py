@@ -59,12 +59,6 @@ ROLE_PERMISSIONS = {
         # Volumes
         Permission.VOLUMES_READ,
         Permission.VOLUMES_MANAGE,
-        # Images
-        Permission.IMAGES_READ,
-        Permission.IMAGES_MANAGE,
-        # Networks
-        Permission.NETWORKS_READ,
-        Permission.NETWORKS_MANAGE,
         # Audit
         Permission.AUDIT_READ,
         # Admin dashboard
@@ -96,10 +90,6 @@ ROLE_PERMISSIONS = {
         Permission.WORKSPACES_READ,
         # Volumes (read only)
         Permission.VOLUMES_READ,
-        # Images (read only)
-        Permission.IMAGES_READ,
-        # Networks (read only)
-        Permission.NETWORKS_READ,
     ],
     
     "support": [
@@ -119,10 +109,6 @@ ROLE_PERMISSIONS = {
         Permission.WORKSPACES_READ,
         # Volumes (read only)
         Permission.VOLUMES_READ,
-        # Images (read only)
-        Permission.IMAGES_READ,
-        # Networks (read only)
-        Permission.NETWORKS_READ,
     ],
     
     "user": [
@@ -139,10 +125,6 @@ ROLE_PERMISSIONS = {
         Permission.WORKSPACES_READ,
         # Volumes (read only)
         Permission.VOLUMES_READ,
-        # Images (read only)
-        Permission.IMAGES_READ,
-        # Networks (read only)
-        Permission.NETWORKS_READ,
     ],
 
     "guest": [
@@ -153,10 +135,6 @@ ROLE_PERMISSIONS = {
         Permission.WORKSPACES_READ,
         # Volumes (read only)
         Permission.VOLUMES_READ,
-        # Images (read only)
-        Permission.IMAGES_READ,
-        # Networks (read only)
-        Permission.NETWORKS_READ,
     ],
 }
 

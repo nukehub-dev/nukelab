@@ -58,14 +58,6 @@ class Permission:
     VOLUMES_READ = "volumes:read"
     VOLUMES_MANAGE = "volumes:manage"
 
-    # Image management
-    IMAGES_READ = "images:read"
-    IMAGES_MANAGE = "images:manage"
-
-    # Network management
-    NETWORKS_READ = "networks:read"
-    NETWORKS_MANAGE = "networks:manage"
-
     # Audit
     AUDIT_READ = "audit:read"
 
@@ -110,10 +102,6 @@ class Permission:
             cls.WORKSPACES_MANAGE,
             cls.VOLUMES_READ,
             cls.VOLUMES_MANAGE,
-            cls.IMAGES_READ,
-            cls.IMAGES_MANAGE,
-            cls.NETWORKS_READ,
-            cls.NETWORKS_MANAGE,
             cls.AUDIT_READ,
             cls.ADMIN_ACCESS,
         ]

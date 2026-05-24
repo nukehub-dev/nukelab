@@ -18,8 +18,6 @@ import {
   ChevronUp,
   HardDrive,
   FolderOpen,
-  Image,
-  Globe,
   CheckCheck,
   ArrowLeft,
 } from 'lucide-react';
@@ -97,10 +95,6 @@ const PERMISSION_LABELS: Record<string, string> = {
   'workspaces:manage': 'Manage Workspaces',
   'volumes:read': 'Read Volumes',
   'volumes:manage': 'Manage Volumes',
-  'images:read': 'Read Images',
-  'images:manage': 'Manage Images',
-  'networks:read': 'Read Networks',
-  'networks:manage': 'Manage Networks',
   'audit:read': 'Read Audit',
   'admin:access': 'Admin Access',
   '*': 'All Permissions',
@@ -147,16 +141,6 @@ function getCategories(allPermissions: string[]): PermissionCategory[] {
       id: 'volumes', label: 'Volumes', icon: HardDrive,
       color: 'text-teal-400', bgColor: 'bg-teal-400/10',
       permissions: allPermissions.filter(p => p.startsWith('volumes:')),
-    },
-    {
-      id: 'images', label: 'Images', icon: Image,
-      color: 'text-pink-400', bgColor: 'bg-pink-400/10',
-      permissions: allPermissions.filter(p => p.startsWith('images:')),
-    },
-    {
-      id: 'networks', label: 'Networks', icon: Globe,
-      color: 'text-sky-400', bgColor: 'bg-sky-400/10',
-      permissions: allPermissions.filter(p => p.startsWith('networks:')),
     },
     {
       id: 'admin', label: 'Admin', icon: Settings,

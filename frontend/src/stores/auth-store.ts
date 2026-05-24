@@ -48,10 +48,7 @@ export const PERMISSIONS = {
   WORKSPACES_MANAGE: 'workspaces:manage',
   VOLUMES_READ: 'volumes:read',
   VOLUMES_MANAGE: 'volumes:manage',
-  IMAGES_READ: 'images:read',
-  IMAGES_MANAGE: 'images:manage',
-  NETWORKS_READ: 'networks:read',
-  NETWORKS_MANAGE: 'networks:manage',
+
   AUDIT_READ: 'audit:read',
   ADMIN_ACCESS: 'admin:access',
   ALL: '*',
@@ -163,13 +160,8 @@ function checkPermission(user: User | null, permission: string): boolean {
       return roleLevel >= ROLE_LEVELS.support;
     case PERMISSIONS.WORKSPACES_READ:
     case PERMISSIONS.VOLUMES_READ:
-    case PERMISSIONS.IMAGES_READ:
-    case PERMISSIONS.NETWORKS_READ:
-      return roleLevel >= ROLE_LEVELS.guest;
     case PERMISSIONS.WORKSPACES_MANAGE:
     case PERMISSIONS.VOLUMES_MANAGE:
-    case PERMISSIONS.IMAGES_MANAGE:
-    case PERMISSIONS.NETWORKS_MANAGE:
       return roleLevel >= ROLE_LEVELS.admin;
     default:
       return false;
