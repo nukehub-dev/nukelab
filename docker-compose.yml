@@ -134,7 +134,6 @@ services:
       - SMTP_FROM_NAME=${SMTP_FROM_NAME:-NukeLab}
     volumes:
       - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:Z
-      - ./backend:/app:Z
       - /var/lib/lxcfs:/var/lib/lxcfs:ro
       - ${VOLUME_STORAGE_PATH:?VOLUME_STORAGE_PATH must be set in .env}:${VOLUME_STORAGE_PATH}:rw
       - uploads:${UPLOAD_DIR:-/data/uploads}
@@ -193,7 +192,6 @@ services:
       - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret}
     volumes:
       - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
-      - ./backend:/app:Z
       - secrets:${SERVER_AUTH_SECRETS_DIR:-/run/secrets}
     networks:
       - nukelab-network
@@ -213,7 +211,6 @@ services:
       - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://nukelab:nukelab123@postgres:5432/nukelab}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
     volumes:
-      - ./backend:/app:Z
       - secrets:${SERVER_AUTH_SECRETS_DIR:-/run/secrets}
     networks:
       - nukelab-network

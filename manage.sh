@@ -40,6 +40,8 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" > /dev/null 2>&1 && pwd)"
 cd "$DIR"
 FRONTEND_PID_FILE="$DIR/.frontend.pid"
 COMPOSE_FILE="$DIR/docker-compose.yml"
+DEV_COMPOSE_FILE="$DIR/.nukelab-dev-compose.yml"
+COMPOSE_ARGS=(-f "$COMPOSE_FILE")
 
 # ─── Helpers ───────────────────────────────────────────────────────────────
 log()   { echo -e "${BLUE}▶${RESET} $*"; }
@@ -196,7 +198,29 @@ kill_frontend() {
 
 # ─── Backend Detection ─────────────────────────────────────────────────────
 is_backend_container_running() {
-    $COMPOSE -f "$COMPOSE_FILE" ps 2>/dev/null | grep -q 'Up .*nukelab-backend'
+    $COMPOSE "${COMPOSE_ARGS[@]}" ps 2>/dev/null | grep -q 'Up .*nukelab-backend'
+}
+
+# ─── Compose Args ──────────────────────────────────────────────────────────
+setup_compose_args() {
+    if $USE_DEV_MODE; then
+        cat > "$DEV_COMPOSE_FILE" << 'EOF'
+services:
+  backend:
+    volumes:
+      - ./backend:/app:Z
+  celery-worker:
+    volumes:
+      - ./backend:/app:Z
+  celery-beat:
+    volumes:
+      - ./backend:/app:Z
+EOF
+        COMPOSE_ARGS=(-f "$COMPOSE_FILE" -f "$DEV_COMPOSE_FILE")
+    else
+        rm -f "$DEV_COMPOSE_FILE"
+        COMPOSE_ARGS=(-f "$COMPOSE_FILE")
+    fi
 }
 
 # ─── CPU Lib Volume ────────────────────────────────────────────────────────
@@ -273,6 +297,7 @@ wait_for_backend() {
         [ "$waited" -ge 60 ] && { warn "Timeout, continuing..."; return 1; }
         printf "."
     done
+    echo ""
     ok "Backend ready (${waited}s)"
 }
 
@@ -280,8 +305,6 @@ wait_for_backend() {
 
 cmd_start() {
     setup_cpu_lib_volume
-
-    init_env
 
     if $USE_DEV_MODE; then
         step "Starting development stack..."
@@ -291,11 +314,11 @@ cmd_start() {
         export FRONTEND_URL="${FRONTEND_URL:-http://localhost:5173}"
         info "FRONTEND_URL=$FRONTEND_URL"
 
-        $COMPOSE -f "$COMPOSE_FILE" stop frontend 2>/dev/null || true
+        $COMPOSE "${COMPOSE_ARGS[@]}" stop frontend > /dev/null 2>&1 || true
 
         if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
             log "Starting backend containers..."
-            $COMPOSE -f "$COMPOSE_FILE" up -d traefik postgres redis backend celery-worker celery-beat
+            $COMPOSE "${COMPOSE_ARGS[@]}" up -d traefik postgres redis backend celery-worker celery-beat > /dev/null
             wait_for_backend
         fi
 
@@ -317,19 +340,19 @@ cmd_start() {
         echo -e "  Traefik:  ${CYAN}http://localhost:8090${RESET}"
         echo -e "\n  ${YELLOW}Ctrl+C to stop${RESET}"
         
-        trap 'echo ""; step "Shutting down..."; kill_frontend; $COMPOSE -f "$COMPOSE_FILE" down; ok "Goodbye!"; exit 0' INT TERM
+        trap 'echo ""; step "Shutting down..."; kill_frontend; $COMPOSE "${COMPOSE_ARGS[@]}" stop traefik postgres redis backend celery-worker celery-beat > /dev/null 2>&1; ok "Goodbye!"; exit 0' INT TERM
         wait
     else
         step "Starting production stack..."
         
         if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
             log "Starting backend services..."
-            $COMPOSE -f "$COMPOSE_FILE" up -d traefik postgres redis backend celery-worker celery-beat
+            $COMPOSE "${COMPOSE_ARGS[@]}" up -d traefik postgres redis backend celery-worker celery-beat > /dev/null
         fi
         
         if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
             log "Starting frontend container..."
-            $COMPOSE -f "$COMPOSE_FILE" up -d frontend
+            $COMPOSE "${COMPOSE_ARGS[@]}" up -d frontend > /dev/null
         fi
         
         ok "Stack running!"
@@ -343,11 +366,11 @@ cmd_stop() {
     
     if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
         kill_frontend
-        $COMPOSE -f "$COMPOSE_FILE" stop frontend 2>/dev/null || true
+        $COMPOSE "${COMPOSE_ARGS[@]}" stop frontend > /dev/null 2>&1 || true
     fi
     
     if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
-        $COMPOSE -f "$COMPOSE_FILE" stop traefik postgres redis backend celery-worker celery-beat 2>/dev/null || true
+        $COMPOSE "${COMPOSE_ARGS[@]}" stop traefik postgres redis backend celery-worker celery-beat > /dev/null 2>&1 || true
     fi
     
     ok "Stopped"
@@ -366,12 +389,12 @@ cmd_build() {
     
     if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
         log "Building backend containers..."
-        $COMPOSE -f "$COMPOSE_FILE" build backend celery-worker celery-beat
+        $COMPOSE "${COMPOSE_ARGS[@]}" build backend celery-worker celery-beat
     fi
     
     if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
         log "Building frontend container..."
-        $COMPOSE -f "$COMPOSE_FILE" build frontend
+        $COMPOSE "${COMPOSE_ARGS[@]}" build frontend
     fi
     
     ok "Build complete"
@@ -381,17 +404,17 @@ cmd_update() {
     step "Updating NukeLab..."
     
     log "Pulling latest images..."
-    $COMPOSE -f "$COMPOSE_FILE" pull
+    $COMPOSE "${COMPOSE_ARGS[@]}" pull
     
     log "Rebuilding containers..."
-    $COMPOSE -f "$COMPOSE_FILE" build --no-cache
+    $COMPOSE "${COMPOSE_ARGS[@]}" build --no-cache
     
     ok "Update complete! Run './manage.sh restart' to apply changes."
 }
 
 cmd_pull() {
     step "Pulling latest images..."
-    $COMPOSE -f "$COMPOSE_FILE" pull
+    $COMPOSE "${COMPOSE_ARGS[@]}" pull
     ok "Images pulled"
 }
 
@@ -400,12 +423,12 @@ cmd_remove() {
     
     if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
         kill_frontend
-        $COMPOSE -f "$COMPOSE_FILE" rm -f frontend 2>/dev/null || true
+        $COMPOSE "${COMPOSE_ARGS[@]}" rm -f frontend 2>/dev/null || true
         ok "Frontend container removed"
     fi
     
     if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
-        $COMPOSE -f "$COMPOSE_FILE" rm -f traefik postgres redis backend celery-worker celery-beat 2>/dev/null || true
+        $COMPOSE "${COMPOSE_ARGS[@]}" rm -f traefik postgres redis backend celery-worker celery-beat 2>/dev/null || true
         ok "Backend containers removed"
     fi
 }
@@ -438,20 +461,20 @@ cmd_shell() {
     
     case "$service" in
         backend)
-            $COMPOSE -f "$COMPOSE_FILE" exec backend /bin/bash || \
-            $COMPOSE -f "$COMPOSE_FILE" exec backend /bin/sh
+            $COMPOSE "${COMPOSE_ARGS[@]}" exec backend /bin/bash || \
+            $COMPOSE "${COMPOSE_ARGS[@]}" exec backend /bin/sh
             ;;
         postgres)
-            $COMPOSE -f "$COMPOSE_FILE" exec postgres psql -U "${DATABASE_USER:-nukelab}" -d "${DATABASE_NAME:-nukelab}"
+            $COMPOSE "${COMPOSE_ARGS[@]}" exec postgres psql -U "${DATABASE_USER:-nukelab}" -d "${DATABASE_NAME:-nukelab}"
             ;;
         redis)
-            $COMPOSE -f "$COMPOSE_FILE" exec redis redis-cli
+            $COMPOSE "${COMPOSE_ARGS[@]}" exec redis redis-cli
             ;;
         frontend)
-            $COMPOSE -f "$COMPOSE_FILE" exec frontend /bin/sh
+            $COMPOSE "${COMPOSE_ARGS[@]}" exec frontend /bin/sh
             ;;
         *)
-            $COMPOSE -f "$COMPOSE_FILE" exec "$service" /bin/sh
+            $COMPOSE "${COMPOSE_ARGS[@]}" exec "$service" /bin/sh
             ;;
     esac
 }
@@ -466,7 +489,7 @@ cmd_exec() {
         die "Usage: ./manage.sh exec <service> <command>\nExample: ./manage.sh exec backend ls -la"
     fi
     
-    $COMPOSE -f "$COMPOSE_FILE" exec "$service" "${EXTRA_ARGS[@]}"
+    $COMPOSE "${COMPOSE_ARGS[@]}" exec "$service" "${EXTRA_ARGS[@]}"
 }
 
 cmd_logs() {
@@ -478,12 +501,12 @@ cmd_logs() {
         service="traefik postgres redis backend celery-worker celery-beat"
     fi
     
-    $COMPOSE -f "$COMPOSE_FILE" logs -f ${service:-}
+    $COMPOSE "${COMPOSE_ARGS[@]}" logs -f ${service:-}
 }
 
 cmd_status() {
     step "Container Status"
-    $COMPOSE -f "$COMPOSE_FILE" ps
+    $COMPOSE "${COMPOSE_ARGS[@]}" ps
     
     echo ""
     if is_frontend_running; then
@@ -521,7 +544,7 @@ cmd_test() {
         
         if is_backend_container_running; then
             # Backend is running in containers, run tests there
-            $COMPOSE -f "$COMPOSE_FILE" exec backend bash -c "PYTHONPATH=/app pytest ${EXTRA_ARGS[@]:-}" || warn "Tests failed or not configured"
+            $COMPOSE "${COMPOSE_ARGS[@]}" exec backend bash -c "PYTHONPATH=/app pytest ${EXTRA_ARGS[@]:-}" || warn "Tests failed or not configured"
         else
             die "Backend not running. Start it first:\n  ./manage.sh start backend"
         fi
@@ -533,7 +556,7 @@ cmd_db_migrate() {
     
     if is_backend_container_running; then
         # Backend is running in containers, run migrations there
-        $COMPOSE -f "$COMPOSE_FILE" exec backend alembic upgrade head
+        $COMPOSE "${COMPOSE_ARGS[@]}" exec backend alembic upgrade head
     else
         die "Backend not running. Start it first:\n  ./manage.sh start backend"
     fi
@@ -543,7 +566,7 @@ cmd_db_migrate() {
 
 cmd_db_shell() {
     step "Opening database shell..."
-    $COMPOSE -f "$COMPOSE_FILE" exec postgres psql -U "${DATABASE_USER:-nukelab}" -d "${DATABASE_NAME:-nukelab}"
+    $COMPOSE "${COMPOSE_ARGS[@]}" exec postgres psql -U "${DATABASE_USER:-nukelab}" -d "${DATABASE_NAME:-nukelab}"
 }
 
 cmd_backup() {
@@ -554,7 +577,7 @@ cmd_backup() {
     mkdir -p "$backup_dir"
     step "Creating backup..."
     
-    $COMPOSE -f "$COMPOSE_FILE" exec -T postgres pg_dump -U "${DATABASE_USER:-nukelab}" "${DATABASE_NAME:-nukelab}" > "$backup_file"
+    $COMPOSE "${COMPOSE_ARGS[@]}" exec -T postgres pg_dump -U "${DATABASE_USER:-nukelab}" "${DATABASE_NAME:-nukelab}" > "$backup_file"
     
     ok "Backup created: ${CYAN}$backup_file${RESET}"
 }
@@ -566,7 +589,7 @@ cmd_reset() {
     
     log "Stopping everything..."
     kill_frontend
-    $COMPOSE -f "$COMPOSE_FILE" down -v --remove-orphans 2>/dev/null || true
+    $COMPOSE "${COMPOSE_ARGS[@]}" down -v --remove-orphans 2>/dev/null || true
     $CONTAINER_ENGINE volume rm nukelab-postgres-data nukelab-letsencrypt 2>/dev/null || true
     ok "Reset complete"
 }
@@ -649,12 +672,14 @@ main() {
             init_env
             detect_engine
             setup_podman_socket
+            setup_compose_args
             ;;
         install|test)
             if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
                 init_env
                 detect_engine
                 setup_podman_socket
+                setup_compose_args
             fi
             ;;
     esac
