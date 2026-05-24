@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.dependencies import get_current_user, require_permissions
-from app.api.auth import require_scopes, require_jwt_auth
+from app.api.auth import require_jwt_auth
 from app.core.permissions import Permission
 from app.services.quota_service import QuotaService
 
@@ -18,7 +18,7 @@ router = APIRouter(tags=["quotas"])
 @router.get("/")
 async def get_my_quota(
     current_user = Depends(get_current_user),
-    _ = Depends(require_scopes("quotas:read")),
+    _ = Depends(require_permissions(Permission.QUOTA_READ)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get current user's quota"""
@@ -80,7 +80,7 @@ async def update_user_quota(
 async def check_spawn_allowed(
     data: dict,
     current_user = Depends(get_current_user),
-    _ = Depends(require_scopes("quotas:read")),
+    _ = Depends(require_permissions(Permission.QUOTA_READ)),
     db: AsyncSession = Depends(get_db)
 ):
     """Check if spawn is allowed with given plan"""

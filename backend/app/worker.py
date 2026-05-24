@@ -1,4 +1,5 @@
 from celery import Celery
+from celery.schedules import crontab
 from app.config import settings
 
 celery_app = Celery(
@@ -58,11 +59,11 @@ celery_app.conf.update(
         },
         'rollup-server-metrics': {
             'task': 'app.tasks.rollup_server_metrics',
-            'schedule': 'crontab(hour=3, minute=0)',  # Daily at 3 AM
+            'schedule': crontab(hour=3, minute=0),  # Daily at 3 AM
         },
         'cleanup-expired-data': {
             'task': 'app.tasks.cleanup_expired_data',
-            'schedule': 'crontab(hour=4, minute=0)',  # Daily at 4 AM
+            'schedule': crontab(hour=4, minute=0),  # Daily at 4 AM
         },
     },
 )

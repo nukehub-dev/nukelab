@@ -10,7 +10,7 @@ from sqlalchemy import text
 import redis.asyncio as redis
 import psutil
 
-from app.api.auth import require_scopes, get_current_user, require_jwt_auth
+from app.api.auth import get_current_user, require_jwt_auth
 from app.core.permissions import Permission
 from app.dependencies import require_permissions
 from app.db.session import get_db

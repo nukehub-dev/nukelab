@@ -12,7 +12,8 @@ from sqlalchemy.orm import joinedload
 
 logger = logging.getLogger(__name__)
 
-from app.api.auth import get_current_user, require_scopes
+from app.api.auth import get_current_user
+from app.dependencies import require_permissions
 from app.core.permissions import Permission
 from app.dependencies import PermissionChecker
 from app.db.session import get_db
@@ -58,7 +59,7 @@ class VolumeResponse(BaseModel):
 async def create_volume(
     request: VolumeCreateRequest,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("volumes:manage")),
+    _ = Depends(require_permissions(Permission.VOLUMES_MANAGE)),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new volume."""
@@ -89,7 +90,7 @@ async def create_volume(
 @router.get("/")
 async def list_volumes(
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("volumes:read")),
+    _ = Depends(require_permissions(Permission.VOLUMES_READ, Permission.RESOURCES_READ_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """List volumes accessible to user."""
@@ -108,7 +109,7 @@ async def list_volumes(
 async def get_volume(
     volume_id: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("volumes:read")),
+    _ = Depends(require_permissions(Permission.VOLUMES_READ, Permission.RESOURCES_READ_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get volume details."""
@@ -132,7 +133,7 @@ async def update_volume(
     volume_id: str,
     request: VolumeUpdateRequest,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("volumes:manage")),
+    _ = Depends(require_permissions(Permission.VOLUMES_MANAGE)),
     db: AsyncSession = Depends(get_db)
 ):
     """Update volume. Only owner can update."""
@@ -175,7 +176,7 @@ async def update_volume(
 async def delete_volume(
     volume_id: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("volumes:manage")),
+    _ = Depends(require_permissions(Permission.VOLUMES_MANAGE)),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete volume. Only owner can delete."""
@@ -215,7 +216,7 @@ async def delete_volume(
 async def refresh_volume_size(
     volume_id: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("volumes:manage")),
+    _ = Depends(require_permissions(Permission.VOLUMES_MANAGE)),
     db: AsyncSession = Depends(get_db)
 ):
     """Refresh volume size from filesystem."""
@@ -274,7 +275,7 @@ async def list_volume_files(
     page: int = 1,
     page_size: int = 100,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("volumes:read")),
+    _ = Depends(require_permissions(Permission.VOLUMES_READ, Permission.RESOURCES_READ_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """List files and directories in a volume with pagination, search, and sorting."""
@@ -376,7 +377,7 @@ async def delete_volume_file(
     volume_id: str,
     path: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("volumes:manage")),
+    _ = Depends(require_permissions(Permission.VOLUMES_MANAGE)),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete a file or directory in a volume."""
@@ -434,7 +435,7 @@ async def download_volume_file(
     volume_id: str,
     path: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("volumes:read")),
+    _ = Depends(require_permissions(Permission.VOLUMES_READ, Permission.RESOURCES_READ_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """Download a file from a volume."""

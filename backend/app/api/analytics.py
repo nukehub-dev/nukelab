@@ -7,9 +7,9 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.auth import get_current_user, require_scopes
+from app.api.auth import get_current_user
 from app.core.permissions import Permission
-from app.dependencies import PermissionChecker
+from app.dependencies import PermissionChecker, require_permissions
 from app.db.session import get_db
 from app.models.user import User
 from app.services.analytics_service import AnalyticsService
@@ -44,7 +44,7 @@ async def get_user_usage(
     from_date: Optional[datetime] = Query(None, alias="from"),
     to_date: Optional[datetime] = Query(None, alias="to"),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("analytics:read")),
+    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get usage trends for a user."""
@@ -64,7 +64,7 @@ async def get_global_usage(
     from_date: Optional[datetime] = Query(None, alias="from"),
     to_date: Optional[datetime] = Query(None, alias="to"),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("analytics:read")),
+    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get platform-wide usage statistics. Admin only."""
@@ -83,7 +83,7 @@ async def get_top_consumers(
     from_date: Optional[datetime] = Query(None, alias="from"),
     to_date: Optional[datetime] = Query(None, alias="to"),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("analytics:read")),
+    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get top credit consumers. Admin only."""
@@ -102,7 +102,7 @@ async def get_credit_flow(
     from_date: Optional[datetime] = Query(None, alias="from"),
     to_date: Optional[datetime] = Query(None, alias="to"),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("analytics:read")),
+    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get daily credit flow (consumed vs granted). Admin only."""
@@ -121,7 +121,7 @@ async def get_login_events(
     from_date: Optional[datetime] = Query(None, alias="from"),
     to_date: Optional[datetime] = Query(None, alias="to"),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("analytics:read")),
+    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get daily login counts. Admin only."""
@@ -140,7 +140,7 @@ async def get_user_growth(
     from_date: Optional[datetime] = Query(None, alias="from"),
     to_date: Optional[datetime] = Query(None, alias="to"),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("analytics:read")),
+    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get daily new user signups. Admin only."""
@@ -159,7 +159,7 @@ async def get_platform_metrics(
     from_date: Optional[datetime] = Query(None, alias="from"),
     to_date: Optional[datetime] = Query(None, alias="to"),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("analytics:read")),
+    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get platform-wide resource metrics over time. Admin only."""
@@ -175,7 +175,7 @@ async def get_platform_metrics(
 @router.get("/volumes")
 async def get_volume_analytics(
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("analytics:read")),
+    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get storage/volume analytics. Admin only."""
@@ -189,7 +189,7 @@ async def get_volume_analytics(
 @router.get("/workspaces")
 async def get_workspace_analytics(
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("analytics:read")),
+    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get workspace collaboration analytics. Admin only."""
@@ -203,7 +203,7 @@ async def get_workspace_analytics(
 @router.get("/environments")
 async def get_environment_usage(
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("analytics:read")),
+    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get usage by environment. Admin only."""
@@ -218,7 +218,7 @@ async def get_environment_usage(
 @router.get("/plans")
 async def get_plan_usage(
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("analytics:read")),
+    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get usage by plan. Admin only."""
@@ -234,7 +234,7 @@ async def get_plan_usage(
 async def export_analytics(
     request: dict,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("analytics:read")),
+    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
     db: AsyncSession = Depends(get_db)
 ):
     """Export analytics data in CSV or JSON format. Admin only."""

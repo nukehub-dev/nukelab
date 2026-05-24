@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.auth import get_current_user, require_scopes, require_jwt_auth
+from app.api.auth import get_current_user, require_jwt_auth
 from app.core.permissions import Permission
 from app.dependencies import PermissionChecker, require_permissions
 from app.db.session import get_db
@@ -34,7 +34,7 @@ class DeductCreditsRequest(BaseModel):
 @router.get("/")
 async def get_my_credits(
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("credits:read")),
+    _ = Depends(require_permissions(Permission.CREDITS_READ)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get current user's credit balance and summary"""
@@ -59,7 +59,7 @@ async def get_my_credit_history(
     sort_by: str = Query("created_at", description="Sort column"),
     sort_order: str = Query("desc", description="Sort order: asc or desc"),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("credits:read")),
+    _ = Depends(require_permissions(Permission.CREDITS_READ)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get current user's credit transaction history"""

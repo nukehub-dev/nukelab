@@ -5,9 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, desc
 from pydantic import BaseModel
 
-from app.api.auth import get_current_user, require_scopes, require_jwt_auth
+from app.api.auth import get_current_user, require_jwt_auth
 from app.core.permissions import Permission
-from app.dependencies import PermissionChecker
+from app.dependencies import PermissionChecker, require_permissions
 from app.db.session import get_db
 from app.models.user import User
 from app.models.server import Server
@@ -68,7 +68,7 @@ async def get_server_metrics(
     interval: str = Query("1m"),
     limit: int = Query(60, ge=1, le=500),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("metrics:read")),
+    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get metrics history for a server"""
@@ -117,7 +117,7 @@ async def get_server_metrics(
 async def get_server_latest_metrics(
     server_id: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("metrics:read")),
+    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get latest metrics for a server"""
@@ -153,7 +153,7 @@ async def get_system_metrics(
     to_date: Optional[datetime] = Query(None),
     limit: int = Query(60, ge=1, le=500),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("metrics:read")),
+    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get system-level metrics history (admin only)"""
@@ -189,7 +189,7 @@ async def get_system_metrics(
 @router.get("/system/latest")
 async def get_latest_system_metrics(
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("metrics:read")),
+    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get latest system metrics (admin only)"""
@@ -350,7 +350,7 @@ async def delete_alert_rule(
 async def list_alert_history(
     status: Optional[str] = Query(None),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("metrics:read")),
+    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
     db: AsyncSession = Depends(get_db)
 ):
     """List alert history"""
@@ -417,7 +417,7 @@ async def get_server_health_checks(
     server_id: str,
     limit: int = Query(50, ge=1, le=200),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("metrics:read")),
+    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get health check history for a server"""
@@ -448,7 +448,7 @@ async def get_server_health_checks(
 @router.get("/health/summary")
 async def get_health_summary(
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("metrics:read")),
+    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get overall health summary (admin only)"""

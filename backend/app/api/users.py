@@ -9,7 +9,7 @@ import shutil
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.auth import get_current_user, require_scopes, require_jwt_auth
+from app.api.auth import get_current_user, require_jwt_auth
 from app.core.permissions import Permission
 from app.core.security import get_user_permissions
 from app.dependencies import require_permissions, PermissionChecker
@@ -129,7 +129,6 @@ class DiscoverUserListResponse(BaseModel):
 async def discover_users(
     search: Optional[str] = Query(None, description="Search username/display name"),
     limit: int = Query(50, ge=1, le=100, description="Max results"),
-    _ = Depends(require_scopes("user:read")),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -161,7 +160,6 @@ async def discover_users(
 @router.get("/me/profile", response_model=UserResponse)
 async def get_my_profile(
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("user:read")),
 ):
     """Get current user's profile"""
     return serialize_user(current_user)
@@ -172,7 +170,6 @@ async def update_my_profile(
     request: UserUpdateRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("user:update")),
 ):
     """Update current user's profile"""
     service = UserService(db)
@@ -202,7 +199,6 @@ async def upload_avatar(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("user:update")),
 ):
     """Upload a custom avatar image."""
     # Validate file type
@@ -279,7 +275,6 @@ async def change_my_password(
     request: ChangePasswordRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("user:update")),
 ):
     """Change current user's password"""
     service = UserService(db)
@@ -296,7 +291,6 @@ async def get_public_profile(
     user_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("user:read")),
 ):
     """Get a user's public profile.
     
@@ -432,7 +426,6 @@ async def create_user(
 @router.get("/{user_id}", response_model=UserResponse)
 async def get_user(
     user_id: str,
-    _ = Depends(require_scopes("user:read")),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -458,7 +451,6 @@ async def get_user(
 async def update_user(
     user_id: str,
     request: UserUpdateRequest,
-    _ = Depends(require_scopes("user:update")),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -576,7 +568,6 @@ async def impersonate_user(
 @router.get("/{user_id}/servers")
 async def get_user_servers(
     user_id: str,
-    _ = Depends(require_scopes("servers:read")),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -611,7 +602,6 @@ async def get_user_servers(
 @router.get("/{user_id}/resources")
 async def get_user_resources(
     user_id: str,
-    _ = Depends(require_scopes("servers:read")),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):

@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, desc
 
-from app.api.auth import get_current_user, require_scopes, require_jwt_auth
+from app.api.auth import get_current_user, require_jwt_auth
 from app.services.notification_service import broadcast_server_status_change
 from app.core.permissions import Permission
 from app.dependencies import require_permissions, PermissionChecker
@@ -510,7 +510,7 @@ async def export_activity_logs(
     db: AsyncSession = Depends(get_db)
 ):
     """Export activity logs (admin only)"""
-    from app.api.auth import get_current_user, require_scopes, require_jwt_auth
+    from app.api.auth import get_current_user, require_jwt_auth
     
     query = select(ActivityLog)
     

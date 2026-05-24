@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
-from app.api.auth import get_current_user, get_password_hash, verify_password, limiter, require_scopes, require_jwt_auth
+from app.api.auth import get_current_user, get_password_hash, verify_password, limiter, require_jwt_auth
 from app.db.session import get_db
 from app.models.user import User
 from app.models.api_token import ApiToken

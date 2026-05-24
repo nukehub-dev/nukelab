@@ -547,7 +547,6 @@ async def verify_auth(request: Request, db: AsyncSession = Depends(get_db)):
 @router.get("/me")
 async def get_me(
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("user:read")),
 ):
     return {
         "id": str(current_user.id),
@@ -887,7 +886,6 @@ async def oauth_callback(
 async def oauth_sync(
     current_user: User = Depends(get_current_user),
     _jwt = Depends(require_jwt_auth()),
-    _scopes = Depends(require_scopes("user:update")),
     db: AsyncSession = Depends(get_db)
 ):
     """Sync user profile from OAuth provider using stored refresh token."""

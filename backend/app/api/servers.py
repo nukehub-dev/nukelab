@@ -13,10 +13,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 
-from app.api.auth import get_current_user, require_scopes
+from app.api.auth import get_current_user
 from app.core.permissions import Permission
 from app.core.security import has_any_permission
-from app.dependencies import PermissionChecker
+from app.dependencies import PermissionChecker, require_permissions
 from app.db.session import get_db
 from app.models.user import User
 from app.models.server import Server
@@ -185,7 +185,7 @@ async def _get_server_volume_mounts(db: AsyncSession, server_id: str) -> list:
 async def create_server(
     request: ServerCreateRequest,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("servers:start")),
+    _ = Depends(require_permissions(Permission.SERVERS_START)),
     db: AsyncSession = Depends(get_db)
 ):
     """Create and spawn a new server using a plan and environment template."""
@@ -524,7 +524,7 @@ async def create_server(
 @router.get("/")
 async def list_servers(
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("servers:read")),
+    _ = Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.RESOURCES_READ_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """List servers. Users see own servers, admins see all."""
@@ -605,7 +605,7 @@ async def list_servers(
 async def get_server(
     server_id: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("servers:read")),
+    _ = Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.RESOURCES_READ_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get server details. Users can view own, admins can view any."""
@@ -658,7 +658,7 @@ async def get_server_by_path(
     username: str,
     server_name: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("servers:read")),
+    _ = Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.RESOURCES_READ_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get server by username and server name. Used by server gateway page."""
@@ -728,7 +728,7 @@ async def get_server_by_path(
 async def start_server(
     server_id: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("servers:start")),
+    _ = Depends(require_permissions(Permission.SERVERS_START)),
     db: AsyncSession = Depends(get_db)
 ):
     """Start a stopped server."""
@@ -992,7 +992,7 @@ async def start_server(
 async def stop_server(
     server_id: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("servers:stop")),
+    _ = Depends(require_permissions(Permission.SERVERS_STOP)),
     db: AsyncSession = Depends(get_db)
 ):
     """Stop a server."""
@@ -1094,7 +1094,7 @@ async def stop_server(
 async def restart_server(
     server_id: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("servers:start")),
+    _ = Depends(require_permissions(Permission.SERVERS_START)),
     db: AsyncSession = Depends(get_db)
 ):
     """Restart a server."""
@@ -1258,7 +1258,7 @@ async def restart_server(
 async def delete_server(
     server_id: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("servers:delete")),
+    _ = Depends(require_permissions(Permission.SERVERS_DELETE)),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete a server."""
@@ -1316,7 +1316,7 @@ async def delete_server(
 async def get_server_volumes(
     server_id: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("servers:read")),
+    _ = Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.RESOURCES_READ_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get volume mounts for a server."""
@@ -1329,7 +1329,7 @@ async def update_server(
     server_id: str,
     request: ServerUpdateRequest,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("servers:manage")),
+    _ = Depends(require_permissions(Permission.SERVERS_MANAGE)),
     db: AsyncSession = Depends(get_db)
 ):
     """Update server configuration. Any config change that affects the container
@@ -1609,7 +1609,7 @@ async def update_server(
 async def test_metric(
     server_id: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("servers:read")),
+    _ = Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.RESOURCES_READ_OWN)),
 ):
     """Send a test metric via Redis pub/sub to verify WebSocket pipeline."""
     import json
@@ -1655,7 +1655,7 @@ async def test_metric(
 async def ping_server_activity(
     server_id: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("servers:start")),
+    _ = Depends(require_permissions(Permission.SERVERS_START)),
     db: AsyncSession = Depends(get_db)
 ):
     """Update last_activity timestamp for a server. Called when user accesses the server."""
@@ -1674,7 +1674,7 @@ async def ping_server_activity(
 async def get_server_queue_status(
     server_id: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("servers:read")),
+    _ = Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.RESOURCES_READ_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get queue status for a server that is waiting in queue."""
@@ -1719,7 +1719,7 @@ async def get_server_logs(
     since: Optional[str] = None,
     follow: bool = False,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("servers:read")),
+    _ = Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.RESOURCES_READ_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get server container logs."""
@@ -1791,7 +1791,7 @@ async def create_server_access_token(
     server_id: str,
     request: Request,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("servers:start")),
+    _ = Depends(require_permissions(Permission.SERVERS_START)),
     db: AsyncSession = Depends(get_db)
 ):
     """Generate a short-lived access token for direct server access.
@@ -1861,7 +1861,7 @@ async def create_server_access_token(
 async def get_server_access_stats(
     server_id: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_scopes("servers:read")),
+    _ = Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.RESOURCES_READ_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get access statistics for a server."""
