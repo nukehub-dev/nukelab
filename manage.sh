@@ -6,7 +6,6 @@
 # Examples:
 #   ./manage.sh start                    # Start production stack (containers)
 #   ./manage.sh start --dev              # Start dev stack (backend containers + Vite)
-#   ./manage.sh start backend --conda    # Start backend via Conda (no containers)
 #   ./manage.sh stop                     # Stop everything
 #   ./manage.sh stop frontend            # Stop only frontend dev server
 #   ./manage.sh build                    # Build all containers
@@ -55,7 +54,6 @@ step()  { echo -e "\n${BOLD}${MAGENTA}▸${RESET} ${BOLD}$*${RESET}"; }
 CMD=""
 TARGET=""
 USE_DEV_MODE=false
-USE_CONDA_MODE=false
 EXTRA_ARGS=()
 
 parse_args() {
@@ -69,9 +67,6 @@ parse_args() {
                 ;;
             --dev|-d)
                 USE_DEV_MODE=true
-                ;;
-            --conda|-c)
-                USE_CONDA_MODE=true
                 ;;
             --help|-h)
                 print_help
@@ -267,10 +262,6 @@ setup_cpu_lib_volume() {
     ok "Built and stored libnukelab_cpu.so in volume"
 }
 
-has_conda_env() {
-    command -v conda > /dev/null 2>&1 && conda env list | grep -q "nukelab-backend"
-}
-
 # ─── Health Check ──────────────────────────────────────────────────────────
 wait_for_backend() {
     local url="${APP_URL:-http://localhost:8080}/api/health"
@@ -289,18 +280,6 @@ wait_for_backend() {
 
 cmd_start() {
     setup_cpu_lib_volume
-
-    if $USE_CONDA_MODE; then
-        if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
-            die "--conda only works with backend target. Use:\n  ./manage.sh start backend --conda"
-        fi
-        step "Starting backend with Conda..."
-        command -v conda > /dev/null 2>&1 || die "Conda not found"
-        conda env list | grep -q "nukelab-backend" || die "Run: ./manage.sh install backend"
-        cd "$DIR/backend"
-        conda run -n nukelab-backend uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-        return
-    fi
 
     init_env
 
@@ -524,15 +503,7 @@ cmd_install() {
     fi
     
     if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
-        step "Installing backend dependencies..."
-        command -v conda > /dev/null 2>&1 || die "Conda not found"
-        cd "$DIR/backend"
-        if conda env list | grep -q "nukelab-backend"; then
-            conda env update -f environment.yml --prune
-        else
-            conda env create -f environment.yml
-        fi
-        ok "Backend environment ready"
+        info "Backend dependencies are managed via Docker (requirements.txt). No local installation needed."
     fi
 }
 
@@ -548,18 +519,11 @@ cmd_test() {
         step "Running backend tests..."
         cd "$DIR/backend"
         
-        if $USE_CONDA_MODE; then
-            # User explicitly wants Conda
-            has_conda_env || die "Conda env 'nukelab-backend' not found. Run: ./manage.sh install backend"
-            conda run -n nukelab-backend pytest ${EXTRA_ARGS[@]:-} || warn "Tests failed or not configured"
-        elif is_backend_container_running; then
+        if is_backend_container_running; then
             # Backend is running in containers, run tests there
             $COMPOSE -f "$COMPOSE_FILE" exec backend bash -c "PYTHONPATH=/app pytest ${EXTRA_ARGS[@]:-}" || warn "Tests failed or not configured"
-        elif has_conda_env; then
-            # Fall back to Conda
-            conda run -n nukelab-backend pytest ${EXTRA_ARGS[@]:-} || warn "Tests failed or not configured"
         else
-            die "Backend not running. Start it first:\n  ./manage.sh start backend\nOr install Conda env:\n  ./manage.sh install backend"
+            die "Backend not running. Start it first:\n  ./manage.sh start backend"
         fi
     fi
 }
@@ -567,20 +531,11 @@ cmd_test() {
 cmd_db_migrate() {
     step "Running database migrations..."
     
-    if $USE_CONDA_MODE; then
-        # User explicitly wants Conda
-        has_conda_env || die "Conda env 'nukelab-backend' not found. Run: ./manage.sh install backend"
-        cd "$DIR/backend"
-        conda run -n nukelab-backend alembic upgrade head
-    elif is_backend_container_running; then
+    if is_backend_container_running; then
         # Backend is running in containers, run migrations there
         $COMPOSE -f "$COMPOSE_FILE" exec backend alembic upgrade head
-    elif has_conda_env; then
-        # Fall back to Conda
-        cd "$DIR/backend"
-        conda run -n nukelab-backend alembic upgrade head
     else
-        die "Backend not running. Start it first:\n  ./manage.sh start backend\nOr install Conda env:\n  ./manage.sh install backend"
+        die "Backend not running. Start it first:\n  ./manage.sh start backend"
     fi
     
     ok "Migrations applied"
@@ -660,22 +615,18 @@ ${BOLD}Targets:${RESET} ${DIM}(optional, default: all)${RESET}
 
 ${BOLD}Flags:${RESET}
   --dev, -d      Development mode: backend containers + local Vite dev server
-  --conda, -c    Use Conda instead of containers for backend
 
 ${BOLD}Examples:${RESET}
   ./manage.sh start                      # Production: all containers
   ./manage.sh start --dev                # Dev: backend containers + Vite
-  ./manage.sh start backend --conda      # Backend via Conda
   ./manage.sh stop frontend              # Stop only frontend
   ./manage.sh build backend              # Build backend image only
   ./manage.sh shell backend              # Shell into backend container
   ./manage.sh exec backend python -v     # Run command in backend
   ./manage.sh logs backend -f            # Stream backend logs
   ./manage.sh db-migrate                 # Run migrations (auto-detect)
-  ./manage.sh db-migrate --conda         # Run migrations via Conda
   ./manage.sh backup                     # Backup database
   ./manage.sh test                       # Run all tests (auto-detect)
-  ./manage.sh test backend --conda       # Run backend tests via Conda
   ./manage.sh clean                      # Clean up dangling resources
   ./manage.sh update                     # Update all images
 

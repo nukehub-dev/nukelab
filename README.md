@@ -12,7 +12,6 @@ Multi-user scientific computing platform with granular RBAC, real-time monitorin
 - **Container Engine**: Docker or Podman
 - **Compose**: docker-compose or podman-compose
 - **Git**
-- **Optional**: Conda (for local Python development)
 - 10GB+ free disk space
 
 ### Environment Files
@@ -69,22 +68,6 @@ docker-compose up -d
 podman-compose up -d
 ```
 
-## Using Conda for Development
-
-If you prefer using Conda instead of Docker for the backend:
-
-```bash
-# Setup Conda environment
-./manage.sh conda-setup
-
-# Activate and run backend locally
-conda activate nukelab-backend
-cd backend
-uvicorn app.main:app --reload --port 8000
-```
-
-The `environment.yml` in `backend/` defines all Python dependencies.
-
 ## Using Podman
 
 The project automatically detects Podman and configures the correct socket path. Just run:
@@ -102,24 +85,20 @@ The script will:
 
 For full local development with hot reload:
 
-**Terminal 1 - Backend (Conda):**
 ```bash
-./manage.sh conda-run
+./manage.sh start --dev
 ```
 
-**Terminal 2 - Frontend:**
+This starts:
+- Backend containers (API, PostgreSQL, Redis, Celery) with auto-reload
+- Frontend Vite dev server on http://localhost:5173
+
+Or run frontend separately:
+
 ```bash
 cd frontend
 npm install
 npm run dev
-```
-
-**Terminal 3 - Infrastructure:**
-```bash
-# Start only PostgreSQL and Redis
-docker-compose up -d postgres redis
-# or
-podman-compose up -d postgres redis
 ```
 
 ## Management Commands
@@ -131,8 +110,6 @@ podman-compose up -d postgres redis
 ./manage.sh build          # Rebuild containers
 ./manage.sh logs [service] # View logs (backend, frontend, etc.)
 ./manage.sh status         # Show running containers
-./manage.sh conda-setup    # Setup Conda environment
-./manage.sh conda-run      # Run backend with Conda
 ```
 
 ## Project Structure
@@ -147,8 +124,7 @@ nukelab/
 │   │   ├── config.py       # Configuration
 │   │   └── main.py         # FastAPI app
 │   ├── Dockerfile
-│   ├── requirements.txt     # Pip dependencies
-│   └── environment.yml      # Conda environment
+│   └── requirements.txt     # Pip dependencies
 ├── frontend/                # Next.js 16 application
 ├── environments/            # Docker images
 │   ├── base/               # Shared base image
@@ -156,7 +132,7 @@ nukelab/
 ├── database/                # Schema and migrations
 ├── phases/                 # Implementation phases
 ├── docker-compose.yml      # All services
-├── manage.sh               # Management script (Docker/Podman/Conda)
+├── manage.sh               # Management script (Docker/Podman)
 └── README.md
 ```
 
