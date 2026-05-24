@@ -1,6 +1,6 @@
 # NukeLab Platform v2.0 — Architecture & Implementation Plan
 
-**Status**: In Development - Phase 4 (Monitoring) In Progress
+**Status**: Phase 4 Complete, Phase 5-7 In Progress
 **Last Updated**: May 2, 2026  
 **Target Timeline**: 6+ months  
 **Tech Stack**: Vite + React 19 SPA, FastAPI, PostgreSQL 18, Redis, Traefik v3, Docker/Podman
@@ -14,6 +14,11 @@
 - **Maintenance Mode** — Toggle platform on/off with 503 response
 - **Audit Log Export** — CSV/JSON export (`/api/admin/activity/export`)
 - **Rate Limiting** — slowapi integration (10/minute on login)
+- **Server Scheduling** — Cron-based schedules with visual builder UI
+- **Shared Workspaces** — Volume sharing with member/invitation management
+- **Notification Center** — In-app + email notifications with WebSocket delivery
+- **Usage Trends** — Per-user and platform-wide historical charts (7d/30d/90d)
+- **Permission Matrix Editor** — Full RBAC matrix UI
 
 ### Model Updates
 - **ServerPlan** — Added `max_runtime`, `idle_timeout`, `allow_scheduling`, `allow_snapshots`
@@ -21,8 +26,8 @@
 - **ServerQueue** — Added `requested_cpu`, `requested_memory`, `requested_disk`
 
 ### Tests
-- 57 tests passing (was 29)
-- New test files: `test_system.py`, `test_plans.py`, `test_credits.py`, `test_environments.py`, `test_auth.py`
+- 57 tests passing
+- Test files: `test_system.py`, `test_plans.py`, `test_credits.py`, `test_environments.py`, `test_auth.py`
 
 ---
 
@@ -32,12 +37,15 @@ NukeLab v2.0 is a ground-up rebuild of the multi-user scientific computing platf
 
 **Key Improvements over v1.0:**
 - Granular role-based access control (6+ roles, 20+ permissions)
-- Real-time per-container resource monitoring (CPU, memory, disk, GPU)
+- Real-time per-container resource monitoring (CPU, memory, disk)
 - Admin-configurable environment templates with Docker images, packages, env vars
 - Modern Vite + React 19 admin dashboard with live metrics
 - Audit logging for compliance
+- Server scheduling (cron-based start/stop)
+- Shared workspaces with permission management
+- Notification center (in-app + email)
 - WebSocket-native architecture
-- Kubernetes migration path
+- Kubernetes migration path (future)
 
 ---
 
@@ -1154,75 +1162,75 @@ GET    /api/system/stats            # Platform statistics
 
 #### Tasks
 
-- [ ] **Project Structure**
-  - [ ] Initialize monorepo structure
-  - [ ] `frontend/` — Vite + React 19 with TypeScript, Tailwind, shadcn/ui
-  - [ ] `backend/` — FastAPI with asyncpg, Pydantic, Docker SDK
-  - [ ] `database/` — PostgreSQL 18 schema and migrations
-  - [ ] `environments/` — Environment Dockerfiles
-  - [ ] `compose.yml` — Full stack orchestration
-  - [ ] `infrastructure/traefik/` — Traefik configuration
+- [x] **Project Structure**
+  - [x] Initialize monorepo structure
+  - [x] `frontend/` — Vite + React 19 with TypeScript, Tailwind, shadcn/ui
+  - [x] `backend/` — FastAPI with asyncpg, Pydantic, Docker SDK
+  - [x] `database/` — PostgreSQL 18 schema and migrations
+  - [x] `environments/` — Environment Dockerfiles
+  - [x] `compose.yml` — Full stack orchestration
+  - [x] `infrastructure/traefik/` — Traefik configuration
 
-- [ ] **Database Setup**
-  - [ ] Create PostgreSQL 18 schema (users, roles, permissions, servers, environments, audit_logs)
-  - [ ] Set up migration system (Alembic)
-  - [ ] Seed default roles and super_admin user
-  - [ ] Create indexes for common queries
+- [x] **Database Setup**
+  - [x] Create PostgreSQL 18 schema (users, roles, permissions, servers, environments, audit_logs)
+  - [x] Set up migration system (Alembic)
+  - [x] Seed default roles and super_admin user
+  - [x] Create indexes for common queries
 
-- [ ] **Redis Setup**
-  - [ ] Configure Redis for sessions
-  - [ ] Configure Redis for pub/sub
-  - [ ] Configure Redis for Celery broker
+- [x] **Redis Setup**
+  - [x] Configure Redis for sessions
+  - [x] Configure Redis for pub/sub
+  - [x] Configure Redis for Celery broker
 
-- [ ] **Authentication System**
-  - [ ] Local auth: bcrypt password hashing, JWT generation
-  - [ ] NukeHub Auth: OAuth2 flow, JWT validation
-  - [ ] Auth middleware for FastAPI
-  - [ ] Permission checking decorators
-  - [ ] Role-based route guards
+- [x] **Authentication System**
+  - [x] Local auth: bcrypt password hashing, JWT generation
+  - [x] NukeHub Auth: OAuth2 flow, JWT validation
+  - [x] Auth middleware for FastAPI
+  - [x] Permission checking decorators
+  - [x] Role-based route guards
 
-- [ ] **NukeIDE Containerization**
-  - [ ] Create `environments/dev/Dockerfile`
-    - [ ] Base: Debian 13 or Ubuntu 24.04
-    - [ ] Install Node.js 22
-    - [ ] Build NukeIDE (clone from nuke-ide repo)
-    - [ ] Install nginx
-    - [ ] Add nginx auth proxy config
-    - [ ] Add startup script
-  - [ ] Update `environments/default/Dockerfile`
-    - [ ] Same structure as dev but with nuclear tools
-    - [ ] Keep existing tool installations
-    - [ ] Add nginx auth proxy
+- [x] **NukeIDE Containerization**
+  - [x] Create `environments/dev/Dockerfile`
+    - [x] Base: Debian 13 or Ubuntu 24.04
+    - [x] Install Node.js 22
+    - [x] Build NukeIDE (clone from nuke-ide repo)
+    - [x] Install nginx
+    - [x] Add nginx auth proxy config
+    - [x] Add startup script
+  - [x] Update `environments/default/Dockerfile`
+    - [x] Same structure as dev but with nuclear tools
+    - [x] Keep existing tool installations
+    - [x] Add nginx auth proxy
 
-- [ ] **Container Spawning**
-  - [ ] Docker SDK integration (async)
-  - [ ] Server spawn endpoint (`POST /api/servers`)
-  - [ ] Container lifecycle management (start, stop, delete)
-  - [ ] Traefik dynamic routing labels
-  - [ ] Volume creation and mounting
+- [x] **Container Spawning**
+  - [x] Docker SDK integration (async)
+  - [x] Server spawn endpoint (`POST /api/servers`)
+  - [x] Container lifecycle management (start, stop, delete)
+  - [x] Traefik dynamic routing labels
+  - [x] Volume creation and mounting
 
-- [ ] **Basic Frontend**
-  - [ ] Login page (local auth mode)
-  - [ ] Dashboard shell with sidebar navigation
-  - [ ] User profile page
-  - [ ] Server list page (basic)
-  - [ ] Server spawn form (environment selection)
+- [x] **Basic Frontend**
+  - [x] Login page (local auth mode)
+  - [x] Dashboard shell with sidebar navigation
+  - [x] User profile page
+  - [x] Server list page (basic)
+  - [x] Server spawn form (environment selection)
 
-- [ ] **Traefik Configuration**
-  - [ ] Dynamic Docker provider
-  - [ ] Route: `/app/*` → Vite SPA (static files served by Nginx)
-  - [ ] Route: `/api/*` → FastAPI
-  - [ ] Route: `/user/{username}` → user containers
-  - [ ] WebSocket upgrade handling
-  - [ ] Basic rate limiting
+- [x] **Traefik Configuration**
+  - [x] Dynamic Docker provider
+  - [x] Route: `/app/*` → Vite SPA (static files served by Nginx)
+  - [x] Route: `/api/*` → FastAPI
+  - [x] Route: `/user/{username}` → user containers
+  - [x] WebSocket upgrade handling
+  - [x] Basic rate limiting
 
 #### Deliverables
 
-- [ ] Admin can log in via local auth
-- [ ] Admin can spawn a NukeIDE container
-- [ ] Admin can access NukeIDE via browser
-- [ ] Basic dashboard UI functional
-- [ ] All services running via docker-compose
+- [x] Admin can log in via local auth
+- [x] Admin can spawn a NukeIDE container
+- [x] Admin can access NukeIDE via browser
+- [x] Basic dashboard UI functional
+- [x] All services running via compose
 
 #### Success Criteria
 
@@ -1288,25 +1296,25 @@ Then the container stops gracefully
 - [x] **Admin Dashboard**
   - [x] User management table
   - [x] Role assignment UI
-  - [ ] Permission matrix editor (Phase 5)
+  - [x] Permission matrix editor
   - [ ] User activity timeline (Phase 5)
   - [x] Credit management (grant/deduct/view)
   - [x] Server management table
   - [ ] Bulk actions (start all, stop all, delete all) (Phase 5)
 
-- [ ] **Server Lifecycle**
+- [x] **Server Lifecycle**
   - [x] Start/stop/restart/delete servers (API ready, UI basic)
   - [x] Credit check before start
-  - [ ] Server status polling (Phase 4)
-  - [ ] Server logs viewer (Phase 4)
-  - [ ] Server detail page (Phase 5)
+  - [x] Server status polling
+  - [x] Server logs viewer
+  - [x] Server detail page
 
 #### Deliverables
 
-- [ ] Admin can create users with specific roles
-- [ ] Permission system prevents unauthorized actions
-- [ ] Admin dashboard shows all users and servers
-- [ ] Users can manage own profile and servers
+- [x] Admin can create users with specific roles
+- [x] Permission system prevents unauthorized actions
+- [x] Admin dashboard shows all users and servers
+- [x] Users can manage own profile and servers
 
 #### Success Criteria
 
@@ -1345,7 +1353,7 @@ Then I get an error: "Insufficient NUKE"
 - [x] **Server Plans**
   - [x] Plan CRUD API (admin)
   - [x] Plan builder UI (admin)
-  - [ ] Plan selection in spawn form (Phase 5)
+  - [x] Plan selection in spawn form
   - [x] Plan restrictions enforcement (role, approval)
   - [ ] Custom plans per user (admin override) (Phase 5)
   - [ ] Plan usage tracking (Phase 5)
@@ -1354,25 +1362,25 @@ Then I get an error: "Insufficient NUKE"
   - [x] Quota model (per-user)
   - [x] Quota enforcement on spawn
   - [x] Quota usage tracking
-  - [ ] Quota exceeded alerts (Phase 4)
+  - [x] Quota exceeded alerts
 
-- [ ] **Resource Limits**
-  - [ ] Docker container limits (CPU, memory) from plan (Phase 5)
+- [x] **Resource Limits**
+  - [x] Docker container limits (CPU, memory) from plan
   - [ ] Disk quota enforcement (Phase 5)
   - [ ] GPU allocation (if available) (Phase 5)
   - [ ] Limit overrides for admins (Phase 5)
 
-- [ ] **Hardware Resource Scheduling**
+- [x] **Hardware Resource Scheduling**
   - [ ] Global resource pool tracking (Phase 5)
   - [x] Resource availability check before spawn
-  - [ ] Queue system when resources unavailable (Phase 5)
+  - [x] Queue system when resources unavailable
   - [x] Priority-based scheduling (plan priority)
   - [ ] Server migration between hosts (future)
-  - [ ] Auto-stop idle servers to free resources (Phase 4)
+  - [x] Auto-stop idle servers to free resources
 
-- [ ] **Volume Management**
-  - [ ] Persistent user volumes (Phase 5)
-  - [ ] Shared workspace volumes (Phase 5)
+- [x] **Volume Management**
+  - [x] Persistent user volumes
+  - [x] Shared workspace volumes
   - [ ] Volume backup/restore (Phase 5)
   - [ ] Volume quota enforcement (Phase 5)
 
@@ -1384,11 +1392,11 @@ Then I get an error: "Insufficient NUKE"
 
 #### Deliverables
 
-- [ ] Admin can create custom environment templates (Docker image, packages, env vars, ports)
-- [ ] Multiple plans available (small, medium, large, xlarge)
-  - [ ] Users can choose environment AND plan when spawning
-  - [ ] Resource quotas enforced per plan
-  - [ ] Admin can create/modify environments and plans
+- [x] Admin can create custom environment templates (Docker image, packages, env vars, ports)
+- [x] Multiple plans available (small, medium, large, xlarge)
+  - [x] Users can choose environment AND plan when spawning
+  - [x] Resource quotas enforced per plan
+  - [x] Admin can create/modify environments and plans
 
 #### Success Criteria
 
@@ -1413,14 +1421,14 @@ Then I get an error: "Plan limit reached for small"
 ### Phase 4: Real-Time Monitoring Dashboard (Weeks 10-12)
 
 **Goal**: Live resource monitoring, historical data, and alerting
-**Status**: In Progress - Core metrics and WebSocket done, UI and alerting in progress
+**Status**: Complete
 
 #### Tasks
 
 - [x] **Metrics Collection**
   - [x] Docker Stats API integration (async streaming)
   - [x] Custom metrics collector (CPU, memory, disk, network)
-  - [ ] GPU metrics (nvidia-smi integration) *[Deferred]*
+  - [ ] GPU metrics (nvidia-smi integration) *[Future]*
   - [x] Metrics storage in PostgreSQL (time-series)
 
 - [x] **WebSocket Streaming**
@@ -1432,21 +1440,21 @@ Then I get an error: "Plan limit reached for small"
 
 - [x] **Monitoring Dashboard**
   - [x] Global resource overview (all users/servers)
-  - [ ] Per-user resource usage page *[Deferred to Phase 5]*
+  - [x] Per-user resource usage page
   - [x] Per-server real-time charts
-  - [ ] Top consumers leaderboard *[Deferred]*
-  - [ ] Resource usage trends (7d, 30d, 90d) *[Deferred]*
+  - [x] Top consumers leaderboard
+  - [x] Resource usage trends (7d, 30d, 90d)
 
 - [x] **Alerting System**
   - [x] Alert rules (quota thresholds, container crashes)
   - [x] Alert rule API CRUD
-  - [ ] Email notifications (SMTP integration) *[Deferred]*
-  - [x] In-app notifications (basic) *[Phase 5]*
+  - [x] Email notifications (SMTP integration)
+  - [x] In-app notifications
   - [x] Alert history and acknowledgment
 
 - [x] **Health Checks**
   - [x] Container health checks
-  - [ ] Auto-restart on failure *[Deferred]*
+  - [ ] Auto-restart on failure *[Future]*
   - [x] Unhealthy server notifications
   - [x] System health dashboard (Postgres, Redis, Docker)
 
@@ -1473,17 +1481,17 @@ Then I see CPU and memory usage updating every second
 
 #### Tasks
 
-- [ ] **Audit Logging**
-  - [ ] Audit middleware (auto-log all admin actions)
-  - [ ] Audit log viewer with filters
-  - [ ] Audit log export (CSV, PDF, JSON)
-  - [ ] Tamper-evident storage
+- [x] **Audit Logging**
+  - [x] Audit middleware (auto-log all state-changing requests)
+  - [x] Audit log viewer with filters
+  - [x] Audit log export (CSV, JSON)
+  - [ ] Tamper-evident storage (Phase 7)
 
-- [ ] **Server Scheduling**
-  - [ ] Cron-based server scheduling
-  - [ ] Recurring schedules (daily, weekly)
-  - [ ] Schedule management UI
-  - [ ] Timezone support
+- [x] **Server Scheduling**
+  - [x] Cron-based server scheduling
+  - [x] Recurring schedules (daily, weekly)
+  - [x] Schedule management UI
+  - [x] Timezone support
 
 - [ ] **API Keys**
   - [x] Scoped API key generation
@@ -1491,33 +1499,34 @@ Then I see CPU and memory usage updating every second
   - [x] API key usage tracking
   - [x] Revocation and expiration
 
-- [ ] **Shared Workspaces**
-  - [ ] Shared volume creation
-  - [ ] Permission management (read-only, read-write)
-  - [ ] Shared workspace UI
-  - [ ] Collaboration features
+- [x] **Shared Workspaces**
+  - [x] Shared volume creation
+  - [x] Permission management (read-only, read-write)
+  - [x] Shared workspace UI
+  - [ ] Collaboration features (Phase 7)
 
-- [ ] **Notifications**
-  - [ ] Webhook configuration
-  - [ ] Email templates
-  - [ ] In-app notification center
+- [x] **Notifications**
+  - [x] Webhook configuration
+  - [x] Email templates
+  - [x] In-app notification center
 
-- [ ] **Maintenance Mode**
-  - [ ] Graceful user draining
-  - [ ] Maintenance page
-  - [ ] Scheduled maintenance windows
-  - [ ] User notifications
+- [x] **Maintenance Mode**
+  - [x] Graceful user draining (returns 503 for non-admins)
+  - [ ] Maintenance page (UI banner exists, standalone page pending)
+  - [ ] Scheduled maintenance windows (Phase 7)
+  - [x] User notifications
 
-- [ ] **Rate Limiting & Security**
-  - [ ] Traefik rate limiting middleware
-  - [ ] API rate limiting
-  - [ ] DDoS protection
-  - [ ] IP allowlist/blocklist
+- [x] **Rate Limiting & Security**
+  - [ ] Traefik rate limiting middleware (Phase 7)
+  - [x] API rate limiting (slowapi)
+  - [ ] DDoS protection (Phase 7)
+  - [ ] IP allowlist/blocklist (Phase 7)
 
-- [ ] **Backup & Restore**
-  - [ ] Automated volume backups
-  - [ ] Backup scheduling
-  - [ ] Point-in-time restore
+- [x] **Backup & Restore**
+  - [x] Database backup (`./manage.sh backup`)
+  - [ ] Automated volume backups (Phase 7)
+  - [ ] Backup scheduling (Phase 7)
+  - [ ] Point-in-time restore (Phase 7)
   - [ ] Cross-region backup (future)
 
 #### Deliverables
@@ -1543,9 +1552,10 @@ Then the server starts automatically
 
 ---
 
-### Phase 6: Production Hardening & Kubernetes (Weeks 17-20)
+### Phase 6: Production Hardening & Kubernetes (Future)
 
 **Goal**: Production readiness and Kubernetes migration
+**Priority**: Low — Platform is feature-complete on Docker/Podman. Kubernetes support is a future scalability goal, not a near-term requirement.
 
 #### Tasks
 

@@ -3,13 +3,14 @@ Server Plan API endpoints.
 """
 
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.dependencies import get_current_user, require_permissions
-from app.api.auth import require_scopes, require_jwt_auth
+from app.api.auth import require_jwt_auth
 from app.core.permissions import Permission
+from app.core.security import has_permission
 from app.services.plan_service import PlanService
 
 router = APIRouter(tags=["plans"])
@@ -22,14 +23,18 @@ async def list_plans(
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=100),
     current_user = Depends(get_current_user),
-    _ = Depends(require_scopes("plans:read")),
     db: AsyncSession = Depends(get_db)
 ):
-    """List server plans (filtered by user's role and access)"""
+    """List server plans.
+    
+    Users with 'plan:read' permission see all plans.
+    Other authenticated users only see plans visible to them (public, role-based, or direct access).
+    """
+    can_read_all = has_permission(current_user, Permission.PLAN_READ)
     service = PlanService(db)
     result = await service.list_plans(
         category=category,
-        is_active=is_active,
+        is_active=is_active if can_read_all else True,
         user_role=current_user.role,
         user_id=str(current_user.id),
         page=page,
@@ -42,15 +47,27 @@ async def list_plans(
 async def get_plan(
     plan_id: str,
     current_user = Depends(get_current_user),
-    _ = Depends(require_scopes("plans:read")),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get plan details"""
+    """Get plan details.
+    
+    Users with 'plan:read' permission can view any plan.
+    Other authenticated users can only view plans visible to them.
+    """
     service = PlanService(db)
     plan = await service.get_by_id(plan_id)
     if not plan:
-        return {"success": False, "error": "Plan not found"}
-    return {"success": True, "data": plan.to_dict()}
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")
+    
+    plan_dict = plan.to_dict()
+    can_read_all = has_permission(current_user, Permission.PLAN_READ)
+    
+    if not can_read_all:
+        is_visible = await service.check_plan_access(plan_id, current_user.role, str(current_user.id))
+        if not is_visible:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    
+    return {"success": True, "data": plan_dict}
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)

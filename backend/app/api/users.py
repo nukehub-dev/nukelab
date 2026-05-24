@@ -625,3 +625,70 @@ async def get_user_resources(
     
     return stats
 
+
+@router.get("/me/activity")
+async def get_my_activity(
+    page: int = Query(1, ge=1),
+    limit: int = Query(25, ge=1, le=100),
+    action: str = Query(None),
+    target_type: str = Query(None),
+    from_date: str = Query(None),
+    to_date: str = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get paginated activity feed for the current user"""
+    from sqlalchemy import select, func, desc, and_
+    from app.models.activity_log import ActivityLog
+    from datetime import datetime
+
+    query = select(ActivityLog).where(ActivityLog.actor_id == current_user.id)
+
+    if action:
+        query = query.where(ActivityLog.action.ilike(f"%{action}%"))
+    if target_type:
+        query = query.where(ActivityLog.target_type.ilike(f"%{target_type}%"))
+    if from_date:
+        try:
+            dt = datetime.fromisoformat(from_date.replace('Z', '+00:00'))
+            query = query.where(ActivityLog.created_at >= dt)
+        except ValueError:
+            pass
+    if to_date:
+        try:
+            dt = datetime.fromisoformat(to_date.replace('Z', '+00:00'))
+            query = query.where(ActivityLog.created_at <= dt)
+        except ValueError:
+            pass
+
+    # Count total
+    count_result = await db.execute(select(func.count()).select_from(query.subquery()))
+    total = count_result.scalar() or 0
+
+    # Paginate
+    offset = (page - 1) * limit
+    query = query.order_by(desc(ActivityLog.created_at)).offset(offset).limit(limit)
+    result = await db.execute(query)
+    activities = result.scalars().all()
+
+    return {
+        "activities": [
+            {
+                "id": str(a.id),
+                "actor_id": str(a.actor_id) if a.actor_id else None,
+                "action": a.action,
+                "target_type": a.target_type,
+                "target_id": str(a.target_id) if a.target_id else None,
+                "timestamp": a.created_at.isoformat() if a.created_at else None,
+                "details": a.details or {}
+            }
+            for a in activities
+        ],
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "total_pages": (total + limit - 1) // limit
+        }
+    }
+

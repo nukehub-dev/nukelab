@@ -13,6 +13,7 @@ import {
   Globe,
   FolderOpen,
   CreditCard,
+  ArrowRight,
 } from 'lucide-react';
 import { FloatingHeader } from '../components/layout/floating-header';
 import { StatCard } from '../components/data/stat-card';
@@ -197,9 +198,18 @@ function DashboardPage() {
 
         {/* Recent Activity */}
         <section className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Activity className="w-4 h-4 text-primary" />
-            <h2 className="text-base font-semibold">Recent Activity</h2>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Activity className="w-4 h-4 text-primary" />
+              <h2 className="text-base font-semibold">Recent Activity</h2>
+            </div>
+            <Link
+              to="/activity"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors"
+            >
+              View all
+              <ArrowRight className="w-3 h-3" />
+            </Link>
           </div>
           <div className="bubble p-6">
             <div className="space-y-3">

@@ -18,12 +18,14 @@ import { Route as ServersRouteImport } from './routes/servers'
 import { Route as PlansRouteImport } from './routes/plans'
 import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as NetworksRouteImport } from './routes/networks'
+import { Route as MaintenanceRouteImport } from './routes/maintenance'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ImagesRouteImport } from './routes/images'
 import { Route as EnvironmentsRouteImport } from './routes/environments'
 import { Route as AuditLogsRouteImport } from './routes/audit-logs'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as AdminRouteImport } from './routes/admin'
+import { Route as ActivityRouteImport } from './routes/activity'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as WorkspacesIndexRouteImport } from './routes/workspaces.index'
 import { Route as SettingsIndexRouteImport } from './routes/settings.index'
@@ -97,6 +99,11 @@ const NetworksRoute = NetworksRouteImport.update({
   path: '/networks',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MaintenanceRoute = MaintenanceRouteImport.update({
+  id: '/maintenance',
+  path: '/maintenance',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -125,6 +132,11 @@ const AnalyticsRoute = AnalyticsRouteImport.update({
 const AdminRoute = AdminRouteImport.update({
   id: '/admin',
   path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ActivityRoute = ActivityRouteImport.update({
+  id: '/activity',
+  path: '/activity',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -265,12 +277,14 @@ const ServersServerIdMetricsRoute = ServersServerIdMetricsRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/activity': typeof ActivityRoute
   '/admin': typeof AdminRouteWithChildren
   '/analytics': typeof AnalyticsRoute
   '/audit-logs': typeof AuditLogsRoute
   '/environments': typeof EnvironmentsRoute
   '/images': typeof ImagesRoute
   '/login': typeof LoginRoute
+  '/maintenance': typeof MaintenanceRoute
   '/networks': typeof NetworksRoute
   '/notifications': typeof NotificationsRoute
   '/plans': typeof PlansRoute
@@ -309,11 +323,13 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/activity': typeof ActivityRoute
   '/analytics': typeof AnalyticsRoute
   '/audit-logs': typeof AuditLogsRoute
   '/environments': typeof EnvironmentsRoute
   '/images': typeof ImagesRoute
   '/login': typeof LoginRoute
+  '/maintenance': typeof MaintenanceRoute
   '/networks': typeof NetworksRoute
   '/notifications': typeof NotificationsRoute
   '/plans': typeof PlansRoute
@@ -350,12 +366,14 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/activity': typeof ActivityRoute
   '/admin': typeof AdminRouteWithChildren
   '/analytics': typeof AnalyticsRoute
   '/audit-logs': typeof AuditLogsRoute
   '/environments': typeof EnvironmentsRoute
   '/images': typeof ImagesRoute
   '/login': typeof LoginRoute
+  '/maintenance': typeof MaintenanceRoute
   '/networks': typeof NetworksRoute
   '/notifications': typeof NotificationsRoute
   '/plans': typeof PlansRoute
@@ -396,12 +414,14 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/activity'
     | '/admin'
     | '/analytics'
     | '/audit-logs'
     | '/environments'
     | '/images'
     | '/login'
+    | '/maintenance'
     | '/networks'
     | '/notifications'
     | '/plans'
@@ -440,11 +460,13 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/activity'
     | '/analytics'
     | '/audit-logs'
     | '/environments'
     | '/images'
     | '/login'
+    | '/maintenance'
     | '/networks'
     | '/notifications'
     | '/plans'
@@ -480,12 +502,14 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/activity'
     | '/admin'
     | '/analytics'
     | '/audit-logs'
     | '/environments'
     | '/images'
     | '/login'
+    | '/maintenance'
     | '/networks'
     | '/notifications'
     | '/plans'
@@ -525,12 +549,14 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ActivityRoute: typeof ActivityRoute
   AdminRoute: typeof AdminRouteWithChildren
   AnalyticsRoute: typeof AnalyticsRoute
   AuditLogsRoute: typeof AuditLogsRoute
   EnvironmentsRoute: typeof EnvironmentsRoute
   ImagesRoute: typeof ImagesRoute
   LoginRoute: typeof LoginRoute
+  MaintenanceRoute: typeof MaintenanceRoute
   NetworksRoute: typeof NetworksRoute
   NotificationsRoute: typeof NotificationsRoute
   PlansRoute: typeof PlansRoute
@@ -608,6 +634,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NetworksRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/maintenance': {
+      id: '/maintenance'
+      path: '/maintenance'
+      fullPath: '/maintenance'
+      preLoaderRoute: typeof MaintenanceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -648,6 +681,13 @@ declare module '@tanstack/react-router' {
       path: '/admin'
       fullPath: '/admin'
       preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/activity': {
+      id: '/activity'
+      path: '/activity'
+      fullPath: '/activity'
+      preLoaderRoute: typeof ActivityRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -941,12 +981,14 @@ const WorkspacesRouteWithChildren = WorkspacesRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ActivityRoute: ActivityRoute,
   AdminRoute: AdminRouteWithChildren,
   AnalyticsRoute: AnalyticsRoute,
   AuditLogsRoute: AuditLogsRoute,
   EnvironmentsRoute: EnvironmentsRoute,
   ImagesRoute: ImagesRoute,
   LoginRoute: LoginRoute,
+  MaintenanceRoute: MaintenanceRoute,
   NetworksRoute: NetworksRoute,
   NotificationsRoute: NotificationsRoute,
   PlansRoute: PlansRoute,

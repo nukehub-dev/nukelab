@@ -20,11 +20,12 @@ import {
   PanelLeftClose,
   PanelLeft,
   UserCircle,
+  Clock,
 } from 'lucide-react';
 import { NukeLabLogo } from '../logo';
 import { useSidebarStore } from '../../stores/sidebar-store';
 import { useThemeStore } from '../../stores/theme-store';
-import { useAuthStore } from '../../stores/auth-store';
+import { useAuthStore, PERMISSIONS } from '../../stores/auth-store';
 import { cn } from '../../lib/utils';
 import { Tooltip } from '../ui/tooltip';
 import { NotificationCenter } from '../notifications/notification-center';
@@ -49,15 +50,16 @@ const navGroups: NavGroup[] = [
       { label: 'Dashboard', icon: LayoutDashboard, href: '/' },
       { label: 'Servers', icon: Server, href: '/servers' },
       { label: 'Usage', icon: Activity, href: '/usage' },
+      { label: 'Activity', icon: Clock, href: '/activity' },
     ],
   },
   {
     label: 'Resources',
     items: [
-      { label: 'Environments', icon: Boxes, href: '/environments' },
+      { label: 'Environments', icon: Boxes, href: '/environments', requiredPermission: PERMISSIONS.ENVIRONMENT_READ },
       { label: 'Volumes', icon: HardDrive, href: '/volumes' },
       { label: 'Workspaces', icon: FolderOpen, href: '/workspaces' },
-      { label: 'Plans', icon: CreditCard, href: '/plans' },
+      { label: 'Plans', icon: CreditCard, href: '/plans', requiredPermission: PERMISSIONS.PLAN_READ },
     ],
   },
   {

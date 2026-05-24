@@ -3,13 +3,14 @@ Environment Template API endpoints.
 """
 
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.dependencies import get_current_user, require_permissions
-from app.api.auth import require_scopes, require_jwt_auth
+from app.api.auth import require_jwt_auth
 from app.core.permissions import Permission
+from app.core.security import has_permission
 from app.services.environment_service import EnvironmentService
 
 router = APIRouter(tags=["environments"])
@@ -23,18 +24,29 @@ async def list_environments(
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=100),
     current_user = Depends(get_current_user),
-    _ = Depends(require_scopes("environments:read")),
     db: AsyncSession = Depends(get_db)
 ):
-    """List environment templates"""
+    """List environment templates.
+    
+    Users with 'environment:read' permission see all environments.
+    Other authenticated users only see public, active environments.
+    """
+    can_read_all = has_permission(current_user, Permission.ENVIRONMENT_READ)
     service = EnvironmentService(db)
     result = await service.list_environments(
         category=category,
-        is_active=is_active,
+        is_active=is_active if can_read_all else True,
         search=search,
         page=page,
         limit=limit
     )
+    
+    # Filter to public-only for non-admin users
+    if not can_read_all:
+        items = result.get("items", [])
+        result["items"] = [env for env in items if env.get("is_public") and env.get("is_active", True)]
+        result["total"] = len(result["items"])
+    
     return {"success": True, "data": result}
 
 
@@ -42,15 +54,25 @@ async def list_environments(
 async def get_environment(
     env_id: str,
     current_user = Depends(get_current_user),
-    _ = Depends(require_scopes("environments:read")),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get environment template details"""
+    """Get environment template details.
+    
+    Users with 'environment:read' permission can view any environment.
+    Other authenticated users can only view public, active environments.
+    """
     service = EnvironmentService(db)
     env = await service.get_by_id(env_id)
     if not env:
-        return {"success": False, "error": "Environment not found"}
-    return {"success": True, "data": env.to_dict()}
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Environment not found")
+    
+    env_dict = env.to_dict()
+    can_read_all = has_permission(current_user, Permission.ENVIRONMENT_READ)
+    
+    if not can_read_all and (not env_dict.get("is_public") or not env_dict.get("is_active", True)):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    
+    return {"success": True, "data": env_dict}
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)

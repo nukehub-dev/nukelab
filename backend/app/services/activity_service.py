@@ -76,13 +76,15 @@ class ActivityService:
     async def get_user_activity(
         self,
         user_id: str,
-        limit: int = 50
+        limit: int = 50,
+        offset: int = 0
     ) -> List[ActivityLog]:
         """Get activity for a specific user"""
         result = await self.db.execute(
             select(ActivityLog)
             .where(ActivityLog.actor_id == uuid.UUID(user_id))
             .order_by(desc(ActivityLog.created_at))
+            .offset(offset)
             .limit(limit)
         )
         return result.scalars().all()
