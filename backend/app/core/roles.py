@@ -12,6 +12,7 @@ Design principles:
 4. Users only manage their own resources
 """
 
+import json
 from app.core.permissions import Permission
 
 
@@ -27,6 +28,7 @@ ROLE_PERMISSIONS = {
         Permission.USERS_DELETE,
         Permission.USERS_IMPERSONATE,
         # Server management (full)
+        Permission.SERVERS_READ_OWN,
         Permission.SERVERS_READ_ALL,
         Permission.SERVERS_START,
         Permission.SERVERS_STOP,
@@ -46,15 +48,18 @@ ROLE_PERMISSIONS = {
         Permission.QUOTA_READ,
         Permission.QUOTA_UPDATE,
         # Credit management
+        Permission.CREDITS_READ_OWN,
         Permission.CREDITS_READ_ALL,
         Permission.CREDITS_GRANT,
         Permission.CREDITS_DEDUCT,
         # Analytics
         Permission.ANALYTICS_READ,
         # Workspaces
+        Permission.WORKSPACES_READ_OWN,
         Permission.WORKSPACES_READ_ALL,
         Permission.WORKSPACES_MANAGE,
         # Volumes
+        Permission.VOLUMES_READ_OWN,
         Permission.VOLUMES_READ_ALL,
         Permission.VOLUMES_MANAGE,
         # Audit
@@ -69,6 +74,7 @@ ROLE_PERMISSIONS = {
         Permission.USERS_CREATE,
         Permission.USERS_UPDATE,
         # Server management (full - can manage all servers)
+        Permission.SERVERS_READ_OWN,
         Permission.SERVERS_READ_ALL,
         Permission.SERVERS_START,
         Permission.SERVERS_STOP,
@@ -79,12 +85,15 @@ ROLE_PERMISSIONS = {
         # Plan (read only)
         Permission.PLAN_READ,
         # Credits (view only)
+        Permission.CREDITS_READ_OWN,
         Permission.CREDITS_READ_ALL,
         # Analytics (read only)
         Permission.ANALYTICS_READ,
         # Workspaces (read only)
+        Permission.WORKSPACES_READ_OWN,
         Permission.WORKSPACES_READ_ALL,
         # Volumes (read only)
+        Permission.VOLUMES_READ_OWN,
         Permission.VOLUMES_READ_ALL,
     ],
     
@@ -92,16 +101,20 @@ ROLE_PERMISSIONS = {
         # User management (view only)
         Permission.USERS_READ,
         # Server management (start/stop/restart but not delete)
+        Permission.SERVERS_READ_OWN,
         Permission.SERVERS_READ_ALL,
         Permission.SERVERS_START,
         Permission.SERVERS_STOP,
         # Credits (view only)
+        Permission.CREDITS_READ_OWN,
         Permission.CREDITS_READ_ALL,
         # Analytics (read only)
         Permission.ANALYTICS_READ,
         # Workspaces (read only)
+        Permission.WORKSPACES_READ_OWN,
         Permission.WORKSPACES_READ_ALL,
         # Volumes (read only)
+        Permission.VOLUMES_READ_OWN,
         Permission.VOLUMES_READ_ALL,
     ],
     
@@ -163,3 +176,39 @@ def get_role_level(role: str) -> int:
 def has_higher_or_equal_role(user_role: str, required_role: str) -> bool:
     """Check if user_role has equal or higher privileges than required_role"""
     return get_role_level(user_role) >= get_role_level(required_role)
+
+
+# Deep copy of default permissions for fallback when DB has no overrides
+_DEFAULT_ROLE_PERMISSIONS = {role: list(perms) for role, perms in ROLE_PERMISSIONS.items()}
+
+
+async def load_role_permissions_from_db() -> None:
+    """Load custom role permissions from database, falling back to defaults."""
+    try:
+        from app.db.session import AsyncSessionLocal
+        from app.services.setting_service import SettingService
+        async with AsyncSessionLocal() as db:
+            service = SettingService(db)
+            raw = await service.get("role_permissions")
+            if raw:
+                stored = json.loads(raw)
+                for role, perms in stored.items():
+                    if role in ROLE_PERMISSIONS:
+                        ROLE_PERMISSIONS[role] = perms
+    except Exception:
+        # On any error, keep defaults
+        pass
+
+
+async def save_role_permissions_to_db() -> None:
+    """Persist current role permissions to database."""
+    try:
+        from app.db.session import AsyncSessionLocal
+        from app.services.setting_service import SettingService
+        async with AsyncSessionLocal() as db:
+            service = SettingService(db)
+            payload = json.dumps(ROLE_PERMISSIONS)
+            await service.set("role_permissions", payload)
+    except Exception:
+        # Best-effort persistence
+        pass

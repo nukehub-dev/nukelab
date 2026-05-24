@@ -34,7 +34,7 @@ class DeductCreditsRequest(BaseModel):
 @router.get("/")
 async def get_my_credits(
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.CREDITS_READ)),
+    _ = Depends(require_permissions(Permission.CREDITS_READ_OWN, Permission.CREDITS_READ_ALL)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get current user's credit balance and summary"""
@@ -59,7 +59,7 @@ async def get_my_credit_history(
     sort_by: str = Query("created_at", description="Sort column"),
     sort_order: str = Query("desc", description="Sort order: asc or desc"),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.CREDITS_READ)),
+    _ = Depends(require_permissions(Permission.CREDITS_READ_OWN, Permission.CREDITS_READ_ALL)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get current user's credit transaction history"""
@@ -83,11 +83,11 @@ async def get_my_credit_history(
 @router.get("/users/{user_id}")
 async def get_user_credits(
     user_id: str,
-    current_user: User = Depends(require_permissions(Permission.CREDITS_READ)),
+    current_user: User = Depends(require_permissions(Permission.CREDITS_READ_ALL)),
     _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get any user's credit balance (Admin only)"""
+    """Get any user's credit balance"""
     service = CreditService(db)
     summary = await service.get_credit_summary(user_id)
     
@@ -108,11 +108,11 @@ async def get_user_credit_history(
     limit: int = Query(50, ge=1, le=100),
     sort_by: str = Query("created_at"),
     sort_order: str = Query("desc"),
-    current_user: User = Depends(require_permissions(Permission.CREDITS_READ)),
+    current_user: User = Depends(require_permissions(Permission.CREDITS_READ_ALL)),
     _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get any user's credit transaction history (Admin only)"""
+    """Get any user's credit transaction history"""
     service = CreditService(db)
     result = await service.get_transaction_history(
         user_id=user_id,
@@ -136,7 +136,7 @@ async def grant_credits_to_user(
     _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
-    """Grant credits to a user (Admin only)"""
+    """Grant credits to a user"""
     service = CreditService(db)
     transaction = await service.grant_credits(
         user_id=user_id,
@@ -168,7 +168,7 @@ async def deduct_credits_from_user(
     _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
-    """Deduct credits from a user (Admin only)"""
+    """Deduct credits from a user"""
     service = CreditService(db)
     transaction = await service.deduct_credits(
         user_id=user_id,
@@ -197,11 +197,11 @@ async def get_low_balance_users(
     threshold: int = Query(100, ge=0, description="Credit threshold"),
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(50, ge=1, le=500, description="Items per page"),
-    current_user: User = Depends(require_permissions(Permission.CREDITS_READ)),
+    current_user: User = Depends(require_permissions(Permission.CREDITS_READ_ALL)),
     _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get users with low credit balance (Admin only)"""
+    """Get users with low credit balance"""
     service = CreditService(db)
     result = await service.get_low_credit_users(threshold, page=page, limit=limit)
     

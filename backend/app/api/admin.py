@@ -615,9 +615,14 @@ async def update_role_permissions(
             detail=f"Invalid permissions: {invalid_perms}"
         )
     
-    # Update the role permissions in memory
-    # Note: In a production system, this should persist to database
+    # Update the role permissions in memory and persist to database
     ROLE_PERMISSIONS[role] = request.permissions
+    
+    try:
+        from app.core.roles import save_role_permissions_to_db
+        await save_role_permissions_to_db()
+    except Exception:
+        pass
     
     return {
         "role": role,

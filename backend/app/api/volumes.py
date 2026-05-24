@@ -90,7 +90,7 @@ async def create_volume(
 @router.get("/")
 async def list_volumes(
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.VOLUMES_READ_OWN)),
+    _ = Depends(require_permissions(Permission.VOLUMES_READ_OWN, Permission.VOLUMES_READ_ALL)),
     db: AsyncSession = Depends(get_db)
 ):
     """List volumes accessible to user."""
@@ -109,7 +109,7 @@ async def list_volumes(
 async def get_volume(
     volume_id: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.VOLUMES_READ_OWN)),
+    _ = Depends(require_permissions(Permission.VOLUMES_READ_OWN, Permission.VOLUMES_READ_ALL)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get volume details."""
@@ -275,7 +275,7 @@ async def list_volume_files(
     page: int = 1,
     page_size: int = 100,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.VOLUMES_READ_OWN)),
+    _ = Depends(require_permissions(Permission.VOLUMES_READ_OWN, Permission.VOLUMES_READ_ALL)),
     db: AsyncSession = Depends(get_db)
 ):
     """List files and directories in a volume with pagination, search, and sorting."""
@@ -435,7 +435,7 @@ async def download_volume_file(
     volume_id: str,
     path: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.VOLUMES_READ_OWN)),
+    _ = Depends(require_permissions(Permission.VOLUMES_READ_OWN, Permission.VOLUMES_READ_ALL)),
     db: AsyncSession = Depends(get_db)
 ):
     """Download a file from a volume."""

@@ -156,7 +156,7 @@ async def get_system_metrics(
     _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get system-level metrics history (admin only)"""
+    """Get system-level metrics history"""
     checker = PermissionChecker(current_user)
     checker.require_any([Permission.ADMIN_ACCESS, Permission.SERVERS_MANAGE])
 
@@ -192,7 +192,7 @@ async def get_latest_system_metrics(
     _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get latest system metrics (admin only)"""
+    """Get latest system metrics"""
     checker = PermissionChecker(current_user)
     checker.require_any([Permission.ADMIN_ACCESS, Permission.SERVERS_MANAGE])
 
@@ -212,7 +212,7 @@ async def list_alert_rules(
     _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
-    """List all alert rules (admin only)"""
+    """List all alert rules"""
     checker = PermissionChecker(current_user)
     checker.require_any([Permission.ADMIN_ACCESS, Permission.SERVERS_MANAGE])
 
@@ -229,7 +229,7 @@ async def create_alert_rule(
     _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
-    """Create a new alert rule (admin only)"""
+    """Create a new alert rule"""
     checker = PermissionChecker(current_user)
     checker.require_any([Permission.ADMIN_ACCESS, Permission.SERVERS_MANAGE])
 
@@ -451,7 +451,7 @@ async def get_health_summary(
     _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get overall health summary (admin only)"""
+    """Get overall health summary"""
     checker = PermissionChecker(current_user)
     checker.require_any([Permission.ADMIN_ACCESS, Permission.SERVERS_MANAGE])
 

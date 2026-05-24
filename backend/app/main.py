@@ -103,6 +103,13 @@ async def startup():
     except Exception as e:
         print(f"Warning: Failed to load system settings from DB: {e}")
     
+    # Load custom role permissions from database
+    try:
+        from app.core.roles import load_role_permissions_from_db
+        await load_role_permissions_from_db()
+    except Exception as e:
+        print(f"Warning: Failed to load role permissions from DB: {e}")
+    
     # Start Redis listener for metrics broadcasting
     try:
         import asyncio

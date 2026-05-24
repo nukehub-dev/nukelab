@@ -82,7 +82,7 @@ async def create_environment(
     _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
-    """Create new environment template (admin only)"""
+    """Create new environment template"""
     service = EnvironmentService(db)
     env = await service.create_environment(
         name=data["name"],
@@ -111,7 +111,7 @@ async def update_environment(
     _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
-    """Update environment template (admin only)"""
+    """Update environment template"""
     service = EnvironmentService(db)
     env = await service.update_environment(env_id, **data)
     return {"success": True, "data": env.to_dict(), "message": "Environment updated"}
@@ -124,7 +124,7 @@ async def deactivate_environment(
     _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
-    """Deactivate environment template (admin only)"""
+    """Deactivate environment template"""
     service = EnvironmentService(db)
     env = await service.deactivate_environment(env_id)
     return {"success": True, "data": env.to_dict(), "message": "Environment deactivated"}
@@ -137,7 +137,7 @@ async def delete_environment(
     _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
-    """Permanently delete environment template (admin only)"""
+    """Permanently delete environment template"""
     service = EnvironmentService(db)
     await service.delete_environment(env_id)
     return {"success": True, "message": "Environment permanently deleted"}
@@ -150,7 +150,7 @@ async def activate_environment(
     _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
-    """Activate environment template (admin only)"""
+    """Activate environment template"""
     service = EnvironmentService(db)
     env = await service.activate_environment(env_id)
     return {"success": True, "data": env.to_dict(), "message": "Environment activated"}
@@ -164,7 +164,7 @@ async def clone_environment(
     _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
-    """Clone environment template (admin only)"""
+    """Clone environment template"""
     service = EnvironmentService(db)
     env = await service.clone_environment(
         env_id=env_id,
