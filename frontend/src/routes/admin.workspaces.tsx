@@ -29,7 +29,7 @@ function WorkspacesAdminPage() {
   if (!allowed) return null;
 
   const hasPermission = useAuthStore((state) => state.hasPermission);
-  const canManageWorkspaces = hasPermission(PERMISSIONS.WORKSPACES_MANAGE);
+  const canManageWorkspaces = hasPermission(PERMISSIONS.WORKSPACES_WRITE_ALL);
 
   const { confirm, dialog } = useConfirmDialog();
 

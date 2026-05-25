@@ -578,7 +578,7 @@ async def get_user_servers(
     # Check access
     checker = PermissionChecker(current_user)
     if str(current_user.id) != user_id:
-        checker.require_any([Permission.SERVERS_READ_ALL, Permission.SERVERS_MANAGE])
+        checker.require_any([Permission.SERVERS_READ_ALL, Permission.SERVERS_WRITE_ALL])
     
     result = await db.execute(
         select(Server).where(Server.user_id == user_id)

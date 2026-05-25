@@ -16,11 +16,9 @@ class Permission:
     
     # Server management
     SERVERS_READ_OWN = "servers:read_own"
+    SERVERS_WRITE_OWN = "servers:write_own"
     SERVERS_READ_ALL = "servers:read_all"
-    SERVERS_START = "servers:start"
-    SERVERS_STOP = "servers:stop"
-    SERVERS_DELETE = "servers:delete"
-    SERVERS_MANAGE = "servers:manage"
+    SERVERS_WRITE_ALL = "servers:write_all"
     SERVERS_ACCESS_OTHERS = "servers:access_others"
     
     # Environment management
@@ -46,17 +44,20 @@ class Permission:
     CREDITS_DEDUCT = "credits:deduct"
     
     # Analytics
+    ANALYTICS_READ_OWN = "analytics:read_own"
     ANALYTICS_READ = "analytics:read"
 
     # Workspace management
     WORKSPACES_READ_OWN = "workspaces:read_own"
+    WORKSPACES_WRITE_OWN = "workspaces:write_own"
     WORKSPACES_READ_ALL = "workspaces:read_all"
-    WORKSPACES_MANAGE = "workspaces:manage"
+    WORKSPACES_WRITE_ALL = "workspaces:write_all"
 
     # Volume management
     VOLUMES_READ_OWN = "volumes:read_own"
+    VOLUMES_WRITE_OWN = "volumes:write_own"
     VOLUMES_READ_ALL = "volumes:read_all"
-    VOLUMES_MANAGE = "volumes:manage"
+    VOLUMES_WRITE_ALL = "volumes:write_all"
 
     # Audit
     AUDIT_READ = "audit:read"
@@ -77,11 +78,9 @@ class Permission:
             cls.USERS_DELETE,
             cls.USERS_IMPERSONATE,
             cls.SERVERS_READ_OWN,
+            cls.SERVERS_WRITE_OWN,
             cls.SERVERS_READ_ALL,
-            cls.SERVERS_START,
-            cls.SERVERS_STOP,
-            cls.SERVERS_DELETE,
-            cls.SERVERS_MANAGE,
+            cls.SERVERS_WRITE_ALL,
             cls.SERVERS_ACCESS_OTHERS,
             cls.ENVIRONMENT_CREATE,
             cls.ENVIRONMENT_READ,
@@ -97,13 +96,16 @@ class Permission:
             cls.CREDITS_READ_ALL,
             cls.CREDITS_GRANT,
             cls.CREDITS_DEDUCT,
+            cls.ANALYTICS_READ_OWN,
             cls.ANALYTICS_READ,
             cls.WORKSPACES_READ_OWN,
+            cls.WORKSPACES_WRITE_OWN,
             cls.WORKSPACES_READ_ALL,
-            cls.WORKSPACES_MANAGE,
+            cls.WORKSPACES_WRITE_ALL,
             cls.VOLUMES_READ_OWN,
+            cls.VOLUMES_WRITE_OWN,
             cls.VOLUMES_READ_ALL,
-            cls.VOLUMES_MANAGE,
+            cls.VOLUMES_WRITE_ALL,
             cls.AUDIT_READ,
             cls.ADMIN_ACCESS,
         ]

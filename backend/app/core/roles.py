@@ -6,10 +6,11 @@ Hierarchy (most to least privileges):
   super_admin > admin > moderator > support > user > guest
 
 Design principles:
-1. Each role has all permissions of roles below it (with some exceptions)
-2. Moderators are junior admins - can manage users and servers but not system settings
-3. Support staff handle day-to-day server operations and can view users
-4. Users only manage their own resources
+1. Higher permissions imply lower ones (read_all → read_own, write_all → write_own + read_all)
+2. Each role has all permissions of roles below it (with some exceptions)
+3. Moderators are junior admins - can manage users and servers but not system settings
+4. Support staff handle day-to-day server operations and can view users
+5. Users only manage their own resources
 """
 
 import json
@@ -27,14 +28,9 @@ ROLE_PERMISSIONS = {
         Permission.USERS_UPDATE,
         Permission.USERS_DELETE,
         Permission.USERS_IMPERSONATE,
-        # Server management (full)
-        Permission.SERVERS_READ_OWN,
+        # Server management (admin level — read_all/write_all imply own)
         Permission.SERVERS_READ_ALL,
-        Permission.SERVERS_START,
-        Permission.SERVERS_STOP,
-        Permission.SERVERS_DELETE,
-        Permission.SERVERS_MANAGE,
-        Permission.SERVERS_ACCESS_OTHERS,
+        Permission.SERVERS_WRITE_ALL,
         # Environment management
         Permission.ENVIRONMENT_CREATE,
         Permission.ENVIRONMENT_READ,
@@ -45,7 +41,6 @@ ROLE_PERMISSIONS = {
         Permission.PLAN_READ,
         Permission.PLAN_UPDATE,
         Permission.PLAN_DELETE,
-        # Quota management
         Permission.QUOTA_READ,
         Permission.QUOTA_UPDATE,
         # Credit management
@@ -54,15 +49,14 @@ ROLE_PERMISSIONS = {
         Permission.CREDITS_GRANT,
         Permission.CREDITS_DEDUCT,
         # Analytics
+        Permission.ANALYTICS_READ_OWN,
         Permission.ANALYTICS_READ,
-        # Workspaces
-        Permission.WORKSPACES_READ_OWN,
+        # Workspaces (admin level)
         Permission.WORKSPACES_READ_ALL,
-        Permission.WORKSPACES_MANAGE,
-        # Volumes
-        Permission.VOLUMES_READ_OWN,
+        Permission.WORKSPACES_WRITE_ALL,
+        # Volumes (admin level)
         Permission.VOLUMES_READ_ALL,
-        Permission.VOLUMES_MANAGE,
+        Permission.VOLUMES_WRITE_ALL,
         # Audit
         Permission.AUDIT_READ,
         # Admin dashboard
@@ -74,72 +68,78 @@ ROLE_PERMISSIONS = {
         Permission.USERS_READ,
         Permission.USERS_CREATE,
         Permission.USERS_UPDATE,
-        # Server management (full - can manage all servers)
-        Permission.SERVERS_READ_OWN,
+        # Server management (full — read_all/write_all imply own)
         Permission.SERVERS_READ_ALL,
-        Permission.SERVERS_START,
-        Permission.SERVERS_STOP,
-        Permission.SERVERS_DELETE,
-        Permission.SERVERS_MANAGE,
-        Permission.SERVERS_ACCESS_OTHERS,
-        # Environment (read only)
+        Permission.SERVERS_WRITE_ALL,
+        # Environment (full)
+        Permission.ENVIRONMENT_CREATE,
         Permission.ENVIRONMENT_READ,
-        # Plan (read only)
+        Permission.ENVIRONMENT_UPDATE,
+        Permission.ENVIRONMENT_DELETE,
+        # Plan (full)
+        Permission.PLAN_CREATE,
         Permission.PLAN_READ,
-        # Credits (view only)
-        Permission.CREDITS_READ_OWN,
+        Permission.PLAN_UPDATE,
+        Permission.PLAN_DELETE,
+        Permission.QUOTA_READ,
+        Permission.QUOTA_UPDATE,
+        # Credits (view all + grant/deduct)
         Permission.CREDITS_READ_ALL,
-        # Analytics (read only)
-        Permission.ANALYTICS_READ,
-        # Workspaces (read only)
-        Permission.WORKSPACES_READ_OWN,
+        Permission.CREDITS_GRANT,
+        Permission.CREDITS_DEDUCT,
+        # Workspaces (full)
         Permission.WORKSPACES_READ_ALL,
-        # Volumes (read only)
-        Permission.VOLUMES_READ_OWN,
+        Permission.WORKSPACES_WRITE_ALL,
+        # Volumes (full)
         Permission.VOLUMES_READ_ALL,
+        Permission.VOLUMES_WRITE_ALL,
+        # Audit
+        Permission.AUDIT_READ,
     ],
     
     "support": [
         # User management (view only)
         Permission.USERS_READ,
-        # Server management (start/stop/restart but not delete)
-        Permission.SERVERS_READ_OWN,
+        # Server management (write own + read all)
+        Permission.SERVERS_WRITE_OWN,
         Permission.SERVERS_READ_ALL,
-        Permission.SERVERS_START,
-        Permission.SERVERS_STOP,
-        # Credits (view only)
+        # Environment (read only)
+        Permission.ENVIRONMENT_READ,
+        # Plan (read only)
+        Permission.PLAN_READ,
+        Permission.QUOTA_READ,
+        # Credits (view own/all + grant)
         Permission.CREDITS_READ_OWN,
         Permission.CREDITS_READ_ALL,
-        # Analytics (read only)
+        Permission.CREDITS_GRANT,
+        # Analytics
+        Permission.ANALYTICS_READ_OWN,
         Permission.ANALYTICS_READ,
-        # Workspaces (read only)
-        Permission.WORKSPACES_READ_OWN,
+        # Workspaces (write own + read all)
+        Permission.WORKSPACES_WRITE_OWN,
         Permission.WORKSPACES_READ_ALL,
-        # Volumes (read only)
-        Permission.VOLUMES_READ_OWN,
+        # Volumes (write own + read all)
+        Permission.VOLUMES_WRITE_OWN,
         Permission.VOLUMES_READ_ALL,
     ],
     
     "user": [
-        # Own servers only
+        # Own resources (full CRUD)
         Permission.SERVERS_READ_OWN,
-        Permission.SERVERS_START,
-        Permission.SERVERS_STOP,
-        Permission.SERVERS_DELETE,
+        Permission.SERVERS_WRITE_OWN,
+        Permission.VOLUMES_READ_OWN,
+        Permission.VOLUMES_WRITE_OWN,
+        Permission.WORKSPACES_READ_OWN,
+        Permission.WORKSPACES_WRITE_OWN,
         # Credits (view own)
         Permission.CREDITS_READ_OWN,
-        # Workspaces (read only)
-        Permission.WORKSPACES_READ_OWN,
-        # Volumes (read only)
-        Permission.VOLUMES_READ_OWN,
+        # Analytics (view own)
+        Permission.ANALYTICS_READ_OWN,
     ],
 
     "guest": [
-        # Read-only access to own resources
+        # Read-only access to own servers and volumes
         Permission.SERVERS_READ_OWN,
-        # Workspaces (read only)
-        Permission.WORKSPACES_READ_OWN,
-        # Volumes (read only)
         Permission.VOLUMES_READ_OWN,
     ],
 }
@@ -189,13 +189,22 @@ async def load_role_permissions_from_db() -> None:
     try:
         from app.db.session import AsyncSessionLocal
         from app.services.setting_service import SettingService
+        from app.core.permissions import Permission
         async with AsyncSessionLocal() as db:
             service = SettingService(db)
             raw = await service.get("role_permissions")
             if raw:
                 stored = json.loads(raw)
+                valid_perms = set(Permission.all_permissions()) | {Permission.ALL}
                 for role, perms in stored.items():
-                    if role in ROLE_PERMISSIONS:
+                    if role not in ROLE_PERMISSIONS:
+                        continue
+                    # Validate all stored permissions are still valid
+                    invalid = [p for p in perms if p not in valid_perms]
+                    if invalid:
+                        # Stale permissions detected — reset to defaults
+                        ROLE_PERMISSIONS[role] = list(_DEFAULT_ROLE_PERMISSIONS[role])
+                    else:
                         ROLE_PERMISSIONS[role] = perms
     except Exception:
         # On any error, keep defaults

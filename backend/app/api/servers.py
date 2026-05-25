@@ -95,12 +95,18 @@ async def get_server_with_permission_check(
     current_user: User,
     db: AsyncSession,
     request: Request,
-    require_ownership: bool = True
+    require_ownership: bool = True,
+    admin_permissions: list[str] | None = None
 ) -> Server:
     """
     Get server and check permissions.
     Admins can access any server via JWT only, users can only access their own.
     API tokens cannot be used for cross-user server access.
+    
+    admin_permissions: list of permissions that grant cross-user access.
+        Defaults to [SERVERS_ACCESS_OTHERS].
+        For read operations, use [SERVERS_READ_ALL, SERVERS_ACCESS_OTHERS].
+        For write operations, use [SERVERS_WRITE_ALL, SERVERS_ACCESS_OTHERS].
     """
     result = await db.execute(
         select(Server).where(Server.id == server_id)
@@ -119,7 +125,8 @@ async def get_server_with_permission_check(
                 detail="Cross-user server access requires JWT authentication. Please log in via the web interface."
             )
         checker = PermissionChecker(current_user)
-        checker.require(Permission.SERVERS_ACCESS_OTHERS)
+        perms_to_check = admin_permissions or [Permission.SERVERS_ACCESS_OTHERS]
+        checker.require_any(perms_to_check)
     
     return server
 
@@ -239,7 +246,7 @@ async def _get_server_volume_mounts(db: AsyncSession, server_id: str) -> list:
 async def create_server(
     request: ServerCreateRequest,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.SERVERS_START)),
+    _ = Depends(require_permissions(Permission.SERVERS_WRITE_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """Create and spawn a new server using a plan and environment template."""
@@ -249,7 +256,7 @@ async def create_server(
     import uuid
     
     checker = PermissionChecker(current_user)
-    checker.require(Permission.SERVERS_START)
+    checker.require(Permission.SERVERS_WRITE_OWN)
     
     # Validate plan exists and user can use it
     plan_service = PlanService(db)
@@ -664,7 +671,10 @@ async def get_server(
     db: AsyncSession = Depends(get_db)
 ):
     """Get server details. Users can view own, admins can view any."""
-    server = await get_server_with_permission_check(server_id, current_user, db, request)
+    server = await get_server_with_permission_check(
+        server_id, current_user, db, request,
+        admin_permissions=[Permission.SERVERS_READ_ALL, Permission.SERVERS_ACCESS_OTHERS]
+    )
 
     if server.container_id:
         try:
@@ -733,7 +743,7 @@ async def get_server_by_path(
     # Permission check - users can only access their own unless admin
     if str(server.user_id) != str(current_user.id):
         checker = PermissionChecker(current_user)
-        checker.require(Permission.SERVERS_ACCESS_OTHERS)
+        checker.require_any([Permission.SERVERS_READ_ALL, Permission.SERVERS_ACCESS_OTHERS])
 
     # Sync status with actual container state
     if server.container_id:
@@ -785,18 +795,21 @@ async def start_server(
     http_request: Request,
     body: ReasonRequest = ReasonRequest(),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.SERVERS_START)),
+    _ = Depends(require_permissions(Permission.SERVERS_WRITE_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """Start a stopped server."""
-    server = await get_server_with_permission_check(server_id, current_user, db, http_request)
+    server = await get_server_with_permission_check(
+        server_id, current_user, db, http_request,
+        admin_permissions=[Permission.SERVERS_WRITE_ALL, Permission.SERVERS_ACCESS_OTHERS]
+    )
     
     checker = PermissionChecker(current_user)
-    checker.require(Permission.SERVERS_START)
+    checker.require(Permission.SERVERS_WRITE_OWN)
     
     # Check if trying to start someone else's server
     if str(server.user_id) != str(current_user.id):
-        checker.require(Permission.SERVERS_ACCESS_OTHERS)
+        checker.require_any([Permission.SERVERS_WRITE_ALL, Permission.SERVERS_ACCESS_OTHERS])
         await _audit_cross_user_access(server, current_user, db, "server.start", body.reason)
     
     # Check plan access — user may have lost access since creation
@@ -1052,18 +1065,21 @@ async def stop_server(
     http_request: Request,
     body: ReasonRequest = ReasonRequest(),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.SERVERS_STOP)),
+    _ = Depends(require_permissions(Permission.SERVERS_WRITE_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """Stop a server."""
-    server = await get_server_with_permission_check(server_id, current_user, db, http_request)
+    server = await get_server_with_permission_check(
+        server_id, current_user, db, http_request,
+        admin_permissions=[Permission.SERVERS_WRITE_ALL, Permission.SERVERS_ACCESS_OTHERS]
+    )
 
     checker = PermissionChecker(current_user)
-    checker.require(Permission.SERVERS_STOP)
+    checker.require(Permission.SERVERS_WRITE_OWN)
 
     # Check if trying to stop someone else's server
     if str(server.user_id) != str(current_user.id):
-        checker.require(Permission.SERVERS_ACCESS_OTHERS)
+        checker.require_any([Permission.SERVERS_WRITE_ALL, Permission.SERVERS_ACCESS_OTHERS])
         await _audit_cross_user_access(server, current_user, db, "server.stop", body.reason)
 
     # Load volume mounts for count management
@@ -1157,18 +1173,21 @@ async def restart_server(
     http_request: Request,
     body: ReasonRequest = ReasonRequest(),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.SERVERS_START)),
+    _ = Depends(require_permissions(Permission.SERVERS_WRITE_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """Restart a server."""
-    server = await get_server_with_permission_check(server_id, current_user, db, http_request)
+    server = await get_server_with_permission_check(
+        server_id, current_user, db, http_request,
+        admin_permissions=[Permission.SERVERS_WRITE_ALL, Permission.SERVERS_ACCESS_OTHERS]
+    )
     
     checker = PermissionChecker(current_user)
-    checker.require_any([Permission.SERVERS_STOP, Permission.SERVERS_START])
+    checker.require(Permission.SERVERS_WRITE_OWN)
     
     # Check if trying to restart someone else's server
     if str(server.user_id) != str(current_user.id):
-        checker.require(Permission.SERVERS_ACCESS_OTHERS)
+        checker.require_any([Permission.SERVERS_WRITE_ALL, Permission.SERVERS_ACCESS_OTHERS])
         await _audit_cross_user_access(server, current_user, db, "server.restart", body.reason)
     
     # Check plan access — user may have lost access since creation
@@ -1324,18 +1343,21 @@ async def delete_server(
     request: Request,
     reason: Optional[str] = None,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.SERVERS_DELETE)),
+    _ = Depends(require_permissions(Permission.SERVERS_WRITE_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete a server."""
-    server = await get_server_with_permission_check(server_id, current_user, db, request)
+    server = await get_server_with_permission_check(
+        server_id, current_user, db, request,
+        admin_permissions=[Permission.SERVERS_WRITE_ALL, Permission.SERVERS_ACCESS_OTHERS]
+    )
     
     checker = PermissionChecker(current_user)
-    checker.require(Permission.SERVERS_DELETE)
+    checker.require(Permission.SERVERS_WRITE_OWN)
     
     # Check if trying to delete someone else's server
     if str(server.user_id) != str(current_user.id):
-        checker.require(Permission.SERVERS_ACCESS_OTHERS)
+        checker.require_any([Permission.SERVERS_WRITE_ALL, Permission.SERVERS_ACCESS_OTHERS])
         await _audit_cross_user_access(server, current_user, db, "server.delete", reason)
     
     # Load volume mounts for count management
@@ -1388,7 +1410,10 @@ async def get_server_volumes(
     db: AsyncSession = Depends(get_db)
 ):
     """Get volume mounts for a server."""
-    server = await get_server_with_permission_check(server_id, current_user, db, request)
+    server = await get_server_with_permission_check(
+        server_id, current_user, db, request,
+        admin_permissions=[Permission.SERVERS_READ_ALL, Permission.SERVERS_ACCESS_OTHERS]
+    )
     return {"volume_mounts": await _get_server_volume_mounts(db, str(server.id))}
 
 
@@ -1398,12 +1423,15 @@ async def update_server(
     http_request: Request,
     body: ServerUpdateRequest,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.SERVERS_MANAGE)),
+    _ = Depends(require_permissions(Permission.SERVERS_WRITE_ALL)),
     db: AsyncSession = Depends(get_db)
 ):
     """Update server configuration. Any config change that affects the container
     triggers a recreate (stop → delete → spawn with new config)."""
-    server = await get_server_with_permission_check(server_id, current_user, db, http_request)
+    server = await get_server_with_permission_check(
+        server_id, current_user, db, http_request,
+        admin_permissions=[Permission.SERVERS_WRITE_ALL, Permission.SERVERS_ACCESS_OTHERS]
+    )
     
     # Audit cross-user config updates
     if str(server.user_id) != str(current_user.id):
@@ -1729,11 +1757,14 @@ async def ping_server_activity(
     server_id: str,
     request: Request,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.SERVERS_START)),
+    _ = Depends(require_permissions(Permission.SERVERS_WRITE_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """Update last_activity timestamp for a server. Called when user accesses the server."""
-    server = await get_server_with_permission_check(server_id, current_user, db, request)
+    server = await get_server_with_permission_check(
+        server_id, current_user, db, request,
+        admin_permissions=[Permission.SERVERS_WRITE_ALL, Permission.SERVERS_ACCESS_OTHERS]
+    )
     
     if server.status != "running":
         raise HTTPException(status_code=400, detail="Server is not running")
@@ -1798,7 +1829,10 @@ async def get_server_logs(
     db: AsyncSession = Depends(get_db)
 ):
     """Get server container logs."""
-    server = await get_server_with_permission_check(server_id, current_user, db, request)
+    server = await get_server_with_permission_check(
+        server_id, current_user, db, request,
+        admin_permissions=[Permission.SERVERS_READ_ALL, Permission.SERVERS_ACCESS_OTHERS]
+    )
     
     if not server.container_id:
         return {
@@ -1871,7 +1905,7 @@ async def create_server_access_token(
     request: Request,
     body: ServerAccessTokenRequest,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.SERVERS_START)),
+    _ = Depends(require_permissions(Permission.SERVERS_WRITE_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """Generate a short-lived access token for direct server access.
@@ -1950,7 +1984,10 @@ async def get_server_access_stats(
     db: AsyncSession = Depends(get_db)
 ):
     """Get access statistics for a server."""
-    server = await get_server_with_permission_check(server_id, current_user, db, request)
+    server = await get_server_with_permission_check(
+        server_id, current_user, db, request,
+        admin_permissions=[Permission.SERVERS_READ_ALL, Permission.SERVERS_ACCESS_OTHERS]
+    )
     from app.services.server_auth_service import server_auth_service
     stats = await server_auth_service.get_server_access_stats(db, server.id)
     return {"server_id": server_id, **stats}

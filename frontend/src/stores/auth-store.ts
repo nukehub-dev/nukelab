@@ -23,11 +23,9 @@ export const PERMISSIONS = {
   USERS_DELETE: 'users:delete',
   USERS_IMPERSONATE: 'users:impersonate',
   SERVERS_READ_OWN: 'servers:read_own',
+  SERVERS_WRITE_OWN: 'servers:write_own',
   SERVERS_READ_ALL: 'servers:read_all',
-  SERVERS_START: 'servers:start',
-  SERVERS_STOP: 'servers:stop',
-  SERVERS_DELETE: 'servers:delete',
-  SERVERS_MANAGE: 'servers:manage',
+  SERVERS_WRITE_ALL: 'servers:write_all',
   SERVERS_ACCESS_OTHERS: 'servers:access_others',
   ENVIRONMENT_CREATE: 'environment:create',
   ENVIRONMENT_READ: 'environment:read',
@@ -43,13 +41,16 @@ export const PERMISSIONS = {
   CREDITS_READ_ALL: 'credits:read_all',
   CREDITS_GRANT: 'credits:grant',
   CREDITS_DEDUCT: 'credits:deduct',
+  ANALYTICS_READ_OWN: 'analytics:read_own',
   ANALYTICS_READ: 'analytics:read',
   WORKSPACES_READ_OWN: 'workspaces:read_own',
+  WORKSPACES_WRITE_OWN: 'workspaces:write_own',
   WORKSPACES_READ_ALL: 'workspaces:read_all',
-  WORKSPACES_MANAGE: 'workspaces:manage',
+  WORKSPACES_WRITE_ALL: 'workspaces:write_all',
   VOLUMES_READ_OWN: 'volumes:read_own',
+  VOLUMES_WRITE_OWN: 'volumes:write_own',
   VOLUMES_READ_ALL: 'volumes:read_all',
-  VOLUMES_MANAGE: 'volumes:manage',
+  VOLUMES_WRITE_ALL: 'volumes:write_all',
 
   AUDIT_READ: 'audit:read',
   ADMIN_ACCESS: 'admin:access',
@@ -124,12 +125,10 @@ function checkPermission(user: User | null, permission: string): boolean {
     case PERMISSIONS.USERS_IMPERSONATE:
       return roleLevel >= ROLE_LEVELS.admin;
     case PERMISSIONS.SERVERS_READ_ALL:
-    case PERMISSIONS.SERVERS_MANAGE:
-    case PERMISSIONS.SERVERS_DELETE:
+    case PERMISSIONS.SERVERS_WRITE_ALL:
     case PERMISSIONS.SERVERS_ACCESS_OTHERS:
       return roleLevel >= ROLE_LEVELS.moderator;
-    case PERMISSIONS.SERVERS_START:
-    case PERMISSIONS.SERVERS_STOP:
+    case PERMISSIONS.SERVERS_WRITE_OWN:
       return roleLevel >= ROLE_LEVELS.user;
     case PERMISSIONS.SERVERS_READ_OWN:
       return roleLevel >= ROLE_LEVELS.guest;
@@ -162,13 +161,16 @@ function checkPermission(user: User | null, permission: string): boolean {
       return roleLevel >= ROLE_LEVELS.support;
     case PERMISSIONS.WORKSPACES_READ_OWN:
     case PERMISSIONS.VOLUMES_READ_OWN:
+    case PERMISSIONS.VOLUMES_WRITE_OWN:
+    case PERMISSIONS.WORKSPACES_READ_OWN:
+    case PERMISSIONS.WORKSPACES_WRITE_OWN:
       return roleLevel >= ROLE_LEVELS.user;
     case PERMISSIONS.WORKSPACES_READ_ALL:
     case PERMISSIONS.VOLUMES_READ_ALL:
       return roleLevel >= ROLE_LEVELS.support;
-    case PERMISSIONS.WORKSPACES_MANAGE:
-    case PERMISSIONS.VOLUMES_MANAGE:
-      return roleLevel >= ROLE_LEVELS.admin;
+    case PERMISSIONS.WORKSPACES_WRITE_ALL:
+    case PERMISSIONS.VOLUMES_WRITE_ALL:
+      return roleLevel >= ROLE_LEVELS.moderator;
     default:
       return false;
   }
@@ -188,8 +190,8 @@ export const useAuthStore = create<AuthState>()(
       isAdmin: () => get().hasPermission(PERMISSIONS.ADMIN_ACCESS),
       isModerator: () => get().hasPermission(PERMISSIONS.SERVERS_READ_ALL) && !get().hasPermission(PERMISSIONS.ADMIN_ACCESS),
       isSupport: () => get().hasPermission(PERMISSIONS.VOLUMES_READ_ALL) && !get().hasPermission(PERMISSIONS.SERVERS_READ_ALL),
-      isUser: () => get().hasPermission(PERMISSIONS.SERVERS_START) && !get().hasPermission(PERMISSIONS.VOLUMES_READ_ALL),
-      isGuest: () => !get().user || (get().hasPermission(PERMISSIONS.SERVERS_READ_OWN) && !get().hasPermission(PERMISSIONS.SERVERS_START)),
+      isUser: () => get().hasPermission(PERMISSIONS.SERVERS_WRITE_OWN) && !get().hasPermission(PERMISSIONS.VOLUMES_READ_ALL),
+      isGuest: () => !get().user || (get().hasPermission(PERMISSIONS.SERVERS_READ_OWN) && !get().hasPermission(PERMISSIONS.SERVERS_WRITE_OWN)),
 
       // Raw permission checks
       hasPermission: (permission: string) => checkPermission(get().user, permission),
@@ -201,12 +203,11 @@ export const useAuthStore = create<AuthState>()(
       canCreateUsers: () => get().hasPermission(PERMISSIONS.USERS_CREATE),
       canDeleteUsers: () => get().hasPermission(PERMISSIONS.USERS_DELETE),
 
-      canManageServers: () => get().hasPermission(PERMISSIONS.SERVERS_MANAGE),
+      canManageServers: () => get().hasPermission(PERMISSIONS.SERVERS_WRITE_ALL),
       canAccessOthersServers: () => get().hasPermission(PERMISSIONS.SERVERS_ACCESS_OTHERS),
       canViewAllServers: () => get().hasPermission(PERMISSIONS.SERVERS_READ_ALL),
 
-      canStartStopServers: () => get().hasAnyPermission([PERMISSIONS.SERVERS_START, PERMISSIONS.SERVERS_STOP]),
-      canDeleteServers: () => get().hasPermission(PERMISSIONS.SERVERS_DELETE),
+      canWriteOwnServers: () => get().hasPermission(PERMISSIONS.SERVERS_WRITE_OWN),
 
       canManageEnvironments: () => get().hasAnyPermission([PERMISSIONS.ENVIRONMENT_CREATE, PERMISSIONS.ENVIRONMENT_UPDATE, PERMISSIONS.ENVIRONMENT_DELETE]),
       canManagePlans: () => get().hasAnyPermission([PERMISSIONS.PLAN_CREATE, PERMISSIONS.PLAN_UPDATE, PERMISSIONS.PLAN_DELETE]),
@@ -218,7 +219,7 @@ export const useAuthStore = create<AuthState>()(
           PERMISSIONS.USERS_UPDATE,
           PERMISSIONS.USERS_DELETE,
           PERMISSIONS.SERVERS_READ_ALL,
-          PERMISSIONS.SERVERS_MANAGE,
+          PERMISSIONS.SERVERS_WRITE_ALL,
           PERMISSIONS.ENVIRONMENT_CREATE,
           PERMISSIONS.ENVIRONMENT_UPDATE,
           PERMISSIONS.ENVIRONMENT_DELETE,

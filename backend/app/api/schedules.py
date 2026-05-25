@@ -65,7 +65,7 @@ async def create_schedule(
     http_request: Request,
     body: ScheduleCreateRequest,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.SERVERS_MANAGE)),
+    _ = Depends(require_permissions(Permission.SERVERS_WRITE_ALL)),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a schedule for a server."""
@@ -76,7 +76,7 @@ async def create_schedule(
         await _audit_cross_user_access(server, current_user, db, "server.schedule.create", body.reason)
     
     checker = PermissionChecker(current_user)
-    checker.require(Permission.SERVERS_START)
+    checker.require(Permission.SERVERS_WRITE_OWN)
     
     service = ScheduleService(db)
     
@@ -108,7 +108,7 @@ async def update_schedule(
     http_request: Request,
     body: ScheduleUpdateRequest,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.SERVERS_MANAGE)),
+    _ = Depends(require_permissions(Permission.SERVERS_WRITE_ALL)),
     db: AsyncSession = Depends(get_db)
 ):
     """Update a schedule."""
@@ -148,7 +148,7 @@ async def delete_schedule(
     request: Request,
     reason: Optional[str] = None,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.SERVERS_MANAGE)),
+    _ = Depends(require_permissions(Permission.SERVERS_WRITE_ALL)),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete a schedule."""

@@ -854,7 +854,7 @@ async def admin_get_workspace(
 async def admin_update_workspace(
     workspace_id: str,
     request: UpdateWorkspaceRequest,
-    current_user: User = Depends(require_permissions(Permission.WORKSPACES_MANAGE)),
+    current_user: User = Depends(require_permissions(Permission.WORKSPACES_WRITE_ALL)),
     _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
@@ -880,7 +880,7 @@ async def admin_update_workspace(
 @router.delete("/workspaces/{workspace_id}")
 async def admin_delete_workspace(
     workspace_id: str,
-    current_user: User = Depends(require_permissions(Permission.WORKSPACES_MANAGE)),
+    current_user: User = Depends(require_permissions(Permission.WORKSPACES_WRITE_ALL)),
     _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
@@ -1032,7 +1032,7 @@ async def admin_get_volume(
 async def admin_update_volume(
     volume_id: str,
     request: UpdateVolumeRequest,
-    current_user: User = Depends(require_permissions(Permission.VOLUMES_MANAGE)),
+    current_user: User = Depends(require_permissions(Permission.VOLUMES_WRITE_ALL)),
     _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
@@ -1060,7 +1060,7 @@ async def admin_update_volume(
 @router.delete("/volumes/{volume_id}")
 async def admin_delete_volume(
     volume_id: str,
-    current_user: User = Depends(require_permissions(Permission.VOLUMES_MANAGE)),
+    current_user: User = Depends(require_permissions(Permission.VOLUMES_WRITE_ALL)),
     _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):

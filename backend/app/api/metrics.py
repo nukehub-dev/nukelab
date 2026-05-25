@@ -82,7 +82,7 @@ async def get_server_metrics(
         raise HTTPException(status_code=404, detail="Server not found")
 
     if str(server.user_id) != str(current_user.id):
-        checker.require_any([Permission.SERVERS_READ_ALL, Permission.SERVERS_MANAGE])
+        checker.require_any([Permission.SERVERS_READ_ALL, Permission.SERVERS_WRITE_ALL])
 
     if not from_date:
         from_date = datetime.utcnow() - timedelta(hours=1)
@@ -130,7 +130,7 @@ async def get_server_latest_metrics(
         raise HTTPException(status_code=404, detail="Server not found")
 
     if str(server.user_id) != str(current_user.id):
-        checker.require_any([Permission.SERVERS_READ_ALL, Permission.SERVERS_MANAGE])
+        checker.require_any([Permission.SERVERS_READ_ALL, Permission.SERVERS_WRITE_ALL])
 
     result = await db.execute(
         select(ServerMetric).where(
@@ -158,7 +158,7 @@ async def get_system_metrics(
 ):
     """Get system-level metrics history"""
     checker = PermissionChecker(current_user)
-    checker.require_any([Permission.ADMIN_ACCESS, Permission.SERVERS_MANAGE])
+    checker.require_any([Permission.ADMIN_ACCESS, Permission.SERVERS_WRITE_ALL])
 
     if not from_date:
         from_date = datetime.utcnow() - timedelta(hours=1)
@@ -194,7 +194,7 @@ async def get_latest_system_metrics(
 ):
     """Get latest system metrics"""
     checker = PermissionChecker(current_user)
-    checker.require_any([Permission.ADMIN_ACCESS, Permission.SERVERS_MANAGE])
+    checker.require_any([Permission.ADMIN_ACCESS, Permission.SERVERS_WRITE_ALL])
 
     result = await db.execute(
         select(SystemMetric).order_by(desc(SystemMetric.collected_at)).limit(1)
@@ -214,7 +214,7 @@ async def list_alert_rules(
 ):
     """List all alert rules"""
     checker = PermissionChecker(current_user)
-    checker.require_any([Permission.ADMIN_ACCESS, Permission.SERVERS_MANAGE])
+    checker.require_any([Permission.ADMIN_ACCESS, Permission.SERVERS_WRITE_ALL])
 
     result = await db.execute(select(AlertRule).order_by(AlertRule.created_at.desc()))
     rules = result.scalars().all()
@@ -231,7 +231,7 @@ async def create_alert_rule(
 ):
     """Create a new alert rule"""
     checker = PermissionChecker(current_user)
-    checker.require_any([Permission.ADMIN_ACCESS, Permission.SERVERS_MANAGE])
+    checker.require_any([Permission.ADMIN_ACCESS, Permission.SERVERS_WRITE_ALL])
 
     import uuid
 
@@ -268,7 +268,7 @@ async def get_alert_rule(
 ):
     """Get alert rule details"""
     checker = PermissionChecker(current_user)
-    checker.require_any([Permission.ADMIN_ACCESS, Permission.SERVERS_MANAGE])
+    checker.require_any([Permission.ADMIN_ACCESS, Permission.SERVERS_WRITE_ALL])
 
     import uuid
 
@@ -293,7 +293,7 @@ async def update_alert_rule(
 ):
     """Update an alert rule"""
     checker = PermissionChecker(current_user)
-    checker.require_any([Permission.ADMIN_ACCESS, Permission.SERVERS_MANAGE])
+    checker.require_any([Permission.ADMIN_ACCESS, Permission.SERVERS_WRITE_ALL])
 
     import uuid
 
@@ -326,7 +326,7 @@ async def delete_alert_rule(
 ):
     """Delete an alert rule"""
     checker = PermissionChecker(current_user)
-    checker.require_any([Permission.ADMIN_ACCESS, Permission.SERVERS_MANAGE])
+    checker.require_any([Permission.ADMIN_ACCESS, Permission.SERVERS_WRITE_ALL])
 
     import uuid
 
@@ -399,7 +399,7 @@ async def resolve_alert(
 ):
     """Resolve an alert"""
     checker = PermissionChecker(current_user)
-    checker.require_any([Permission.ADMIN_ACCESS, Permission.SERVERS_MANAGE])
+    checker.require_any([Permission.ADMIN_ACCESS, Permission.SERVERS_WRITE_ALL])
 
     service = AlertService(db)
     alert = await service.resolve_alert(alert_id)
@@ -430,7 +430,7 @@ async def get_server_health_checks(
         raise HTTPException(status_code=404, detail="Server not found")
 
     if str(server.user_id) != str(current_user.id):
-        checker.require_any([Permission.SERVERS_READ_ALL, Permission.SERVERS_MANAGE])
+        checker.require_any([Permission.SERVERS_READ_ALL, Permission.SERVERS_WRITE_ALL])
 
     result = await db.execute(
         select(HealthCheck).where(
@@ -453,7 +453,7 @@ async def get_health_summary(
 ):
     """Get overall health summary"""
     checker = PermissionChecker(current_user)
-    checker.require_any([Permission.ADMIN_ACCESS, Permission.SERVERS_MANAGE])
+    checker.require_any([Permission.ADMIN_ACCESS, Permission.SERVERS_WRITE_ALL])
 
     # Count by status
     result = await db.execute(

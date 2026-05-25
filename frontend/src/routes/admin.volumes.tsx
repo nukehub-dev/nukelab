@@ -55,7 +55,7 @@ function VolumesAdminPage() {
   if (!allowed) return null;
 
   const hasPermission = useAuthStore((state) => state.hasPermission);
-  const canManageVolumes = hasPermission(PERMISSIONS.VOLUMES_MANAGE);
+  const canManageVolumes = hasPermission(PERMISSIONS.VOLUMES_WRITE_ALL);
 
   const { confirm, dialog } = useConfirmDialog();
 

@@ -34,46 +34,25 @@ import type { ApiToken, ApiTokenWithValue } from '../../types/api';
 
 const AVAILABLE_SCOPES = [
   // Servers
-  { value: 'servers:read', label: 'Read Servers', description: 'View server details and status', category: 'Servers' },
-  { value: 'servers:start', label: 'Start Servers', description: 'Start servers', category: 'Servers' },
-  { value: 'servers:stop', label: 'Stop Servers', description: 'Stop servers', category: 'Servers' },
-  { value: 'servers:delete', label: 'Delete Servers', description: 'Delete servers', category: 'Servers' },
-  { value: 'servers:manage', label: 'Manage Servers', description: 'Full server management', category: 'Servers' },
-  { value: 'servers:access_others', label: 'Access All Servers', description: 'Start, stop, and manage servers owned by other users', category: 'Servers' },
+  { value: 'servers:read_own', label: 'Read Own Servers', description: 'View own server details', category: 'Servers' },
+  { value: 'servers:write_own', label: 'Write Own Servers', description: 'Create, start, stop, and delete own servers', category: 'Servers' },
   // Volumes
   { value: 'volumes:read_own', label: 'Read Own Volumes', description: 'View own volume details', category: 'Volumes' },
-  { value: 'volumes:read_all', label: 'Read All Volumes', description: 'View all volume details', category: 'Volumes' },
-  { value: 'volumes:manage', label: 'Manage Volumes', description: 'Create and delete volumes', category: 'Volumes' },
+  { value: 'volumes:write_own', label: 'Write Own Volumes', description: 'Create and manage own volumes', category: 'Volumes' },
   // Workspaces
   { value: 'workspaces:read_own', label: 'Read Own Workspaces', description: 'View own workspace details', category: 'Workspaces' },
-  { value: 'workspaces:read_all', label: 'Read All Workspaces', description: 'View all workspace details', category: 'Workspaces' },
-  { value: 'workspaces:manage', label: 'Manage Workspaces', description: 'Create and manage workspaces', category: 'Workspaces' },
+  { value: 'workspaces:write_own', label: 'Write Own Workspaces', description: 'Create and manage own workspaces', category: 'Workspaces' },
   // User
   { value: 'user:read', label: 'Read User', description: 'View user profile information', category: 'User' },
   { value: 'user:update', label: 'Update User', description: 'Update user profile', category: 'User' },
   // Credits
   { value: 'credits:read_own', label: 'Read Own Credits', description: 'View own credit balance and history', category: 'Credits' },
-  { value: 'credits:read_all', label: 'Read All Credits', description: 'View all credit balances and history', category: 'Credits' },
   // Notifications
   { value: 'notifications:read', label: 'Read Notifications', description: 'View notifications', category: 'Notifications' },
   { value: 'notifications:write', label: 'Manage Notifications', description: 'Mark notifications as read', category: 'Notifications' },
-  // Analytics & Metrics
-  { value: 'analytics:read', label: 'Read Analytics', description: 'View analytics and usage data', category: 'Analytics' },
-  { value: 'metrics:read', label: 'Read Metrics', description: 'View system and server metrics', category: 'Analytics' },
-  // Dashboard
-  { value: 'dashboard:read', label: 'Read Dashboard', description: 'Access dashboard data', category: 'Dashboard' },
   // Preferences
   { value: 'preferences:read', label: 'Read Preferences', description: 'View user preferences', category: 'Preferences' },
   { value: 'preferences:write', label: 'Write Preferences', description: 'Update user preferences', category: 'Preferences' },
-  // Schedules
-  { value: 'schedules:read', label: 'Read Schedules', description: 'View scheduled tasks', category: 'Schedules' },
-  { value: 'schedules:write', label: 'Write Schedules', description: 'Create and manage schedules', category: 'Schedules' },
-  // Environments
-  { value: 'environments:read', label: 'Read Environments', description: 'View environment templates', category: 'Environments' },
-  // Plans & Quotas
-  { value: 'plans:read', label: 'Read Plans', description: 'View subscription plans', category: 'Plans' },
-  { value: 'quotas:read', label: 'Read Quotas', description: 'View resource quotas', category: 'Plans' },
-  // Bulk
 ];
 
 const EXPIRATION_OPTIONS = [
@@ -310,7 +289,7 @@ function CreateTokenDialog({
   const actions = useTokenActions();
   const [name, setName] = useState('');
   const [expiresDays, setExpiresDays] = useState('30');
-  const [selectedScopes, setSelectedScopes] = useState<string[]>(['servers:read', 'servers:start']);
+  const [selectedScopes, setSelectedScopes] = useState<string[]>(['servers:read_own', 'servers:write_own']);
   const [nameError, setNameError] = useState('');
 
   const toggleScope = (scope: string) => {
@@ -341,7 +320,7 @@ function CreateTokenDialog({
         onSuccess: (data) => {
           onSuccess(data as unknown as ApiTokenWithValue);
           setName('');
-          setSelectedScopes(['servers:read', 'servers:start']);
+          setSelectedScopes(['servers:read_own', 'servers:write_own']);
           setExpiresDays('30');
         },
       }
@@ -352,7 +331,7 @@ function CreateTokenDialog({
     if (!isCreating) {
       setName('');
       setNameError('');
-      setSelectedScopes(['servers:read', 'servers:start']);
+      setSelectedScopes(['servers:read_own', 'servers:write_own']);
       setExpiresDays('30');
       onOpenChange(false);
     }

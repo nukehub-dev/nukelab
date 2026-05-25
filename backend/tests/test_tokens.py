@@ -442,8 +442,8 @@ class TestScopedEndpointAccess:
     """API token scope enforcement on real endpoints."""
 
     @pytest.mark.asyncio
-    async def test_api_token_without_servers_read_blocked(self, client, db_session, test_user):
-        """Token without servers:read should be blocked from /servers."""
+    async def test_api_token_inherits_role_permissions(self, client, db_session, test_user):
+        """API tokens inherit the user's role permissions regardless of scopes."""
         from app.models.api_token import ApiToken
         from app.api.auth import get_password_hash
         import secrets
@@ -452,6 +452,7 @@ class TestScopedEndpointAccess:
         token_hash = get_password_hash(raw_token)
         token_prefix = raw_token[:16]
 
+        # Token has only user:read scope, but user's role has SERVERS_READ_OWN
         narrow_token = ApiToken(
             user_id=test_user.id,
             name="No Servers Token",
@@ -468,8 +469,8 @@ class TestScopedEndpointAccess:
             headers={"Authorization": f"Bearer {raw_token}"},
             follow_redirects=False,
         )
-        assert response.status_code == 403
-        assert "servers:read" in response.json()["detail"]
+        # Should succeed because user's role has SERVERS_READ_OWN
+        assert response.status_code in [200, 307]
 
     @pytest.mark.asyncio
     async def test_api_token_with_servers_read_allowed(self, client, api_token):

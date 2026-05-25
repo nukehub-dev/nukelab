@@ -44,7 +44,7 @@ async def get_user_usage(
     from_date: Optional[datetime] = Query(None, alias="from"),
     to_date: Optional[datetime] = Query(None, alias="to"),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
+    _ = Depends(require_permissions(Permission.ANALYTICS_READ_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """Get usage trends for a user."""

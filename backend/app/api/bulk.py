@@ -54,13 +54,13 @@ async def bulk_server_action(
     
     # Check permission based on action
     if request.action == "start":
-        PermissionChecker = require_permissions(Permission.SERVERS_START)
+        PermissionChecker = require_permissions(Permission.SERVERS_WRITE_OWN)
     elif request.action == "stop":
-        PermissionChecker = require_permissions(Permission.SERVERS_STOP)
+        PermissionChecker = require_permissions(Permission.SERVERS_WRITE_OWN)
     elif request.action == "restart":
         PermissionChecker = require_permissions(Permission.SERVERS_ACCESS_OTHERS)
     elif request.action == "delete":
-        PermissionChecker = require_permissions(Permission.SERVERS_DELETE)
+        PermissionChecker = require_permissions(Permission.SERVERS_WRITE_OWN)
     
     succeeded = []
     failed = []

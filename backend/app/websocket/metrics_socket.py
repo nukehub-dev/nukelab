@@ -116,7 +116,7 @@ def has_permission(user: User, permission: str) -> bool:
 async def check_server_access(user: User, server_id: str, db: AsyncSession) -> bool:
     """Check if user can access a specific server"""
     # Admin/moderator/support with read_all can access any server
-    if has_permission(user, Permission.SERVERS_READ_ALL) or has_permission(user, Permission.SERVERS_MANAGE):
+    if has_permission(user, Permission.SERVERS_READ_ALL) or has_permission(user, Permission.SERVERS_WRITE_ALL):
         return True
     
     # Check if user owns the server

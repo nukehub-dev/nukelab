@@ -59,7 +59,7 @@ class VolumeResponse(BaseModel):
 async def create_volume(
     request: VolumeCreateRequest,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.VOLUMES_MANAGE)),
+    _ = Depends(require_permissions(Permission.VOLUMES_WRITE_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new volume."""
@@ -133,7 +133,7 @@ async def update_volume(
     volume_id: str,
     request: VolumeUpdateRequest,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.VOLUMES_MANAGE)),
+    _ = Depends(require_permissions(Permission.VOLUMES_WRITE_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """Update volume. Only owner can update."""
@@ -176,7 +176,7 @@ async def update_volume(
 async def delete_volume(
     volume_id: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.VOLUMES_MANAGE)),
+    _ = Depends(require_permissions(Permission.VOLUMES_WRITE_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete volume. Only owner can delete."""
@@ -216,7 +216,7 @@ async def delete_volume(
 async def refresh_volume_size(
     volume_id: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.VOLUMES_MANAGE)),
+    _ = Depends(require_permissions(Permission.VOLUMES_WRITE_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """Refresh volume size from filesystem."""
@@ -377,7 +377,7 @@ async def delete_volume_file(
     volume_id: str,
     path: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.VOLUMES_MANAGE)),
+    _ = Depends(require_permissions(Permission.VOLUMES_WRITE_OWN)),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete a file or directory in a volume."""
