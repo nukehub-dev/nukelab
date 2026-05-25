@@ -1211,3 +1211,376 @@ async def bulk_volume_action(
         "action": body.action,
         "results": results
     }
+
+
+# ========== Health Monitoring ==========
+
+class HealthMonitoringResponse(BaseModel):
+    system: dict
+    containers: dict
+    recent_restarts: list
+
+
+@router.get("/health/monitoring")
+async def get_health_monitoring(
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    status_filter: Optional[str] = Query(None, alias="status"),
+    search: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user),
+    _ = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get comprehensive health monitoring data for admin dashboard.
+
+    Production-ready:
+    - Only queries currently RUNNING servers (not stale stopped records)
+    - Paginated container health checks
+    - Server-side filtering by status and search term
+    - Composite index on (server_id, checked_at) for fast latest-check lookups
+    """
+    import time
+    import psutil
+    import redis.asyncio as redis
+    from sqlalchemy import text as sa_text, or_
+    from app.container.client import container_client
+    from app.models.health_check import HealthCheck
+    from app.models.user import User as UserModel
+    from app.services.email_service import EmailService
+    from app.config import settings
+
+    # ------------------------------------------------------------------
+    # System health (fast, always computed)
+    # ------------------------------------------------------------------
+    health_data = {
+        "status": "healthy",
+        "timestamp": time.time(),
+        "services": {},
+        "resources": {}
+    }
+
+    # Database check
+    try:
+        start = time.time()
+        await db.execute(sa_text("SELECT 1"))
+        db_latency = (time.time() - start) * 1000
+        health_data["services"]["database"] = {
+            "status": "healthy",
+            "latency_ms": round(db_latency, 2)
+        }
+    except Exception as e:
+        health_data["services"]["database"] = {
+            "status": "unhealthy",
+            "error": str(e)
+        }
+        health_data["status"] = "degraded"
+
+    # Redis check
+    try:
+        start = time.time()
+        redis_client = redis.from_url(settings.redis_url)
+        await redis_client.ping()
+        redis_latency = (time.time() - start) * 1000
+        await redis_client.close()
+        health_data["services"]["redis"] = {
+            "status": "healthy",
+            "latency_ms": round(redis_latency, 2)
+        }
+    except Exception as e:
+        health_data["services"]["redis"] = {
+            "status": "unhealthy",
+            "error": str(e)
+        }
+        health_data["status"] = "degraded"
+
+    # Container runtime check
+    try:
+        await container_client.connect()
+        version = await container_client.version()
+        runtime_name = "Containers"
+        components = version.get("Components", [])
+        if components and isinstance(components, list):
+            runtime_name = components[0].get("Name", "Containers").replace(" Engine", "")
+        health_data["services"]["containers"] = {
+            "status": "healthy",
+            "version": version.get("Version", "unknown"),
+            "runtime": runtime_name,
+        }
+    except Exception as e:
+        health_data["services"]["containers"] = {
+            "status": "unhealthy",
+            "error": str(e)
+        }
+        health_data["status"] = "degraded"
+
+    # SMTP check
+    try:
+        email_service = EmailService()
+        if email_service.enabled:
+            import aiosmtplib
+            smtp = aiosmtplib.SMTP(
+                hostname=email_service.smtp_host,
+                port=email_service.smtp_port,
+                timeout=3,
+                start_tls=False,
+                validate_certs=email_service.verify_certs,
+            )
+            await smtp.connect()
+            if email_service.use_tls:
+                await smtp.starttls(validate_certs=email_service.verify_certs)
+            await smtp.quit()
+            health_data["services"]["smtp"] = {
+                "status": "healthy",
+                "host": email_service.smtp_host,
+                "port": email_service.smtp_port
+            }
+        else:
+            health_data["services"]["smtp"] = {
+                "status": "disabled",
+                "message": "SMTP not configured"
+            }
+    except Exception as e:
+        health_data["services"]["smtp"] = {
+            "status": "unhealthy",
+            "error": str(e)
+        }
+        health_data["status"] = "degraded"
+
+    # System resources
+    try:
+        def get_disk_info(path: str):
+            usage = psutil.disk_usage(path)
+            return {
+                "path": path,
+                "percent": usage.percent,
+                "total_bytes": usage.total,
+                "used_bytes": usage.used,
+                "free_bytes": usage.free,
+            }
+
+        disk_info = get_disk_info("/")
+        container_disk_info = None
+        if settings.volume_storage_path:
+            try:
+                container_disk_info = get_disk_info(settings.volume_storage_path)
+            except Exception:
+                pass
+
+        fs_type = None
+        try:
+            for part in psutil.disk_partitions(all=False):
+                if part.mountpoint == "/":
+                    fs_type = part.fstype
+                    break
+        except Exception:
+            pass
+
+        # CPU details
+        cpu_count = psutil.cpu_count()
+        cpu_freq = psutil.cpu_freq()
+        cpu_count_logical = psutil.cpu_count(logical=True)
+
+        # Memory details
+        mem = psutil.virtual_memory()
+
+        health_data["resources"] = {
+            "cpu": {
+                "percent": psutil.cpu_percent(interval=0.1),
+                "count": cpu_count,
+                "count_logical": cpu_count_logical,
+                "freq_mhz": round(cpu_freq.current, 0) if cpu_freq else None,
+            },
+            "memory": {
+                "percent": mem.percent,
+                "total_bytes": mem.total,
+                "available_bytes": mem.available,
+                "used_bytes": mem.used,
+            },
+            "disk": {**disk_info, "fstype": fs_type},
+            "load_average": psutil.getloadavg()
+        }
+        if container_disk_info:
+            container_fs_type = None
+            try:
+                for part in psutil.disk_partitions(all=False):
+                    if part.mountpoint == settings.volume_storage_path:
+                        container_fs_type = part.fstype
+                        break
+            except Exception:
+                pass
+            health_data["resources"]["container_disk"] = {**container_disk_info, "fstype": container_fs_type}
+    except Exception:
+        health_data["resources"] = {
+            "cpu": {"percent": 0, "count": 0, "count_logical": 0, "freq_mhz": None},
+            "memory": {"percent": 0, "total_bytes": 0, "available_bytes": 0, "used_bytes": 0},
+            "disk": {"path": "/", "percent": 0, "total_bytes": 0, "used_bytes": 0, "free_bytes": 0, "fstype": None},
+            "load_average": (0, 0, 0)
+        }
+
+    # ------------------------------------------------------------------
+    # Container health — PRODUCTION: only RUNNING servers, paginated
+    # ------------------------------------------------------------------
+    offset = (page - 1) * limit
+    recent = datetime.utcnow() - timedelta(hours=24)
+
+    # Build the base server query — only RUNNING servers
+    server_base = (
+        select(Server.id)
+        .join(UserModel, Server.user_id == UserModel.id)
+        .where(Server.status == "running")
+    )
+
+    # Apply search filter
+    if search:
+        pattern = f"%{search}%"
+        server_base = server_base.where(
+            or_(Server.name.ilike(pattern), UserModel.username.ilike(pattern))
+        )
+
+    # Get total count of running servers matching filters
+    total_result = await db.execute(
+        select(func.count()).select_from(server_base.subquery())
+    )
+    total_running = total_result.scalar() or 0
+
+    # Get paginated server IDs
+    server_ids_result = await db.execute(
+        server_base.order_by(Server.name).limit(limit).offset(offset)
+    )
+    server_ids = [row[0] for row in server_ids_result.all()]
+
+    # Get latest health check for ONLY the servers on this page
+    latest_checks = []
+    if server_ids:
+        subq = (
+            select(
+                HealthCheck.server_id,
+                func.max(HealthCheck.checked_at).label("latest_check")
+            )
+            .where(HealthCheck.server_id.in_(server_ids))
+            .group_by(HealthCheck.server_id)
+            .subquery()
+        )
+
+        checks_query = (
+            select(HealthCheck, Server, UserModel)
+            .join(Server, HealthCheck.server_id == Server.id)
+            .join(UserModel, Server.user_id == UserModel.id)
+            .join(subq, and_(
+                HealthCheck.server_id == subq.c.server_id,
+                HealthCheck.checked_at == subq.c.latest_check
+            ))
+            .where(Server.id.in_(server_ids))
+        )
+
+        # Apply status filter to health checks
+        if status_filter:
+            checks_query = checks_query.where(HealthCheck.status == status_filter)
+
+        checks_query = checks_query.order_by(Server.name)
+        checks_result = await db.execute(checks_query)
+
+        for hc, server, user_obj in checks_result.all():
+            latest_checks.append({
+                "id": str(hc.id),
+                "server_id": str(hc.server_id),
+                "server_name": server.name,
+                "username": user_obj.username if user_obj else "unknown",
+                "container_id": hc.container_id,
+                "status": hc.status,
+                "exit_code": hc.exit_code,
+                "output": hc.output,
+                "consecutive_failures": hc.consecutive_failures,
+                "last_success_at": hc.last_success_at.isoformat() if hc.last_success_at else None,
+                "checked_at": hc.checked_at.isoformat() if hc.checked_at else None,
+            })
+
+    # Summary counts — count ALL running servers by their latest health status
+    # Uses a single optimized query with a CTE-like subquery
+    status_counts = {}
+    unhealthy_count = 0
+    unknown_count = 0
+    restarting_count = 0
+    restart_failed_count = 0
+
+    # Get all running server IDs for summary (just IDs, light query)
+    all_running_result = await db.execute(
+        select(Server.id).where(Server.status == "running")
+    )
+    all_running_ids = [row[0] for row in all_running_result.all()]
+
+    if all_running_ids:
+        # Get latest check status for each running server
+        summary_subq = (
+            select(
+                HealthCheck.server_id,
+                HealthCheck.status
+            )
+            .distinct(HealthCheck.server_id)
+            .where(
+                HealthCheck.server_id.in_(all_running_ids),
+                HealthCheck.checked_at >= recent
+            )
+            .order_by(HealthCheck.server_id, desc(HealthCheck.checked_at))
+            .subquery()
+        )
+
+        summary_result = await db.execute(
+            select(summary_subq.c.status, func.count())
+            .group_by(summary_subq.c.status)
+        )
+        status_counts = {status: count for status, count in summary_result.all()}
+        unhealthy_count = status_counts.get('unhealthy', 0)
+        unknown_count = status_counts.get('unknown', 0)
+        restarting_count = status_counts.get('restarting', 0)
+        restart_failed_count = status_counts.get('restart_failed', 0)
+
+    container_data = {
+        "status_counts": status_counts,
+        "latest_checks": latest_checks,
+        "unhealthy_count": unhealthy_count,
+        "unknown_count": unknown_count,
+        "restarting_count": restarting_count,
+        "restart_failed_count": restart_failed_count,
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total_running,
+            "total_pages": (total_running + limit - 1) // limit,
+        }
+    }
+
+    # ------------------------------------------------------------------
+    # Recent auto-restart events (always limited to 50, no pagination)
+    # ------------------------------------------------------------------
+    restart_window = datetime.utcnow() - timedelta(hours=24)
+    restart_result = await db.execute(
+        select(HealthCheck, Server, UserModel)
+        .join(Server, HealthCheck.server_id == Server.id)
+        .join(UserModel, Server.user_id == UserModel.id)
+        .where(
+            HealthCheck.status.in_(['restarting', 'restart_failed']),
+            HealthCheck.checked_at >= restart_window
+        )
+        .order_by(desc(HealthCheck.checked_at))
+        .limit(50)
+    )
+    restart_events = restart_result.all()
+
+    recent_restarts = []
+    for hc, server, user_obj in restart_events:
+        recent_restarts.append({
+            "id": str(hc.id),
+            "server_id": str(hc.server_id),
+            "server_name": server.name,
+            "username": user_obj.username if user_obj else "unknown",
+            "status": hc.status,
+            "output": hc.output,
+            "checked_at": hc.checked_at.isoformat() if hc.checked_at else None,
+        })
+
+    return {
+        "system": health_data,
+        "containers": container_data,
+        "recent_restarts": recent_restarts,
+    }

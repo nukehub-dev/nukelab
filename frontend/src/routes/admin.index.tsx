@@ -13,6 +13,7 @@ import {
   Gauge,
   FolderOpen,
   HardDrive,
+  HeartPulse,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
@@ -43,6 +44,14 @@ const categories: AdminCategory[] = [
     href: '/admin/servers',
     requiredPermission: PERMISSIONS.SERVERS_READ_ALL,
     color: 'bg-emerald-500/10 text-emerald-400',
+  },
+  {
+    label: 'Health',
+    description: 'System services and container health monitoring',
+    icon: HeartPulse,
+    href: '/admin/health',
+    requiredPermission: PERMISSIONS.ADMIN_ACCESS,
+    color: 'bg-rose-500/10 text-rose-400',
   },
   {
     label: 'Analytics',

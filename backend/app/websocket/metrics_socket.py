@@ -283,8 +283,11 @@ class MetricsWebSocketManager:
 
         user = await self._authenticate(websocket)
         if not user:
-            await websocket.send_json({"event": "auth:error", "message": "Authentication required"})
-            await websocket.close(code=4001, reason="Authentication required")
+            try:
+                await websocket.send_json({"event": "auth:error", "message": "Authentication required"})
+                await websocket.close(code=4001, reason="Authentication required")
+            except Exception:
+                pass
             return
 
         await websocket.send_json({"event": "auth:success"})

@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timedelta
 from typing import Optional
 from sqlalchemy import select, func
@@ -6,6 +7,23 @@ from app.container.client import get_fresh_container_client
 from app.models.health_check import HealthCheck
 from app.models.server import Server
 from app.config import settings
+
+
+async def _broadcast_health_update():
+    """Notify admin WebSocket clients that health data has changed."""
+    try:
+        import redis.asyncio as redis_client
+        r = redis_client.from_url(settings.redis_url)
+        await r.publish(
+            "metrics:system",
+            json.dumps({
+                "event": "health:system",
+                "data": {"refreshed_at": datetime.utcnow().isoformat()}
+            })
+        )
+        await r.close()
+    except Exception:
+        pass
 
 
 class HealthCheckService:
@@ -21,14 +39,19 @@ class HealthCheckService:
         )
         servers = result.scalars().all()
 
+        any_checked = False
         for server in servers:
             if not server.container_id:
                 continue
 
             try:
                 await self._check_container(server)
+                any_checked = True
             except Exception as e:
                 print(f"Health check failed for {server.id}: {e}")
+
+        if any_checked:
+            await _broadcast_health_update()
 
     async def _check_container(self, server: Server):
         """Check health of a single container"""

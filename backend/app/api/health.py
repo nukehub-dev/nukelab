@@ -74,16 +74,22 @@ async def detailed_health_check(
         }
         health_data["status"] = "degraded"
     
-    # Docker check
+    # Container runtime check
     try:
         from app.container.client import container_client
+        await container_client.connect()
         version = await container_client.version()
-        health_data["services"]["docker"] = {
+        runtime_name = "Containers"
+        components = version.get("Components", [])
+        if components and isinstance(components, list):
+            runtime_name = components[0].get("Name", "Containers").replace(" Engine", "")
+        health_data["services"]["containers"] = {
             "status": "healthy",
-            "version": version.get("Version", "unknown")
+            "version": version.get("Version", "unknown"),
+            "runtime": runtime_name,
         }
     except Exception as e:
-        health_data["services"]["docker"] = {
+        health_data["services"]["containers"] = {
             "status": "unhealthy",
             "error": str(e)
         }
@@ -125,17 +131,55 @@ async def detailed_health_check(
     
     # System resources
     try:
+        def get_disk_info(path: str):
+            usage = psutil.disk_usage(path)
+            return {
+                "path": path,
+                "percent": usage.percent,
+                "total_bytes": usage.total,
+                "used_bytes": usage.used,
+                "free_bytes": usage.free,
+            }
+
+        disk_info = get_disk_info("/")
+        container_disk_info = None
+        if settings.volume_storage_path:
+            try:
+                container_disk_info = get_disk_info(settings.volume_storage_path)
+            except Exception:
+                pass
+
+        fs_type = None
+        try:
+            for part in psutil.disk_partitions(all=False):
+                if part.mountpoint == "/":
+                    fs_type = part.fstype
+                    break
+        except Exception:
+            pass
+
         health_data["resources"] = {
             "cpu_percent": psutil.cpu_percent(interval=0.1),
             "memory_percent": psutil.virtual_memory().percent,
-            "disk_percent": psutil.disk_usage('/').percent,
+            "disk": {**disk_info, "fstype": fs_type},
             "load_average": psutil.getloadavg()
         }
+        if container_disk_info:
+            container_fs_type = None
+            try:
+                for part in psutil.disk_partitions(all=False):
+                    if part.mountpoint == settings.volume_storage_path:
+                        container_fs_type = part.fstype
+                        break
+            except Exception:
+                pass
+            health_data["resources"]["container_disk"] = {**container_disk_info, "fstype": container_fs_type}
     except Exception:
         health_data["resources"] = {
             "cpu_percent": 0,
             "memory_percent": 0,
-            "disk_percent": 0
+            "disk": {"path": "/", "percent": 0, "total_bytes": 0, "used_bytes": 0, "free_bytes": 0, "fstype": None},
+            "load_average": (0, 0, 0)
         }
     
     return health_data

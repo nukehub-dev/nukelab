@@ -50,6 +50,7 @@ import { Route as AdminPermissionsRouteImport } from './routes/admin.permissions
 import { Route as AdminEnvironmentsRouteImport } from './routes/admin.environments'
 import { Route as AdminCreditsRouteImport } from './routes/admin.credits'
 import { Route as AdminAuditLogsRouteImport } from './routes/admin.audit-logs'
+import { Route as AdminHealthRouteImport } from './routes/admin.health'
 import { Route as AdminAnalyticsRouteImport } from './routes/admin.analytics'
 import { Route as UserUsernameServerNameRouteImport } from './routes/user.$username.$serverName'
 import { Route as ServersServerIdMetricsRouteImport } from './routes/servers.$serverId.metrics'
@@ -259,6 +260,11 @@ const AdminAuditLogsRoute = AdminAuditLogsRouteImport.update({
   path: '/audit-logs',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminHealthRoute = AdminHealthRouteImport.update({
+  id: '/health',
+  path: '/health',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminAnalyticsRoute = AdminAnalyticsRouteImport.update({
   id: '/analytics',
   path: '/analytics',
@@ -298,6 +304,7 @@ export interface FileRoutesByFullPath {
   '/admin/audit-logs': typeof AdminAuditLogsRoute
   '/admin/credits': typeof AdminCreditsRoute
   '/admin/environments': typeof AdminEnvironmentsRoute
+  '/admin/health': typeof AdminHealthRoute
   '/admin/permissions': typeof AdminPermissionsRoute
   '/admin/plans': typeof AdminPlansRoute
   '/admin/quotas': typeof AdminQuotasRoute
@@ -340,6 +347,7 @@ export interface FileRoutesByTo {
   '/admin/audit-logs': typeof AdminAuditLogsRoute
   '/admin/credits': typeof AdminCreditsRoute
   '/admin/environments': typeof AdminEnvironmentsRoute
+  '/admin/health': typeof AdminHealthRoute
   '/admin/permissions': typeof AdminPermissionsRoute
   '/admin/plans': typeof AdminPlansRoute
   '/admin/quotas': typeof AdminQuotasRoute
@@ -387,6 +395,7 @@ export interface FileRoutesById {
   '/admin/audit-logs': typeof AdminAuditLogsRoute
   '/admin/credits': typeof AdminCreditsRoute
   '/admin/environments': typeof AdminEnvironmentsRoute
+  '/admin/health': typeof AdminHealthRoute
   '/admin/permissions': typeof AdminPermissionsRoute
   '/admin/plans': typeof AdminPlansRoute
   '/admin/quotas': typeof AdminQuotasRoute
@@ -435,6 +444,7 @@ export interface FileRouteTypes {
     | '/admin/audit-logs'
     | '/admin/credits'
     | '/admin/environments'
+    | '/admin/health'
     | '/admin/permissions'
     | '/admin/plans'
     | '/admin/quotas'
@@ -477,6 +487,7 @@ export interface FileRouteTypes {
     | '/admin/audit-logs'
     | '/admin/credits'
     | '/admin/environments'
+    | '/admin/health'
     | '/admin/permissions'
     | '/admin/plans'
     | '/admin/quotas'
@@ -523,6 +534,7 @@ export interface FileRouteTypes {
     | '/admin/audit-logs'
     | '/admin/credits'
     | '/admin/environments'
+    | '/admin/health'
     | '/admin/permissions'
     | '/admin/plans'
     | '/admin/quotas'
@@ -844,6 +856,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminEnvironmentsRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/health': {
+      id: '/admin/health'
+      path: '/health'
+      fullPath: '/admin/health'
+      preLoaderRoute: typeof AdminHealthRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/credits': {
       id: '/admin/credits'
       path: '/credits'
@@ -887,6 +906,7 @@ interface AdminRouteChildren {
   AdminAuditLogsRoute: typeof AdminAuditLogsRoute
   AdminCreditsRoute: typeof AdminCreditsRoute
   AdminEnvironmentsRoute: typeof AdminEnvironmentsRoute
+  AdminHealthRoute: typeof AdminHealthRoute
   AdminPermissionsRoute: typeof AdminPermissionsRoute
   AdminPlansRoute: typeof AdminPlansRoute
   AdminQuotasRoute: typeof AdminQuotasRoute
@@ -903,6 +923,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminAuditLogsRoute: AdminAuditLogsRoute,
   AdminCreditsRoute: AdminCreditsRoute,
   AdminEnvironmentsRoute: AdminEnvironmentsRoute,
+  AdminHealthRoute: AdminHealthRoute,
   AdminPermissionsRoute: AdminPermissionsRoute,
   AdminPlansRoute: AdminPlansRoute,
   AdminQuotasRoute: AdminQuotasRoute,

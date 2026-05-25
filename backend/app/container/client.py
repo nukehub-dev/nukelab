@@ -394,6 +394,10 @@ class ContainerClient:
         container = await self.client.containers.get(container_id)
         return await container.show()
 
+    async def version(self):
+        """Get container runtime version info"""
+        return await self.client.version()
+
     async def list_containers(self, filters: Optional[dict] = None):
         """List containers"""
         return await self.client.containers.list(filters=filters)

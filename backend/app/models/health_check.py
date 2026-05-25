@@ -9,6 +9,7 @@ class HealthCheck(Base):
     __tablename__ = "health_checks"
     __table_args__ = (
         Index('ix_health_checks_checked_at', 'checked_at'),
+        Index('ix_health_checks_server_checked_at', 'server_id', 'checked_at'),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
