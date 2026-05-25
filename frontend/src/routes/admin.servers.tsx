@@ -7,8 +7,9 @@ import { type ColumnDef, type SortingState, type ColumnFiltersState, type Visibi
 import { ResourcePageLayout } from '../components/layout/resource-page-layout';
 import { DataTable } from '../components/data/data-table';
 import { StatusBadge } from '../components/data/status-badge';
-import { useServers } from '../hooks/use-servers';
+import { useServers, useBulkServerActions } from '../hooks/use-servers';
 import { useServerActionsWithReason } from '../hooks/use-server-actions-with-reason';
+import { useReasonDialog } from '../hooks/use-reason-dialog';
 import { useEnvironments } from '../hooks/use-environments';
 import { usePlans } from '../hooks/use-plans';
 import { useVolumes } from '../hooks/use-volumes';
@@ -39,6 +40,8 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
   const { confirm, dialog } = useConfirmDialog();
   const { data: servers = [], isLoading, isError, error } = useServers();
   const { createServer, startServer, stopServer, restartServer, deleteServer, startServerAsync, promptAccessReason, isOperationPending, dialog: reasonDialog } = useServerActionsWithReason();
+  const { bulkAction } = useBulkServerActions();
+  const { prompt } = useReasonDialog();
   const user = useAuthStore((state) => state.user);
   const canAccessOthersServers = useAuthStore((state) => state.canAccessOthersServers());
   const canAccessServer = (server: ServerType) => !user || server.user_id === user.id || canAccessOthersServers;
@@ -372,36 +375,41 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
     { title: 'Total CPU Cores', value: servers.reduce((acc, s) => acc + (s.allocated_cpu || 0), 0), icon: Cpu, iconColor: 'text-amber-400', bgColor: 'bg-amber-500/10' },
   ];
 
+  const runBulkAction = async (
+    action: 'start' | 'stop' | 'restart' | 'delete',
+    ids: string[]
+  ) => {
+    const selectedServers = ids.map((id) => servers.find((s) => s.id === id)).filter(Boolean) as ServerType[];
+    const hasCrossUser = selectedServers.some((s) => s.user_id !== user?.id);
+    let reason: string | undefined;
+    if (hasCrossUser) {
+      const r = await prompt({
+        description: `You are about to ${action} ${ids.length} server(s) owned by other users. Please provide a reason.`,
+        actionLabel: action,
+      });
+      if (!r) return;
+      reason = r;
+    }
+    bulkAction.mutate({ action, server_ids: ids, reason }, {
+      onSuccess: () => setRowSelection({}),
+    });
+  };
+
   const bulkActions = enableManagement ? [
     {
       label: 'Start',
       icon: <Play className="w-4 h-4" />,
-      onClick: (ids: string[]) => {
-        ids.forEach((id) => {
-          const s = servers.find((srv) => srv.id === id);
-          if (s) startServer(s);
-        });
-      },
+      onClick: (ids: string[]) => runBulkAction('start', ids),
     },
     {
       label: 'Stop',
       icon: <Square className="w-4 h-4" />,
-      onClick: (ids: string[]) => {
-        ids.forEach((id) => {
-          const s = servers.find((srv) => srv.id === id);
-          if (s) stopServer(s);
-        });
-      },
+      onClick: (ids: string[]) => runBulkAction('stop', ids),
     },
     {
       label: 'Restart',
       icon: <RotateCcw className="w-4 h-4" />,
-      onClick: (ids: string[]) => {
-        ids.forEach((id) => {
-          const s = servers.find((srv) => srv.id === id);
-          if (s) restartServer(s);
-        });
-      },
+      onClick: (ids: string[]) => runBulkAction('restart', ids),
     },
     {
       label: 'Delete',
@@ -414,12 +422,7 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
           cancelLabel: 'Cancel',
           variant: 'danger',
         });
-        if (confirmed) {
-          ids.forEach((id) => {
-            const s = servers.find((srv) => srv.id === id);
-            if (s) deleteServer(s);
-          });
-        }
+        if (confirmed) runBulkAction('delete', ids);
       },
       variant: 'destructive' as const,
     },
@@ -631,6 +634,9 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
         plans={plans}
         environments={environments}
         volumes={volumes}
+        defaultUsername={user?.username}
+        defaultPlanId={user?.preferences?.default_plan as string | undefined}
+        defaultEnvironmentId={user?.preferences?.default_environment as string | undefined}
         isPending={createServer.isPending}
         error={createServer.error}
         onDeploy={(data) => {

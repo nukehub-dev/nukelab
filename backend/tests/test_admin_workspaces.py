@@ -207,3 +207,154 @@ class TestAdminWorkspaceMembers:
 
         response = await client.get(f"/api/admin/workspaces/{ws_id}/members", headers=user_headers)
         assert response.status_code == 403
+
+
+class TestBulkWorkspaceActions:
+    """Bulk workspace action tests."""
+
+    @pytest.mark.asyncio
+    async def test_invalid_action_rejected(self, client: AsyncClient, admin_token):
+        """Bulk endpoint should reject unknown actions."""
+        response = await client.post(
+            "/api/admin/workspaces/bulk-action",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"action": "invalid_action", "workspace_ids": ["123", "456"]}
+        )
+        assert response.status_code == 400
+        assert "Invalid action" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_valid_delete_action_accepted(self, client: AsyncClient, admin_token):
+        """Bulk endpoint should accept 'delete' as a valid action."""
+        response = await client.post(
+            "/api/admin/workspaces/bulk-action",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"action": "delete", "workspace_ids": []}
+        )
+        assert response.status_code != 400
+
+    @pytest.mark.asyncio
+    async def test_valid_activate_action_accepted(self, client: AsyncClient, admin_token):
+        """Bulk endpoint should accept 'activate' as a valid action."""
+        response = await client.post(
+            "/api/admin/workspaces/bulk-action",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"action": "activate", "workspace_ids": []}
+        )
+        assert response.status_code != 400
+
+    @pytest.mark.asyncio
+    async def test_valid_deactivate_action_accepted(self, client: AsyncClient, admin_token):
+        """Bulk endpoint should accept 'deactivate' as a valid action."""
+        response = await client.post(
+            "/api/admin/workspaces/bulk-action",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"action": "deactivate", "workspace_ids": []}
+        )
+        assert response.status_code != 400
+
+    @pytest.mark.asyncio
+    async def test_non_admin_cannot_bulk_action(self, client: AsyncClient, user_token):
+        """Regular user should get 403 on workspace bulk action."""
+        response = await client.post(
+            "/api/admin/workspaces/bulk-action",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"action": "delete", "workspace_ids": []}
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_admin_can_bulk_delete_workspaces(self, client: AsyncClient, admin_token):
+        """Admin should be able to bulk delete workspaces."""
+        headers = {"Authorization": f"Bearer {admin_token}"}
+
+        create_resp1 = await client.post("/api/workspaces/", json={"name": "Bulk Delete WS 1", "description": ""}, headers=headers)
+        assert create_resp1.status_code == 201
+        ws_id1 = create_resp1.json()["id"]
+
+        create_resp2 = await client.post("/api/workspaces/", json={"name": "Bulk Delete WS 2", "description": ""}, headers=headers)
+        assert create_resp2.status_code == 201
+        ws_id2 = create_resp2.json()["id"]
+
+        response = await client.post(
+            "/api/admin/workspaces/bulk-action",
+            headers=headers,
+            json={"action": "delete", "workspace_ids": [ws_id1, ws_id2]}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["action"] == "delete"
+        assert ws_id1 in data["results"]["success"]
+        assert ws_id2 in data["results"]["success"]
+
+        # Verify they're gone
+        get_resp1 = await client.get(f"/api/admin/workspaces/{ws_id1}", headers=headers)
+        assert get_resp1.status_code == 404
+        get_resp2 = await client.get(f"/api/admin/workspaces/{ws_id2}", headers=headers)
+        assert get_resp2.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_admin_can_bulk_activate_deactivate_workspaces(self, client: AsyncClient, admin_token):
+        """Admin should be able to bulk activate and deactivate workspaces."""
+        headers = {"Authorization": f"Bearer {admin_token}"}
+
+        create_resp = await client.post("/api/workspaces/", json={"name": "Bulk Toggle WS", "description": ""}, headers=headers)
+        assert create_resp.status_code == 201
+        ws_id = create_resp.json()["id"]
+
+        # Deactivate
+        response = await client.post(
+            "/api/admin/workspaces/bulk-action",
+            headers=headers,
+            json={"action": "deactivate", "workspace_ids": [ws_id]}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert ws_id in data["results"]["success"]
+
+        # Verify deactivated
+        get_resp = await client.get(f"/api/admin/workspaces/{ws_id}", headers=headers)
+        assert get_resp.json()["workspace"]["is_active"] is False
+
+        # Activate
+        response = await client.post(
+            "/api/admin/workspaces/bulk-action",
+            headers=headers,
+            json={"action": "activate", "workspace_ids": [ws_id]}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert ws_id in data["results"]["success"]
+
+        # Verify activated
+        get_resp = await client.get(f"/api/admin/workspaces/{ws_id}", headers=headers)
+        assert get_resp.json()["workspace"]["is_active"] is True
+
+    @pytest.mark.asyncio
+    async def test_api_token_rejected_for_bulk_workspace_action(self, client: AsyncClient, admin_user, db_session):
+        """API token authentication should be rejected for workspace bulk actions (JWT only)."""
+        from app.models.api_token import ApiToken
+        from app.api.auth import get_password_hash
+        import secrets
+
+        raw_token = f"nukelab_{secrets.token_urlsafe(32)}"
+        token_hash = get_password_hash(raw_token)
+
+        token = ApiToken(
+            user_id=admin_user.id,
+            name="Admin API Token",
+            token_hash=token_hash,
+            token_prefix=raw_token[:16],
+            scopes=["servers:read"],
+            is_active=True,
+        )
+        db_session.add(token)
+        await db_session.commit()
+
+        response = await client.post(
+            "/api/admin/workspaces/bulk-action",
+            headers={"Authorization": f"Bearer {raw_token}"},
+            json={"action": "delete", "workspace_ids": []}
+        )
+        assert response.status_code == 403
+        assert "JWT authentication required" in response.json()["detail"]

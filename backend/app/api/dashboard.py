@@ -17,8 +17,47 @@ from app.models.server import Server
 from app.models.server_plan import ServerPlan
 from app.models.credit_transaction import CreditTransaction
 from app.models.activity_log import ActivityLog
+from app.models.health_check import HealthCheck
 
 router = APIRouter()
+
+
+async def _get_system_health(db: AsyncSession) -> str:
+    """Determine overall system health from latest health checks."""
+    from datetime import datetime, timedelta
+
+    recent = datetime.utcnow() - timedelta(hours=1)
+    subq = (
+        select(
+            HealthCheck.server_id,
+            func.max(HealthCheck.checked_at).label("latest_check")
+        )
+        .where(HealthCheck.checked_at >= recent)
+        .group_by(HealthCheck.server_id)
+        .subquery()
+    )
+
+    result = await db.execute(
+        select(HealthCheck)
+        .join(subq, and_(
+            HealthCheck.server_id == subq.c.server_id,
+            HealthCheck.checked_at == subq.c.latest_check
+        ))
+    )
+    latest_checks = result.scalars().all()
+
+    if not latest_checks:
+        return "healthy"
+
+    failing = sum(1 for hc in latest_checks if hc.consecutive_failures > 0)
+    total = len(latest_checks)
+
+    if failing == 0:
+        return "healthy"
+    elif failing <= total // 2:
+        return "degraded"
+    else:
+        return "unhealthy"
 
 
 @router.get("/")
@@ -111,7 +150,7 @@ async def get_dashboard(
             "total_servers": all_servers,
             "active_servers": active_servers,
             "total_nukes": total_nukes,
-            "system_health": "healthy"  # TODO: Implement health check
+            "system_health": await _get_system_health(db)
         }
     
     return dashboard_data

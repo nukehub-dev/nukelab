@@ -206,6 +206,8 @@ export const useAuthStore = create<AuthState>()(
       canManageServers: () => get().hasPermission(PERMISSIONS.SERVERS_WRITE_ALL),
       canAccessOthersServers: () => get().hasPermission(PERMISSIONS.SERVERS_ACCESS_OTHERS),
       canViewAllServers: () => get().hasPermission(PERMISSIONS.SERVERS_READ_ALL),
+      canStartStopServers: () => get().hasPermission(PERMISSIONS.SERVERS_WRITE_OWN),
+      canDeleteServers: () => get().hasPermission(PERMISSIONS.SERVERS_WRITE_OWN),
 
       canWriteOwnServers: () => get().hasPermission(PERMISSIONS.SERVERS_WRITE_OWN),
 

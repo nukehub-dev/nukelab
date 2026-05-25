@@ -225,3 +225,163 @@ class TestAdminVolumeDelete:
 
         response = await client.delete(f"/api/admin/volumes/{vol_id}", headers=user_headers)
         assert response.status_code == 403
+
+
+class TestBulkVolumeActions:
+    """Bulk volume action tests."""
+
+    @pytest.mark.asyncio
+    async def test_invalid_action_rejected(self, client: AsyncClient, admin_token):
+        """Bulk endpoint should reject unknown actions."""
+        response = await client.post(
+            "/api/admin/volumes/bulk-action",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"action": "invalid_action", "volume_ids": ["123", "456"]}
+        )
+        assert response.status_code == 400
+        assert "Invalid action" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_valid_delete_action_accepted(self, client: AsyncClient, admin_token):
+        """Bulk endpoint should accept 'delete' as a valid action."""
+        response = await client.post(
+            "/api/admin/volumes/bulk-action",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"action": "delete", "volume_ids": []}
+        )
+        assert response.status_code != 400
+
+    @pytest.mark.asyncio
+    async def test_valid_archive_action_accepted(self, client: AsyncClient, admin_token):
+        """Bulk endpoint should accept 'archive' as a valid action."""
+        response = await client.post(
+            "/api/admin/volumes/bulk-action",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"action": "archive", "volume_ids": []}
+        )
+        assert response.status_code != 400
+
+    @pytest.mark.asyncio
+    async def test_valid_activate_action_accepted(self, client: AsyncClient, admin_token):
+        """Bulk endpoint should accept 'activate' as a valid action."""
+        response = await client.post(
+            "/api/admin/volumes/bulk-action",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"action": "activate", "volume_ids": []}
+        )
+        assert response.status_code != 400
+
+    @pytest.mark.asyncio
+    async def test_non_admin_cannot_bulk_action(self, client: AsyncClient, user_token):
+        """Regular user should get 403 on volume bulk action."""
+        response = await client.post(
+            "/api/admin/volumes/bulk-action",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"action": "delete", "volume_ids": []}
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_admin_can_bulk_delete_volumes(self, client: AsyncClient, admin_token):
+        """Admin should be able to bulk delete volumes."""
+        headers = {"Authorization": f"Bearer {admin_token}"}
+
+        create_resp1 = await client.post("/api/volumes/", json={
+            "name": "bulk_del_vol_1",
+            "display_name": "Bulk Delete Volume 1",
+        }, headers=headers)
+        assert create_resp1.status_code == 201
+        vol_id1 = create_resp1.json()["id"]
+
+        create_resp2 = await client.post("/api/volumes/", json={
+            "name": "bulk_del_vol_2",
+            "display_name": "Bulk Delete Volume 2",
+        }, headers=headers)
+        assert create_resp2.status_code == 201
+        vol_id2 = create_resp2.json()["id"]
+
+        response = await client.post(
+            "/api/admin/volumes/bulk-action",
+            headers=headers,
+            json={"action": "delete", "volume_ids": [vol_id1, vol_id2]}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["action"] == "delete"
+        assert vol_id1 in data["results"]["success"]
+        assert vol_id2 in data["results"]["success"]
+
+        # Verify they're gone
+        get_resp1 = await client.get(f"/api/admin/volumes/{vol_id1}", headers=headers)
+        assert get_resp1.status_code == 404
+        get_resp2 = await client.get(f"/api/admin/volumes/{vol_id2}", headers=headers)
+        assert get_resp2.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_admin_can_bulk_archive_activate_volumes(self, client: AsyncClient, admin_token):
+        """Admin should be able to bulk archive and activate volumes."""
+        headers = {"Authorization": f"Bearer {admin_token}"}
+
+        create_resp = await client.post("/api/volumes/", json={
+            "name": "bulk_toggle_vol",
+            "display_name": "Bulk Toggle Volume",
+        }, headers=headers)
+        assert create_resp.status_code == 201
+        vol_id = create_resp.json()["id"]
+
+        # Archive
+        response = await client.post(
+            "/api/admin/volumes/bulk-action",
+            headers=headers,
+            json={"action": "archive", "volume_ids": [vol_id]}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert vol_id in data["results"]["success"]
+
+        # Verify archived
+        get_resp = await client.get(f"/api/admin/volumes/{vol_id}", headers=headers)
+        assert get_resp.json()["volume"]["status"] == "archived"
+
+        # Activate
+        response = await client.post(
+            "/api/admin/volumes/bulk-action",
+            headers=headers,
+            json={"action": "activate", "volume_ids": [vol_id]}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert vol_id in data["results"]["success"]
+
+        # Verify activated
+        get_resp = await client.get(f"/api/admin/volumes/{vol_id}", headers=headers)
+        assert get_resp.json()["volume"]["status"] == "active"
+
+    @pytest.mark.asyncio
+    async def test_api_token_rejected_for_bulk_volume_action(self, client: AsyncClient, admin_user, db_session):
+        """API token authentication should be rejected for volume bulk actions (JWT only)."""
+        from app.models.api_token import ApiToken
+        from app.api.auth import get_password_hash
+        import secrets
+
+        raw_token = f"nukelab_{secrets.token_urlsafe(32)}"
+        token_hash = get_password_hash(raw_token)
+
+        token = ApiToken(
+            user_id=admin_user.id,
+            name="Admin API Token",
+            token_hash=token_hash,
+            token_prefix=raw_token[:16],
+            scopes=["servers:read"],
+            is_active=True,
+        )
+        db_session.add(token)
+        await db_session.commit()
+
+        response = await client.post(
+            "/api/admin/volumes/bulk-action",
+            headers={"Authorization": f"Bearer {raw_token}"},
+            json={"action": "delete", "volume_ids": []}
+        )
+        assert response.status_code == 403
+        assert "JWT authentication required" in response.json()["detail"]

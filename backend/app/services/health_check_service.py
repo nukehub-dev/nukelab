@@ -1,10 +1,11 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.container.client import get_fresh_container_client
 from app.models.health_check import HealthCheck
 from app.models.server import Server
+from app.config import settings
 
 
 class HealthCheckService:
@@ -97,7 +98,73 @@ class HealthCheckService:
                     pass
 
     async def _auto_restart(self, server: Server):
-        """Auto-restart a failed container"""
+        """Auto-restart a failed container with rate limiting."""
+        if not settings.server_auto_restart_enabled:
+            return
+
+        # Rate limit: count recent restart attempts within the window
+        window_start = datetime.utcnow() - timedelta(
+            seconds=settings.server_auto_restart_window
+        )
+        recent_restarts = await self.db.execute(
+            select(func.count()).select_from(HealthCheck).where(
+                HealthCheck.server_id == server.id,
+                HealthCheck.checked_at >= window_start,
+                HealthCheck.status == 'restarting'
+            )
+        )
+        restart_count = recent_restarts.scalar() or 0
+
+        if restart_count >= settings.server_auto_restart_max_attempts:
+            print(
+                f"Server {server.id}: auto-restart rate limit exceeded "
+                f"({restart_count} attempts in {settings.server_auto_restart_window}s)"
+            )
+            return
+
         print(f"Auto-restarting server {server.id} after consecutive failures")
-        # TODO: Implement auto-restart with rate limiting
-        # This would call the spawner restart logic
+
+        from app.container.spawner import spawner
+        from app.services.notification_service import NotificationService
+
+        try:
+            if server.container_id:
+                await spawner.stop(server.container_id)
+                await spawner.start(server.container_id)
+            else:
+                # No container to restart — mark as needing manual attention
+                print(f"Server {server.id}: no container_id, cannot auto-restart")
+                return
+
+            # Log the restart attempt
+            restart_log = HealthCheck(
+                server_id=server.id,
+                container_id=server.container_id,
+                status='restarting',
+                output='Auto-restarted after consecutive health check failures',
+                last_success_at=datetime.utcnow(),
+            )
+            self.db.add(restart_log)
+            await self.db.commit()
+
+            # Notify user
+            notif_service = NotificationService(self.db)
+            await notif_service.server_restarted(
+                user_id=server.user_id,
+                server_name=server.name,
+                action_url=f"/servers/{server.id}"
+            )
+
+            print(f"Server {server.id}: auto-restart successful")
+
+        except Exception as e:
+            print(f"Server {server.id}: auto-restart failed: {e}")
+            # Log the failure
+            fail_log = HealthCheck(
+                server_id=server.id,
+                container_id=server.container_id or '',
+                status='restart_failed',
+                output=f"Auto-restart failed: {str(e)[:500]}",
+            )
+            self.db.add(fail_log)
+            await self.db.commit()

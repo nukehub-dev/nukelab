@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { FolderOpen, Pencil, Trash2, Users, HardDrive } from 'lucide-react';
+import { FolderOpen, Pencil, Trash2, Users, HardDrive, Play, Square } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { ResourcePageLayout } from '../components/layout/resource-page-layout';
 import { DataTable } from '../components/data/data-table';
@@ -90,7 +90,7 @@ function WorkspacesAdminPage() {
     is_active: true,
   });
 
-  const { updateWorkspace, deleteWorkspace } = useAdminWorkspaceActions();
+  const { updateWorkspace, deleteWorkspace, bulkAction: bulkWorkspaceAction } = useAdminWorkspaceActions();
 
   const openEditDialog = (workspace: AdminWorkspace) => {
     setEditingWorkspace(workspace);
@@ -128,6 +128,48 @@ function WorkspacesAdminPage() {
       deleteWorkspace.mutate(workspace.id);
     }
   };
+
+  const handleBulkDelete = async (ids: string[]) => {
+    const confirmed = await confirm({
+      title: 'Delete Workspaces',
+      description: `Are you sure you want to delete ${ids.length} workspace(s)? This action cannot be undone and will remove all members, volumes, and invitations.`,
+      variant: 'danger',
+      confirmLabel: 'Delete',
+      cancelLabel: 'Cancel',
+    });
+    if (confirmed) {
+      bulkWorkspaceAction.mutate({ action: 'delete', workspace_ids: ids }, {
+        onSuccess: () => setRowSelection({}),
+      });
+    }
+  };
+
+  const bulkActions = canManageWorkspaces ? [
+    {
+      label: 'Activate',
+      icon: <Play className="w-4 h-4" />,
+      onClick: (ids: string[]) => {
+        bulkWorkspaceAction.mutate({ action: 'activate', workspace_ids: ids }, {
+          onSuccess: () => setRowSelection({}),
+        });
+      },
+    },
+    {
+      label: 'Deactivate',
+      icon: <Square className="w-4 h-4" />,
+      onClick: (ids: string[]) => {
+        bulkWorkspaceAction.mutate({ action: 'deactivate', workspace_ids: ids }, {
+          onSuccess: () => setRowSelection({}),
+        });
+      },
+    },
+    {
+      label: 'Delete',
+      icon: <Trash2 className="w-4 h-4" />,
+      onClick: handleBulkDelete,
+      variant: 'destructive' as const,
+    },
+  ] : [];
 
   // Stats
   const totalWorkspaces = pagination?.total || 0;
@@ -353,6 +395,8 @@ function WorkspacesAdminPage() {
           searchPlaceholder="Search workspaces..."
           density={useThemeStore().density}
           mobileCardRenderer={mobileCardRenderer}
+          bulkActions={bulkActions}
+          enableRowSelection={canManageWorkspaces}
         />
       </ResourcePageLayout>
 

@@ -90,6 +90,20 @@ interface UpdateWorkspaceData {
   is_active?: boolean;
 }
 
+export interface BulkWorkspaceActionRequest {
+  action: 'delete' | 'activate' | 'deactivate';
+  workspace_ids: string[];
+}
+
+export interface BulkWorkspaceActionResponse {
+  message: string;
+  action: string;
+  results: {
+    success: string[];
+    failed: Array<{ workspace_id: string; error: string }>;
+  };
+}
+
 export function useAdminWorkspaceActions() {
   const queryClient = useQueryClient();
   const { success, error: showError } = useToast();
@@ -122,5 +136,25 @@ export function useAdminWorkspaceActions() {
     },
   });
 
-  return { updateWorkspace, deleteWorkspace };
+  const bulkAction = useMutation({
+    mutationFn: (data: BulkWorkspaceActionRequest) =>
+      api.post<BulkWorkspaceActionResponse>('/admin/workspaces/bulk-action', data),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-workspaces'] });
+      if (data.results.failed.length > 0) {
+        showError(
+          `${data.results.failed.length} workspace(s) failed`,
+          data.results.failed.slice(0, 3).map((f) => f.error).join('; ')
+        );
+      }
+      if (data.results.success.length > 0) {
+        success('Bulk action completed', `${data.results.success.length} workspace(s) processed`);
+      }
+    },
+    onError: (err) => {
+      showError('Bulk action failed', getErrorMessage(err));
+    },
+  });
+
+  return { updateWorkspace, deleteWorkspace, bulkAction };
 }

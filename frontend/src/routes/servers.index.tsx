@@ -7,7 +7,7 @@ import { type ColumnDef, type SortingState, type ColumnFiltersState, type Visibi
 import { ResourcePageLayout } from '../components/layout/resource-page-layout';
 import { DataTable } from '../components/data/data-table';
 import { StatusBadge } from '../components/data/status-badge';
-import { useServers, useServerActions } from '../hooks/use-servers';
+import { useServers, useServerActions, useBulkServerActions } from '../hooks/use-servers';
 import { useReasonDialog } from '../hooks/use-reason-dialog';
 import { useEnvironments } from '../hooks/use-environments';
 import { usePlans } from '../hooks/use-plans';
@@ -32,6 +32,7 @@ function ServersPage() {
   const { confirm, dialog } = useConfirmDialog();
   const { data: servers = [], isLoading, isError, error } = useServers();
   const { createServer, updateServer, startServer, stopServer, restartServer, deleteServer, isOperationPending } = useServerActions();
+  const { bulkAction } = useBulkServerActions();
   const { prompt, dialog: reasonDialog } = useReasonDialog();
   const { data: envData } = useEnvironments({ is_active: true, limit: 100 });
   const { data: plansData } = usePlans({ is_active: true, limit: 100 });
@@ -195,6 +196,26 @@ function ServersPage() {
   const environments = envData?.data || [];
   const plans = plansData?.data || [];
   const volumes = volumesData || [];
+
+  // Pre-fill deploy dialog with saved defaults
+  const defaultPlanId = user?.preferences?.default_plan as string | undefined;
+  const defaultEnvironmentId = user?.preferences?.default_environment as string | undefined;
+
+  useEffect(() => {
+    // Handle navigation from other pages via Alt+N shortcut
+    if (sessionStorage.getItem('nukelab-new-server') === 'true') {
+      sessionStorage.removeItem('nukelab-new-server');
+      setDialogOpen(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleNewServer = () => {
+      setDialogOpen(true);
+    };
+    window.addEventListener('new-server', handleNewServer);
+    return () => window.removeEventListener('new-server', handleNewServer);
+  }, []);
 
   // Filter to only current user's servers
   const myServers = servers.filter((server) => !user || server.user_id === user.id);
@@ -449,21 +470,27 @@ function ServersPage() {
       label: 'Start',
       icon: <Play className="w-4 h-4" />,
       onClick: (ids: string[]) => {
-        ids.forEach((id) => startServer.mutate({ serverId: id }));
+        bulkAction.mutate({ action: 'start', server_ids: ids }, {
+          onSuccess: () => setRowSelection({}),
+        });
       },
     },
     {
       label: 'Stop',
       icon: <Square className="w-4 h-4" />,
       onClick: (ids: string[]) => {
-        ids.forEach((id) => stopServer.mutate({ serverId: id }));
+        bulkAction.mutate({ action: 'stop', server_ids: ids }, {
+          onSuccess: () => setRowSelection({}),
+        });
       },
     },
     {
       label: 'Restart',
       icon: <RotateCcw className="w-4 h-4" />,
       onClick: (ids: string[]) => {
-        ids.forEach((id) => restartServer.mutate({ serverId: id }));
+        bulkAction.mutate({ action: 'restart', server_ids: ids }, {
+          onSuccess: () => setRowSelection({}),
+        });
       },
     },
     {
@@ -477,7 +504,11 @@ function ServersPage() {
           cancelLabel: 'Cancel',
           variant: 'danger',
         });
-        if (confirmed) ids.forEach((id) => deleteServer.mutate({ serverId: id }));
+        if (confirmed) {
+          bulkAction.mutate({ action: 'delete', server_ids: ids }, {
+            onSuccess: () => setRowSelection({}),
+          });
+        }
       },
       variant: 'destructive' as const,
     },
@@ -682,6 +713,8 @@ function ServersPage() {
         environments={environments}
         volumes={volumes}
         defaultUsername={user?.username}
+        defaultPlanId={defaultPlanId}
+        defaultEnvironmentId={defaultEnvironmentId}
         isPending={createServer.isPending}
         error={createServer.error}
         onDeploy={(data) => {

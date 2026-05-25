@@ -1113,3 +1113,93 @@ async def update_retention_policy(
         return {"retention_policy": policy, "success": True}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# ========== Workspace Bulk Actions ==========
+
+class BulkWorkspaceActionRequest(BaseModel):
+    action: str  # delete, activate, deactivate
+    workspace_ids: List[str]
+
+
+@router.post("/workspaces/bulk-action")
+async def bulk_workspace_action(
+    request: BulkWorkspaceActionRequest,
+    current_user: User = Depends(require_permissions(Permission.WORKSPACES_WRITE_ALL)),
+    _jwt = Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db)
+):
+    """Perform bulk action on workspaces."""
+    valid_actions = ["delete", "activate", "deactivate"]
+    if request.action not in valid_actions:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid action. Must be one of: {', '.join(valid_actions)}"
+        )
+
+    workspace_service = WorkspaceService(db)
+    results = {"success": [], "failed": []}
+
+    for workspace_id in request.workspace_ids:
+        try:
+            if request.action == "delete":
+                await workspace_service.delete_workspace(workspace_id)
+            elif request.action == "activate":
+                await workspace_service.update_workspace(workspace_id, is_active=True)
+            elif request.action == "deactivate":
+                await workspace_service.update_workspace(workspace_id, is_active=False)
+
+            results["success"].append(workspace_id)
+        except Exception as e:
+            results["failed"].append({"workspace_id": workspace_id, "error": str(e)})
+
+    return {
+        "message": f"Processed {len(request.workspace_ids)} workspaces",
+        "action": request.action,
+        "results": results
+    }
+
+
+# ========== Volume Bulk Actions ==========
+
+class BulkVolumeActionRequest(BaseModel):
+    action: str  # delete, archive, activate
+    volume_ids: List[str]
+
+
+@router.post("/volumes/bulk-action")
+async def bulk_volume_action(
+    request: BulkVolumeActionRequest,
+    current_user: User = Depends(require_permissions(Permission.VOLUMES_WRITE_ALL)),
+    _jwt = Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db)
+):
+    """Perform bulk action on volumes."""
+    valid_actions = ["delete", "archive", "activate"]
+    if request.action not in valid_actions:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid action. Must be one of: {', '.join(valid_actions)}"
+        )
+
+    volume_service = VolumeService(db)
+    results = {"success": [], "failed": []}
+
+    for volume_id in request.volume_ids:
+        try:
+            if request.action == "delete":
+                await volume_service.delete_volume(volume_id)
+            elif request.action == "archive":
+                await volume_service.update_volume(volume_id, status="archived")
+            elif request.action == "activate":
+                await volume_service.update_volume(volume_id, status="active")
+
+            results["success"].append(volume_id)
+        except Exception as e:
+            results["failed"].append({"volume_id": volume_id, "error": str(e)})
+
+    return {
+        "message": f"Processed {len(request.volume_ids)} volumes",
+        "action": request.action,
+        "results": results
+    }

@@ -96,6 +96,20 @@ interface UpdateVolumeData {
   max_size_bytes?: number;
 }
 
+export interface BulkVolumeActionRequest {
+  action: 'delete' | 'archive' | 'activate';
+  volume_ids: string[];
+}
+
+export interface BulkVolumeActionResponse {
+  message: string;
+  action: string;
+  results: {
+    success: string[];
+    failed: Array<{ volume_id: string; error: string }>;
+  };
+}
+
 export function useAdminVolumeActions() {
   const queryClient = useQueryClient();
   const { success, error: showError } = useToast();
@@ -128,5 +142,25 @@ export function useAdminVolumeActions() {
     },
   });
 
-  return { updateVolume, deleteVolume };
+  const bulkAction = useMutation({
+    mutationFn: (data: BulkVolumeActionRequest) =>
+      api.post<BulkVolumeActionResponse>('/admin/volumes/bulk-action', data),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-volumes'] });
+      if (data.results.failed.length > 0) {
+        showError(
+          `${data.results.failed.length} volume(s) failed`,
+          data.results.failed.slice(0, 3).map((f) => f.error).join('; ')
+        );
+      }
+      if (data.results.success.length > 0) {
+        success('Bulk action completed', `${data.results.success.length} volume(s) processed`);
+      }
+    },
+    onError: (err) => {
+      showError('Bulk action failed', getErrorMessage(err));
+    },
+  });
+
+  return { updateVolume, deleteVolume, bulkAction };
 }

@@ -34,6 +34,8 @@ interface DeployServerDialogProps {
   environments: Environment[];
   volumes: Volume[];
   defaultUsername?: string;
+  defaultPlanId?: string;
+  defaultEnvironmentId?: string;
   isPending: boolean;
   error?: Error | null;
   onDeploy: (data: DeployServerData) => void;
@@ -46,6 +48,8 @@ export function DeployServerDialog({
   environments,
   volumes,
   defaultUsername = 'user',
+  defaultPlanId,
+  defaultEnvironmentId,
   isPending,
   error,
   onDeploy,
@@ -62,11 +66,13 @@ export function DeployServerDialog({
 
   useEffect(() => {
     if (open) {
-      setDeployForm({ name: '', plan_id: '', environment_id: '' });
+      const planId = defaultPlanId && plans.some((p) => p.id === defaultPlanId) ? defaultPlanId : '';
+      const envId = defaultEnvironmentId && environments.some((e) => e.id === defaultEnvironmentId) ? defaultEnvironmentId : '';
+      setDeployForm({ name: '', plan_id: planId, environment_id: envId });
       setVolumeMounts([{ volume_id: '', mount_path: '', mode: 'read_write', max_size_gb: 10 }]);
       setVisibleError(null);
     }
-  }, [open]);
+  }, [open, defaultPlanId, defaultEnvironmentId, plans, environments]);
 
   useEffect(() => {
     if (error) {

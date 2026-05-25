@@ -152,7 +152,7 @@ async def platform_status():
             "auth_mode": settings.auth_mode,
             "oauth_enabled": oauth_service.is_configured and settings.auth_mode in ("oauth", "both"),
             "oauth_provider_name": settings.oauth_provider_name if oauth_service.is_configured else None,
-            "registration_enabled": True,  # TODO: Add to settings
+            "registration_enabled": settings.registration_enabled,
             "credit_system_enabled": True,
             "websocket_enabled": True,
             "gravatar_enabled": True,
@@ -160,7 +160,7 @@ async def platform_status():
             "notifications_enabled": True
         },
         "limits": {
-            "max_servers_per_user": 10,  # TODO: Add to settings
+            "max_servers_per_user": settings.max_servers_per_user,
             "max_file_upload_size": 10485760,  # 10MB
             "api_rate_limit": 1000  # requests per hour
         }

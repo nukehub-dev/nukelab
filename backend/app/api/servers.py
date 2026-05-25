@@ -789,6 +789,509 @@ async def get_server_by_path(
     }
 
 
+async def _perform_server_start(
+    server: Server,
+    db: AsyncSession,
+    current_user: User,
+    server_id: str,
+) -> dict:
+    """Execute server start logic. Raises HTTPException on failure."""
+    from app.services.plan_service import PlanService
+    from app.services.credit_service import CreditService
+    from app.services.volume_service import VolumeService
+    from app.services.environment_service import EnvironmentService
+    from sqlalchemy import select as sa_select
+    from app.models.user import User
+
+    # Check plan access — user may have lost access since creation
+    if server.plan_id:
+        plan_service = PlanService(db)
+        can_use = await plan_service.can_user_use_plan(
+            str(server.plan_id), current_user.role, str(current_user.id)
+        )
+        if not can_use:
+            raise HTTPException(status_code=403, detail="Plan no longer available for your account")
+
+    # Check NUKE credits before starting
+    if settings.credits_enabled and server.plan_id:
+        plan_service = PlanService(db)
+        plan = await plan_service.get_by_id(str(server.plan_id))
+        if plan and plan.cost_per_hour > 0:
+            credit_service = CreditService(db)
+            has_credits = await credit_service.check_sufficient_credits(
+                user_id=str(server.user_id),
+                required=plan.cost_per_hour
+            )
+            if not has_credits:
+                raise HTTPException(
+                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                    detail=f"Insufficient NUKE credits. Required: {plan.cost_per_hour} for 1 hour"
+                )
+
+    # Load volume mounts
+    volume_mounts = await _load_server_volume_mounts(db, str(server.id))
+
+    # Check volume quota before starting
+    if volume_mounts and server.plan_id:
+        volume_service = VolumeService(db)
+        plan_service = PlanService(db)
+        plan = await plan_service.get_by_id(str(server.plan_id))
+        if plan:
+            for vm in volume_mounts:
+                quota_check = await volume_service.check_quota(vm["volume_id"], plan.disk_limit)
+                if not quota_check["allowed"]:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=quota_check["reason"]
+                    )
+            all_volume_ids = [vm["volume_id"] for vm in volume_mounts]
+            aggregate_check = await volume_service.check_aggregate_quota(all_volume_ids, plan.disk_limit)
+            if not aggregate_check["allowed"]:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=aggregate_check["reason"]
+                )
+
+    if server.container_id:
+        try:
+            actual_status = await spawner.get_status(server.container_id)
+            if actual_status == "running":
+                await broadcast_server_status_change(server.user_id, server_id, "running")
+                return {"message": "Server already running", "server_id": server_id, "status": "running"}
+
+            if actual_status in ("unknown", "stopped"):
+                if actual_status == "unknown":
+                    print(f"Container {server.container_id} not found, recreating...")
+                else:
+                    print(f"Container {server.container_id} is stopped, deleting and recreating...")
+                    try:
+                        await spawner.delete(server.container_id)
+                    except Exception as e:
+                        print(f"Warning: failed to delete stale container: {e}")
+
+                env_service = EnvironmentService(db)
+                environment = await env_service.get_by_id(str(server.environment_id)) if server.environment_id else None
+                plan_service = PlanService(db)
+                plan = await plan_service.get_by_id(str(server.plan_id)) if server.plan_id else None
+
+                result = await db.execute(sa_select(User).where(User.id == server.user_id))
+                server_owner = result.scalar_one_or_none()
+                owner_username = server_owner.username if server_owner else current_user.username
+
+                new_server = await spawner.spawn(
+                    user_id=str(server.user_id),
+                    username=owner_username,
+                    server_name=server.name,
+                    environment=environment.slug if environment else "dev",
+                    environment_id=str(server.environment_id) if server.environment_id else None,
+                    image=environment.image if environment else None,
+                    cpu=plan.cpu_limit if plan else server.allocated_cpu,
+                    memory=plan.memory_limit if plan else server.allocated_memory,
+                    disk=plan.disk_limit if plan else server.allocated_disk,
+                    volume_mounts=volume_mounts or None,
+                    server_id=str(server.id),
+                )
+
+                server.container_id = new_server.container_id
+                server.image = new_server.image
+                server.volume_id = new_server.volume_id
+                server.status = "running"
+                server.started_at = datetime.utcnow()
+                server.external_url = new_server.external_url
+                server.stop_reason = None
+                server.stopped_at = None
+
+                if volume_mounts:
+                    volume_service = VolumeService(db)
+                    for vm in volume_mounts:
+                        await volume_service.increment_server_count(vm["volume_id"])
+                elif server.volume_id:
+                    volume_service = VolumeService(db)
+                    await volume_service.increment_server_count(str(server.volume_id))
+
+                await db.commit()
+                await broadcast_server_status_change(server.user_id, server_id, "running")
+                return {"message": "Server container recreated and started", "server_id": server_id, "status": "running"}
+
+            success = await spawner.start(server.container_id)
+            if not success:
+                raise Exception("Failed to start container - check container logs")
+
+            server.status = "running"
+            server.started_at = datetime.utcnow()
+            server.stop_reason = None
+            server.stopped_at = None
+
+            if volume_mounts:
+                volume_service = VolumeService(db)
+                for vm in volume_mounts:
+                    await volume_service.increment_server_count(vm["volume_id"])
+            elif server.volume_id:
+                volume_service = VolumeService(db)
+                await volume_service.increment_server_count(str(server.volume_id))
+
+            notif_service = NotificationService(db)
+            await notif_service.server_started(
+                user_id=server.user_id,
+                server_name=server.name,
+                action_url=f"/servers/{server_id}"
+            )
+
+            await db.commit()
+            await broadcast_server_status_change(server.user_id, server_id, "running")
+            return {"message": "Server started", "server_id": server_id, "status": "running"}
+        except HTTPException:
+            raise
+        except Exception:
+            logger.exception("Server start failed")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to start server. Please try again or contact support."
+            )
+    else:
+        if not server.environment_id or not server.plan_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Server configuration incomplete"
+            )
+
+        env_service = EnvironmentService(db)
+        environment = await env_service.get_by_id(str(server.environment_id))
+        if not environment:
+            raise HTTPException(status_code=404, detail="Environment not found")
+
+        plan_service = PlanService(db)
+        plan = await plan_service.get_by_id(str(server.plan_id))
+        if not plan:
+            raise HTTPException(status_code=404, detail="Plan not found")
+
+        try:
+            result = await db.execute(sa_select(User).where(User.id == server.user_id))
+            server_owner = result.scalar_one_or_none()
+            owner_username = server_owner.username if server_owner else current_user.username
+
+            new_server = await spawner.spawn(
+                user_id=str(server.user_id),
+                username=owner_username,
+                server_name=server.name,
+                environment=environment.slug if environment else "dev",
+                environment_id=str(server.environment_id) if server.environment_id else None,
+                image=environment.image if environment else None,
+                cpu=plan.cpu_limit if plan else server.allocated_cpu,
+                memory=plan.memory_limit if plan else server.allocated_memory,
+                disk=plan.disk_limit if plan else server.allocated_disk,
+                volume_mounts=volume_mounts or None,
+                server_id=str(server.id),
+            )
+
+            server.container_id = new_server.container_id
+            server.image = new_server.image
+            server.volume_id = new_server.volume_id
+            server.status = "running"
+            server.external_url = new_server.external_url
+            server.started_at = datetime.utcnow()
+            server.stop_reason = None
+            server.stopped_at = None
+            server.allocated_cpu = new_server.allocated_cpu
+            server.allocated_memory = new_server.allocated_memory
+            await db.commit()
+
+            if volume_mounts:
+                volume_service = VolumeService(db)
+                for vm in volume_mounts:
+                    await volume_service.increment_server_count(vm["volume_id"])
+            elif server.volume_id:
+                volume_service = VolumeService(db)
+                await volume_service.increment_server_count(str(server.volume_id))
+
+            notif_service = NotificationService(db)
+            await notif_service.server_started(
+                user_id=server.user_id,
+                server_name=server.name,
+                action_url=f"/servers/{server_id}"
+            )
+
+            await broadcast_server_status_change(server.user_id, server_id, "running")
+            return {"message": "Server started", "server_id": server_id, "status": "running"}
+        except HTTPException:
+            raise
+        except Exception:
+            logger.exception("Server spawn failed during restart")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to restart server. Please try again or contact support."
+            )
+
+
+async def _perform_server_stop(
+    server: Server,
+    db: AsyncSession,
+    server_id: str,
+) -> dict:
+    """Execute server stop logic. Raises HTTPException on failure."""
+    from app.services.credit_service import CreditService
+    from app.models.server_plan import ServerPlan
+    from app.services.quota_service import QuotaService
+    from app.services.volume_service import VolumeService
+
+    volume_mounts = await _load_server_volume_mounts(db, str(server.id))
+
+    if server.container_id:
+        try:
+            actual_status = await spawner.get_status(server.container_id)
+            if actual_status == "stopped" or actual_status == "unknown":
+                server.status = "stopped"
+                server.container_id = None
+                await db.commit()
+                await broadcast_server_status_change(server.user_id, server_id, "stopped")
+                return {"message": "Server already stopped", "server_id": server_id, "status": "stopped"}
+
+            await spawner.delete(server.container_id)
+            server.container_id = None
+            server.status = "stopped"
+            server.stopped_at = datetime.utcnow()
+
+            if server.plan_id:
+                credit_service = CreditService(db)
+                plan_result = await db.execute(
+                    select(ServerPlan).where(ServerPlan.id == server.plan_id)
+                )
+                plan = plan_result.scalar_one_or_none()
+                if plan:
+                    await credit_service.reconcile_server_billing(server, plan)
+
+            if server.plan_id:
+                quota_service = QuotaService(db)
+                await quota_service.decrement_usage(
+                    user_id=str(server.user_id),
+                    plan_id=str(server.plan_id)
+                )
+
+            if volume_mounts:
+                volume_service = VolumeService(db)
+                for vm in volume_mounts:
+                    await volume_service.decrement_server_count(vm["volume_id"])
+            elif server.volume_id:
+                volume_service = VolumeService(db)
+                await volume_service.decrement_server_count(str(server.volume_id))
+
+            await db.commit()
+
+            notif_service = NotificationService(db)
+            await notif_service.server_stopped(
+                user_id=server.user_id,
+                server_name=server.name,
+                action_url=f"/servers/{server_id}"
+            )
+
+            await broadcast_server_status_change(server.user_id, server_id, "stopped")
+            return {"message": "Server stopped", "server_id": server_id, "status": "stopped"}
+        except HTTPException:
+            raise
+        except Exception:
+            logger.exception("Server stop failed")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to stop server. Please try again or contact support."
+            )
+
+    server.status = "stopped"
+    await db.commit()
+
+    notif_service = NotificationService(db)
+    await notif_service.server_stopped(
+        user_id=server.user_id,
+        server_name=server.name,
+        action_url=f"/servers/{server_id}"
+    )
+
+    await broadcast_server_status_change(server.user_id, server_id, "stopped")
+    return {"message": "Server stopped", "server_id": server_id, "status": "stopped"}
+
+
+async def _perform_server_restart(
+    server: Server,
+    db: AsyncSession,
+    current_user: User,
+    server_id: str,
+) -> dict:
+    """Execute server restart logic. Raises HTTPException on failure."""
+    from app.services.plan_service import PlanService
+    from app.services.credit_service import CreditService
+    from app.services.volume_service import VolumeService
+    from app.services.environment_service import EnvironmentService
+    from sqlalchemy import select as sa_select
+    from app.models.user import User
+
+    if server.plan_id:
+        plan_service = PlanService(db)
+        can_use = await plan_service.can_user_use_plan(
+            str(server.plan_id), current_user.role, str(current_user.id)
+        )
+        if not can_use:
+            raise HTTPException(status_code=403, detail="Plan no longer available for your account")
+
+    if settings.credits_enabled and server.plan_id:
+        plan_service = PlanService(db)
+        plan = await plan_service.get_by_id(str(server.plan_id))
+        if plan and plan.cost_per_hour > 0:
+            credit_service = CreditService(db)
+            has_credits = await credit_service.check_sufficient_credits(
+                user_id=str(server.user_id),
+                required=plan.cost_per_hour
+            )
+            if not has_credits:
+                raise HTTPException(
+                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                    detail=f"Insufficient NUKE credits. Required: {plan.cost_per_hour} for 1 hour"
+                )
+
+    volume_mounts = await _load_server_volume_mounts(db, str(server.id))
+
+    if volume_mounts and server.plan_id:
+        volume_service = VolumeService(db)
+        plan_service = PlanService(db)
+        plan = await plan_service.get_by_id(str(server.plan_id))
+        if plan:
+            for vm in volume_mounts:
+                quota_check = await volume_service.check_quota(vm["volume_id"], plan.disk_limit)
+                if not quota_check["allowed"]:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=quota_check["reason"]
+                    )
+            all_volume_ids = [vm["volume_id"] for vm in volume_mounts]
+            aggregate_check = await volume_service.check_aggregate_quota(all_volume_ids, plan.disk_limit)
+            if not aggregate_check["allowed"]:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=aggregate_check["reason"]
+                )
+
+    if server.container_id:
+        try:
+            actual_status = await spawner.get_status(server.container_id)
+            if actual_status == "unknown":
+                env_service = EnvironmentService(db)
+                environment = await env_service.get_by_id(str(server.environment_id)) if server.environment_id else None
+                plan_service = PlanService(db)
+                plan = await plan_service.get_by_id(str(server.plan_id)) if server.plan_id else None
+
+                result = await db.execute(sa_select(User).where(User.id == server.user_id))
+                server_owner = result.scalar_one_or_none()
+                owner_username = server_owner.username if server_owner else current_user.username
+
+                new_server = await spawner.spawn(
+                    user_id=str(server.user_id),
+                    username=owner_username,
+                    server_name=server.name,
+                    environment=environment.slug if environment else "dev",
+                    environment_id=str(server.environment_id) if server.environment_id else None,
+                    image=environment.image if environment else None,
+                    cpu=plan.cpu_limit if plan else server.allocated_cpu,
+                    memory=plan.memory_limit if plan else server.allocated_memory,
+                    disk=plan.disk_limit if plan else server.allocated_disk,
+                    volume_mounts=volume_mounts or None,
+                    server_id=str(server.id),
+                )
+
+                server.container_id = new_server.container_id
+                server.image = new_server.image
+                server.volume_id = new_server.volume_id
+                server.status = "running"
+                server.started_at = datetime.utcnow()
+                server.external_url = new_server.external_url
+                server.stop_reason = None
+                server.stopped_at = None
+                await db.commit()
+
+                notif_service = NotificationService(db)
+                await notif_service.server_restarted(
+                    user_id=server.user_id,
+                    server_name=server.name,
+                    action_url=f"/servers/{server_id}"
+                )
+
+                await broadcast_server_status_change(server.user_id, server_id, "running")
+                return {"message": "Server container recreated and started", "server_id": server_id, "status": "running"}
+
+            await spawner.stop(server.container_id)
+            await spawner.start(server.container_id)
+            server.status = "running"
+            server.started_at = datetime.utcnow()
+            server.stop_reason = None
+            server.stopped_at = None
+            await db.commit()
+
+            notif_service = NotificationService(db)
+            await notif_service.server_restarted(
+                user_id=server.user_id,
+                server_name=server.name,
+                action_url=f"/servers/{server_id}"
+            )
+
+            await broadcast_server_status_change(server.user_id, server_id, "running")
+            return {"message": "Server restarted", "server_id": server_id, "status": "running"}
+        except HTTPException:
+            raise
+        except Exception:
+            logger.exception("Server restart failed")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to restart server. Please try again or contact support."
+            )
+
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="No container associated with this server"
+    )
+
+
+async def _perform_server_delete(
+    server: Server,
+    db: AsyncSession,
+    server_id: str,
+) -> dict:
+    """Execute server delete logic. Raises HTTPException on failure."""
+    from app.services.volume_service import VolumeService
+    from app.models.credit_transaction import CreditTransaction
+    from sqlalchemy import delete
+
+    volume_mounts = await _load_server_volume_mounts(db, str(server.id))
+
+    if server.container_id:
+        try:
+            await spawner.delete(server.container_id)
+        except Exception as e:
+            print(f"Warning: Failed to delete container: {e}")
+
+    if volume_mounts:
+        volume_service = VolumeService(db)
+        for vm in volume_mounts:
+            await volume_service.decrement_server_count(vm["volume_id"])
+    elif server.volume_id:
+        volume_service = VolumeService(db)
+        await volume_service.decrement_server_count(str(server.volume_id))
+
+    await db.execute(
+        delete(CreditTransaction).where(CreditTransaction.server_id == server.id)
+    )
+
+    user_id = server.user_id
+    server_name = server.name
+
+    await db.delete(server)
+    await db.commit()
+
+    notif_service = NotificationService(db)
+    await notif_service.server_deleted(
+        user_id=user_id,
+        server_name=server_name
+    )
+
+    return {"message": "Server deleted", "server_id": server_id}
+
+
 @router.post("/{server_id}/start")
 async def start_server(
     server_id: str,
@@ -803,260 +1306,15 @@ async def start_server(
         server_id, current_user, db, http_request,
         admin_permissions=[Permission.SERVERS_WRITE_ALL, Permission.SERVERS_ACCESS_OTHERS]
     )
-    
+
     checker = PermissionChecker(current_user)
     checker.require(Permission.SERVERS_WRITE_OWN)
-    
-    # Check if trying to start someone else's server
+
     if str(server.user_id) != str(current_user.id):
         checker.require_any([Permission.SERVERS_WRITE_ALL, Permission.SERVERS_ACCESS_OTHERS])
         await _audit_cross_user_access(server, current_user, db, "server.start", body.reason)
-    
-    # Check plan access — user may have lost access since creation
-    if server.plan_id:
-        from app.services.plan_service import PlanService
-        plan_service = PlanService(db)
-        can_use = await plan_service.can_user_use_plan(
-            str(server.plan_id), current_user.role, str(current_user.id)
-        )
-        if not can_use:
-            raise HTTPException(status_code=403, detail="Plan no longer available for your account")
-    
-    # Check NUKE credits before starting
-    if settings.credits_enabled and server.plan_id:
-        from app.services.plan_service import PlanService
-        from app.services.credit_service import CreditService
-        
-        plan_service = PlanService(db)
-        plan = await plan_service.get_by_id(str(server.plan_id))
-        
-        if plan and plan.cost_per_hour > 0:
-            credit_service = CreditService(db)
-            has_credits = await credit_service.check_sufficient_credits(
-                user_id=str(server.user_id),
-                required=plan.cost_per_hour
-            )
-            if not has_credits:
-                raise HTTPException(
-                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                    detail=f"Insufficient NUKE credits. Required: {plan.cost_per_hour} for 1 hour"
-                )
-    
-    # Load volume mounts
-    volume_mounts = await _load_server_volume_mounts(db, str(server.id))
-    
-    # Check volume quota before starting
-    if volume_mounts and server.plan_id:
-        from app.services.volume_service import VolumeService
-        from app.services.plan_service import PlanService
-        
-        volume_service = VolumeService(db)
-        plan_service = PlanService(db)
-        plan = await plan_service.get_by_id(str(server.plan_id))
-        
-        if plan:
-            for vm in volume_mounts:
-                quota_check = await volume_service.check_quota(vm["volume_id"], plan.disk_limit)
-                if not quota_check["allowed"]:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=quota_check["reason"]
-                    )
-            
-            # Check aggregate volume quota
-            all_volume_ids = [vm["volume_id"] for vm in volume_mounts]
-            aggregate_check = await volume_service.check_aggregate_quota(all_volume_ids, plan.disk_limit)
-            if not aggregate_check["allowed"]:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=aggregate_check["reason"]
-                )
-    
-    if server.container_id:
-        try:
-            actual_status = await spawner.get_status(server.container_id)
-            if actual_status == "running":
-                await broadcast_server_status_change(server.user_id, server_id, "running")
-                return {"message": "Server already running", "server_id": server_id, "status": "running"}
-            
-            if actual_status in ("unknown", "stopped"):
-                from app.services.environment_service import EnvironmentService
-                from app.services.plan_service import PlanService
-                
-                if actual_status == "unknown":
-                    print(f"Container {server.container_id} not found, recreating...")
-                else:
-                    print(f"Container {server.container_id} is stopped, deleting and recreating...")
-                    # Delete stale container to avoid broken mounts after reboots
-                    try:
-                        await spawner.delete(server.container_id)
-                    except Exception as e:
-                        print(f"Warning: failed to delete stale container: {e}")
-                
-                env_service = EnvironmentService(db)
-                environment = await env_service.get_by_id(str(server.environment_id)) if server.environment_id else None
-                plan_service = PlanService(db)
-                plan = await plan_service.get_by_id(str(server.plan_id)) if server.plan_id else None
-                
-                # Get server owner's username, not current user's
-                server_owner = server.user if hasattr(server, 'user') and server.user else current_user
-                
-                new_server = await spawner.spawn(
-                    user_id=str(server.user_id),
-                    username=server_owner.username,
-                    server_name=server.name,
-                    environment=environment.slug if environment else "dev",
-                    environment_id=str(server.environment_id) if server.environment_id else None,
-                    image=environment.image if environment else None,
-                    cpu=plan.cpu_limit if plan else server.allocated_cpu,
-                    memory=plan.memory_limit if plan else server.allocated_memory,
-                    disk=plan.disk_limit if plan else server.allocated_disk,
-                    volume_mounts=volume_mounts or None,
-                    server_id=str(server.id),
-                )
-                
-                server.container_id = new_server.container_id
-                server.image = new_server.image
-                server.volume_id = new_server.volume_id
-                server.status = "running"
-                server.started_at = datetime.utcnow()
-                server.external_url = new_server.external_url
-                server.stop_reason = None
-                server.stopped_at = None
-                
-                # Increment volume server counts for all mounts
-                if volume_mounts:
-                    from app.services.volume_service import VolumeService
-                    volume_service = VolumeService(db)
-                    for vm in volume_mounts:
-                        await volume_service.increment_server_count(vm["volume_id"])
-                elif server.volume_id:
-                    from app.services.volume_service import VolumeService
-                    volume_service = VolumeService(db)
-                    await volume_service.increment_server_count(str(server.volume_id))
-                
-                await db.commit()
-                await broadcast_server_status_change(server.user_id, server_id, "running")
-                return {"message": "Server container recreated and started", "server_id": server_id, "status": "running"}
-            
-            success = await spawner.start(server.container_id)
-            if not success:
-                raise Exception("Failed to start container - check container logs")
-            
-            server.status = "running"
-            server.started_at = datetime.utcnow()
-            server.stop_reason = None
-            server.stopped_at = None
-            
-            # Increment volume server counts for all mounts
-            if volume_mounts:
-                from app.services.volume_service import VolumeService
-                volume_service = VolumeService(db)
-                for vm in volume_mounts:
-                    await volume_service.increment_server_count(vm["volume_id"])
-            elif server.volume_id:
-                from app.services.volume_service import VolumeService
-                volume_service = VolumeService(db)
-                await volume_service.increment_server_count(str(server.volume_id))
-            
-            # Create notification for server owner
-            notif_service = NotificationService(db)
-            await notif_service.server_started(
-                user_id=server.user_id,
-                server_name=server.name,
-                action_url=f"/servers/{server_id}"
-            )
 
-            await db.commit()
-            await broadcast_server_status_change(server.user_id, server_id, "running")
-            return {"message": "Server started", "server_id": server_id, "status": "running"}
-        except Exception:
-            logger.exception("Server start failed")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to start server. Please try again or contact support."
-            )
-    else:
-        from app.services.environment_service import EnvironmentService
-        from app.services.plan_service import PlanService
-        
-        if not server.environment_id or not server.plan_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Server configuration incomplete"
-            )
-        
-        env_service = EnvironmentService(db)
-        environment = await env_service.get_by_id(str(server.environment_id))
-        if not environment:
-            raise HTTPException(status_code=404, detail="Environment not found")
-        
-        plan_service = PlanService(db)
-        plan = await plan_service.get_by_id(str(server.plan_id))
-        if not plan:
-            raise HTTPException(status_code=404, detail="Plan not found")
-        
-        try:
-            # Get server owner's username via explicit query to avoid lazy loading issues
-            from sqlalchemy import select as sa_select
-            from app.models.user import User
-            result = await db.execute(sa_select(User).where(User.id == server.user_id))
-            server_owner = result.scalar_one_or_none()
-            owner_username = server_owner.username if server_owner else current_user.username
-            
-            new_server = await spawner.spawn(
-                user_id=str(server.user_id),
-                username=owner_username,
-                server_name=server.name,
-                environment=environment.slug if environment else "dev",
-                environment_id=str(server.environment_id) if server.environment_id else None,
-                image=environment.image if environment else None,
-                cpu=plan.cpu_limit if plan else server.allocated_cpu,
-                memory=plan.memory_limit if plan else server.allocated_memory,
-                disk=plan.disk_limit if plan else server.allocated_disk,
-                volume_mounts=volume_mounts or None,
-                server_id=str(server.id),
-            )
-            
-            server.container_id = new_server.container_id
-            server.image = new_server.image
-            server.volume_id = new_server.volume_id
-            server.status = "running"
-            server.external_url = new_server.external_url
-            server.started_at = datetime.utcnow()
-            server.stop_reason = None
-            server.stopped_at = None
-            server.allocated_cpu = new_server.allocated_cpu
-            server.allocated_memory = new_server.allocated_memory
-            await db.commit()
-
-            # Increment volume server counts for all mounts
-            if volume_mounts:
-                from app.services.volume_service import VolumeService
-                volume_service = VolumeService(db)
-                for vm in volume_mounts:
-                    await volume_service.increment_server_count(vm["volume_id"])
-            elif server.volume_id:
-                from app.services.volume_service import VolumeService
-                volume_service = VolumeService(db)
-                await volume_service.increment_server_count(str(server.volume_id))
-
-            # Create notification for server owner
-            notif_service = NotificationService(db)
-            await notif_service.server_started(
-                user_id=server.user_id,
-                server_name=server.name,
-                action_url=f"/servers/{server_id}"
-            )
-
-            await broadcast_server_status_change(server.user_id, server_id, "running")
-            return {"message": "Server started", "server_id": server_id, "status": "running"}
-        except Exception:
-            logger.exception("Server spawn failed during restart")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to restart server. Please try again or contact support."
-            )
+    return await _perform_server_start(server, db, current_user, server_id)
 
 
 @router.post("/{server_id}/stop")
@@ -1077,94 +1335,11 @@ async def stop_server(
     checker = PermissionChecker(current_user)
     checker.require(Permission.SERVERS_WRITE_OWN)
 
-    # Check if trying to stop someone else's server
     if str(server.user_id) != str(current_user.id):
         checker.require_any([Permission.SERVERS_WRITE_ALL, Permission.SERVERS_ACCESS_OTHERS])
         await _audit_cross_user_access(server, current_user, db, "server.stop", body.reason)
 
-    # Load volume mounts for count management
-    volume_mounts = await _load_server_volume_mounts(db, str(server.id))
-
-    if server.container_id:
-        try:
-            actual_status = await spawner.get_status(server.container_id)
-            if actual_status == "stopped" or actual_status == "unknown":
-                server.status = "stopped"
-                server.container_id = None
-                await db.commit()
-                await broadcast_server_status_change(server.user_id, server_id, "stopped")
-                return {"message": "Server already stopped", "server_id": server_id, "status": "stopped"}
-
-            # Delete container to remove Traefik route so frontend catch-all handles it
-            await spawner.delete(server.container_id)
-            server.container_id = None
-            server.status = "stopped"
-            server.stopped_at = datetime.utcnow()
-            
-            # Reconcile exact billing for the final partial interval
-            if server.plan_id:
-                from app.services.credit_service import CreditService
-                from app.models.server_plan import ServerPlan
-                credit_service = CreditService(db)
-                plan_result = await db.execute(
-                    select(ServerPlan).where(ServerPlan.id == server.plan_id)
-                )
-                plan = plan_result.scalar_one_or_none()
-                if plan:
-                    await credit_service.reconcile_server_billing(server, plan)
-            
-            # Decrement quota usage
-            if server.plan_id:
-                from app.services.quota_service import QuotaService
-                quota_service = QuotaService(db)
-                await quota_service.decrement_usage(
-                    user_id=str(server.user_id),
-                    plan_id=str(server.plan_id)
-                )
-            
-            # Decrement volume server counts for all mounts
-            if volume_mounts:
-                from app.services.volume_service import VolumeService
-                volume_service = VolumeService(db)
-                for vm in volume_mounts:
-                    await volume_service.decrement_server_count(vm["volume_id"])
-            elif server.volume_id:
-                from app.services.volume_service import VolumeService
-                volume_service = VolumeService(db)
-                await volume_service.decrement_server_count(str(server.volume_id))
-            
-            await db.commit()
-
-            # Create notification for server owner
-            notif_service = NotificationService(db)
-            await notif_service.server_stopped(
-                user_id=server.user_id,
-                server_name=server.name,
-                action_url=f"/servers/{server_id}"
-            )
-
-            await broadcast_server_status_change(server.user_id, server_id, "stopped")
-            return {"message": "Server stopped", "server_id": server_id, "status": "stopped"}
-        except Exception:
-            logger.exception("Server stop failed")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to stop server. Please try again or contact support."
-            )
-
-    server.status = "stopped"
-    await db.commit()
-
-    # Create notification for server owner
-    notif_service = NotificationService(db)
-    await notif_service.server_stopped(
-        user_id=server.user_id,
-        server_name=server.name,
-        action_url=f"/servers/{server_id}"
-    )
-
-    await broadcast_server_status_change(server.user_id, server_id, "stopped")
-    return {"message": "Server stopped", "server_id": server_id, "status": "stopped"}
+    return await _perform_server_stop(server, db, server_id)
 
 
 @router.post("/{server_id}/restart")
@@ -1181,160 +1356,15 @@ async def restart_server(
         server_id, current_user, db, http_request,
         admin_permissions=[Permission.SERVERS_WRITE_ALL, Permission.SERVERS_ACCESS_OTHERS]
     )
-    
+
     checker = PermissionChecker(current_user)
     checker.require(Permission.SERVERS_WRITE_OWN)
-    
-    # Check if trying to restart someone else's server
+
     if str(server.user_id) != str(current_user.id):
         checker.require_any([Permission.SERVERS_WRITE_ALL, Permission.SERVERS_ACCESS_OTHERS])
         await _audit_cross_user_access(server, current_user, db, "server.restart", body.reason)
-    
-    # Check plan access — user may have lost access since creation
-    if server.plan_id:
-        from app.services.plan_service import PlanService
-        plan_service = PlanService(db)
-        can_use = await plan_service.can_user_use_plan(
-            str(server.plan_id), current_user.role, str(current_user.id)
-        )
-        if not can_use:
-            raise HTTPException(status_code=403, detail="Plan no longer available for your account")
-    
-    # Check NUKE credits before restarting
-    if settings.credits_enabled and server.plan_id:
-        from app.services.plan_service import PlanService
-        from app.services.credit_service import CreditService
-        
-        plan_service = PlanService(db)
-        plan = await plan_service.get_by_id(str(server.plan_id))
-        
-        if plan and plan.cost_per_hour > 0:
-            credit_service = CreditService(db)
-            has_credits = await credit_service.check_sufficient_credits(
-                user_id=str(server.user_id),
-                required=plan.cost_per_hour
-            )
-            if not has_credits:
-                raise HTTPException(
-                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                    detail=f"Insufficient NUKE credits. Required: {plan.cost_per_hour} for 1 hour"
-                )
-    
-    # Load volume mounts
-    volume_mounts = await _load_server_volume_mounts(db, str(server.id))
-    
-    # Check volume quota before restarting
-    if volume_mounts and server.plan_id:
-        from app.services.volume_service import VolumeService
-        from app.services.plan_service import PlanService
-        
-        volume_service = VolumeService(db)
-        plan_service = PlanService(db)
-        plan = await plan_service.get_by_id(str(server.plan_id))
-        
-        if plan:
-            for vm in volume_mounts:
-                quota_check = await volume_service.check_quota(vm["volume_id"], plan.disk_limit)
-                if not quota_check["allowed"]:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=quota_check["reason"]
-                    )
-            
-            # Check aggregate volume quota
-            all_volume_ids = [vm["volume_id"] for vm in volume_mounts]
-            aggregate_check = await volume_service.check_aggregate_quota(all_volume_ids, plan.disk_limit)
-            if not aggregate_check["allowed"]:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=aggregate_check["reason"]
-                )
-    
-    if server.container_id:
-        try:
-            actual_status = await spawner.get_status(server.container_id)
-            if actual_status == "unknown":
-                from app.services.environment_service import EnvironmentService
-                from app.services.plan_service import PlanService
-                
-                print(f"Container {server.container_id} not found, recreating...")
-                
-                env_service = EnvironmentService(db)
-                environment = await env_service.get_by_id(str(server.environment_id)) if server.environment_id else None
-                plan_service = PlanService(db)
-                plan = await plan_service.get_by_id(str(server.plan_id)) if server.plan_id else None
-                
-                # Get server owner's username via explicit query to avoid lazy loading issues
-                from sqlalchemy import select as sa_select
-                from app.models.user import User
-                result = await db.execute(sa_select(User).where(User.id == server.user_id))
-                server_owner = result.scalar_one_or_none()
-                owner_username = server_owner.username if server_owner else current_user.username
-                
-                new_server = await spawner.spawn(
-                    user_id=str(server.user_id),
-                    username=owner_username,
-                    server_name=server.name,
-                    environment=environment.slug if environment else "dev",
-                    environment_id=str(server.environment_id) if server.environment_id else None,
-                    image=environment.image if environment else None,
-                    cpu=plan.cpu_limit if plan else server.allocated_cpu,
-                    memory=plan.memory_limit if plan else server.allocated_memory,
-                    disk=plan.disk_limit if plan else server.allocated_disk,
-                    volume_mounts=volume_mounts or None,
-                    server_id=str(server.id),
-                )
-                
-                server.container_id = new_server.container_id
-                server.image = new_server.image
-                server.volume_id = new_server.volume_id
-                server.status = "running"
-                server.started_at = datetime.utcnow()
-                server.external_url = new_server.external_url
-                server.stop_reason = None
-                server.stopped_at = None
-                await db.commit()
 
-                # Create notification for server owner
-                notif_service = NotificationService(db)
-                await notif_service.server_restarted(
-                    user_id=server.user_id,
-                    server_name=server.name,
-                    action_url=f"/servers/{server_id}"
-                )
-
-                await broadcast_server_status_change(server.user_id, server_id, "running")
-                return {"message": "Server container recreated and started", "server_id": server_id, "status": "running"}
-            
-            await spawner.stop(server.container_id)
-            await spawner.start(server.container_id)
-            server.status = "running"
-            server.started_at = datetime.utcnow()
-            server.stop_reason = None
-            server.stopped_at = None
-            await db.commit()
-
-            # Create notification for server owner
-            notif_service = NotificationService(db)
-            await notif_service.server_restarted(
-                user_id=server.user_id,
-                server_name=server.name,
-                action_url=f"/servers/{server_id}"
-            )
-
-            await broadcast_server_status_change(server.user_id, server_id, "running")
-            return {"message": "Server restarted", "server_id": server_id, "status": "running"}
-        except Exception:
-            logger.exception("Server restart failed")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to restart server. Please try again or contact support."
-            )
-    
-    raise HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail="No container associated with this server"
-    )
+    return await _perform_server_restart(server, db, current_user, server_id)
 
 
 @router.delete("/{server_id}")
@@ -1351,54 +1381,15 @@ async def delete_server(
         server_id, current_user, db, request,
         admin_permissions=[Permission.SERVERS_WRITE_ALL, Permission.SERVERS_ACCESS_OTHERS]
     )
-    
+
     checker = PermissionChecker(current_user)
     checker.require(Permission.SERVERS_WRITE_OWN)
-    
-    # Check if trying to delete someone else's server
+
     if str(server.user_id) != str(current_user.id):
         checker.require_any([Permission.SERVERS_WRITE_ALL, Permission.SERVERS_ACCESS_OTHERS])
         await _audit_cross_user_access(server, current_user, db, "server.delete", reason)
-    
-    # Load volume mounts for count management
-    volume_mounts = await _load_server_volume_mounts(db, str(server.id))
-    
-    if server.container_id:
-        try:
-            await spawner.delete(server.container_id)
-        except Exception as e:
-            # Log but continue to delete from DB
-            print(f"Warning: Failed to delete container: {e}")
-    
-    # Decrement volume server counts for all mounts
-    if volume_mounts:
-        from app.services.volume_service import VolumeService
-        volume_service = VolumeService(db)
-        for vm in volume_mounts:
-            await volume_service.decrement_server_count(vm["volume_id"])
-    elif server.volume_id:
-        from app.services.volume_service import VolumeService
-        volume_service = VolumeService(db)
-        await volume_service.decrement_server_count(str(server.volume_id))
-    
-    # Delete associated credit transactions to avoid FK constraint
-    from app.models.credit_transaction import CreditTransaction
-    from sqlalchemy import delete
-    await db.execute(
-        delete(CreditTransaction).where(CreditTransaction.server_id == server.id)
-    )
-    
-    await db.delete(server)
-    await db.commit()
 
-    # Create notification for server owner
-    notif_service = NotificationService(db)
-    await notif_service.server_deleted(
-        user_id=server.user_id,
-        server_name=server.name
-    )
-
-    return {"message": "Server deleted", "server_id": server_id}
+    return await _perform_server_delete(server, db, server_id)
 
 
 @router.get("/{server_id}/volumes")

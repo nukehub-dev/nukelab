@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { HardDrive, Pencil, Trash2, Server } from 'lucide-react';
+import { HardDrive, Pencil, Trash2, Server, Play, Archive } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { ResourcePageLayout } from '../components/layout/resource-page-layout';
 import { DataTable } from '../components/data/data-table';
@@ -119,7 +119,7 @@ function VolumesAdminPage() {
     max_size_bytes: undefined as number | undefined,
   });
 
-  const { updateVolume, deleteVolume } = useAdminVolumeActions();
+  const { updateVolume, deleteVolume, bulkAction: bulkVolumeAction } = useAdminVolumeActions();
 
   const openEditDialog = (volume: AdminVolume) => {
     setEditingVolume(volume);
@@ -161,6 +161,48 @@ function VolumesAdminPage() {
       deleteVolume.mutate(volume.id);
     }
   };
+
+  const handleBulkDelete = async (ids: string[]) => {
+    const confirmed = await confirm({
+      title: 'Delete Volumes',
+      description: `Are you sure you want to delete ${ids.length} volume(s)? This action cannot be undone.`,
+      variant: 'danger',
+      confirmLabel: 'Delete',
+      cancelLabel: 'Cancel',
+    });
+    if (confirmed) {
+      bulkVolumeAction.mutate({ action: 'delete', volume_ids: ids }, {
+        onSuccess: () => setRowSelection({}),
+      });
+    }
+  };
+
+  const bulkActions = canManageVolumes ? [
+    {
+      label: 'Activate',
+      icon: <Play className="w-4 h-4" />,
+      onClick: (ids: string[]) => {
+        bulkVolumeAction.mutate({ action: 'activate', volume_ids: ids }, {
+          onSuccess: () => setRowSelection({}),
+        });
+      },
+    },
+    {
+      label: 'Archive',
+      icon: <Archive className="w-4 h-4" />,
+      onClick: (ids: string[]) => {
+        bulkVolumeAction.mutate({ action: 'archive', volume_ids: ids }, {
+          onSuccess: () => setRowSelection({}),
+        });
+      },
+    },
+    {
+      label: 'Delete',
+      icon: <Trash2 className="w-4 h-4" />,
+      onClick: handleBulkDelete,
+      variant: 'destructive' as const,
+    },
+  ] : [];
 
   // Stats
   const totalVolumes = pagination?.total || 0;
@@ -415,6 +457,8 @@ function VolumesAdminPage() {
           searchPlaceholder="Search volumes..."
           density={useThemeStore().density}
           mobileCardRenderer={mobileCardRenderer}
+          bulkActions={bulkActions}
+          enableRowSelection={canManageVolumes}
         />
       </ResourcePageLayout>
 

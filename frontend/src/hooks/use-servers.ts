@@ -326,3 +326,59 @@ export function useServerLogs(serverId: string, tail: number = 100, paused: bool
     refetchInterval: (paused || !active) ? false : 5000,
   });
 }
+
+export interface BulkActionRequest {
+  action: 'start' | 'stop' | 'restart' | 'delete';
+  server_ids: string[];
+  reason?: string;
+}
+
+export interface BulkActionResponse {
+  succeeded: string[];
+  failed: Array<{ server_id: string; error: string }>;
+  total: number;
+  success_count: number;
+  failure_count: number;
+}
+
+export function useBulkServerActions() {
+  const queryClient = useQueryClient();
+
+  const bulkAction = useMutation({
+    mutationFn: (data: BulkActionRequest) =>
+      api.post<BulkActionResponse>('/bulk/servers/bulk-action', data),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['servers'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      if (data.failure_count > 0) {
+        const errors = data.failed.slice(0, 3).map((f) => f.error).join('; ');
+        const more = data.failed.length > 3 ? ` and ${data.failed.length - 3} more` : '';
+        useToastStore.getState().addToast({
+          type: 'error',
+          title: `${data.failure_count} server(s) failed`,
+          message: errors + more,
+          duration: 8000,
+        });
+      }
+      if (data.success_count > 0) {
+        useToastStore.getState().addToast({
+          type: 'success',
+          title: 'Bulk action completed',
+          message: `${data.success_count} server(s) processed successfully`,
+          duration: 4000,
+        });
+      }
+    },
+    onError: (error: Error) => {
+      console.error('Bulk action failed:', error.message);
+      useToastStore.getState().addToast({
+        type: 'error',
+        title: 'Bulk action failed',
+        message: error.message,
+        duration: 8000,
+      });
+    },
+  });
+
+  return { bulkAction };
+}

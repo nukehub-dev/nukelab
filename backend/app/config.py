@@ -96,6 +96,12 @@ class Settings(BaseSettings):
     server_max_runtime: int = 86400
     server_auto_stop_on_depletion: bool = True
     server_warn_before_stop: int = 600
+    server_auto_restart_enabled: bool = True
+    server_auto_restart_max_attempts: int = 3
+    server_auto_restart_window: int = 300  # seconds
+
+    registration_enabled: bool = True
+    max_servers_per_user: int = 10
 
     # SMTP Email Configuration
     smtp_host: str = ""

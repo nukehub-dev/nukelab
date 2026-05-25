@@ -1,13 +1,16 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { motion } from 'framer-motion';
-import { Server, ArrowLeft, Clock, Power, AlertTriangle } from 'lucide-react';
+import { Server, ArrowLeft, Clock, Power, AlertTriangle, Box, Layers } from 'lucide-react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCurrentUser } from '../hooks/use-current-user';
+import { usePlans } from '../hooks/use-plans';
+import { useEnvironments } from '../hooks/use-environments';
 import { api } from '../lib/api';
 import { useToast } from '../stores/toast-store';
 import { cn } from '../lib/utils';
 import { Switch } from '../components/ui/switch';
+import { Select, SelectItem } from '../components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 
 export const Route = createFileRoute('/settings/servers')({
@@ -29,7 +32,14 @@ function ServerBehaviorSettingsPage() {
   const [idleEnabled, setIdleEnabled] = useState(true);
   const [idleTimeout, setIdleTimeout] = useState(15);
   const [stopOnLogout, setStopOnLogout] = useState(false);
+  const [defaultPlan, setDefaultPlan] = useState('');
+  const [defaultEnvironment, setDefaultEnvironment] = useState('');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+
+  const { data: plansData } = usePlans({ is_active: true, limit: 100 });
+  const { data: envData } = useEnvironments({ is_active: true, limit: 100 });
+  const plans = plansData?.data || [];
+  const environments = envData?.data || [];
 
   // Load saved preferences
   useEffect(() => {
@@ -44,13 +54,19 @@ function ServerBehaviorSettingsPage() {
       if (typeof prefs.stop_on_logout === 'boolean') {
         setStopOnLogout(prefs.stop_on_logout);
       }
+      if (typeof prefs.default_plan === 'string') {
+        setDefaultPlan(prefs.default_plan);
+      }
+      if (typeof prefs.default_environment === 'string') {
+        setDefaultEnvironment(prefs.default_environment);
+      }
     }
   }, [user]);
 
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const saveMutation = useMutation({
-    mutationFn: async (payload: { idle_shutdown_enabled: boolean; idle_shutdown_timeout: number; stop_on_logout: boolean }) => {
+    mutationFn: async (payload: Record<string, unknown>) => {
       return api.put('/preferences/', payload);
     },
     onSuccess: (_result, variables) => {
@@ -74,7 +90,7 @@ function ServerBehaviorSettingsPage() {
   });
 
   const triggerSave = useCallback(
-    (updates: Partial<{ idle_shutdown_enabled: boolean; idle_shutdown_timeout: number; stop_on_logout: boolean }>) => {
+    (updates: Record<string, unknown>) => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       setSaveStatus('saving');
       saveTimeoutRef.current = setTimeout(() => {
@@ -82,10 +98,12 @@ function ServerBehaviorSettingsPage() {
           idle_shutdown_enabled: updates.idle_shutdown_enabled ?? idleEnabled,
           idle_shutdown_timeout: updates.idle_shutdown_timeout ?? idleTimeout,
           stop_on_logout: updates.stop_on_logout ?? stopOnLogout,
+          default_plan: updates.default_plan ?? defaultPlan,
+          default_environment: updates.default_environment ?? defaultEnvironment,
         });
       }, 400);
     },
-    [idleEnabled, idleTimeout, stopOnLogout, saveMutation]
+    [idleEnabled, idleTimeout, stopOnLogout, defaultPlan, defaultEnvironment, saveMutation]
   );
 
   const handleIdleToggle = (checked: boolean) => {
@@ -101,6 +119,16 @@ function ServerBehaviorSettingsPage() {
   const handleLogoutToggle = (checked: boolean) => {
     setStopOnLogout(checked);
     triggerSave({ stop_on_logout: checked });
+  };
+
+  const handleDefaultPlanChange = (value: string) => {
+    setDefaultPlan(value);
+    triggerSave({ default_plan: value });
+  };
+
+  const handleDefaultEnvironmentChange = (value: string) => {
+    setDefaultEnvironment(value);
+    triggerSave({ default_environment: value });
   };
 
   return (
@@ -204,11 +232,79 @@ function ServerBehaviorSettingsPage() {
           </Card>
         </motion.div>
 
-        {/* Stop on Logout */}
+        {/* Default Spawn Preferences */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.1 }}
+        >
+          <Card>
+            <CardHeader>
+              <CardTitle>Default Spawn Preferences</CardTitle>
+              <CardDescription>
+                Pre-select your preferred plan and environment for quick server deployment.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Default Plan */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-muted-foreground" />
+                  <h3 className="text-base font-semibold">Default Plan</h3>
+                </div>
+                <Select
+                  value={defaultPlan}
+                  onChange={(value) => handleDefaultPlanChange(value)}
+                  placeholder="No default (manual selection)"
+                >
+                  {plans.map((plan) => (
+                    <SelectItem key={plan.id} value={plan.id}>
+                      {plan.name} ({plan.cpu_limit} CPU / {plan.memory_limit})
+                    </SelectItem>
+                  ))}
+                </Select>
+                <p className="text-sm text-muted-foreground">
+                  Used when opening the deploy dialog or pressing Alt+N.
+                </p>
+              </div>
+
+              {/* Default Environment */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Box className="w-4 h-4 text-muted-foreground" />
+                  <h3 className="text-base font-semibold">Default Environment</h3>
+                </div>
+                <Select
+                  value={defaultEnvironment}
+                  onChange={(value) => handleDefaultEnvironmentChange(value)}
+                  placeholder="No default (manual selection)"
+                >
+                  {environments.map((env) => (
+                    <SelectItem key={env.id} value={env.id}>
+                      {env.name} ({env.slug})
+                    </SelectItem>
+                  ))}
+                </Select>
+                <p className="text-sm text-muted-foreground">
+                  The environment template used for quick spawn.
+                </p>
+              </div>
+
+              <div className="flex items-start gap-3 p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/10">
+                <AlertTriangle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                <p className="text-sm text-emerald-400/80">
+                  When both defaults are set, press Ctrl+N anywhere to instantly create a server. Otherwise, the deploy dialog will open.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        {/* Stop on Logout */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.2 }}
         >
           <Card>
             <CardHeader>

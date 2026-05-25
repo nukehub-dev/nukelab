@@ -115,10 +115,15 @@ export function useGlobalShortcuts() {
     },
     {
       key: 'n',
-      modifiers: ['ctrl'],
+      modifiers: ['alt'],
       description: 'New Server',
       action: () => {
-        window.dispatchEvent(new CustomEvent('new-server'));
+        if (window.location.pathname === '/servers') {
+          window.dispatchEvent(new CustomEvent('new-server'));
+        } else {
+          sessionStorage.setItem('nukelab-new-server', 'true');
+          navigate({ to: '/servers' });
+        }
       },
     },
   ]);
@@ -170,7 +175,7 @@ export function useShortcutsList(): Shortcut[] {
     },
     {
       key: 'n',
-      modifiers: ['ctrl'],
+      modifiers: ['alt'],
       description: 'New Server',
       action: () => {},
     },
