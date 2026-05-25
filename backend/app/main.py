@@ -1,8 +1,6 @@
 from fastapi import FastAPI, WebSocket, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from app.config import settings
 from app.api import (
     auth, users, servers, tokens, credits, admin,
@@ -12,8 +10,6 @@ from app.api import (
 from app.db.base import Base
 from app.db.session import engine
 from app.websocket.metrics_socket import manager
-
-limiter = Limiter(key_func=get_remote_address)
 
 app = FastAPI(
     title=settings.app_name,

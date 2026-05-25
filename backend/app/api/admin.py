@@ -6,11 +6,11 @@ Provides statistics, user management, server management, and activity logs.
 from typing import Optional, List
 from datetime import datetime, timedelta
 from pydantic import BaseModel
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, desc
 
-from app.api.auth import get_current_user, require_jwt_auth
+from app.api.auth import get_current_user, require_jwt_auth, limiter
 from app.services.notification_service import broadcast_server_status_change
 from app.core.permissions import Permission
 from app.dependencies import require_permissions, PermissionChecker
@@ -185,8 +185,10 @@ async def admin_list_users(
 
 
 @router.post("/users/bulk-action")
+@limiter.limit("20/minute")
 async def bulk_user_action(
-    request: BulkActionRequest,
+    request: Request,
+    body: BulkActionRequest,
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
     _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
@@ -195,24 +197,24 @@ async def bulk_user_action(
     service = UserService(db)
     results = {"success": [], "failed": []}
     
-    for user_id in request.user_ids:
+    for user_id in body.user_ids:
         try:
-            if request.action == "disable":
+            if body.action == "disable":
                 await service.disable_user(user_id, disabled=True)
-            elif request.action == "enable":
+            elif body.action == "enable":
                 await service.disable_user(user_id, disabled=False)
-            elif request.action == "delete":
+            elif body.action == "delete":
                 await service.delete_user(user_id)
             else:
-                raise ValueError(f"Unknown action: {request.action}")
+                raise ValueError(f"Unknown action: {body.action}")
             
             results["success"].append(user_id)
         except Exception as e:
             results["failed"].append({"user_id": user_id, "error": str(e)})
     
     return {
-        "message": f"Processed {len(request.user_ids)} users",
-        "action": request.action,
+        "message": f"Processed {len(body.user_ids)} users",
+        "action": body.action,
         "results": results
     }
 
@@ -275,8 +277,10 @@ async def admin_list_servers(
 
 
 @router.post("/servers/bulk-action")
+@limiter.limit("20/minute")
 async def bulk_server_action(
-    request: BulkServerActionRequest,
+    request: Request,
+    body: BulkServerActionRequest,
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
     _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
@@ -286,7 +290,7 @@ async def bulk_server_action(
     
     results = {"success": [], "failed": []}
     
-    for server_id in request.server_ids:
+    for server_id in body.server_ids:
         try:
             result = await db.execute(
                 select(Server).where(Server.id == server_id)
@@ -297,31 +301,31 @@ async def bulk_server_action(
                 results["failed"].append({"server_id": server_id, "error": "Server not found"})
                 continue
             
-            if request.action == "start":
+            if body.action == "start":
                 if server.container_id:
                     await spawner.start(server.container_id)
                     server.status = "running"
-            elif request.action == "stop":
+            elif body.action == "stop":
                 if server.container_id:
                     await spawner.stop(server.container_id)
                     server.status = "stopped"
-            elif request.action == "delete":
+            elif body.action == "delete":
                 if server.container_id:
                     await spawner.delete(server.container_id)
                 await db.delete(server)
             else:
-                raise ValueError(f"Unknown action: {request.action}")
+                raise ValueError(f"Unknown action: {body.action}")
             
             await db.commit()
-            if request.action in ("start", "stop"):
+            if body.action in ("start", "stop"):
                 await broadcast_server_status_change(server.user_id, str(server.id), server.status)
             results["success"].append(server_id)
         except Exception as e:
             results["failed"].append({"server_id": server_id, "error": str(e)})
     
     return {
-        "message": f"Processed {len(request.server_ids)} servers",
-        "action": request.action,
+        "message": f"Processed {len(body.server_ids)} servers",
+        "action": body.action,
         "results": results
     }
 
@@ -1123,15 +1127,17 @@ class BulkWorkspaceActionRequest(BaseModel):
 
 
 @router.post("/workspaces/bulk-action")
+@limiter.limit("20/minute")
 async def bulk_workspace_action(
-    request: BulkWorkspaceActionRequest,
+    request: Request,
+    body: BulkWorkspaceActionRequest,
     current_user: User = Depends(require_permissions(Permission.WORKSPACES_WRITE_ALL)),
     _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
     """Perform bulk action on workspaces."""
     valid_actions = ["delete", "activate", "deactivate"]
-    if request.action not in valid_actions:
+    if body.action not in valid_actions:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid action. Must be one of: {', '.join(valid_actions)}"
@@ -1140,13 +1146,13 @@ async def bulk_workspace_action(
     workspace_service = WorkspaceService(db)
     results = {"success": [], "failed": []}
 
-    for workspace_id in request.workspace_ids:
+    for workspace_id in body.workspace_ids:
         try:
-            if request.action == "delete":
+            if body.action == "delete":
                 await workspace_service.delete_workspace(workspace_id)
-            elif request.action == "activate":
+            elif body.action == "activate":
                 await workspace_service.update_workspace(workspace_id, is_active=True)
-            elif request.action == "deactivate":
+            elif body.action == "deactivate":
                 await workspace_service.update_workspace(workspace_id, is_active=False)
 
             results["success"].append(workspace_id)
@@ -1154,8 +1160,8 @@ async def bulk_workspace_action(
             results["failed"].append({"workspace_id": workspace_id, "error": str(e)})
 
     return {
-        "message": f"Processed {len(request.workspace_ids)} workspaces",
-        "action": request.action,
+        "message": f"Processed {len(body.workspace_ids)} workspaces",
+        "action": body.action,
         "results": results
     }
 
@@ -1168,15 +1174,17 @@ class BulkVolumeActionRequest(BaseModel):
 
 
 @router.post("/volumes/bulk-action")
+@limiter.limit("20/minute")
 async def bulk_volume_action(
-    request: BulkVolumeActionRequest,
+    request: Request,
+    body: BulkVolumeActionRequest,
     current_user: User = Depends(require_permissions(Permission.VOLUMES_WRITE_ALL)),
     _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
     """Perform bulk action on volumes."""
     valid_actions = ["delete", "archive", "activate"]
-    if request.action not in valid_actions:
+    if body.action not in valid_actions:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid action. Must be one of: {', '.join(valid_actions)}"
@@ -1185,13 +1193,13 @@ async def bulk_volume_action(
     volume_service = VolumeService(db)
     results = {"success": [], "failed": []}
 
-    for volume_id in request.volume_ids:
+    for volume_id in body.volume_ids:
         try:
-            if request.action == "delete":
+            if body.action == "delete":
                 await volume_service.delete_volume(volume_id)
-            elif request.action == "archive":
+            elif body.action == "archive":
                 await volume_service.update_volume(volume_id, status="archived")
-            elif request.action == "activate":
+            elif body.action == "activate":
                 await volume_service.update_volume(volume_id, status="active")
 
             results["success"].append(volume_id)
@@ -1199,7 +1207,7 @@ async def bulk_volume_action(
             results["failed"].append({"volume_id": volume_id, "error": str(e)})
 
     return {
-        "message": f"Processed {len(request.volume_ids)} volumes",
-        "action": request.action,
+        "message": f"Processed {len(body.volume_ids)} volumes",
+        "action": body.action,
         "results": results
     }

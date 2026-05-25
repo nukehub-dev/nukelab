@@ -479,9 +479,10 @@ class RefreshRequest(BaseModel):
 
 
 @router.post("/refresh")
-async def refresh_token_endpoint(request: RefreshRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit("10/minute")
+async def refresh_token_endpoint(request: Request, body: RefreshRequest, db: AsyncSession = Depends(get_db)):
     """Exchange a refresh token for a new access token + new refresh token (rotation)."""
-    rt = await verify_refresh_token(request.refresh_token, db)
+    rt = await verify_refresh_token(body.refresh_token, db)
     if not rt:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired refresh token")
 

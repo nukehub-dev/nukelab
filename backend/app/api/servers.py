@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 
-from app.api.auth import get_current_user
+from app.api.auth import get_current_user, limiter
 from app.core.permissions import Permission
 from app.core.security import has_any_permission
 from app.dependencies import PermissionChecker, require_permissions
@@ -243,8 +243,10 @@ async def _get_server_volume_mounts(db: AsyncSession, server_id: str) -> list:
 
 
 @router.post("/", response_model=ServerResponse)
+@limiter.limit("10/minute")
 async def create_server(
-    request: ServerCreateRequest,
+    request: Request,
+    body: ServerCreateRequest,
     current_user: User = Depends(get_current_user),
     _ = Depends(require_permissions(Permission.SERVERS_WRITE_OWN)),
     db: AsyncSession = Depends(get_db)
@@ -260,7 +262,7 @@ async def create_server(
     
     # Validate plan exists and user can use it
     plan_service = PlanService(db)
-    plan = await plan_service.get_by_id(request.plan_id)
+    plan = await plan_service.get_by_id(body.plan_id)
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
     
@@ -276,7 +278,7 @@ async def create_server(
     
     # Validate environment exists
     env_service = EnvironmentService(db)
-    environment = await env_service.get_by_id(request.environment_id)
+    environment = await env_service.get_by_id(body.environment_id)
     if not environment:
         raise HTTPException(status_code=404, detail="Environment not found")
     
@@ -284,7 +286,7 @@ async def create_server(
     quota_service = QuotaService(db)
     quota_check = await quota_service.check_spawn_allowed(
         user_id=str(current_user.id),
-        plan_id=request.plan_id
+        plan_id=body.plan_id
     )
     
     if not quota_check["allowed"]:
@@ -308,7 +310,7 @@ async def create_server(
     # Check global resource pool
     from app.services.resource_pool_service import ResourcePoolService
     resource_pool = ResourcePoolService(db)
-    can_fit = await resource_pool.can_fit(request.plan_id)
+    can_fit = await resource_pool.can_fit(body.plan_id)
     
     if not can_fit:
         # Queue the server instead of rejecting
@@ -316,11 +318,11 @@ async def create_server(
         
         queue_entry = ServerQueue(
             user_id=current_user.id,
-            environment_id=uuid.UUID(request.environment_id),
-            plan_id=uuid.UUID(request.plan_id),
+            environment_id=uuid.UUID(body.environment_id),
+            plan_id=uuid.UUID(body.plan_id),
             status="pending",
             priority=plan.priority,
-            server_name=request.name,
+            server_name=body.name,
             requested_cpu=plan.cpu_limit,
             requested_memory=plan.memory_limit,
             requested_disk=plan.disk_limit,
@@ -349,8 +351,8 @@ async def create_server(
         # Build volume_mounts list from new or legacy format
         volume_mounts = []
         
-        if request.volume_mounts:
-            for idx, vm in enumerate(request.volume_mounts):
+        if body.volume_mounts:
+            for idx, vm in enumerate(body.volume_mounts):
                 mount_data = {
                     "volume_id": vm.volume_id,
                     "mount_path": vm.mount_path or "/data",
@@ -359,23 +361,23 @@ async def create_server(
                 }
                 # Auto-create volume for empty volume_id mounts
                 if not vm.volume_id:
-                    safe_name = re.sub(r'[^a-zA-Z0-9_.-]', '-', request.name).lower()
+                    safe_name = re.sub(r'[^a-zA-Z0-9_.-]', '-', body.name).lower()
                     suffix = "data" if idx == 0 else f"data-{idx}"
                     volume_name = f"nukelab-server-{current_user.username}-{safe_name}-{suffix}"
                     new_vol = await volume_service.create_volume(
                         name=volume_name,
-                        display_name=f"{request.name} {suffix.title()}",
+                        display_name=f"{body.name} {suffix.title()}",
                         owner_id=str(current_user.id),
                         max_size_bytes=vm.max_size_bytes or volume_service._parse_memory(plan.disk_limit),
                     )
                     mount_data["volume_id"] = str(new_vol.id)
                 volume_mounts.append(mount_data)
-        elif request.volume_id:
+        elif body.volume_id:
             # Legacy single-volume support
             volume_mounts.append({
-                "volume_id": request.volume_id,
+                "volume_id": body.volume_id,
                 "mount_path": f"/home/{current_user.username}",
-                "mode": request.volume_mode or "read_write",
+                "mode": body.volume_mode or "read_write",
             })
         
         # Auto-create primary volume if none provided
@@ -383,12 +385,12 @@ async def create_server(
         auto_created_volume_name = None
         if not volume_mounts:
             # Sanitize volume name to ensure Docker compatibility
-            safe_name = re.sub(r'[^a-zA-Z0-9_.-]', '-', request.name).lower()
+            safe_name = re.sub(r'[^a-zA-Z0-9_.-]', '-', body.name).lower()
             volume_name = f"nukelab-server-{current_user.username}-{safe_name}-data"
             auto_created_volume_name = volume_name
             auto_created_volume = await volume_service.create_volume(
                 name=volume_name,
-                display_name=f"{request.name} Data",
+                display_name=f"{body.name} Data",
                 owner_id=str(current_user.id),
                 max_size_bytes=volume_service._parse_memory(plan.disk_limit),
             )
@@ -443,9 +445,9 @@ async def create_server(
         server = await spawner.spawn(
             user_id=str(current_user.id),
             username=current_user.username,
-            server_name=request.name,
+            server_name=body.name,
             environment=environment.slug,
-            environment_id=request.environment_id,
+            environment_id=body.environment_id,
             image=environment.image,
             cpu=plan.cpu_limit,
             memory=plan.memory_limit,
@@ -454,7 +456,7 @@ async def create_server(
         )
         
         # Store plan reference
-        server.plan_id = uuid.UUID(request.plan_id)
+        server.plan_id = uuid.UUID(body.plan_id)
         server.last_activity = datetime.utcnow()
         
         # Set expiration based on max_runtime
@@ -490,7 +492,7 @@ async def create_server(
         # Increment quota usage
         await quota_service.increment_usage(
             user_id=str(current_user.id),
-            plan_id=request.plan_id
+            plan_id=body.plan_id
         )
         
         # Build volume_mounts response
@@ -566,7 +568,7 @@ async def create_server(
         try:
             from app.container.client import get_container_client
             container_client = await get_container_client()
-            container_name = f"nukelab-server-{current_user.username}-{request.name}"
+            container_name = f"nukelab-server-{current_user.username}-{body.name}"
             try:
                 container = await container_client.client.containers.get(container_name)
                 await container.delete(force=True)

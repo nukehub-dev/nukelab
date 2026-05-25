@@ -1,7 +1,7 @@
 # NukeLab Platform v2.0 — Architecture & Implementation Plan
 
-**Status**: Phase 4 Complete, Phase 5-7 In Progress
-**Last Updated**: May 2, 2026  
+**Status**: Phase 4 Complete, Phase 5 In Progress
+**Last Updated**: May 24, 2026  
 **Target Timeline**: 6+ months  
 **Tech Stack**: Vite + React 19 SPA, FastAPI, PostgreSQL 18, Redis, Traefik v3, Docker/Podman
 
@@ -19,6 +19,11 @@
 - **Notification Center** — In-app + email notifications with WebSocket delivery
 - **Usage Trends** — Per-user and platform-wide historical charts (7d/30d/90d)
 - **Permission Matrix Editor** — Full RBAC matrix UI
+- **Bulk Operations** — Server start/stop/restart/delete, workspace activate/deactivate/delete, volume activate/archive/delete
+- **Quick Spawn** — `Alt+N` opens deploy dialog pre-filled with saved user preferences
+- **Default Spawn Preferences** — Settings UI for default plan + environment
+- **Health Check Auto-Restart** — Rate-limited auto-restart for unhealthy containers
+- **Real Health Endpoint Values** — Dashboard system health aggregates actual Postgres/Redis/Docker checks
 
 ### Model Updates
 - **ServerPlan** — Added `max_runtime`, `idle_timeout`, `allow_scheduling`, `allow_snapshots`
@@ -26,8 +31,8 @@
 - **ServerQueue** — Added `requested_cpu`, `requested_memory`, `requested_disk`
 
 ### Tests
-- 57 tests passing
-- Test files: `test_system.py`, `test_plans.py`, `test_credits.py`, `test_environments.py`, `test_auth.py`
+- 367 tests passing (355 + 12 new bulk action tests)
+- Test files: `test_system.py`, `test_plans.py`, `test_credits.py`, `test_environments.py`, `test_auth.py`, `test_bulk.py`, `test_admin_workspaces.py`, `test_admin_volumes.py`
 
 ---
 
@@ -1092,6 +1097,38 @@ POST   /api/audit/export            # Export audit logs
 GET    /api/audit/stats             # Audit statistics
 ```
 
+#### Admin Workspaces
+
+```
+GET    /api/admin/workspaces              # List all workspaces
+GET    /api/admin/workspaces/{id}         # Get workspace details
+PUT    /api/admin/workspaces/{id}         # Update workspace
+DELETE /api/admin/workspaces/{id}         # Delete workspace
+POST   /api/admin/workspaces/bulk-action  # Bulk delete/activate/deactivate
+GET    /api/admin/workspaces/{id}/members  # List workspace members
+GET    /api/admin/workspaces/{id}/volumes  # List workspace volumes
+```
+
+#### Admin Volumes
+
+```
+GET    /api/admin/volumes              # List all volumes
+GET    /api/admin/volumes/{id}         # Get volume details
+PUT    /api/admin/volumes/{id}         # Update volume
+DELETE /api/admin/volumes/{id}         # Delete volume
+POST   /api/admin/volumes/bulk-action  # Bulk delete/activate/archive
+```
+
+#### Bulk Operations
+
+```
+POST   /api/bulk/servers/bulk-action      # Bulk start/stop/restart/delete servers (JWT only)
+POST   /api/admin/workspaces/bulk-action  # Bulk delete/activate/deactivate workspaces (JWT only)
+POST   /api/admin/volumes/bulk-action     # Bulk delete/activate/archive volumes (JWT only)
+POST   /api/admin/users/bulk-action       # Bulk disable/enable/delete users (JWT only)
+POST   /api/admin/servers/bulk-action     # Bulk start/stop/delete servers (admin, JWT only)
+```
+
 #### System
 
 ```
@@ -1268,7 +1305,7 @@ Then the container stops gracefully
   - [x] Read user list with filters (role, status, search)
   - [x] Update user (profile, role, quotas)
   - [x] Delete/disable user
-  - [ ] Bulk operations (Phase 5)
+  - [x] Bulk operations (servers, workspaces, volumes)
 
 - [x] **User Profile**
   - [x] View own profile
@@ -1282,25 +1319,25 @@ Then the container stops gracefully
   - [x] Settings page UI
   - [x] Default environment/plan selection
   - [x] Theme/language/timezone settings
-  - [ ] Notification preferences (Phase 5)
-  - [ ] Quick spawn with saved defaults (Phase 5)
+  - [x] Notification preferences
+  - [x] Quick spawn with saved defaults (`Alt+N`)
 
 - [x] **NUKE Currency System**
   - [x] NUKE balance model and ledger
   - [x] Daily allowance system (automated reset)
-  - [ ] NUKE consumption on server usage (Phase 5)
+  - [x] NUKE consumption on server usage (auto-billing via Celery)
   - [x] NUKE grant/deduct (admin)
-  - [ ] Low NUKE alerts and auto-stop (Phase 5)
+  - [x] Low NUKE alerts and auto-stop on credit depletion
   - [x] NUKE transaction history
 
 - [x] **Admin Dashboard**
   - [x] User management table
   - [x] Role assignment UI
   - [x] Permission matrix editor
-  - [ ] User activity timeline (Phase 5)
+  - [x] User activity timeline (`/activity` route with filters)
   - [x] Credit management (grant/deduct/view)
   - [x] Server management table
-  - [ ] Bulk actions (start all, stop all, delete all) (Phase 5)
+  - [x] Bulk actions (start/stop/restart/delete servers, activate/deactivate/delete workspaces, activate/archive/delete volumes)
 
 - [x] **Server Lifecycle**
   - [x] Start/stop/restart/delete servers (API ready, UI basic)
@@ -1355,8 +1392,8 @@ Then I get an error: "Insufficient NUKE"
   - [x] Plan builder UI (admin)
   - [x] Plan selection in spawn form
   - [x] Plan restrictions enforcement (role, approval)
-  - [ ] Custom plans per user (admin override) (Phase 5)
-  - [ ] Plan usage tracking (Phase 5)
+  - [x] Custom plans per user (admin override via UserPlanAccess)
+  - [x] Plan usage tracking (analytics dashboard)
 
 - [x] **Resource Quotas**
   - [x] Quota model (per-user)
@@ -1366,12 +1403,12 @@ Then I get an error: "Insufficient NUKE"
 
 - [x] **Resource Limits**
   - [x] Docker container limits (CPU, memory) from plan
-  - [ ] Disk quota enforcement (Phase 5)
-  - [ ] GPU allocation (if available) (Phase 5)
-  - [ ] Limit overrides for admins (Phase 5)
+  - [x] Disk quota enforcement (spawn-time, partial: standalone volume creation gap)
+  - [ ] GPU allocation (if available) (future)
+  - [x] Limit overrides for admins (via custom plans)
 
 - [x] **Hardware Resource Scheduling**
-  - [ ] Global resource pool tracking (Phase 5)
+  - [x] Global resource pool tracking (ResourcePoolService)
   - [x] Resource availability check before spawn
   - [x] Queue system when resources unavailable
   - [x] Priority-based scheduling (plan priority)
@@ -1381,14 +1418,14 @@ Then I get an error: "Insufficient NUKE"
 - [x] **Volume Management**
   - [x] Persistent user volumes
   - [x] Shared workspace volumes
-  - [ ] Volume backup/restore (Phase 5)
-  - [ ] Volume quota enforcement (Phase 5)
+  - [x] Volume backup/restore (BackupService with retention)
+  - [x] Volume quota enforcement (mounted volumes, gap: standalone creation)
 
 - [ ] **Environment Images**
-  - [ ] Build system for environment images (Phase 5)
-  - [ ] Image registry integration (Phase 5)
-  - [ ] Image versioning (Phase 5)
-  - [ ] Base image updates (Phase 5)
+  - [ ] Build system for environment images (future)
+  - [ ] Image registry integration (future)
+  - [ ] Image versioning (future)
+  - [ ] Base image updates (future)
 
 #### Deliverables
 
@@ -1454,7 +1491,7 @@ Then I get an error: "Plan limit reached for small"
 
 - [x] **Health Checks**
   - [x] Container health checks
-  - [ ] Auto-restart on failure *[Future]*
+  - [x] Auto-restart on failure (rate-limited)
   - [x] Unhealthy server notifications
   - [x] System health dashboard (Postgres, Redis, Docker)
 
@@ -1478,76 +1515,91 @@ Then I see CPU and memory usage updating every second
 ### Phase 5: Advanced Platform Features (Weeks 13-16)
 
 **Goal**: Industrial-grade features for production use
+**Status**: ~90% Complete — Core features implemented; remaining work is bug fixes, test coverage, and hardening
 
-#### Tasks
+---
 
-- [x] **Audit Logging**
-  - [x] Audit middleware (auto-log all state-changing requests)
-  - [x] Audit log viewer with filters
-  - [x] Audit log export (CSV, JSON)
-  - [ ] Tamper-evident storage (Phase 7)
+#### Completed ✅
 
-- [x] **Server Scheduling**
-  - [x] Cron-based server scheduling
-  - [x] Recurring schedules (daily, weekly)
-  - [x] Schedule management UI
-  - [x] Timezone support
+The following features are fully implemented and in active use:
 
-- [ ] **API Keys**
-  - [x] Scoped API key generation
-  - [x] API key management UI
-  - [x] API key usage tracking
-  - [x] Revocation and expiration
+- **[x] Audit Logging** — Middleware auto-logs all state-changing requests; viewer with filters at `/admin/audit-logs`; CSV/JSON export
+- **[x] Server Scheduling** — Cron-based schedules with visual builder UI; timezone support; Celery task for execution
+- **[x] API Keys** — Scoped token generation (24 scopes); management UI; usage tracking; revocation/expiration
+- **[x] Shared Workspaces** — Workspace CRUD; member/invitation management; volume associations; grid/list UI
+- **[x] Notifications** — 20+ notification types; email + in-app + webhook delivery; WebSocket real-time; preferences UI
+- **[x] Maintenance Mode** — Toggle with graceful draining; dedicated `/maintenance` page; admin settings panel
+- **[x] Rate Limiting (API)** — slowapi on auth and token endpoints
+- **[x] Backup & Restore** — Database backup (`./manage.sh backup`); volume backup service with retention policy
+- **[x] Health Checks** — Container health monitoring; auto-restart with rate limiting; system health dashboard
+- **[x] Bulk Operations** — Server start/stop/restart/delete; workspace activate/deactivate/delete; volume activate/archive/delete
+- **[x] Quick Spawn** — `Alt+N` opens deploy dialog pre-filled with saved user preferences
+- **[x] User Activity Timeline** — `/activity` route with paginated table, filters, and detail drawer
+- **[x] NUKE Consumption** — Auto-billing via Celery; low-balance alerts; auto-stop on depletion
+- **[x] Custom Plans Per User** — `UserPlanAccess` model; admin grant/revoke endpoints
+- **[x] Resource Pool Tracking** — Global CPU/RAM/disk tracking; queue position logic
 
-- [x] **Shared Workspaces**
-  - [x] Shared volume creation
-  - [x] Permission management (read-only, read-write)
-  - [x] Shared workspace UI
-  - [ ] Collaboration features (Phase 7)
+---
 
-- [x] **Notifications**
-  - [x] Webhook configuration
-  - [x] Email templates
-  - [x] In-app notification center
+#### Remaining Work 🚧
 
-- [x] **Maintenance Mode**
-  - [x] Graceful user draining (returns 503 for non-admins)
-  - [ ] Maintenance page (UI banner exists, standalone page pending)
-  - [ ] Scheduled maintenance windows (Phase 7)
-  - [x] User notifications
+| Priority | Task | Notes |
+|----------|------|-------|
+| **High** | **Fix schedule API bug** | `backend/app/api/schedules.py` lines 87-90, 127-130: `request.action` should be `body.action` (NameError at runtime) |
+| **High** | **Broaden rate limiting** | Currently only token endpoints. Add to auth login, server spawn, user registration, bulk actions |
+| **High** | **Volume quota gap** | Standalone volume creation (`POST /api/volumes/`) does not check global `ResourceQuota` disk limit |
+| **Medium** | **Bulk action test coverage** | `test_bulk.py` only validates action names. Need mocked spawner tests for start/stop/restart/delete |
+| **Medium** | **Frontend health monitoring UI** | No dedicated page for viewing container health status, consecutive failures, or auto-restart history |
+| **Medium** | **Traefik rate limiting** | Infra-level rate limiting middleware in `infrastructure/traefik/` |
+| **Low** | **IP allowlist/blocklist** | Admin-configurable IP restrictions for sensitive endpoints |
+| **Low** | **Security headers** | HSTS, CSP, X-Frame-Options in Traefik or FastAPI middleware |
+| **Low** | **Scheduled maintenance windows** | Pre-planned maintenance with advance user notification |
 
-- [x] **Rate Limiting & Security**
-  - [ ] Traefik rate limiting middleware (Phase 7)
-  - [x] API rate limiting (slowapi)
-  - [ ] DDoS protection (Phase 7)
-  - [ ] IP allowlist/blocklist (Phase 7)
+---
 
-- [x] **Backup & Restore**
-  - [x] Database backup (`./manage.sh backup`)
-  - [ ] Automated volume backups (Phase 7)
-  - [ ] Backup scheduling (Phase 7)
-  - [ ] Point-in-time restore (Phase 7)
-  - [ ] Cross-region backup (future)
+#### Known Bugs / Tech Debt 🔧
+
+| Issue | Location | Impact |
+|-------|----------|--------|
+| Schedule create/update crashes | `backend/app/api/schedules.py:87,127` | Cannot create/update schedules via API |
+| Rate limiting only on tokens | `backend/app/api/tokens.py` | Other endpoints unprotected from brute force |
+| Volume quota bypass | `backend/app/services/volume_service.py` | Users can exceed disk quota via standalone volume creation |
+| `test_bulk.py` thin coverage | `backend/tests/test_bulk.py` | No mocked spawner execution tests |
+
+---
 
 #### Deliverables
 
-- [ ] Complete audit trail for all actions
-  - [ ] Server scheduling system
-  - [ ] API key management
-  - [ ] Shared workspaces
-  - [ ] Advanced notifications
+- [x] Complete audit trail for all actions (viewer + export)
+- [x] Server scheduling system (cron + UI + execution)
+- [x] API key management (scoped tokens + UI)
+- [x] Shared workspaces (members + volumes + UI)
+- [x] Advanced notifications (20+ types + multi-channel)
+- [ ] Schedule API bug fixed and tested
+- [ ] Rate limiting covers all auth-sensitive and resource-intensive endpoints
+- [ ] Volume quota enforced on all creation paths
+- [ ] Bulk action tests with mocked spawner execution
+
+---
 
 #### Success Criteria
 
 ```gherkin
 Given I am an admin
-When I delete a user
-Then the action is logged in the audit trail
-And I can see the before/after state
+When I create a cron schedule for a server
+Then the schedule is saved and the API returns 200
 
-Given I schedule a server to start at 9 AM daily
-When 9 AM arrives
-Then the server starts automatically
+Given a schedule is due
+When the Celery worker evaluates schedules
+Then the server action executes automatically
+
+Given a user with a full disk quota
+When they try to create a standalone volume
+Then the request is rejected with 422
+
+Given a running server
+When I bulk-select it and click "Stop"
+Then the server stops and the bulk API returns success
 ```
 
 ---
@@ -2155,7 +2207,11 @@ DEFAULT_MAX_SERVERS=3
 | 2026-04-27 | Queue-based scheduling | Handle resource scarcity gracefully | Approved |
 | 2026-04-27 | Daily NUKE allowance with no rollover | Prevent hoarding, encourage fair use | Approved |
 | 2026-04-27 | User Preferences/Defaults | Save default environment/plan/settings per user | Approved |
+| 2026-05-15 | JWT-only for bulk/sensitive admin ops | API tokens scoped for automation; bulk actions are high-impact and require session auth | Approved |
+| 2026-05-15 | `Alt+N` over `Ctrl+N` for quick spawn | Avoids Firefox "New Window" conflict and other OS shortcut collisions | Approved |
+| 2026-05-20 | Extracted spawner helpers for bulk ops | Reuse existing start/stop/restart/delete logic instead of duplicating container orchestration code | Approved |
+| 2026-05-24 | DataTable row selection for bulk actions | Consistent UX pattern across servers, workspaces, and volumes tables | Approved |
 
 ---
 
-**Next Steps**: Begin Phase 1 implementation upon approval.
+**Next Steps**: Continue Phase 5 implementation — remaining items: fix schedule API bug (`request` → `body`), broaden rate limiting to all auth-sensitive endpoints, close volume quota gap on standalone creation, add mocked spawner tests for bulk actions, add frontend health monitoring UI.

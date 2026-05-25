@@ -18,6 +18,7 @@ from app.core.permissions import Permission
 from app.dependencies import PermissionChecker
 from app.db.session import get_db
 from app.models.user import User
+from app.services.quota_service import QuotaService
 from app.models.volume import Volume
 from app.services.volume_service import VolumeService
 from app.services.volume_access_service import VolumeAccessService
@@ -63,6 +64,15 @@ async def create_volume(
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new volume."""
+    # Check disk quota before creating
+    quota_service = QuotaService(db)
+    quota_check = await quota_service.check_volume_creation_allowed(
+        user_id=str(current_user.id),
+        requested_size_bytes=request.max_size_bytes
+    )
+    if not quota_check["allowed"]:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=quota_check["reason"])
+    
     volume_service = VolumeService(db)
     
     # Generate unique volume name

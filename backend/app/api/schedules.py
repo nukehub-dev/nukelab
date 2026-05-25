@@ -84,10 +84,10 @@ async def create_schedule(
         schedule = await service.create_schedule(
             server_id=server_id,
             user_id=str(current_user.id),
-            action=request.action,
-            cron_expression=request.cron_expression,
-            timezone=request.timezone,
-            is_active=request.is_active
+            action=body.action,
+            cron_expression=body.cron_expression,
+            timezone=body.timezone,
+            is_active=body.is_active
         )
         return schedule.to_dict()
     except ValueError:
@@ -124,10 +124,10 @@ async def update_schedule(
         schedule = await service.update_schedule(
             schedule_id=schedule_id,
             user_id=str(current_user.id),
-            action=request.action,
-            cron_expression=request.cron_expression,
-            timezone=request.timezone,
-            is_active=request.is_active
+            action=body.action,
+            cron_expression=body.cron_expression,
+            timezone=body.timezone,
+            is_active=body.is_active
         )
         return schedule.to_dict()
     except ValueError:

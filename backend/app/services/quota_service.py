@@ -12,6 +12,7 @@ from fastapi import HTTPException, status
 from app.models.resource_quota import ResourceQuota
 from app.models.server import Server
 from app.models.server_plan import ServerPlan
+from app.models.volume import Volume
 
 
 class QuotaService:
@@ -143,7 +144,7 @@ class QuotaService:
         return quota
     
     async def recalculate_usage(self, user_id: str, exclude_server_id: Optional[str] = None) -> ResourceQuota:
-        """Recalculate current usage from active servers"""
+        """Recalculate current usage from active servers and volumes"""
         
         quota = await self.get_or_create_user_quota(user_id)
         
@@ -160,10 +161,17 @@ class QuotaService:
         )
         servers = result.scalars().all()
         
+        # Get all volumes for user (count max_size_bytes towards disk quota)
+        result = await self.db.execute(
+            select(Volume).where(Volume.owner_id == uuid.UUID(user_id))
+        )
+        volumes = result.scalars().all()
+        
         # Calculate totals
         total_cpu = sum(s.allocated_cpu for s in servers)
         total_memory_mb = sum(self._parse_memory(s.allocated_memory) for s in servers)
         total_disk_mb = sum(self._parse_memory(s.allocated_disk) for s in servers)
+        total_disk_mb += sum((v.max_size_bytes or 0) // (1024 * 1024) for v in volumes)
         total_gpu = sum(s.allocated_gpu for s in servers)
         total_servers = len(servers)
         
@@ -297,6 +305,32 @@ class QuotaService:
             "allowed": True,
             "reason": None,
             "estimated_cost_per_hour": plan.cost_per_hour
+        }
+    
+    async def check_volume_creation_allowed(
+        self,
+        user_id: str,
+        requested_size_bytes: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """Check if user can create a volume with given size"""
+        
+        quota = await self.recalculate_usage(user_id)
+        
+        max_disk_mb = self._parse_memory(quota.max_disk_total)
+        
+        # If no size specified, assume a reasonable default (1GB)
+        requested_mb = (requested_size_bytes or 1024 * 1024 * 1024) // (1024 * 1024)
+        
+        if quota.usage_disk_mb + requested_mb > max_disk_mb:
+            available_mb = max(0, max_disk_mb - quota.usage_disk_mb)
+            return {
+                "allowed": False,
+                "reason": f"Disk quota exceeded. Volume needs {self._format_memory(requested_mb)}, but you only have {self._format_memory(available_mb)} available (limit: {self._format_memory(max_disk_mb)}, currently using: {self._format_memory(quota.usage_disk_mb)})."
+            }
+        
+        return {
+            "allowed": True,
+            "reason": None
         }
     
     async def increment_usage(self, user_id: str, plan_id: str) -> ResourceQuota:

@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from app.api.auth import get_current_user, require_jwt_auth
+from app.api.auth import get_current_user, require_jwt_auth, limiter
 from app.api.servers import (
     _perform_server_start,
     _perform_server_stop,
@@ -43,9 +43,10 @@ class BulkActionResponse(BaseModel):
 
 
 @router.post("/servers/bulk-action", response_model=BulkActionResponse)
+@limiter.limit("20/minute")
 async def bulk_server_action(
-    request: BulkServerActionRequest,
-    http_request: Request,
+    body: BulkServerActionRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
@@ -54,7 +55,7 @@ async def bulk_server_action(
 
     # Validate action
     valid_actions = ["start", "stop", "restart", "delete"]
-    if request.action not in valid_actions:
+    if body.action not in valid_actions:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid action. Must be one of: {', '.join(valid_actions)}"
@@ -67,7 +68,7 @@ async def bulk_server_action(
         "restart": Permission.SERVERS_WRITE_OWN,
         "delete": Permission.SERVERS_WRITE_OWN,
     }
-    if not has_permission(current_user, base_permissions[request.action]):
+    if not has_permission(current_user, base_permissions[body.action]):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Permission denied"
@@ -76,7 +77,7 @@ async def bulk_server_action(
     succeeded = []
     failed = []
 
-    for server_id in request.server_ids:
+    for server_id in body.server_ids:
         try:
             # Get server
             result = await db.execute(
@@ -92,7 +93,7 @@ async def bulk_server_action(
             is_cross_user = str(server.user_id) != str(current_user.id)
             if is_cross_user:
                 # Cross-user access requires JWT authentication — API tokens are not allowed
-                auth_context = getattr(http_request.state, "auth_context", None)
+                auth_context = getattr(request.state, "auth_context", None)
                 if not auth_context or auth_context.auth_method != "jwt":
                     failed.append({
                         "server_id": server_id,
@@ -105,25 +106,25 @@ async def bulk_server_action(
                     continue
 
                 # Require reason for cross-user access
-                if not request.reason or not request.reason.strip():
+                if not body.reason or not body.reason.strip():
                     failed.append({"server_id": server_id, "error": "A reason is required for cross-user server access"})
                     continue
 
                 # Audit cross-user bulk action
                 activity_service = ActivityService(db)
                 await activity_service.log(
-                    action=f"server.bulk_{request.action}",
+                    action=f"server.bulk_{body.action}",
                     target_type="server",
                     target_id=str(server.id),
                     actor_id=str(current_user.id),
-                    details={"reason": request.reason, "server_name": server.name},
+                    details={"reason": body.reason, "server_name": server.name},
                 )
 
                 notif_service = NotificationService(db)
                 await notif_service.create(
                     user_id=server.user_id,
                     title="Server Accessed",
-                    message=f"{current_user.username or 'An admin'} performed {request.action} on your server '{server.name}' with reason: {request.reason}",
+                    message=f"{current_user.username or 'An admin'} performed {body.action} on your server '{server.name}' with reason: {body.reason}",
                     type="server",
                     severity="warning",
                     action_url=f"/servers/{server.id}",
@@ -131,22 +132,22 @@ async def bulk_server_action(
                 )
 
             # Perform action using shared helpers
-            if request.action == "start":
+            if body.action == "start":
                 if server.status == "running":
                     failed.append({"server_id": server_id, "error": "Server already running"})
                     continue
                 await _perform_server_start(server, db, current_user, server_id)
 
-            elif request.action == "stop":
+            elif body.action == "stop":
                 if server.status == "stopped":
                     failed.append({"server_id": server_id, "error": "Server already stopped"})
                     continue
                 await _perform_server_stop(server, db, server_id)
 
-            elif request.action == "restart":
+            elif body.action == "restart":
                 await _perform_server_restart(server, db, current_user, server_id)
 
-            elif request.action == "delete":
+            elif body.action == "delete":
                 await _perform_server_delete(server, db, server_id)
 
             succeeded.append(server_id)
@@ -159,7 +160,7 @@ async def bulk_server_action(
     return {
         "succeeded": succeeded,
         "failed": failed,
-        "total": len(request.server_ids),
+        "total": len(body.server_ids),
         "success_count": len(succeeded),
         "failure_count": len(failed)
     }
