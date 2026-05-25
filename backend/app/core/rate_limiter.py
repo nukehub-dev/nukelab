@@ -24,18 +24,9 @@ from fastapi import Request, HTTPException, status
 from jose import jwt, JWTError, ExpiredSignatureError
 
 from app.config import settings
+from app.core.roles import get_role_rate_limit
 
 logger = logging.getLogger(__name__)
-
-# Role → RPM mapping
-ROLE_RATE_LIMITS = {
-    "guest": settings.rate_limit_guest_rpm,
-    "user": settings.rate_limit_user_rpm,
-    "support": settings.rate_limit_support_rpm,
-    "moderator": settings.rate_limit_moderator_rpm,
-    "admin": settings.rate_limit_admin_rpm,
-    "super_admin": settings.rate_limit_super_admin_rpm,
-}
 
 _LUA_INCR_EXPIRE = """
 local key = KEYS[1]
@@ -70,13 +61,11 @@ class RateLimitExceeded(HTTPException):
 
 
 def _get_redis_client():
-    """Lazy-import redis to avoid startup dependency issues."""
     import redis.asyncio as redis
     return redis.from_url(settings.redis_url)
 
 
 def _extract_jwt_sub(token: str) -> Optional[str]:
-    """Decode and verify JWT, return sub claim. Returns None for expired/invalid tokens."""
     try:
         payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
         return payload.get("sub")
@@ -87,19 +76,10 @@ def _extract_jwt_sub(token: str) -> Optional[str]:
 
 
 def _hash_token(token: str) -> str:
-    """Hash a raw token for stable rate-limit keying."""
     return hashlib.sha256(token.encode()).hexdigest()[:16]
 
 
 def _get_user_key_and_role(request: Request) -> tuple[str, Optional[str]]:
-    """
-    Extract (rate_limit_key, role) from the request.
-
-    Priority:
-      1. Valid JWT → username + role from payload
-      2. API token → token hash (each key gets its own budget)
-      3. Unauthenticated → IP-based fallback
-    """
     auth_header = request.headers.get("Authorization", "")
     token = ""
     if auth_header.startswith("Bearer ") or auth_header.startswith("Token "):
@@ -108,7 +88,6 @@ def _get_user_key_and_role(request: Request) -> tuple[str, Optional[str]]:
         token = request.cookies.get("nukelab_token", "")
 
     if token:
-        # Try JWT
         sub = _extract_jwt_sub(token)
         if sub:
             try:
@@ -117,21 +96,12 @@ def _get_user_key_and_role(request: Request) -> tuple[str, Optional[str]]:
                 return (sub, role)
             except JWTError:
                 pass
-        # API token fallback
         return (f"tkn:{_hash_token(token)}", "user")
 
-    # Unauthenticated fallback
     client_ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
     if client_ip and "," in client_ip:
         client_ip = client_ip.split(",")[0].strip()
     return (f"ip:{client_ip}", "unauthenticated")
-
-
-def _get_limit_for_role(role: Optional[str]) -> int:
-    """Get RPM limit for a role. Unknown roles default to 'user' tier."""
-    if not role:
-        return ROLE_RATE_LIMITS["user"]
-    return ROLE_RATE_LIMITS.get(role.lower(), ROLE_RATE_LIMITS["user"])
 
 
 async def _check_limit(
@@ -140,21 +110,15 @@ async def _check_limit(
     custom_key_suffix: str = "",
     limit_override: Optional[int] = None,
 ) -> tuple[int, int]:
-    """
-    Check rate limit. Returns (limit, remaining). Raises RateLimitExceeded if over.
-    """
     if not settings.rate_limit_enabled:
         return 0, 0
 
     user_key, role = _get_user_key_and_role(request)
 
-    if role == "super_admin" and multiplier >= 1.0 and not limit_override:
-        return 0, 0
-
     if limit_override is not None:
         limit = limit_override
     else:
-        limit = int(_get_limit_for_role(role) * multiplier)
+        limit = int(get_role_rate_limit(role) * multiplier)
 
     window = settings.rate_limit_window_seconds
     bucket = int(time.time()) // window
@@ -180,25 +144,19 @@ async def _check_limit(
         return 0, 0
 
 
-# ─── FastAPI Dependencies ───
-
 async def rate_limit_general(request: Request) -> None:
-    """Standard tier rate limit (1.0×). Use as Depends()."""
     await _check_limit(request, multiplier=1.0)
 
 
 async def rate_limit_strict(request: Request) -> None:
-    """Strict rate limit (0.5× of tier). For mutations, admin ops, bulk actions."""
     await _check_limit(request, multiplier=settings.rate_limit_strict_multiplier)
 
 
 async def rate_limit_auth(request: Request) -> None:
-    """Auth endpoint rate limit (separate key suffix to isolate from general)."""
     await _check_limit(request, multiplier=1.0, custom_key_suffix="auth")
 
 
 async def rate_limit_websocket(request: Request) -> None:
-    """WebSocket connection rate limit."""
     await _check_limit(
         request,
         multiplier=1.0,

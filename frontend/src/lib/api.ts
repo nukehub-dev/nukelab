@@ -2,14 +2,28 @@ import { QueryClient } from '@tanstack/react-query';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
+export class ApiError extends Error {
+  status: number;
+  retryAfter?: number;
+
+  constructor(message: string, status: number, retryAfter?: number) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.retryAfter = retryAfter;
+  }
+}
+
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 1000 * 30,
       retry: (failureCount, error) => {
-        // Don't retry on 401 unauthorized
-        if (error instanceof Error && error.message.includes('401')) {
-          return false;
+        // Don't retry on 401 unauthorized or 429 rate limited
+        if (error instanceof ApiError) {
+          if (error.status === 401 || error.status === 429) {
+            return false;
+          }
         }
         return failureCount < 2;
       },
@@ -122,13 +136,18 @@ async function apiFetch<T>(
   if (!response.ok) {
     // Try to get detailed error message from response body
     let detail = response.statusText;
+    let retryAfter: number | undefined;
     try {
       const body = await response.json();
       detail = body.detail || body.message || response.statusText;
+      if (response.status === 429 && body.retry_after) {
+        retryAfter = body.retry_after;
+        detail = `${detail} Retry in ${body.retry_after}s.`;
+      }
     } catch {
       // ignore JSON parse errors
     }
-    throw new Error(`${detail}`);
+    throw new ApiError(detail, response.status, retryAfter);
   }
 
   return parseJson<T>(response);
@@ -185,13 +204,18 @@ export const api = {
 
     if (!response.ok) {
       let detail = response.statusText;
+      let retryAfter: number | undefined;
       try {
         const body = await response.json();
         detail = body.detail || body.message || response.statusText;
+        if (response.status === 429 && body.retry_after) {
+          retryAfter = body.retry_after;
+          detail = `${detail} Retry in ${body.retry_after}s.`;
+        }
       } catch {
         // ignore
       }
-      throw new Error(`${detail}`);
+      throw new ApiError(detail, response.status, retryAfter);
     }
 
     const blob = await response.blob();

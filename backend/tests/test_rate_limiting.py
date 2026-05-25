@@ -11,7 +11,8 @@ from unittest.mock import AsyncMock, patch, MagicMock
 from fastapi import WebSocket
 
 from app.config import settings
-from app.middleware.rate_limit import RateLimitMiddleware, ROLE_LIMITS
+from app.middleware.rate_limit import RateLimitMiddleware
+from app.core.roles import ROLE_RATE_LIMITS as ROLE_LIMITS
 from app.websocket.metrics_socket import _check_ws_message_rate_limit
 
 
@@ -139,14 +140,14 @@ class TestRateLimitMiddleware:
             assert response.status_code in (200, 404)  # 404 if no servers exist
 
     @pytest.mark.asyncio
-    async def test_super_admin_bypass(self, client, superadmin_token, mock_redis):
-        """Super admins should bypass rate limiting entirely."""
+    async def test_super_admin_tier(self, client, superadmin_token, mock_redis):
+        """Super admins use the highest tier (3000/min) but are still rate-limited."""
         settings.rate_limit_enabled = True
 
         with patch.object(
             RateLimitMiddleware, '_get_redis', return_value=mock_redis
         ):
-            # Fire many requests — super admin should never be limited
+            # Fire requests — super admin gets high limit but still has headers
             for _ in range(50):
                 response = await client.get(
                     "/api/servers/",
@@ -154,7 +155,7 @@ class TestRateLimitMiddleware:
                 )
 
             assert response.status_code in (200, 404)
-            assert response.headers.get("X-RateLimit-Limit") is None
+            assert response.headers.get("X-RateLimit-Limit") == "3000"
 
     @pytest.mark.asyncio
     async def test_expired_jwt_does_not_exhaust_quota(self, client, test_user, mock_redis):
@@ -293,8 +294,8 @@ class TestWebSocketRateLimiting:
         assert limit == user_limit
 
     @pytest.mark.asyncio
-    async def test_ws_super_admin_bypass(self, mock_redis):
-        """Super admins should bypass WS message rate limits."""
+    async def test_ws_super_admin_tier(self, mock_redis):
+        """Super admins use the highest WS tier (3000/min)."""
         settings.rate_limit_enabled = True
 
         for _ in range(200):
@@ -302,6 +303,7 @@ class TestWebSocketRateLimiting:
                 mock_redis, "superadmin", "super_admin"
             )
             assert not is_limited
+            assert limit == 3000
 
     @pytest.mark.asyncio
     async def test_ws_redis_fail_open(self):

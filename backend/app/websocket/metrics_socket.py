@@ -13,7 +13,7 @@ from app.db.session import AsyncSessionLocal
 from app.models.user import User
 from app.models.server import Server
 from app.core.permissions import Permission
-from app.core.roles import get_role_permissions
+from app.core.roles import get_role_permissions, get_role_rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -558,9 +558,6 @@ async def _check_ws_message_rate_limit(
     Returns: (is_limited, limit, remaining)
     """
     if not settings.rate_limit_enabled:
-        return False, 0, 0
-
-    if role == "super_admin":
         return False, 0, 0
 
     limit = _WS_MSG_LIMITS.get(role.lower(), _WS_MSG_LIMITS["user"])

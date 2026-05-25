@@ -20,7 +20,7 @@ from app.core.permissions import Permission
 # Role to permissions mapping
 ROLE_PERMISSIONS = {
     "super_admin": [Permission.ALL],
-    
+
     "admin": [
         # User management (full)
         Permission.USERS_READ,
@@ -145,6 +145,19 @@ ROLE_PERMISSIONS = {
 }
 
 
+# Rate limits per role (requests per minute, general API)
+# Admin/mutation endpoints use strict_multiplier (0.5x)
+# WebSocket uses rate_limit_websocket_cpm override
+ROLE_RATE_LIMITS = {
+    "guest":        30,
+    "user":         120,
+    "support":      300,
+    "moderator":    300,
+    "admin":        600,
+    "super_admin":  3000,
+}
+
+
 # Valid roles ordered by privilege level
 VALID_ROLES = list(ROLE_PERMISSIONS.keys())
 
@@ -178,6 +191,11 @@ def get_role_level(role: str) -> int:
 def has_higher_or_equal_role(user_role: str, required_role: str) -> bool:
     """Check if user_role has equal or higher privileges than required_role"""
     return get_role_level(user_role) >= get_role_level(required_role)
+
+
+def get_role_rate_limit(role: str) -> int:
+    """Get the general API rate limit (RPM) for a role. Defaults to 'user' tier."""
+    return ROLE_RATE_LIMITS.get(role, ROLE_RATE_LIMITS["user"])
 
 
 # Deep copy of default permissions for fallback when DB has no overrides

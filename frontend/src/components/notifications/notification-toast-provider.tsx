@@ -68,6 +68,11 @@ export function useNotificationToasts() {
         return;
       }
 
+      if (message.event === 'rate_limited') {
+        warning('Rate Limited', message.message || 'Too many messages. Please slow down.');
+        return;
+      }
+
       if (message.event !== 'notification:new') return;
 
       const notification = message.data as Notification;
