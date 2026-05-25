@@ -26,6 +26,7 @@ import { NukeLabLogo } from '../logo';
 import { useSidebarStore } from '../../stores/sidebar-store';
 import { useThemeStore } from '../../stores/theme-store';
 import { useAuthStore, PERMISSIONS } from '../../stores/auth-store';
+import { logout } from '../../hooks/use-auth';
 import { cn } from '../../lib/utils';
 import { Tooltip } from '../ui/tooltip';
 import { NotificationCenter } from '../notifications/notification-center';
@@ -106,23 +107,8 @@ export function Sidebar() {
   const user = useAuthStore((state) => state.user);
   const isAuto = mode === 'auto';
 
-  const handleLogout = async () => {
-    const refreshToken = localStorage.getItem('nukelab-refresh');
-    if (refreshToken) {
-      try {
-        await fetch(`${window.location.origin}/api/auth/logout`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refresh_token: refreshToken }),
-        });
-      } catch {
-        // Ignore errors — always clear local state
-      }
-    }
-    localStorage.removeItem('nukelab-token');
-    localStorage.removeItem('nukelab-refresh');
-    document.cookie = 'nukelab_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-    window.location.href = '/login';
+  const handleLogout = () => {
+    logout();
   };
 
   const displayName = user?.first_name && user?.last_name

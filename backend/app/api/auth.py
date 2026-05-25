@@ -1,3 +1,5 @@
+import asyncio
+import hashlib
 import logging
 import secrets
 import uuid
@@ -92,20 +94,53 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     return jwt.encode(to_encode, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
+# Hard cap on active refresh tokens per user to prevent unbounded growth
+# at scale (100M users × unbounded tokens = storage disaster).
+MAX_REFRESH_TOKENS_PER_USER = 10
+
+
+async def _enforce_refresh_token_limit(user_id: uuid.UUID, db: AsyncSession) -> None:
+    """Revoke oldest tokens if user exceeds MAX_REFRESH_TOKENS_PER_USER."""
+    result = await db.execute(
+        select(RefreshToken)
+        .where(
+            RefreshToken.user_id == user_id,
+            RefreshToken.revoked_at == None,
+        )
+        .order_by(RefreshToken.created_at.asc())
+    )
+    tokens = result.scalars().all()
+    if len(tokens) >= MAX_REFRESH_TOKENS_PER_USER:
+        # Revoke oldest tokens to make room
+        to_revoke = tokens[: len(tokens) - MAX_REFRESH_TOKENS_PER_USER + 1]
+        for rt in to_revoke:
+            rt.revoked_at = datetime.utcnow()
+
+
 async def create_refresh_token_for_user(
     user_id: str,
     db: AsyncSession,
     user_agent: Optional[str] = None,
     ip_address: Optional[str] = None,
 ) -> str:
-    """Create a new refresh token, store hashed version in DB, return plaintext."""
+    """Create a new refresh token, store hashed version in DB, return plaintext.
+    
+    Uses SHA-256 lookup hash for O(1) DB queries at scale.
+    Enforces MAX_REFRESH_TOKENS_PER_USER to prevent storage explosion.
+    """
     plaintext = secrets.token_urlsafe(32)
     token_hash = pwd_context.hash(plaintext)
+    # Deterministic SHA-256 for indexed DB lookup (bcrypt is non-deterministic)
+    token_lookup = hashlib.sha256(plaintext.encode()).hexdigest()
     expires_at = datetime.utcnow() + timedelta(days=settings.jwt_refresh_expire_days)
 
+    uid = uuid.UUID(user_id)
+    await _enforce_refresh_token_limit(uid, db)
+
     refresh_token = RefreshToken(
-        user_id=uuid.UUID(user_id),
+        user_id=uid,
         token_hash=token_hash,
+        token_lookup=token_lookup,
         expires_at=expires_at,
         user_agent=user_agent,
         ip_address=ip_address,
@@ -116,30 +151,107 @@ async def create_refresh_token_for_user(
 
 
 async def verify_refresh_token(plaintext: str, db: AsyncSession) -> Optional[RefreshToken]:
-    """Verify a refresh token by checking all non-revoked, non-expired tokens for the user."""
+    """Verify a refresh token.
+    
+    Fast path (new tokens): query by deterministic SHA-256 lookup hash — O(log n) via btree index.
+    Legacy fallback (old tokens without lookup hash): scan active tokens — O(n) with bcrypt per row.
+    """
+    lookup = hashlib.sha256(plaintext.encode()).hexdigest()
+
+    # Fast path: indexed lookup by SHA-256 hash. With 100M users and ~2 sessions each,
+    # this is ~30 btree comparisons instead of scanning 200M rows.
     result = await db.execute(
         select(RefreshToken)
         .options(selectinload(RefreshToken.user))
         .where(
+            RefreshToken.token_lookup == lookup,
             RefreshToken.revoked_at == None,
             RefreshToken.expires_at > datetime.utcnow(),
         )
     )
-    tokens = result.scalars().all()
-    for rt in tokens:
-        if pwd_context.verify(plaintext, rt.token_hash):
-            return rt
+    rt = result.scalar_one_or_none()
+    if rt and pwd_context.verify(plaintext, rt.token_hash):
+        return rt
+
+    # Legacy fallback: tokens created before this migration have no token_lookup.
+    # This path naturally disappears as old tokens expire (typically 7-30 days).
+    result = await db.execute(
+        select(RefreshToken)
+        .options(selectinload(RefreshToken.user))
+        .where(
+            RefreshToken.token_lookup == None,
+            RefreshToken.revoked_at == None,
+            RefreshToken.expires_at > datetime.utcnow(),
+        )
+    )
+    for legacy_rt in result.scalars().all():
+        if pwd_context.verify(plaintext, legacy_rt.token_hash):
+            return legacy_rt
     return None
 
 
-async def revoke_refresh_token(plaintext: str, db: AsyncSession) -> bool:
-    """Revoke a refresh token."""
-    rt = await verify_refresh_token(plaintext, db)
+async def revoke_refresh_token(plaintext: Optional[str] = None, db: Optional[AsyncSession] = None, rt: Optional[RefreshToken] = None) -> bool:
+    """Revoke a refresh token.
+    
+    Accepts either a plaintext token (will be verified) or a pre-verified RefreshToken
+    object to avoid double bcrypt verification.
+    """
+    if rt is None:
+        if plaintext is None or db is None:
+            raise ValueError("Either rt or (plaintext + db) must be provided")
+        rt = await verify_refresh_token(plaintext, db)
     if rt:
         rt.revoked_at = datetime.utcnow()
-        await db.commit()
+        if db is not None:
+            await db.commit()
         return True
     return False
+
+
+# Retain revoked tokens for 30 days for audit, then purge.
+_REFRESH_TOKEN_RETENTION_DAYS = 30
+
+
+async def cleanup_expired_refresh_tokens(db: AsyncSession) -> int:
+    """Delete expired and old revoked refresh tokens to prevent unbounded table growth.
+    
+    Returns number of rows deleted. Uses batched deletes to avoid long table locks.
+    """
+    from sqlalchemy import text
+    cutoff = datetime.utcnow() - timedelta(days=_REFRESH_TOKEN_RETENTION_DAYS)
+
+    # Batch delete in chunks of 10k to avoid locking the table for too long
+    total_deleted = 0
+    while True:
+        result = await db.execute(text("""
+            DELETE FROM refresh_tokens
+            WHERE id IN (
+                SELECT id FROM refresh_tokens
+                WHERE expires_at < NOW()
+                   OR (revoked_at IS NOT NULL AND revoked_at < :cutoff)
+                LIMIT 10000
+            )
+        """), {"cutoff": cutoff})
+        await db.commit()
+        deleted = result.rowcount
+        total_deleted += deleted
+        if deleted < 10000:
+            break
+    return total_deleted
+
+
+async def run_periodic_refresh_token_cleanup() -> None:
+    """Background task: purge stale refresh tokens every hour."""
+    from app.db.session import AsyncSessionLocal
+    while True:
+        try:
+            await asyncio.sleep(3600)  # 1 hour
+            async with AsyncSessionLocal() as db:
+                deleted = await cleanup_expired_refresh_tokens(db)
+                if deleted > 0:
+                    logger.info(f"Purged {deleted} stale refresh tokens")
+        except Exception:
+            logger.exception("Refresh token cleanup failed")
 
 
 async def get_auth_context(
@@ -473,9 +585,9 @@ async def logout_endpoint(request: Request, body: Optional[RefreshRequest] = Non
             
             await db.commit()
     
-    # Revoke refresh token
-    if body and body.refresh_token:
-        await revoke_refresh_token(body.refresh_token, db)
+    # Revoke refresh token (reuse already-verified rt to avoid double bcrypt)
+    if body and body.refresh_token and rt:
+        await revoke_refresh_token(db=db, rt=rt)
 
     response = JSONResponse(content={"message": "Logged out successfully"})
     response.delete_cookie("nukelab_token")

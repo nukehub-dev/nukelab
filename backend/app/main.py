@@ -116,6 +116,14 @@ async def startup():
         asyncio.create_task(manager.start_redis_listener())
     except Exception as e:
         print(f"Warning: Failed to start Redis listener: {e}")
+    
+    # Start periodic refresh token cleanup (prevents unbounded growth at scale)
+    try:
+        import asyncio
+        from app.api.auth import run_periodic_refresh_token_cleanup
+        asyncio.create_task(run_periodic_refresh_token_cleanup())
+    except Exception as e:
+        print(f"Warning: Failed to start refresh token cleanup: {e}")
 
 
 @app.get("/")
