@@ -14,6 +14,7 @@ services:
       - ./certs:/certs:ro
       - letsencrypt:/letsencrypt
       - ./infrastructure/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./infrastructure/traefik/dynamic:/etc/traefik/dynamic:ro
     networks:
       - nukelab-network
     labels:
@@ -80,9 +81,18 @@ services:
       - SESSION_SAMESITE=${SESSION_SAMESITE:-lax}
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://localhost:8000}
       - CORS_ALLOW_CREDENTIALS=${CORS_ALLOW_CREDENTIALS:-true}
-      - RATE_LIMIT_ENABLED=${RATE_LIMIT_ENABLED:-false}
-      - RATE_LIMIT_REQUESTS=${RATE_LIMIT_REQUESTS:-100}
-      - RATE_LIMIT_WINDOW=${RATE_LIMIT_WINDOW:-60}
+      # Rate Limiting — per-user tier configuration (Redis-backed)
+      - RATE_LIMIT_ENABLED=${RATE_LIMIT_ENABLED:-true}
+      - RATE_LIMIT_GUEST_RPM=${RATE_LIMIT_GUEST_RPM:-30}
+      - RATE_LIMIT_USER_RPM=${RATE_LIMIT_USER_RPM:-120}
+      - RATE_LIMIT_SUPPORT_RPM=${RATE_LIMIT_SUPPORT_RPM:-300}
+      - RATE_LIMIT_MODERATOR_RPM=${RATE_LIMIT_MODERATOR_RPM:-300}
+      - RATE_LIMIT_ADMIN_RPM=${RATE_LIMIT_ADMIN_RPM:-600}
+      - RATE_LIMIT_SUPER_ADMIN_RPM=${RATE_LIMIT_SUPER_ADMIN_RPM:-3000}
+      - RATE_LIMIT_STRICT_MULTIPLIER=${RATE_LIMIT_STRICT_MULTIPLIER:-0.5}
+      - RATE_LIMIT_WEBSOCKET_CPM=${RATE_LIMIT_WEBSOCKET_CPM:-30}
+      - RATE_LIMIT_WINDOW_SECONDS=${RATE_LIMIT_WINDOW_SECONDS:-60}
+      - RATE_LIMIT_BUCKET_TTL_MULTIPLIER=${RATE_LIMIT_BUCKET_TTL_MULTIPLIER:-2}
       - AUTH_MODE=${AUTH_MODE:-local}
       - LOCAL_AUTH_BCRYPT_ROUNDS=${LOCAL_AUTH_BCRYPT_ROUNDS:-12}
       - OAUTH_PROVIDER_NAME=${OAUTH_PROVIDER_NAME:-}
@@ -146,8 +156,16 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.backend.rule=PathPrefix(`/api`)"
+      - "traefik.http.routers.backend.middlewares=api-chain@file"
       - "traefik.http.services.backend.loadbalancer.server.port=8000"
+      # Auth endpoints — stricter rate limit (10/min per IP)
+      - "traefik.http.routers.backend-auth.rule=PathPrefix(`/api/auth`)"
+      - "traefik.http.routers.backend-auth.priority=100"
+      - "traefik.http.routers.backend-auth.middlewares=auth-chain@file"
+      - "traefik.http.routers.backend-auth.service=backend"
+      # WebSocket endpoint
       - "traefik.http.routers.ws.rule=PathPrefix(`/ws`)"
+      - "traefik.http.routers.ws.middlewares=ws-chain@file"
       - "traefik.http.routers.ws.service=backend"
     restart: unless-stopped
 

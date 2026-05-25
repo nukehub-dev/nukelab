@@ -6,6 +6,9 @@ providers:
   docker:
     exposedByDefault: false
     network: nukelab-network
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
 
 entryPoints:
   web:

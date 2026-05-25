@@ -366,6 +366,134 @@ backend:
 
 ---
 
+## Traefik Security Hardening
+
+NukeLab uses a **two-layer rate limiting architecture** designed for platforms serving 100M+ users across institutions, labs, and companies:
+
+### Why Two Layers?
+
+**The NAT problem:** Universities and companies put thousands of users behind a single public IP. IP-based rate limiting would block entire institutions.
+
+| Layer | Technology | Scope | Purpose |
+|-------|-----------|-------|---------|
+| **Layer 1** | Traefik | Per-IP | DDoS / bot protection only (very high thresholds) |
+| **Layer 2** | FastAPI + Redis | Per-user (JWT identity) | Fair throttling, role-based tiers |
+
+### Layer 1: Traefik DDoS Protection
+
+Traefik middlewares in `infrastructure/traefik/dynamic/middlewares.yml`:
+
+| Middleware | Rate | Burst | Purpose |
+|-----------|------|-------|---------|
+| `ddos-protect` | 10,000/min | 5,000 | Catch bot floods, DDoS attacks |
+| `ddos-protect-ws` | 5,000/min | 2,000 | WebSocket connection floods |
+
+These thresholds are intentionally **extremely high** — a single university with 10,000 active users will never hit them. They only catch malicious traffic.
+
+### Layer 2: FastAPI Per-User Rate Limiting
+
+The `RateLimitMiddleware` (`backend/app/middleware/rate_limit.py`) enforces limits by **JWT user identity**, not IP. It uses Redis fixed-window counters keyed by `username` (from JWT `sub` claim) + role.
+
+**Role-based tiers (requests per minute):**
+
+| Role | General API | Strict* | WebSocket |
+|------|------------|---------|-----------|
+| `guest` | 30 | 15 | 30 |
+| `user` | 120 | 60 | 30 |
+| `support` | 300 | 150 | 30 |
+| `moderator` | 300 | 150 | 30 |
+| `admin` | 600 | 300 | 30 |
+| `super_admin` | Unlimited | Unlimited | Unlimited |
+
+\* Strict = admin mutations, bulk actions, password reset endpoints (0.5× multiplier)
+
+**Algorithm:** Redis `INCR` with TTL on a fixed-window bucket (`rate_limit:{user}:{bucket}:{suffix}`). Redis failures **fail open** — legitimate traffic is never blocked by infrastructure issues.
+
+**Exempt paths:** Health checks, auth endpoints (handled by slowapi IP limits), docs, system config.
+
+### Security Headers
+
+The `security-headers@file` middleware adds:
+
+- `Strict-Transport-Security` (HSTS, 1 year, includeSubDomains, preload)
+- `X-Frame-Options: SAMEORIGIN`
+- `X-Content-Type-Options: nosniff`
+- `X-XSS-Protection: 1; mode=block`
+- `Referrer-Policy: strict-origin-when-cross-origin`
+
+A separate `csp-header@file` middleware provides a Content Security Policy baseline. Apply it to the frontend router if you need CSP.
+
+### Admin Panel IP Allowlist
+
+The `admin-allowlist@file` middleware restricts access to `/admin` and `/api/admin/*` to private network ranges by default. **Override this in production** by editing `infrastructure/traefik/dynamic/middlewares.yml`:
+
+```yaml
+admin-allowlist:
+  ipAllowList:
+    sourceRange:
+      - "203.0.113.0/24"   # Your office IP
+      - "198.51.100.0/24"  # Your VPN range
+```
+
+To apply the allowlist, add the middleware label to the backend service in `compose.yml`:
+
+```yaml
+labels:
+  - "traefik.http.routers.backend-admin.rule=PathPrefix(`/api/admin`)"
+  - "traefik.http.routers.backend-admin.priority=90"
+  - "traefik.http.routers.backend-admin.middlewares=admin-allowlist@file,api-chain@file"
+  - "traefik.http.routers.backend-admin.service=backend"
+```
+
+### Customizing Rate Limits
+
+**Traefik (DDoS thresholds):**
+
+Edit `infrastructure/traefik/dynamic/middlewares.yml` — Traefik auto-reloads within ~2 seconds (no restart needed).
+
+**FastAPI (User tiers):**
+
+Set environment variables in `.env`:
+
+```env
+RATE_LIMIT_GUEST_RPM=30
+RATE_LIMIT_USER_RPM=120
+RATE_LIMIT_ADMIN_RPM=600
+RATE_LIMIT_SUPER_ADMIN_RPM=3000
+```
+
+Restart the backend:
+
+```bash
+./manage.sh restart backend
+```
+
+### Verify Rate Limiting
+
+**Test DDoS layer (Traefik):**
+
+```bash
+# Should succeed
+curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/health
+
+# Flood from one IP — should trigger Traefik 429 only at 10K+/min
+ab -n 20000 -c 100 http://localhost:8080/api/health
+```
+
+**Test user layer (FastAPI):**
+
+```bash
+# Authenticated request — should succeed
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/servers
+
+# Flood as authenticated user — should trigger FastAPI 429 at tier limit
+for i in {1..150}; do
+  curl -s -o /dev/null -w "%{http_code}\n" \
+    -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/servers
+done
+# Expected: mostly 200, then 429 with Retry-After header
+```
+
 ## Quick Production Checklist
 
 - [ ] Cgroup controllers enabled (`cpuset cpu memory`)
@@ -377,6 +505,10 @@ backend:
 - [ ] User containers show correct CPU count (`nproc`)
 - [ ] User containers show correct memory (`free -h`)
 - [ ] Storage quotas enforced (check with `podman inspect`)
+- [ ] Traefik DDoS protection active (very high thresholds — test with `ab -n 20000`)
+- [ ] FastAPI per-user rate limiting active (test authenticated user at tier limit)
+- [ ] Admin IP allowlist restricted to office/VPN ranges
+- [ ] HSTS headers present (`curl -I https://your-domain`)
 
 ---
 

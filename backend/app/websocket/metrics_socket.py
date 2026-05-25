@@ -1,5 +1,7 @@
 import json
 import asyncio
+import time
+import logging
 from typing import Set, Dict, Optional
 from fastapi import WebSocket, WebSocketDisconnect
 from jose import JWTError, jwt
@@ -12,6 +14,30 @@ from app.models.user import User
 from app.models.server import Server
 from app.core.permissions import Permission
 from app.core.roles import get_role_permissions
+
+logger = logging.getLogger(__name__)
+
+# Role → WebSocket message RPM limits
+_WS_MSG_LIMITS = {
+    "guest": settings.rate_limit_guest_rpm,
+    "user": settings.rate_limit_user_rpm,
+    "support": settings.rate_limit_support_rpm,
+    "moderator": settings.rate_limit_moderator_rpm,
+    "admin": settings.rate_limit_admin_rpm,
+    "super_admin": settings.rate_limit_super_admin_rpm,
+}
+
+# Atomic Lua: INCR + conditional EXPIRE
+_LUA_INCR_EXPIRE = """
+local key = KEYS[1]
+local ttl = tonumber(ARGV[1])
+local exists = redis.call('EXISTS', key)
+local count = redis.call('INCR', key)
+if exists == 0 then
+    redis.call('EXPIRE', key, ttl)
+end
+return count
+"""
 
 # Track active connections
 connections: Dict[str, Set[WebSocket]] = {}
@@ -300,8 +326,32 @@ class MetricsWebSocketManager:
         }
 
         try:
+            # Lazy-init Redis for WS message throttling
+            ws_redis: Optional[redis.Redis] = None
+            if settings.rate_limit_enabled:
+                try:
+                    ws_redis = redis.from_url(settings.redis_url)
+                except Exception:
+                    ws_redis = None
+
             while True:
                 message = await websocket.receive_text()
+
+                # ─── WebSocket message-level rate limiting ───
+                if ws_redis and settings.rate_limit_enabled:
+                    user_id = connection_users[websocket]['user_id']
+                    role = connection_users[websocket]['role']
+                    is_limited, limit, remaining = await _check_ws_message_rate_limit(
+                        ws_redis, user_id, role
+                    )
+                    if is_limited:
+                        await websocket.send_json({
+                            "event": "rate_limited",
+                            "message": "Too many messages. Please slow down.",
+                            "retry_after": settings.rate_limit_window_seconds,
+                        })
+                        continue
+
                 try:
                     data = json.loads(message)
                     msg_type = data.get('type')
@@ -495,6 +545,41 @@ class MetricsWebSocketManager:
             ]
             for task in tasks_to_cancel:
                 task.cancel()
+
+
+async def _check_ws_message_rate_limit(
+    redis_client: redis.Redis,
+    user_id: str,
+    role: str,
+) -> tuple[bool, int, int]:
+    """
+    Check WebSocket message rate limit for a user.
+
+    Returns: (is_limited, limit, remaining)
+    """
+    if not settings.rate_limit_enabled:
+        return False, 0, 0
+
+    if role == "super_admin":
+        return False, 0, 0
+
+    limit = _WS_MSG_LIMITS.get(role.lower(), _WS_MSG_LIMITS["user"])
+    window = settings.rate_limit_window_seconds
+    bucket = int(time.time()) // window
+    key = f"rl:ws_msg:{user_id}:{bucket}"
+    ttl = window * settings.rate_limit_bucket_ttl_multiplier
+
+    try:
+        lua_sha = await redis_client.script_load(_LUA_INCR_EXPIRE)
+        current = int(await redis_client.evalsha(lua_sha, 1, key, ttl))
+        remaining = max(0, limit - current)
+
+        if current > limit:
+            return True, limit, 0
+        return False, limit, remaining
+    except Exception as e:
+        logger.warning(f"WS rate limiter Redis error (fail-open): {e}")
+        return False, 0, 0
 
 
 manager = MetricsWebSocketManager()

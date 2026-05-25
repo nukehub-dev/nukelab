@@ -1,7 +1,7 @@
 # NukeLab Platform v2.0 — Architecture & Implementation Plan
 
 **Status**: Phase 4 Complete, Phase 5 In Progress
-**Last Updated**: May 24, 2026  
+**Last Updated**: May 26, 2026  
 **Target Timeline**: 6+ months  
 **Tech Stack**: Vite + React 19 SPA, FastAPI, PostgreSQL 18, Redis, Traefik v3, Docker/Podman
 
@@ -1529,7 +1529,7 @@ The following features are fully implemented and in active use:
 - **[x] Shared Workspaces** — Workspace CRUD; member/invitation management; volume associations; grid/list UI
 - **[x] Notifications** — 20+ notification types; email + in-app + webhook delivery; WebSocket real-time; preferences UI
 - **[x] Maintenance Mode** — Toggle with graceful draining; dedicated `/maintenance` page; admin settings panel
-- **[x] Rate Limiting (API)** — slowapi on auth and token endpoints
+- **[x] Rate Limiting (Two-Layer)** — Traefik DDoS protection (10K/min per IP) + FastAPI per-user Redis-backed throttling (role-based tiers: guest 30/min → super_admin ∞)
 - **[x] Backup & Restore** — Database backup (`./manage.sh backup`); volume backup service with retention policy
 - **[x] Health Checks** — Container health monitoring; auto-restart with rate limiting; system health dashboard
 - **[x] Bulk Operations** — Server start/stop/restart/delete; workspace activate/deactivate/delete; volume activate/archive/delete
@@ -1550,9 +1550,9 @@ The following features are fully implemented and in active use:
 | **High** | ~~Volume quota gap~~ ✅ | `recalculate_usage()` now counts volume sizes; `check_volume_creation_allowed()` enforces quota on `POST /api/volumes/` |
 | **Medium** | ~~Bulk action test coverage~~ ✅ | `test_bulk.py` now has 12 mocked spawner lifecycle tests (start/stop/restart/delete, mixed results, cross-user, not-found) |
 | **Medium** | ~~Frontend health monitoring UI~~ ✅ | Admin health monitoring page at `/admin/health` with system services, resource gauges, container health table, and auto-restart events |
-| **Medium** | **Traefik rate limiting** | Infra-level rate limiting middleware in `infrastructure/traefik/` |
+| **Medium** | ~~Traefik rate limiting~~ ✅ | Two-layer architecture: Traefik DDoS-only (10K/min) + FastAPI per-user Redis throttling; `test_rate_limiting.py` with 14 tests |
 | **Low** | **IP allowlist/blocklist** | Admin-configurable IP restrictions for sensitive endpoints |
-| **Low** | **Security headers** | HSTS, CSP, X-Frame-Options in Traefik or FastAPI middleware |
+| **Low** | **Security headers** | `security-headers@file` and `csp-header@file` middlewares deployed in Traefik; admin-allowlist available |
 | **Low** | **Scheduled maintenance windows** | Pre-planned maintenance with advance user notification |
 
 ---
@@ -1697,16 +1697,18 @@ Then the deployment completes with zero downtime
 - [ ] **Security — Input Validation**
   - [ ] Request size limits
   - [ ] Strict CORS for production
-  - [ ] Security headers (HSTS, CSP)
+  - [x] Security headers (HSTS, CSP) — `security-headers@file` and `csp-header@file` middlewares deployed in Traefik dynamic config
 
 - [ ] **Database — Connection Pooling**
   - [ ] PgBouncer setup
   - [ ] Query timeout configuration
   - [ ] Proper index usage
 
-- [ ] **Rate Limiting**
-  - [ ] Per-user rate limiting (slowapi)
-  - [ ] Global rate limiting at Traefik level
+- [x] **Rate Limiting**
+  - [x] Per-user rate limiting (FastAPI + Redis, JWT-based, role tiers)
+  - [x] Global DDoS protection at Traefik level (10K/min per IP)
+  - [x] WebSocket message-level throttling (120/min per user)
+  - [x] 14 tests covering all tiers, expired JWT, Redis fail-open, strict endpoints
 
 #### Status: Recommended Before Going Production
 
@@ -2211,4 +2213,4 @@ DEFAULT_MAX_SERVERS=3
 
 ---
 
-**Next Steps**: Continue Phase 5 implementation — remaining items: Traefik rate limiting middleware, IP allowlist/blocklist, security headers.
+**Next Steps**: Continue Phase 5 implementation — remaining items: IP allowlist/blocklist wiring (middlewares defined, needs router labels), scheduled maintenance windows.

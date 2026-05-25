@@ -29,9 +29,36 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000,http://localhost:8000"
     cors_allow_credentials: bool = True
 
-    rate_limit_enabled: bool = False
-    rate_limit_requests: int = 100
-    rate_limit_window: int = 60
+    # -------------------------------------------------------------------------
+    # Rate Limiting — Two-Layer Architecture
+    #   Layer 1 (Traefik): DDoS protection only — very high per-IP thresholds
+    #   Layer 2 (FastAPI + Redis): Per-user throttling by JWT identity
+    # -------------------------------------------------------------------------
+    rate_limit_enabled: bool = True
+
+    # Per-user tier limits (requests per minute, per user ID from JWT)
+    rate_limit_guest_rpm: int = 30
+    rate_limit_user_rpm: int = 120
+    rate_limit_support_rpm: int = 300
+    rate_limit_moderator_rpm: int = 300
+    rate_limit_admin_rpm: int = 600
+    rate_limit_super_admin_rpm: int = 3000
+
+    # Auth endpoint limits (IP-based via slowapi — for unauthenticated routes)
+    rate_limit_auth_login_rpm: int = 10
+    rate_limit_auth_register_rpm: int = 5
+    rate_limit_auth_refresh_rpm: int = 10
+
+    # Strict endpoint limits (per-user, half of general tier)
+    rate_limit_strict_multiplier: float = 0.5
+
+    # WebSocket rate limits
+    rate_limit_websocket_cpm: int = 30         # Connections per minute
+    rate_limit_websocket_msg_rpm: int = 120    # Messages per minute per connection
+
+    # Redis window configuration (seconds)
+    rate_limit_window_seconds: int = 60
+    rate_limit_bucket_ttl_multiplier: int = 2
 
     auth_mode: str = "local"  # local | oauth | both
     local_auth_bcrypt_rounds: int = 12

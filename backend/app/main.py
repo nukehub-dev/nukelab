@@ -34,6 +34,10 @@ async def rate_limit_exceeded_handler(request: Request, exc):
 from app.middleware.maintenance import MaintenanceMiddleware
 app.add_middleware(MaintenanceMiddleware)
 
+# Rate limit middleware (per-user, JWT-based — runs before expensive ops)
+from app.middleware.rate_limit import RateLimitMiddleware
+app.add_middleware(RateLimitMiddleware)
+
 # Audit middleware
 from app.middleware.audit import AuditMiddleware
 app.add_middleware(AuditMiddleware)
