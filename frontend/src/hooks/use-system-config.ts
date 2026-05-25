@@ -28,6 +28,7 @@ export function useUpdateSystemConfig() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['system-config'] });
+      queryClient.invalidateQueries({ queryKey: ['health'] });
     },
   });
 }

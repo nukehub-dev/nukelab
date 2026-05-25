@@ -90,9 +90,16 @@ export function AppShell() {
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="fixed top-0 left-0 right-0 z-[60] bg-amber-500/10 border-b border-amber-500/20 backdrop-blur-sm"
+          className={cn(
+            'fixed top-0 z-[60] bg-amber-100 dark:bg-amber-500/10 border-b border-amber-300 dark:border-amber-500/20 backdrop-blur-sm',
+            // Mobile: full width
+            'left-0 right-0',
+            // Desktop: respect sidebar width, curved left edge
+            'lg:rounded-bl-xl',
+            isOpen ? 'lg:left-[17rem]' : 'lg:left-[5.5rem]'
+          )}
         >
-          <div className="flex items-center justify-center gap-2 px-4 py-2 text-amber-400 text-sm">
+          <div className="flex items-center justify-center gap-2 px-4 py-2 text-amber-800 dark:text-amber-400 text-sm">
             <AlertTriangle className="w-4 h-4" />
             <span className="font-medium">
               {health?.message || 'System under maintenance'}

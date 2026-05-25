@@ -24,9 +24,9 @@ function MaintenancePage() {
           initial={{ scale: 0.8 }}
           animate={{ scale: 1 }}
           transition={{ delay: 0.2, type: 'spring' }}
-          className="mx-auto w-24 h-24 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center"
+          className="mx-auto w-24 h-24 rounded-2xl bg-amber-100 dark:bg-amber-500/10 border border-amber-300 dark:border-amber-500/20 flex items-center justify-center"
         >
-          <Construction className="w-12 h-12 text-amber-400" />
+          <Construction className="w-12 h-12 text-amber-600 dark:text-amber-400" />
         </motion.div>
 
         <div className="space-y-3">
@@ -40,9 +40,9 @@ function MaintenancePage() {
 
         <div className="bubble p-6 space-y-4">
           <div className="flex items-center gap-3 text-sm">
-            <Clock className="w-4 h-4 text-amber-400" />
+            <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
             <span className="text-muted-foreground">Status:</span>
-            <span className="font-medium text-amber-400">Maintenance Mode</span>
+            <span className="font-medium text-amber-700 dark:text-amber-400">Maintenance Mode</span>
           </div>
           {health?.timestamp && (
             <div className="flex items-center gap-3 text-sm">
