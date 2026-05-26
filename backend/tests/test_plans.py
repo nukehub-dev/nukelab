@@ -51,7 +51,6 @@ class TestPlanCRUD:
                 "gpu_limit": 0,
                 "max_servers_per_user": 3,
                 "cost_per_hour": 2,
-                "requires_approval": False,
                 "visible_to_roles": ["user", "moderator"],
                 "priority": 0
             }

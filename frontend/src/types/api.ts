@@ -111,7 +111,6 @@ export interface Plan {
   max_servers_per_user: number;
   cost_per_hour: number;
   cooldown_seconds: number;
-  requires_approval: boolean;
   is_public: boolean;
   visible_to_roles: string[];
   is_active: boolean;

@@ -37,7 +37,6 @@ class ServerPlan(Base):
     allow_snapshots = Column(Boolean, default=False)
     
     # Restrictions
-    requires_approval = Column(Boolean, default=False)
     is_public = Column(Boolean, default=False)
     visible_to_roles = Column(JSON, default=list)
     
@@ -73,7 +72,6 @@ class ServerPlan(Base):
             "cooldown_seconds": self.cooldown_seconds,
             "allow_scheduling": self.allow_scheduling,
             "allow_snapshots": self.allow_snapshots,
-            "requires_approval": self.requires_approval,
             "is_public": self.is_public,
             "visible_to_roles": self.visible_to_roles or [],
             "is_active": self.is_active,

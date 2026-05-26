@@ -87,7 +87,7 @@ async def seed_plans(db: AsyncSession):
         {
             "name": "XLarge",
             "slug": "xlarge",
-            "description": "16 CPU / 32GB — maximum resources for heavy computations (admin approval required)",
+            "description": "16 CPU / 32GB — maximum resources for heavy computations",
             "category": "cpu",
             "cpu_limit": 16.0,
             "memory_limit": "32g",
@@ -95,7 +95,6 @@ async def seed_plans(db: AsyncSession):
             "max_servers_per_user": 1,
             "cost_per_hour": 8,
             "priority": 3,
-            "requires_approval": True,
             "visible_to_roles": [],
         },
     ]

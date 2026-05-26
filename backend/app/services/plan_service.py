@@ -153,7 +153,6 @@ class PlanService:
         max_servers_per_user: int = 3,
         cost_per_hour: int = 10,
         cooldown_seconds: int = 0,
-        requires_approval: bool = False,
         is_public: bool = False,
         visible_to_roles: Optional[List[str]] = None,
         priority: int = 0
@@ -180,7 +179,6 @@ class PlanService:
             max_servers_per_user=max_servers_per_user,
             cost_per_hour=cost_per_hour,
             cooldown_seconds=cooldown_seconds,
-            requires_approval=requires_approval,
             is_public=is_public,
             visible_to_roles=visible_to_roles or [],
             priority=priority

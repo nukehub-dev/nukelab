@@ -105,7 +105,6 @@ function PlansPage() {
     max_servers_per_user: 3,
     cost_per_hour: 10,
     cooldown_seconds: 0,
-    requires_approval: false,
     is_public: false,
     visible_to_roles: ['user'] as string[],
     priority: 0,
@@ -132,7 +131,6 @@ function PlansPage() {
       max_servers_per_user: 3,
       cost_per_hour: 10,
       cooldown_seconds: 0,
-      requires_approval: false,
       is_public: false,
       visible_to_roles: ['user'],
       priority: 0,
@@ -154,7 +152,6 @@ function PlansPage() {
       max_servers_per_user: plan.max_servers_per_user,
       cost_per_hour: plan.cost_per_hour,
       cooldown_seconds: plan.cooldown_seconds,
-      requires_approval: plan.requires_approval,
       is_public: plan.is_public,
       visible_to_roles: plan.visible_to_roles || ['user'],
       priority: plan.priority,
@@ -183,7 +180,6 @@ function PlansPage() {
           max_servers_per_user: formData.max_servers_per_user,
           cost_per_hour: formData.cost_per_hour,
           cooldown_seconds: formData.cooldown_seconds,
-          requires_approval: formData.requires_approval,
           is_public: formData.is_public,
           visible_to_roles: formData.visible_to_roles,
           priority: formData.priority,
@@ -202,7 +198,6 @@ function PlansPage() {
         max_servers_per_user: formData.max_servers_per_user,
         cost_per_hour: formData.cost_per_hour,
         cooldown_seconds: formData.cooldown_seconds,
-        requires_approval: formData.requires_approval,
         is_public: formData.is_public,
         visible_to_roles: formData.visible_to_roles,
         priority: formData.priority,
@@ -783,14 +778,6 @@ function PlansPage() {
                 </p>
               </div>
             )}
-            <label className="flex items-center gap-3 cursor-pointer group"
-            >
-              <Checkbox
-                checked={formData.requires_approval}
-                onChange={(checked) => setFormData({ ...formData, requires_approval: checked })}
-              />
-              <span className="text-sm">Requires admin approval</span>
-            </label>
           </form>
           <DialogFooter>
             <Button variant="outline" type="button" onClick={() => setDialogOpen(false)}>

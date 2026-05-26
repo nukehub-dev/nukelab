@@ -91,7 +91,6 @@ async def create_plan(
         max_servers_per_user=data.get("max_servers_per_user", 3),
         cost_per_hour=data.get("cost_per_hour", 10),
         cooldown_seconds=data.get("cooldown_seconds", 0),
-        requires_approval=data.get("requires_approval", False),
         is_public=data.get("is_public", False),
         visible_to_roles=data.get("visible_to_roles"),
         priority=data.get("priority", 0)
