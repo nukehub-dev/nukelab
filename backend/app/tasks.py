@@ -55,6 +55,26 @@ def example_task(self, message: str):
 
 
 @celery_app.task(bind=True)
+def evaluate_maintenance_windows(self):
+    """Evaluate scheduled maintenance windows: send notifications, enable/disable maintenance mode."""
+    async def _evaluate():
+        from app.services.maintenance_window_service import MaintenanceWindowService
+
+        async with AsyncSessionLocal() as db:
+            service = MaintenanceWindowService(db)
+            result = await service.evaluate_windows()
+            return (
+                f"Maintenance windows: {result['notifications_sent']} notifications sent, "
+                f"{result['enabled_count']} enabled, {result['disabled_count']} disabled"
+            )
+
+    try:
+        return _run_async(_evaluate())
+    except Exception as e:
+        return f"Error evaluating maintenance windows: {e}"
+
+
+@celery_app.task(bind=True)
 def cleanup_inactive_servers(self):
     """Cleanup task - stops servers that have been inactive for too long"""
     return "Cleanup completed"

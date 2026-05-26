@@ -459,6 +459,18 @@ class NotificationService:
             event_key="api_key_created",
         )
 
+    async def maintenance_window(self, user_id, title: str, message: str, action_url: Optional[str] = None) -> Optional[Notification]:
+        """Notify user about a scheduled maintenance window."""
+        return await self.create(
+            user_id=user_id,
+            title=title,
+            message=message,
+            type="system",
+            severity="warning",
+            action_url=action_url,
+            event_key="maintenance",
+        )
+
     async def server_backup_completed(self, user_id, server_name: str, backup_size: str, action_url: Optional[str] = None) -> Optional[Notification]:
         """Notify user that a server backup has been completed."""
         return await self.create(

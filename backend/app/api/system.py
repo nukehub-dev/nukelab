@@ -1,6 +1,6 @@
-from typing import Optional
-from datetime import datetime
-from pydantic import BaseModel
+from typing import Optional, List
+from datetime import datetime, timezone
+from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +14,7 @@ from app.models.server import Server
 from app.config import settings
 from app.api.auth import require_scopes, require_jwt_auth
 from app.services.setting_service import SettingService
+from app.services.maintenance_window_service import MaintenanceWindowService
 
 router = APIRouter(tags=["system"])
 
@@ -143,3 +144,128 @@ async def get_system_stats(
         "credits": {"total": total_credits},
         "timestamp": datetime.utcnow().isoformat()
     }
+
+
+# ─── Maintenance Window Schemas ─────────────────────────────────────────────
+
+class MaintenanceWindowCreate(BaseModel):
+    title: str
+    message: str
+    start_at: datetime
+    end_at: datetime
+    is_active: Optional[bool] = True
+    notify_offsets: Optional[List[int]] = Field(default=None, description="Notification offsets in minutes before start (e.g. [10080, 1440, 15])")
+
+
+class MaintenanceWindowUpdate(BaseModel):
+    title: Optional[str] = None
+    message: Optional[str] = None
+    start_at: Optional[datetime] = None
+    end_at: Optional[datetime] = None
+    is_active: Optional[bool] = None
+    notify_offsets: Optional[List[int]] = Field(default=None, description="Notification offsets in minutes before start")
+
+
+def _naive_utc(dt: datetime) -> datetime:
+    """Convert a timezone-aware datetime to naive UTC."""
+    if dt.tzinfo is not None:
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
+
+
+# ─── Maintenance Window Endpoints ───────────────────────────────────────────
+
+@router.get("/maintenance-windows")
+async def list_maintenance_windows(
+    active_only: bool = False,
+    future_only: bool = False,
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _jwt = Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db)
+):
+    """List scheduled maintenance windows (admin only)"""
+    service = MaintenanceWindowService(db)
+    windows = await service.list_windows(
+        active_only=active_only,
+        future_only=future_only,
+    )
+    return {"windows": windows}
+
+
+@router.post("/maintenance-windows")
+async def create_maintenance_window(
+    data: MaintenanceWindowCreate,
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _jwt = Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a new scheduled maintenance window (admin only)"""
+    service = MaintenanceWindowService(db)
+    try:
+        window = await service.create_window(
+            title=data.title,
+            message=data.message,
+            start_at=_naive_utc(data.start_at),
+            end_at=_naive_utc(data.end_at),
+            created_by=str(current_user.id),
+            is_active=data.is_active if data.is_active is not None else True,
+            notify_offsets=data.notify_offsets,
+        )
+        return {"success": True, "window": window.to_dict()}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/maintenance-windows/{window_id}")
+async def get_maintenance_window(
+    window_id: str,
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _jwt = Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get a single maintenance window (admin only)"""
+    service = MaintenanceWindowService(db)
+    window = await service.get_window(window_id)
+    if not window:
+        raise HTTPException(status_code=404, detail="Maintenance window not found")
+    return {"window": window.to_dict()}
+
+
+@router.put("/maintenance-windows/{window_id}")
+async def update_maintenance_window(
+    window_id: str,
+    data: MaintenanceWindowUpdate,
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _jwt = Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update a maintenance window (admin only)"""
+    service = MaintenanceWindowService(db)
+    try:
+        window = await service.update_window(
+            window_id=window_id,
+            title=data.title,
+            message=data.message,
+            start_at=_naive_utc(data.start_at) if data.start_at else None,
+            end_at=_naive_utc(data.end_at) if data.end_at else None,
+            is_active=data.is_active,
+            notify_offsets=data.notify_offsets,
+        )
+        return {"success": True, "window": window.to_dict()}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.delete("/maintenance-windows/{window_id}")
+async def delete_maintenance_window(
+    window_id: str,
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _jwt = Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete a maintenance window (admin only)"""
+    service = MaintenanceWindowService(db)
+    deleted = await service.delete_window(window_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Maintenance window not found")
+    return {"success": True, "message": "Maintenance window deleted"}

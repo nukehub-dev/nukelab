@@ -1,6 +1,6 @@
 # NukeLab Platform v2.0 — Architecture & Implementation Plan
 
-**Status**: Phase 5 ~99% Complete
+**Status**: Phase 5 100% Complete
 **Last Updated**: May 24, 2026  
 **Target Timeline**: 6+ months  
 **Tech Stack**: Vite + React 19 SPA, FastAPI, PostgreSQL 18, Redis, Traefik v3, Docker/Podman
@@ -34,6 +34,7 @@
 - **CSRF Double-Submit Protection** — `CSRFProtectMiddleware` enforces `X-CSRF-Token` header matching `csrf_token` cookie for cookie-authenticated state-changing requests; smart exemptions for Bearer auth, safe methods, and auth flow endpoints
 - **Removed Harmful `browserXssFilter`** — Deleted from Traefik config (XSS Auditor creates XS-Leak side channels)
 - **Disabled Traefik Dashboard** — Removed `api.insecure` and dashboard router labels from default config
+- **Scheduled Maintenance Windows** — Pre-planned maintenance with auto-enable/disable via Celery; 15-minute advance notifications to all active users (in-app + email + WebSocket)
 
 ### Model Updates
 - **ServerPlan** — Added `max_runtime`, `idle_timeout`, `allow_scheduling`, `allow_snapshots`
@@ -41,8 +42,8 @@
 - **ServerQueue** — Added `requested_cpu`, `requested_memory`, `requested_disk`
 
 ### Tests
-- 466 tests passing
-- Test files: `test_system.py`, `test_plans.py`, `test_credits.py`, `test_environments.py`, `test_auth.py`, `test_bulk.py`, `test_admin_workspaces.py`, `test_admin_volumes.py`, `test_ip_restrictions.py`, `test_volumes.py`, `test_security_headers.py`, `test_filesystem.py`, `test_config.py`, `test_csrf.py`
+- 493 tests passing
+- Test files: `test_system.py`, `test_plans.py`, `test_credits.py`, `test_environments.py`, `test_auth.py`, `test_bulk.py`, `test_admin_workspaces.py`, `test_admin_volumes.py`, `test_ip_restrictions.py`, `test_volumes.py`, `test_security_headers.py`, `test_filesystem.py`, `test_config.py`, `test_csrf.py`, `test_maintenance_windows.py`
 
 ---
 
@@ -1562,8 +1563,8 @@ The following features are fully implemented and in active use:
 | **Medium** | ~~Frontend health monitoring UI~~ ✅ | Admin health monitoring page at `/admin/health` with system services, resource gauges, container health table, and auto-restart events |
 | **Medium** | ~~Traefik rate limiting~~ ✅ | Two-layer architecture: Traefik DDoS-only (10K/min) + FastAPI per-user Redis throttling; `test_rate_limiting.py` with 14 tests |
 | **Low** | ~~IP allowlist/blocklist~~ ✅ | Full middleware + admin CRUD API + UI with CIDR support; 24 tests |
-| **Low** | **Security headers** | `security-headers@file` and `csp-header@file` middlewares deployed in Traefik; admin-allowlist available |
-| **Low** | **Scheduled maintenance windows** | Pre-planned maintenance with advance user notification |
+| **Low** | ~~Security headers~~ ✅ | Exception-safe ASGI middleware + Traefik layer; CSP, Cache-Control, Clear-Site-Data, HSTS, CORP; 10 tests |
+| **Low** | ~~Scheduled maintenance windows~~ ✅ | `MaintenanceWindow` model + admin CRUD API + Celery task; auto enable/disable + advance user notification; 27 tests |
 
 ---
 
@@ -2231,4 +2232,4 @@ DEFAULT_MAX_SERVERS=3
 
 ---
 
-**Next Steps**: Continue Phase 5 implementation — remaining items: scheduled maintenance windows.
+**Next Steps**: Phase 5 implementation complete. All planned features implemented. Proceed to Phase 6 (scalability / multi-host / Kubernetes migration path) or polish / documentation as needed.

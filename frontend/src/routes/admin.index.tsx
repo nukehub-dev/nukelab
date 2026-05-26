@@ -15,6 +15,7 @@ import {
   HardDrive,
   HeartPulse,
   GlobeLock,
+  Wrench,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
@@ -133,6 +134,14 @@ const categories: AdminCategory[] = [
     href: '/admin/ip-restrictions',
     requiredPermission: PERMISSIONS.ADMIN_ACCESS,
     color: 'bg-red-500/10 text-red-400',
+  },
+  {
+    label: 'Maintenance Windows',
+    description: 'Schedule platform maintenance with auto enable/disable',
+    icon: Wrench,
+    href: '/admin/maintenance-windows',
+    requiredPermission: PERMISSIONS.ADMIN_ACCESS,
+    color: 'bg-orange-500/10 text-orange-400',
   },
   {
     label: 'Settings',

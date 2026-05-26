@@ -57,6 +57,10 @@ celery_app.conf.update(
             'task': 'app.tasks.evaluate_schedules',
             'schedule': 60.0,  # Every 60 seconds
         },
+        'evaluate-maintenance-windows': {
+            'task': 'app.tasks.evaluate_maintenance_windows',
+            'schedule': 60.0,  # Every 60 seconds
+        },
         'rollup-server-metrics': {
             'task': 'app.tasks.rollup_server_metrics',
             'schedule': crontab(hour=3, minute=0),  # Daily at 3 AM
