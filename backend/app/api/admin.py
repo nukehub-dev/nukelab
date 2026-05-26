@@ -1042,6 +1042,16 @@ async def admin_update_volume(
 ):
     """Update volume (admin)"""
     service = VolumeService(db)
+    volume = await service.get_volume(volume_id)
+    if not volume:
+        raise HTTPException(status_code=404, detail="Volume not found")
+
+    # Validate max_size_bytes cannot be set below current size
+    try:
+        service.validate_max_size(volume, request.max_size_bytes)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
     volume = await service.update_volume(
         volume_id=volume_id,
         display_name=request.display_name,
@@ -1050,9 +1060,6 @@ async def admin_update_volume(
         status=request.status,
         max_size_bytes=request.max_size_bytes,
     )
-    
-    if not volume:
-        raise HTTPException(status_code=404, detail="Volume not found")
     
     return {
         "success": True,

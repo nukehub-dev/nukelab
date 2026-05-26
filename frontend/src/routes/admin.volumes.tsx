@@ -17,6 +17,7 @@ import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
 import { Select, SelectItem } from '../components/ui/select';
 import { Button } from '../components/ui/button';
+import { Slider } from '../components/ui/slider';
 import { Tooltip } from '../components/ui/tooltip';
 import { motion } from 'framer-motion';
 
@@ -116,19 +117,22 @@ function VolumesAdminPage() {
     description: '',
     visibility: 'private',
     status: 'active',
-    max_size_bytes: undefined as number | undefined,
+    max_size_gb: 10,
   });
 
   const { updateVolume, deleteVolume, bulkAction: bulkVolumeAction } = useAdminVolumeActions();
 
   const openEditDialog = (volume: AdminVolume) => {
     setEditingVolume(volume);
+    const sizeGb = volume.max_size_bytes
+      ? Math.max(1, Math.round(volume.max_size_bytes / (1024 * 1024 * 1024)))
+      : 10;
     setFormData({
       display_name: volume.display_name,
       description: volume.description || '',
       visibility: volume.visibility,
       status: volume.status,
-      max_size_bytes: volume.max_size_bytes || undefined,
+      max_size_gb: sizeGb,
     });
     setDialogOpen(true);
   };
@@ -137,13 +141,18 @@ function VolumesAdminPage() {
     e.preventDefault();
     if (!editingVolume) return;
 
+    const minSizeGb = editingVolume.size_bytes
+      ? Math.max(1, Math.ceil(editingVolume.size_bytes / (1024 * 1024 * 1024)))
+      : 1;
+    const finalSizeGb = Math.max(minSizeGb, formData.max_size_gb);
+
     updateVolume.mutate({
       volumeId: editingVolume.id,
       display_name: formData.display_name,
       description: formData.description || undefined,
       visibility: formData.visibility,
       status: formData.status,
-      max_size_bytes: formData.max_size_bytes,
+      max_size_bytes: finalSizeGb * 1024 * 1024 * 1024,
     }, {
       onSuccess: () => setDialogOpen(false),
     });
@@ -515,15 +524,45 @@ function VolumesAdminPage() {
                   </Select>
                 </div>
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Max Size (bytes)</label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={formData.max_size_bytes ?? ''}
-                  onChange={(e) => setFormData({ ...formData, max_size_bytes: e.target.value ? parseInt(e.target.value) : undefined })}
-                  placeholder="Leave empty for unlimited"
-                />
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium">Size Limit</label>
+                  {editingVolume && editingVolume.size_bytes > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      Current: {formatBytes(editingVolume.size_bytes)}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  <Slider
+                    min={editingVolume && editingVolume.size_bytes > 0
+                      ? Math.max(1, Math.ceil(editingVolume.size_bytes / (1024 * 1024 * 1024)))
+                      : 1}
+                    max={500}
+                    step={1}
+                    value={formData.max_size_gb}
+                    onChange={(value) => setFormData({ ...formData, max_size_gb: value })}
+                  />
+                  <Input
+                    type="number"
+                    min={editingVolume && editingVolume.size_bytes > 0
+                      ? Math.max(1, Math.ceil(editingVolume.size_bytes / (1024 * 1024 * 1024)))
+                      : 1}
+                    max={500}
+                    value={formData.max_size_gb}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      setFormData({ ...formData, max_size_gb: isNaN(val) ? 1 : Math.max(1, Math.min(500, val)) });
+                    }}
+                    className="w-20 text-center"
+                  />
+                  <span className="text-sm text-muted-foreground w-8">GB</span>
+                </div>
+                {editingVolume && editingVolume.size_bytes > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Cannot set limit below current volume size ({formatBytes(editingVolume.size_bytes)}).
+                  </p>
+                )}
               </div>
             </form>
             <DialogFooter>

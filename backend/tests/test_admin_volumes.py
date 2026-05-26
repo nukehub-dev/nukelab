@@ -185,6 +185,53 @@ class TestAdminVolumeUpdate:
         response = await client.put(f"/api/admin/volumes/{vol_id}", json={"display_name": "Hacked"}, headers=user_headers)
         assert response.status_code == 403
 
+    @pytest.mark.asyncio
+    async def test_admin_cannot_shrink_volume_below_used_size(self, client: AsyncClient, admin_user, admin_token, db_session):
+        """Admin should get 400 when trying to set max_size below current size_bytes."""
+        from app.services.volume_service import VolumeService
+
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        service = VolumeService(db_session)
+
+        volume = await service.create_volume(
+            name="admin-shrink-test",
+            display_name="Admin Shrink Test",
+            owner_id=str(admin_user.id),
+            max_size_bytes=50 * 1024 * 1024 * 1024,
+        )
+        volume.size_bytes = 10 * 1024 * 1024 * 1024  # 10 GB used
+        await db_session.commit()
+
+        response = await client.put(f"/api/admin/volumes/{volume.id}", headers=headers, json={
+            "max_size_bytes": 5 * 1024 * 1024 * 1024,  # Try to shrink to 5 GB
+        })
+        assert response.status_code == 400
+        assert "cannot set volume limit" in response.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_admin_can_increase_volume_max_size(self, client: AsyncClient, admin_user, admin_token, db_session):
+        """Admin should be able to increase volume max_size."""
+        from app.services.volume_service import VolumeService
+
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        service = VolumeService(db_session)
+
+        volume = await service.create_volume(
+            name="admin-grow-test",
+            display_name="Admin Grow Test",
+            owner_id=str(admin_user.id),
+            max_size_bytes=10 * 1024 * 1024 * 1024,
+        )
+        volume.size_bytes = 2 * 1024 * 1024 * 1024
+        await db_session.commit()
+
+        response = await client.put(f"/api/admin/volumes/{volume.id}", headers=headers, json={
+            "max_size_bytes": 100 * 1024 * 1024 * 1024,
+        })
+        assert response.status_code == 200
+        data = response.json()
+        assert data["volume"]["max_size_bytes"] == 100 * 1024 * 1024 * 1024
+
 
 class TestAdminVolumeDelete:
     """Admin volume delete tests."""

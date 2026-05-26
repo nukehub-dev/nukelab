@@ -219,6 +219,20 @@ class VolumeService:
             "limit": limit,
         }
 
+    def validate_max_size(self, volume: Volume, max_size_bytes: Optional[int]) -> None:
+        """Validate that max_size_bytes is not below the volume's current size.
+
+        Raises ValueError with a descriptive message if the limit would be
+        set below the actual used bytes.
+        """
+        if max_size_bytes is not None and volume.size_bytes is not None:
+            if max_size_bytes < volume.size_bytes:
+                raise ValueError(
+                    f"Cannot set volume limit ({max_size_bytes} bytes) "
+                    f"below current volume size ({volume.size_bytes} bytes). "
+                    f"Free up {volume.size_bytes - max_size_bytes} bytes first."
+                )
+
     async def update_volume(
         self,
         volume_id: str,

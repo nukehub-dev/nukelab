@@ -320,6 +320,56 @@ class TestVolumeAPI:
         resp = await client.get(f"/api/volumes/{volume['id']}", headers=headers)
         assert resp.status_code == 404
 
+    @pytest.mark.asyncio
+    async def test_user_cannot_shrink_volume_below_used_size(self, client: AsyncClient, test_user, user_token, db_session):
+        """User should get 400 when trying to set max_size below current size_bytes."""
+        from app.services.volume_service import VolumeService
+
+        headers = {"Authorization": f"Bearer {user_token}"}
+        service = VolumeService(db_session)
+
+        # Create volume with 10 GB limit
+        volume = await service.create_volume(
+            name="shrink-test-vol",
+            display_name="Shrink Test Volume",
+            owner_id=str(test_user.id),
+            max_size_bytes=10 * 1024 * 1024 * 1024,
+        )
+        # Simulate 5 GB of used data
+        volume.size_bytes = 5 * 1024 * 1024 * 1024
+        await db_session.commit()
+
+        # Try to shrink to 3 GB
+        resp = await client.put(f"/api/volumes/{volume.id}", headers=headers, json={
+            "max_size_bytes": 3 * 1024 * 1024 * 1024,
+        })
+        assert resp.status_code == 400
+        assert "cannot set volume limit" in resp.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_user_can_increase_volume_max_size(self, client: AsyncClient, test_user, user_token, db_session):
+        """User should be able to increase volume max_size."""
+        from app.services.volume_service import VolumeService
+
+        headers = {"Authorization": f"Bearer {user_token}"}
+        service = VolumeService(db_session)
+
+        volume = await service.create_volume(
+            name="grow-test-vol",
+            display_name="Grow Test Volume",
+            owner_id=str(test_user.id),
+            max_size_bytes=10 * 1024 * 1024 * 1024,
+        )
+        volume.size_bytes = 2 * 1024 * 1024 * 1024
+        await db_session.commit()
+
+        resp = await client.put(f"/api/volumes/{volume.id}", headers=headers, json={
+            "max_size_bytes": 20 * 1024 * 1024 * 1024,
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["max_size_bytes"] == 20 * 1024 * 1024 * 1024
+
 
 class TestVolumeAccessService:
     """Volume access control tests."""
@@ -363,6 +413,49 @@ class TestVolumeAccessService:
             str(volume.id), str(admin_user.id), "read_write"
         )
         assert can_access is False
+
+    @pytest.mark.asyncio
+    async def test_validate_max_size_rejects_shrink(self, db_session, test_user):
+        """VolumeService.validate_max_size should reject shrinking below used bytes."""
+        from app.services.volume_service import VolumeService
+
+        service = VolumeService(db_session)
+        volume = await service.create_volume(
+            name="test-vol-validate",
+            display_name="Validate Test Volume",
+            owner_id=str(test_user.id),
+            max_size_bytes=10 * 1024 * 1024 * 1024,  # 10 GB
+        )
+        # Simulate used data by setting size_bytes directly
+        volume.size_bytes = 5 * 1024 * 1024 * 1024  # 5 GB used
+        await db_session.commit()
+
+        # Shrinking to 3 GB should fail
+        with pytest.raises(ValueError, match="Cannot set volume limit"):
+            service.validate_max_size(volume, 3 * 1024 * 1024 * 1024)
+
+        # Keeping at 10 GB should succeed
+        service.validate_max_size(volume, 10 * 1024 * 1024 * 1024)
+
+        # Expanding to 20 GB should succeed
+        service.validate_max_size(volume, 20 * 1024 * 1024 * 1024)
+
+    @pytest.mark.asyncio
+    async def test_validate_max_size_allows_unlimited(self, db_session, test_user):
+        """Setting max_size_bytes to None (unlimited) should always pass."""
+        from app.services.volume_service import VolumeService
+
+        service = VolumeService(db_session)
+        volume = await service.create_volume(
+            name="test-vol-unlimited",
+            display_name="Unlimited Test Volume",
+            owner_id=str(test_user.id),
+        )
+        volume.size_bytes = 100 * 1024 * 1024 * 1024  # 100 GB used
+        await db_session.commit()
+
+        # None means unlimited — should always pass
+        service.validate_max_size(volume, None)
 
     @pytest.mark.asyncio
     async def test_public_volume_read_only_access(self, db_session, test_user, admin_user):

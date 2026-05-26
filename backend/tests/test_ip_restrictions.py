@@ -279,9 +279,106 @@ class TestIPRestrictionAPI:
         assert response.status_code == 403
 
     @pytest.mark.asyncio
+    async def test_create_allowlist_entry(self, client, superadmin_token):
+        response = await client.post(
+            "/api/admin/ip-restrictions",
+            headers={"Authorization": f"Bearer {superadmin_token}"},
+            json={
+                "ip_range": "10.0.0.0/8",
+                "restriction_type": "allow",
+                "note": "Office VPN",
+            },
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["ip_range"] == "10.0.0.0/8"
+        assert data["restriction_type"] == "allow"
+        assert data["note"] == "Office VPN"
+
+    @pytest.mark.asyncio
+    async def test_self_block_prevented(self, client, superadmin_token):
+        """Admin cannot create a blocklist entry that covers their own IP."""
+        response = await client.post(
+            "/api/admin/ip-restrictions",
+            headers={
+                "Authorization": f"Bearer {superadmin_token}",
+                "X-Forwarded-For": "203.0.113.50",
+            },
+            json={
+                "ip_range": "203.0.113.0/24",
+                "restriction_type": "block",
+                "note": "Should fail",
+            },
+        )
+        assert response.status_code == 422
+        assert "cannot block your own ip" in response.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_my_ip_endpoint(self, client):
+        """My-IP endpoint returns caller's IP and is exempt from restrictions."""
+        response = await client.get(
+            "/api/admin/ip-restrictions/my-ip",
+            headers={"X-Forwarded-For": "198.51.100.42"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["ip"] == "198.51.100.42"
+        assert "note" in data
+
+    @pytest.mark.asyncio
     async def test_non_admin_cannot_list(self, client, user_token):
         response = await client.get(
             "/api/admin/ip-restrictions",
             headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 403
+
+
+class TestIPRestrictionMiddlewareModes:
+    """Tests for allowlist/blocklist interaction and precedence."""
+
+    @pytest.mark.asyncio
+    async def test_mixed_allow_and_block_uses_allowlist_mode(self, client, admin_token):
+        """When both allow and block entries exist, allowlist takes precedence.
+
+        A non-matching IP should be blocked even if it doesn't match any block entry.
+        """
+        with patch(
+            "app.middleware.ip_restriction._get_restrictions",
+            return_value=[
+                {"ip_range": "10.0.0.0/8", "restriction_type": "allow"},
+                {"ip_range": "1.2.3.4/32", "restriction_type": "block"},
+            ],
+        ):
+            # IP that matches neither allow nor block — should be blocked (allowlist mode)
+            with patch(
+                "app.middleware.ip_restriction._get_client_ip",
+                return_value="8.8.8.8",
+            ):
+                response = await client.get(
+                    "/api/servers/",
+                    headers={"Authorization": f"Bearer {admin_token}"},
+                )
+                assert response.status_code == 403
+                assert "allowlist" in response.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_ip_matching_allow_overrides_block(self, client, admin_token):
+        """An IP that matches both allow and block should be allowed."""
+        with patch(
+            "app.middleware.ip_restriction._get_restrictions",
+            return_value=[
+                {"ip_range": "10.0.0.0/8", "restriction_type": "allow"},
+                {"ip_range": "10.1.2.3/32", "restriction_type": "block"},
+            ],
+        ):
+            # IP is in allowlist range and also in blocklist — allow wins
+            with patch(
+                "app.middleware.ip_restriction._get_client_ip",
+                return_value="10.1.2.3",
+            ):
+                response = await client.get(
+                    "/api/servers/",
+                    headers={"Authorization": f"Bearer {admin_token}"},
+                )
+                assert response.status_code in (200, 404)

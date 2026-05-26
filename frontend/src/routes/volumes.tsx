@@ -640,7 +640,7 @@ function VolumesPage() {
               </div>
               <div className="flex items-center gap-3">
                 <Slider
-                  min={1}
+                  min={Math.max(1, Math.ceil(editForm.current_size_bytes / (1024 * 1024 * 1024)))}
                   max={500}
                   step={1}
                   value={Math.max(1, editForm.max_size_gb)}
@@ -648,7 +648,7 @@ function VolumesPage() {
                 />
                 <Input
                   type="number"
-                  min={1}
+                  min={Math.max(1, Math.ceil(editForm.current_size_bytes / (1024 * 1024 * 1024)))}
                   max={500}
                   value={editForm.max_size_gb}
                   onChange={(e) => {
