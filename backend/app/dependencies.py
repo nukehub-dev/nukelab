@@ -3,7 +3,7 @@ FastAPI dependencies for authentication and authorization.
 """
 
 from typing import List
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Response
 from app.api.auth import get_current_user
 from app.core.permissions import Permission
 from app.core.security import has_permission, has_any_permission
@@ -139,3 +139,16 @@ require_credit_read_all = require_permissions(Permission.CREDITS_READ_ALL)
 require_credit_grant = require_permissions(Permission.CREDITS_GRANT)
 require_credit_deduct = require_permissions(Permission.CREDITS_DEDUCT)
 require_admin_access = require_permissions(Permission.ADMIN_ACCESS)
+
+
+def no_store_cache(response: Response) -> None:
+    """Add Cache-Control: no-store headers to prevent sensitive data caching.
+
+    Should be applied to auth endpoints, admin endpoints, and any route
+    that returns tokens, credentials, or personal data.
+    """
+    response.headers["Cache-Control"] = (
+        "no-store, no-cache, must-revalidate, proxy-revalidate"
+    )
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"

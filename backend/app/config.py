@@ -130,6 +130,8 @@ class Settings(BaseSettings):
     registration_enabled: bool = True
     max_servers_per_user: int = 10
 
+    security_headers_enabled: bool = True
+
     # SMTP Email Configuration
     smtp_host: str = ""
     smtp_port: int = 587

@@ -1,7 +1,7 @@
 # NukeLab Platform v2.0 — Architecture & Implementation Plan
 
-**Status**: Phase 4 Complete, Phase 5 In Progress
-**Last Updated**: May 26, 2026  
+**Status**: Phase 5 ~98% Complete
+**Last Updated**: May 24, 2026  
 **Target Timeline**: 6+ months  
 **Tech Stack**: Vite + React 19 SPA, FastAPI, PostgreSQL 18, Redis, Traefik v3, Docker/Podman
 
@@ -24,6 +24,10 @@
 - **Default Spawn Preferences** — Settings UI for default plan + environment
 - **Health Check Auto-Restart** — Rate-limited auto-restart for unhealthy containers
 - **Real Health Endpoint Values** — Dashboard system health aggregates actual Postgres/Redis/Docker checks
+- **IP Allowlist/Blocklist** — Full middleware + admin CRUD API + UI; CIDR support; self-block prevention; exempt paths (auth, health, docs)
+- **Quota Service Disk Bug Fix** — Removed double-counting of server `allocated_disk` + volume `max_size_bytes`; volume creation quota now counts volumes separately
+- **Admin Volume Edit UX** — Replaced raw bytes input with GB slider (1–500 GB); synced with user volume create dialog pattern
+- **Volume Max Size Validation** — Shared `VolumeService.validate_max_size()` prevents shrinking below actual used bytes on both user and admin endpoints
 
 ### Model Updates
 - **ServerPlan** — Added `max_runtime`, `idle_timeout`, `allow_scheduling`, `allow_snapshots`
@@ -31,8 +35,8 @@
 - **ServerQueue** — Added `requested_cpu`, `requested_memory`, `requested_disk`
 
 ### Tests
-- 379 tests passing (355 + 12 admin bulk tests + 12 mocked spawner lifecycle tests)
-- Test files: `test_system.py`, `test_plans.py`, `test_credits.py`, `test_environments.py`, `test_auth.py`, `test_bulk.py`, `test_admin_workspaces.py`, `test_admin_volumes.py`
+- 433 tests passing (379 + 24 IP restriction tests + 6 volume validation tests + 12 mocked spawner lifecycle tests)
+- Test files: `test_system.py`, `test_plans.py`, `test_credits.py`, `test_environments.py`, `test_auth.py`, `test_bulk.py`, `test_admin_workspaces.py`, `test_admin_volumes.py`, `test_ip_restrictions.py`, `test_volumes.py`
 
 ---
 
@@ -1551,7 +1555,7 @@ The following features are fully implemented and in active use:
 | **Medium** | ~~Bulk action test coverage~~ ✅ | `test_bulk.py` now has 12 mocked spawner lifecycle tests (start/stop/restart/delete, mixed results, cross-user, not-found) |
 | **Medium** | ~~Frontend health monitoring UI~~ ✅ | Admin health monitoring page at `/admin/health` with system services, resource gauges, container health table, and auto-restart events |
 | **Medium** | ~~Traefik rate limiting~~ ✅ | Two-layer architecture: Traefik DDoS-only (10K/min) + FastAPI per-user Redis throttling; `test_rate_limiting.py` with 14 tests |
-| **Low** | **IP allowlist/blocklist** | Admin-configurable IP restrictions for sensitive endpoints |
+| **Low** | ~~IP allowlist/blocklist~~ ✅ | Full middleware + admin CRUD API + UI with CIDR support; 24 tests |
 | **Low** | **Security headers** | `security-headers@file` and `csp-header@file` middlewares deployed in Traefik; admin-allowlist available |
 | **Low** | **Scheduled maintenance windows** | Pre-planned maintenance with advance user notification |
 
@@ -1576,6 +1580,10 @@ The following features are fully implemented and in active use:
 - [x] Rate limiting covers auth refresh, server spawn, and all bulk actions
 - [x] Volume quota enforced on standalone volume creation
 - [x] Bulk action tests with mocked spawner execution
+- [x] IP allowlist/blocklist middleware with CIDR support, admin UI, and self-block prevention
+- [x] Quota service disk calculation fixed (no double-counting)
+- [x] Volume max size validation shared between user and admin endpoints
+- [x] Admin volume edit dialog uses GB slider with min-bound enforcement
 
 ---
 
@@ -2213,4 +2221,4 @@ DEFAULT_MAX_SERVERS=3
 
 ---
 
-**Next Steps**: Continue Phase 5 implementation — remaining items: IP allowlist/blocklist wiring (middlewares defined, needs router labels), scheduled maintenance windows.
+**Next Steps**: Continue Phase 5 implementation — remaining items: scheduled maintenance windows.

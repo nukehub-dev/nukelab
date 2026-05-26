@@ -79,6 +79,7 @@ services:
       - SESSION_SECURE=${SESSION_SECURE:-false}
       - SESSION_HTTPONLY=${SESSION_HTTPONLY:-true}
       - SESSION_SAMESITE=${SESSION_SAMESITE:-lax}
+      - SECURITY_HEADERS_ENABLED=${SECURITY_HEADERS_ENABLED:-true}
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://localhost:8000}
       - CORS_ALLOW_CREDENTIALS=${CORS_ALLOW_CREDENTIALS:-true}
       # Rate Limiting — per-user tier configuration (Redis-backed)
@@ -192,9 +193,11 @@ services:
       - "traefik.http.routers.frontend.rule=PathPrefix(`/`)"
       - "traefik.http.services.frontend.loadbalancer.server.port=3000"
       - "traefik.http.routers.frontend.priority=1"
+      - "traefik.http.routers.frontend.middlewares=frontend-chain@file"
       - "traefik.http.routers.user-gateway.rule=PathPrefix(`/user/`)"
       - "traefik.http.routers.user-gateway.service=frontend"
       - "traefik.http.routers.user-gateway.priority=2"
+      - "traefik.http.routers.user-gateway.middlewares=frontend-chain@file"
     restart: unless-stopped
 
   # Celery Worker

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, Request
+from fastapi import FastAPI, WebSocket, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.config import settings
@@ -34,6 +34,10 @@ async def rate_limit_exceeded_handler(request: Request, exc):
 # IP restriction middleware (runs first — blocks bad IPs at the edge)
 from app.middleware.ip_restriction import IPRestrictionMiddleware
 app.add_middleware(IPRestrictionMiddleware)
+
+# Security headers middleware (exception-safe ASGI — runs early)
+from app.core.security_headers_asgi import SecurityHeadersMiddleware
+app.add_middleware(SecurityHeadersMiddleware)
 
 # Maintenance middleware (must be before auth-dependent middleware)
 from app.middleware.maintenance import MaintenanceMiddleware

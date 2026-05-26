@@ -592,6 +592,7 @@ async def logout_endpoint(request: Request, body: Optional[RefreshRequest] = Non
 
     response = JSONResponse(content={"message": "Logged out successfully"})
     response.delete_cookie("nukelab_token")
+    response.headers["Clear-Site-Data"] = '"cache", "cookies", "storage"'
     return response
 
 
