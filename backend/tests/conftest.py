@@ -1,13 +1,14 @@
 """
-Test configuration and fixtures for NukeLab backend tests.
-Uses isolated test database with table truncation for clean state between tests.
+Test configuration and fixtures for NukeLab backend.
+Uses transactional test isolation: each test runs inside a savepoint that is
+rolled back at teardown, guaranteeing a clean database state without TRUNCATE.
 """
 
 import asyncio
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.pool import NullPool
 from sqlalchemy import text
 
@@ -32,43 +33,6 @@ test_engine = create_async_engine(
     poolclass=NullPool,
 )
 
-# Test session factory
-TestSessionLocal = async_sessionmaker(
-    test_engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-    autocommit=False,
-    autoflush=False,
-)
-
-# List of tables to truncate (in reverse dependency order)
-TRUNCATE_TABLES = [
-    "alert_history",
-    "alert_rules",
-    "server_metrics",
-    "server_queue",
-    "credit_transactions",
-    "notifications",
-    "resource_quotas",
-    "environment_templates",
-    "server_volumes",
-    "workspace_volumes",
-    "user_plan_access",
-    "workspace_plan_access",
-    "workspace_members",
-    "shared_workspaces",
-    "servers",
-    "volumes",
-    "api_tokens",
-    "system_metrics",
-    "health_checks",
-    "activity_logs",
-    "server_plans",
-    "refresh_tokens",
-    "users",
-    "system_settings",
-]
-
 
 @pytest.fixture(scope="session")
 def event_loop():
@@ -81,65 +45,85 @@ def event_loop():
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def setup_test_database():
     """Create test database and tables before all tests, drop after."""
-    # Connect to default database to create test database
     admin_engine = create_async_engine(
         "postgresql+asyncpg://nukelab:nukelab123@postgres:5432/nukelab",
         future=True,
         poolclass=NullPool,
     )
-    
+
     async with admin_engine.connect() as conn:
         await conn.execution_options(isolation_level="AUTOCOMMIT")
-        # Drop and recreate test database
-        try:
-            await conn.execute(text("DROP DATABASE IF EXISTS nukelab_test"))
-        except Exception:
-            pass
+        # Terminate any lingering connections to the test database
+        await conn.execute(
+            text(
+                """
+                SELECT pg_terminate_backend(pid)
+                FROM pg_stat_activity
+                WHERE datname = 'nukelab_test' AND pid <> pg_backend_pid()
+                """
+            )
+        )
+        await conn.execute(text("DROP DATABASE IF EXISTS nukelab_test"))
         await conn.execute(text("CREATE DATABASE nukelab_test"))
-    
+
     await admin_engine.dispose()
-    
+
     # Create all tables in test database
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
-    
+
     yield
-    
-    # Cleanup
+
+    # Cleanup: terminate connections again, then drop tables
+    async with admin_engine.connect() as conn:
+        await conn.execution_options(isolation_level="AUTOCOMMIT")
+        await conn.execute(
+            text(
+                """
+                SELECT pg_terminate_backend(pid)
+                FROM pg_stat_activity
+                WHERE datname = 'nukelab_test' AND pid <> pg_backend_pid()
+                """
+            )
+        )
+
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
     await test_engine.dispose()
+    await admin_engine.dispose()
 
 
 @pytest_asyncio.fixture
 async def db_session():
-    """Create a fresh database session for each test."""
-    async with TestSessionLocal() as session:
+    """Create a transactional session that rolls back after each test.
+
+    Uses SQLAlchemy's ``join_transaction_mode="create_savepoint"`` so that
+    ``session.commit()`` inside fixtures or endpoints commits a savepoint
+    within the outer transaction rather than the real transaction.  At
+    teardown the outer transaction is rolled back, undoing ALL changes.
+    """
+    async with test_engine.connect() as conn:
+        trans = await conn.begin()
+        session = AsyncSession(
+            bind=conn,
+            expire_on_commit=False,
+            join_transaction_mode="create_savepoint",
+        )
         yield session
         await session.close()
-
-
-@pytest_asyncio.fixture(autouse=True)
-async def clean_tables(db_session):
-    """Truncate all tables before each test to ensure clean state."""
-    for table in TRUNCATE_TABLES:
-        try:
-            await db_session.execute(text(f"TRUNCATE TABLE {table} CASCADE"))
-        except Exception:
-            pass  # Table might not exist
-    await db_session.commit()
-    yield
+        await trans.rollback()
 
 
 @pytest.fixture(autouse=True)
 def reset_role_permissions():
     """Reset in-memory role permissions to defaults before each test.
-    
+
     Some tests modify ROLE_PERMISSIONS in memory (e.g. test_permissions.py).
     This fixture ensures subsequent tests start with clean defaults.
     """
     from app.core.roles import ROLE_PERMISSIONS, _DEFAULT_ROLE_PERMISSIONS
+
     # Restore defaults in-place so all imported references see the change
     for role, perms in _DEFAULT_ROLE_PERMISSIONS.items():
         ROLE_PERMISSIONS[role] = list(perms)
@@ -149,14 +133,17 @@ def reset_role_permissions():
 @pytest_asyncio.fixture
 async def client(db_session):
     """Create test client with overridden database dependency."""
+
     async def override_get_db():
         yield db_session
-    
+
     app.dependency_overrides[get_db] = override_get_db
-    
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
         yield ac
-    
+
     app.dependency_overrides.clear()
 
 
@@ -178,7 +165,6 @@ async def test_user(db_session):
     await db_session.commit()
     await db_session.refresh(user)
     yield user
-    # Cleanup happens via clean_tables fixture
 
 
 @pytest_asyncio.fixture
@@ -199,21 +185,26 @@ async def admin_user(db_session):
     await db_session.commit()
     await db_session.refresh(user)
     yield user
-    # Cleanup happens via clean_tables fixture
 
 
 @pytest_asyncio.fixture
 async def user_token(test_user):
     """Generate JWT token for test user."""
     from app.api.auth import create_access_token
-    return create_access_token(data={"sub": test_user.username, "role": test_user.role})
+
+    return create_access_token(
+        data={"sub": test_user.username, "role": test_user.role}
+    )
 
 
 @pytest_asyncio.fixture
 async def admin_token(admin_user):
     """Generate JWT token for admin user."""
     from app.api.auth import create_access_token
-    return create_access_token(data={"sub": admin_user.username, "role": admin_user.role})
+
+    return create_access_token(
+        data={"sub": admin_user.username, "role": admin_user.role}
+    )
 
 
 @pytest_asyncio.fixture
@@ -260,14 +251,20 @@ async def support_user(db_session):
 async def support_token(support_user):
     """Generate JWT token for support user."""
     from app.api.auth import create_access_token
-    return create_access_token(data={"sub": support_user.username, "role": support_user.role})
+
+    return create_access_token(
+        data={"sub": support_user.username, "role": support_user.role}
+    )
 
 
 @pytest_asyncio.fixture
 async def moderator_token(moderator_user):
     """Generate JWT token for moderator user."""
     from app.api.auth import create_access_token
-    return create_access_token(data={"sub": moderator_user.username, "role": moderator_user.role})
+
+    return create_access_token(
+        data={"sub": moderator_user.username, "role": moderator_user.role}
+    )
 
 
 @pytest_asyncio.fixture
@@ -294,7 +291,10 @@ async def superadmin_user(db_session):
 async def superadmin_token(superadmin_user):
     """Generate JWT token for super_admin user."""
     from app.api.auth import create_access_token
-    return create_access_token(data={"sub": superadmin_user.username, "role": superadmin_user.role})
+
+    return create_access_token(
+        data={"sub": superadmin_user.username, "role": superadmin_user.role}
+    )
 
 
 @pytest_asyncio.fixture
@@ -322,4 +322,5 @@ async def api_token(db_session, test_user):
 
     # Return both the DB object and the raw token for tests to use
     from types import SimpleNamespace
+
     return SimpleNamespace(db_token=token, raw_token=raw_token)
