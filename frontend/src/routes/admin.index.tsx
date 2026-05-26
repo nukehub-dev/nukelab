@@ -14,6 +14,7 @@ import {
   FolderOpen,
   HardDrive,
   HeartPulse,
+  GlobeLock,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
@@ -124,6 +125,14 @@ const categories: AdminCategory[] = [
     href: '/admin/permissions',
     requiredPermission: PERMISSIONS.ADMIN_ACCESS,
     color: 'bg-purple-500/10 text-purple-400',
+  },
+  {
+    label: 'IP Restrictions',
+    description: 'Manage IP-based access restrictions',
+    icon: GlobeLock,
+    href: '/admin/ip-restrictions',
+    requiredPermission: PERMISSIONS.ADMIN_ACCESS,
+    color: 'bg-red-500/10 text-red-400',
   },
   {
     label: 'Settings',

@@ -51,6 +51,7 @@ import { Route as AdminEnvironmentsRouteImport } from './routes/admin.environmen
 import { Route as AdminCreditsRouteImport } from './routes/admin.credits'
 import { Route as AdminAuditLogsRouteImport } from './routes/admin.audit-logs'
 import { Route as AdminHealthRouteImport } from './routes/admin.health'
+import { Route as AdminIpRestrictionsRouteImport } from './routes/admin.ip-restrictions'
 import { Route as AdminAnalyticsRouteImport } from './routes/admin.analytics'
 import { Route as UserUsernameServerNameRouteImport } from './routes/user.$username.$serverName'
 import { Route as ServersServerIdMetricsRouteImport } from './routes/servers.$serverId.metrics'
@@ -265,6 +266,11 @@ const AdminHealthRoute = AdminHealthRouteImport.update({
   path: '/health',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminIpRestrictionsRoute = AdminIpRestrictionsRouteImport.update({
+  id: '/ip-restrictions',
+  path: '/ip-restrictions',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminAnalyticsRoute = AdminAnalyticsRouteImport.update({
   id: '/analytics',
   path: '/analytics',
@@ -305,6 +311,7 @@ export interface FileRoutesByFullPath {
   '/admin/credits': typeof AdminCreditsRoute
   '/admin/environments': typeof AdminEnvironmentsRoute
   '/admin/health': typeof AdminHealthRoute
+  '/admin/ip-restrictions': typeof AdminIpRestrictionsRoute
   '/admin/permissions': typeof AdminPermissionsRoute
   '/admin/plans': typeof AdminPlansRoute
   '/admin/quotas': typeof AdminQuotasRoute
@@ -348,6 +355,7 @@ export interface FileRoutesByTo {
   '/admin/credits': typeof AdminCreditsRoute
   '/admin/environments': typeof AdminEnvironmentsRoute
   '/admin/health': typeof AdminHealthRoute
+  '/admin/ip-restrictions': typeof AdminIpRestrictionsRoute
   '/admin/permissions': typeof AdminPermissionsRoute
   '/admin/plans': typeof AdminPlansRoute
   '/admin/quotas': typeof AdminQuotasRoute
@@ -396,6 +404,7 @@ export interface FileRoutesById {
   '/admin/credits': typeof AdminCreditsRoute
   '/admin/environments': typeof AdminEnvironmentsRoute
   '/admin/health': typeof AdminHealthRoute
+  '/admin/ip-restrictions': typeof AdminIpRestrictionsRoute
   '/admin/permissions': typeof AdminPermissionsRoute
   '/admin/plans': typeof AdminPlansRoute
   '/admin/quotas': typeof AdminQuotasRoute
@@ -863,6 +872,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminHealthRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/ip-restrictions': {
+      id: '/admin/ip-restrictions'
+      path: '/ip-restrictions'
+      fullPath: '/admin/ip-restrictions'
+      preLoaderRoute: typeof AdminIpRestrictionsRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/credits': {
       id: '/admin/credits'
       path: '/credits'
@@ -907,6 +923,7 @@ interface AdminRouteChildren {
   AdminCreditsRoute: typeof AdminCreditsRoute
   AdminEnvironmentsRoute: typeof AdminEnvironmentsRoute
   AdminHealthRoute: typeof AdminHealthRoute
+  AdminIpRestrictionsRoute: typeof AdminIpRestrictionsRoute
   AdminPermissionsRoute: typeof AdminPermissionsRoute
   AdminPlansRoute: typeof AdminPlansRoute
   AdminQuotasRoute: typeof AdminQuotasRoute
@@ -924,6 +941,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminCreditsRoute: AdminCreditsRoute,
   AdminEnvironmentsRoute: AdminEnvironmentsRoute,
   AdminHealthRoute: AdminHealthRoute,
+  AdminIpRestrictionsRoute: AdminIpRestrictionsRoute,
   AdminPermissionsRoute: AdminPermissionsRoute,
   AdminPlansRoute: AdminPlansRoute,
   AdminQuotasRoute: AdminQuotasRoute,

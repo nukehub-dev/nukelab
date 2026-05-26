@@ -5,7 +5,8 @@ from app.config import settings
 from app.api import (
     auth, users, servers, tokens, credits, admin,
     preferences, environments, plans, quotas, metrics,
-    notifications, dashboard, bulk, health, system, schedules, volumes, analytics, workspaces
+    notifications, dashboard, bulk, health, system, schedules, volumes, analytics, workspaces,
+    ip_restriction
 )
 from app.db.base import Base
 from app.db.session import engine
@@ -29,6 +30,10 @@ async def rate_limit_exceeded_handler(request: Request, exc):
         status_code=429,
         content={"detail": detail}
     )
+
+# IP restriction middleware (runs first — blocks bad IPs at the edge)
+from app.middleware.ip_restriction import IPRestrictionMiddleware
+app.add_middleware(IPRestrictionMiddleware)
 
 # Maintenance middleware (must be before auth-dependent middleware)
 from app.middleware.maintenance import MaintenanceMiddleware
@@ -72,6 +77,7 @@ app.include_router(schedules.router, prefix="/schedules", tags=["schedules"])
 app.include_router(volumes.router, prefix="/volumes", tags=["volumes"])
 app.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
 app.include_router(workspaces.router, prefix="/workspaces", tags=["workspaces"])
+app.include_router(ip_restriction.router, prefix="/admin", tags=["admin"])
 
 
 @app.websocket("/ws")
