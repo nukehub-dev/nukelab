@@ -337,7 +337,6 @@ cmd_start() {
         ok "Development stack running!"
         echo -e "  Frontend: ${CYAN}http://localhost:5173${RESET} ${DIM}(Vite dev)${RESET}"
         echo -e "  API:      ${CYAN}http://localhost:8080/api${RESET}"
-        echo -e "  Traefik:  ${CYAN}http://localhost:8090${RESET}"
         echo -e "\n  ${YELLOW}Ctrl+C to stop${RESET}"
         
         trap 'echo ""; step "Shutting down..."; kill_frontend; $COMPOSE "${COMPOSE_ARGS[@]}" stop traefik postgres redis backend celery-worker celery-beat > /dev/null 2>&1; ok "Goodbye!"; exit 0' INT TERM

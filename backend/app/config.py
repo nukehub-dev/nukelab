@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     session_httponly: bool = True
     session_samesite: str = "lax"
 
+    csrf_protection_enabled: bool = True
+
     cors_origins: str = "http://localhost:3000,http://localhost:8000"
     cors_allow_credentials: bool = True
 
@@ -164,6 +166,24 @@ class Settings(BaseSettings):
             self.server_auth_public_key_path = os.path.join(
                 self.server_auth_secrets_dir, 'server-auth-public.pem'
             )
+        return self
+
+    @model_validator(mode='after')
+    def reject_default_secrets_in_production(self) -> 'Settings':
+        """Refuse to start in production with default/dev secrets."""
+        if self.app_env == "production":
+            weak_secrets = {"change-me", "dev-jwt-secret-change-in-production-min-32-chars",
+                            "dev-session-secret-change-in-production", "dev-jwt-secret"}
+            if self.jwt_secret in weak_secrets:
+                raise ValueError(
+                    "JWT_SECRET is using a default/dev value. "
+                    "Set a strong random secret before running in production."
+                )
+            if self.session_secret in weak_secrets:
+                raise ValueError(
+                    "SESSION_SECRET is using a default/dev value. "
+                    "Set a strong random secret before running in production."
+                )
         return self
 
     class Config:

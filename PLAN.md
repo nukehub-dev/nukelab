@@ -1,6 +1,6 @@
 # NukeLab Platform v2.0 — Architecture & Implementation Plan
 
-**Status**: Phase 5 ~98% Complete
+**Status**: Phase 5 ~99% Complete
 **Last Updated**: May 24, 2026  
 **Target Timeline**: 6+ months  
 **Tech Stack**: Vite + React 19 SPA, FastAPI, PostgreSQL 18, Redis, Traefik v3, Docker/Podman
@@ -28,6 +28,12 @@
 - **Quota Service Disk Bug Fix** — Removed double-counting of server `allocated_disk` + volume `max_size_bytes`; volume creation quota now counts volumes separately
 - **Admin Volume Edit UX** — Replaced raw bytes input with GB slider (1–500 GB); synced with user volume create dialog pattern
 - **Volume Max Size Validation** — Shared `VolumeService.validate_max_size()` prevents shrinking below actual used bytes on both user and admin endpoints
+- **Security Headers (Exception-Safe ASGI)** — `SecurityHeadersMiddleware` intercepts `http.response.start` to inject headers even on 500 errors; adds `Cross-Origin-Resource-Policy`, `Cache-Control: no-store` on auth/admin, `Clear-Site-Data` on logout
+- **Path Traversal Fix** — Centralized `secure_path()` utility with `pathlib.Path.resolve()` + `relative_to()` validation; avatar endpoint has filename whitelist + path resolution defense-in-depth
+- **Production Secret Validation** — App refuses to start in production with default `JWT_SECRET` or `SESSION_SECRET`
+- **CSRF Double-Submit Protection** — `CSRFProtectMiddleware` enforces `X-CSRF-Token` header matching `csrf_token` cookie for cookie-authenticated state-changing requests; smart exemptions for Bearer auth, safe methods, and auth flow endpoints
+- **Removed Harmful `browserXssFilter`** — Deleted from Traefik config (XSS Auditor creates XS-Leak side channels)
+- **Disabled Traefik Dashboard** — Removed `api.insecure` and dashboard router labels from default config
 
 ### Model Updates
 - **ServerPlan** — Added `max_runtime`, `idle_timeout`, `allow_scheduling`, `allow_snapshots`
@@ -35,8 +41,8 @@
 - **ServerQueue** — Added `requested_cpu`, `requested_memory`, `requested_disk`
 
 ### Tests
-- 433 tests passing (379 + 24 IP restriction tests + 6 volume validation tests + 12 mocked spawner lifecycle tests)
-- Test files: `test_system.py`, `test_plans.py`, `test_credits.py`, `test_environments.py`, `test_auth.py`, `test_bulk.py`, `test_admin_workspaces.py`, `test_admin_volumes.py`, `test_ip_restrictions.py`, `test_volumes.py`
+- 466 tests passing
+- Test files: `test_system.py`, `test_plans.py`, `test_credits.py`, `test_environments.py`, `test_auth.py`, `test_bulk.py`, `test_admin_workspaces.py`, `test_admin_volumes.py`, `test_ip_restrictions.py`, `test_volumes.py`, `test_security_headers.py`, `test_filesystem.py`, `test_config.py`, `test_csrf.py`
 
 ---
 
@@ -1626,7 +1632,11 @@ Then the server stops and the bulk API returns success
   - [ ] OWASP Top 10 audit
   - [ ] Dependency scanning (Snyk, Dependabot)
   - [ ] Secret management (HashiCorp Vault or Sealed Secrets)
-  - [ ] Security headers (HSTS, CSP, X-Frame-Options)
+  - [x] Security headers (HSTS, CSP, X-Frame-Options, CORP, Permissions-Policy) — exception-safe ASGI middleware
+  - [x] Path traversal prevention — centralized `secure_path()` with `Path.resolve()` + `relative_to()`
+  - [x] Production secret validation — refuses to start with default secrets
+  - [x] CSRF protection — double-submit cookie pattern with smart exemptions
+  - [x] Removed harmful `browserXssFilter`
   - [ ] Penetration testing
 
 - [ ] **Performance**

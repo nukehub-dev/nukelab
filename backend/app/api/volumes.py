@@ -255,18 +255,7 @@ def _get_volume_base_path(volume_name: str) -> Path:
     return Path(VOLUME_STORAGE_PATH) / volume_name / "_data"
 
 
-def _secure_path(base_path: Path, subpath: str) -> Path:
-    """Validate and resolve a path within the volume to prevent traversal attacks."""
-    # Normalize the requested path
-    requested = (base_path / subpath.lstrip("/")).resolve()
-    
-    # Ensure it's within the volume directory
-    try:
-        requested.relative_to(base_path.resolve())
-    except ValueError:
-        raise HTTPException(status_code=403, detail="Access denied: path traversal detected")
-    
-    return requested
+
 
 
 @router.get("/{volume_id}/files")
@@ -296,7 +285,7 @@ async def list_volume_files(
     
     try:
         base_path = _get_volume_base_path(volume.name)
-        target_path = _secure_path(base_path, path)
+        target_path = secure_path(base_path, path)
         
         if not target_path.exists():
             raise HTTPException(status_code=404, detail="Path not found")
@@ -398,7 +387,7 @@ async def delete_volume_file(
     
     try:
         base_path = _get_volume_base_path(volume.name)
-        target_path = _secure_path(base_path, path)
+        target_path = secure_path(base_path, path)
         
         if not target_path.exists():
             raise HTTPException(status_code=404, detail="Path not found")
@@ -458,7 +447,7 @@ async def download_volume_file(
     
     try:
         base_path = _get_volume_base_path(volume.name)
-        target_path = _secure_path(base_path, path)
+        target_path = secure_path(base_path, path)
         
         if not target_path.exists() or target_path.is_dir():
             raise HTTPException(status_code=404, detail="File not found")

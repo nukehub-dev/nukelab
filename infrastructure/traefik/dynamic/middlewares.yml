@@ -43,7 +43,6 @@ http:
       headers:
         frameDeny: true
         contentTypeNosniff: true
-        browserXssFilter: true
         referrerPolicy: "strict-origin-when-cross-origin"
         customFrameOptionsValue: "SAMEORIGIN"
         stsSeconds: 31536000

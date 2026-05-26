@@ -596,6 +596,27 @@ async def logout_endpoint(request: Request, body: Optional[RefreshRequest] = Non
     return response
 
 
+@router.get("/csrf-token")
+async def get_csrf_token():
+    """Generate a CSRF token for double-submit cookie protection.
+
+    Returns a new token and sets it as the csrf_token cookie.
+    The frontend must read this cookie and send it as the
+    X-CSRF-Token header on all state-changing requests.
+    """
+    token = secrets.token_urlsafe(32)
+    response = JSONResponse(content={"csrf_token": token})
+    response.set_cookie(
+        key="csrf_token",
+        value=token,
+        httponly=False,  # Must be readable by JavaScript
+        samesite=settings.session_samesite,
+        secure=settings.session_secure,
+        max_age=86400,  # 24 hours
+    )
+    return response
+
+
 @router.get("/verify")
 async def verify_auth(request: Request, db: AsyncSession = Depends(get_db)):
     """Verify authentication for nginx auth_request module.

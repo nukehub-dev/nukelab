@@ -174,3 +174,28 @@ class TestPublicProfileAPI:
             headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 404
+
+
+
+class TestAvatarPathTraversal:
+    """Path traversal prevention tests for the avatar endpoint."""
+
+    # NOTE: Starlette's router normalizes URL paths before routing,
+    # so raw traversal sequences (../) never reach the endpoint.
+    # The real protection is validated by unit tests in test_filesystem.py.
+    # These integration tests verify the defense-in-depth layers that
+    # ARE reachable through the HTTP client.
+
+    @pytest.mark.asyncio
+    async def test_avatar_invalid_filename_returns_400(self, client):
+        """Non-UUID filenames must be rejected before path resolution."""
+        response = await client.get("/api/users/avatar/evil.exe")
+        assert response.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_avatar_missing_file_returns_404(self, client):
+        """Valid-format but non-existent avatar should return 404."""
+        response = await client.get(
+            "/api/users/avatar/550e8400-e29b-41d4-a716-446655440000.png"
+        )
+        assert response.status_code == 404

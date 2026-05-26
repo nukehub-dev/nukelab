@@ -8,7 +8,6 @@ services:
     ports:
       - "8080:80"
       - "8443:443"
-      - "8090:8080"
     volumes:
       - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:ro
       - ./certs:/certs:ro
@@ -17,10 +16,6 @@ services:
       - ./infrastructure/traefik/dynamic:/etc/traefik/dynamic:ro
     networks:
       - nukelab-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.traefik.rule=Host(`traefik.localhost`)"
-      - "traefik.http.routers.traefik.service=api@internal"
     restart: unless-stopped
 
   # Database
@@ -80,6 +75,7 @@ services:
       - SESSION_HTTPONLY=${SESSION_HTTPONLY:-true}
       - SESSION_SAMESITE=${SESSION_SAMESITE:-lax}
       - SECURITY_HEADERS_ENABLED=${SECURITY_HEADERS_ENABLED:-true}
+      - CSRF_PROTECTION_ENABLED=${CSRF_PROTECTION_ENABLED:-true}
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://localhost:8000}
       - CORS_ALLOW_CREDENTIALS=${CORS_ALLOW_CREDENTIALS:-true}
       # Rate Limiting — per-user tier configuration (Redis-backed)

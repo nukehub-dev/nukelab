@@ -41,7 +41,6 @@ cp .env.example .env.development
 - Frontend: http://localhost:8080
 - API: http://localhost:8080/api
 - API Docs: http://localhost:8080/api/docs
-- Traefik Dashboard: http://localhost:8090
 
 **Default login:**
 - Username: `admin`

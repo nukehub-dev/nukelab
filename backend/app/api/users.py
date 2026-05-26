@@ -3,6 +3,7 @@ User API endpoints with RBAC enforcement.
 """
 
 from typing import Optional, List
+from pathlib import Path
 from pydantic import BaseModel, Field
 import os
 import shutil
@@ -10,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import get_current_user, require_jwt_auth
+from app.core.filesystem import secure_path, validate_avatar_filename
 from app.core.permissions import Permission
 from app.core.security import get_user_permissions
 from app.dependencies import require_permissions, PermissionChecker
@@ -209,14 +211,22 @@ async def upload_avatar(
             detail=f"Invalid file type. Allowed: JPEG, PNG, WebP, GIF"
         )
 
-    # Validate file size
-    contents = await file.read()
+    # Validate file size via chunked read to avoid memory exhaustion
     max_size = settings.max_avatar_size_mb * 1024 * 1024
-    if len(contents) > max_size:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"File too large. Max size: {settings.max_avatar_size_mb}MB"
-        )
+    total_size = 0
+    chunks = []
+    chunk_size = 8192
+    while True:
+        chunk = await file.read(chunk_size)
+        if not chunk:
+            break
+        total_size += len(chunk)
+        if total_size > max_size:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File too large. Max size: {settings.max_avatar_size_mb}MB"
+            )
+        chunks.append(chunk)
 
     # Determine file extension
     ext_map = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif"}
@@ -235,7 +245,8 @@ async def upload_avatar(
             os.remove(os.path.join(avatars_dir, old_file))
 
     with open(file_path, "wb") as f:
-        f.write(contents)
+        for chunk in chunks:
+            f.write(chunk)
 
     # Update user: set avatar_url to relative path and disable Gravatar
     avatar_url = f"/api/users/avatar/{filename}"
@@ -253,8 +264,13 @@ async def upload_avatar(
 @router.get("/avatar/{filename}")
 async def get_avatar(filename: str):
     """Serve an avatar image file."""
-    file_path = os.path.join(settings.upload_dir, "avatars", filename)
-    if not os.path.isfile(file_path):
+    # Defense-in-depth: whitelist filename pattern + secure path resolution
+    validate_avatar_filename(filename)
+
+    avatars_dir = Path(settings.upload_dir) / "avatars"
+    file_path = secure_path(avatars_dir, filename)
+
+    if not file_path.is_file():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Avatar not found")
 
     from fastapi.responses import FileResponse
@@ -265,9 +281,9 @@ async def get_avatar(filename: str):
         ".webp": "image/webp",
         ".gif": "image/gif",
     }
-    ext = os.path.splitext(filename)[1].lower()
+    ext = file_path.suffix.lower()
     media_type = media_types.get(ext, "application/octet-stream")
-    return FileResponse(file_path, media_type=media_type)
+    return FileResponse(str(file_path), media_type=media_type)
 
 
 @router.post("/me/change-password")

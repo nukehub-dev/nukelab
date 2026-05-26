@@ -39,6 +39,10 @@ app.add_middleware(IPRestrictionMiddleware)
 from app.core.security_headers_asgi import SecurityHeadersMiddleware
 app.add_middleware(SecurityHeadersMiddleware)
 
+# CSRF protection middleware (runs before auth-dependent middleware)
+from app.middleware.csrf import CSRFProtectMiddleware
+app.add_middleware(CSRFProtectMiddleware)
+
 # Maintenance middleware (must be before auth-dependent middleware)
 from app.middleware.maintenance import MaintenanceMiddleware
 app.add_middleware(MaintenanceMiddleware)
