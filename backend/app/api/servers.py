@@ -480,8 +480,8 @@ async def create_server(
                 is_primary=vm.get("is_primary", False),
             )
             db.add(sv)
-            # Increment volume server count
-            await volume_service.increment_server_count(vm["volume_id"])
+            # Update volume last mounted time
+            await volume_service.record_mount(vm["volume_id"])
             # Persist home-directory flag for privacy warnings even after deletion
             home_mount_path = f"/home/{current_user.username}"
             if vm["mount_path"] == home_mount_path:
@@ -903,14 +903,6 @@ async def _perform_server_start(
                 server.stop_reason = None
                 server.stopped_at = None
 
-                if volume_mounts:
-                    volume_service = VolumeService(db)
-                    for vm in volume_mounts:
-                        await volume_service.increment_server_count(vm["volume_id"])
-                elif server.volume_id:
-                    volume_service = VolumeService(db)
-                    await volume_service.increment_server_count(str(server.volume_id))
-
                 await db.commit()
                 await broadcast_server_status_change(server.user_id, server_id, "running")
                 return {"message": "Server container recreated and started", "server_id": server_id, "status": "running"}
@@ -927,10 +919,10 @@ async def _perform_server_start(
             if volume_mounts:
                 volume_service = VolumeService(db)
                 for vm in volume_mounts:
-                    await volume_service.increment_server_count(vm["volume_id"])
+                    await volume_service.record_mount(vm["volume_id"])
             elif server.volume_id:
                 volume_service = VolumeService(db)
-                await volume_service.increment_server_count(str(server.volume_id))
+                await volume_service.record_mount(str(server.volume_id))
 
             notif_service = NotificationService(db)
             await notif_service.server_started(
@@ -1001,10 +993,10 @@ async def _perform_server_start(
             if volume_mounts:
                 volume_service = VolumeService(db)
                 for vm in volume_mounts:
-                    await volume_service.increment_server_count(vm["volume_id"])
+                    await volume_service.record_mount(vm["volume_id"])
             elif server.volume_id:
                 volume_service = VolumeService(db)
-                await volume_service.increment_server_count(str(server.volume_id))
+                await volume_service.record_mount(str(server.volume_id))
 
             notif_service = NotificationService(db)
             await notif_service.server_started(
@@ -1068,14 +1060,6 @@ async def _perform_server_stop(
                     user_id=str(server.user_id),
                     plan_id=str(server.plan_id)
                 )
-
-            if volume_mounts:
-                volume_service = VolumeService(db)
-                for vm in volume_mounts:
-                    await volume_service.decrement_server_count(vm["volume_id"])
-            elif server.volume_id:
-                volume_service = VolumeService(db)
-                await volume_service.decrement_server_count(str(server.volume_id))
 
             await db.commit()
 
@@ -1266,14 +1250,6 @@ async def _perform_server_delete(
             await spawner.delete(server.container_id)
         except Exception as e:
             print(f"Warning: Failed to delete container: {e}")
-
-    if volume_mounts:
-        volume_service = VolumeService(db)
-        for vm in volume_mounts:
-            await volume_service.decrement_server_count(vm["volume_id"])
-    elif server.volume_id:
-        volume_service = VolumeService(db)
-        await volume_service.decrement_server_count(str(server.volume_id))
 
     await db.execute(
         delete(CreditTransaction).where(CreditTransaction.server_id == server.id)
@@ -1568,13 +1544,6 @@ async def update_server(
         except Exception as e:
             print(f"Warning: failed to stop/delete container during update: {e}")
         
-        # Decrement old volume counts
-        old_mounts = await _load_server_volume_mounts(db, str(server.id))
-        for vm in old_mounts:
-            await volume_service.decrement_server_count(vm["volume_id"])
-        if server.volume_id and not old_mounts:
-            await volume_service.decrement_server_count(str(server.volume_id))
-        
         server.container_id = None
         server.status = "stopped"
         server.stopped_at = datetime.utcnow()
@@ -1657,13 +1626,6 @@ async def update_server(
             server.external_url = new_server_container.external_url
             server.stop_reason = None
             server.stopped_at = None
-            
-            # Increment new volume counts
-            if spawn_mounts:
-                for vm in spawn_mounts:
-                    await volume_service.increment_server_count(vm["volume_id"])
-            elif server.volume_id:
-                await volume_service.increment_server_count(str(server.volume_id))
             
             await db.commit()
             await broadcast_server_status_change(server.user_id, str(server.id), "running")

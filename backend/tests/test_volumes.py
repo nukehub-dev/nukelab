@@ -21,7 +21,7 @@ class TestVolumeModel:
         assert hasattr(vol, 'size_bytes')
         assert hasattr(vol, 'max_size_bytes')
         assert hasattr(vol, 'status')
-        assert hasattr(vol, 'server_count')
+        assert hasattr(vol, 'last_mounted_at')
 
     @pytest.mark.asyncio
     async def test_volume_defaults(self):
@@ -34,7 +34,7 @@ class TestVolumeModel:
         assert vol.visibility is None  # DB default
         assert vol.status is None  # DB default
         assert vol.size_bytes is None  # DB default
-        assert vol.server_count is None  # DB default
+        assert vol.last_mounted_at is None  # DB default
 
 
 class TestVolumeService:
@@ -142,10 +142,14 @@ class TestVolumeService:
             assert result["plan_limit"] == 10737418240  # 10GB
 
     @pytest.mark.asyncio
-    async def test_server_count_tracking(self, db_session, test_user):
-        """Server count should increment and decrement."""
+    async def test_server_count_computed_from_mounts(self, db_session, test_user):
+        """server_count in to_dict() should reflect actual server_mounts."""
         from app.services.volume_service import VolumeService
-
+        from app.models.volume import Volume
+        from app.models.server import Server
+        from app.models.server_volume import ServerVolume
+        from sqlalchemy import select
+        from sqlalchemy.orm import selectinload
         service = VolumeService(db_session)
         volume = await service.create_volume(
             name="test-vol-count",
@@ -153,15 +157,71 @@ class TestVolumeService:
             owner_id=str(test_user.id),
         )
 
-        assert volume.server_count == 0
+        # Without server_mounts loaded, count is 0
+        assert volume.to_dict()["server_count"] == 0
 
-        await service.increment_server_count(str(volume.id))
-        await db_session.refresh(volume)
-        assert volume.server_count == 1
+        # Create a server and mount the volume
+        server = Server(
+            name="count-test-server",
+            user_id=test_user.id,
+            status="running",
+        )
+        db_session.add(server)
+        await db_session.commit()
+        await db_session.refresh(server)
 
-        await service.decrement_server_count(str(volume.id))
-        await db_session.refresh(volume)
-        assert volume.server_count == 0
+        sv = ServerVolume(
+            server_id=server.id,
+            volume_id=volume.id,
+            mount_path="/data",
+            mode="read_write",
+        )
+        db_session.add(sv)
+        await db_session.commit()
+
+        # Load volume with server_mounts and verify count
+        result = await db_session.execute(
+            select(Volume)
+            .options(selectinload(Volume.server_mounts))
+            .where(Volume.id == volume.id)
+        )
+        volume_loaded = result.scalar_one()
+        assert volume_loaded.to_dict()["server_count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_delete_volume_rejects_mounted_volume(self, db_session, test_user):
+        """delete_volume should reject a volume that still has server mounts."""
+        from app.services.volume_service import VolumeService
+        from app.models.server import Server
+        from app.models.server_volume import ServerVolume
+
+        service = VolumeService(db_session)
+        volume = await service.create_volume(
+            name="test-vol-mounted",
+            display_name="Mounted Volume",
+            owner_id=str(test_user.id),
+        )
+
+        server = Server(
+            name="mounted-server",
+            user_id=test_user.id,
+            status="running",
+        )
+        db_session.add(server)
+        await db_session.commit()
+        await db_session.refresh(server)
+
+        sv = ServerVolume(
+            server_id=server.id,
+            volume_id=volume.id,
+            mount_path="/data",
+            mode="read_write",
+        )
+        db_session.add(sv)
+        await db_session.commit()
+
+        with pytest.raises(ValueError, match="still mounted"):
+            await service.delete_volume(str(volume.id))
 
     @pytest.mark.asyncio
     async def test_check_aggregate_quota_passes(self, db_session, test_user):

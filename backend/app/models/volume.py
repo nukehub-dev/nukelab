@@ -27,7 +27,6 @@ class Volume(Base):
     status = Column(String(20), default="active")  # active, archived, deleting, over_limit
     
     # Usage tracking
-    server_count = Column(Integer, default=0)
     last_mounted_at = Column(DateTime, nullable=True)
     
     # Metadata
@@ -39,7 +38,6 @@ class Volume(Base):
     
     # Relationships
     owner = relationship("User", back_populates="volumes")
-    servers = relationship("Server", back_populates="volume")
     server_mounts = relationship("ServerVolume", back_populates="volume", cascade="all, delete-orphan")
     workspace_associations = relationship("WorkspaceVolume", back_populates="volume", cascade="all, delete-orphan")
     
@@ -53,7 +51,7 @@ class Volume(Base):
             "size_bytes": self.size_bytes,
             "max_size_bytes": self.max_size_bytes,
             "status": self.status,
-            "server_count": self.server_count,
+            "server_count": len(self.server_mounts) if "server_mounts" not in inspect(self).unloaded and self.server_mounts else 0,
             "last_mounted_at": self.last_mounted_at.isoformat() if self.last_mounted_at else None,
             "description": self.description,
             "labels": self.labels,

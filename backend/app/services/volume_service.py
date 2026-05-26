@@ -268,8 +268,13 @@ class VolumeService:
         if not volume:
             return False
 
-        if volume.server_count > 0:
-            raise ValueError(f"Volume is still mounted by {volume.server_count} server(s)")
+        from app.models.server_volume import ServerVolume
+        mount_count = await self.db.execute(
+            select(func.count()).where(ServerVolume.volume_id == volume.id)
+        )
+        mount_count_value = mount_count.scalar()
+        if mount_count_value > 0:
+            raise ValueError(f"Volume is still mounted by {mount_count_value} server(s)")
 
         # Delete Docker volume
         container_client = await get_container_client()
@@ -420,20 +425,11 @@ class VolumeService:
 
         return {"allowed": True}
 
-    async def increment_server_count(self, volume_id: str):
-        """Increment server count when a server mounts this volume"""
+    async def record_mount(self, volume_id: str):
+        """Update last_mounted_at when a server mounts this volume"""
         volume = await self.get_volume(volume_id)
         if volume:
-            volume.server_count += 1
             volume.last_mounted_at = datetime.utcnow()
-            await self.db.commit()
-
-    async def decrement_server_count(self, volume_id: str):
-        """Decrement server count when a server unmounts this volume"""
-        volume = await self.get_volume(volume_id)
-        if volume:
-            volume.server_count = max(0, volume.server_count - 1)
-            await self.db.commit()
 
     async def mark_home_volume(self, volume_id: str):
         """Persistently mark a volume as having been used as a home directory.

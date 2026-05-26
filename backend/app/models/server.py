@@ -48,7 +48,7 @@ class Server(Base):
     
     # Relationships
     user = relationship("User", back_populates="servers")
-    volume = relationship("Volume", back_populates="servers")
+    volume = relationship("Volume")
     volume_mounts = relationship("ServerVolume", back_populates="server", cascade="all, delete-orphan")
     
     # Timestamps
