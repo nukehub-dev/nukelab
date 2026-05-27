@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { useThemeStore } from '../stores/theme-store';
 
 // NukeLab logo SVG paths (same as logo.tsx)
 const LOGO_PATHS = `
@@ -21,31 +22,32 @@ const LOGO_PATHS = `
   </g>
 `;
 
-function getPrimaryColor(): string {
-  return getComputedStyle(document.documentElement).getPropertyValue('--primary').trim() || '#f37524';
+function getCssVar(name: string, fallback: string): string {
+  return (
+    getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback
+  );
 }
 
-function generateFaviconDataUrl(color: string): string {
+function generateFaviconDataUrl(color: string, background: string): string {
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
-      <rect width="256" height="256" rx="48" fill="var(--background, #0a0a0a)"/>
+      <rect width="256" height="256" rx="48" fill="${background}"/>
       <g style="color: ${color}">
         ${LOGO_PATHS}
       </g>
     </svg>
   `.trim();
-  
-  const encoded = encodeURIComponent(svg)
-    .replace(/'/g, '%27')
-    .replace(/"/g, '%22');
-  
+
+  const encoded = encodeURIComponent(svg).replace(/'/g, '%27').replace(/"/g, '%22');
+
   return `data:image/svg+xml,${encoded}`;
 }
 
 export function updateFavicon(): void {
-  const color = getPrimaryColor();
-  const dataUrl = generateFaviconDataUrl(color);
-  
+  const color = getCssVar('--primary', 'oklch(0.541 0.281 293.009)');
+  const background = getCssVar('--background', '#0a0a0a');
+  const dataUrl = generateFaviconDataUrl(color, background);
+
   let link: HTMLLinkElement | null = document.querySelector("link[rel*='icon']");
   if (!link) {
     link = document.createElement('link');
@@ -53,25 +55,28 @@ export function updateFavicon(): void {
     link.type = 'image/svg+xml';
     document.head.appendChild(link);
   }
-  
+
   link.href = dataUrl;
 }
 
+export function updateThemeColor(): void {
+  const color = getCssVar('--primary', 'oklch(0.541 0.281 293.009)');
+
+  let meta: HTMLMetaElement | null = document.querySelector('meta[name="theme-color"]');
+  if (!meta) {
+    meta = document.createElement('meta');
+    meta.name = 'theme-color';
+    document.head.appendChild(meta);
+  }
+
+  meta.content = color;
+}
+
 export function useFavicon(): void {
+  const { theme, isDark, isOled, accentColor } = useThemeStore();
+
   useEffect(() => {
-    // Initial update
     updateFavicon();
-    
-    // Watch for CSS variable changes
-    const observer = new MutationObserver(() => {
-      updateFavicon();
-    });
-    
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['style'],
-    });
-    
-    return () => observer.disconnect();
-  }, []);
+    updateThemeColor();
+  }, [theme, isDark, isOled, accentColor]);
 }
