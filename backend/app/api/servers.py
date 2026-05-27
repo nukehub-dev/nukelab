@@ -1422,13 +1422,13 @@ async def update_server(
     needs_recreate = False
     
     # Validate and apply name change (no recreate needed)
-    if request.name is not None:
-        server.name = request.name
+    if body.name is not None:
+        server.name = body.name
     
     # Validate and apply plan change
-    if request.plan_id is not None:
+    if body.plan_id is not None:
         plan_service = PlanService(db)
-        plan = await plan_service.get_by_id(request.plan_id)
+        plan = await plan_service.get_by_id(body.plan_id)
         if not plan:
             raise HTTPException(status_code=404, detail="Plan not found")
         can_use = await plan_service.can_user_use_plan(
@@ -1443,31 +1443,31 @@ async def update_server(
         quota_service = QuotaService(db)
         quota_check = await quota_service.check_spawn_allowed(
             user_id=str(current_user.id),
-            plan_id=request.plan_id,
+            plan_id=body.plan_id,
             exclude_server_id=str(server.id)
         )
         if not quota_check["allowed"]:
             raise HTTPException(status_code=429, detail=quota_check["reason"])
         
-        server.plan_id = uuid.UUID(request.plan_id)
+        server.plan_id = uuid.UUID(body.plan_id)
         server.allocated_cpu = plan.cpu_limit
         server.allocated_memory = plan.memory_limit
         server.allocated_disk = plan.disk_limit
         needs_recreate = True
     
     # Validate and apply environment change
-    if request.environment_id is not None:
+    if body.environment_id is not None:
         env_service = EnvironmentService(db)
-        environment = await env_service.get_by_id(request.environment_id)
+        environment = await env_service.get_by_id(body.environment_id)
         if not environment:
             raise HTTPException(status_code=404, detail="Environment not found")
-        server.environment_id = uuid.UUID(request.environment_id)
+        server.environment_id = uuid.UUID(body.environment_id)
         needs_recreate = True
     
     # Validate and apply volume mounts change
     new_volume_mounts = None
     disk_limit = None
-    if request.volume_mounts is not None:
+    if body.volume_mounts is not None:
         new_volume_mounts = []
         plan = None
         if server.plan_id:
@@ -1475,7 +1475,7 @@ async def update_server(
             plan = await plan_service.get_by_id(str(server.plan_id))
         disk_limit = plan.disk_limit if plan else server.allocated_disk
         
-        for idx, vm in enumerate(request.volume_mounts):
+        for idx, vm in enumerate(body.volume_mounts):
             mount_data = {
                 "volume_id": vm.volume_id,
                 "mount_path": vm.mount_path or "/data",
