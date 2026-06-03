@@ -4,7 +4,6 @@ Uses transactional test isolation: each test runs inside a savepoint that is
 rolled back at teardown, guaranteeing a clean database state without TRUNCATE.
 """
 
-import asyncio
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
@@ -34,14 +33,6 @@ test_engine = create_async_engine(
 )
 
 
-@pytest.fixture(scope="session")
-def event_loop():
-    """Create an instance of the default event loop for each test case."""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
-
-
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def setup_test_database():
     """Create test database and tables before all tests, drop after."""
@@ -53,16 +44,6 @@ async def setup_test_database():
 
     async with admin_engine.connect() as conn:
         await conn.execution_options(isolation_level="AUTOCOMMIT")
-        # Terminate any lingering connections to the test database
-        await conn.execute(
-            text(
-                """
-                SELECT pg_terminate_backend(pid)
-                FROM pg_stat_activity
-                WHERE datname = 'nukelab_test' AND pid <> pg_backend_pid()
-                """
-            )
-        )
         await conn.execute(text("DROP DATABASE IF EXISTS nukelab_test"))
         await conn.execute(text("CREATE DATABASE nukelab_test"))
 
@@ -73,21 +54,26 @@ async def setup_test_database():
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
 
+    # Patch app.db.session to use test_engine so middleware/tasks also
+    # connect to the test database instead of the main database.
+    from sqlalchemy.orm import sessionmaker
+    import app.db.session as _session_module
+    _original_engine = _session_module.engine
+    _original_AsyncSessionLocal = _session_module.AsyncSessionLocal
+    _session_module.engine = test_engine
+    _session_module.AsyncSessionLocal = sessionmaker(
+        test_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
     yield
 
-    # Cleanup: terminate connections again, then drop tables
-    async with admin_engine.connect() as conn:
-        await conn.execution_options(isolation_level="AUTOCOMMIT")
-        await conn.execute(
-            text(
-                """
-                SELECT pg_terminate_backend(pid)
-                FROM pg_stat_activity
-                WHERE datname = 'nukelab_test' AND pid <> pg_backend_pid()
-                """
-            )
-        )
+    # Restore original engine/sessionmaker
+    _session_module.engine = _original_engine
+    _session_module.AsyncSessionLocal = _original_AsyncSessionLocal
 
+    # Cleanup: drop tables
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
     await test_engine.dispose()
@@ -111,8 +97,8 @@ async def db_session():
             join_transaction_mode="create_savepoint",
         )
         yield session
-        await session.close()
         await trans.rollback()
+        await session.close()
 
 
 @pytest.fixture(autouse=True)

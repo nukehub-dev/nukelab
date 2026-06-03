@@ -16,6 +16,7 @@ from app.api.auth import get_current_user
 from app.dependencies import require_permissions
 from app.core.permissions import Permission
 from app.dependencies import PermissionChecker
+from app.core.filesystem import secure_path
 from app.db.session import get_db
 from app.models.user import User
 from app.services.quota_service import QuotaService

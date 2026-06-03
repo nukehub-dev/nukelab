@@ -2,6 +2,32 @@
 
 import pytest
 from httpx import AsyncClient
+from unittest import mock
+
+
+@pytest.fixture(autouse=True)
+def mock_docker_client():
+    """Mock Docker container client to avoid real volume creation."""
+    mock_vol = mock.AsyncMock()
+    mock_vol.delete = mock.AsyncMock()
+    
+    mock_volumes = mock.AsyncMock()
+    mock_volumes.create = mock.AsyncMock(return_value=mock_vol)
+    mock_volumes.get = mock.AsyncMock(return_value=mock_vol)
+    
+    mock_client = mock.AsyncMock()
+    mock_client.volumes = mock_volumes
+    mock_client.close = mock.AsyncMock()
+    
+    mock_container_client = mock.AsyncMock()
+    mock_container_client.client = mock_client
+    mock_container_client.list_containers = mock.AsyncMock(return_value=[])
+    mock_container_client.create_container = mock.AsyncMock(return_value=mock.Mock(id="mock-cid"))
+    mock_container_client.start_container = mock.AsyncMock()
+    mock_container_client.get_container_logs = mock.AsyncMock(return_value="mock logs")
+    
+    with mock.patch("app.services.volume_service.get_container_client", return_value=mock_container_client):
+        yield
 
 
 class TestWorkspaceModel:

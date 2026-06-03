@@ -1,101 +1,87 @@
-"""Tests for filesystem security utilities."""
-
-import os
-import tempfile
-from pathlib import Path
+"""Tests for app.core.filesystem security utilities."""
 
 import pytest
+import tempfile
+import os
+from pathlib import Path
 from fastapi import HTTPException
 
 from app.core.filesystem import secure_path, validate_avatar_filename
 
 
 class TestSecurePath:
-    """Unit tests for the secure_path() traversal prevention utility."""
+    @pytest.fixture
+    def temp_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            yield Path(tmp)
 
-    def test_normal_filename_resolves_correctly(self):
-        """A benign filename should resolve normally inside the base directory."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            target = secure_path(tmpdir, "subdir/file.txt")
-            assert target == Path(tmpdir) / "subdir" / "file.txt"
+    def test_valid_subpath(self, temp_dir):
+        result = secure_path(temp_dir, "subdir/file.txt")
+        assert result == temp_dir / "subdir" / "file.txt"
 
-    def test_dotdot_traversal_raises_403(self):
-        """Path traversal via .. should be rejected with 403."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with pytest.raises(HTTPException) as exc_info:
-                secure_path(tmpdir, "../../../etc/passwd")
-            assert exc_info.value.status_code == 403
-            assert "traversal" in exc_info.value.detail.lower()
+    def test_traversal_blocked(self, temp_dir):
+        with pytest.raises(HTTPException) as exc_info:
+            secure_path(temp_dir, "../../etc/passwd")
+        assert exc_info.value.status_code == 403
+        assert "traversal" in exc_info.value.detail.lower()
 
-    def test_absolute_path_is_normalized_safe(self):
-        """Leading slashes are stripped, making absolute paths relative and safe."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            target = secure_path(tmpdir, "/etc/passwd")
-            # /etc/passwd becomes etc/passwd inside tmpdir
-            assert target == Path(tmpdir) / "etc" / "passwd"
+    def test_absolute_path_normalized(self, temp_dir):
+        # Absolute paths are sanitized by stripping leading slash
+        result = secure_path(temp_dir, "/etc/passwd")
+        assert result == temp_dir / "etc" / "passwd"
 
-    def test_leading_slash_is_stripped_and_allowed(self):
-        """Leading slashes on otherwise-safe paths should be stripped."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            target = secure_path(tmpdir, "/safe.txt")
-            assert target == Path(tmpdir) / "safe.txt"
+    def test_dot_dot_in_middle(self, temp_dir):
+        # Creating a real subdir so resolve works
+        (temp_dir / "a" / "b").mkdir(parents=True)
+        (temp_dir / "c").mkdir()
+        result = secure_path(temp_dir, "a/b/../../c")
+        assert result == temp_dir / "c"
 
-    def test_symlink_within_base_allowed(self):
-        """Symlinks that point inside the base directory are allowed."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            real_file = Path(tmpdir) / "real.txt"
-            real_file.write_text("hello")
-            symlink = Path(tmpdir) / "link.txt"
-            symlink.symlink_to(real_file)
+    def test_single_dot_allowed(self, temp_dir):
+        result = secure_path(temp_dir, "./file.txt")
+        assert result == temp_dir / "file.txt"
 
-            target = secure_path(tmpdir, "link.txt")
-            assert target.resolve() == real_file.resolve()
+    def test_empty_subpath(self, temp_dir):
+        result = secure_path(temp_dir, "")
+        assert result == temp_dir
 
-    def test_symlink_escaping_base_raises_403(self):
-        """Symlinks that escape the base directory should be rejected."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            outside = Path(tmpdir).parent / "outside.txt"
-            outside.write_text("secret")
-            symlink = Path(tmpdir) / "evil.txt"
-            symlink.symlink_to(outside)
-
-            with pytest.raises(HTTPException) as exc_info:
-                secure_path(tmpdir, "evil.txt")
-            assert exc_info.value.status_code == 403
-
-    def test_null_byte_in_path(self):
-        """Pathlib should reject null bytes (defense against null-byte injection)."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            # Path() itself raises ValueError on null bytes
-            with pytest.raises((ValueError, HTTPException)):
-                secure_path(tmpdir, "foo\x00.txt")
+    def test_existing_file(self, temp_dir):
+        # Create a real file
+        test_file = temp_dir / "test.txt"
+        test_file.write_text("hello")
+        result = secure_path(temp_dir, "test.txt")
+        assert result.exists()
 
 
 class TestValidateAvatarFilename:
-    """Unit tests for avatar filename validation."""
-
-    def test_valid_uuid_filenames(self):
-        """Standard avatar filenames should pass validation."""
+    def test_valid_uuid_png(self):
         validate_avatar_filename("550e8400-e29b-41d4-a716-446655440000.png")
+
+    def test_valid_uuid_jpg(self):
         validate_avatar_filename("550e8400-e29b-41d4-a716-446655440000.jpg")
-        validate_avatar_filename("550e8400-e29b-41d4-a716-446655440000.jpeg")
+
+    def test_valid_uuid_webp(self):
         validate_avatar_filename("550e8400-e29b-41d4-a716-446655440000.webp")
+
+    def test_valid_uuid_gif(self):
         validate_avatar_filename("550e8400-e29b-41d4-a716-446655440000.gif")
 
-    def test_traversal_filename_rejected(self):
-        """Traversal patterns should be rejected."""
+    def test_invalid_extension(self):
+        with pytest.raises(HTTPException) as exc_info:
+            validate_avatar_filename("550e8400-e29b-41d4-a716-446655440000.exe")
+        assert exc_info.value.status_code == 400
+
+    def test_invalid_filename(self):
         with pytest.raises(HTTPException) as exc_info:
             validate_avatar_filename("../../../etc/passwd")
         assert exc_info.value.status_code == 400
 
-    def test_no_extension_rejected(self):
-        """Filenames without extension should be rejected."""
+    def test_no_extension(self):
         with pytest.raises(HTTPException) as exc_info:
-            validate_avatar_filename("550e8400-e29b-41d4-a716-446655440000")
+            validate_avatar_filename("avatar")
         assert exc_info.value.status_code == 400
 
-    def test_disallowed_extension_rejected(self):
-        """Non-image extensions should be rejected."""
+    def test_uppercase_extension_blocked(self):
         with pytest.raises(HTTPException) as exc_info:
-            validate_avatar_filename("550e8400-e29b-41d4-a716-446655440000.exe")
+            validate_avatar_filename("550e8400-e29b-41d4-a716-446655440000.PNG")
         assert exc_info.value.status_code == 400

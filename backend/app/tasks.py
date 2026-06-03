@@ -244,7 +244,7 @@ def process_nuke_billing(self):
         from app.models.server import Server
         from app.models.server_plan import ServerPlan
         from app.models.user import User
-        from app.services.notification_service import NotificationService
+        from app.services.notification_service import NotificationService, broadcast_server_status_change
         from app.services.credit_service import CreditService
         from datetime import datetime, timedelta
         from app.config import settings
@@ -347,7 +347,7 @@ def enforce_auto_stop(self):
         from sqlalchemy import select
         from app.models.server import Server
         from app.models.server_plan import ServerPlan
-        from app.services.notification_service import NotificationService
+        from app.services.notification_service import NotificationService, broadcast_server_status_change
         from datetime import datetime, timedelta
         from app.core.time_utils import parse_duration
         from app.config import settings
@@ -754,7 +754,7 @@ def rollup_server_metrics(self):
 def cleanup_expired_data(self):
     """Delete expired raw data based on retention settings."""
     async def _cleanup():
-        from sqlalchemy import delete, text
+        from sqlalchemy import delete, text, select
         from app.models.server_metric import ServerMetric
         from app.models.system_metric import SystemMetric
         from app.models.health_check import HealthCheck

@@ -26,6 +26,7 @@ def reset_maintenance_mode():
     failure paths, which would cause our tests to get 503 instead of 429.
     """
     settings.maintenance_mode = False
+    settings.rate_limit_enabled = True
     yield
 
 

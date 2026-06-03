@@ -8,6 +8,27 @@ from unittest.mock import MagicMock, AsyncMock, patch
 from app.models.server import Server
 
 
+@pytest.fixture(autouse=True)
+def mock_docker_client():
+    """Mock Docker container client to avoid real volume creation."""
+    mock_vol = AsyncMock()
+    mock_vol.delete = AsyncMock()
+    mock_volumes = AsyncMock()
+    mock_volumes.create = AsyncMock(return_value=mock_vol)
+    mock_volumes.get = AsyncMock(return_value=mock_vol)
+    mock_client = AsyncMock()
+    mock_client.volumes = mock_volumes
+    mock_client.close = AsyncMock()
+    mock_container_client = AsyncMock()
+    mock_container_client.client = mock_client
+    mock_container_client.list_containers = AsyncMock(return_value=[])
+    mock_container_client.create_container = AsyncMock(return_value=MagicMock(id="mock-cid"))
+    mock_container_client.start_container = AsyncMock()
+    mock_container_client.get_container_logs = AsyncMock(return_value="mock logs")
+    with patch("app.services.volume_service.get_container_client", return_value=mock_container_client):
+        yield
+
+
 class TestServerModelFields:
     """Server model property tests."""
 

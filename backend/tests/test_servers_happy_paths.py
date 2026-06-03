@@ -36,7 +36,7 @@ class TestServerGetEndpoints:
 
     @pytest.mark.asyncio
     async def test_get_server_with_container_sync_running(self, client, user_token, test_user, db_session):
-        """Server with container_id should sync status with spawner."""
+        """Server with container_id should sync status with spawner to running."""
         server = Server(
             name="running-srv", user_id=test_user.id, status="stopped",
             container_id="container123", allocated_cpu=2.0
@@ -53,6 +53,66 @@ class TestServerGetEndpoints:
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "running"
+
+    @pytest.mark.asyncio
+    async def test_get_server_container_sync_stopped(self, client, user_token, test_user, db_session):
+        """Server should sync to stopped when spawner returns stopped."""
+        server = Server(
+            name="sync-stopped", user_id=test_user.id, status="running",
+            container_id="cid-stopped"
+        )
+        db_session.add(server)
+        await db_session.commit()
+        await db_session.refresh(server)
+
+        with mock.patch("app.api.servers.spawner.get_status", return_value="stopped"):
+            response = await client.get(
+                f"/api/servers/{server.id}",
+                headers={"Authorization": f"Bearer {user_token}"}
+            )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "stopped"
+
+    @pytest.mark.asyncio
+    async def test_get_server_container_sync_paused(self, client, user_token, test_user, db_session):
+        """Server should sync to stopped when spawner returns paused."""
+        server = Server(
+            name="sync-paused", user_id=test_user.id, status="running",
+            container_id="cid-paused"
+        )
+        db_session.add(server)
+        await db_session.commit()
+        await db_session.refresh(server)
+
+        with mock.patch("app.api.servers.spawner.get_status", return_value="paused"):
+            response = await client.get(
+                f"/api/servers/{server.id}",
+                headers={"Authorization": f"Bearer {user_token}"}
+            )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "stopped"
+
+    @pytest.mark.asyncio
+    async def test_get_server_container_sync_exited(self, client, user_token, test_user, db_session):
+        """Server should sync to stopped when spawner returns exited."""
+        server = Server(
+            name="sync-exited", user_id=test_user.id, status="running",
+            container_id="cid-exited"
+        )
+        db_session.add(server)
+        await db_session.commit()
+        await db_session.refresh(server)
+
+        with mock.patch("app.api.servers.spawner.get_status", return_value="exited"):
+            response = await client.get(
+                f"/api/servers/{server.id}",
+                headers={"Authorization": f"Bearer {user_token}"}
+            )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "stopped"
 
     @pytest.mark.asyncio
     async def test_get_server_by_path(self, client, user_token, test_user, db_session):
@@ -86,6 +146,25 @@ class TestServerGetEndpoints:
         data = response.json()
         assert "servers" in data
         assert isinstance(data["servers"], list)
+
+    @pytest.mark.asyncio
+    async def test_list_servers_admin_sees_all(self, client, admin_token, test_user, admin_user, db_session):
+        """Admin should see all servers including other users'."""
+        user_server = Server(name="user-srv", user_id=test_user.id, status="stopped")
+        admin_server = Server(name="admin-srv", user_id=admin_user.id, status="stopped")
+        db_session.add_all([user_server, admin_server])
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/servers/",
+            headers={"Authorization": f"Bearer {admin_token}"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "servers" in data
+        server_names = {s["name"] for s in data["servers"]}
+        assert "user-srv" in server_names
+        assert "admin-srv" in server_names
 
     @pytest.mark.asyncio
     async def test_get_server_with_volume_mounts(self, client, user_token, test_user, db_session):

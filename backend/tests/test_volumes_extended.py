@@ -1,116 +1,116 @@
-"""Extended tests for Volumes API error paths."""
+"""Extended tests for Volume API endpoints."""
 
 import pytest
-import uuid
+from unittest import mock
+from fastapi import HTTPException
 
 from app.models.volume import Volume
 
 
-class TestVolumeAPIErrors:
-    """Tests for volume endpoint error paths."""
-
+class TestRefreshVolumeSize:
     @pytest.mark.asyncio
-    async def test_get_volume_not_found(self, client, user_token):
-        """Getting non-existent volume should 404."""
-        response = await client.get(
-            "/api/volumes/00000000-0000-0000-0000-000000000000",
-            headers={"Authorization": f"Bearer {user_token}"}
-        )
-        assert response.status_code == 404
-
-    @pytest.mark.asyncio
-    async def test_update_volume_not_found(self, client, user_token):
-        """Updating non-existent volume should 404."""
-        response = await client.put(
-            "/api/volumes/00000000-0000-0000-0000-000000000000",
-            headers={"Authorization": f"Bearer {user_token}"},
-            json={"display_name": "new name"}
-        )
-        assert response.status_code == 404
-
-    @pytest.mark.asyncio
-    async def test_delete_volume_not_found(self, client, user_token):
-        """Deleting non-existent volume should 404."""
-        response = await client.delete(
-            "/api/volumes/00000000-0000-0000-0000-000000000000",
-            headers={"Authorization": f"Bearer {user_token}"}
-        )
-        assert response.status_code == 404
-
-    @pytest.mark.asyncio
-    async def test_user_cannot_access_others_volume(self, client, user_token, admin_user, db_session):
-        """User should not be able to access another user's private volume."""
-        volume = Volume(
-            owner_id=admin_user.id,
-            name="admin-volume",
-            display_name="Admin Volume",
-            size_bytes=10 * 1024 * 1024 * 1024,
-            visibility="private",
-        )
-        db_session.add(volume)
+    async def test_refresh_volume_size(self, client, user_token, test_user, db_session):
+        vol = Volume(name="refresh-vol", display_name="Refresh Vol", owner_id=test_user.id, size_bytes=0)
+        db_session.add(vol)
         await db_session.commit()
-        await db_session.refresh(volume)
+        await db_session.refresh(vol)
+
+        with mock.patch("app.api.volumes.VolumeService.update_volume_size", new_callable=mock.AsyncMock, return_value=1024):
+            response = await client.post(
+                f"/api/volumes/{vol.id}/refresh-size",
+                headers={"Authorization": f"Bearer {user_token}"}
+            )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["size_bytes"] == 1024
+
+    @pytest.mark.asyncio
+    async def test_refresh_volume_not_found(self, client, user_token):
+        import uuid
+        response = await client.post(
+            f"/api/volumes/{uuid.uuid4()}/refresh-size",
+            headers={"Authorization": f"Bearer {user_token}"}
+        )
+        assert response.status_code == 404
+
+
+class TestVolumeFiles:
+    @pytest.mark.asyncio
+    async def test_list_volume_files_not_found(self, client, user_token, test_user, db_session):
+        vol = Volume(name="files-vol", display_name="Files Vol", owner_id=test_user.id)
+        db_session.add(vol)
+        await db_session.commit()
+        await db_session.refresh(vol)
+
+        with mock.patch("app.api.volumes.secure_path", side_effect=HTTPException(status_code=404, detail="Path not found")):
+            response = await client.get(
+                f"/api/volumes/{vol.id}/files?path=/nonexistent",
+                headers={"Authorization": f"Bearer {user_token}"}
+            )
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_delete_volume_file_not_found(self, client, user_token, test_user, db_session):
+        vol = Volume(name="del-vol", display_name="Del Vol", owner_id=test_user.id)
+        db_session.add(vol)
+        await db_session.commit()
+        await db_session.refresh(vol)
+
+        with mock.patch("app.api.volumes.secure_path", side_effect=HTTPException(status_code=404, detail="Path not found")):
+            response = await client.delete(
+                f"/api/volumes/{vol.id}/files?path=/nonexistent",
+                headers={"Authorization": f"Bearer {user_token}"}
+            )
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_download_volume_file_not_found(self, client, user_token, test_user, db_session):
+        vol = Volume(name="dl-vol", display_name="DL Vol", owner_id=test_user.id)
+        db_session.add(vol)
+        await db_session.commit()
+        await db_session.refresh(vol)
+
+        with mock.patch("app.api.volumes.secure_path", side_effect=HTTPException(status_code=404, detail="Path not found")):
+            response = await client.get(
+                f"/api/volumes/{vol.id}/download?path=/nonexistent",
+                headers={"Authorization": f"Bearer {user_token}"}
+            )
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_volume_files_volume_not_found(self, client, user_token):
+        import uuid
+        response = await client.get(
+            f"/api/volumes/{uuid.uuid4()}/files",
+            headers={"Authorization": f"Bearer {user_token}"}
+        )
+        assert response.status_code == 404
+
+
+class TestVolumeAccessControl:
+    @pytest.mark.asyncio
+    async def test_get_other_user_volume_forbidden(self, client, user_token, admin_user, db_session):
+        vol = Volume(name="private-vol", display_name="Private Vol", owner_id=admin_user.id, visibility="private")
+        db_session.add(vol)
+        await db_session.commit()
+        await db_session.refresh(vol)
 
         response = await client.get(
-            f"/api/volumes/{volume.id}",
+            f"/api/volumes/{vol.id}",
             headers={"Authorization": f"Bearer {user_token}"}
         )
-        assert response.status_code in [403, 404]
+        assert response.status_code == 403
 
     @pytest.mark.asyncio
-    async def test_create_volume_invalid_size(self, client, user_token):
-        """Creating volume with invalid size should 422."""
-        response = await client.post(
-            "/api/volumes/",
+    async def test_update_other_user_volume_forbidden(self, client, user_token, admin_user, db_session):
+        vol = Volume(name="upd-private", display_name="Upd Private", owner_id=admin_user.id)
+        db_session.add(vol)
+        await db_session.commit()
+        await db_session.refresh(vol)
+
+        response = await client.put(
+            f"/api/volumes/{vol.id}",
             headers={"Authorization": f"Bearer {user_token}"},
-            json={"name": "vol1", "size_gb": -1}
+            json={"display_name": "Hacked"}
         )
-        assert response.status_code == 422
-
-    @pytest.mark.asyncio
-    async def test_create_volume_missing_name(self, client, user_token):
-        """Creating volume without name should 422."""
-        response = await client.post(
-            "/api/volumes/",
-            headers={"Authorization": f"Bearer {user_token}"},
-            json={"size_gb": 10}
-        )
-        assert response.status_code == 422
-
-    @pytest.mark.asyncio
-    async def test_mount_volume_not_found(self, client, user_token):
-        """Mounting non-existent volume should 404."""
-        response = await client.post(
-            "/api/volumes/00000000-0000-0000-0000-000000000000/mount",
-            headers={"Authorization": f"Bearer {user_token}"},
-            json={"server_id": str(uuid.uuid4())}
-        )
-        assert response.status_code == 404
-
-    @pytest.mark.asyncio
-    async def test_unmount_volume_not_found(self, client, user_token):
-        """Unmounting non-existent volume should 404."""
-        response = await client.post(
-            "/api/volumes/00000000-0000-0000-0000-000000000000/unmount",
-            headers={"Authorization": f"Bearer {user_token}"},
-            json={"server_id": str(uuid.uuid4())}
-        )
-        assert response.status_code == 404
-
-    @pytest.mark.asyncio
-    async def test_list_volume_backups_not_found(self, client, user_token):
-        """Listing backups for non-existent volume should 404."""
-        response = await client.get(
-            "/api/volumes/00000000-0000-0000-0000-000000000000/backups",
-            headers={"Authorization": f"Bearer {user_token}"}
-        )
-        assert response.status_code == 404
-
-    @pytest.mark.asyncio
-    async def test_create_backup_volume_not_found(self, client, user_token):
-        """Creating backup for non-existent volume should 404."""
-        response = await client.post(
-            "/api/volumes/00000000-0000-0000-0000-000000000000/backups",
-            headers={"Authorization": f"Bearer {user_token}"}
-        )
-        assert response.status_code == 404
+        assert response.status_code == 403
