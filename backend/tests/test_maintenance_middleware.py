@@ -84,15 +84,15 @@ class TestMaintenanceMiddlewareOn:
             assert response.status_code == 503
 
     def test_rate_limiting_503s(self, app):
-        MaintenanceMiddleware._request_log.clear()
-        with mock.patch("app.middleware.maintenance.settings.maintenance_mode", True):
-            client = TestClient(app)
-            # Make many requests quickly
-            for _ in range(35):
-                response = client.get("/api/test")
-            # After rate limit threshold, should get 429
-            assert response.status_code == 429
-            assert response.json()["status"] == "rate_limited"
+        with mock.patch.object(MaintenanceMiddleware, '_request_log', {}):
+            with mock.patch("app.middleware.maintenance.settings.maintenance_mode", True):
+                client = TestClient(app)
+                # Make many requests quickly
+                for _ in range(35):
+                    response = client.get("/api/test")
+                # After rate limit threshold, should get 429
+                assert response.status_code == 429
+                assert response.json()["status"] == "rate_limited"
 
 
 class TestIsAdmin:

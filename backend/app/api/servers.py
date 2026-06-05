@@ -1693,7 +1693,7 @@ async def test_metric(
     active_connections = len(connections.get(room, set()))
     all_rooms = list(connections.keys())
     
-    await r.close()
+    await r.aclose()
     
     return {
         "message": "Test metric published",

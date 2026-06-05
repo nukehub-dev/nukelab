@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -12,6 +13,61 @@ from app.db.base import Base
 from app.db.session import engine
 from app.websocket.metrics_socket import manager
 
+
+async def startup():
+    """Application startup logic (tables, seeding, background tasks)."""
+    # Create tables
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    # Seed default data
+    try:
+        from app.db.seed import seed_all
+        await seed_all()
+    except Exception as e:
+        print(f"Warning: Failed to seed data: {e}")
+
+    # Load dynamic system settings from database
+    try:
+        from app.db.session import AsyncSessionLocal
+        from app.services.setting_service import SettingService
+        async with AsyncSessionLocal() as db:
+            service = SettingService(db)
+            await service.load_into_config()
+    except Exception as e:
+        print(f"Warning: Failed to load system settings from DB: {e}")
+
+    # Load custom role permissions from database
+    try:
+        from app.core.roles import load_role_permissions_from_db
+        await load_role_permissions_from_db()
+    except Exception as e:
+        print(f"Warning: Failed to load role permissions from DB: {e}")
+
+    # Start Redis listener for metrics broadcasting
+    try:
+        import asyncio
+        asyncio.create_task(manager.start_redis_listener())
+    except Exception as e:
+        print(f"Warning: Failed to start Redis listener: {e}")
+
+    # Start periodic refresh token cleanup (prevents unbounded growth at scale)
+    try:
+        import asyncio
+        from app.api.auth import run_periodic_refresh_token_cleanup
+        asyncio.create_task(run_periodic_refresh_token_cleanup())
+    except Exception as e:
+        print(f"Warning: Failed to start refresh token cleanup: {e}")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan events (startup / shutdown)."""
+    await startup()
+    yield
+    # Shutdown logic can be added here when needed
+
+
 app = FastAPI(
     title=settings.app_name,
     description="NukeLab Platform v2.0 API",
@@ -20,6 +76,7 @@ app = FastAPI(
     root_path="/api",
     docs_url="/docs",
     openapi_url="/openapi.json",
+    lifespan=lifespan,
 )
 
 @app.exception_handler(429)
@@ -92,52 +149,6 @@ app.include_router(ip_restriction.router, prefix="/admin", tags=["admin"])
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint for real-time metrics"""
     await manager.handle_connection(websocket)
-
-
-@app.on_event("startup")
-async def startup():
-    # Create tables
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    
-    # Seed default data
-    try:
-        from app.db.seed import seed_all
-        await seed_all()
-    except Exception as e:
-        print(f"Warning: Failed to seed data: {e}")
-    
-    # Load dynamic system settings from database
-    try:
-        from app.db.session import AsyncSessionLocal
-        from app.services.setting_service import SettingService
-        async with AsyncSessionLocal() as db:
-            service = SettingService(db)
-            await service.load_into_config()
-    except Exception as e:
-        print(f"Warning: Failed to load system settings from DB: {e}")
-    
-    # Load custom role permissions from database
-    try:
-        from app.core.roles import load_role_permissions_from_db
-        await load_role_permissions_from_db()
-    except Exception as e:
-        print(f"Warning: Failed to load role permissions from DB: {e}")
-    
-    # Start Redis listener for metrics broadcasting
-    try:
-        import asyncio
-        asyncio.create_task(manager.start_redis_listener())
-    except Exception as e:
-        print(f"Warning: Failed to start Redis listener: {e}")
-    
-    # Start periodic refresh token cleanup (prevents unbounded growth at scale)
-    try:
-        import asyncio
-        from app.api.auth import run_periodic_refresh_token_cleanup
-        asyncio.create_task(run_periodic_refresh_token_cleanup())
-    except Exception as e:
-        print(f"Warning: Failed to start refresh token cleanup: {e}")
 
 
 @app.get("/")

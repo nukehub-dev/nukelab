@@ -63,7 +63,7 @@ async def broadcast_server_status_change(user_id, server_id: str, status: str, e
                 }
             })
         )
-        await r.close()
+        await r.aclose()
     except Exception:
         pass
 
@@ -159,7 +159,7 @@ class NotificationService:
                     "data": notification.to_dict()
                 })
             )
-            await r.close()
+            await r.aclose()
         except Exception:
             pass
 

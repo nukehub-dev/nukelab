@@ -21,7 +21,7 @@ async def _broadcast_health_update():
                 "data": {"refreshed_at": datetime.now(UTC).replace(tzinfo=None).isoformat()}
             })
         )
-        await r.close()
+        await r.aclose()
     except Exception:
         pass
 

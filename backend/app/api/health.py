@@ -62,7 +62,7 @@ async def detailed_health_check(
         redis_client = redis.from_url(settings.redis_url)
         await redis_client.ping()
         redis_latency = (time.time() - start) * 1000
-        await redis_client.close()
+        await redis_client.aclose()
         health_data["services"]["redis"] = {
             "status": "healthy",
             "latency_ms": round(redis_latency, 2)

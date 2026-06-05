@@ -502,7 +502,7 @@ async def admin_system_health(
 
 @router.get("/activity/export")
 async def export_activity_logs(
-    format: str = Query("json", regex="^(json|csv)$"),
+    format: str = Query("json", pattern="^(json|csv)$"),
     user_id: Optional[str] = Query(None),
     action: Optional[str] = Query(None),
     target_type: Optional[str] = Query(None),
@@ -1288,7 +1288,7 @@ async def get_health_monitoring(
         redis_client = redis.from_url(settings.redis_url)
         await redis_client.ping()
         redis_latency = (time.time() - start) * 1000
-        await redis_client.close()
+        await redis_client.aclose()
         health_data["services"]["redis"] = {
             "status": "healthy",
             "latency_ms": round(redis_latency, 2)

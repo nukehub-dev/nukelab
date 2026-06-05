@@ -225,7 +225,7 @@ class SystemMetricsCollector:
                 "metrics:system",
                 json.dumps(data, default=str)
             )
-            await redis_client.close()
+            await redis_client.aclose()
         except Exception:
             pass
 

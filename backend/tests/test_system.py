@@ -347,23 +347,34 @@ class TestMaintenanceMiddleware:
     @pytest.mark.asyncio
     async def test_rate_limiting_on_blocked_requests(self, client, user_token, admin_token):
         """Blocked requests should be rate-limited after too many attempts."""
-        # Enable maintenance
-        await client.post(
-            "/api/system/maintenance?enabled=true",
-            headers={"Authorization": f"Bearer {admin_token}"}
-        )
+        from unittest import mock
+        from app.config import settings
+        from app.middleware.maintenance import MaintenanceMiddleware
 
-        # Fire many requests quickly to hit the rate limit
-        for _ in range(35):
-            response = await client.get(
-                "/api/servers/",
-                headers={"Authorization": f"Bearer {user_token}"}
+        # Completely isolate the request log so prior tests cannot pollute state.
+        with mock.patch.object(MaintenanceMiddleware, '_request_log', {}):
+            # Enable maintenance
+            response = await client.post(
+                "/api/system/maintenance?enabled=true",
+                headers={"Authorization": f"Bearer {admin_token}"}
             )
+            assert response.status_code == 200
+            assert settings.maintenance_mode is True
 
-        # At least one should be rate-limited (429)
-        assert response.status_code == 429
-        data = response.json()
-        assert data["status"] == "rate_limited"
+            # Fire many requests quickly to hit the rate limit
+            rate_limited = False
+            for _ in range(35):
+                response = await client.get(
+                    "/api/servers/",
+                    headers={"Authorization": f"Bearer {user_token}"}
+                )
+                if response.status_code == 429:
+                    rate_limited = True
+
+            # At least one should be rate-limited (429)
+            assert rate_limited, f"Expected at least one 429, got {response.status_code}"
+            data = response.json()
+            assert data["status"] == "rate_limited"
 
     @pytest.mark.asyncio
     async def test_normal_operation_when_maintenance_off(self, client, user_token):
