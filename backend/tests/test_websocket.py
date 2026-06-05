@@ -14,6 +14,7 @@ from app.websocket.metrics_socket import (
     connections,
     connection_users,
     log_streams,
+    stream_logs_to_websocket,
     _check_ws_message_rate_limit,
     _WS_MSG_LIMITS,
 )
@@ -443,6 +444,281 @@ class TestMetricsWebSocketManager:
         for room in list(connections.values()):
             assert ws not in room
         assert ws not in connection_users
+
+
+class TestStreamLogsToWebsocket:
+    """Tests for stream_logs_to_websocket."""
+
+    @pytest.fixture(autouse=True)
+    def cleanup(self):
+        connections.clear()
+        connection_users.clear()
+        log_streams.clear()
+        yield
+        connections.clear()
+        connection_users.clear()
+        log_streams.clear()
+
+    @pytest.mark.asyncio
+    async def test_stream_logs_success(self):
+        ws = mock.AsyncMock()
+        connection_users[ws] = {"user_id": "u1"}
+        connections["logs:srv-1"] = {ws}
+
+        mock_container = mock.AsyncMock()
+        mock_logs = mock.AsyncMock()
+        mock_logs.__aiter__ = mock.Mock(return_value=iter(["line1", "line2"]))
+        mock_container.log = mock.AsyncMock(return_value=mock_logs)
+        mock_client = mock.AsyncMock()
+        mock_client.client.containers.get = mock.AsyncMock(return_value=mock_container)
+
+        with mock.patch("app.container.client.get_container_client", new_callable=mock.AsyncMock, return_value=mock_client):
+            await stream_logs_to_websocket(ws, "srv-1", "cid-1", tail=50)
+
+        assert ws.send_json.call_count >= 1
+
+    @pytest.mark.asyncio
+    async def test_stream_logs_disconnects_when_not_in_connections(self):
+        ws = mock.AsyncMock()
+        connection_users[ws] = {"user_id": "u1"}
+        # Not in connections
+
+        mock_container = mock.AsyncMock()
+        mock_logs = mock.AsyncMock()
+        mock_logs.__aiter__ = mock.Mock(return_value=iter(["line1"]))
+        mock_container.log = mock.AsyncMock(return_value=mock_logs)
+        mock_client = mock.AsyncMock()
+        mock_client.client.containers.get = mock.AsyncMock(return_value=mock_container)
+
+        with mock.patch("app.container.client.get_container_client", new_callable=mock.AsyncMock, return_value=mock_client):
+            await stream_logs_to_websocket(ws, "srv-1", "cid-1", tail=50)
+
+    @pytest.mark.asyncio
+    async def test_stream_logs_error_handling(self):
+        ws = mock.AsyncMock()
+        connection_users[ws] = {"user_id": "u1"}
+        connections["logs:srv-1"] = {ws}
+
+        mock_client = mock.AsyncMock()
+        mock_client.client.containers.get = mock.AsyncMock(side_effect=Exception("container gone"))
+
+        with mock.patch("app.container.client.get_container_client", new_callable=mock.AsyncMock, return_value=mock_client):
+            await stream_logs_to_websocket(ws, "srv-1", "cid-1", tail=50)
+
+
+class TestHandleConnectionExtended:
+    """Additional handle_connection tests for uncovered branches."""
+
+    @pytest.fixture(autouse=True)
+    def cleanup_connections(self):
+        connections.clear()
+        connection_users.clear()
+        log_streams.clear()
+        yield
+        connections.clear()
+        connection_users.clear()
+        log_streams.clear()
+
+    @pytest.mark.asyncio
+    async def test_handle_connection_rate_limited(self, test_user):
+        manager = MetricsWebSocketManager()
+        ws = mock.AsyncMock()
+        ws.query_params = {"token": "fake_token"}
+        ws.receive_text = mock.AsyncMock(side_effect=[
+            json.dumps({"type": "subscribe", "scope": "global"}),
+            Exception("disconnect")
+        ])
+        with mock.patch("app.websocket.metrics_socket.validate_token", new_callable=mock.AsyncMock, return_value=test_user):
+            with mock.patch("app.websocket.metrics_socket.settings.rate_limit_enabled", True):
+                with mock.patch("app.websocket.metrics_socket.redis.from_url") as mock_redis_cls:
+                    mock_redis = mock.AsyncMock()
+                    mock_redis.script_load = mock.AsyncMock(return_value="sha1")
+                    mock_redis.evalsha = mock.AsyncMock(return_value=999999)  # over limit
+                    mock_redis_cls.return_value = mock_redis
+                    await manager.handle_connection(ws)
+
+        rate_limited_sent = any(
+            call.args[0].get("event") == "rate_limited"
+            for call in ws.send_json.call_args_list
+        )
+        assert rate_limited_sent
+
+    @pytest.mark.asyncio
+    async def test_handle_connection_subscribe_server_allowed(self, test_user):
+        from app.models.server import Server
+        manager = MetricsWebSocketManager()
+        ws = mock.AsyncMock()
+        ws.query_params = {"token": "fake_token"}
+        server = Server(user_id=test_user.id, name="srv", status="stopped")
+        # Need to mock the db session since we're not using db_session fixture directly here
+        ws.receive_text = mock.AsyncMock(side_effect=[
+            json.dumps({"type": "subscribe", "scope": "server", "target_id": "550e8400-e29b-41d4-a716-446655440000"}),
+            Exception("disconnect")
+        ])
+        with mock.patch("app.websocket.metrics_socket.validate_token", new_callable=mock.AsyncMock, return_value=test_user):
+            with mock.patch("app.websocket.metrics_socket.AsyncSessionLocal") as mock_session:
+                mock_db = mock.AsyncMock()
+                mock_result = mock.Mock()
+                mock_server = mock.Mock()
+                mock_server.user_id = test_user.id
+                mock_result.scalar_one_or_none.return_value = mock_server
+                mock_db.execute = mock.AsyncMock(return_value=mock_result)
+                mock_session.return_value.__aenter__ = mock.AsyncMock(return_value=mock_db)
+                mock_session.return_value.__aexit__ = mock.AsyncMock(return_value=False)
+                await manager.handle_connection(ws)
+
+        sub_sent = any(
+            call.args[0].get("event") == "subscribed" and call.args[0].get("scope") == "server"
+            for call in ws.send_json.call_args_list
+        )
+        assert sub_sent
+
+    @pytest.mark.asyncio
+    async def test_handle_connection_subscribe_server_denied(self, test_user):
+        manager = MetricsWebSocketManager()
+        ws = mock.AsyncMock()
+        ws.query_params = {"token": "fake_token"}
+        ws.receive_text = mock.AsyncMock(side_effect=[
+            json.dumps({"type": "subscribe", "scope": "server", "target_id": "550e8400-e29b-41d4-a716-446655440000"}),
+            Exception("disconnect")
+        ])
+        with mock.patch("app.websocket.metrics_socket.validate_token", new_callable=mock.AsyncMock, return_value=test_user):
+            with mock.patch("app.websocket.metrics_socket.AsyncSessionLocal") as mock_session:
+                mock_db = mock.AsyncMock()
+                mock_result = mock.Mock()
+                mock_server = mock.Mock()
+                mock_server.user_id = "other-user-id"
+                mock_result.scalar_one_or_none.return_value = mock_server
+                mock_db.execute = mock.AsyncMock(return_value=mock_result)
+                mock_session.return_value.__aenter__ = mock.AsyncMock(return_value=mock_db)
+                mock_session.return_value.__aexit__ = mock.AsyncMock(return_value=False)
+                await manager.handle_connection(ws)
+
+        error_sent = any(
+            call.args[0].get("event") == "error" and "Access denied" in call.args[0].get("message", "")
+            for call in ws.send_json.call_args_list
+        )
+        assert error_sent
+
+    @pytest.mark.asyncio
+    async def test_handle_connection_subscribe_logs_success(self, test_user):
+        manager = MetricsWebSocketManager()
+        ws = mock.AsyncMock()
+        ws.query_params = {"token": "fake_token"}
+        ws.receive_text = mock.AsyncMock(side_effect=[
+            json.dumps({"type": "subscribe_logs", "server_id": "550e8400-e29b-41d4-a716-446655440000", "tail": 50}),
+            Exception("disconnect")
+        ])
+        with mock.patch("app.websocket.metrics_socket.validate_token", new_callable=mock.AsyncMock, return_value=test_user):
+            with mock.patch("app.websocket.metrics_socket.AsyncSessionLocal") as mock_session:
+                mock_db = mock.AsyncMock()
+                mock_result = mock.Mock()
+                mock_server = mock.Mock()
+                mock_server.user_id = test_user.id
+                mock_server.container_id = "cid-123"
+                mock_result.scalar_one_or_none.return_value = mock_server
+                mock_db.execute = mock.AsyncMock(return_value=mock_result)
+                mock_session.return_value.__aenter__ = mock.AsyncMock(return_value=mock_db)
+                mock_session.return_value.__aexit__ = mock.AsyncMock(return_value=False)
+                await manager.handle_connection(ws)
+
+        sub_sent = any(
+            call.args[0].get("event") == "logs:subscribed"
+            for call in ws.send_json.call_args_list
+        )
+        assert sub_sent
+
+    @pytest.mark.asyncio
+    async def test_handle_connection_subscribe_logs_no_server_id(self, test_user):
+        manager = MetricsWebSocketManager()
+        ws = mock.AsyncMock()
+        ws.query_params = {"token": "fake_token"}
+        ws.receive_text = mock.AsyncMock(side_effect=[
+            json.dumps({"type": "subscribe_logs"}),
+            Exception("disconnect")
+        ])
+        with mock.patch("app.websocket.metrics_socket.validate_token", new_callable=mock.AsyncMock, return_value=test_user):
+            await manager.handle_connection(ws)
+
+        error_sent = any(
+            call.args[0].get("event") == "error" and "server_id is required" in call.args[0].get("message", "")
+            for call in ws.send_json.call_args_list
+        )
+        assert error_sent
+
+    @pytest.mark.asyncio
+    async def test_handle_connection_subscribe_logs_no_container(self, test_user):
+        manager = MetricsWebSocketManager()
+        ws = mock.AsyncMock()
+        ws.query_params = {"token": "fake_token"}
+        ws.receive_text = mock.AsyncMock(side_effect=[
+            json.dumps({"type": "subscribe_logs", "server_id": "550e8400-e29b-41d4-a716-446655440000"}),
+            Exception("disconnect")
+        ])
+        with mock.patch("app.websocket.metrics_socket.validate_token", new_callable=mock.AsyncMock, return_value=test_user):
+            with mock.patch("app.websocket.metrics_socket.AsyncSessionLocal") as mock_session:
+                mock_db = mock.AsyncMock()
+                mock_result = mock.Mock()
+                mock_server = mock.Mock()
+                mock_server.user_id = test_user.id
+                mock_server.container_id = None
+                mock_result.scalar_one_or_none.return_value = mock_server
+                mock_db.execute = mock.AsyncMock(return_value=mock_result)
+                mock_session.return_value.__aenter__ = mock.AsyncMock(return_value=mock_db)
+                mock_session.return_value.__aexit__ = mock.AsyncMock(return_value=False)
+                await manager.handle_connection(ws)
+
+        error_sent = any(
+            call.args[0].get("event") == "error" and "no container" in call.args[0].get("message", "").lower()
+            for call in ws.send_json.call_args_list
+        )
+        assert error_sent
+
+    @pytest.mark.asyncio
+    async def test_handle_connection_unsubscribe_logs(self, test_user):
+        manager = MetricsWebSocketManager()
+        ws = mock.AsyncMock()
+        ws.query_params = {"token": "fake_token"}
+        ws.receive_text = mock.AsyncMock(side_effect=[
+            json.dumps({"type": "unsubscribe_logs", "server_id": "srv-1"}),
+            Exception("disconnect")
+        ])
+        with mock.patch("app.websocket.metrics_socket.validate_token", new_callable=mock.AsyncMock, return_value=test_user):
+            await manager.handle_connection(ws)
+
+        unsub_sent = any(
+            call.args[0].get("event") == "logs:unsubscribed"
+            for call in ws.send_json.call_args_list
+        )
+        assert unsub_sent
+
+    @pytest.mark.asyncio
+    async def test_handle_connection_subscribe_user_admin_can_access_other(self, admin_user, test_user):
+        manager = MetricsWebSocketManager()
+        ws = mock.AsyncMock()
+        ws.query_params = {"token": "fake_token"}
+        ws.receive_text = mock.AsyncMock(side_effect=[
+            json.dumps({"type": "subscribe", "scope": "user", "target_id": str(test_user.id)}),
+            Exception("disconnect")
+        ])
+        with mock.patch("app.websocket.metrics_socket.validate_token", new_callable=mock.AsyncMock, return_value=admin_user):
+            await manager.handle_connection(ws)
+
+        sub_sent = any(
+            call.args[0].get("event") == "subscribed" and call.args[0].get("scope") == "user"
+            for call in ws.send_json.call_args_list
+        )
+        assert sub_sent
+
+    @pytest.mark.asyncio
+    async def test_handle_connection_auth_failure_send_error_exception(self):
+        manager = MetricsWebSocketManager()
+        ws = mock.AsyncMock()
+        ws.query_params = {}
+        ws.receive_text = mock.AsyncMock(side_effect=asyncio.TimeoutError())
+        ws.send_json = mock.AsyncMock(side_effect=Exception("send failed"))
+        ws.close = mock.AsyncMock(side_effect=Exception("close failed"))
+        await manager.handle_connection(ws)
 
 
 class TestCheckWsMessageRateLimit:

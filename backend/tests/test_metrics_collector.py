@@ -178,6 +178,37 @@ class TestPersistMetrics:
                     await collector._persist_metrics(metrics)  # should not raise
 
 
+class TestGetContainerClient:
+    @pytest.mark.asyncio
+    async def test_get_container_client(self):
+        collector = MetricsCollector()
+        with mock.patch("app.services.metrics_collector.get_fresh_container_client", new_callable=mock.AsyncMock) as mock_get:
+            mock_client = mock.AsyncMock()
+            mock_get.return_value = mock_client
+            result = await collector._get_container_client()
+            assert result == mock_client
+
+
+class TestGetRedis:
+    @pytest.mark.asyncio
+    async def test_get_redis_creates_client(self):
+        collector = MetricsCollector()
+        with mock.patch("app.services.metrics_collector.redis.from_url") as mock_redis:
+            mock_client = mock.Mock()
+            mock_redis.return_value = mock_client
+            result = await collector._get_redis()
+            assert result is mock_client
+            mock_redis.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_redis_reuses_client(self):
+        collector = MetricsCollector()
+        mock_client = mock.Mock()
+        collector.redis_client = mock_client
+        result = await collector._get_redis()
+        assert result is mock_client
+
+
 class TestCollectAll:
     """Tests for collect_all."""
 
@@ -200,3 +231,121 @@ class TestCollectAll:
 
         with mock.patch("app.services.metrics_collector.get_fresh_container_client", side_effect=Exception("docker error")):
             await collector.collect_all()  # should not raise
+
+    @pytest.mark.asyncio
+    async def test_collect_all_with_containers(self):
+        """Should process running containers with labels."""
+        collector = MetricsCollector()
+        mock_container = mock.AsyncMock()
+        mock_container._id = "cid-1"
+        mock_container.show = mock.AsyncMock(return_value={
+            "Config": {"Labels": {"nukelab.server.id": "srv-1"}}
+        })
+
+        mock_client = mock.AsyncMock()
+        mock_client.list_containers = mock.AsyncMock(return_value=[mock_container])
+
+        with mock.patch("app.services.metrics_collector.get_fresh_container_client", return_value=mock_client):
+            with mock.patch.object(collector, "_collect_container_metrics") as mock_collect:
+                await collector.collect_all()
+
+        mock_client.list_containers.assert_awaited_once()
+        mock_collect.assert_awaited_once_with("cid-1", "srv-1")
+
+    @pytest.mark.asyncio
+    async def test_collect_all_skips_missing_labels(self):
+        """Should skip containers without nukelab.server.id label."""
+        collector = MetricsCollector()
+        mock_container = mock.AsyncMock()
+        mock_container._id = "cid-1"
+        mock_container.show = mock.AsyncMock(return_value={
+            "Config": {"Labels": {}}
+        })
+
+        mock_client = mock.AsyncMock()
+        mock_client.list_containers = mock.AsyncMock(return_value=[mock_container])
+
+        with mock.patch("app.services.metrics_collector.get_fresh_container_client", return_value=mock_client):
+            with mock.patch.object(collector, "_collect_container_metrics") as mock_collect:
+                await collector.collect_all()
+
+        mock_collect.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_collect_all_closes_client(self):
+        """Should close docker client after processing."""
+        collector = MetricsCollector()
+        mock_client = mock.AsyncMock()
+        mock_client.list_containers = mock.AsyncMock(return_value=[])
+
+        with mock.patch("app.services.metrics_collector.get_fresh_container_client", return_value=mock_client):
+            await collector.collect_all()
+
+        mock_client.client.close.assert_awaited_once()
+
+
+class TestCollectContainerMetrics:
+    """Tests for _collect_container_metrics."""
+
+    @pytest.mark.asyncio
+    async def test_collect_container_metrics_success(self):
+        collector = MetricsCollector()
+        mock_container = mock.AsyncMock()
+        mock_container.stats = mock.AsyncMock(return_value=[{"cpu_stats": {"cpu_usage": {"total_usage": 100}}, "memory_stats": {}}])
+
+        mock_client = mock.AsyncMock()
+        mock_client.client.containers.get = mock.AsyncMock(return_value=mock_container)
+
+        with mock.patch("app.services.metrics_collector.get_fresh_container_client", return_value=mock_client):
+            with mock.patch.object(collector, "_parse_container_stats", return_value={"server_id": "srv-1"}):
+                with mock.patch.object(collector, "_persist_metrics", new_callable=mock.AsyncMock):
+                    with mock.patch.object(collector, "_broadcast_metrics", new_callable=mock.AsyncMock):
+                        with mock.patch("asyncio.sleep"):
+                            await collector._collect_container_metrics("cid-1", "srv-1")
+
+        mock_client.client.containers.get.assert_awaited_once_with("cid-1")
+        assert mock_container.stats.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_collect_container_metrics_stats_not_dict(self):
+        """Should return early when stats is not a dict."""
+        collector = MetricsCollector()
+        mock_container = mock.AsyncMock()
+        mock_container.stats = mock.AsyncMock(return_value="not-a-dict")
+
+        mock_client = mock.AsyncMock()
+        mock_client.client.containers.get = mock.AsyncMock(return_value=mock_container)
+
+        with mock.patch("app.services.metrics_collector.get_fresh_container_client", return_value=mock_client):
+            with mock.patch.object(collector, "_parse_container_stats") as mock_parse:
+                await collector._collect_container_metrics("cid-1", "srv-1")
+
+        mock_parse.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_collect_container_metrics_container_error(self):
+        """Should gracefully handle container fetch errors."""
+        collector = MetricsCollector()
+        mock_client = mock.AsyncMock()
+        mock_client.client.containers.get = mock.AsyncMock(side_effect=Exception("not found"))
+
+        with mock.patch("app.services.metrics_collector.get_fresh_container_client", return_value=mock_client):
+            await collector._collect_container_metrics("cid-1", "srv-1")
+
+    @pytest.mark.asyncio
+    async def test_collect_container_metrics_closes_client(self):
+        collector = MetricsCollector()
+        mock_container = mock.AsyncMock()
+        mock_container.stats = mock.AsyncMock(return_value=[{"cpu_stats": {"cpu_usage": {"total_usage": 100}}, "memory_stats": {}}])
+
+        mock_client = mock.AsyncMock()
+        mock_client.client.containers.get = mock.AsyncMock(return_value=mock_container)
+
+        with mock.patch("app.services.metrics_collector.get_fresh_container_client", return_value=mock_client):
+            with mock.patch.object(collector, "_parse_container_stats", return_value={"server_id": "srv-1"}):
+                with mock.patch.object(collector, "_persist_metrics", new_callable=mock.AsyncMock):
+                    with mock.patch.object(collector, "_broadcast_metrics", new_callable=mock.AsyncMock):
+                        with mock.patch("asyncio.sleep"):
+                            await collector._collect_container_metrics("cid-1", "srv-1")
+
+        mock_client.client.close.assert_awaited_once()

@@ -239,13 +239,14 @@ class TestServerAccessToken:
         db_session.add(server)
         await db_session.commit()
 
-        with mock.patch("app.services.server_auth_service.server_auth_service") as mock_svc:
-            mock_svc.is_enabled = False
-            response = await client.post(
-                f"/api/servers/{server.id}/access-token",
-                headers={"Authorization": f"Bearer {user_token}"},
-                json={}
-            )
+        with mock.patch("app.config.settings.rate_limit_enabled", False):
+            with mock.patch("app.services.server_auth_service.server_auth_service") as mock_svc:
+                mock_svc.is_enabled = False
+                response = await client.post(
+                    f"/api/servers/{server.id}/access-token",
+                    headers={"Authorization": f"Bearer {user_token}"},
+                    json={}
+                )
 
         assert response.status_code == 503
 
@@ -274,14 +275,15 @@ class TestServerAccessToken:
         db_session.add(server)
         await db_session.commit()
 
-        with mock.patch("app.services.server_auth_service.server_auth_service") as mock_svc:
-            mock_svc.is_enabled = True
-            mock_svc.generate_access_token = mock.AsyncMock(side_effect=ValueError("rate limit"))
-            response = await client.post(
-                f"/api/servers/{server.id}/access-token",
-                headers={"Authorization": f"Bearer {user_token}"},
-                json={}
-            )
+        with mock.patch("app.config.settings.rate_limit_enabled", False):
+            with mock.patch("app.services.server_auth_service.server_auth_service") as mock_svc:
+                mock_svc.is_enabled = True
+                mock_svc.generate_access_token = mock.AsyncMock(side_effect=ValueError("rate limit"))
+                response = await client.post(
+                    f"/api/servers/{server.id}/access-token",
+                    headers={"Authorization": f"Bearer {user_token}"},
+                    json={}
+                )
 
         assert response.status_code == 429
         assert "rate limit" in response.json()["detail"].lower()
