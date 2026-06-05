@@ -333,6 +333,20 @@ def reset_rate_limiter():
     from app.api.auth import limiter
     if hasattr(limiter, '_storage') and hasattr(limiter._storage, 'reset'):
         limiter._storage.reset()
+    # Also clear Redis-backed rate limit keys used by RateLimitMiddleware
+    try:
+        import redis.asyncio as redis
+        from app.config import settings
+        r = redis.from_url(settings.redis_url)
+        # Use sync client for sync fixture
+        import redis as sync_redis
+        sync_r = sync_redis.from_url(settings.redis_url)
+        keys = sync_r.keys("rl:*")
+        if keys:
+            sync_r.delete(*keys)
+        sync_r.close()
+    except Exception:
+        pass
     yield
 
 
