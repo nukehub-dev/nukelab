@@ -56,6 +56,7 @@ step()  { echo -e "\n${BOLD}${MAGENTA}▸${RESET} ${BOLD}$*${RESET}"; }
 CMD=""
 TARGET=""
 USE_DEV_MODE=false
+USE_COVERAGE=false
 EXTRA_ARGS=()
 
 parse_args() {
@@ -69,6 +70,9 @@ parse_args() {
                 ;;
             --dev|-d)
                 USE_DEV_MODE=true
+                ;;
+            --coverage)
+                USE_COVERAGE=true
                 ;;
             --help|-h)
                 print_help
@@ -541,9 +545,14 @@ cmd_test() {
         step "Running backend tests..."
         cd "$DIR/backend"
         
+        local pytest_args="${EXTRA_ARGS[*]:-}"
+        if $USE_COVERAGE; then
+            pytest_args="--cov=app --cov-report=term --cov-report=html ${pytest_args}"
+        fi
+        
         if is_backend_container_running; then
             # Backend is running in containers, run tests there
-            $COMPOSE "${COMPOSE_ARGS[@]}" exec backend bash -c "PYTHONPATH=/app pytest ${EXTRA_ARGS[@]:-}" || warn "Tests failed or not configured"
+            $COMPOSE "${COMPOSE_ARGS[@]}" exec backend bash -c "cd /app && python -m pytest ${pytest_args}" || warn "Tests failed or not configured"
         else
             die "Backend not running. Start it first:\n  ./manage.sh start backend"
         fi
@@ -628,7 +637,7 @@ ${BOLD}Database:${RESET}
   ${GREEN}backup${RESET}                               Create database backup
 
 ${BOLD}Testing:${RESET}
-  ${GREEN}test${RESET}       [target]                  Run tests
+  ${GREEN}test${RESET}       [target] [--coverage]      Run tests
 
 ${BOLD}Targets:${RESET} ${DIM}(optional, default: all)${RESET}
   backend    Backend services (api, workers, db, redis, traefik)
@@ -637,6 +646,7 @@ ${BOLD}Targets:${RESET} ${DIM}(optional, default: all)${RESET}
 
 ${BOLD}Flags:${RESET}
   --dev, -d      Development mode: backend containers + local Vite dev server
+  --coverage     Run tests with coverage report (backend only)
 
 ${BOLD}Examples:${RESET}
   ./manage.sh start                      # Production: all containers
@@ -649,6 +659,7 @@ ${BOLD}Examples:${RESET}
   ./manage.sh db-migrate                 # Run migrations (auto-detect)
   ./manage.sh backup                     # Backup database
   ./manage.sh test                       # Run all tests (auto-detect)
+  ./manage.sh test backend --coverage    # Run backend tests with coverage
   ./manage.sh clean                      # Clean up dangling resources
   ./manage.sh update                     # Update all images
 

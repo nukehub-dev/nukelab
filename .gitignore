@@ -41,6 +41,10 @@ dist/
 # Tanstack Tmp
 .tanstack/
 
+# Coverage
+.coverage
+htmlcov/
+
 # IDEs
 .idea/
 .vscode/
