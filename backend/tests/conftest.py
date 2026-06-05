@@ -102,6 +102,20 @@ async def db_session():
 
 
 @pytest.fixture(autouse=True)
+def reset_maintenance_mode():
+    """Reset maintenance mode to disabled after each test.
+
+    Tests that toggle maintenance mode via the system API mutate the global
+    settings singleton.  This fixture ensures subsequent tests don't get
+    503 Service Unavailable from MaintenanceMiddleware.
+    """
+    yield
+    from app.config import settings
+    settings.maintenance_mode = False
+    settings.maintenance_message = ""
+
+
+@pytest.fixture(autouse=True)
 def reset_role_permissions():
     """Reset in-memory role permissions to defaults before each test.
 
@@ -310,3 +324,25 @@ async def api_token(db_session, test_user):
     from types import SimpleNamespace
 
     return SimpleNamespace(db_token=token, raw_token=raw_token)
+
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limiter():
+    """Reset the slowapi rate limiter before each test to avoid 429 errors."""
+    from app.api.auth import limiter
+    if hasattr(limiter, '_storage') and hasattr(limiter._storage, 'reset'):
+        limiter._storage.reset()
+    yield
+
+
+@pytest.fixture(autouse=True)
+def reset_maintenance_request_log():
+    """Reset MaintenanceMiddleware in-memory request log before each test.
+
+    Prevents rate-limit state from maintenance-mode tests leaking into
+    subsequent tests (e.g. test_rate_limiting_on_blocked_requests).
+    """
+    from app.middleware.maintenance import MaintenanceMiddleware
+    MaintenanceMiddleware._request_log.clear()
+    yield

@@ -622,9 +622,6 @@ async def list_servers(
                 elif actual in ("stopped", "paused", "exited") and s.status == "running":
                     s.status = "stopped"
                     s.stopped_at = datetime.utcnow()
-                elif actual == "running" and s.status == "pending":
-                    s.status = "running"
-                    s.started_at = datetime.utcnow()
             except Exception:
                 pass
     

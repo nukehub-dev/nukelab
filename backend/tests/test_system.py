@@ -96,14 +96,20 @@ class TestSettingService:
     @pytest.mark.asyncio
     async def test_get_maintenance_fallback_to_config(self, db_session):
         """Should fall back to env config when DB row is missing."""
-        settings.maintenance_mode = True
-        settings.maintenance_message = "Fallback msg"
+        original_mode = settings.maintenance_mode
+        original_msg = settings.maintenance_message
+        try:
+            settings.maintenance_mode = True
+            settings.maintenance_message = "Fallback msg"
 
-        service = SettingService(db_session)
-        maint = await service.get_maintenance()
+            service = SettingService(db_session)
+            maint = await service.get_maintenance()
 
-        assert maint["maintenance_mode"] is True
-        assert maint["maintenance_message"] == "Fallback msg"
+            assert maint["maintenance_mode"] is True
+            assert maint["maintenance_message"] == "Fallback msg"
+        finally:
+            settings.maintenance_mode = original_mode
+            settings.maintenance_message = original_msg
 
 
 # ---------------------------------------------------------------------------
