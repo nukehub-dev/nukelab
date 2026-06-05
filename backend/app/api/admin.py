@@ -4,7 +4,7 @@ Provides statistics, user management, server management, and activity logs.
 """
 
 from typing import Optional, List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -90,7 +90,7 @@ async def get_admin_stats(
     stopped_servers = total_servers - running_servers
     
     # Credit stats (today)
-    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start = datetime.now(UTC).replace(tzinfo=None).replace(hour=0, minute=0, second=0, microsecond=0)
     
     credits_granted_result = await db.execute(
         select(func.sum(CreditTransaction.amount)).where(
@@ -347,7 +347,7 @@ async def admin_credit_summary(
     total_credits = total_credits_result.scalar() or 0
     
     # Today's transactions
-    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start = datetime.now(UTC).replace(tzinfo=None).replace(hour=0, minute=0, second=0, microsecond=0)
     
     today_granted = await db.execute(
         select(func.sum(CreditTransaction.amount)).where(
@@ -494,7 +494,7 @@ async def admin_system_health(
     return {
         "status": "healthy",
         "database": db_status,
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.now(UTC).replace(tzinfo=None).isoformat()
     }
 
 
@@ -714,13 +714,13 @@ async def test_email(
             <div style="background: #f3f4f6; padding: 16px; border-radius: 8px; margin: 16px 0;">
                 <p style="margin: 0;"><strong>SMTP Host:</strong> {service.smtp_host}</p>
                 <p style="margin: 4px 0 0;"><strong>SMTP Port:</strong> {service.smtp_port}</p>
-                <p style="margin: 4px 0 0;"><strong>Sent at:</strong> {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}</p>
+                <p style="margin: 4px 0 0;"><strong>Sent at:</strong> {datetime.now(UTC).replace(tzinfo=None).strftime('%Y-%m-%d %H:%M:%S UTC')}</p>
             </div>
             <p>If you received this email, your email notifications are ready to use.</p>
         </body>
         </html>
         """,
-        text_body=f"SMTP Test from NukeLab\n\nHello {current_user.username},\n\nThis is a test email to verify your SMTP configuration is working.\n\nSMTP Host: {service.smtp_host}\nSMTP Port: {service.smtp_port}\nSent at: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}"
+        text_body=f"SMTP Test from NukeLab\n\nHello {current_user.username},\n\nThis is a test email to verify your SMTP configuration is working.\n\nSMTP Host: {service.smtp_host}\nSMTP Port: {service.smtp_port}\nSent at: {datetime.now(UTC).replace(tzinfo=None).strftime('%Y-%m-%d %H:%M:%S UTC')}"
     )
 
     if not result["success"]:
@@ -1428,7 +1428,7 @@ async def get_health_monitoring(
     # Container health — PRODUCTION: only RUNNING servers, paginated
     # ------------------------------------------------------------------
     offset = (page - 1) * limit
-    recent = datetime.utcnow() - timedelta(hours=24)
+    recent = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=24)
 
     # Build the base server query — only RUNNING servers
     server_base = (
@@ -1560,7 +1560,7 @@ async def get_health_monitoring(
     # ------------------------------------------------------------------
     # Recent auto-restart events (always limited to 50, no pagination)
     # ------------------------------------------------------------------
-    restart_window = datetime.utcnow() - timedelta(hours=24)
+    restart_window = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=24)
     restart_result = await db.execute(
         select(HealthCheck, Server, UserModel)
         .join(Server, HealthCheck.server_id == Server.id)

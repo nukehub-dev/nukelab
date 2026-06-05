@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func
-from datetime import datetime
+from datetime import datetime, UTC
 
 from app.api.auth import get_current_user
 from app.db.session import get_db
@@ -141,7 +141,7 @@ async def mark_as_read(
         raise HTTPException(status_code=404, detail="Notification not found")
     
     notification.read = True
-    notification.read_at = datetime.utcnow()
+    notification.read_at = datetime.now(UTC).replace(tzinfo=None)
     await db.commit()
     
     return serialize_notification(notification)
@@ -163,7 +163,7 @@ async def mark_all_as_read(
     )
     notifications = result.scalars().all()
     
-    now = datetime.utcnow()
+    now = datetime.now(UTC).replace(tzinfo=None)
     for notification in notifications:
         notification.read = True
         notification.read_at = now

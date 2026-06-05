@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from app.core.time_utils import utc_now
 from sqlalchemy import Column, String, DateTime, Integer, Boolean, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.base import Base
@@ -17,7 +17,7 @@ class ServerSchedule(Base):
     last_run_at = Column(DateTime, nullable=True)
     next_run_at = Column(DateTime, nullable=True)
     run_count = Column(Integer, default=0)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
     
     def to_dict(self):
         return {

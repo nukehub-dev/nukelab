@@ -3,7 +3,7 @@ Credit service for managing user credits.
 """
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from typing import List, Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func
@@ -145,7 +145,7 @@ class CreditService:
             )
         
         # Check if already granted today
-        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_start = datetime.now(UTC).replace(tzinfo=None).replace(hour=0, minute=0, second=0, microsecond=0)
         result = await self.db.execute(
             select(CreditTransaction).where(
                 and_(
@@ -370,7 +370,7 @@ class CreditService:
         balance = await self.get_balance(user_id)
         
         # Get today's consumption
-        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_start = datetime.now(UTC).replace(tzinfo=None).replace(hour=0, minute=0, second=0, microsecond=0)
         result = await self.db.execute(
             select(func.sum(CreditTransaction.amount)).where(
                 and_(

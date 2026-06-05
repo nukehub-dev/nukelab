@@ -3,7 +3,7 @@ Server schedule service for cron-based server scheduling.
 """
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from typing import List, Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
@@ -27,7 +27,7 @@ def _validate_cron(cron_expression: str) -> None:
 def _get_next_run(cron_expression: str, timezone: str = "UTC") -> datetime:
     """Calculate next run time from cron expression."""
     from croniter import croniter
-    base = datetime.utcnow()
+    base = datetime.now(UTC).replace(tzinfo=None)
     itr = croniter(cron_expression, base)
     next_dt = itr.get_next(datetime)
     return next_dt
@@ -162,7 +162,7 @@ class ScheduleService:
             select(ServerSchedule).where(
                 and_(
                     ServerSchedule.is_active == True,
-                    ServerSchedule.next_run_at <= datetime.utcnow()
+                    ServerSchedule.next_run_at <= datetime.now(UTC).replace(tzinfo=None)
                 )
             )
         )
@@ -195,8 +195,8 @@ class ScheduleService:
                     if actual == "stopped":
                         await spawner.start(server.container_id)
                         server.status = "running"
-                        server.started_at = datetime.utcnow()
-                        server.last_activity = datetime.utcnow()
+                        server.started_at = datetime.now(UTC).replace(tzinfo=None)
+                        server.last_activity = datetime.now(UTC).replace(tzinfo=None)
                         success = True
                         message = f"Server '{server.name}' started by schedule"
                         await broadcast_server_status_change(server.user_id, str(server.id), "running")
@@ -209,7 +209,7 @@ class ScheduleService:
                     await spawner.delete(server.container_id)
                     server.container_id = None
                     server.status = "stopped"
-                    server.stopped_at = datetime.utcnow()
+                    server.stopped_at = datetime.now(UTC).replace(tzinfo=None)
                     server.stop_reason = "scheduled_stop"
                     await broadcast_server_status_change(server.user_id, str(server.id), "stopped", {"stop_reason": "scheduled_stop"})
                     
@@ -240,8 +240,8 @@ class ScheduleService:
                 if server.container_id and server.status == "running":
                     await spawner.stop(server.container_id)
                     await spawner.start(server.container_id)
-                    server.started_at = datetime.utcnow()
-                    server.last_activity = datetime.utcnow()
+                    server.started_at = datetime.now(UTC).replace(tzinfo=None)
+                    server.last_activity = datetime.now(UTC).replace(tzinfo=None)
                     success = True
                     message = f"Server '{server.name}' restarted by schedule"
                     await broadcast_server_status_change(server.user_id, str(server.id), "running")
@@ -264,7 +264,7 @@ class ScheduleService:
             return {"success": False, "error": str(e)}
         
         # Update schedule
-        schedule.last_run_at = datetime.utcnow()
+        schedule.last_run_at = datetime.now(UTC).replace(tzinfo=None)
         schedule.run_count += 1
         schedule.next_run_at = _get_next_run(schedule.cron_expression, schedule.timezone)
         await self.db.commit()

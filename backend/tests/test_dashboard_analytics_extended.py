@@ -1,7 +1,7 @@
 """Extended tests for Dashboard and Analytics API endpoints."""
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 
 from app.models.activity_log import ActivityLog
 
@@ -137,8 +137,8 @@ class TestAnalytics:
     @pytest.mark.asyncio
     async def test_analytics_date_range_validation(self, client, admin_token):
         """Invalid date range should 422."""
-        from_date = datetime.utcnow().isoformat()
-        to_date = (datetime.utcnow() - timedelta(days=1)).isoformat()
+        from_date = datetime.now(UTC).replace(tzinfo=None).isoformat()
+        to_date = (datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1)).isoformat()
         response = await client.get(
             f"/api/analytics/global?from={from_date}&to={to_date}",
             headers={"Authorization": f"Bearer {admin_token}"}

@@ -2,7 +2,7 @@
 Usage analytics service for aggregating platform metrics.
 """
 
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, UTC, date, UTC
 from typing import Dict, Any, List, Optional, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_, text, case
@@ -40,7 +40,7 @@ class AnalyticsService:
             return from_date, to_date
         
         effective_days = days or 30
-        to_dt = datetime.utcnow()
+        to_dt = datetime.now(UTC).replace(tzinfo=None)
         from_dt = to_dt - timedelta(days=effective_days)
         return from_dt, to_dt
 

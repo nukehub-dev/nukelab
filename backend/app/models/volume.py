@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from app.core.time_utils import utc_now
 from sqlalchemy import Column, String, DateTime, BigInteger, ForeignKey, Integer, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID
@@ -33,8 +33,8 @@ class Volume(Base):
     description = Column(Text, nullable=True)
     labels = Column(JSONB, default=dict)
     
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
     
     # Relationships
     owner = relationship("User", back_populates="volumes")

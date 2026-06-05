@@ -162,13 +162,13 @@ class TestRateLimitMiddleware:
     async def test_expired_jwt_does_not_exhaust_quota(self, client, test_user, mock_redis):
         """Expired tokens should not consume the real user's rate limit budget."""
         from jose import jwt as jose_jwt
-        from datetime import datetime, timedelta
+        from datetime import datetime, timedelta, UTC
 
         settings.rate_limit_enabled = True
 
         # Create an expired token
         expired_token = jose_jwt.encode(
-            {"sub": test_user.username, "role": test_user.role, "exp": datetime.utcnow() - timedelta(hours=1)},
+            {"sub": test_user.username, "role": test_user.role, "exp": datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1)},
             settings.jwt_secret,
             algorithm=settings.jwt_algorithm,
         )

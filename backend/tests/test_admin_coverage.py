@@ -2,7 +2,7 @@
 
 import pytest
 from unittest import mock
-from datetime import datetime
+from datetime import datetime, UTC
 
 from app.models.user import User
 from app.models.server import Server
@@ -292,7 +292,7 @@ class TestHealthMonitoringFilters:
             container_id="c1",
             status="healthy",
             output="ok",
-            checked_at=datetime.utcnow()
+            checked_at=datetime.now(UTC).replace(tzinfo=None)
         )
         db_session.add(hc)
         await db_session.commit()
@@ -316,7 +316,7 @@ class TestHealthMonitoringFilters:
             container_id="c1",
             status="restarting",
             output="restarting...",
-            checked_at=datetime.utcnow()
+            checked_at=datetime.now(UTC).replace(tzinfo=None)
         )
         db_session.add(hc)
         await db_session.commit()

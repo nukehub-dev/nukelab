@@ -15,7 +15,7 @@ Architecture:
 import uuid
 import os
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from typing import Optional, Dict, Any
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -161,7 +161,7 @@ class ServerAuthService:
         # Generate unique token ID
         jti = str(uuid.uuid4())
         key_id = self.get_key_id()
-        now = datetime.utcnow()
+        now = datetime.now(UTC).replace(tzinfo=None)
         expires = now + timedelta(seconds=settings.server_auth_token_ttl)
         
         # Build claims
@@ -278,7 +278,7 @@ class ServerAuthService:
         token = result.scalar_one_or_none()
         
         if token:
-            token.revoked_at = datetime.utcnow()
+            token.revoked_at = datetime.now(UTC).replace(tzinfo=None)
             token.revoked_reason = reason
             await db.commit()
             logger.info(f"Revoked server access token: jti={jti}, reason={reason}")
@@ -304,7 +304,7 @@ class ServerAuthService:
                 and_(
                     ServerAccessToken.server_id == server_id,
                     ServerAccessToken.revoked_at.is_(None),
-                    ServerAccessToken.expires_at > datetime.utcnow()
+                    ServerAccessToken.expires_at > datetime.now(UTC).replace(tzinfo=None)
                 )
             )
         )
@@ -312,7 +312,7 @@ class ServerAuthService:
         
         count = 0
         for token in tokens:
-            token.revoked_at = datetime.utcnow()
+            token.revoked_at = datetime.now(UTC).replace(tzinfo=None)
             token.revoked_reason = reason
             count += 1
         
@@ -344,7 +344,7 @@ class ServerAuthService:
         server_id: uuid.UUID,
     ) -> None:
         """Check if user has exceeded token generation rate limit."""
-        window_start = datetime.utcnow() - timedelta(minutes=1)
+        window_start = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=1)
         
         result = await db.execute(
             select(func.count(ServerAccessToken.id)).where(
@@ -375,7 +375,7 @@ class ServerAuthService:
         """
         from sqlalchemy import delete
         
-        cutoff = datetime.utcnow() - timedelta(days=max_age_days)
+        cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=max_age_days)
         
         result = await db.execute(
             delete(ServerAccessToken).where(
@@ -402,14 +402,14 @@ class ServerAuthService:
                 and_(
                     ServerAccessToken.server_id == server_id,
                     ServerAccessToken.revoked_at.is_(None),
-                    ServerAccessToken.expires_at > datetime.utcnow()
+                    ServerAccessToken.expires_at > datetime.now(UTC).replace(tzinfo=None)
                 )
             )
         )
         active_count = result.scalar()
         
         # Total tokens issued (last 24h)
-        day_ago = datetime.utcnow() - timedelta(hours=24)
+        day_ago = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=24)
         result = await db.execute(
             select(func.count(ServerAccessToken.id)).where(
                 and_(

@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from app.core.time_utils import utc_now
 from sqlalchemy import Column, String, Boolean, DateTime, Integer, JSON, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -20,7 +20,7 @@ class ApiToken(Base):
     usage_count = Column(Integer, default=0)
     
     # Lifecycle
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
     expires_at = Column(DateTime, nullable=True)
     revoked_at = Column(DateTime, nullable=True)
     is_active = Column(Boolean, default=True)

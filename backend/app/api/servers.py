@@ -4,7 +4,7 @@ Server API endpoints with RBAC and ownership enforcement.
 
 import logging
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from typing import Optional
 from app.config import settings
 from fastapi import APIRouter, Depends, HTTPException, status, Request
@@ -457,13 +457,13 @@ async def create_server(
         
         # Store plan reference
         server.plan_id = uuid.UUID(body.plan_id)
-        server.last_activity = datetime.utcnow()
+        server.last_activity = datetime.now(UTC).replace(tzinfo=None)
         
         # Set expiration based on max_runtime
         from app.core.time_utils import parse_duration
         max_runtime_seconds = parse_duration(plan.max_runtime)
         if max_runtime_seconds > 0:
-            server.expires_at = datetime.utcnow() + timedelta(seconds=max_runtime_seconds)
+            server.expires_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(seconds=max_runtime_seconds)
         
         # Save to database
         db.add(server)
@@ -618,10 +618,10 @@ async def list_servers(
                 actual = await spawner.get_status(s.container_id)
                 if actual == "running" and s.status != "running":
                     s.status = "running"
-                    s.started_at = datetime.utcnow()
+                    s.started_at = datetime.now(UTC).replace(tzinfo=None)
                 elif actual in ("stopped", "paused", "exited") and s.status == "running":
                     s.status = "stopped"
-                    s.stopped_at = datetime.utcnow()
+                    s.stopped_at = datetime.now(UTC).replace(tzinfo=None)
             except Exception:
                 pass
     
@@ -680,12 +680,12 @@ async def get_server(
             actual = await spawner.get_status(server.container_id)
             if actual == "running" and server.status != "running":
                 server.status = "running"
-                server.started_at = datetime.utcnow()
+                server.started_at = datetime.now(UTC).replace(tzinfo=None)
                 server.stop_reason = None
                 server.stopped_at = None
             elif actual in ("stopped", "paused", "exited") and server.status == "running":
                 server.status = "stopped"
-                server.stopped_at = datetime.utcnow()
+                server.stopped_at = datetime.now(UTC).replace(tzinfo=None)
             await db.commit()
         except Exception:
             pass
@@ -750,12 +750,12 @@ async def get_server_by_path(
             actual = await spawner.get_status(server.container_id)
             if actual == "running" and server.status != "running":
                 server.status = "running"
-                server.started_at = datetime.utcnow()
+                server.started_at = datetime.now(UTC).replace(tzinfo=None)
                 server.stop_reason = None
                 server.stopped_at = None
             elif actual in ("stopped", "paused", "exited") and server.status == "running":
                 server.status = "stopped"
-                server.stopped_at = datetime.utcnow()
+                server.stopped_at = datetime.now(UTC).replace(tzinfo=None)
             await db.commit()
         except Exception:
             pass
@@ -895,7 +895,7 @@ async def _perform_server_start(
                 server.image = new_server.image
                 server.volume_id = new_server.volume_id
                 server.status = "running"
-                server.started_at = datetime.utcnow()
+                server.started_at = datetime.now(UTC).replace(tzinfo=None)
                 server.external_url = new_server.external_url
                 server.stop_reason = None
                 server.stopped_at = None
@@ -909,7 +909,7 @@ async def _perform_server_start(
                 raise Exception("Failed to start container - check container logs")
 
             server.status = "running"
-            server.started_at = datetime.utcnow()
+            server.started_at = datetime.now(UTC).replace(tzinfo=None)
             server.stop_reason = None
             server.stopped_at = None
 
@@ -980,7 +980,7 @@ async def _perform_server_start(
             server.volume_id = new_server.volume_id
             server.status = "running"
             server.external_url = new_server.external_url
-            server.started_at = datetime.utcnow()
+            server.started_at = datetime.now(UTC).replace(tzinfo=None)
             server.stop_reason = None
             server.stopped_at = None
             server.allocated_cpu = new_server.allocated_cpu
@@ -1040,7 +1040,7 @@ async def _perform_server_stop(
             await spawner.delete(server.container_id)
             server.container_id = None
             server.status = "stopped"
-            server.stopped_at = datetime.utcnow()
+            server.stopped_at = datetime.now(UTC).replace(tzinfo=None)
 
             if server.plan_id:
                 credit_service = CreditService(db)
@@ -1182,7 +1182,7 @@ async def _perform_server_restart(
                 server.image = new_server.image
                 server.volume_id = new_server.volume_id
                 server.status = "running"
-                server.started_at = datetime.utcnow()
+                server.started_at = datetime.now(UTC).replace(tzinfo=None)
                 server.external_url = new_server.external_url
                 server.stop_reason = None
                 server.stopped_at = None
@@ -1201,7 +1201,7 @@ async def _perform_server_restart(
             await spawner.stop(server.container_id)
             await spawner.start(server.container_id)
             server.status = "running"
-            server.started_at = datetime.utcnow()
+            server.started_at = datetime.now(UTC).replace(tzinfo=None)
             server.stop_reason = None
             server.stopped_at = None
             await db.commit()
@@ -1543,7 +1543,7 @@ async def update_server(
         
         server.container_id = None
         server.status = "stopped"
-        server.stopped_at = datetime.utcnow()
+        server.stopped_at = datetime.now(UTC).replace(tzinfo=None)
     
     # Apply volume mount changes in DB
     if new_volume_mounts is not None:
@@ -1619,7 +1619,7 @@ async def update_server(
             server.image = new_server_container.image
             server.volume_id = new_server_container.volume_id
             server.status = "running"
-            server.started_at = datetime.utcnow()
+            server.started_at = datetime.now(UTC).replace(tzinfo=None)
             server.external_url = new_server_container.external_url
             server.stop_reason = None
             server.stopped_at = None
@@ -1721,7 +1721,7 @@ async def ping_server_activity(
     if server.status != "running":
         raise HTTPException(status_code=400, detail="Server is not running")
     
-    server.last_activity = datetime.utcnow()
+    server.last_activity = datetime.now(UTC).replace(tzinfo=None)
     await db.commit()
     
     return {"message": "Activity recorded", "server_id": server_id, "last_activity": server.last_activity.isoformat()}

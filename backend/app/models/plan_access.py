@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from app.core.time_utils import utc_now
 from sqlalchemy import Column, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -12,7 +12,7 @@ class UserPlanAccess(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     plan_id = Column(UUID(as_uuid=True), ForeignKey("server_plans.id", ondelete="CASCADE"), primary_key=True)
     granted_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    granted_at = Column(DateTime, default=datetime.utcnow)
+    granted_at = Column(DateTime, default=utc_now)
     expires_at = Column(DateTime, nullable=True)
 
     user = relationship("User", foreign_keys=[user_id], back_populates="plan_access")
@@ -35,7 +35,7 @@ class WorkspacePlanAccess(Base):
     workspace_id = Column(UUID(as_uuid=True), ForeignKey("shared_workspaces.id", ondelete="CASCADE"), primary_key=True)
     plan_id = Column(UUID(as_uuid=True), ForeignKey("server_plans.id", ondelete="CASCADE"), primary_key=True)
     granted_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    granted_at = Column(DateTime, default=datetime.utcnow)
+    granted_at = Column(DateTime, default=utc_now)
     expires_at = Column(DateTime, nullable=True)
 
     workspace = relationship("SharedWorkspace", back_populates="plan_access")

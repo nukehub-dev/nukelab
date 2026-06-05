@@ -345,11 +345,11 @@ class TestWorkspaceCollaboration:
         # Manually expire the invitation in DB via db_session fixture
         from app.models.workspace_invitation import WorkspaceInvitation
         from sqlalchemy import update
-        from datetime import datetime, timedelta
+        from datetime import datetime, timedelta, UTC
         await db_session.execute(
             update(WorkspaceInvitation)
             .where(WorkspaceInvitation.id == invitation["id"])
-            .values(expires_at=datetime.utcnow() - timedelta(days=1))
+            .values(expires_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1))
         )
         await db_session.commit()
 

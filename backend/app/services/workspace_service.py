@@ -2,7 +2,7 @@
 Shared workspace service for managing collaborative workspaces.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from typing import List, Dict, Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func
@@ -537,7 +537,7 @@ class WorkspaceService:
             existing.status = "pending"
             existing.role = role
             existing.invited_by = invited_by
-            existing.expires_at = datetime.utcnow() + timedelta(days=7)
+            existing.expires_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(days=7)
             await self.db.commit()
             await self.db.refresh(existing, attribute_names=["user", "inviter", "workspace"])
             return existing
@@ -576,7 +576,7 @@ class WorkspaceService:
             raise ValueError("Invitation not found or already processed")
         
         # Check expiration
-        if invitation.expires_at and invitation.expires_at < datetime.utcnow():
+        if invitation.expires_at and invitation.expires_at < datetime.now(UTC).replace(tzinfo=None):
             invitation.status = "expired"
             await self.db.commit()
             raise ValueError("Invitation has expired")

@@ -1,7 +1,7 @@
 """IP restriction model for allowlist/blocklist."""
 
 import uuid
-from datetime import datetime
+from app.core.time_utils import utc_now
 from sqlalchemy import Column, String, DateTime, Text, ForeignKey, Boolean, Index
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.base import Base
@@ -28,7 +28,7 @@ class IPRestriction(Base):
     created_by_id = Column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     def to_dict(self):
         return {

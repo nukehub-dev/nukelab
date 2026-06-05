@@ -1,7 +1,7 @@
 """Tests for Server model and Server lifecycle with volume support."""
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from httpx import AsyncClient
 from unittest.mock import MagicMock, AsyncMock, patch
 
@@ -222,10 +222,10 @@ class TestServerLifecycleE2E:
         """E2E: Verify auto-stop related fields exist on server."""
         server = Server()
 
-        server.expires_at = datetime.utcnow() + timedelta(hours=1)
+        server.expires_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1)
         assert server.expires_at is not None
 
-        server.last_activity = datetime.utcnow()
+        server.last_activity = datetime.now(UTC).replace(tzinfo=None)
         assert server.last_activity is not None
 
         server.total_cost = 100

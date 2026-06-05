@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from app.core.time_utils import utc_now
 from sqlalchemy import Column, String, DateTime, ForeignKey, inspect
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -12,7 +12,7 @@ class WorkspaceVolume(Base):
     workspace_id = Column(UUID(as_uuid=True), ForeignKey("shared_workspaces.id", ondelete="CASCADE"), primary_key=True)
     volume_id = Column(UUID(as_uuid=True), ForeignKey("volumes.id", ondelete="CASCADE"), primary_key=True)
     role = Column(String(20), default="read_write")  # read_only, read_write
-    added_at = Column(DateTime, default=datetime.utcnow)
+    added_at = Column(DateTime, default=utc_now)
     added_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     
     # Relationships

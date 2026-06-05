@@ -24,9 +24,9 @@ router = APIRouter()
 
 async def _get_system_health(db: AsyncSession) -> str:
     """Determine overall system health from latest health checks."""
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, UTC
 
-    recent = datetime.utcnow() - timedelta(hours=1)
+    recent = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1)
     subq = (
         select(
             HealthCheck.server_id,

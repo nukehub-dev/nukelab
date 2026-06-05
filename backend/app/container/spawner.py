@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Optional, List, Dict, Any
 from app.container.client import ContainerClient, get_container_client
 from app.models.server import Server
@@ -229,8 +229,8 @@ class ServerSpawner:
                 allocated_memory=memory,
                 allocated_disk=disk,
                 external_url=f"{public_url}{route_prefix}",
-                started_at=datetime.utcnow(),
-                created_at=datetime.utcnow(),
+                started_at=datetime.now(UTC).replace(tzinfo=None),
+                created_at=datetime.now(UTC).replace(tzinfo=None),
             )
             
             return server

@@ -2,7 +2,7 @@
 
 import pytest
 from unittest import mock
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 
 from app.core.security import (
     _expand_permissions,
@@ -421,7 +421,7 @@ class TestRefreshTokenUtils:
         # Manually expire it
         result = await db_session.execute(select(RefreshToken).where(RefreshToken.user_id == test_user.id))
         rt = result.scalars().first()
-        rt.expires_at = datetime.utcnow() - timedelta(days=1)
+        rt.expires_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1)
         await db_session.commit()
 
         deleted = await cleanup_expired_refresh_tokens(db_session)

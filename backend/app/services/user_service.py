@@ -3,7 +3,7 @@ User service for business logic.
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import List, Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func
@@ -229,7 +229,7 @@ class UserService:
             if field in data:
                 setattr(user, field, data[field])
         
-        user.updated_at = datetime.utcnow()
+        user.updated_at = datetime.now(UTC).replace(tzinfo=None)
         await self.db.commit()
         await self.db.refresh(user)
         
@@ -277,7 +277,7 @@ class UserService:
         security = dict(user.security or {})
         if disabled:
             security["disabled_reason"] = reason
-            security["disabled_at"] = datetime.utcnow().isoformat()
+            security["disabled_at"] = datetime.now(UTC).replace(tzinfo=None).isoformat()
         else:
             security.pop("disabled_reason", None)
             security.pop("disabled_at", None)
@@ -316,7 +316,7 @@ class UserService:
         
         # Update security tracking
         security = dict(user.security or {})
-        security["password_changed_at"] = datetime.utcnow().isoformat()
+        security["password_changed_at"] = datetime.now(UTC).replace(tzinfo=None).isoformat()
         user.security = security
         
         await self.db.commit()

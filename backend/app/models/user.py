@@ -1,6 +1,6 @@
 import uuid
 import hashlib
-from datetime import datetime
+from app.core.time_utils import utc_now
 from sqlalchemy import Column, String, Boolean, DateTime, Integer, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -53,8 +53,8 @@ class User(Base):
     last_login = Column(DateTime, nullable=True)
     login_count = Column(Integer, default=0)
     
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
     
     # Relationships
     servers = relationship("Server", back_populates="user", cascade="all, delete-orphan")

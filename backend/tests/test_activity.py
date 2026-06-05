@@ -2,7 +2,7 @@
 
 import pytest
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 
 from app.models.activity_log import ActivityLog
 
@@ -188,7 +188,7 @@ class TestUserActivityAPI:
             target_type="servers",
             target_id=uuid.uuid4(),
             details={},
-            created_at=datetime.utcnow() - timedelta(days=10),
+            created_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=10),
         )
         new_log = ActivityLog(
             actor_id=test_user.id,
@@ -196,12 +196,12 @@ class TestUserActivityAPI:
             target_type="servers",
             target_id=uuid.uuid4(),
             details={},
-            created_at=datetime.utcnow() - timedelta(days=1),
+            created_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1),
         )
         db_session.add_all([old_log, new_log])
         await db_session.commit()
 
-        from_date = (datetime.utcnow() - timedelta(days=5)).isoformat()
+        from_date = (datetime.now(UTC).replace(tzinfo=None) - timedelta(days=5)).isoformat()
         response = await client.get(
             f"/api/users/me/activity?from_date={from_date}",
             headers={"Authorization": f"Bearer {user_token}"},

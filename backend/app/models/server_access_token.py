@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from app.core.time_utils import utc_now
 from sqlalchemy import Column, String, DateTime, ForeignKey, Boolean, Integer, Index
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.base import Base
@@ -27,7 +27,7 @@ class ServerAccessToken(Base):
     key_id = Column(String(32), nullable=False)
     
     # Token validity window
-    issued_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    issued_at = Column(DateTime, nullable=False, default=utc_now)
     expires_at = Column(DateTime, nullable=False)
     
     # Revocation
@@ -45,7 +45,7 @@ class ServerAccessToken(Base):
     # Token type: 'session' (normal), 'resume' (after reconnect), 'share' (shared link)
     token_type = Column(String(20), default="session")
     
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     __table_args__ = (
         Index('idx_server_access_tokens_server_user', 'server_id', 'user_id'),

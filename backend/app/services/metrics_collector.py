@@ -1,6 +1,6 @@
 import asyncio
 import json
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Dict, List, Optional
 import aiodocker
 from app.container.client import get_fresh_container_client
@@ -173,7 +173,7 @@ class MetricsCollector:
             'network_rx_errors': network_rx_errors,
             'network_tx_errors': network_tx_errors,
             'pids': stats2.get('pids_stats', {}).get('current', 0),
-            'collected_at': datetime.utcnow(),
+            'collected_at': datetime.now(UTC).replace(tzinfo=None),
         }
 
     async def _persist_metrics(self, metrics: dict):

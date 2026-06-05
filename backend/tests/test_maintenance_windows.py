@@ -2,7 +2,7 @@
 
 import pytest
 import pytest_asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from uuid import uuid4
 
 from app.models.maintenance_window import MaintenanceWindow
@@ -30,7 +30,7 @@ def reset_maintenance_state():
 async def sample_window(db_session):
     """Create a sample maintenance window in the future."""
     service = MaintenanceWindowService(db_session)
-    now = datetime.utcnow()
+    now = datetime.now(UTC).replace(tzinfo=None)
     window = await service.create_window(
         title="Test Maintenance",
         message="System will be down for updates",
@@ -50,7 +50,7 @@ class TestMaintenanceWindowModel:
     @pytest.mark.asyncio
     async def test_create_window(self, db_session):
         """Should create a maintenance window with correct defaults."""
-        now = datetime.utcnow()
+        now = datetime.now(UTC).replace(tzinfo=None)
         window = MaintenanceWindow(
             title="Planned Downtime",
             message="Upgrading database",
@@ -71,7 +71,7 @@ class TestMaintenanceWindowModel:
     @pytest.mark.asyncio
     async def test_to_dict(self, db_session):
         """Should serialize to dict correctly."""
-        now = datetime.utcnow()
+        now = datetime.now(UTC).replace(tzinfo=None)
         window = MaintenanceWindow(
             title="Test",
             message="Msg",
@@ -100,7 +100,7 @@ class TestMaintenanceWindowService:
     async def test_create_window(self, db_session):
         """Should create a window with valid times."""
         service = MaintenanceWindowService(db_session)
-        now = datetime.utcnow()
+        now = datetime.now(UTC).replace(tzinfo=None)
         window = await service.create_window(
             title="Window",
             message="Msg",
@@ -114,7 +114,7 @@ class TestMaintenanceWindowService:
     async def test_create_window_end_before_start(self, db_session):
         """Should reject end time before start time."""
         service = MaintenanceWindowService(db_session)
-        now = datetime.utcnow()
+        now = datetime.now(UTC).replace(tzinfo=None)
         with pytest.raises(ValueError, match="End time must be after start time"):
             await service.create_window(
                 title="Bad",
@@ -127,7 +127,7 @@ class TestMaintenanceWindowService:
     async def test_create_window_past_start(self, db_session):
         """Should reject start time in the past."""
         service = MaintenanceWindowService(db_session)
-        now = datetime.utcnow()
+        now = datetime.now(UTC).replace(tzinfo=None)
         with pytest.raises(ValueError, match="Start time must be in the future"):
             await service.create_window(
                 title="Bad",
@@ -190,7 +190,7 @@ class TestMaintenanceWindowService:
     async def test_get_pending_notifications(self, db_session):
         """Should find windows needing advance notification."""
         service = MaintenanceWindowService(db_session)
-        now = datetime.utcnow()
+        now = datetime.now(UTC).replace(tzinfo=None)
         # Window starts in 10 minutes — within 15-minute threshold
         window = await service.create_window(
             title="Soon",
@@ -206,7 +206,7 @@ class TestMaintenanceWindowService:
     async def test_get_pending_notifications_already_notified(self, db_session):
         """Should not return already-notified windows."""
         service = MaintenanceWindowService(db_session)
-        now = datetime.utcnow()
+        now = datetime.now(UTC).replace(tzinfo=None)
         window = await service.create_window(
             title="Soon",
             message="Msg",
@@ -223,7 +223,7 @@ class TestMaintenanceWindowService:
     async def test_get_windows_to_enable(self, db_session):
         """Should find windows that should start now."""
         service = MaintenanceWindowService(db_session)
-        now = datetime.utcnow()
+        now = datetime.now(UTC).replace(tzinfo=None)
         window = MaintenanceWindow(
             title="Now",
             message="Msg",
@@ -240,7 +240,7 @@ class TestMaintenanceWindowService:
     async def test_get_windows_to_disable(self, db_session):
         """Should find windows that should end now."""
         service = MaintenanceWindowService(db_session)
-        now = datetime.utcnow()
+        now = datetime.now(UTC).replace(tzinfo=None)
         window = MaintenanceWindow(
             title="Done",
             message="Msg",
@@ -280,7 +280,7 @@ class TestMaintenanceWindowService:
     async def test_evaluate_windows_full_cycle(self, db_session):
         """Should run full evaluate cycle: notify, enable, disable."""
         service = MaintenanceWindowService(db_session)
-        now = datetime.utcnow()
+        now = datetime.now(UTC).replace(tzinfo=None)
 
         # Create a user for notification
         user = User(
@@ -371,7 +371,7 @@ class TestMaintenanceWindowAPI:
     @pytest.mark.asyncio
     async def test_create_requires_admin(self, client, user_token):
         """Non-admin should not create maintenance windows."""
-        now = datetime.utcnow()
+        now = datetime.now(UTC).replace(tzinfo=None)
         response = await client.post(
             "/api/system/maintenance-windows",
             headers={"Authorization": f"Bearer {user_token}"},
@@ -387,7 +387,7 @@ class TestMaintenanceWindowAPI:
     @pytest.mark.asyncio
     async def test_create_as_admin(self, client, admin_token):
         """Admin should create a maintenance window."""
-        now = datetime.utcnow()
+        now = datetime.now(UTC).replace(tzinfo=None)
         response = await client.post(
             "/api/system/maintenance-windows",
             headers={"Authorization": f"Bearer {admin_token}"},
@@ -406,7 +406,7 @@ class TestMaintenanceWindowAPI:
     @pytest.mark.asyncio
     async def test_create_invalid_times(self, client, admin_token):
         """Should reject invalid time ranges."""
-        now = datetime.utcnow()
+        now = datetime.now(UTC).replace(tzinfo=None)
         response = await client.post(
             "/api/system/maintenance-windows",
             headers={"Authorization": f"Bearer {admin_token}"},

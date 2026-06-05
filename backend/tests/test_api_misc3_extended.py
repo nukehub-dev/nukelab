@@ -2,7 +2,7 @@
 
 import pytest
 from unittest import mock
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 import uuid as uuid_mod
 
 from app.config import settings
@@ -394,8 +394,8 @@ class TestSystemExtended:
                 json={
                     "title": "Test Window",
                     "message": "Maintenance",
-                    "start_at": (datetime.utcnow() + timedelta(hours=1)).isoformat(),
-                    "end_at": (datetime.utcnow() + timedelta(hours=2)).isoformat(),
+                    "start_at": (datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1)).isoformat(),
+                    "end_at": (datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=2)).isoformat(),
                 },
             )
         assert response.status_code == 200
@@ -411,8 +411,8 @@ class TestSystemExtended:
                 json={
                     "title": "Test",
                     "message": "Maintenance",
-                    "start_at": (datetime.utcnow() + timedelta(hours=1)).isoformat(),
-                    "end_at": (datetime.utcnow() + timedelta(hours=2)).isoformat(),
+                    "start_at": (datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1)).isoformat(),
+                    "end_at": (datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=2)).isoformat(),
                 },
             )
         assert response.status_code == 400

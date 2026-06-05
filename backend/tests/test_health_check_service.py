@@ -2,7 +2,7 @@
 
 import pytest
 import uuid as uuid_mod
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from unittest.mock import patch, AsyncMock, MagicMock
 
 from app.services.health_check_service import HealthCheckService, _broadcast_health_update
@@ -64,7 +64,7 @@ class TestHealthCheckServiceAutoRestart:
                 server_id=server.id,
                 container_id="abc123",
                 status="restarting",
-                checked_at=datetime.utcnow(),
+                checked_at=datetime.now(UTC).replace(tzinfo=None),
             )
             db_session.add(hc)
         await db_session.commit()

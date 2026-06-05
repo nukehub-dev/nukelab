@@ -2,7 +2,7 @@
 
 import pytest
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from jose import jwt, JWTError
 from sqlalchemy import select
 
@@ -179,8 +179,8 @@ class TestServerAuthServiceCleanup:
             user_id=test_user.id,
             jti="old-jti-123",
             key_id="key1",
-            issued_at=datetime.utcnow() - timedelta(days=10),
-            expires_at=datetime.utcnow() - timedelta(days=9),
+            issued_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=10),
+            expires_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=9),
         )
         db_session.add(old_token)
         await db_session.commit()

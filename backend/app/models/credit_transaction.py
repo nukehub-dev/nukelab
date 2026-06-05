@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from app.core.time_utils import utc_now
 from sqlalchemy import Column, String, Integer, DateTime, Text, ForeignKey, JSON, Index
 from sqlalchemy.dialects.postgresql import UUID, INET
 from app.db.base import Base
@@ -20,7 +20,7 @@ class CreditTransaction(Base):
     plan_id = Column(UUID(as_uuid=True), nullable=True)
     actor_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     meta = Column(JSON, default=dict)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
     
     def to_dict(self):
         return {

@@ -2,7 +2,7 @@
 
 import pytest
 from unittest import mock
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 
 
 class TestHealthEndpoints:
@@ -129,8 +129,8 @@ class TestSystemEndpoints:
             json={
                 "title": "Test",
                 "message": "Test window",
-                "start_at": (datetime.utcnow() + timedelta(hours=1)).isoformat(),
-                "end_at": (datetime.utcnow() - timedelta(hours=1)).isoformat(),
+                "start_at": (datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1)).isoformat(),
+                "end_at": (datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1)).isoformat(),
             }
         )
         # Should get 400 for invalid date range

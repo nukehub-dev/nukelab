@@ -2,7 +2,7 @@
 
 import pytest
 from unittest import mock
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 
 
 class TestCsrfToken:
@@ -442,7 +442,7 @@ class TestAuthContextEdgeCases:
             token_prefix=token_str[:16],
             token_hash="$2b$12$testhash",  # won't match verify_password but let's see
             is_active=True,
-            expires_at=datetime.utcnow() - timedelta(days=1),
+            expires_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1),
         )
         db_session.add(api_token)
         await db_session.commit()

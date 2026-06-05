@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from app.core.time_utils import utc_now
 from sqlalchemy import Column, String, DateTime, ForeignKey, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -14,7 +14,7 @@ class ServerVolume(Base):
     mount_path = Column(String(255), nullable=False, default="/data")
     mode = Column(String(20), default="read_write")  # read_write, read_only
     is_primary = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
     
     server = relationship("Server", back_populates="volume_mounts")
     volume = relationship("Volume", back_populates="server_mounts")

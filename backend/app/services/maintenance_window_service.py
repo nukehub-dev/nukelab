@@ -4,7 +4,7 @@ Handles creation, updates, and evaluation of maintenance windows.
 """
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from typing import List, Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_
@@ -34,7 +34,7 @@ class MaintenanceWindowService:
             query = query.where(MaintenanceWindow.is_active == True)
 
         if future_only:
-            query = query.where(MaintenanceWindow.end_at >= datetime.utcnow())
+            query = query.where(MaintenanceWindow.end_at >= datetime.now(UTC).replace(tzinfo=None))
 
         query = query.limit(limit)
 
@@ -63,7 +63,7 @@ class MaintenanceWindowService:
         if end_at <= start_at:
             raise ValueError("End time must be after start time")
 
-        if start_at < datetime.utcnow() - timedelta(minutes=1):
+        if start_at < datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=1):
             raise ValueError("Start time must be in the future")
 
         # Validate offsets — filter out any larger than time until start
@@ -144,7 +144,7 @@ class MaintenanceWindowService:
         """
         if not offsets:
             return [15]
-        now = datetime.utcnow()
+        now = datetime.now(UTC).replace(tzinfo=None)
         minutes_until_start = int((start_at - now).total_seconds() / 60)
         # Remove duplicates, filter out offsets larger than time until start, sort descending
         unique = sorted(
@@ -155,7 +155,7 @@ class MaintenanceWindowService:
 
     async def get_pending_notifications(self) -> List[tuple[MaintenanceWindow, int]]:
         """Get (window, offset_minutes) pairs that need notification sent."""
-        now = datetime.utcnow()
+        now = datetime.now(UTC).replace(tzinfo=None)
 
         result = await self.db.execute(
             select(MaintenanceWindow).where(
@@ -187,7 +187,7 @@ class MaintenanceWindowService:
 
     async def get_windows_to_enable(self) -> List[MaintenanceWindow]:
         """Get active windows whose start time has arrived."""
-        now = datetime.utcnow()
+        now = datetime.now(UTC).replace(tzinfo=None)
         result = await self.db.execute(
             select(MaintenanceWindow).where(
                 and_(
@@ -201,7 +201,7 @@ class MaintenanceWindowService:
 
     async def get_windows_to_disable(self) -> List[MaintenanceWindow]:
         """Get active windows whose end time has passed."""
-        now = datetime.utcnow()
+        now = datetime.now(UTC).replace(tzinfo=None)
         result = await self.db.execute(
             select(MaintenanceWindow).where(
                 and_(
@@ -252,7 +252,7 @@ class MaintenanceWindowService:
         if offset_minutes not in notified:
             notified.append(offset_minutes)
         window.notified_offsets = notified
-        window.notified_at = datetime.utcnow()
+        window.notified_at = datetime.now(UTC).replace(tzinfo=None)
         await self.db.commit()
         return sent_count
 

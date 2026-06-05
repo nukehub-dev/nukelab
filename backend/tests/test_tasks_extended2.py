@@ -3,7 +3,7 @@
 import pytest
 import asyncio
 from unittest import mock
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 import uuid as uuid_mod
 
 from app.tasks import (
@@ -113,8 +113,8 @@ class TestShutdownIdleServersBranches:
         user.preferences = {"idle_shutdown_enabled": False}
         server = mock.Mock()
         server.container_id = "cid-123"
-        server.last_activity = datetime.utcnow() - timedelta(hours=1)
-        server.started_at = datetime.utcnow() - timedelta(hours=2)
+        server.last_activity = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1)
+        server.started_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=2)
         db = self._make_db([(server, user)])
         result = _run_with_mock_db(shutdown_idle_servers, db)
         assert "Stopped 0 idle servers" in result
@@ -137,8 +137,8 @@ class TestShutdownIdleServersBranches:
         user.preferences = {"idle_shutdown_timeout": 30}
         server = mock.Mock()
         server.container_id = "cid-123"
-        server.last_activity = datetime.utcnow() - timedelta(minutes=5)
-        server.started_at = datetime.utcnow() - timedelta(hours=1)
+        server.last_activity = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=5)
+        server.started_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1)
         db = self._make_db([(server, user)])
         result = _run_with_mock_db(shutdown_idle_servers, db)
         assert "Stopped 0 idle servers" in result
@@ -149,8 +149,8 @@ class TestShutdownIdleServersBranches:
         user.preferences = {"idle_shutdown_timeout": 30}
         server = mock.Mock()
         server.container_id = "cid-123"
-        server.last_activity = datetime.utcnow() - timedelta(hours=1)
-        server.started_at = datetime.utcnow() - timedelta(hours=2)
+        server.last_activity = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1)
+        server.started_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=2)
         server.plan_id = None
         db = self._make_db([(server, user)])
         with mock.patch("app.container.spawner.spawner.get_status", new=mock.AsyncMock(return_value="stopped")):
@@ -165,8 +165,8 @@ class TestShutdownIdleServersBranches:
         plan.id = uuid_mod.uuid4()
         server = mock.Mock()
         server.container_id = "cid-123"
-        server.last_activity = datetime.utcnow() - timedelta(hours=1)
-        server.started_at = datetime.utcnow() - timedelta(hours=2)
+        server.last_activity = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1)
+        server.started_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=2)
         server.plan_id = plan.id
 
         db = _make_async_mock_db()
@@ -194,8 +194,8 @@ class TestShutdownIdleServersBranches:
         user.preferences = {"idle_shutdown_timeout": 30}
         server = mock.Mock()
         server.container_id = "cid-123"
-        server.last_activity = datetime.utcnow() - timedelta(hours=1)
-        server.started_at = datetime.utcnow() - timedelta(hours=2)
+        server.last_activity = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1)
+        server.started_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=2)
         server.plan_id = None
         db = self._make_db([(server, user)])
         with mock.patch("app.container.spawner.spawner.get_status", side_effect=Exception("docker down")):
@@ -288,7 +288,7 @@ class TestEnforceAutoStopBranches:
         server.container_id = "cid-123"
         server.status = "running"
         server.name = "test-srv"
-        server.expires_at = datetime.utcnow() - timedelta(minutes=5)
+        server.expires_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=5)
         server.last_activity = None
         plan = mock.Mock()
         plan.idle_timeout = None
@@ -310,7 +310,7 @@ class TestEnforceAutoStopBranches:
         server.status = "running"
         server.name = "test-srv"
         server.expires_at = None
-        server.last_activity = datetime.utcnow() - timedelta(minutes=25)
+        server.last_activity = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=25)
         plan = mock.Mock()
         plan.idle_timeout = "30m"
 
@@ -330,7 +330,7 @@ class TestEnforceAutoStopBranches:
         server.status = "running"
         server.name = "test-srv"
         server.expires_at = None
-        server.last_activity = datetime.utcnow() - timedelta(minutes=35)
+        server.last_activity = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=35)
         plan = mock.Mock()
         plan.idle_timeout = "30m"
 
@@ -352,7 +352,7 @@ class TestEnforceAutoStopBranches:
         server.status = "running"
         server.name = "test-srv"
         server.expires_at = None
-        server.last_activity = datetime.utcnow() - timedelta(minutes=35)
+        server.last_activity = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=35)
         plan = mock.Mock()
         plan.idle_timeout = "invalid"
 
@@ -370,7 +370,7 @@ class TestProcessServerQueueBranches:
         entry.user_id = uuid_mod.uuid4()
         entry.server_name = "queued-srv"
         entry.status = "pending"
-        entry.requested_at = datetime.utcnow() - timedelta(hours=2)
+        entry.requested_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=2)
 
         db = _make_async_mock_db()
         timeout_res = mock.Mock()

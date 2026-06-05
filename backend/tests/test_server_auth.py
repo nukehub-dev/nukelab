@@ -2,7 +2,7 @@
 
 import pytest
 import pytest_asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from jose import jwt
 
 
@@ -98,7 +98,7 @@ class TestServerAuthTokenGeneration:
         from app.services.server_auth_service import server_auth_service
         from app.config import settings
 
-        before = datetime.utcnow()
+        before = datetime.now(UTC).replace(tzinfo=None)
 
         token = await server_auth_service.generate_access_token(
             db=db_session,

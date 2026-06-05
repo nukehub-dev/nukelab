@@ -1,7 +1,7 @@
 """Tests for Credits API endpoints."""
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from app.models.server import Server
 
 
@@ -133,8 +133,8 @@ class TestServerBillingReconciliation:
             user_id=test_user.id,
             plan_id=plan.id,
             status="running",
-            started_at=datetime.utcnow() - timedelta(minutes=5),
-            stopped_at=datetime.utcnow(),
+            started_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=5),
+            stopped_at=datetime.now(UTC).replace(tzinfo=None),
             total_cost=0,
         )
         db_session.add(server)
@@ -173,8 +173,8 @@ class TestServerBillingReconciliation:
             user_id=test_user.id,
             plan_id=plan.id,
             status="running",
-            started_at=datetime.utcnow() - timedelta(minutes=30),
-            stopped_at=datetime.utcnow(),
+            started_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=30),
+            stopped_at=datetime.now(UTC).replace(tzinfo=None),
             total_cost=30,  # Already billed 30 NUKE via ticks
         )
         db_session.add(server)
@@ -209,8 +209,8 @@ class TestServerBillingReconciliation:
             user_id=test_user.id,
             plan_id=plan.id,
             status="running",
-            started_at=datetime.utcnow() - timedelta(minutes=20),
-            stopped_at=datetime.utcnow(),
+            started_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=20),
+            stopped_at=datetime.now(UTC).replace(tzinfo=None),
             total_cost=10,  # Only billed for 10 minutes
         )
         db_session.add(server)
@@ -245,8 +245,8 @@ class TestServerBillingReconciliation:
             user_id=test_user.id,
             plan_id=plan.id,
             status="running",
-            started_at=datetime.utcnow() - timedelta(hours=1),
-            stopped_at=datetime.utcnow(),
+            started_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1),
+            stopped_at=datetime.now(UTC).replace(tzinfo=None),
             total_cost=0,
         )
         db_session.add(server)

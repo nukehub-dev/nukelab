@@ -1,7 +1,7 @@
 """Tests for API token management, authentication, and scope enforcement."""
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 
 
 class TestTokenCreation:
@@ -118,7 +118,7 @@ class TestTokenAuthentication:
     async def test_revoked_api_token_rejected(self, client, api_token, db_session):
         """Revoked token should be rejected."""
         api_token.db_token.is_active = False
-        api_token.db_token.revoked_at = datetime.utcnow()
+        api_token.db_token.revoked_at = datetime.now(UTC).replace(tzinfo=None)
         await db_session.commit()
 
         response = await client.get(
@@ -144,7 +144,7 @@ class TestTokenAuthentication:
             token_hash=token_hash,
             token_prefix=token_prefix,
             scopes=["servers:read"],
-            expires_at=datetime.utcnow() - timedelta(hours=1),
+            expires_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1),
             is_active=True,
         )
         db_session.add(expired_token)

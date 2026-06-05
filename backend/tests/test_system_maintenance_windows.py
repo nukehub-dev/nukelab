@@ -2,7 +2,7 @@
 
 import pytest
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 
 from app.models.maintenance_window import MaintenanceWindow
 
@@ -13,7 +13,7 @@ class TestMaintenanceWindowEndpoints:
     @pytest.mark.asyncio
     async def test_list_maintenance_windows(self, client, admin_token, db_session):
         """Admin should list maintenance windows."""
-        w = MaintenanceWindow(title="t", message="m", start_at=datetime.utcnow() + timedelta(hours=1), end_at=datetime.utcnow() + timedelta(hours=2))
+        w = MaintenanceWindow(title="t", message="m", start_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1), end_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=2))
         db_session.add(w)
         await db_session.commit()
 
@@ -29,8 +29,8 @@ class TestMaintenanceWindowEndpoints:
     @pytest.mark.asyncio
     async def test_list_active_only(self, client, admin_token, db_session):
         """Should filter by active_only."""
-        w1 = MaintenanceWindow(title="active", message="m", start_at=datetime.utcnow() + timedelta(hours=1), end_at=datetime.utcnow() + timedelta(hours=2), is_active=True)
-        w2 = MaintenanceWindow(title="inactive", message="m", start_at=datetime.utcnow() + timedelta(hours=3), end_at=datetime.utcnow() + timedelta(hours=4), is_active=False)
+        w1 = MaintenanceWindow(title="active", message="m", start_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1), end_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=2), is_active=True)
+        w2 = MaintenanceWindow(title="inactive", message="m", start_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=3), end_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=4), is_active=False)
         db_session.add_all([w1, w2])
         await db_session.commit()
 
@@ -45,8 +45,8 @@ class TestMaintenanceWindowEndpoints:
     @pytest.mark.asyncio
     async def test_create_maintenance_window(self, client, admin_token):
         """Admin should create a maintenance window."""
-        start = (datetime.utcnow() + timedelta(hours=1)).isoformat()
-        end = (datetime.utcnow() + timedelta(hours=2)).isoformat()
+        start = (datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1)).isoformat()
+        end = (datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=2)).isoformat()
         response = await client.post(
             "/api/system/maintenance-windows",
             headers={"Authorization": f"Bearer {admin_token}"},
@@ -67,8 +67,8 @@ class TestMaintenanceWindowEndpoints:
     @pytest.mark.asyncio
     async def test_create_maintenance_window_invalid_times(self, client, admin_token):
         """Should reject end before start."""
-        start = (datetime.utcnow() + timedelta(hours=2)).isoformat()
-        end = (datetime.utcnow() + timedelta(hours=1)).isoformat()
+        start = (datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=2)).isoformat()
+        end = (datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1)).isoformat()
         response = await client.post(
             "/api/system/maintenance-windows",
             headers={"Authorization": f"Bearer {admin_token}"},
@@ -84,7 +84,7 @@ class TestMaintenanceWindowEndpoints:
     @pytest.mark.asyncio
     async def test_get_maintenance_window(self, client, admin_token, db_session):
         """Admin should get a single maintenance window."""
-        w = MaintenanceWindow(title="t", message="m", start_at=datetime.utcnow() + timedelta(hours=1), end_at=datetime.utcnow() + timedelta(hours=2))
+        w = MaintenanceWindow(title="t", message="m", start_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1), end_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=2))
         db_session.add(w)
         await db_session.commit()
         await db_session.refresh(w)
@@ -108,7 +108,7 @@ class TestMaintenanceWindowEndpoints:
     @pytest.mark.asyncio
     async def test_update_maintenance_window(self, client, admin_token, db_session):
         """Admin should update a maintenance window."""
-        w = MaintenanceWindow(title="old", message="m", start_at=datetime.utcnow() + timedelta(hours=1), end_at=datetime.utcnow() + timedelta(hours=2))
+        w = MaintenanceWindow(title="old", message="m", start_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1), end_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=2))
         db_session.add(w)
         await db_session.commit()
         await db_session.refresh(w)
@@ -124,7 +124,7 @@ class TestMaintenanceWindowEndpoints:
     @pytest.mark.asyncio
     async def test_delete_maintenance_window(self, client, admin_token, db_session):
         """Admin should delete a maintenance window."""
-        w = MaintenanceWindow(title="del", message="m", start_at=datetime.utcnow() + timedelta(hours=1), end_at=datetime.utcnow() + timedelta(hours=2))
+        w = MaintenanceWindow(title="del", message="m", start_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1), end_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=2))
         db_session.add(w)
         await db_session.commit()
         await db_session.refresh(w)

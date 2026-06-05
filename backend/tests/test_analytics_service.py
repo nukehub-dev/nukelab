@@ -2,7 +2,7 @@
 
 import pytest
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from unittest import mock
 
 from app.services.analytics_service import AnalyticsService
@@ -73,7 +73,7 @@ class TestGetUserUsage:
             container_id="cid1",
             cpu_percent=50.0,
             memory_percent=60.0,
-            collected_at=datetime.utcnow() - timedelta(days=1),
+            collected_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1),
         )
         db_session.add(metric)
         await db_session.commit()
@@ -95,7 +95,7 @@ class TestGetUserUsage:
 
         rollup = DailyServerMetric(
             server_id=server.id,
-            date=(datetime.utcnow() - timedelta(days=10)).date(),
+            date=(datetime.now(UTC).replace(tzinfo=None) - timedelta(days=10)).date(),
             avg_cpu=40.0,
             peak_cpu=80.0,
             avg_memory=50.0,
@@ -123,7 +123,7 @@ class TestGetUserUsage:
             amount=-100,
             balance_after=900,
             type="server_usage",
-            created_at=datetime.utcnow() - timedelta(days=1),
+            created_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1),
         )
         db_session.add(tx)
         await db_session.commit()
@@ -160,7 +160,7 @@ class TestGetGlobalUsage:
 
     @pytest.mark.asyncio
     async def test_global_usage_with_transactions(self, db_session, analytics_service, test_user):
-        tx = CreditTransaction(user_id=test_user.id, amount=-50, balance_after=950, type="server_usage", created_at=datetime.utcnow() - timedelta(days=1))
+        tx = CreditTransaction(user_id=test_user.id, amount=-50, balance_after=950, type="server_usage", created_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1))
         db_session.add(tx)
         await db_session.commit()
 
@@ -178,7 +178,7 @@ class TestGetTopConsumers:
             amount=-200,
             balance_after=800,
             type="server_usage",
-            created_at=datetime.utcnow() - timedelta(days=1),
+            created_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1),
         )
         db_session.add(tx)
         await db_session.commit()
@@ -199,8 +199,8 @@ class TestGetCreditFlow:
 
     @pytest.mark.asyncio
     async def test_credit_flow(self, db_session, analytics_service, test_user):
-        tx1 = CreditTransaction(user_id=test_user.id, amount=-50, balance_after=950, type="server_usage", created_at=datetime.utcnow() - timedelta(days=1))
-        tx2 = CreditTransaction(user_id=test_user.id, amount=100, balance_after=1050, type="grant", created_at=datetime.utcnow() - timedelta(days=1))
+        tx1 = CreditTransaction(user_id=test_user.id, amount=-50, balance_after=950, type="server_usage", created_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1))
+        tx2 = CreditTransaction(user_id=test_user.id, amount=100, balance_after=1050, type="grant", created_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1))
         db_session.add_all([tx1, tx2])
         await db_session.commit()
 
@@ -221,7 +221,7 @@ class TestGetUserGrowth:
     @pytest.mark.asyncio
     async def test_user_growth(self, db_session, analytics_service):
         user = User(username="growthuser", email="g@test.com", role="user")
-        user.created_at = datetime.utcnow() - timedelta(days=1)
+        user.created_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1)
         db_session.add(user)
         await db_session.commit()
 
@@ -240,7 +240,7 @@ class TestGetDailyLogins:
 
     @pytest.mark.asyncio
     async def test_daily_logins(self, db_session, analytics_service, test_user):
-        event = LoginEvent(user_id=test_user.id, timestamp=datetime.utcnow() - timedelta(days=1))
+        event = LoginEvent(user_id=test_user.id, timestamp=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1))
         db_session.add(event)
         await db_session.commit()
 
@@ -268,7 +268,7 @@ class TestGetPlatformMetrics:
             container_id="cid2",
             cpu_percent=45.0,
             memory_percent=55.0,
-            collected_at=datetime.utcnow() - timedelta(days=1),
+            collected_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1),
         )
         db_session.add(metric)
         await db_session.commit()
@@ -286,7 +286,7 @@ class TestGetPlatformMetrics:
 
         rollup = DailyServerMetric(
             server_id=server.id,
-            date=(datetime.utcnow() - timedelta(days=10)).date(),
+            date=(datetime.now(UTC).replace(tzinfo=None) - timedelta(days=10)).date(),
             avg_cpu=40.0,
             peak_cpu=80.0,
             avg_memory=50.0,

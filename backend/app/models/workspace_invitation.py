@@ -1,5 +1,6 @@
 import uuid
-from datetime import datetime, timedelta
+from app.core.time_utils import utc_now
+from datetime import timedelta
 from sqlalchemy import Column, String, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -29,9 +30,9 @@ class WorkspaceInvitation(Base):
     )
     role = Column(String(20), default="read_write", nullable=False)
     status = Column(String(20), default="pending", nullable=False)
-    expires_at = Column(DateTime, default=lambda: datetime.utcnow() + timedelta(days=7), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    expires_at = Column(DateTime, default=lambda: utc_now() + timedelta(days=7), nullable=True)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     __table_args__ = (
         UniqueConstraint("workspace_id", "user_id", name="uq_workspace_invitation"),

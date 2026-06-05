@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from app.core.time_utils import utc_now
 from sqlalchemy import Column, String, Integer, DateTime, Text, ForeignKey, Index
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.base import Base
@@ -23,7 +23,7 @@ class HealthCheck(Base):
     consecutive_failures = Column(Integer, default=0)
     last_success_at = Column(DateTime)
 
-    checked_at = Column(DateTime, default=datetime.utcnow)
+    checked_at = Column(DateTime, default=utc_now)
 
     def to_dict(self):
         return {

@@ -2,7 +2,7 @@
 
 import pytest
 import uuid
-from datetime import datetime
+from datetime import datetime, UTC
 
 
 class TestActivityLogModel:
@@ -107,7 +107,7 @@ class TestMaintenanceWindowModel:
         from app.models.maintenance_window import MaintenanceWindow
         mw = MaintenanceWindow(
             title="Test", message="msg",
-            start_at=datetime.utcnow(), end_at=datetime.utcnow(),
+            start_at=datetime.now(UTC).replace(tzinfo=None), end_at=datetime.now(UTC).replace(tzinfo=None),
             created_by="admin"
         )
         d = mw.to_dict()

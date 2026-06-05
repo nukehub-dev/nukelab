@@ -3,6 +3,12 @@ Time duration parsing utilities.
 """
 
 import re
+from datetime import datetime, UTC
+
+
+def utc_now():
+    """Return a naive UTC datetime (equivalent to deprecated datetime.utcnow())."""
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 def parse_duration(duration_str: str) -> int:

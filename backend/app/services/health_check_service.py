@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from typing import Optional
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,7 +18,7 @@ async def _broadcast_health_update():
             "metrics:system",
             json.dumps({
                 "event": "health:system",
-                "data": {"refreshed_at": datetime.utcnow().isoformat()}
+                "data": {"refreshed_at": datetime.now(UTC).replace(tzinfo=None).isoformat()}
             })
         )
         await r.close()
@@ -95,7 +95,7 @@ class HealthCheckService:
                 else:
                     health_check.consecutive_failures = 1
             else:
-                health_check.last_success_at = datetime.utcnow()
+                health_check.last_success_at = datetime.now(UTC).replace(tzinfo=None)
 
             self.db.add(health_check)
             await self.db.commit()
@@ -126,7 +126,7 @@ class HealthCheckService:
             return
 
         # Rate limit: count recent restart attempts within the window
-        window_start = datetime.utcnow() - timedelta(
+        window_start = datetime.now(UTC).replace(tzinfo=None) - timedelta(
             seconds=settings.server_auto_restart_window
         )
         recent_restarts = await self.db.execute(
@@ -165,7 +165,7 @@ class HealthCheckService:
                 container_id=server.container_id,
                 status='restarting',
                 output='Auto-restarted after consecutive health check failures',
-                last_success_at=datetime.utcnow(),
+                last_success_at=datetime.now(UTC).replace(tzinfo=None),
             )
             self.db.add(restart_log)
             await self.db.commit()

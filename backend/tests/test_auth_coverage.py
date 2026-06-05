@@ -2,7 +2,7 @@
 
 import pytest
 from unittest import mock
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from jose import jwt as jose_jwt
 
 from app.models.user import User
@@ -328,7 +328,7 @@ class TestGetAuthContextEdgeCases:
             token_prefix=raw[:16],
             scopes=["user:read"],
             is_active=True,
-            expires_at=datetime.utcnow() - timedelta(hours=1)
+            expires_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1)
         )
         db_session.add(token)
         await db_session.commit()
@@ -379,7 +379,7 @@ class TestVerifyRefreshTokenLegacy:
             user_id=test_user.id,
             token_hash=token_hash,
             token_lookup=None,
-            expires_at=datetime.utcnow() + timedelta(days=7)
+            expires_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(days=7)
         )
         db_session.add(rt)
         await db_session.commit()
@@ -404,8 +404,8 @@ class TestEnforceRefreshTokenLimit:
                 user_id=uid,
                 token_hash="hash",
                 token_lookup=f"lookup{i}",
-                expires_at=datetime.utcnow() + timedelta(days=7),
-                created_at=datetime.utcnow() - timedelta(minutes=i)
+                expires_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(days=7),
+                created_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=i)
             )
             db_session.add(rt)
         await db_session.commit()

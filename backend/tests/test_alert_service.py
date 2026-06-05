@@ -2,7 +2,7 @@
 
 import pytest
 import uuid as uuid_mod
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from unittest.mock import patch, AsyncMock
 
 from app.services.alert_service import AlertService
@@ -315,7 +315,7 @@ class TestAlertServiceEvaluate:
             server_id=server.id,            status="fired",
             metric_value=75.0,
             threshold=50.0,
-            fired_at=datetime.utcnow(),
+            fired_at=datetime.now(UTC).replace(tzinfo=None),
         )
         db_session.add(alert)
         await db_session.commit()

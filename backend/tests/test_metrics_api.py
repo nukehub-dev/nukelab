@@ -1,7 +1,7 @@
 """Tests for metrics API endpoints."""
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 
 from app.models.server import Server
 from app.models.server_metric import ServerMetric
@@ -49,7 +49,7 @@ class TestServerMetrics:
             container_id="cid",
             cpu_percent=50.0,
             memory_percent=60.0,
-            collected_at=datetime.utcnow(),
+            collected_at=datetime.now(UTC).replace(tzinfo=None),
         )
         db_session.add(metric)
         await db_session.commit()
@@ -74,7 +74,7 @@ class TestServerMetrics:
             server_id=server.id,
             container_id="cid",
             cpu_percent=50.0,
-            collected_at=datetime.utcnow(),
+            collected_at=datetime.now(UTC).replace(tzinfo=None),
         )
         db_session.add(metric)
         await db_session.commit()

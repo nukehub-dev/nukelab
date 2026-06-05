@@ -3,7 +3,7 @@ import hashlib
 import logging
 import secrets
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from typing import Optional, List
 from dataclasses import dataclass
 from fastapi import APIRouter, Depends, HTTPException, status, Request
@@ -89,7 +89,7 @@ def get_password_hash(password: str) -> str:
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=settings.jwt_expire_minutes))
+    expire = datetime.now(UTC).replace(tzinfo=None) + (expires_delta or timedelta(minutes=settings.jwt_expire_minutes))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
@@ -114,7 +114,7 @@ async def _enforce_refresh_token_limit(user_id: uuid.UUID, db: AsyncSession) -> 
         # Revoke oldest tokens to make room
         to_revoke = tokens[: len(tokens) - MAX_REFRESH_TOKENS_PER_USER + 1]
         for rt in to_revoke:
-            rt.revoked_at = datetime.utcnow()
+            rt.revoked_at = datetime.now(UTC).replace(tzinfo=None)
 
 
 async def create_refresh_token_for_user(
@@ -132,7 +132,7 @@ async def create_refresh_token_for_user(
     token_hash = pwd_context.hash(plaintext)
     # Deterministic SHA-256 for indexed DB lookup (bcrypt is non-deterministic)
     token_lookup = hashlib.sha256(plaintext.encode()).hexdigest()
-    expires_at = datetime.utcnow() + timedelta(days=settings.jwt_refresh_expire_days)
+    expires_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(days=settings.jwt_refresh_expire_days)
 
     uid = uuid.UUID(user_id)
     await _enforce_refresh_token_limit(uid, db)
@@ -166,7 +166,7 @@ async def verify_refresh_token(plaintext: str, db: AsyncSession) -> Optional[Ref
         .where(
             RefreshToken.token_lookup == lookup,
             RefreshToken.revoked_at == None,
-            RefreshToken.expires_at > datetime.utcnow(),
+            RefreshToken.expires_at > datetime.now(UTC).replace(tzinfo=None),
         )
     )
     rt = result.scalar_one_or_none()
@@ -181,7 +181,7 @@ async def verify_refresh_token(plaintext: str, db: AsyncSession) -> Optional[Ref
         .where(
             RefreshToken.token_lookup == None,
             RefreshToken.revoked_at == None,
-            RefreshToken.expires_at > datetime.utcnow(),
+            RefreshToken.expires_at > datetime.now(UTC).replace(tzinfo=None),
         )
     )
     for legacy_rt in result.scalars().all():
@@ -201,7 +201,7 @@ async def revoke_refresh_token(plaintext: Optional[str] = None, db: Optional[Asy
             raise ValueError("Either rt or (plaintext + db) must be provided")
         rt = await verify_refresh_token(plaintext, db)
     if rt:
-        rt.revoked_at = datetime.utcnow()
+        rt.revoked_at = datetime.now(UTC).replace(tzinfo=None)
         if db is not None:
             await db.commit()
         return True
@@ -218,7 +218,7 @@ async def cleanup_expired_refresh_tokens(db: AsyncSession) -> int:
     Returns number of rows deleted. Uses batched deletes to avoid long table locks.
     """
     from sqlalchemy import text
-    cutoff = datetime.utcnow() - timedelta(days=_REFRESH_TOKEN_RETENTION_DAYS)
+    cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=_REFRESH_TOKEN_RETENTION_DAYS)
 
     # Batch delete in chunks of 10k to avoid locking the table for too long
     total_deleted = 0
@@ -301,11 +301,11 @@ async def get_auth_context(
 
     for api_token in api_tokens:
         if verify_password(token, api_token.token_hash):
-            if api_token.expires_at and api_token.expires_at < datetime.utcnow():
+            if api_token.expires_at and api_token.expires_at < datetime.now(UTC).replace(tzinfo=None):
                 raise credentials_exception
 
             # Update usage
-            api_token.last_used_at = datetime.utcnow()
+            api_token.last_used_at = datetime.now(UTC).replace(tzinfo=None)
             api_token.usage_count = (api_token.usage_count or 0) + 1
             await db.commit()
 
@@ -432,18 +432,18 @@ async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends
         )
     
     # Update login tracking
-    user.last_login = datetime.utcnow()
+    user.last_login = datetime.now(UTC).replace(tzinfo=None)
     user.login_count = (user.login_count or 0) + 1
     
     # Update security tracking
     security = dict(user.security or {})
-    security["last_login_at"] = datetime.utcnow().isoformat()
+    security["last_login_at"] = datetime.now(UTC).replace(tzinfo=None).isoformat()
     user.security = security
     
     # Record login event
     db.add(LoginEvent(
         user_id=user.id,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(UTC).replace(tzinfo=None),
         method="password",
         ip_address=get_remote_address(request),
         user_agent=request.headers.get("user-agent"),
@@ -487,8 +487,8 @@ async def refresh_token_endpoint(request: Request, body: RefreshRequest, db: Asy
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired refresh token")
 
     # Revoke the old token
-    rt.revoked_at = datetime.utcnow()
-    rt.last_used_at = datetime.utcnow()
+    rt.revoked_at = datetime.now(UTC).replace(tzinfo=None)
+    rt.last_used_at = datetime.now(UTC).replace(tzinfo=None)
 
     # Get user
     result = await db.execute(select(User).where(User.id == rt.user_id))
@@ -548,7 +548,7 @@ async def logout_endpoint(request: Request, body: Optional[RefreshRequest] = Non
                         await spawner.delete(server.container_id)
                         server.container_id = None
                         server.status = "stopped"
-                        server.stopped_at = datetime.utcnow()
+                        server.stopped_at = datetime.now(UTC).replace(tzinfo=None)
                         
                         # Reconcile billing
                         if server.plan_id:
@@ -667,7 +667,7 @@ async def verify_auth(request: Request, db: AsyncSession = Depends(get_db)):
     
     for api_token in api_tokens:
         if verify_password(token, api_token.token_hash):
-            if api_token.expires_at and api_token.expires_at < datetime.utcnow():
+            if api_token.expires_at and api_token.expires_at < datetime.now(UTC).replace(tzinfo=None):
                 raise HTTPException(status_code=401, detail="Token expired")
             
             result = await db.execute(select(User).where(User.id == api_token.user_id))
@@ -955,16 +955,16 @@ async def oauth_callback(
             security["oauth_refresh_token"] = encrypt_token(refresh_token)
         
         # Update login tracking
-        user.last_login = datetime.utcnow()
+        user.last_login = datetime.now(UTC).replace(tzinfo=None)
         user.login_count = (user.login_count or 0) + 1
-        security["last_login_at"] = datetime.utcnow().isoformat()
+        security["last_login_at"] = datetime.now(UTC).replace(tzinfo=None).isoformat()
         security["oauth_login"] = True
         user.security = security
         
         # Record login event
         db.add(LoginEvent(
             user_id=user.id,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(UTC).replace(tzinfo=None),
             method="oauth",
             ip_address=get_remote_address(request),
             user_agent=request.headers.get("user-agent"),

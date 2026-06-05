@@ -4,7 +4,7 @@ import pytest
 import pytest_asyncio
 import uuid as uuid_mod
 from unittest import mock
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 
 from app.models.user import User
 from app.models.server import Server
@@ -290,13 +290,13 @@ class TestActivityFilters:
             target_type="server",
             target_id=uuid_mod.uuid4(),
             actor_id=test_user.id,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(UTC).replace(tzinfo=None),
         )
         db_session.add(log)
         await db_session.commit()
 
-        from_date = (datetime.utcnow() - timedelta(days=1)).isoformat()
-        to_date = (datetime.utcnow() + timedelta(days=1)).isoformat()
+        from_date = (datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1)).isoformat()
+        to_date = (datetime.now(UTC).replace(tzinfo=None) + timedelta(days=1)).isoformat()
 
         response = await client.get(
             f"/api/admin/activity?from_date={from_date}&to_date={to_date}",

@@ -2,7 +2,7 @@
 
 import pytest
 import uuid as uuid_mod
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from unittest.mock import patch, AsyncMock
 
 from app.services.schedule_service import ScheduleService, _validate_cron, _get_next_run
@@ -26,7 +26,7 @@ class TestCronHelpers:
         """Should return a future datetime."""
         next_run = _get_next_run("0 9 * * *")
         assert isinstance(next_run, datetime)
-        assert next_run > datetime.utcnow()
+        assert next_run > datetime.now(UTC).replace(tzinfo=None)
 
 
 class TestScheduleServiceGet:
@@ -51,7 +51,7 @@ class TestScheduleServiceGet:
             user_id=test_user.id,
             action="start",
             cron_expression="0 9 * * *",
-            next_run_at=datetime.utcnow() + timedelta(hours=1),
+            next_run_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1),
         )
         db_session.add(sched)
         await db_session.commit()
@@ -73,7 +73,7 @@ class TestScheduleServiceGet:
             user_id=test_user.id,
             action="start",
             cron_expression="0 9 * * *",
-            next_run_at=datetime.utcnow() + timedelta(hours=1),
+            next_run_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1),
         )
         db_session.add(sched)
         await db_session.commit()
@@ -145,7 +145,7 @@ class TestScheduleServiceUpdate:
             user_id=test_user.id,
             action="start",
             cron_expression="0 9 * * *",
-            next_run_at=datetime.utcnow() + timedelta(hours=1),
+            next_run_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1),
         )
         db_session.add(sched)
         await db_session.commit()
@@ -168,7 +168,7 @@ class TestScheduleServiceUpdate:
             user_id=test_user.id,
             action="start",
             cron_expression="0 9 * * *",
-            next_run_at=datetime.utcnow() + timedelta(hours=1),
+            next_run_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1),
         )
         db_session.add(sched)
         await db_session.commit()
@@ -200,7 +200,7 @@ class TestScheduleServiceUpdate:
             user_id=test_user.id,
             action="start",
             cron_expression="0 9 * * *",
-            next_run_at=datetime.utcnow() + timedelta(hours=1),
+            next_run_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1),
         )
         db_session.add(sched)
         await db_session.commit()
@@ -221,7 +221,7 @@ class TestScheduleServiceUpdate:
             user_id=test_user.id,
             action="start",
             cron_expression="0 9 * * *",
-            next_run_at=datetime.utcnow() + timedelta(hours=1),
+            next_run_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1),
             is_active=True,
         )
         db_session.add(sched)
@@ -247,7 +247,7 @@ class TestScheduleServiceDelete:
             user_id=test_user.id,
             action="start",
             cron_expression="0 9 * * *",
-            next_run_at=datetime.utcnow() + timedelta(hours=1),
+            next_run_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1),
         )
         db_session.add(sched)
         await db_session.commit()
@@ -286,7 +286,7 @@ class TestScheduleServiceDue:
             user_id=test_user.id,
             action="start",
             cron_expression="0 9 * * *",
-            next_run_at=datetime.utcnow() - timedelta(minutes=5),
+            next_run_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=5),
             is_active=True,
         )
         db_session.add(sched)
@@ -309,7 +309,7 @@ class TestScheduleServiceDue:
             user_id=test_user.id,
             action="start",
             cron_expression="0 9 * * *",
-            next_run_at=datetime.utcnow() + timedelta(hours=1),
+            next_run_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1),
             is_active=True,
         )
         db_session.add(sched)
@@ -331,7 +331,7 @@ class TestScheduleServiceDue:
             user_id=test_user.id,
             action="start",
             cron_expression="0 9 * * *",
-            next_run_at=datetime.utcnow() - timedelta(minutes=5),
+            next_run_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=5),
             is_active=False,
         )
         db_session.add(sched)
@@ -359,7 +359,7 @@ class TestScheduleServiceExecute:
             user_id=test_user.id,
             action="start",
             cron_expression="0 9 * * *",
-            next_run_at=datetime.utcnow(),
+            next_run_at=datetime.now(UTC).replace(tzinfo=None),
             is_active=True,
         )
         db_session.add(sched)
@@ -393,7 +393,7 @@ class TestScheduleServiceExecute:
             user_id=test_user.id,
             action="start",
             cron_expression="0 9 * * *",
-            next_run_at=datetime.utcnow(),
+            next_run_at=datetime.now(UTC).replace(tzinfo=None),
             is_active=True,
         )
         db_session.add(sched)

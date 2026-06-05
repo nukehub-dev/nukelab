@@ -3,7 +3,7 @@ Volume management service with quota enforcement.
 """
 
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, UTC
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func
 from sqlalchemy.orm import selectinload
@@ -429,7 +429,7 @@ class VolumeService:
         """Update last_mounted_at when a server mounts this volume"""
         volume = await self.get_volume(volume_id)
         if volume:
-            volume.last_mounted_at = datetime.utcnow()
+            volume.last_mounted_at = datetime.now(UTC).replace(tzinfo=None)
 
     async def mark_home_volume(self, volume_id: str):
         """Persistently mark a volume as having been used as a home directory.

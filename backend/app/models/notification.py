@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from app.core.time_utils import utc_now
 from sqlalchemy import Column, String, Boolean, DateTime, Text, ForeignKey, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -18,7 +18,7 @@ class Notification(Base):
     read_at = Column(DateTime, nullable=True)
     action_url = Column(String(500), nullable=True)
     extra_data = Column(JSON, default=dict)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
     
     # Relationship
     user = relationship("User", back_populates="notifications")

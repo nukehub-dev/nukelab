@@ -1,7 +1,7 @@
 import asyncio
 import json
 import psutil
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Dict
 from app.db.session import AsyncSessionLocal
 from app.models.system_metric import SystemMetric
@@ -91,7 +91,7 @@ class SystemMetricsCollector:
                     pass
 
             if disk_prev_data and disk_io:
-                time_diff = (datetime.utcnow() - datetime.fromisoformat(disk_prev_data['timestamp'])).total_seconds()
+                time_diff = (datetime.now(UTC).replace(tzinfo=None) - datetime.fromisoformat(disk_prev_data['timestamp'])).total_seconds()
                 if time_diff > 0:
                     read_diff = disk_io.read_bytes - disk_prev_data.get('read_bytes', 0)
                     write_diff = disk_io.write_bytes - disk_prev_data.get('write_bytes', 0)
@@ -105,7 +105,7 @@ class SystemMetricsCollector:
             if disk_io:
                 with open(disk_cache_file, 'w') as f:
                     json.dump({
-                        'timestamp': datetime.utcnow().isoformat(),
+                        'timestamp': datetime.now(UTC).replace(tzinfo=None).isoformat(),
                         'read_bytes': disk_io.read_bytes,
                         'write_bytes': disk_io.write_bytes,
                     }, f)
@@ -128,7 +128,7 @@ class SystemMetricsCollector:
                     pass
 
             if prev_data and net_io:
-                time_diff = (datetime.utcnow() - datetime.fromisoformat(prev_data['timestamp'])).total_seconds()
+                time_diff = (datetime.now(UTC).replace(tzinfo=None) - datetime.fromisoformat(prev_data['timestamp'])).total_seconds()
                 if time_diff > 0:
                     rx_diff = net_io.bytes_recv - prev_data.get('rx_bytes', 0)
                     tx_diff = net_io.bytes_sent - prev_data.get('tx_bytes', 0)
@@ -142,7 +142,7 @@ class SystemMetricsCollector:
             if net_io:
                 with open(cache_file, 'w') as f:
                     json.dump({
-                        'timestamp': datetime.utcnow().isoformat(),
+                        'timestamp': datetime.now(UTC).replace(tzinfo=None).isoformat(),
                         'rx_bytes': net_io.bytes_recv,
                         'tx_bytes': net_io.bytes_sent,
                     }, f)
@@ -173,7 +173,7 @@ class SystemMetricsCollector:
             'docker_containers_running': docker_containers_running,
             'docker_containers_total': docker_containers_total,
             'docker_images_total': docker_images_total,
-            'collected_at': datetime.utcnow(),
+            'collected_at': datetime.now(UTC).replace(tzinfo=None),
         }
 
         # Persist to DB using a fresh engine to avoid asyncpg conflicts in Celery threads

@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from app.core.time_utils import utc_now
 from sqlalchemy import Column, String, Integer, Float, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.base import Base
@@ -27,8 +27,8 @@ class ResourceQuota(Base):
     usage_servers = Column(Integer, default=0)
     
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
     
     def to_dict(self):
         return {

@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from app.core.time_utils import utc_now
 from sqlalchemy import Column, String, DateTime, Boolean, ForeignKey, Text, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.base import Base
@@ -15,8 +15,8 @@ class MaintenanceWindow(Base):
     end_at = Column(DateTime, nullable=False)
     is_active = Column(Boolean, default=True)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
     notify_offsets = Column(JSON, default=list)
     notified_offsets = Column(JSON, default=list)
     notified_at = Column(DateTime, nullable=True)

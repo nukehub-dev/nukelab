@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from app.core.time_utils import utc_now
 from sqlalchemy import Column, String, Float, Integer, BigInteger, DateTime, ForeignKey, Index
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.base import Base
@@ -53,7 +53,7 @@ class ServerMetric(Base):
     pids = Column(Integer)
 
     # Timestamp
-    collected_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    collected_at = Column(DateTime, nullable=False, default=utc_now)
 
     def to_dict(self):
         return {

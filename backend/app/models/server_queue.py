@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from app.core.time_utils import utc_now
 from sqlalchemy import Column, String, Text, DateTime, Integer, Float, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.base import Base
@@ -25,7 +25,7 @@ class ServerQueue(Base):
     requested_disk = Column(String(20), nullable=True)
     
     # Timestamps
-    requested_at = Column(DateTime, default=datetime.utcnow)
+    requested_at = Column(DateTime, default=utc_now)
     scheduled_at = Column(DateTime, nullable=True)
     started_at = Column(DateTime, nullable=True)
     failed_at = Column(DateTime, nullable=True)
@@ -34,8 +34,8 @@ class ServerQueue(Base):
     error_message = Column(Text, nullable=True)
     retry_count = Column(Integer, default=0)
     
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
     
     def to_dict(self):
         return {

@@ -2,7 +2,7 @@
 
 import pytest
 import uuid as uuid_mod
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from httpx import AsyncClient
 from sqlalchemy import select
 
@@ -59,7 +59,7 @@ class TestAnalyticsService:
             plan_id=plan.id,
             status="running",
             container_id="test-container",
-            created_at=datetime.utcnow() - timedelta(days=2),
+            created_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=2),
         )
         db_session.add(server)
         await db_session.flush()
@@ -77,7 +77,7 @@ class TestAnalyticsService:
                     network_tx_bytes=500000,
                     disk_read_bytes=100000,
                     disk_write_bytes=50000,
-                    collected_at=datetime.utcnow() - timedelta(days=day_offset, hours=hour),
+                    collected_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=day_offset, hours=hour),
                 )
                 db_session.add(metric)
         
@@ -90,7 +90,7 @@ class TestAnalyticsService:
             type="server_usage",
             description="Test charge",
             server_id=server.id,
-            created_at=datetime.utcnow() - timedelta(days=1),
+            created_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1),
         )
         db_session.add(tx)
         await db_session.commit()
@@ -128,7 +128,7 @@ class TestAnalyticsService:
             user_id=test_user.id,
             status="running",
             container_id="old-container",
-            created_at=datetime.utcnow() - timedelta(days=10),
+            created_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=10),
         )
         db_session.add(server)
         await db_session.flush()
@@ -140,7 +140,7 @@ class TestAnalyticsService:
             container_id=server.container_id,
             cpu_percent=50.0,
             memory_percent=60.0,
-            collected_at=datetime.utcnow() - timedelta(days=10),
+            collected_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=10),
         )
         db_session.add(old_metric)
         
@@ -151,7 +151,7 @@ class TestAnalyticsService:
             container_id=server.container_id,
             cpu_percent=70.0,
             memory_percent=80.0,
-            collected_at=datetime.utcnow() - timedelta(days=1),
+            collected_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1),
         )
         db_session.add(new_metric)
         await db_session.commit()
@@ -173,7 +173,7 @@ class TestAnalyticsService:
             user_id=test_user.id,
             status="running",
             container_id="test-container",
-            created_at=datetime.utcnow() - timedelta(days=20),
+            created_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=20),
         )
         db_session.add(server)
         await db_session.flush()
@@ -186,7 +186,7 @@ class TestAnalyticsService:
             balance_after=900,
             type="server_usage",
             server_id=server.id,
-            created_at=datetime.utcnow() - timedelta(days=10),
+            created_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=10),
         )
         db_session.add(tx_prev)
         
@@ -198,7 +198,7 @@ class TestAnalyticsService:
             balance_after=750,
             type="server_usage",
             server_id=server.id,
-            created_at=datetime.utcnow() - timedelta(days=2),
+            created_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=2),
         )
         db_session.add(tx_curr)
         await db_session.commit()
@@ -219,8 +219,8 @@ class TestAnalyticsService:
             user_id=test_user.id,
             status="running",
             container_id="test-container",
-            created_at=datetime.utcnow() - timedelta(days=1),
-            started_at=datetime.utcnow() - timedelta(days=1),
+            created_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1),
+            started_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1),
         )
         db_session.add(server)
         await db_session.commit()
@@ -263,7 +263,7 @@ class TestAnalyticsService:
             balance_after=800,
             type="server_usage",
             server_id=server.id,
-            created_at=datetime.utcnow() - timedelta(days=1),
+            created_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1),
         )
         db_session.add(tx)
         await db_session.commit()
@@ -286,7 +286,7 @@ class TestAnalyticsService:
             amount=-100,
             balance_after=900,
             type="server_usage",
-            created_at=datetime.utcnow() - timedelta(days=1),
+            created_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1),
         )
         db_session.add(tx1)
         
@@ -297,7 +297,7 @@ class TestAnalyticsService:
             amount=50,
             balance_after=950,
             type="grant",
-            created_at=datetime.utcnow() - timedelta(days=1),
+            created_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1),
         )
         db_session.add(tx2)
         await db_session.commit()
@@ -335,7 +335,7 @@ class TestAnalyticsService:
             user_id=test_user.id,
             status="running",
             container_id="metrics-container",
-            created_at=datetime.utcnow() - timedelta(days=1),
+            created_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1),
         )
         db_session.add(server)
         await db_session.flush()
@@ -350,7 +350,7 @@ class TestAnalyticsService:
             network_tx_bytes=500000,
             disk_read_bytes=100000,
             disk_write_bytes=50000,
-            collected_at=datetime.utcnow() - timedelta(days=1),
+            collected_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1),
         )
         db_session.add(metric)
         await db_session.commit()
@@ -677,7 +677,7 @@ class TestDailyServerMetricRollups:
             user_id=test_user.id,
             status="running",
             container_id="rollup-container",
-            created_at=datetime.utcnow() - timedelta(days=1),
+            created_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1),
         )
         db_session.add(server)
         await db_session.flush()
@@ -688,7 +688,7 @@ class TestDailyServerMetricRollups:
             container_id=server.container_id,
             cpu_percent=50.0,
             memory_percent=60.0,
-            collected_at=datetime.utcnow() - timedelta(days=1),
+            collected_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1),
         )
         db_session.add(metric)
         await db_session.commit()
@@ -708,7 +708,7 @@ class TestDailyServerMetricRollups:
             user_id=test_user.id,
             status="running",
             container_id="rollup-long-container",
-            created_at=datetime.utcnow() - timedelta(days=10),
+            created_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=10),
         )
         db_session.add(server)
         await db_session.flush()
@@ -716,7 +716,7 @@ class TestDailyServerMetricRollups:
         rollup = DailyServerMetric(
             id=uuid_mod.uuid4(),
             server_id=server.id,
-            date=(datetime.utcnow() - timedelta(days=5)).date(),
+            date=(datetime.now(UTC).replace(tzinfo=None) - timedelta(days=5)).date(),
             avg_cpu=42.0,
             peak_cpu=80.0,
             avg_memory=55.0,

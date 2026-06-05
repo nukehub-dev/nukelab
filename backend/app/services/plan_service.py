@@ -3,7 +3,7 @@ Server plan service for business logic.
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import List, Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func
@@ -209,7 +209,7 @@ class PlanService:
             if hasattr(plan, key) and value is not None:
                 setattr(plan, key, value)
         
-        plan.updated_at = datetime.utcnow()
+        plan.updated_at = datetime.now(UTC).replace(tzinfo=None)
         await self.db.commit()
         await self.db.refresh(plan)
         
@@ -325,7 +325,7 @@ class PlanService:
             plan_id=uuid.UUID(plan_id),
             user_id=uuid.UUID(user_id),
             granted_by=uuid.UUID(granted_by) if granted_by else None,
-            granted_at=datetime.utcnow()
+            granted_at=datetime.now(UTC).replace(tzinfo=None)
         )
         self.db.add(access)
         await self.db.commit()
@@ -392,7 +392,7 @@ class PlanService:
             plan_id=uuid.UUID(plan_id),
             workspace_id=uuid.UUID(workspace_id),
             granted_by=uuid.UUID(granted_by) if granted_by else None,
-            granted_at=datetime.utcnow()
+            granted_at=datetime.now(UTC).replace(tzinfo=None)
         )
         self.db.add(access)
         await self.db.commit()

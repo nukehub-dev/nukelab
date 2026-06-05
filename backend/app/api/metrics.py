@@ -1,5 +1,5 @@
 from typing import Optional, List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, desc
@@ -85,9 +85,9 @@ async def get_server_metrics(
         checker.require_any([Permission.SERVERS_READ_ALL, Permission.SERVERS_WRITE_ALL])
 
     if not from_date:
-        from_date = datetime.utcnow() - timedelta(hours=1)
+        from_date = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1)
     if not to_date:
-        to_date = datetime.utcnow()
+        to_date = datetime.now(UTC).replace(tzinfo=None)
 
     query = select(ServerMetric).where(
         and_(
@@ -161,9 +161,9 @@ async def get_system_metrics(
     checker.require_any([Permission.ADMIN_ACCESS, Permission.SERVERS_WRITE_ALL])
 
     if not from_date:
-        from_date = datetime.utcnow() - timedelta(hours=1)
+        from_date = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1)
     if not to_date:
-        to_date = datetime.utcnow()
+        to_date = datetime.now(UTC).replace(tzinfo=None)
 
     query = select(SystemMetric).where(
         and_(

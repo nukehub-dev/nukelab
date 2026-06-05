@@ -7,7 +7,7 @@ import hashlib
 import json
 import asyncio
 from typing import Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, UTC
 import aiohttp
 
 
@@ -38,7 +38,7 @@ class WebhookService:
         
         webhook_payload = {
             "event": event,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).replace(tzinfo=None).isoformat(),
             "payload": payload,
         }
         

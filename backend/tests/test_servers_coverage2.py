@@ -3,7 +3,7 @@
 import pytest
 import uuid
 from unittest import mock
-from datetime import datetime
+from datetime import datetime, UTC
 
 from app.models.server import Server
 from app.models.user import User
@@ -45,8 +45,8 @@ class TestCreateServerHappyPath:
             allocated_memory="512m",
             allocated_disk="10g",
             external_url="http://localhost:8080/user/testuser/srv1",
-            started_at=datetime.utcnow(),
-            created_at=datetime.utcnow(),
+            started_at=datetime.now(UTC).replace(tzinfo=None),
+            created_at=datetime.now(UTC).replace(tzinfo=None),
         )
 
         with mock.patch("app.api.servers.spawner.spawn", return_value=spawned_server):
@@ -122,8 +122,8 @@ class TestCreateServerHappyPath:
             allocated_memory="512m",
             allocated_disk="10g",
             external_url="http://localhost:8080/user/testuser/srv2",
-            started_at=datetime.utcnow(),
-            created_at=datetime.utcnow(),
+            started_at=datetime.now(UTC).replace(tzinfo=None),
+            created_at=datetime.now(UTC).replace(tzinfo=None),
         )
 
         with mock.patch("app.api.servers.spawner.spawn", return_value=spawned_server):
@@ -519,8 +519,8 @@ class TestCreateServerValidationMore:
             allocated_memory="512m",
             allocated_disk="10g",
             external_url="http://localhost:8080/user/testuser/srvauto",
-            started_at=datetime.utcnow(),
-            created_at=datetime.utcnow(),
+            started_at=datetime.now(UTC).replace(tzinfo=None),
+            created_at=datetime.now(UTC).replace(tzinfo=None),
         )
 
         with mock.patch("app.api.servers.spawner.spawn", return_value=spawned_server):
@@ -829,7 +829,7 @@ class TestStartServer:
         spawned = Server(
             id=s1.id, name=s1.name, user_id=test_user.id,
             container_id="c2", image="img", status="running",
-            external_url="http://x", started_at=datetime.utcnow(),
+            external_url="http://x", started_at=datetime.now(UTC).replace(tzinfo=None),
         )
 
         with mock.patch("app.api.servers.spawner.get_status", return_value="stopped"):
@@ -867,7 +867,7 @@ class TestStartServer:
         spawned = Server(
             id=s1.id, name=s1.name, user_id=test_user.id,
             container_id="c2", image="img", status="running",
-            external_url="http://x", started_at=datetime.utcnow(),
+            external_url="http://x", started_at=datetime.now(UTC).replace(tzinfo=None),
         )
 
         with mock.patch("app.api.servers.spawner.get_status", return_value="unknown"):
@@ -913,7 +913,7 @@ class TestStartServer:
         spawned = Server(
             id=s1.id, name=s1.name, user_id=test_user.id,
             container_id="c-new", image="python:3.11", status="running",
-            external_url="http://x", started_at=datetime.utcnow(),
+            external_url="http://x", started_at=datetime.now(UTC).replace(tzinfo=None),
         )
 
         with mock.patch("app.api.servers.spawner.spawn", return_value=spawned):
@@ -1070,7 +1070,7 @@ class TestRestartServer:
         spawned = Server(
             id=s1.id, name=s1.name, user_id=test_user.id,
             container_id="c2", image="python:3.11", status="running",
-            external_url="http://x", started_at=datetime.utcnow(),
+            external_url="http://x", started_at=datetime.now(UTC).replace(tzinfo=None),
         )
 
         with mock.patch("app.api.servers.spawner.get_status", return_value="unknown"):
@@ -1542,7 +1542,7 @@ class TestUpdateServerAdditionalBranches:
         spawned = Server(
             id=s1.id, name=s1.name, user_id=test_user.id,
             container_id="c-new", image="img", status="running",
-            external_url="http://x", started_at=datetime.utcnow(),
+            external_url="http://x", started_at=datetime.now(UTC).replace(tzinfo=None),
         )
 
         with mock.patch("app.api.servers.spawner.spawn", return_value=spawned):
@@ -1588,7 +1588,7 @@ class TestUpdateServerAdditionalBranches:
         spawned = Server(
             id=s1.id, name=s1.name, user_id=test_user.id,
             container_id="c-plan", image="img", status="running",
-            external_url="http://x", started_at=datetime.utcnow(),
+            external_url="http://x", started_at=datetime.now(UTC).replace(tzinfo=None),
         )
 
         with mock.patch("app.api.servers.spawner.spawn", return_value=spawned):
@@ -1630,7 +1630,7 @@ class TestUpdateServerAdditionalBranches:
         spawned = Server(
             id=s1.id, name=s1.name, user_id=test_user.id,
             container_id="c-new", image="img", status="running",
-            external_url="http://x", started_at=datetime.utcnow(),
+            external_url="http://x", started_at=datetime.now(UTC).replace(tzinfo=None),
         )
 
         with mock.patch("app.api.servers.spawner.get_status", return_value="running"):

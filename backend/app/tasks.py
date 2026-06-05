@@ -92,7 +92,7 @@ def shutdown_idle_servers(self):
         from app.services.credit_service import CreditService
         from app.services.quota_service import QuotaService
         from app.container.spawner import spawner
-        from datetime import datetime, timedelta
+        from datetime import datetime, timedelta, UTC
         
         async with AsyncSessionLocal() as db:
             stopped_count = 0
@@ -114,7 +114,7 @@ def shutdown_idle_servers(self):
                     continue
                 
                 timeout_mins = prefs.get("idle_shutdown_timeout", 30)
-                cutoff = datetime.utcnow() - timedelta(minutes=timeout_mins)
+                cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=timeout_mins)
                 
                 # Determine last activity time
                 last_activity = server.last_activity or server.started_at
@@ -138,7 +138,7 @@ def shutdown_idle_servers(self):
                         server.container_id = None
                     
                     server.status = "stopped"
-                    server.stopped_at = datetime.utcnow()
+                    server.stopped_at = datetime.now(UTC).replace(tzinfo=None)
                     server.stop_reason = "idle_timeout"
                     
                     # Reconcile billing
@@ -246,7 +246,7 @@ def process_nuke_billing(self):
         from app.models.user import User
         from app.services.notification_service import NotificationService, broadcast_server_status_change
         from app.services.credit_service import CreditService
-        from datetime import datetime, timedelta
+        from datetime import datetime, timedelta, UTC
         from app.config import settings
         
         async with AsyncSessionLocal() as db:
@@ -286,7 +286,7 @@ def process_nuke_billing(self):
                             await spawner.delete(server.container_id)
                             server.container_id = None
                             server.status = "stopped"
-                            server.stopped_at = datetime.utcnow()
+                            server.stopped_at = datetime.now(UTC).replace(tzinfo=None)
                             server.stop_reason = "credit_depleted"
                             
                             # Reconcile exact billing for final partial interval
@@ -316,7 +316,7 @@ def process_nuke_billing(self):
                     
                     # Update server billing state
                     server.total_cost = (server.total_cost or 0) + billing_amount
-                    server.last_billed_at = datetime.utcnow()
+                    server.last_billed_at = datetime.now(UTC).replace(tzinfo=None)
                     billed_count += 1
                     
                     # Warn user if credits getting low
@@ -348,7 +348,7 @@ def enforce_auto_stop(self):
         from app.models.server import Server
         from app.models.server_plan import ServerPlan
         from app.services.notification_service import NotificationService, broadcast_server_status_change
-        from datetime import datetime, timedelta
+        from datetime import datetime, timedelta, UTC
         from app.core.time_utils import parse_duration
         from app.config import settings
         from app.container.spawner import spawner
@@ -367,7 +367,7 @@ def enforce_auto_stop(self):
             servers = result.all()
             
             for server, plan in servers:
-                now = datetime.utcnow()
+                now = datetime.now(UTC).replace(tzinfo=None)
                 should_stop = False
                 stop_reason = ""
                 
@@ -452,7 +452,7 @@ def process_server_queue(self):
         from app.services.quota_service import QuotaService
         from app.container.spawner import spawner
         from app.core.time_utils import parse_duration
-        from datetime import datetime, timedelta
+        from datetime import datetime, timedelta, UTC
         from app.config import settings
         
         async with AsyncSessionLocal() as db:
@@ -464,7 +464,7 @@ def process_server_queue(self):
             timeout_count = 0
             
             # Remove timed-out queue entries (older than 1 hour)
-            timeout_threshold = datetime.utcnow() - timedelta(hours=1)
+            timeout_threshold = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1)
             result = await db.execute(
                 select(ServerQueue).where(
                     ServerQueue.status == "pending",
@@ -566,12 +566,12 @@ def process_server_queue(self):
                     )
                     
                     server.plan_id = next_entry.plan_id
-                    server.last_activity = datetime.utcnow()
+                    server.last_activity = datetime.now(UTC).replace(tzinfo=None)
                     
                     # Set expiration
                     max_runtime_seconds = parse_duration(plan.max_runtime)
                     if max_runtime_seconds > 0:
-                        server.expires_at = datetime.utcnow() + timedelta(seconds=max_runtime_seconds)
+                        server.expires_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(seconds=max_runtime_seconds)
                     
                     db.add(server)
                     await db.commit()
@@ -585,7 +585,7 @@ def process_server_queue(self):
                     
                     # Update queue entry
                     next_entry.status = "started"
-                    next_entry.started_at = datetime.utcnow()
+                    next_entry.started_at = datetime.now(UTC).replace(tzinfo=None)
                     
                     # Notify user
                     notif_service = NotificationService(db)
@@ -660,7 +660,7 @@ def rollup_server_metrics(self):
         from app.models.server_metric import ServerMetric
         from app.models.daily_server_metric import DailyServerMetric
         from app.db.session import AsyncSessionLocal
-        from datetime import datetime, timedelta, date
+        from datetime import datetime, timedelta, UTC, date, UTC
 
         async with AsyncSessionLocal() as db:
             # Process the last 7 days (to catch up if missed)
@@ -764,7 +764,7 @@ def cleanup_expired_data(self):
         from app.models.daily_server_metric import DailyServerMetric
         from app.models.system_setting import SystemSetting
         from app.db.session import AsyncSessionLocal
-        from datetime import datetime, timedelta
+        from datetime import datetime, timedelta, UTC
 
         async with AsyncSessionLocal() as db:
             # Helper to read retention setting
@@ -792,7 +792,7 @@ def cleanup_expired_data(self):
             notification_days = await get_retention_days("notification_retention_days", 30)
             daily_rollup_days = await get_retention_days("daily_rollup_retention_days", 730)
 
-            now = datetime.utcnow()
+            now = datetime.now(UTC).replace(tzinfo=None)
             deleted = {}
 
             # Server metrics

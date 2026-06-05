@@ -1,7 +1,7 @@
 """Extended tests for Auth API error paths and uncovered branches."""
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from unittest import mock
 
 from app.config import settings
@@ -100,7 +100,7 @@ class TestVerifyEndpoint:
             name="test",
             token_hash=token_hash,
             token_prefix=token_plain[:16],
-            expires_at=datetime.utcnow() - timedelta(hours=1),
+            expires_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1),
             is_active=True,
         )
         db_session.add(api_token)
@@ -122,7 +122,7 @@ class TestVerifyEndpoint:
             name="test",
             token_hash=token_hash,
             token_prefix=token_plain[:16],
-            expires_at=datetime.utcnow() + timedelta(hours=1),
+            expires_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1),
             is_active=True,
         )
         db_session.add(api_token)
@@ -341,7 +341,7 @@ class TestCleanupExpiredRefreshTokens:
         expired_rt = RefreshToken(
             user_id=test_user.id,
             token_hash="hash",
-            expires_at=datetime.utcnow() - timedelta(days=60),
+            expires_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=60),
         )
         db_session.add(expired_rt)
         await db_session.commit()

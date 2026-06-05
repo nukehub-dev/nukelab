@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from typing import List, Optional, Dict
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -44,7 +44,7 @@ class AlertService:
     async def _handle_breach(self, rule: AlertRule, metric: ServerMetric, value: float):
         """Handle threshold breach"""
         # Check cooldown
-        cooldown_time = datetime.utcnow() - timedelta(seconds=rule.cooldown_seconds)
+        cooldown_time = datetime.now(UTC).replace(tzinfo=None) - timedelta(seconds=rule.cooldown_seconds)
         recent_alert = await self.db.execute(
             select(AlertHistory).where(
                 and_(
@@ -85,7 +85,7 @@ class AlertService:
 
         if active_alert:
             active_alert.status = "resolved"
-            active_alert.resolved_at = datetime.utcnow()
+            active_alert.resolved_at = datetime.now(UTC).replace(tzinfo=None)
             active_alert.resolved_value = value
             await self.db.commit()
 
@@ -195,7 +195,7 @@ class AlertService:
 
         alert.status = "acknowledged"
         alert.acknowledged_by = uuid.UUID(user_id)
-        alert.acknowledged_at = datetime.utcnow()
+        alert.acknowledged_at = datetime.now(UTC).replace(tzinfo=None)
         if notes:
             alert.notes = notes
 
@@ -215,7 +215,7 @@ class AlertService:
             return None
 
         alert.status = "resolved"
-        alert.resolved_at = datetime.utcnow()
+        alert.resolved_at = datetime.now(UTC).replace(tzinfo=None)
         if resolved_value is not None:
             alert.resolved_value = resolved_value
 

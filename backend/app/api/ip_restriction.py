@@ -2,7 +2,7 @@
 
 import uuid
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, UTC
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -91,7 +91,7 @@ async def create_ip_restriction(
         note=req.note,
         is_active=True,
         created_by_id=current_user.id,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(UTC).replace(tzinfo=None),
     )
     db.add(entry)
     await db.commit()

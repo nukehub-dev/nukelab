@@ -2,7 +2,7 @@
 
 import pytest
 import uuid
-from datetime import datetime
+from datetime import datetime, UTC
 
 from app.models.alert_rule import AlertRule
 from app.models.alert_history import AlertHistory
@@ -18,7 +18,7 @@ class TestAlertHistory:
         """Admin should see all alert history."""
         alert = AlertHistory(
             metric_value=90.0, threshold=80.0, status="fired",
-            user_id=test_user.id, fired_at=datetime.utcnow()
+            user_id=test_user.id, fired_at=datetime.now(UTC).replace(tzinfo=None)
         )
         db_session.add(alert)
         await db_session.commit()
@@ -45,7 +45,7 @@ class TestAlertHistory:
         """Non-admin with ANALYTICS_READ should only see their own alerts."""
         alert = AlertHistory(
             metric_value=90.0, threshold=80.0, status="fired",
-            user_id=support_user.id, fired_at=datetime.utcnow()
+            user_id=support_user.id, fired_at=datetime.now(UTC).replace(tzinfo=None)
         )
         db_session.add(alert)
         await db_session.commit()
@@ -79,7 +79,7 @@ class TestAlertHistory:
         """Should acknowledge an alert."""
         alert = AlertHistory(
             metric_value=90.0, threshold=80.0, status="fired",
-            user_id=test_user.id, fired_at=datetime.utcnow()
+            user_id=test_user.id, fired_at=datetime.now(UTC).replace(tzinfo=None)
         )
         db_session.add(alert)
         await db_session.commit()
@@ -111,7 +111,7 @@ class TestAlertHistory:
         """Admin should resolve an alert."""
         alert = AlertHistory(
             metric_value=90.0, threshold=80.0, status="fired",
-            user_id=test_user.id, fired_at=datetime.utcnow()
+            user_id=test_user.id, fired_at=datetime.now(UTC).replace(tzinfo=None)
         )
         db_session.add(alert)
         await db_session.commit()
@@ -151,7 +151,7 @@ class TestHealthChecks:
             hc = HealthCheck(
                 server_id=server.id, container_id="hc1",
                 status="healthy", consecutive_failures=0,
-                checked_at=datetime.utcnow()
+                checked_at=datetime.now(UTC).replace(tzinfo=None)
             )
             db_session.add(hc)
         await db_session.commit()
@@ -182,8 +182,8 @@ class TestHealthChecks:
         await db_session.commit()
         await db_session.refresh(server)
 
-        db_session.add(HealthCheck(server_id=server.id, container_id="c1", status="healthy", checked_at=datetime.utcnow()))
-        db_session.add(HealthCheck(server_id=server.id, container_id="c1", status="unhealthy", checked_at=datetime.utcnow()))
+        db_session.add(HealthCheck(server_id=server.id, container_id="c1", status="healthy", checked_at=datetime.now(UTC).replace(tzinfo=None)))
+        db_session.add(HealthCheck(server_id=server.id, container_id="c1", status="unhealthy", checked_at=datetime.now(UTC).replace(tzinfo=None)))
         await db_session.commit()
 
         response = await client.get(

@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from app.core.time_utils import utc_now
 from sqlalchemy import Column, String, DateTime, BigInteger, Text, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.base import Base
@@ -15,7 +15,7 @@ class VolumeBackup(Base):
     status = Column(String(50), default="pending")  # pending, in_progress, completed, failed
     error_message = Column(Text, nullable=True)
     description = Column(String(255), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
     completed_at = Column(DateTime, nullable=True)
     
     def __repr__(self):

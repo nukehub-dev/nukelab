@@ -6,7 +6,7 @@ import os
 import shutil
 import tarfile
 import uuid
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import List, Dict, Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, desc
@@ -40,7 +40,7 @@ class BackupService:
         
         # Generate backup filename
         backup_id = str(uuid.uuid4())
-        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now(UTC).replace(tzinfo=None).strftime("%Y%m%d_%H%M%S")
         filename = f"{volume_name}_{timestamp}_{backup_id[:8]}.tar.gz"
         filepath = os.path.join(self.backup_path, filename)
         
@@ -73,7 +73,7 @@ class BackupService:
             # Update backup record
             backup.status = "completed"
             backup.size_bytes = size_bytes
-            backup.completed_at = datetime.utcnow()
+            backup.completed_at = datetime.now(UTC).replace(tzinfo=None)
             await self.db.commit()
 
             # Notify user if user_id is available
@@ -210,7 +210,7 @@ class BackupService:
             "backup_id": backup_id,
             "volume_name": volume_name,
             "status": "restored",
-            "restored_at": datetime.utcnow().isoformat(),
+            "restored_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
         }
     
     async def delete_backup(self, backup_id: str) -> bool:

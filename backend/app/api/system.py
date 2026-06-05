@@ -1,5 +1,5 @@
 from typing import Optional, List
-from datetime import datetime, timezone
+from datetime import datetime, UTC, timezone
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import JSONResponse
@@ -37,7 +37,7 @@ async def health_check():
             }
         )
     
-    return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
+    return {"status": "healthy", "timestamp": datetime.now(UTC).replace(tzinfo=None).isoformat()}
 
 
 @router.get("/config")
@@ -142,7 +142,7 @@ async def get_system_stats(
         "users": {"total": total_users, "active": active_users},
         "servers": {"total": total_servers, "running": running_servers},
         "credits": {"total": total_credits},
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.now(UTC).replace(tzinfo=None).isoformat()
     }
 
 

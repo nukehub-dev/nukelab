@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from app.core.time_utils import utc_now
 from sqlalchemy import Column, String, Float, Integer, Boolean, DateTime, Text, ForeignKey, Index
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.base import Base
@@ -33,8 +33,8 @@ class AlertHistory(Base):
     resolved_at = Column(DateTime)
     resolved_value = Column(Float)
 
-    fired_at = Column(DateTime, default=datetime.utcnow)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    fired_at = Column(DateTime, default=utc_now)
+    created_at = Column(DateTime, default=utc_now)
 
     def to_dict(self):
         return {

@@ -1,7 +1,7 @@
 """Tests for Auth API endpoints."""
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 
 
 class TestRefreshToken:
@@ -93,7 +93,7 @@ class TestRefreshToken:
         expired_rt = RefreshToken(
             user_id=test_user.id,
             token_hash=token_hash,
-            expires_at=datetime.utcnow() - timedelta(hours=1),
+            expires_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1),
         )
         db_session.add(expired_rt)
         await db_session.commit()

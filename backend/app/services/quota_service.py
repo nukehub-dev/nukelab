@@ -3,7 +3,7 @@ Resource quota service for business logic.
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func
@@ -137,7 +137,7 @@ class QuotaService:
         if max_servers_total is not None:
             quota.max_servers_total = max_servers_total
         
-        quota.updated_at = datetime.utcnow()
+        quota.updated_at = datetime.now(UTC).replace(tzinfo=None)
         await self.db.commit()
         await self.db.refresh(quota)
         
@@ -173,7 +173,7 @@ class QuotaService:
         quota.usage_disk_mb = total_disk_mb
         quota.usage_gpu = total_gpu
         quota.usage_servers = total_servers
-        quota.updated_at = datetime.utcnow()
+        quota.updated_at = datetime.now(UTC).replace(tzinfo=None)
         
         await self.db.commit()
         await self.db.refresh(quota)
@@ -349,7 +349,7 @@ class QuotaService:
             quota.usage_disk_mb += self._parse_memory(plan.disk_limit)
             quota.usage_gpu += plan.gpu_limit
             quota.usage_servers += 1
-            quota.updated_at = datetime.utcnow()
+            quota.updated_at = datetime.now(UTC).replace(tzinfo=None)
             
             await self.db.commit()
             await self.db.refresh(quota)
@@ -372,7 +372,7 @@ class QuotaService:
             quota.usage_disk_mb = max(0, quota.usage_disk_mb - self._parse_memory(plan.disk_limit))
             quota.usage_gpu = max(0, quota.usage_gpu - plan.gpu_limit)
             quota.usage_servers = max(0, quota.usage_servers - 1)
-            quota.updated_at = datetime.utcnow()
+            quota.updated_at = datetime.now(UTC).replace(tzinfo=None)
             
             await self.db.commit()
             await self.db.refresh(quota)

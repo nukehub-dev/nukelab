@@ -2,7 +2,7 @@
 
 import pytest
 import uuid as uuid_mod
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from unittest.mock import patch, AsyncMock
 
 from app.services.credit_service import CreditService
@@ -376,8 +376,8 @@ class TestCreditServiceReconcile:
             user_id=test_user.id,
             plan_id=plan.id,
             status="stopped",
-            started_at=datetime.utcnow() - timedelta(minutes=10),
-            stopped_at=datetime.utcnow(),
+            started_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=10),
+            stopped_at=datetime.now(UTC).replace(tzinfo=None),
             total_cost=0,
         )
         db_session.add(server)
@@ -420,8 +420,8 @@ class TestCreditServiceReconcile:
             name="test-server",
             user_id=test_user.id,
             status="stopped",
-            started_at=datetime.utcnow(),
-            stopped_at=datetime.utcnow() - timedelta(minutes=5),
+            started_at=datetime.now(UTC).replace(tzinfo=None),
+            stopped_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=5),
             total_cost=0,
         )
         plan = ServerPlan(

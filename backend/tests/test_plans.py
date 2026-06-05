@@ -1,6 +1,7 @@
 """Tests for Plans API endpoints."""
 
 import pytest
+from datetime import datetime, UTC
 from sqlalchemy import select
 
 from app.models.server_plan import ServerPlan
@@ -139,7 +140,7 @@ class TestPlanVisibility:
 
         # Grant user direct access
         access = UserPlanAccess(
-            plan_id=plan.id, user_id=test_user.id, granted_at=__import__('datetime').datetime.utcnow()
+            plan_id=plan.id, user_id=test_user.id, granted_at=datetime.now(UTC).replace(tzinfo=None)
         )
         db_session.add(access)
         await db_session.commit()
@@ -180,7 +181,7 @@ class TestPlanVisibility:
 
         # Grant workspace access to plan
         ws_access = WorkspacePlanAccess(
-            plan_id=plan.id, workspace_id=workspace.id, granted_at=__import__('datetime').datetime.utcnow()
+            plan_id=plan.id, workspace_id=workspace.id, granted_at=datetime.now(UTC).replace(tzinfo=None)
         )
         db_session.add(ws_access)
         await db_session.commit()

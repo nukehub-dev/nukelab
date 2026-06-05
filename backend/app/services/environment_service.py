@@ -3,7 +3,7 @@ Environment template service for business logic.
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import List, Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func
@@ -152,7 +152,7 @@ class EnvironmentService:
             if hasattr(env, key) and value is not None:
                 setattr(env, key, value)
         
-        env.updated_at = datetime.utcnow()
+        env.updated_at = datetime.now(UTC).replace(tzinfo=None)
         await self.db.commit()
         await self.db.refresh(env)
         

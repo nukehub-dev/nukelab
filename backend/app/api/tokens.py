@@ -1,5 +1,5 @@
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel, Field, field_validator
@@ -94,7 +94,7 @@ async def create_token(
     # Calculate expiration
     expires_at = None
     if token_data.expires_days:
-        expires_at = datetime.utcnow() + timedelta(days=token_data.expires_days)
+        expires_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(days=token_data.expires_days)
 
     # Create token record
     api_token = ApiToken(
@@ -178,7 +178,7 @@ async def revoke_token(
         )
 
     token.is_active = False
-    token.revoked_at = datetime.utcnow()
+    token.revoked_at = datetime.now(UTC).replace(tzinfo=None)
     await db.commit()
 
     return None
@@ -244,7 +244,7 @@ async def regenerate_token(
 
     # Revoke old token
     old_token.is_active = False
-    old_token.revoked_at = datetime.utcnow()
+    old_token.revoked_at = datetime.now(UTC).replace(tzinfo=None)
 
     # Create new token with same settings but fresh expiration
     raw_token = f"nukelab_{secrets.token_urlsafe(32)}"
@@ -257,7 +257,7 @@ async def regenerate_token(
         token_hash=token_hash,
         token_prefix=token_prefix,
         scopes=old_token.scopes,
-        expires_at=datetime.utcnow() + timedelta(days=30) if old_token.expires_at else None,
+        expires_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(days=30) if old_token.expires_at else None,
     )
 
     db.add(new_token)

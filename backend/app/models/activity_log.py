@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from app.core.time_utils import utc_now
 from sqlalchemy import Column, String, DateTime, Text, ForeignKey, JSON, Index
 from sqlalchemy.dialects.postgresql import UUID, INET
 from app.db.base import Base
@@ -21,7 +21,7 @@ class ActivityLog(Base):
     request_id = Column(UUID(as_uuid=True), nullable=True)
     ip_address = Column(INET, nullable=True)
     user_agent = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     def to_dict(self):
         return {

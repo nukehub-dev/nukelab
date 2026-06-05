@@ -1,7 +1,7 @@
 """Extended tests for HealthCheckService (container health checks, auto-restart)."""
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from unittest import mock
 from sqlalchemy import select
 
@@ -168,7 +168,7 @@ class TestAutoRestart:
         for _ in range(5):
             hc = HealthCheck(
                 server_id=server.id, container_id="c2",
-                status="restarting", checked_at=datetime.utcnow()
+                status="restarting", checked_at=datetime.now(UTC).replace(tzinfo=None)
             )
             db_session.add(hc)
         await db_session.commit()

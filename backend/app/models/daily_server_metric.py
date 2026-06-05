@@ -1,5 +1,6 @@
 import uuid
-from datetime import datetime, date
+from app.core.time_utils import utc_now
+from datetime import date
 from sqlalchemy import Column, String, Float, Integer, BigInteger, DateTime, Date, ForeignKey, Index, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.base import Base
@@ -28,7 +29,7 @@ class DailyServerMetric(Base):
     peak_gpu = Column(Float)
     data_points = Column(Integer, default=0)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     def to_dict(self):
         return {
