@@ -77,11 +77,13 @@ async def lifespan(app: FastAPI):
     await startup()
     yield
     # Graceful shutdown
+    from app.core.redis_client import get_redis_client
     coordinator = get_shutdown_coordinator()
     await coordinator.shutdown(
         websocket_manager=manager,
         metrics_buffer=_metrics_buffer,
         db_engine=engine,
+        redis_client=get_redis_client(),
     )
 
 

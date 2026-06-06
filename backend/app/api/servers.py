@@ -24,10 +24,33 @@ from app.container.spawner import spawner
 import aiodocker
 from app.services.notification_service import NotificationService, broadcast_server_status_change
 from app.services.activity_service import ActivityService
+from app.core.cache import (
+    cache_get_or_set,
+    cache_delete,
+    cache_delete_tracked,
+    cache_track_key,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Cache TTL for server lists (seconds)
+_SERVER_LIST_CACHE_TTL = 30
+
+
+def _server_list_cache_key(user_id: str) -> str:
+    return f"servers:list:user:{user_id}"
+
+
+def _admin_server_list_cache_key(page: int, limit: int, status: Optional[str], user_id: Optional[str]) -> str:
+    return f"servers:list:admin:{page}:{limit}:{status or 'all'}:{user_id or 'all'}"
+
+
+async def _invalidate_server_list_cache(user_id: str) -> None:
+    """Invalidate cached server lists for a specific user and all admin lists."""
+    await cache_delete(_server_list_cache_key(user_id))
+    await cache_delete_tracked("servers:list:admin:keys")
 
 
 class VolumeMountRequest(BaseModel):
@@ -506,6 +529,8 @@ async def create_server(
             for vm in volume_mounts
         ]
         
+        await _invalidate_server_list_cache(str(current_user.id))
+
         return ServerResponse(
             id=str(server.id),
             name=server.name,
@@ -526,7 +551,7 @@ async def create_server(
             created_at=server.created_at.isoformat() if server.created_at else None,
             started_at=server.started_at.isoformat() if server.started_at else None,
         )
-        
+
     except HTTPException:
         raise
     except Exception:
@@ -590,75 +615,84 @@ async def list_servers(
     _ = Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.SERVERS_READ_ALL)),
     db: AsyncSession = Depends(get_db)
 ):
-    """List servers. Users see own servers, admins see all."""
-    from sqlalchemy.orm import joinedload
-    checker = PermissionChecker(current_user)
-    
-    from sqlalchemy.orm import selectinload
-    from app.models.server_volume import ServerVolume
-    
-    if checker.is_admin() or has_any_permission(current_user, [Permission.SERVERS_READ_ALL]):
-        result = await db.execute(
-            select(Server)
-            .options(joinedload(Server.user))
-            .options(selectinload(Server.volume_mounts).selectinload(ServerVolume.volume))
-        )
-    else:
-        result = await db.execute(
-            select(Server).where(Server.user_id == current_user.id)
-            .options(joinedload(Server.user))
-            .options(selectinload(Server.volume_mounts).selectinload(ServerVolume.volume))
-        )
-    
-    servers = result.unique().scalars().all()
-    
-    for s in servers:
-        if s.container_id:
-            try:
-                actual = await spawner.get_status(s.container_id)
-                if actual == "running" and s.status != "running":
-                    s.status = "running"
-                    s.started_at = datetime.now(UTC).replace(tzinfo=None)
-                elif actual in ("stopped", "paused", "exited") and s.status == "running":
-                    s.status = "stopped"
-                    s.stopped_at = datetime.now(UTC).replace(tzinfo=None)
-            except Exception:
-                pass
-    
-    await db.commit()
-    
-    return {
-        "servers": [
-            {
-                "id": str(s.id),
-                "name": s.name,
-                "status": s.status,
-                "container_id": s.container_id,
-                "volume_id": str(s.volume_id) if s.volume_id else None,
-                "volume_mode": s.volume_mode,
-                "volume_mounts": _serialize_volume_mounts(s),
-                "external_url": s.external_url,
-                "allocated_cpu": s.allocated_cpu,
-                "allocated_memory": s.allocated_memory,
-                "allocated_disk": s.allocated_disk,
-                "health_status": s.health_status,
-                "status_reason": s.status_reason,
-                "stop_reason": s.stop_reason,
-                "user_id": str(s.user_id),
-                "username": s.user.username if s.user else None,
-                "plan_id": str(s.plan_id) if s.plan_id else None,
-                "environment_id": str(s.environment_id) if s.environment_id else None,
-                "created_at": s.created_at.isoformat() if s.created_at else None,
-                "started_at": s.started_at.isoformat() if s.started_at else None,
-                "stopped_at": s.stopped_at.isoformat() if s.stopped_at else None,
-                "last_activity": s.last_activity.isoformat() if s.last_activity else None,
-                "expires_at": s.expires_at.isoformat() if s.expires_at else None,
-                "total_cost": s.total_cost,
-                "last_billed_at": s.last_billed_at.isoformat() if s.last_billed_at else None,
-            }
-            for s in servers
-        ]
-    }
+    """List servers. Users see own servers, admins see all.
+
+    Results are cached for 10 seconds to reduce DB + Docker API load.
+    Real-time status updates are delivered via WebSocket.
+    """
+    cache_key = _server_list_cache_key(str(current_user.id))
+
+    async def _build_response():
+        from sqlalchemy.orm import joinedload
+        checker = PermissionChecker(current_user)
+
+        from sqlalchemy.orm import selectinload
+        from app.models.server_volume import ServerVolume
+
+        if checker.is_admin() or has_any_permission(current_user, [Permission.SERVERS_READ_ALL]):
+            result = await db.execute(
+                select(Server)
+                .options(joinedload(Server.user))
+                .options(selectinload(Server.volume_mounts).selectinload(ServerVolume.volume))
+            )
+        else:
+            result = await db.execute(
+                select(Server).where(Server.user_id == current_user.id)
+                .options(joinedload(Server.user))
+                .options(selectinload(Server.volume_mounts).selectinload(ServerVolume.volume))
+            )
+
+        servers = result.unique().scalars().all()
+
+        for s in servers:
+            if s.container_id:
+                try:
+                    actual = await spawner.get_status(s.container_id)
+                    if actual == "running" and s.status != "running":
+                        s.status = "running"
+                        s.started_at = datetime.now(UTC).replace(tzinfo=None)
+                    elif actual in ("stopped", "paused", "exited") and s.status == "running":
+                        s.status = "stopped"
+                        s.stopped_at = datetime.now(UTC).replace(tzinfo=None)
+                except Exception:
+                    pass
+
+        await db.commit()
+
+        return {
+            "servers": [
+                {
+                    "id": str(s.id),
+                    "name": s.name,
+                    "status": s.status,
+                    "container_id": s.container_id,
+                    "volume_id": str(s.volume_id) if s.volume_id else None,
+                    "volume_mode": s.volume_mode,
+                    "volume_mounts": _serialize_volume_mounts(s),
+                    "external_url": s.external_url,
+                    "allocated_cpu": s.allocated_cpu,
+                    "allocated_memory": s.allocated_memory,
+                    "allocated_disk": s.allocated_disk,
+                    "health_status": s.health_status,
+                    "status_reason": s.status_reason,
+                    "stop_reason": s.stop_reason,
+                    "user_id": str(s.user_id),
+                    "username": s.user.username if s.user else None,
+                    "plan_id": str(s.plan_id) if s.plan_id else None,
+                    "environment_id": str(s.environment_id) if s.environment_id else None,
+                    "created_at": s.created_at.isoformat() if s.created_at else None,
+                    "started_at": s.started_at.isoformat() if s.started_at else None,
+                    "stopped_at": s.stopped_at.isoformat() if s.stopped_at else None,
+                    "last_activity": s.last_activity.isoformat() if s.last_activity else None,
+                    "expires_at": s.expires_at.isoformat() if s.expires_at else None,
+                    "total_cost": s.total_cost,
+                    "last_billed_at": s.last_billed_at.isoformat() if s.last_billed_at else None,
+                }
+                for s in servers
+            ]
+        }
+
+    return await cache_get_or_set(cache_key, _build_response, _SERVER_LIST_CACHE_TTL)
 
 
 @router.get("/{server_id}")
@@ -1289,7 +1323,9 @@ async def start_server(
         checker.require_any([Permission.SERVERS_WRITE_ALL, Permission.SERVERS_ACCESS_OTHERS])
         await _audit_cross_user_access(server, current_user, db, "server.start", body.reason)
 
-    return await _perform_server_start(server, db, current_user, server_id)
+    result = await _perform_server_start(server, db, current_user, server_id)
+    await _invalidate_server_list_cache(str(server.user_id))
+    return result
 
 
 @router.post("/{server_id}/stop")
@@ -1314,7 +1350,9 @@ async def stop_server(
         checker.require_any([Permission.SERVERS_WRITE_ALL, Permission.SERVERS_ACCESS_OTHERS])
         await _audit_cross_user_access(server, current_user, db, "server.stop", body.reason)
 
-    return await _perform_server_stop(server, db, server_id)
+    result = await _perform_server_stop(server, db, server_id)
+    await _invalidate_server_list_cache(str(server.user_id))
+    return result
 
 
 @router.post("/{server_id}/restart")
@@ -1339,7 +1377,9 @@ async def restart_server(
         checker.require_any([Permission.SERVERS_WRITE_ALL, Permission.SERVERS_ACCESS_OTHERS])
         await _audit_cross_user_access(server, current_user, db, "server.restart", body.reason)
 
-    return await _perform_server_restart(server, db, current_user, server_id)
+    result = await _perform_server_restart(server, db, current_user, server_id)
+    await _invalidate_server_list_cache(str(server.user_id))
+    return result
 
 
 @router.delete("/{server_id}")
@@ -1364,7 +1404,9 @@ async def delete_server(
         checker.require_any([Permission.SERVERS_WRITE_ALL, Permission.SERVERS_ACCESS_OTHERS])
         await _audit_cross_user_access(server, current_user, db, "server.delete", reason)
 
-    return await _perform_server_delete(server, db, server_id)
+    result = await _perform_server_delete(server, db, server_id)
+    await _invalidate_server_list_cache(str(server.user_id))
+    return result
 
 
 @router.get("/{server_id}/volumes")
@@ -1636,6 +1678,8 @@ async def update_server(
                 detail="Failed to apply configuration changes. Please try again or contact support."
             )
     
+    await _invalidate_server_list_cache(str(server.user_id))
+
     return ServerResponse(
         id=str(server.id),
         name=server.name,
@@ -1666,12 +1710,11 @@ async def test_metric(
 ):
     """Send a test metric via Redis pub/sub to verify WebSocket pipeline."""
     import json
-    import redis.asyncio as redis_client
-    from app.config import settings
+    from app.core.redis_client import get_redis_client
     from app.websocket.metrics_socket import connections
-    
-    r = redis_client.from_url(settings.redis_url)
-    
+
+    r = get_redis_client()
+
     test_metric = {
         "server_id": server_id,
         "cpu_percent": 50.0,
@@ -1682,19 +1725,25 @@ async def test_metric(
         "network_tx_bytes": 2000,
         "test": True,
     }
-    
-    # Publish to specific channel
-    await r.publish(f"metrics:server:{server_id}", json.dumps(test_metric))
-    # Also publish to global
-    await r.publish("metrics:all", json.dumps(test_metric))
-    
+
+    metric_json = json.dumps(test_metric)
+    try:
+        # Publish to specific channel
+        await r.publish(f"metrics:server:{server_id}", metric_json)
+        # Also publish to global
+        await r.publish("metrics:all", metric_json)
+    except Exception:
+        logger.exception("Failed to publish test metric")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to publish test metric"
+        )
+
     # Check active WebSocket connections
     room = f"server:{server_id}"
     active_connections = len(connections.get(room, set()))
     all_rooms = list(connections.keys())
-    
-    await r.aclose()
-    
+
     return {
         "message": "Test metric published",
         "server_id": server_id,
@@ -1723,7 +1772,8 @@ async def ping_server_activity(
     
     server.last_activity = datetime.now(UTC).replace(tzinfo=None)
     await db.commit()
-    
+    await _invalidate_server_list_cache(str(server.user_id))
+
     return {"message": "Activity recorded", "server_id": server_id, "last_activity": server.last_activity.isoformat()}
 
 

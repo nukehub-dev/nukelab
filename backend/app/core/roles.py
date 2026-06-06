@@ -198,6 +198,80 @@ def get_role_rate_limit(role: str) -> int:
     return ROLE_RATE_LIMITS.get(role, ROLE_RATE_LIMITS["user"])
 
 
+# ---------------------------------------------------------------------------
+# Expanded permission cache — precomputed so has_permission() skips the loop
+# ---------------------------------------------------------------------------
+
+def _expand_permissions(permissions: list) -> set:
+    """Expand a permission list to include all implied permissions."""
+    from app.core.permissions import Permission
+    implications = {
+        Permission.ALL: set(Permission.all_permissions()),
+        Permission.SERVERS_READ_ALL: {Permission.SERVERS_READ_OWN},
+        Permission.SERVERS_WRITE_ALL: {
+            Permission.SERVERS_WRITE_OWN,
+            Permission.SERVERS_READ_ALL,
+            Permission.SERVERS_READ_OWN,
+        },
+        Permission.SERVERS_ACCESS_OTHERS: {
+            Permission.SERVERS_READ_ALL,
+            Permission.SERVERS_READ_OWN,
+        },
+        Permission.VOLUMES_READ_ALL: {Permission.VOLUMES_READ_OWN},
+        Permission.VOLUMES_WRITE_ALL: {
+            Permission.VOLUMES_WRITE_OWN,
+            Permission.VOLUMES_READ_ALL,
+            Permission.VOLUMES_READ_OWN,
+        },
+        Permission.WORKSPACES_READ_ALL: {Permission.WORKSPACES_READ_OWN},
+        Permission.WORKSPACES_WRITE_ALL: {
+            Permission.WORKSPACES_WRITE_OWN,
+            Permission.WORKSPACES_READ_ALL,
+            Permission.WORKSPACES_READ_OWN,
+        },
+        Permission.CREDITS_READ_ALL: {Permission.CREDITS_READ_OWN},
+    }
+    result = set(permissions)
+    changed = True
+    while changed:
+        changed = False
+        for perm in list(result):
+            implied = implications.get(perm, set())
+            for imp in implied:
+                if imp not in result:
+                    result.add(imp)
+                    changed = True
+    return result
+
+
+# Precompute expanded permissions for all roles at module load time.
+_EXPANSION_CACHE: dict[str, frozenset] = {}
+
+
+def _rebuild_expansion_cache() -> None:
+    """Rebuild the in-memory expanded-permission cache.
+
+    Called automatically on module load and whenever ``ROLE_PERMISSIONS`` is
+    mutated (e.g. admin updates role permissions).
+    """
+    global _EXPANSION_CACHE
+    _EXPANSION_CACHE = {
+        role: frozenset(_expand_permissions(perms))
+        for role, perms in ROLE_PERMISSIONS.items()
+    }
+
+
+_rebuild_expansion_cache()
+
+
+def get_expanded_role_permissions(role: str) -> frozenset:
+    """Return the expanded permission set for a role (O(1) lookup).
+
+    Falls back to an empty set for unknown roles.
+    """
+    return _EXPANSION_CACHE.get(role, frozenset())
+
+
 # Deep copy of default permissions for fallback when DB has no overrides
 _DEFAULT_ROLE_PERMISSIONS = {role: list(perms) for role, perms in ROLE_PERMISSIONS.items()}
 
@@ -224,6 +298,7 @@ async def load_role_permissions_from_db() -> None:
                         ROLE_PERMISSIONS[role] = list(_DEFAULT_ROLE_PERMISSIONS[role])
                     else:
                         ROLE_PERMISSIONS[role] = perms
+        _rebuild_expansion_cache()
     except Exception:
         # On any error, keep defaults
         pass

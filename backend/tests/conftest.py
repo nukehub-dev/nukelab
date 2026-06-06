@@ -351,6 +351,22 @@ def reset_rate_limiter():
 
 
 @pytest.fixture(autouse=True)
+def reset_cache():
+    """Clear Redis cache keys before each test to prevent cross-test leakage."""
+    try:
+        import redis as sync_redis
+        from app.config import settings
+        sync_r = sync_redis.from_url(settings.redis_url)
+        keys = sync_r.keys("nukelab:cache:*")
+        if keys:
+            sync_r.delete(*keys)
+        sync_r.close()
+    except Exception:
+        pass
+    yield
+
+
+@pytest.fixture(autouse=True)
 def reset_maintenance_request_log():
     """Reset MaintenanceMiddleware in-memory request log before each test.
 

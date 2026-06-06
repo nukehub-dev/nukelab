@@ -244,7 +244,7 @@ class TestSecurity:
 
     @pytest.mark.asyncio
     async def test_expand_permissions(self):
-        from app.core.security import _expand_permissions
+        from app.core.roles import _expand_permissions
         from app.core.permissions import Permission
         result = _expand_permissions([Permission.SERVERS_WRITE_ALL])
         assert Permission.SERVERS_READ_OWN in result

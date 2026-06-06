@@ -4,8 +4,8 @@ import pytest
 from unittest import mock
 from datetime import datetime, timedelta, UTC
 
+from app.core.roles import _expand_permissions
 from app.core.security import (
-    _expand_permissions,
     get_user_permissions,
     has_permission,
     has_any_permission,

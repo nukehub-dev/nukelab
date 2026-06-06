@@ -28,6 +28,14 @@ from app.services.workspace_service import WorkspaceService
 from app.services.volume_service import VolumeService
 from app.core.roles import ROLE_PERMISSIONS, get_role_permissions, VALID_ROLES
 from app.config import settings
+from app.core.cache import cache_get_or_set, cache_track_key, cache_delete_tracked
+
+# Cache TTL for admin server lists (seconds)
+_ADMIN_SERVER_LIST_CACHE_TTL = 30
+
+
+def _admin_server_list_cache_key(page: int, limit: int, status: Optional[str], user_id: Optional[str]) -> str:
+    return f"servers:list:admin:{page}:{limit}:{status or 'all'}:{user_id or 'all'}"
 
 router = APIRouter()
 
@@ -231,49 +239,60 @@ async def admin_list_servers(
     _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
-    """List all servers (admin view)"""
-    query = select(Server)
-    
-    if status:
-        query = query.where(Server.status == status)
-    
-    if user_id:
-        query = query.where(Server.user_id == user_id)
-    
-    # Count
-    count_result = await db.execute(select(func.count()).select_from(query.subquery()))
-    total = count_result.scalar()
-    
-    # Pagination
-    offset = (page - 1) * limit
-    query = query.offset(offset).limit(limit).order_by(desc(Server.created_at))
-    
-    result = await db.execute(query)
-    servers = result.scalars().all()
-    
-    return {
-        "servers": [
-            {
-                "id": str(s.id),
-                "name": s.name,
-                "user_id": str(s.user_id),
-                "status": s.status,
-                "container_id": s.container_id,
-                "external_url": s.external_url,
-                "allocated_cpu": s.allocated_cpu,
-                "allocated_memory": s.allocated_memory,
-                "created_at": s.created_at.isoformat() if s.created_at else None,
-                "started_at": s.started_at.isoformat() if s.started_at else None,
+    """List all servers (admin view).
+
+    Results are cached for 10 seconds to reduce DB load on the admin dashboard.
+    """
+    cache_key = _admin_server_list_cache_key(page, limit, status, user_id)
+
+    async def _build_response():
+        query = select(Server)
+
+        if status:
+            query = query.where(Server.status == status)
+
+        if user_id:
+            query = query.where(Server.user_id == user_id)
+
+        # Count
+        count_result = await db.execute(select(func.count()).select_from(query.subquery()))
+        total = count_result.scalar()
+
+        # Pagination
+        offset = (page - 1) * limit
+        query = query.offset(offset).limit(limit).order_by(desc(Server.created_at))
+
+        result = await db.execute(query)
+        servers = result.scalars().all()
+
+        return {
+            "servers": [
+                {
+                    "id": str(s.id),
+                    "name": s.name,
+                    "user_id": str(s.user_id),
+                    "status": s.status,
+                    "container_id": s.container_id,
+                    "external_url": s.external_url,
+                    "allocated_cpu": s.allocated_cpu,
+                    "allocated_memory": s.allocated_memory,
+                    "created_at": s.created_at.isoformat() if s.created_at else None,
+                    "started_at": s.started_at.isoformat() if s.started_at else None,
+                }
+                for s in servers
+            ],
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total,
+                "total_pages": (total + limit - 1) // limit
             }
-            for s in servers
-        ],
-        "pagination": {
-            "page": page,
-            "limit": limit,
-            "total": total,
-            "total_pages": (total + limit - 1) // limit
         }
-    }
+
+    response = await cache_get_or_set(cache_key, _build_response, _ADMIN_SERVER_LIST_CACHE_TTL)
+    # Track this key so bulk invalidation can delete it without SCAN
+    await cache_track_key("servers:list:admin:keys", cache_key)
+    return response
 
 
 @router.post("/servers/bulk-action")
@@ -289,18 +308,19 @@ async def bulk_server_action(
     from app.container.spawner import spawner
     
     results = {"success": [], "failed": []}
-    
+    affected_user_ids: set[str] = set()
+
     for server_id in body.server_ids:
         try:
             result = await db.execute(
                 select(Server).where(Server.id == server_id)
             )
             server = result.scalar_one_or_none()
-            
+
             if not server:
                 results["failed"].append({"server_id": server_id, "error": "Server not found"})
                 continue
-            
+
             if body.action == "start":
                 if server.container_id:
                     await spawner.start(server.container_id)
@@ -315,14 +335,20 @@ async def bulk_server_action(
                 await db.delete(server)
             else:
                 raise ValueError(f"Unknown action: {body.action}")
-            
+
             await db.commit()
             if body.action in ("start", "stop"):
                 await broadcast_server_status_change(server.user_id, str(server.id), server.status)
             results["success"].append(server_id)
+            affected_user_ids.add(str(server.user_id))
         except Exception as e:
             results["failed"].append({"server_id": server_id, "error": str(e)})
-    
+
+    # Invalidate caches for all affected users + admin lists
+    from app.api.servers import _invalidate_server_list_cache
+    for uid in affected_user_ids:
+        await _invalidate_server_list_cache(uid)
+
     return {
         "message": f"Processed {len(body.server_ids)} servers",
         "action": body.action,
@@ -619,9 +645,12 @@ async def update_role_permissions(
             detail=f"Invalid permissions: {invalid_perms}"
         )
     
-    # Update the role permissions in memory and persist to database
+    # Update the role permissions in memory, rebuild the expansion cache, and persist
     ROLE_PERMISSIONS[role] = request.permissions
-    
+
+    from app.core.roles import _rebuild_expansion_cache
+    _rebuild_expansion_cache()
+
     try:
         from app.core.roles import save_role_permissions_to_db
         await save_role_permissions_to_db()
