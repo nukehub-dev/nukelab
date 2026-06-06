@@ -162,6 +162,7 @@ class MetricsWebSocketManager:
         self.redis_client = None
         self._pubsub_task = None
         self._running = False
+        self._shutting_down = False
 
     async def get_redis(self):
         if not self.redis_client:
@@ -204,6 +205,46 @@ class MetricsWebSocketManager:
 
     async def stop_redis_listener(self):
         self._running = False
+        if self.redis_client:
+            try:
+                await self.redis_client.close()
+            except Exception:
+                pass
+            self.redis_client = None
+
+    async def close_all_connections(self, timeout: float = 5.0):
+        """Gracefully close all active WebSocket connections.
+
+        Closes every authenticated connection in parallel so the shutdown
+        window is bounded even when there are hundreds of open sockets.
+        """
+        self._shutting_down = True
+        # Collect from both connection_users (all authenticated) and connections
+        # (room memberships) to ensure nothing is missed.
+        all_websockets: set = set(connection_users.keys())
+        for room in connections.values():
+            all_websockets.update(room)
+
+        if not all_websockets:
+            connections.clear()
+            log_streams.clear()
+            return
+
+        async def _close_one(ws):
+            try:
+                await ws.close(code=1001, reason="Server shutting down")
+            except Exception:
+                pass
+
+        # Close in parallel — bounded by *timeout* regardless of connection count
+        close_tasks = [asyncio.create_task(_close_one(ws)) for ws in all_websockets]
+        done, pending = await asyncio.wait(close_tasks, timeout=timeout)
+        for task in pending:
+            task.cancel()
+
+        connections.clear()
+        connection_users.clear()
+        log_streams.clear()
 
     async def _broadcast_metric(self, metric: dict):
         """Broadcast metric to subscribed clients"""
@@ -316,6 +357,15 @@ class MetricsWebSocketManager:
                 pass
             return
 
+        # Reject new connections if server is shutting down
+        if self._shutting_down:
+            try:
+                await websocket.send_json({"event": "error", "message": "Server shutting down"})
+                await websocket.close(code=1001, reason="Server shutting down")
+            except Exception:
+                pass
+            return
+
         await websocket.send_json({"event": "auth:success"})
 
         # Store user data for this connection
@@ -335,6 +385,10 @@ class MetricsWebSocketManager:
                     ws_redis = None
 
             while True:
+                # If shutdown starts while we're in the loop, stop processing
+                if self._shutting_down:
+                    break
+
                 message = await websocket.receive_text()
 
                 # ─── WebSocket message-level rate limiting ───

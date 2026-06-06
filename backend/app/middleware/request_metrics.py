@@ -115,6 +115,7 @@ class _RequestMetricsBuffer:
         self._flush_interval = flush_interval
         self._flush_task: Optional[asyncio.Task] = None
         self._started = False
+        self._pending_adds: set = set()
 
     async def add(self, record: dict) -> None:
         if not self._started:
@@ -171,6 +172,14 @@ class _RequestMetricsBuffer:
                 await self._flush_task
             except asyncio.CancelledError:
                 pass
+
+        # Yield so any fire-and-forget add() tasks that were created just
+        # before shutdown have a chance to append to the buffer.
+        if self._pending_adds:
+            await asyncio.sleep(0)
+            # Clean up completed tasks from the set
+            self._pending_adds = {t for t in self._pending_adds if not t.done()}
+
         await self.flush()
 
 
@@ -250,9 +259,11 @@ class RequestMetricsMiddleware(BaseHTTPMiddleware):
             "correlation_id": correlation_id.get(""),
         }
 
-        # Fire-and-forget buffer add
+        # Fire-and-forget buffer add (tracked so shutdown can wait for stragglers)
         try:
-            asyncio.create_task(_metrics_buffer.add(record))
+            task = asyncio.create_task(_metrics_buffer.add(record))
+            _metrics_buffer._pending_adds.add(task)
+            task.add_done_callback(_metrics_buffer._pending_adds.discard)
         except Exception:
             logger.exception("Failed to buffer request metric")
 

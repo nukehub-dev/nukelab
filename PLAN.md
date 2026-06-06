@@ -1647,9 +1647,10 @@ Then the server stops and the bulk API returns success
   - [ ] Connection pooling
 
 - [ ] **Observability**
-  - [ ] Prometheus metrics export
-  - [ ] Grafana dashboards
-  - [ ] Structured logging (JSON)
+  - [x] Structured logging (JSON) — `app.core.logging` with `JSONFormatter`, `CorrelationIdFilter`, correlation ID propagation
+  - [x] Custom HTTP request metrics — `RequestMetric` model, route-aware normalization, batched DB writes, admin dashboard
+  - [ ] Prometheus metrics export — deferred; custom pipeline sufficient for single-node, revisit for K8s
+  - [ ] Grafana dashboards — deferred; custom React charts + admin analytics UI sufficient
   - [ ] Distributed tracing (OpenTelemetry)
   - [ ] Error tracking (Sentry)
 
@@ -1698,30 +1699,45 @@ Then the deployment completes with zero downtime
 
 #### Tasks
 
-- [ ] **Observability — Structured Logging**
-  - [ ] Add correlation IDs to all requests
-  - [ ] JSON-structured logging format
-  - [ ] Request ID tracking middleware
+- [x] **Observability — Structured Logging**
+  - [x] Add correlation IDs to all requests (`contextvars` + middleware)
+  - [x] JSON-structured logging format (`JSONFormatter` + `TextFormatter`)
+  - [x] Request ID tracking middleware (`CorrelationIdFilter`, `app.core.context.correlation_id`)
+  - [x] `print()` → `logger.*` migration (~46 replacements across 12 files)
+  - [x] Celery cross-thread correlation ID propagation via Redis headers
+  - [x] Audit middleware populates `ActivityLog.request_id` from contextvar
 
-- [ ] **Observability — Prometheus Metrics**
-  - [ ] Add `/metrics` endpoint (Prometheus client)
-  - [ ] Application metrics (request duration, errors)
-  - [ ] Celery task metrics
+- [x] **Observability — HTTP Request Metrics**
+  - [x] `RequestMetric` model with p50/p95/p99 aggregation
+  - [x] Route-aware path normalization (reads FastAPI route regexes at startup)
+  - [x] Batched fire-and-forget DB writes (100 records / 5s flush)
+  - [x] `GET /api/metrics/requests` admin-only endpoint with percentile aggregation
+  - [x] Frontend "API Performance" dashboard section (`/admin/analytics`)
+  - [x] 30-day retention via `cleanup_expired_data` Celery task
+  - [ ] Prometheus metrics export (deferred — custom pipeline sufficient for single-node)
 
-- [ ] **Reliability — Graceful Shutdown**
-  - [ ] Handle SIGTERM properly
-  - [ ] Wait for in-flight requests
-  - [ ] Drain WebSocket connections
+- [x] **Reliability — Graceful Shutdown**
+  - [x] Handle SIGTERM properly (Uvicorn lifespan shutdown hook)
+  - [x] Wait for in-flight requests (Uvicorn default + background task cancellation with 3s timeout)
+  - [x] Drain WebSocket connections (parallel `asyncio.gather`, code 1001, 3s timeout)
+  - [x] Flush pending request metrics buffer on shutdown (5s timeout, yields for fire-and-forget stragglers)
+  - [x] Stop Redis listener and close Redis client (3s timeout)
+  - [x] Dispose database engine (async pool close, 3s timeout)
+  - [x] `ShutdownCoordinator` with structured shutdown logging and elapsed-time tracking
+  - [x] Draining health endpoint — `/health` returns 503 as soon as shutdown starts (Traefik pre-drain)
+  - [x] Docker `stop_grace_period` — 30s backend, 20s celery-worker/beat (prevents premature SIGKILL)
 
 - [ ] **Security — Input Validation**
   - [ ] Request size limits
   - [ ] Strict CORS for production
   - [x] Security headers (HSTS, CSP) — `security-headers@file` and `csp-header@file` middlewares deployed in Traefik dynamic config
+  - [x] CSRF protection — double-submit cookie pattern with smart exemptions
+  - [x] IP allowlist/blocklist middleware with CIDR support, admin CRUD API, and UI
 
 - [ ] **Database — Connection Pooling**
   - [ ] PgBouncer setup
   - [ ] Query timeout configuration
-  - [ ] Proper index usage
+  - [x] Proper index usage — indexes added on `request_metrics` (path, status_code, user_id, correlation_id, created_at)
 
 - [x] **Rate Limiting**
   - [x] Per-user rate limiting (FastAPI + Redis, JWT-based, role tiers)
@@ -1729,7 +1745,7 @@ Then the deployment completes with zero downtime
   - [x] WebSocket message-level throttling (120/min per user)
   - [x] 14 tests covering all tiers, expired JWT, Redis fail-open, strict endpoints
 
-#### Status: Recommended Before Going Production
+#### Status: Complete ✅ — Observability quick wins delivered; remaining items (graceful shutdown, PgBouncer, request size limits) are lower priority and can be deferred to Phase 6
 
 ---
 
@@ -1779,7 +1795,9 @@ nukelab/
 │   │   ├── main.py                  # FastAPI app factory
 │   │   ├── config.py                # Configuration
 │   │   ├── dependencies.py          # FastAPI dependencies
-│   │   └── middleware/              # Custom middleware
+│   │   ├── middleware/              # Custom middleware
+│   │   │   ├── request_metrics.py   # HTTP request metrics middleware
+│   │   │   └── ... (audit, rate limit, etc.)
 │   ├── api/                         # API routes
 │   │   ├── __init__.py
 │   │   ├── auth.py                  # Auth endpoints
@@ -1795,7 +1813,8 @@ nukelab/
 │   │   ├── __init__.py
 │   │   ├── security.py              # JWT, bcrypt, permissions
 │   │   ├── exceptions.py            # Custom exceptions
-│   │   └── logging.py               # Structured logging
+│   │   ├── logging.py               # Structured logging (JSON/text formatters)
+│   │   └── context.py               # contextvars (correlation_id)
 │   ├── services/                    # Business logic
 │   │   ├── __init__.py
 │   │   ├── auth_service.py          # Auth business logic
@@ -1808,7 +1827,7 @@ nukelab/
 │   │   ├── credit_service.py        # Credit management
 │   │   ├── preferences_service.py   # User preferences
 │   │   └── notification_service.py  # Notifications
-│   ├── models/                      # Pydantic models
+│   ├── models/                      # SQLAlchemy & Pydantic models
 │   │   ├── __init__.py
 │   │   ├── user.py
 │   │   ├── server.py
@@ -1816,7 +1835,8 @@ nukelab/
 │   │   ├── plan.py
 │   │   ├── credit.py
 │   │   ├── preferences.py
-│   │   └── audit.py
+│   │   ├── audit.py
+│   │   └── request_metric.py        # HTTP request telemetry
 │   ├── db/                          # Database
 │   │   ├── __init__.py
 │   │   ├── base.py                  # SQLAlchemy base

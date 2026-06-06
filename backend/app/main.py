@@ -15,6 +15,8 @@ from app.api import (
 from app.db.base import Base
 from app.db.session import engine
 from app.websocket.metrics_socket import manager
+from app.core.shutdown import get_shutdown_coordinator
+from app.middleware.request_metrics import _metrics_buffer
 
 
 async def startup():
@@ -49,10 +51,13 @@ async def startup():
     except Exception as e:
         logger.warning(f"Failed to load role permissions from DB: {e}")
 
+    coordinator = get_shutdown_coordinator()
+
     # Start Redis listener for metrics broadcasting
     try:
         import asyncio
-        asyncio.create_task(manager.start_redis_listener())
+        redis_task = asyncio.create_task(manager.start_redis_listener())
+        coordinator.register_background_task(redis_task)
     except Exception as e:
         logger.warning(f"Failed to start Redis listener: {e}")
 
@@ -60,7 +65,8 @@ async def startup():
     try:
         import asyncio
         from app.api.auth import run_periodic_refresh_token_cleanup
-        asyncio.create_task(run_periodic_refresh_token_cleanup())
+        cleanup_task = asyncio.create_task(run_periodic_refresh_token_cleanup())
+        coordinator.register_background_task(cleanup_task)
     except Exception as e:
         logger.warning(f"Failed to start refresh token cleanup: {e}")
 
@@ -70,7 +76,13 @@ async def lifespan(app: FastAPI):
     """Application lifespan events (startup / shutdown)."""
     await startup()
     yield
-    # Shutdown logic can be added here when needed
+    # Graceful shutdown
+    coordinator = get_shutdown_coordinator()
+    await coordinator.shutdown(
+        websocket_manager=manager,
+        metrics_buffer=_metrics_buffer,
+        db_engine=engine,
+    )
 
 
 app = FastAPI(
@@ -167,8 +179,16 @@ async def root():
 
 @app.get("/health")
 async def health():
+    from app.core.shutdown import is_shutting_down
+    from fastapi.responses import JSONResponse
+
+    if is_shutting_down():
+        return JSONResponse(
+            status_code=503,
+            content={"status": "shutting_down", "message": "Server is shutting down"}
+        )
+
     if settings.maintenance_mode:
-        from fastapi.responses import JSONResponse
         return JSONResponse(
             status_code=503,
             content={

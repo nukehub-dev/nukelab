@@ -113,6 +113,21 @@ class TestHealthEndpoint:
         finally:
             settings.maintenance_mode = original
 
+    @pytest.mark.asyncio
+    async def test_health_returns_503_during_shutdown(self):
+        from app.core.shutdown import is_shutting_down
+        from app.core import shutdown as _shutdown_mod
+
+        _shutdown_mod._is_shutting_down = True
+        try:
+            result = await health()
+            assert isinstance(result, JSONResponse)
+            assert result.status_code == 503
+            body = result.body.decode()
+            assert "shutting_down" in body
+        finally:
+            _shutdown_mod._is_shutting_down = False
+
 
 class TestStartupEvent:
     """Application startup event tests."""

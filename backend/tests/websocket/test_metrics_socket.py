@@ -1213,3 +1213,84 @@ class TestHandleConnectionExtended2:
             for call in ws.send_json.call_args_list
         )
         assert unsub_sent
+
+
+class TestCloseAllConnections:
+    """Graceful shutdown WebSocket drain tests."""
+
+    @pytest.fixture(autouse=True)
+    def clear_connections(self):
+        connections.clear()
+        connection_users.clear()
+        log_streams.clear()
+        yield
+        connections.clear()
+        connection_users.clear()
+        log_streams.clear()
+
+    @pytest.mark.asyncio
+    async def test_close_all_connections_closes_every_ws(self):
+        manager = MetricsWebSocketManager()
+        ws1 = mock.AsyncMock()
+        ws2 = mock.AsyncMock()
+        connections["global"] = {ws1, ws2}
+        connection_users[ws1] = {"user_id": "1"}
+        connection_users[ws2] = {"user_id": "2"}
+
+        await manager.close_all_connections()
+
+        ws1.close.assert_awaited_once_with(code=1001, reason="Server shutting down")
+        ws2.close.assert_awaited_once_with(code=1001, reason="Server shutting down")
+        assert len(connections) == 0
+        assert len(connection_users) == 0
+
+    @pytest.mark.asyncio
+    async def test_close_all_connections_gracefully_handles_errors(self):
+        manager = MetricsWebSocketManager()
+        ws1 = mock.AsyncMock()
+        ws1.close.side_effect = Exception("broken")
+        ws2 = mock.AsyncMock()
+        connections["global"] = {ws1, ws2}
+        connection_users[ws1] = {"user_id": "1"}
+        connection_users[ws2] = {"user_id": "2"}
+
+        # Should not raise
+        await manager.close_all_connections()
+
+        ws1.close.assert_awaited_once()
+        ws2.close.assert_awaited_once()
+        assert len(connections) == 0
+
+    @pytest.mark.asyncio
+    async def test_close_all_clears_log_streams(self):
+        manager = MetricsWebSocketManager()
+        ws = mock.AsyncMock()
+        connections["logs:server1"] = {ws}
+        log_streams["123:server1"] = mock.Mock()
+
+        await manager.close_all_connections()
+
+        assert len(log_streams) == 0
+
+    @pytest.mark.asyncio
+    async def test_stop_redis_listener_closes_client(self):
+        manager = MetricsWebSocketManager()
+        redis_mock = mock.AsyncMock()
+        manager.redis_client = redis_mock
+        manager._running = True
+
+        await manager.stop_redis_listener()
+
+        assert manager._running is False
+        redis_mock.close.assert_awaited_once()
+        assert manager.redis_client is None
+
+    @pytest.mark.asyncio
+    async def test_stop_redis_listener_no_client(self):
+        manager = MetricsWebSocketManager()
+        manager.redis_client = None
+        manager._running = True
+
+        # Should not raise
+        await manager.stop_redis_listener()
+        assert manager._running is False
