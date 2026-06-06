@@ -61,6 +61,24 @@ class TestRateLimitExceptionHandler:
         assert b"Rate limit exceeded" in response.body
 
 
+class TestRequestBodyTooLargeHandler:
+    """413 exception handler tests."""
+
+    @pytest.mark.asyncio
+    async def test_request_body_too_large_returns_413(self):
+        from app.main import request_body_too_large_handler
+        from app.middleware.request_size_limit import RequestBodyTooLarge
+
+        request = mock.Mock(spec=Request)
+        exc = RequestBodyTooLarge(max_size=1024, bytes_received=2048)
+        response = await request_body_too_large_handler(request, exc)
+        assert response.status_code == 413
+        body = response.body.decode()
+        assert "1024" in body
+        # bytes_received must NOT be leaked in the public response
+        assert "2048" not in body
+
+
 class TestRootEndpoint:
     """Root / endpoint tests."""
 

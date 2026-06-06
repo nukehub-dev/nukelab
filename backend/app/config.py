@@ -28,8 +28,13 @@ class Settings(BaseSettings):
 
     csrf_protection_enabled: bool = True
 
-    cors_origins: str = "http://localhost:3000,http://localhost:8000"
+    cors_origins: str = "http://localhost:3000,http://localhost:5173,http://localhost:8000"
     cors_allow_credentials: bool = True
+    cors_max_age: int = 600  # seconds to cache preflight responses
+
+    # Request size limits (bytes)
+    max_request_body_size: int = 10 * 1024 * 1024  # 10 MB default
+    max_upload_size: int = 100 * 1024 * 1024  # 100 MB for file uploads
 
     # -------------------------------------------------------------------------
     # Rate Limiting — Two-Layer Architecture
@@ -184,6 +189,24 @@ class Settings(BaseSettings):
                     "SESSION_SECRET is using a default/dev value. "
                     "Set a strong random secret before running in production."
                 )
+        return self
+
+    @model_validator(mode='after')
+    def validate_cors_in_production(self) -> 'Settings':
+        """Refuse wildcard or empty CORS origins in production."""
+        if self.app_env == "production":
+            origins = [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+            if not origins or "*" in origins:
+                raise ValueError(
+                    "CORS_ORIGINS must contain explicit origins in production. "
+                    "Wildcards (*) are not allowed."
+                )
+            # Validate each origin looks like a valid URL (scheme + netloc)
+            for origin in origins:
+                if not origin.startswith(("http://", "https://")):
+                    raise ValueError(
+                        f"CORS origin '{origin}' must be a valid HTTP/HTTPS URL."
+                    )
         return self
 
     class Config:

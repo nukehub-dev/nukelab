@@ -52,3 +52,50 @@ class TestProductionSecretValidation:
                 session_secret="dev-session-secret-change-in-production",
             )
         assert "SESSION_SECRET" in str(exc_info.value)
+
+
+class TestCorsValidation:
+    """CORS configuration validation tests."""
+
+    def test_production_with_wildcard_cors_origin_raises(self):
+        with pytest.raises(ValidationError) as exc_info:
+            Settings(
+                app_env="production",
+                jwt_secret="a-strong-production-jwt-secret-min-32-characters",
+                session_secret="another-strong-production-session-secret-here",
+                cors_origins="*",
+            )
+        assert "CORS_ORIGINS" in str(exc_info.value)
+
+    def test_production_with_empty_cors_origin_raises(self):
+        with pytest.raises(ValidationError) as exc_info:
+            Settings(
+                app_env="production",
+                jwt_secret="a-strong-production-jwt-secret-min-32-characters",
+                session_secret="another-strong-production-session-secret-here",
+                cors_origins="",
+            )
+        assert "CORS_ORIGINS" in str(exc_info.value)
+
+    def test_production_with_explicit_origins_succeeds(self):
+        settings = Settings(
+            app_env="production",
+            jwt_secret="a-strong-production-jwt-secret-min-32-characters",
+            session_secret="another-strong-production-session-secret-here",
+            cors_origins="https://app.example.com,https://admin.example.com",
+        )
+        assert settings.app_env == "production"
+
+    def test_production_with_invalid_origin_url_raises(self):
+        with pytest.raises(ValidationError) as exc_info:
+            Settings(
+                app_env="production",
+                jwt_secret="a-strong-production-jwt-secret-min-32-characters",
+                session_secret="another-strong-production-session-secret-here",
+                cors_origins="not-a-valid-url",
+            )
+        assert "CORS origin" in str(exc_info.value)
+
+    def test_development_with_wildcard_cors_origin_succeeds(self):
+        settings = Settings(app_env="development", cors_origins="*")
+        assert settings.cors_origins == "*"

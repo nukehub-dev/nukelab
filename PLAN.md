@@ -1727,9 +1727,9 @@ Then the deployment completes with zero downtime
   - [x] Draining health endpoint — `/health` returns 503 as soon as shutdown starts (Traefik pre-drain)
   - [x] Docker `stop_grace_period` — 30s backend, 20s celery-worker/beat (prevents premature SIGKILL)
 
-- [ ] **Security — Input Validation**
-  - [ ] Request size limits
-  - [ ] Strict CORS for production
+- [x] **Security — Input Validation**
+  - [x] Request size limits — ASGI middleware `RequestSizeLimitMiddleware` (10 MB default, configurable, 413 on overflow, wraps receive for chunked transfers)
+  - [x] Strict CORS for production — explicit origin whitelist, restricted methods/headers, preflight caching, validated at startup (rejects `*` in production)
   - [x] Security headers (HSTS, CSP) — `security-headers@file` and `csp-header@file` middlewares deployed in Traefik dynamic config
   - [x] CSRF protection — double-submit cookie pattern with smart exemptions
   - [x] IP allowlist/blocklist middleware with CIDR support, admin CRUD API, and UI

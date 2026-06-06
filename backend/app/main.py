@@ -105,6 +105,21 @@ async def rate_limit_exceeded_handler(request: Request, exc):
         content={"detail": detail}
     )
 
+
+from app.middleware.request_size_limit import RequestBodyTooLarge
+
+
+@app.exception_handler(RequestBodyTooLarge)
+async def request_body_too_large_handler(request: Request, exc: RequestBodyTooLarge):
+    """Convert RequestBodyTooLarge into a clean 413 response."""
+    return JSONResponse(
+        status_code=413,
+        content={
+            "detail": f"Request body too large. Maximum allowed is {exc.max_size} bytes.",
+            "max_size": exc.max_size,
+        },
+    )
+
 # IP restriction middleware (runs first — blocks bad IPs at the edge)
 from app.middleware.ip_restriction import IPRestrictionMiddleware
 app.add_middleware(IPRestrictionMiddleware)
@@ -133,13 +148,45 @@ app.add_middleware(RequestMetricsMiddleware)
 from app.middleware.audit import AuditMiddleware
 app.add_middleware(AuditMiddleware)
 
-# CORS
+# Request body size limit (runs first — rejects oversized payloads before any processing)
+from app.middleware.request_size_limit import RequestSizeLimitMiddleware
+app.add_middleware(RequestSizeLimitMiddleware, max_size=settings.max_request_body_size)
+
+# CORS — strict in production, permissive but safe in development
+_cors_origins_list = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+
+if settings.app_debug:
+    # Debug mode: use configured origins (default includes localhost dev servers).
+    # Wildcard + credentials is invalid per CORS spec, so we avoid it.
+    _cors_origins = list(_cors_origins_list)
+    # Auto-include frontend_url if set (e.g., Vite dev server on a non-standard port)
+    frontend_origin = settings.frontend_url.rstrip("/") if settings.frontend_url else ""
+    if frontend_origin and frontend_origin not in _cors_origins:
+        _cors_origins.append(frontend_origin)
+    _cors_methods = ["*"]
+    _cors_headers = ["*"]
+    _cors_credentials = settings.cors_allow_credentials
+else:
+    # Production: explicit whitelist only
+    _cors_origins = _cors_origins_list
+    _cors_methods = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
+    _cors_headers = [
+        "Authorization",
+        "Content-Type",
+        "X-Requested-With",
+        "X-Correlation-ID",
+        "X-CSRF-Token",
+    ]
+    _cors_credentials = settings.cors_allow_credentials
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if settings.app_debug else [settings.app_url],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_cors_origins,
+    allow_credentials=_cors_credentials,
+    allow_methods=_cors_methods,
+    allow_headers=_cors_headers,
+    expose_headers=["X-Correlation-ID"],
+    max_age=settings.cors_max_age,
 )
 
 # Include routers
