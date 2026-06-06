@@ -427,3 +427,202 @@ class TestPlanWorkspaceAccess:
         )
         
         assert response.status_code == 409
+
+"""Extended tests for small API modules — coverage gap closure."""
+
+import pytest
+from unittest import mock
+from datetime import datetime, timedelta, UTC
+import uuid as uuid_mod
+
+from app.config import settings
+from app.models.server import Server
+from app.models.server_plan import ServerPlan
+from app.models.environment_template import EnvironmentTemplate
+from app.models.notification import Notification
+from app.models.activity_log import ActivityLog
+from app.models.credit_transaction import CreditTransaction
+
+
+@pytest.fixture(autouse=True)
+def reset_maintenance_state():
+    """Reset global maintenance state before and after each test."""
+    settings.maintenance_mode = False
+    settings.maintenance_message = "System under maintenance"
+    yield
+    settings.maintenance_mode = False
+    settings.maintenance_message = "System under maintenance"
+
+
+# ─────────────────────────────────────────────────────────────
+# Schedules API
+# ─────────────────────────────────────────────────────────────
+
+class TestPlansExtended:
+    """Tests for plans endpoint coverage gaps."""
+
+    @pytest.mark.asyncio
+    async def test_get_plan_success(self, client, user_token):
+        """Should get a single plan."""
+        with mock.patch("app.api.plans.PlanService") as mock_svc:
+            mock_plan = mock.Mock()
+            mock_plan.to_dict.return_value = {"id": str(uuid_mod.uuid4()), "name": "test-plan"}
+            mock_svc.return_value.get_by_id = mock.AsyncMock(return_value=mock_plan)
+            mock_svc.return_value.check_plan_access = mock.AsyncMock(return_value=True)
+            response = await client.get(
+                f"/api/plans/{uuid_mod.uuid4()}",
+                headers={"Authorization": f"Bearer {user_token}"},
+            )
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_get_plan_not_found(self, client, user_token):
+        """Should return 404 for nonexistent plan."""
+        with mock.patch("app.api.plans.PlanService") as mock_svc:
+            mock_svc.return_value.get_by_id = mock.AsyncMock(return_value=None)
+            response = await client.get(
+                f"/api/plans/{uuid_mod.uuid4()}",
+                headers={"Authorization": f"Bearer {user_token}"},
+            )
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_update_plan(self, client, admin_token):
+        """Admin should update a plan."""
+        with mock.patch("app.api.plans.PlanService") as mock_svc:
+            mock_plan = mock.Mock()
+            mock_plan.to_dict.return_value = {"id": str(uuid_mod.uuid4()), "name": "updated"}
+            mock_svc.return_value.update_plan = mock.AsyncMock(return_value=mock_plan)
+            response = await client.put(
+                f"/api/plans/{uuid_mod.uuid4()}",
+                headers={"Authorization": f"Bearer {admin_token}"},
+                json={"name": "updated", "cpu_limit": 2},
+            )
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_deactivate_plan(self, client, admin_token):
+        """Admin should deactivate a plan."""
+        with mock.patch("app.api.plans.PlanService") as mock_svc:
+            mock_plan = mock.Mock()
+            mock_plan.to_dict.return_value = {"id": str(uuid_mod.uuid4())}
+            mock_svc.return_value.deactivate_plan = mock.AsyncMock(return_value=mock_plan)
+            response = await client.delete(
+                f"/api/plans/{uuid_mod.uuid4()}",
+                headers={"Authorization": f"Bearer {admin_token}"},
+            )
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_activate_plan(self, client, admin_token):
+        """Admin should activate a plan."""
+        with mock.patch("app.api.plans.PlanService") as mock_svc:
+            mock_plan = mock.Mock()
+            mock_plan.to_dict.return_value = {"id": str(uuid_mod.uuid4())}
+            mock_svc.return_value.activate_plan = mock.AsyncMock(return_value=mock_plan)
+            response = await client.post(
+                f"/api/plans/{uuid_mod.uuid4()}/activate",
+                headers={"Authorization": f"Bearer {admin_token}"},
+            )
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_delete_plan_permanent(self, client, admin_token):
+        """Admin should permanently delete a plan."""
+        with mock.patch("app.api.plans.PlanService") as mock_svc:
+            mock_svc.return_value.delete_plan = mock.AsyncMock(return_value=None)
+            response = await client.delete(
+                f"/api/plans/{uuid_mod.uuid4()}/permanent",
+                headers={"Authorization": f"Bearer {admin_token}"},
+            )
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_list_plan_users_success(self, client, admin_token):
+        """Admin should list plan users."""
+        with mock.patch("app.api.plans.PlanService") as mock_svc:
+            mock_svc.return_value.list_plan_users = mock.AsyncMock(return_value=[])
+            response = await client.get(
+                f"/api/plans/{uuid_mod.uuid4()}/users",
+                headers={"Authorization": f"Bearer {admin_token}"},
+            )
+        assert response.status_code == 200
+
+
+# ─────────────────────────────────────────────────────────────
+# Bulk API
+# ─────────────────────────────────────────────────────────────
+
+
+"""Extended tests for smaller API endpoints (tokens, plans, quotas, schedules)."""
+
+import pytest
+import uuid
+
+from app.models.server_plan import ServerPlan
+from app.models.server_schedule import ServerSchedule
+from app.models.server import Server
+
+class TestPlansAPI:
+    """Tests for plan endpoints."""
+
+    @pytest.mark.asyncio
+    async def test_get_plan_not_found(self, client, user_token):
+        """Getting non-existent plan should 404."""
+        response = await client.get(
+            "/api/plans/00000000-0000-0000-0000-000000000000",
+            headers={"Authorization": f"Bearer {user_token}"}
+        )
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_list_plans(self, client, user_token):
+        """Should list plans."""
+        response = await client.get(
+            "/api/plans/",
+            headers={"Authorization": f"Bearer {user_token}"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "success" in data
+
+    @pytest.mark.asyncio
+    async def test_list_plans_with_category(self, client, user_token):
+        """Should list plans with category filter."""
+        response = await client.get(
+            "/api/plans/?category=cpu",
+            headers={"Authorization": f"Bearer {user_token}"}
+        )
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_non_admin_cannot_create_plan(self, client, user_token):
+        """Regular user should not create plans."""
+        response = await client.post(
+            "/api/plans/",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"name": "Test Plan", "slug": "test-plan"}
+        )
+        assert response.status_code in [403, 404]
+
+    @pytest.mark.asyncio
+    async def test_non_admin_cannot_update_plan(self, client, user_token):
+        """Regular user should not update plans."""
+        response = await client.put(
+            "/api/plans/00000000-0000-0000-0000-000000000000",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"name": "Updated"}
+        )
+        assert response.status_code in [403, 404]
+
+    @pytest.mark.asyncio
+    async def test_non_admin_cannot_delete_plan(self, client, user_token):
+        """Regular user should not delete plans."""
+        response = await client.delete(
+            "/api/plans/00000000-0000-0000-0000-000000000000",
+            headers={"Authorization": f"Bearer {user_token}"}
+        )
+        assert response.status_code in [403, 404]
+
+
+

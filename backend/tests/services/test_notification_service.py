@@ -371,3 +371,170 @@ class TestNotificationServicePrefs:
         assert service._should_send(prefs, "server_start", "in_app") is False
         assert service._should_send(prefs, "server_start", "email") is True
         assert service._should_send(prefs, "server_start", "webhook") is True
+
+"""Coverage tests for NotificationService edge cases."""
+
+import pytest
+from unittest import mock
+from sqlalchemy import select
+
+from app.services.notification_service import NotificationService, broadcast_server_status_change
+from app.models.notification import Notification
+from app.models.user import User
+
+
+class TestBroadcastServerStatusChange:
+    """Tests for broadcast_server_status_change."""
+
+    @pytest.mark.asyncio
+    async def test_broadcast_exception_handled(self):
+        """Should silently handle Redis exceptions."""
+        with mock.patch("redis.asyncio.from_url", side_effect=Exception("redis down")):
+            # Should not raise
+            await broadcast_server_status_change("user-1", "srv-1", "running")
+
+
+class TestNotificationServiceGetPrefs:
+    """Tests for _get_user_notification_prefs edge cases."""
+
+    @pytest.mark.asyncio
+    async def test_get_prefs_exception_returns_empty(self, db_session, test_user):
+        """Should return empty dict on exception."""
+        service = NotificationService(db_session)
+
+        with mock.patch.object(db_session, "execute", side_effect=Exception("db error")):
+            prefs = await service._get_user_notification_prefs(test_user.id)
+
+        assert prefs == {}
+
+
+class TestNotificationServiceSendEmail:
+    """Tests for _send_email_for_notification branches."""
+
+    @pytest.mark.asyncio
+    async def test_send_email_disabled(self, db_session, test_user):
+        """Should return early when email service is disabled."""
+        service = NotificationService(db_session)
+
+        with mock.patch("app.services.email_service.EmailService") as mock_cls:
+            mock_email = mock_cls.return_value
+            mock_email.enabled = False
+            await service._send_email_for_notification(test_user.id, "Title", "Message")
+            mock_email.send_email.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_send_email_no_user_email(self, db_session, test_user):
+        """Should return early when user has no email."""
+        service = NotificationService(db_session)
+
+        with mock.patch("app.services.email_service.EmailService") as mock_cls:
+            mock_email = mock_cls.return_value
+            mock_email.enabled = True
+
+            # Mock user query to return user without email
+            with mock.patch.object(db_session, "execute") as mock_exec:
+                mock_result = mock.Mock()
+                mock_user = mock.Mock()
+                mock_user.email = None
+                mock_result.scalar_one_or_none.return_value = mock_user
+                mock_exec.return_value = mock_result
+                await service._send_email_for_notification(test_user.id, "Title", "Message")
+
+            mock_email.send_email.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_send_email_success(self, db_session, test_user):
+        """Should log success on email sent."""
+        service = NotificationService(db_session)
+
+        with mock.patch("app.services.email_service.EmailService") as mock_cls:
+            mock_email = mock_cls.return_value
+            mock_email.enabled = True
+            mock_email.send_email = mock.AsyncMock(return_value={"success": True})
+
+            with mock.patch("logging.getLogger") as mock_getlogger:
+                mock_logger = mock.Mock()
+                mock_getlogger.return_value = mock_logger
+                await service._send_email_for_notification(test_user.id, "Title", "Message")
+                mock_logger.info.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_send_email_failure(self, db_session, test_user):
+        """Should log warning on email failure."""
+        service = NotificationService(db_session)
+
+        with mock.patch("app.services.email_service.EmailService") as mock_cls:
+            mock_email = mock_cls.return_value
+            mock_email.enabled = True
+            mock_email.send_email = mock.AsyncMock(return_value={"success": False, "error": "smtp error"})
+
+            with mock.patch("logging.getLogger") as mock_getlogger:
+                mock_logger = mock.Mock()
+                mock_getlogger.return_value = mock_logger
+                await service._send_email_for_notification(test_user.id, "Title", "Message")
+                mock_logger.warning.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_send_email_exception(self, db_session, test_user):
+        """Should log warning on exception."""
+        service = NotificationService(db_session)
+
+        with mock.patch("app.services.email_service.EmailService") as mock_cls:
+            mock_email = mock_cls.return_value
+            mock_email.enabled = True
+            mock_email.send_email = mock.AsyncMock(side_effect=Exception("boom"))
+
+            with mock.patch("logging.getLogger") as mock_getlogger:
+                mock_logger = mock.Mock()
+                mock_getlogger.return_value = mock_logger
+                await service._send_email_for_notification(test_user.id, "Title", "Message")
+                mock_logger.warning.assert_called_once()
+
+
+class TestNotificationServicePublish:
+    """Tests for _publish_to_websocket edge cases."""
+
+    @pytest.mark.asyncio
+    async def test_publish_exception_handled(self, db_session, test_user):
+        """Should silently handle Redis exceptions."""
+        service = NotificationService(db_session)
+        notif = Notification(
+            user_id=test_user.id,
+            title="Test",
+            message="Msg",
+            type="system",
+            severity="info",
+        )
+
+        with mock.patch("redis.asyncio.from_url", side_effect=Exception("redis down")):
+            # Should not raise
+            await service._publish_to_websocket(test_user.id, notif)
+
+
+class TestNotificationServiceCreateEmailOnly:
+    """Tests for create with email channel enabled."""
+
+    @pytest.mark.asyncio
+    async def test_create_email_only_no_in_app(self, db_session, test_user):
+        """Should send email but not create in-app notification."""
+        test_user.preferences = {
+            "notifications": {
+                "events": [
+                    {"event": "server_start", "channels": {"in_app": False, "email": True}}
+                ]
+            }
+        }
+        await db_session.commit()
+
+        service = NotificationService(db_session)
+
+        with mock.patch.object(service, "_send_email_for_notification", new_callable=mock.AsyncMock) as mock_email:
+            notif = await service.create(
+                user_id=test_user.id,
+                title="Server Started",
+                message="Server is running",
+                event_key="server_start",
+            )
+
+        assert notif is None  # in_app is False
+        mock_email.assert_awaited_once()
