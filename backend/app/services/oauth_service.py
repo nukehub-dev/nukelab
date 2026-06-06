@@ -7,6 +7,9 @@ from typing import Optional, Dict, Any
 import aiohttp
 from urllib.parse import urlencode
 from app.config import settings
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class OAuthService:
@@ -41,8 +44,8 @@ class OAuthService:
                     response.raise_for_status()
                     self.discovery_data = await response.json()
                     return self.discovery_data
-        except Exception as e:
-            print(f"OAuth discovery failed: {e}")
+        except Exception:
+            logger.exception("OAuth discovery failed")
             return {}
     
     def _get_endpoint(self, endpoint_type: str) -> Optional[str]:

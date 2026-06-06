@@ -3,6 +3,9 @@ from fastapi import FastAPI, WebSocket, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.config import settings
+from app.core.logging import configure_logging, get_logger
+
+logger = get_logger(__name__)
 from app.api import (
     auth, users, servers, tokens, credits, admin,
     preferences, environments, plans, quotas, metrics,
@@ -16,6 +19,8 @@ from app.websocket.metrics_socket import manager
 
 async def startup():
     """Application startup logic (tables, seeding, background tasks)."""
+    configure_logging()
+
     # Create tables
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -25,7 +30,7 @@ async def startup():
         from app.db.seed import seed_all
         await seed_all()
     except Exception as e:
-        print(f"Warning: Failed to seed data: {e}")
+        logger.warning(f"Failed to seed data: {e}")
 
     # Load dynamic system settings from database
     try:
@@ -35,21 +40,21 @@ async def startup():
             service = SettingService(db)
             await service.load_into_config()
     except Exception as e:
-        print(f"Warning: Failed to load system settings from DB: {e}")
+        logger.warning(f"Failed to load system settings from DB: {e}")
 
     # Load custom role permissions from database
     try:
         from app.core.roles import load_role_permissions_from_db
         await load_role_permissions_from_db()
     except Exception as e:
-        print(f"Warning: Failed to load role permissions from DB: {e}")
+        logger.warning(f"Failed to load role permissions from DB: {e}")
 
     # Start Redis listener for metrics broadcasting
     try:
         import asyncio
         asyncio.create_task(manager.start_redis_listener())
     except Exception as e:
-        print(f"Warning: Failed to start Redis listener: {e}")
+        logger.warning(f"Failed to start Redis listener: {e}")
 
     # Start periodic refresh token cleanup (prevents unbounded growth at scale)
     try:
@@ -57,7 +62,7 @@ async def startup():
         from app.api.auth import run_periodic_refresh_token_cleanup
         asyncio.create_task(run_periodic_refresh_token_cleanup())
     except Exception as e:
-        print(f"Warning: Failed to start refresh token cleanup: {e}")
+        logger.warning(f"Failed to start refresh token cleanup: {e}")
 
 
 @asynccontextmanager
@@ -107,6 +112,10 @@ app.add_middleware(MaintenanceMiddleware)
 # Rate limit middleware (per-user, JWT-based — runs before expensive ops)
 from app.middleware.rate_limit import RateLimitMiddleware
 app.add_middleware(RateLimitMiddleware)
+
+# Request metrics middleware (captures total latency after rate limit)
+from app.middleware.request_metrics import RequestMetricsMiddleware
+app.add_middleware(RequestMetricsMiddleware)
 
 # Audit middleware
 from app.middleware.audit import AuditMiddleware

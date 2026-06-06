@@ -7,6 +7,9 @@ from app.container.client import get_fresh_container_client
 from app.models.server_metric import ServerMetric
 import redis.asyncio as redis
 from app.config import settings
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class MetricsCollector:
@@ -205,13 +208,13 @@ class MetricsCollector:
             metric = ServerMetric(**metrics)
             db.add(metric)
             await db.commit()
-            print(f"Metrics collector: Saved metric to database for server {metrics['server_id']}")
+            logger.debug("Metrics collector: Saved metric to database for server %s", metrics['server_id'])
         except IntegrityError:
             # Server no longer exists in database (e.g., deleted but container still running)
             # Silently skip - metrics are still broadcast via Redis
             pass
-        except Exception as e:
-            print(f"Metrics collector: Error during persist: {e}")
+        except Exception:
+            logger.exception("Metrics collector: Error during persist")
             if db:
                 try:
                     await db.rollback()
@@ -241,8 +244,8 @@ class MetricsCollector:
                 "metrics:all",
                 json.dumps(metrics, default=str)
             )
-        except Exception as e:
-            print(f"Error broadcasting metrics: {e}")
+        except Exception:
+            logger.exception("Error broadcasting metrics")
 
 
 collector = MetricsCollector()

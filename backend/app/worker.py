@@ -1,12 +1,73 @@
-from celery import Celery
+from celery import Celery, Task
+from celery.signals import before_task_publish, task_prerun, task_postrun
 from celery.schedules import crontab
 from app.config import settings
+from app.core.context import correlation_id
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
+
+
+def _get_cid_from_headers(headers: dict) -> str:
+    """Extract correlation_id from Celery message headers."""
+    if not headers:
+        return ""
+    # Check nested headers structure
+    hdrs = headers.get("headers", {}) or {}
+    return hdrs.get("correlation_id", "")
+
+
+@before_task_publish.connect
+def inject_correlation_id(headers=None, body=None, **kwargs):
+    """Inject current correlation_id into Celery message headers before publish."""
+    if headers is not None:
+        hdrs = headers.setdefault("headers", {})
+        hdrs["correlation_id"] = correlation_id.get("")
+
+
+@task_prerun.connect
+def set_correlation_id(task_id=None, task=None, kwargs=None, **rest):
+    """Restore correlation_id from headers when task starts."""
+    if task is None:
+        return
+    # task.request.headers may be None or a dict
+    req_headers = getattr(task.request, "headers", None) or {}
+    cid = req_headers.get("correlation_id", "")
+    if cid:
+        correlation_id.set(cid)
+        logger.debug("Correlation ID restored for task", extra={"correlation_id": cid, "task_id": task_id})
+
+
+@task_postrun.connect
+def clear_correlation_id(task_id=None, task=None, **rest):
+    """Clear correlation_id after task completes."""
+    correlation_id.set("")
+
+
+class ContextTask(Task):
+    """Custom Celery task base that propagates correlation IDs."""
+
+    def apply_async(self, args=None, kwargs=None, task_id=None, producer=None,
+                    link=None, link_error=None, shadow=None, **options):
+        # Ensure headers exist
+        headers = options.setdefault("headers", {})
+        headers.setdefault("correlation_id", correlation_id.get(""))
+        return super().apply_async(
+            args=args, kwargs=kwargs, task_id=task_id, producer=producer,
+            link=link, link_error=link_error, shadow=shadow, **options
+        )
+
+    def delay(self, *args, **kwargs):
+        # delay() wraps apply_async; our apply_async handles headers
+        return super().delay(*args, **kwargs)
+
 
 celery_app = Celery(
     "nukelab",
     broker=settings.redis_url,
     backend=settings.redis_url,
     include=["app.tasks"],
+    task_cls=ContextTask,
 )
 
 celery_app.conf.update(

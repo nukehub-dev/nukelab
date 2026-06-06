@@ -1,6 +1,9 @@
 import asyncio
 import threading
 from app.worker import celery_app
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
 from app.services.metrics_collector import MetricsCollector
 from app.services.system_metrics_collector import SystemMetricsCollector
 from app.services.health_check_service import HealthCheckService
@@ -14,26 +17,26 @@ def _run_async(coro):
     exception = []
 
     def _run_in_thread():
-        print(f"[_run_async] Starting new event loop in thread")
+        logger.debug("[_run_async] Starting new event loop in thread")
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        print(f"[_run_async] Event loop created: {loop}")
+        logger.debug("[_run_async] Event loop created: %s", loop)
         try:
-            print(f"[_run_async] Running coroutine...")
+            logger.debug("[_run_async] Running coroutine...")
             result.append(loop.run_until_complete(coro))
-            print(f"[_run_async] Coroutine completed successfully")
+            logger.debug("[_run_async] Coroutine completed successfully")
         except Exception as e:
-            print(f"[_run_async] Exception in coroutine: {e}")
+            logger.error("[_run_async] Exception in coroutine: %s", e)
             exception.append(e)
         finally:
-            print(f"[_run_async] Cleaning up event loop...")
+            logger.debug("[_run_async] Cleaning up event loop...")
             try:
                 loop.run_until_complete(loop.shutdown_asyncgens())
             except Exception:
                 pass
             loop.close()
             asyncio.set_event_loop(None)
-            print(f"[_run_async] Event loop closed")
+            logger.debug("[_run_async] Event loop closed")
 
     t = threading.Thread(target=_run_in_thread)
     t.start()
@@ -173,8 +176,8 @@ def shutdown_idle_servers(self):
                     await broadcast_server_status_change(user.id, str(server.id), "stopped")
                     stopped_count += 1
                 
-                except Exception as e:
-                    print(f"Error auto-stopping idle server {server.id}: {e}")
+                except Exception:
+                    logger.exception("Error auto-stopping idle server %s", server.id)
             
             return f"Stopped {stopped_count} idle servers"
     
@@ -301,8 +304,8 @@ def process_nuke_billing(self):
                                 reason="insufficient NUKE credits"
                             )
                             stopped_count += 1
-                        except Exception as e:
-                            print(f"Error stopping server {server.id}: {e}")
+                        except Exception:
+                            logger.exception("Error stopping server %s", server.id)
                     continue
                 
                 # Deduct credits
@@ -328,8 +331,8 @@ def process_nuke_billing(self):
                             balance=new_balance
                         )
                 
-                except Exception as e:
-                    print(f"Error billing server {server.id}: {e}")
+                except Exception:
+                    logger.exception("Error billing server %s", server.id)
             
             await db.commit()
             return f"Billed {billed_count} servers, stopped {stopped_count} servers"
@@ -395,8 +398,8 @@ def enforce_auto_stop(self):
                                     idle_minutes=int(idle_duration / 60)
                                 )
                                 warned_count += 1
-                    except Exception as e:
-                        print(f"Error checking idle timeout for server {server.id}: {e}")
+                    except Exception:
+                        logger.exception("Error checking idle timeout for server %s", server.id)
                 
                 if should_stop:
                     try:
@@ -426,8 +429,8 @@ def enforce_auto_stop(self):
                             reason=reason_messages.get(stop_reason, "automatic stop")
                         )
                         stopped_count += 1
-                    except Exception as e:
-                        print(f"Error auto-stopping server {server.id}: {e}")
+                    except Exception:
+                        logger.exception("Error auto-stopping server %s", server.id)
             
             await db.commit()
             return f"Stopped {stopped_count} servers, warned {warned_count} servers"
@@ -638,10 +641,10 @@ def evaluate_schedules(self):
                         executed_count += 1
                     else:
                         failed_count += 1
-                        print(f"Schedule {schedule.id} failed: {result.get('error')}")
-                except Exception as e:
+                        logger.error("Schedule %s failed: %s", schedule.id, result.get('error'))
+                except Exception:
                     failed_count += 1
-                    print(f"Error executing schedule {schedule.id}: {e}")
+                    logger.exception("Error executing schedule %s", schedule.id)
             
             return f"Executed {executed_count} schedules, {failed_count} failed"
     
@@ -763,6 +766,7 @@ def cleanup_expired_data(self):
         from app.models.notification import Notification
         from app.models.daily_server_metric import DailyServerMetric
         from app.models.system_setting import SystemSetting
+        from app.models.request_metric import RequestMetric
         from app.db.session import AsyncSessionLocal
         from datetime import datetime, timedelta, UTC
 
@@ -791,6 +795,7 @@ def cleanup_expired_data(self):
             activity_log_days = await get_retention_days("activity_log_retention_days", 365)
             notification_days = await get_retention_days("notification_retention_days", 30)
             daily_rollup_days = await get_retention_days("daily_rollup_retention_days", 730)
+            request_metrics_days = await get_retention_days("request_metrics_retention_days", 30)
 
             now = datetime.now(UTC).replace(tzinfo=None)
             deleted = {}
@@ -843,6 +848,13 @@ def cleanup_expired_data(self):
                 delete(DailyServerMetric).where(DailyServerMetric.date < cutoff.date())
             )
             deleted['daily_rollups'] = result.rowcount
+
+            # Request metrics
+            cutoff = now - timedelta(days=request_metrics_days)
+            result = await db.execute(
+                delete(RequestMetric).where(RequestMetric.created_at < cutoff)
+            )
+            deleted['request_metrics'] = result.rowcount
 
             await db.commit()
             total = sum(deleted.values())

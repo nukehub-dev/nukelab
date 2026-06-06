@@ -6,8 +6,9 @@ from typing import Optional, List, Dict, Any
 from app.container.client import ContainerClient, get_container_client
 from app.models.server import Server
 from app.config import settings
+from app.core.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ServerSpawner:
@@ -31,7 +32,7 @@ class ServerSpawner:
                     "nukelab.managed": "true",
                 }
             })
-            print(f"Created volume: {volume_name}")
+            logger.info("Created volume: %s", volume_name)
 
     async def spawn(
         self,
@@ -250,8 +251,8 @@ class ServerSpawner:
         try:
             await container_client.start_container(container_id)
             return True
-        except Exception as e:
-            print(f"Error starting container: {e}")
+        except Exception:
+            logger.exception("Error starting container")
             return False
     
     async def stop(self, container_id: str) -> bool:
@@ -260,8 +261,8 @@ class ServerSpawner:
         try:
             await container_client.stop_container(container_id)
             return True
-        except Exception as e:
-            print(f"Error stopping container: {e}")
+        except Exception:
+            logger.exception("Error stopping container")
             return False
     
     async def delete(self, container_id: str) -> bool:
@@ -270,8 +271,8 @@ class ServerSpawner:
         try:
             await container_client.delete_container(container_id, force=True)
             return True
-        except Exception as e:
-            print(f"Error deleting container: {e}")
+        except Exception:
+            logger.exception("Error deleting container")
             return False
     
     async def get_status(self, container_id: str) -> str:

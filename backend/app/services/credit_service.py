@@ -13,6 +13,9 @@ from fastapi import HTTPException, status
 from app.models.user import User
 from app.models.credit_transaction import CreditTransaction
 from app.services.notification_service import NotificationService
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class CreditService:
@@ -254,7 +257,10 @@ class CreditService:
                     )
                     server.total_cost = already_billed + balance
                 # Log unpaid amount for future reference
-                print(f"[CREDIT] Server {server.id} stopped with unpaid balance: {additional_cost - balance} NUKE (user had {balance})")
+                logger.warning(
+                    "[CREDIT] Server %s stopped with unpaid balance: %s NUKE (user had %s)",
+                    server.id, additional_cost - balance, balance,
+                )
                 return balance if balance > 0 else 0
 
         return 0

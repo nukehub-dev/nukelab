@@ -12,6 +12,9 @@ from app.services.plan_service import PlanService
 from app.models.user import User
 from app.api.auth import get_password_hash
 from app.config import settings
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 async def seed_admin_user(db: AsyncSession):
@@ -25,7 +28,7 @@ async def seed_admin_user(db: AsyncSession):
     existing = result.scalar_one_or_none()
     
     if existing:
-        print(f"  Admin user exists: {settings.dev_admin_user}")
+        logger.info("Admin user exists: %s", settings.dev_admin_user)
         return
     
     admin = User(
@@ -40,7 +43,7 @@ async def seed_admin_user(db: AsyncSession):
     )
     db.add(admin)
     await db.commit()
-    print(f"✓ Created admin user: {settings.dev_admin_user}")
+    logger.info("Created admin user: %s", settings.dev_admin_user)
 
 
 async def seed_plans(db: AsyncSession):
@@ -104,23 +107,23 @@ async def seed_plans(db: AsyncSession):
             existing = await service.get_by_slug(plan_data["slug"])
             if not existing:
                 await service.create_plan(**plan_data)
-                print(f"✓ Created plan: {plan_data['name']}")
+                logger.info("Created plan: %s", plan_data['name'])
             else:
-                print(f"  Plan exists: {plan_data['name']}")
+                logger.info("Plan exists: %s", plan_data['name'])
         except Exception as e:
-            print(f"✗ Failed to create {plan_data['name']}: {e}")
+            logger.error("Failed to create %s: %s", plan_data['name'], e)
 
 
 async def seed_all():
     """Seed default data (plans + dev admin)"""
     async with async_session() as db:
-        print("Seeding admin user...")
+        logger.info("Seeding admin user...")
         await seed_admin_user(db)
-        
-        print("Seeding plans...")
+
+        logger.info("Seeding plans...")
         await seed_plans(db)
-        
-        print("\n✓ Seeding complete!")
+
+        logger.info("Seeding complete!")
     
 
 if __name__ == "__main__":

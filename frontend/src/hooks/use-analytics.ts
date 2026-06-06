@@ -153,6 +153,38 @@ export interface PlanUsage {
   server_count: number;
 }
 
+export interface RequestMetricEndpoint {
+  path: string;
+  method: string;
+  count: number;
+  avg_duration_ms: number;
+  p50_ms: number;
+  p95_ms: number;
+  p99_ms: number;
+  error_count: number;
+  error_rate: number;
+}
+
+export interface RequestMetricsData {
+  endpoints: RequestMetricEndpoint[];
+  summary: {
+    total_requests: number;
+    avg_duration_ms: number;
+    total_errors: number;
+    error_rate: number;
+  };
+  recent: Array<{
+    id: string;
+    method: string;
+    path: string;
+    status_code: number;
+    duration_ms: number;
+    correlation_id: string;
+    created_at: string;
+  }>;
+  filters: Record<string, unknown>;
+}
+
 export function useUserUsage(userId: string, params: DateRangeParams = {}) {
   const qs = buildQueryString(params);
   return useQuery({
@@ -276,5 +308,18 @@ export function usePlanUsage() {
       const response = await api.get<{ plans: PlanUsage[] }>('/analytics/plans');
       return response.plans;
     },
+  });
+}
+
+
+export function useRequestMetrics(params: DateRangeParams = {}) {
+  const qs = buildQueryString(params);
+  return useQuery({
+    queryKey: ['analytics', 'request-metrics', params],
+    queryFn: async () => {
+      const response = await api.get<RequestMetricsData>(`/metrics/requests?${qs}`);
+      return response;
+    },
+    staleTime: 30000, // 30s cache for metrics
   });
 }

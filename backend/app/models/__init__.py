@@ -27,3 +27,4 @@ from app.models.system_setting import SystemSetting
 from app.models.daily_server_metric import DailyServerMetric
 from app.models.login_event import LoginEvent
 from app.models.maintenance_window import MaintenanceWindow
+from app.models.request_metric import RequestMetric

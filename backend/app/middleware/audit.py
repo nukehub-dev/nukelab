@@ -15,6 +15,10 @@ from app.models.activity_log import ActivityLog
 from app.models.user import User
 from app.db.session import AsyncSessionLocal
 from app.config import settings
+from app.core.logging import get_logger
+from app.core.context import correlation_id
+
+logger = get_logger(__name__)
 
 
 class AuditMiddleware(BaseHTTPMiddleware):
@@ -62,7 +66,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
                 await self._log_activity(request, response, before_state)
             except Exception as e:
                 # Don't fail the request if logging fails
-                print(f"Audit logging error: {e}")
+                logger.exception("Audit logging error")
         
         return response
     
@@ -210,6 +214,10 @@ class AuditMiddleware(BaseHTTPMiddleware):
             if user.email:
                 details["actor_email"] = user.email
         
+        # Get correlation ID from context
+        cid = correlation_id.get("")
+        request_id = uuid.UUID(cid) if cid else None
+
         # Log to database
         async with AsyncSessionLocal() as db:
             log = ActivityLog(
@@ -222,6 +230,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
                 after_state={},  # Would need to capture after state
                 ip_address=ip_address,
                 user_agent=user_agent,
+                request_id=request_id,
             )
             db.add(log)
             await db.commit()

@@ -860,13 +860,13 @@ async def _perform_server_start(
 
             if actual_status in ("unknown", "stopped"):
                 if actual_status == "unknown":
-                    print(f"Container {server.container_id} not found, recreating...")
+                    logger.warning("Container %s not found, recreating...", server.container_id)
                 else:
-                    print(f"Container {server.container_id} is stopped, deleting and recreating...")
+                    logger.warning("Container %s is stopped, deleting and recreating...", server.container_id)
                     try:
                         await spawner.delete(server.container_id)
-                    except Exception as e:
-                        print(f"Warning: failed to delete stale container: {e}")
+                    except Exception:
+                        logger.exception("Warning: failed to delete stale container")
 
                 env_service = EnvironmentService(db)
                 environment = await env_service.get_by_id(str(server.environment_id)) if server.environment_id else None
@@ -1245,8 +1245,8 @@ async def _perform_server_delete(
     if server.container_id:
         try:
             await spawner.delete(server.container_id)
-        except Exception as e:
-            print(f"Warning: Failed to delete container: {e}")
+        except Exception:
+            logger.exception("Warning: Failed to delete container")
 
     await db.execute(
         delete(CreditTransaction).where(CreditTransaction.server_id == server.id)
@@ -1538,8 +1538,8 @@ async def update_server(
             if actual_status == "running":
                 await spawner.stop(server.container_id)
             await spawner.delete(server.container_id)
-        except Exception as e:
-            print(f"Warning: failed to stop/delete container during update: {e}")
+        except Exception:
+            logger.exception("Warning: failed to stop/delete container during update")
         
         server.container_id = None
         server.status = "stopped"

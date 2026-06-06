@@ -33,6 +33,7 @@ import {
   useVolumeAnalytics,
   useWorkspaceAnalytics,
   useLoginEvents,
+  useRequestMetrics,
 } from '../hooks/use-analytics';
 import { StatCard } from '../components/data/stat-card';
 import { MetricsAreaChart, formatters } from '../components/charts/area-chart';
@@ -204,6 +205,7 @@ function AnalyticsDashboard() {
   const { data: platformMetricsPrev } = usePlatformMetrics(prevParams ?? {});
   const { data: volumeAnalytics, isLoading: volumeLoading } = useVolumeAnalytics();
   const { data: workspaceAnalytics, isLoading: workspaceLoading } = useWorkspaceAnalytics();
+  const { data: requestMetrics, isLoading: requestMetricsLoading } = useRequestMetrics(dateParams);
 
   /* Derived data */
   const serverCreationData = useMemo(
@@ -988,6 +990,121 @@ function AnalyticsDashboard() {
               {!topConsumers?.length && (
                 <div className="text-center py-8 text-muted-foreground">
                   <p className="text-sm">No consumption data available</p>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* ── API Performance ── */}
+      <section>
+        <SectionHeader icon={Zap} title="API Performance" delay={0.3} />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+          <motion.div
+            className="bubble p-4"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35, ...springs.gentle }}
+          >
+            <h3 className="text-sm font-semibold text-muted-foreground mb-1">Total Requests</h3>
+            <p className="text-2xl font-bold">
+              {requestMetricsLoading ? '—' : (requestMetrics?.summary.total_requests ?? 0).toLocaleString()}
+            </p>
+          </motion.div>
+          <motion.div
+            className="bubble p-4"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4, ...springs.gentle }}
+          >
+            <h3 className="text-sm font-semibold text-muted-foreground mb-1">Avg Duration</h3>
+            <p className="text-2xl font-bold">
+              {requestMetricsLoading ? '—' : `${(requestMetrics?.summary.avg_duration_ms ?? 0).toFixed(1)} ms`}
+            </p>
+          </motion.div>
+          <motion.div
+            className="bubble p-4"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.45, ...springs.gentle }}
+          >
+            <h3 className="text-sm font-semibold text-muted-foreground mb-1">Error Rate</h3>
+            <p className="text-2xl font-bold">
+              {requestMetricsLoading ? '—' : `${(requestMetrics?.summary.error_rate ?? 0).toFixed(2)}%`}
+            </p>
+          </motion.div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <motion.div
+            className="bubble p-5"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35, ...springs.gentle }}
+          >
+            <h3 className="text-base font-semibold mb-4">Endpoints by P95 Latency</h3>
+            <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
+              {requestMetrics?.endpoints?.map((ep) => (
+                <div
+                  key={`${ep.method}:${ep.path}`}
+                  className="flex items-center justify-between p-3 rounded-lg bg-surface/50 border border-border/50"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                      {ep.method}
+                    </span>
+                    <span className="text-sm font-medium truncate">{ep.path}</span>
+                  </div>
+                  <div className="flex items-center gap-4 text-xs text-muted-foreground shrink-0">
+                    <span className="tabular-nums">{ep.count} req</span>
+                    <span className="tabular-nums">p95: {ep.p95_ms.toFixed(0)}ms</span>
+                    {ep.error_rate > 0 && (
+                      <span className="text-destructive tabular-nums">{ep.error_rate.toFixed(1)}% err</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {!requestMetrics?.endpoints?.length && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <p className="text-sm">No API metrics available yet</p>
+                </div>
+              )}
+            </div>
+          </motion.div>
+
+          <motion.div
+            className="bubble p-5"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4, ...springs.gentle }}
+          >
+            <h3 className="text-base font-semibold mb-4">Recent Requests</h3>
+            <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
+              {requestMetrics?.recent?.map((req) => (
+                <div
+                  key={req.id}
+                  className="flex items-center justify-between p-3 rounded-lg bg-surface/50 border border-border/50"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className={`text-xs font-mono px-1.5 py-0.5 rounded ${
+                      req.status_code < 400
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                        : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                    }`}>
+                      {req.status_code}
+                    </span>
+                    <span className="text-xs font-mono text-muted-foreground">{req.method}</span>
+                    <span className="text-sm truncate">{req.path}</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground tabular-nums shrink-0">
+                    {req.duration_ms.toFixed(1)} ms
+                  </span>
+                </div>
+              ))}
+              {!requestMetrics?.recent?.length && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <p className="text-sm">No recent requests</p>
                 </div>
               )}
             </div>

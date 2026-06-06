@@ -2,7 +2,7 @@ from typing import Optional, List
 from datetime import datetime, timedelta, UTC
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, desc
+from sqlalchemy import select, func, and_, desc, case
 from pydantic import BaseModel
 
 from app.api.auth import get_current_user, require_jwt_auth
@@ -16,6 +16,7 @@ from app.models.system_metric import SystemMetric
 from app.models.alert_rule import AlertRule
 from app.models.alert_history import AlertHistory
 from app.models.health_check import HealthCheck
+from app.models.request_metric import RequestMetric
 from app.services.alert_service import AlertService
 
 router = APIRouter()
@@ -476,4 +477,129 @@ async def get_health_summary(
         "latest_checks": [c.to_dict() for c in latest],
         "unhealthy_count": status_counts.get('unhealthy', 0),
         "unknown_count": status_counts.get('unknown', 0),
+    }
+
+
+# ========== Request Metrics ==========
+
+@router.get("/requests")
+async def get_request_metrics(
+    path: Optional[str] = Query(None),
+    status_code: Optional[int] = Query(None),
+    start_date: Optional[datetime] = Query(None),
+    end_date: Optional[datetime] = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+    current_user: User = Depends(get_current_user),
+    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get HTTP request metrics with aggregation (admin only)."""
+    checker = PermissionChecker(current_user)
+    checker.require_any([Permission.ADMIN_ACCESS, Permission.SERVERS_WRITE_ALL])
+
+    # Base query for aggregation
+    base_query = select(RequestMetric)
+
+    if path:
+        base_query = base_query.where(RequestMetric.path == path)
+    if status_code:
+        base_query = base_query.where(RequestMetric.status_code == status_code)
+    if start_date:
+        base_query = base_query.where(RequestMetric.created_at >= start_date)
+    if end_date:
+        base_query = base_query.where(RequestMetric.created_at <= end_date)
+
+    # Get raw metrics for the period (limited)
+    raw_query = base_query.order_by(desc(RequestMetric.created_at)).limit(limit)
+    result = await db.execute(raw_query)
+    metrics = result.scalars().all()
+
+    # Aggregate per endpoint
+    from sqlalchemy import func
+
+    agg_query = (
+        select(
+            RequestMetric.path,
+            RequestMetric.method,
+            func.count().label("count"),
+            func.avg(RequestMetric.duration_ms).label("avg_duration"),
+            func.percentile_cont(0.5).within_group(
+                RequestMetric.duration_ms.asc()
+            ).label("p50"),
+            func.percentile_cont(0.95).within_group(
+                RequestMetric.duration_ms.asc()
+            ).label("p95"),
+            func.percentile_cont(0.99).within_group(
+                RequestMetric.duration_ms.asc()
+            ).label("p99"),
+            func.sum(
+                case((RequestMetric.status_code >= 400, 1), else_=0)
+            ).label("error_count"),
+        )
+        .group_by(RequestMetric.path, RequestMetric.method)
+        .order_by(desc(func.percentile_cont(0.95).within_group(
+            RequestMetric.duration_ms.asc()
+        )))
+        .limit(50)
+    )
+
+    if path:
+        agg_query = agg_query.where(RequestMetric.path == path)
+    if start_date:
+        agg_query = agg_query.where(RequestMetric.created_at >= start_date)
+    if end_date:
+        agg_query = agg_query.where(RequestMetric.created_at <= end_date)
+
+    agg_result = await db.execute(agg_query)
+    endpoints = []
+    for row in agg_result.all():
+        error_rate = (row.error_count / row.count * 100) if row.count > 0 else 0
+        endpoints.append({
+            "path": row.path,
+            "method": row.method,
+            "count": row.count,
+            "avg_duration_ms": round(row.avg_duration, 2) if row.avg_duration else 0,
+            "p50_ms": round(row.p50, 2) if row.p50 else 0,
+            "p95_ms": round(row.p95, 2) if row.p95 else 0,
+            "p99_ms": round(row.p99, 2) if row.p99 else 0,
+            "error_count": row.error_count,
+            "error_rate": round(error_rate, 2),
+        })
+
+    # Overall summary
+    summary_query = select(
+        func.count().label("total_count"),
+        func.avg(RequestMetric.duration_ms).label("avg_duration"),
+        func.sum(
+            case((RequestMetric.status_code >= 400, 1), else_=0)
+        ).label("total_errors"),
+    )
+
+    if start_date:
+        summary_query = summary_query.where(RequestMetric.created_at >= start_date)
+    if end_date:
+        summary_query = summary_query.where(RequestMetric.created_at <= end_date)
+
+    summary_result = await db.execute(summary_query)
+    summary_row = summary_result.one_or_none()
+
+    summary = {
+        "total_requests": summary_row.total_count if summary_row else 0,
+        "avg_duration_ms": round(summary_row.avg_duration, 2) if summary_row and summary_row.avg_duration else 0,
+        "total_errors": summary_row.total_errors if summary_row else 0,
+        "error_rate": round(
+            (summary_row.total_errors / summary_row.total_count * 100), 2
+        ) if summary_row and summary_row.total_count else 0,
+    }
+
+    return {
+        "endpoints": endpoints,
+        "summary": summary,
+        "recent": [m.to_dict() for m in metrics],
+        "filters": {
+            "path": path,
+            "status_code": status_code,
+            "start_date": start_date.isoformat() if start_date else None,
+            "end_date": end_date.isoformat() if end_date else None,
+        },
     }

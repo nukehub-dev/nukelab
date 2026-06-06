@@ -6,6 +6,9 @@ from app.models.alert_rule import AlertRule
 from app.models.alert_history import AlertHistory
 from app.models.server_metric import ServerMetric
 from app.models.user import User
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class AlertService:
@@ -24,8 +27,8 @@ class AlertService:
         for rule in rules:
             try:
                 await self._evaluate_rule(rule)
-            except Exception as e:
-                print(f"Error evaluating rule {rule.id}: {e}")
+            except Exception:
+                logger.exception("Error evaluating rule %s", rule.id)
 
     async def _evaluate_rule(self, rule: AlertRule):
         """Evaluate a single rule"""

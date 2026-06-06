@@ -7,6 +7,9 @@ from app.container.client import get_fresh_container_client
 from app.models.health_check import HealthCheck
 from app.models.server import Server
 from app.config import settings
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 async def _broadcast_health_update():
@@ -47,8 +50,8 @@ class HealthCheckService:
             try:
                 await self._check_container(server)
                 any_checked = True
-            except Exception as e:
-                print(f"Health check failed for {server.id}: {e}")
+            except Exception:
+                logger.exception("Health check failed for %s", server.id)
 
         if any_checked:
             await _broadcast_health_update()
@@ -139,13 +142,13 @@ class HealthCheckService:
         restart_count = recent_restarts.scalar() or 0
 
         if restart_count >= settings.server_auto_restart_max_attempts:
-            print(
-                f"Server {server.id}: auto-restart rate limit exceeded "
-                f"({restart_count} attempts in {settings.server_auto_restart_window}s)"
+            logger.warning(
+                "Server %s: auto-restart rate limit exceeded (%s attempts in %ss)",
+                server.id, restart_count, settings.server_auto_restart_window,
             )
             return
 
-        print(f"Auto-restarting server {server.id} after consecutive failures")
+        logger.info("Auto-restarting server %s after consecutive failures", server.id)
 
         from app.container.spawner import spawner
         from app.services.notification_service import NotificationService
@@ -156,7 +159,7 @@ class HealthCheckService:
                 await spawner.start(server.container_id)
             else:
                 # No container to restart — mark as needing manual attention
-                print(f"Server {server.id}: no container_id, cannot auto-restart")
+                logger.warning("Server %s: no container_id, cannot auto-restart", server.id)
                 return
 
             # Log the restart attempt
@@ -178,10 +181,10 @@ class HealthCheckService:
                 action_url=f"/servers/{server.id}"
             )
 
-            print(f"Server {server.id}: auto-restart successful")
+            logger.info("Server %s: auto-restart successful", server.id)
 
         except Exception as e:
-            print(f"Server {server.id}: auto-restart failed: {e}")
+            logger.exception("Server %s: auto-restart failed", server.id)
             # Log the failure
             fail_log = HealthCheck(
                 server_id=server.id,

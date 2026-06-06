@@ -1003,8 +1003,8 @@ async def oauth_callback(
         
     except Exception as e:
         import traceback
-        print(f"OAuth callback error: {traceback.format_exc()}")
-        
+        logger.exception("OAuth callback error: %s", traceback.format_exc())
+
         # Check if sync mode for error handling too
         is_sync = request.cookies.get("oauth_sync") == "1"
         if is_sync:
@@ -1015,7 +1015,7 @@ async def oauth_callback(
             response.delete_cookie("oauth_verifier")
             response.delete_cookie("oauth_sync")
             return response
-        
+
         return RedirectResponse(url=f"{frontend_base}/login?error=OAuth authentication failed: {str(e)}")
 
 

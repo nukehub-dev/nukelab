@@ -13,6 +13,9 @@ from app.models.maintenance_window import MaintenanceWindow
 from app.models.user import User
 from app.services.notification_service import NotificationService
 from app.services.setting_service import SettingService
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class MaintenanceWindowService:
@@ -295,8 +298,8 @@ class MaintenanceWindowService:
             try:
                 sent = await self.send_advance_notifications(window, offset)
                 notifications_sent += sent
-            except Exception as e:
-                print(f"Error sending notifications for window {window.id}: {e}")
+            except Exception:
+                logger.exception("Error sending notifications for window %s", window.id)
 
         # 2. Enable maintenance mode for windows that have started
         to_enable = await self.get_windows_to_enable()
@@ -304,8 +307,8 @@ class MaintenanceWindowService:
             try:
                 await self.enable_maintenance(window)
                 enabled_count += 1
-            except Exception as e:
-                print(f"Error enabling maintenance for window {window.id}: {e}")
+            except Exception:
+                logger.exception("Error enabling maintenance for window %s", window.id)
 
         # 3. Disable maintenance mode for windows that have ended
         to_disable = await self.get_windows_to_disable()
@@ -313,8 +316,8 @@ class MaintenanceWindowService:
             try:
                 await self.disable_maintenance(window)
                 disabled_count += 1
-            except Exception as e:
-                print(f"Error disabling maintenance for window {window.id}: {e}")
+            except Exception:
+                logger.exception("Error disabling maintenance for window %s", window.id)
 
         return {
             "notifications_sent": notifications_sent,
