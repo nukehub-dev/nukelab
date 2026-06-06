@@ -189,6 +189,9 @@ class SystemMetricsCollector:
                 future=True,
                 pool_size=1,
                 max_overflow=0,
+                connect_args={
+                    "command_timeout": settings.database_query_timeout_seconds,
+                },
             )
             AsyncSessionLocalFresh = sessionmaker(
                 engine,

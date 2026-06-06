@@ -95,6 +95,9 @@ class Settings(BaseSettings):
     database_pool_size: int = 10
     database_pool_max_overflow: int = 10
     database_pool_timeout: int = 30
+    database_pool_recycle: int = 3600  # Recycle connections after 1 hour (seconds)
+    database_pool_pre_ping: bool = True  # Validate connections before checkout
+    database_query_timeout_seconds: int = 30  # asyncpg command_timeout (seconds)
     database_echo: bool = False
 
     redis_url: str = "redis://redis:6379/0"

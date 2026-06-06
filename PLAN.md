@@ -1,7 +1,7 @@
 # NukeLab Platform v2.0 — Architecture & Implementation Plan
 
-**Status**: Phase 5 100% Complete
-**Last Updated**: May 24, 2026  
+**Status**: Phase 5 & Phase 7 100% Complete · DB Pooling & Query Timeouts Delivered
+**Last Updated**: June 7, 2026  
 **Target Timeline**: 6+ months  
 **Tech Stack**: Vite + React 19 SPA, FastAPI, PostgreSQL 18, Redis, Traefik v3, Docker/Podman
 
@@ -35,6 +35,11 @@
 - **Removed Harmful `browserXssFilter`** — Deleted from Traefik config (XSS Auditor creates XS-Leak side channels)
 - **Disabled Traefik Dashboard** — Removed `api.insecure` and dashboard router labels from default config
 - **Scheduled Maintenance Windows** — Pre-planned maintenance with auto-enable/disable via Celery; 15-minute advance notifications to all active users (in-app + email + WebSocket)
+- **Structured Logging** — JSON/text formatters, correlation IDs via `contextvars`, Celery cross-thread propagation; ~46 `print()` replacements
+- **HTTP Request Metrics** — `RequestMetric` model, route-aware normalization, batched DB writes (100/5s), admin dashboard at `/admin/analytics`, 30-day retention
+- **Graceful Shutdown** — `ShutdownCoordinator` with bounded timeouts: background task cancellation (3s), WebSocket drain (3s), metrics flush (5s), Redis stop (3s), DB engine dispose (3s); `/health` returns 503 during shutdown
+- **Request Size Limits** — `RequestSizeLimitMiddleware` with O(1) Content-Length fast path and chunked-transfer abort; 10 MB default
+- **Strict CORS** — Explicit origin whitelist, restricted methods/headers in production, preflight caching; rejects `*` with credentials
 
 ### Model Updates
 - **ServerPlan** — Added `max_runtime`, `idle_timeout`, `allow_scheduling`, `allow_snapshots`
@@ -42,8 +47,8 @@
 - **ServerQueue** — Added `requested_cpu`, `requested_memory`, `requested_disk`
 
 ### Tests
-- 493 tests passing
-- Test files: `test_system.py`, `test_plans.py`, `test_credits.py`, `test_environments.py`, `test_auth.py`, `test_bulk.py`, `test_admin_workspaces.py`, `test_admin_volumes.py`, `test_ip_restrictions.py`, `test_volumes.py`, `test_security_headers.py`, `test_filesystem.py`, `test_config.py`, `test_csrf.py`, `test_maintenance_windows.py`
+- 500+ tests passing
+- Test files: `test_system.py`, `test_plans.py`, `test_credits.py`, `test_environments.py`, `test_auth.py`, `test_bulk.py`, `test_admin_workspaces.py`, `test_admin_volumes.py`, `test_ip_restrictions.py`, `test_volumes.py`, `test_security_headers.py`, `test_filesystem.py`, `test_config.py`, `test_csrf.py`, `test_maintenance_windows.py`, `test_shutdown.py`, `test_logging.py`, `test_request_size_limit.py`, `test_websocket_shutdown.py`
 
 ---
 
@@ -1641,10 +1646,11 @@ Then the server stops and the bulk API returns success
   - [ ] Penetration testing
 
 - [ ] **Performance**
+  - [x] Database connection pooling — `pool_size`, `max_overflow`, `pool_timeout`, `pool_recycle`, `pool_pre_ping` wired into `create_async_engine`; asyncpg `command_timeout` for query abort
   - [ ] Database query optimization
   - [ ] Caching strategy (Redis)
   - [ ] CDN for static assets
-  - [ ] Connection pooling
+  - [ ] PgBouncer setup
 
 - [ ] **Observability**
   - [x] Structured logging (JSON) — `app.core.logging` with `JSONFormatter`, `CorrelationIdFilter`, correlation ID propagation
@@ -1734,9 +1740,12 @@ Then the deployment completes with zero downtime
   - [x] CSRF protection — double-submit cookie pattern with smart exemptions
   - [x] IP allowlist/blocklist middleware with CIDR support, admin CRUD API, and UI
 
-- [ ] **Database — Connection Pooling**
-  - [ ] PgBouncer setup
-  - [ ] Query timeout configuration
+- [x] **Database — Connection Pooling & Timeouts**
+  - [x] SQLAlchemy `pool_recycle=3600` — stale connection recycling
+  - [x] SQLAlchemy `pool_pre_ping=True` — validate connections before checkout
+  - [x] asyncpg `command_timeout` — query-level timeout (default 30s)
+  - [x] Fixed dead config: `max_overflow` and `pool_timeout` were defined but never passed to `create_async_engine`
+  - [ ] PgBouncer setup (deferred — single-node deployment, SQLAlchemy pooling sufficient)
   - [x] Proper index usage — indexes added on `request_metrics` (path, status_code, user_id, correlation_id, created_at)
 
 - [x] **Rate Limiting**
@@ -1745,7 +1754,7 @@ Then the deployment completes with zero downtime
   - [x] WebSocket message-level throttling (120/min per user)
   - [x] 14 tests covering all tiers, expired JWT, Redis fail-open, strict endpoints
 
-#### Status: Complete ✅ — Observability quick wins delivered; remaining items (graceful shutdown, PgBouncer, request size limits) are lower priority and can be deferred to Phase 6
+#### Status: Complete ✅ — All Phase 7 quick wins delivered; graceful shutdown, request size limits, strict CORS, structured logging, HTTP metrics, and connection pooling all implemented and tested
 
 ---
 
@@ -2252,4 +2261,8 @@ DEFAULT_MAX_SERVERS=3
 
 ---
 
-**Next Steps**: Phase 5 implementation complete. All planned features implemented. Proceed to Phase 6 (scalability / multi-host / Kubernetes migration path) or polish / documentation as needed.
+**Next Steps**: Phases 1–5 and 7 are complete. Platform is production-hardened with structured logging, metrics, graceful shutdown, rate limiting, CSRF, security headers, IP restrictions, request size limits, and database connection pooling. Recommended next work:
+
+1. **Redis caching layer for hot reads** (permissions, server lists, system config) — high impact, medium effort
+2. **Database query optimization + E2E tests (Playwright)** — parallel tracks for stability
+3. **Phase 6 items** (Kubernetes, CI/CD, Prometheus/Grafana) remain future goals for multi-node scaling

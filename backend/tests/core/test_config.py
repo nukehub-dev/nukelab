@@ -99,3 +99,35 @@ class TestCorsValidation:
     def test_development_with_wildcard_cors_origin_succeeds(self):
         settings = Settings(app_env="development", cors_origins="*")
         assert settings.cors_origins == "*"
+
+
+class TestDatabasePoolSettings:
+    """Database connection pool configuration defaults."""
+
+    def test_pool_settings_exist_and_have_correct_types(self):
+        """Pool settings must exist on the settings object with expected types."""
+        from app.config import settings
+        assert isinstance(settings.database_pool_size, int)
+        assert isinstance(settings.database_pool_max_overflow, int)
+        assert isinstance(settings.database_pool_timeout, int)
+        assert isinstance(settings.database_pool_recycle, int)
+        assert isinstance(settings.database_pool_pre_ping, bool)
+        assert isinstance(settings.database_query_timeout_seconds, int)
+        assert settings.database_pool_recycle > 0
+        assert settings.database_query_timeout_seconds > 0
+
+    def test_pool_settings_are_customizable(self):
+        settings = Settings(
+            database_pool_size=5,
+            database_pool_max_overflow=2,
+            database_pool_timeout=10,
+            database_pool_recycle=1800,
+            database_pool_pre_ping=False,
+            database_query_timeout_seconds=60,
+        )
+        assert settings.database_pool_size == 5
+        assert settings.database_pool_max_overflow == 2
+        assert settings.database_pool_timeout == 10
+        assert settings.database_pool_recycle == 1800
+        assert settings.database_pool_pre_ping is False
+        assert settings.database_query_timeout_seconds == 60
