@@ -887,3 +887,44 @@ def ensure_partitions(self):
         return _run_async(_ensure())
     except Exception as e:
         return f"Error ensuring partitions: {e}"
+
+
+@celery_app.task(bind=True)
+def check_autovacuum_health(self):
+    """Log tables with high dead-tuple ratios for operational awareness.
+    Run weekly via Celery Beat. Actual tuning is manual (see docs)."""
+    async def _check():
+        from sqlalchemy import text
+
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(text("""
+                SELECT
+                    relname AS table_name,
+                    n_live_tup,
+                    n_dead_tup,
+                    ROUND(100.0 * n_dead_tup / NULLIF(n_live_tup + n_dead_tup, 0), 2) AS dead_pct
+                FROM pg_stat_user_tables
+                WHERE schemaname = 'public'
+                  AND n_dead_tup > 100
+                ORDER BY dead_pct DESC NULLS LAST
+            """))
+            rows = result.mappings().all()
+            warnings = [r for r in rows if (r["dead_pct"] or 0) > 20]
+            if warnings:
+                for w in warnings:
+                    logger.warning(
+                        "Autovacuum health: high dead tuples",
+                        extra={
+                            "table": w["table_name"],
+                            "live": w["n_live_tup"],
+                            "dead": w["n_dead_tup"],
+                            "dead_pct": w["dead_pct"],
+                        },
+                    )
+                return f"Autovacuum: {len(warnings)} table(s) exceed 20% dead tuples"
+            return "Autovacuum: all tables healthy"
+
+    try:
+        return _run_async(_check())
+    except Exception as e:
+        return f"Error checking autovacuum: {e}"

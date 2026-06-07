@@ -80,6 +80,40 @@ async def cmd_drop_old(args):
             await db.commit()
 
 
+async def cmd_autovacuum(args):
+    from sqlalchemy import text
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(text("""
+            SELECT
+                relname AS table_name,
+                n_live_tup AS live_rows,
+                n_dead_tup AS dead_rows,
+                ROUND(100.0 * n_dead_tup / NULLIF(n_live_tup + n_dead_tup, 0), 2) AS dead_pct,
+                last_vacuum,
+                last_autovacuum,
+                last_analyze,
+                last_autoanalyze
+            FROM pg_stat_user_tables
+            WHERE schemaname = 'public'
+            ORDER BY n_dead_tup DESC NULLS LAST
+        """))
+        rows = result.mappings().all()
+        print(f"\n{'Table':<40} {'Live':>10} {'Dead':>10} {'Dead %':>8} {'Last AutoVac':>16}")
+        print("-" * 90)
+        warning = False
+        for r in rows:
+            marker = " ***" if (r["dead_pct"] or 0) > args.threshold else ""
+            if marker:
+                warning = True
+            print(
+                f"{r['table_name']:<40} {r['live_rows'] or 0:>10,} {r['dead_rows'] or 0:>10,} "
+                f"{r['dead_pct'] or 0:>7.2f}%{marker}  "
+                f"{str(r['last_autovacuum'] or '-')[:16]:>16}"
+            )
+        if warning:
+            print(f"\n*** = dead tuple % exceeds threshold ({args.threshold}%). Consider autovacuum tuning.")
+
+
 def main():
     parser = argparse.ArgumentParser(description="NukeLab DB profiler and partition manager")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -100,6 +134,9 @@ def main():
     p_drop = sub.add_parser("drop-old", help="Drop partitions older than N months")
     p_drop.add_argument("--tables", nargs="+", help="Defaults to all partitioned tables")
     p_drop.add_argument("--months-to-keep", type=int, default=12)
+
+    p_auto = sub.add_parser("autovacuum", help="Show dead tuple stats per table")
+    p_auto.add_argument("--threshold", type=float, default=20.0, help="Dead % threshold for warning marker")
 
     args = parser.parse_args()
     asyncio.run(globals()[f"cmd_{args.command.replace('-', '_')}"](args))

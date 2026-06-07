@@ -378,14 +378,15 @@ def reset_rate_limiter():
 
 @pytest.fixture(autouse=True)
 def reset_cache():
-    """Clear Redis cache keys before each test to prevent cross-test leakage."""
+    """Flush Redis DB before each test to prevent cross-test state leakage.
+    This clears ALL keys (cache, rate limits, WebSocket state, etc.).
+    Safe because tests run in isolation with no concurrent app traffic.
+    """
     try:
         import redis as sync_redis
         from app.config import settings
         sync_r = sync_redis.from_url(settings.redis_url)
-        keys = sync_r.keys("nukelab:cache:*")
-        if keys:
-            sync_r.delete(*keys)
+        sync_r.flushdb()
         sync_r.close()
     except Exception:
         pass

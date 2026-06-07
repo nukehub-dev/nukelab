@@ -40,6 +40,34 @@ async def health_check():
     return {"status": "healthy", "timestamp": datetime.now(UTC).replace(tzinfo=None).isoformat()}
 
 
+@router.get("/health/partitions")
+async def partition_health(db: AsyncSession = Depends(get_db)):
+    """Verify time-series table partitions exist for current month.
+    Returns 503 if any partitioned table is missing monthly partitions.
+    """
+    from app.db.partitioning import PartitionManager
+
+    pm = PartitionManager(db)
+    issues = []
+    for table in pm.PARTITION_CONFIG:
+        parts = await pm.list_partitions(table)
+        month_parts = [p for p in parts if "_default" not in p["partition_name"]]
+        if not month_parts:
+            issues.append(f"{table}: no monthly partitions found")
+
+    if issues:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=issues,
+        )
+
+    return {
+        "status": "ok",
+        "tables": list(pm.PARTITION_CONFIG),
+        "timestamp": datetime.now(UTC).replace(tzinfo=None).isoformat(),
+    }
+
+
 @router.get("/config")
 async def get_system_config(
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),

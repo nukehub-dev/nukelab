@@ -58,6 +58,7 @@ TARGET=""
 USE_DEV_MODE=false
 USE_COVERAGE=false
 EXTRA_ARGS=()
+COMPOSE_OVERLAY_FILES=()
 
 parse_args() {
     CMD="${1:-help}"
@@ -73,6 +74,10 @@ parse_args() {
                 ;;
             --coverage)
                 USE_COVERAGE=true
+                ;;
+            --overlay|-o)
+                shift
+                COMPOSE_OVERLAY_FILES+=("$1")
                 ;;
             --help|-h)
                 print_help
@@ -225,6 +230,25 @@ EOF
         rm -f "$DEV_COMPOSE_FILE"
         COMPOSE_ARGS=(-f "$COMPOSE_FILE")
     fi
+
+    # Include overlays from env var (space-separated) and CLI flags
+    if [ -n "${COMPOSE_OVERLAYS:-}" ]; then
+        read -ra _env_overlays <<< "$COMPOSE_OVERLAYS"
+        COMPOSE_OVERLAY_FILES+=("${_env_overlays[@]}")
+    fi
+
+    # Deduplicate
+    declare -A _seen_overlays
+    for overlay in "${COMPOSE_OVERLAY_FILES[@]}"; do
+        if [ -z "${_seen_overlays[$overlay]:-}" ]; then
+            _seen_overlays[$overlay]=1
+            if [ -f "$overlay" ]; then
+                COMPOSE_ARGS+=(-f "$overlay")
+            else
+                warn "Compose overlay not found: $overlay"
+            fi
+        fi
+    done
 }
 
 # ─── CPU Lib Volume ────────────────────────────────────────────────────────
@@ -590,6 +614,37 @@ cmd_backup() {
     ok "Backup created: ${CYAN}$backup_file${RESET}"
 }
 
+cmd_restore() {
+    local backup_file="${TARGET:-}"
+    
+    if [ -z "$backup_file" ] || [ "$backup_file" = "all" ]; then
+        die "Usage: ./manage.sh restore <backup-file>\nExample: ./manage.sh restore backups/nukelab_backup_20250607_120000.sql"
+    fi
+    
+    if [ ! -f "$backup_file" ]; then
+        die "Backup file not found: $backup_file"
+    fi
+    
+    step "Restoring from ${BOLD}$backup_file${RESET}..."
+    
+    local db_user="${DATABASE_USER:-nukelab}"
+    local db_name="${DATABASE_NAME:-nukelab}"
+    
+    log "Dropping database if exists..."
+    $COMPOSE "${COMPOSE_ARGS[@]}" exec postgres psql -U "$db_user" -c "DROP DATABASE IF EXISTS $db_name;"
+    
+    log "Creating database..."
+    $COMPOSE "${COMPOSE_ARGS[@]}" exec postgres psql -U "$db_user" -c "CREATE DATABASE $db_name;"
+    
+    log "Restoring data..."
+    $COMPOSE "${COMPOSE_ARGS[@]}" exec -T postgres psql -U "$db_user" -d "$db_name" < "$backup_file"
+    
+    log "Stamping alembic version..."
+    $COMPOSE "${COMPOSE_ARGS[@]}" exec backend python -m alembic stamp 281a4c5d5529
+    
+    ok "Restore complete"
+}
+
 cmd_reset() {
     step "${RED}${BOLD}WARNING:${RESET} This deletes ALL data and containers!"
     read -rp "Type 'yes' to confirm: " confirm
@@ -635,6 +690,7 @@ ${BOLD}Database:${RESET}
   ${GREEN}db-migrate${RESET}                           Run Alembic migrations
   ${GREEN}db-shell${RESET}                             Open PostgreSQL shell
   ${GREEN}backup${RESET}                               Create database backup
+  ${GREEN}restore${RESET}     <file>                   Restore database from backup
 
 ${BOLD}Testing:${RESET}
   ${GREEN}test${RESET}       [target] [--coverage]      Run tests
@@ -647,6 +703,7 @@ ${BOLD}Targets:${RESET} ${DIM}(optional, default: all)${RESET}
 ${BOLD}Flags:${RESET}
   --dev, -d      Development mode: backend containers + local Vite dev server
   --coverage     Run tests with coverage report (backend only)
+  --overlay, -o  Add a compose overlay file (repeatable)
 
 ${BOLD}Examples:${RESET}
   ./manage.sh start                      # Production: all containers
@@ -658,8 +715,12 @@ ${BOLD}Examples:${RESET}
   ./manage.sh logs backend -f            # Stream backend logs
   ./manage.sh db-migrate                 # Run migrations (auto-detect)
   ./manage.sh backup                     # Backup database
+  ./manage.sh restore backups/nukelab_backup_20250607_120000.sql
+                                         # Restore database from backup
   ./manage.sh test                       # Run all tests (auto-detect)
   ./manage.sh test backend --coverage    # Run backend tests with coverage
+  ./manage.sh start --overlay compose.pgbouncer.yml
+                                         # Start with PgBouncer overlay
   ./manage.sh clean                      # Clean up dangling resources
   ./manage.sh update                     # Update all images
 
@@ -678,7 +739,7 @@ main() {
     esac
 
     case "$CMD" in
-        start|stop|restart|build|update|pull|remove|clean|status|logs|reset|shell|exec|db-migrate|db-shell|backup)
+        start|stop|restart|build|update|pull|remove|clean|status|logs|reset|shell|exec|db-migrate|db-shell|backup|restore)
             init_env
             detect_engine
             setup_podman_socket
@@ -712,6 +773,7 @@ main() {
         db-migrate)  cmd_db_migrate ;;
         db-shell)    cmd_db_shell ;;
         backup)      cmd_backup ;;
+        restore)     cmd_restore ;;
         reset)       cmd_reset ;;
         *)           die "Unknown command: $CMD\nRun './manage.sh help' for usage." ;;
     esac

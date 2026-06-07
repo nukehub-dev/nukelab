@@ -1,0 +1,49 @@
+# PgBouncer overlay for connection pooling.
+# Use when >80% of max_connections is consistently in use.
+#
+# Usage:
+#   1. Add to .env (or pass --overlay at runtime):
+#      COMPOSE_OVERLAYS=compose.pgbouncer.yml
+#   2. Update DATABASE_URL to use pgbouncer:6432
+#   3. ./manage.sh start
+#
+# Or one-off:
+#   ./manage.sh start --overlay compose.pgbouncer.yml
+#
+# Then update .env:
+#   DATABASE_URL=postgresql+asyncpg://${DATABASE_USER}:${DATABASE_PASSWORD}@pgbouncer:6432/${DATABASE_NAME}
+
+services:
+  pgbouncer:
+    image: pgbouncer/pgbouncer:1.24
+    container_name: nukelab-pgbouncer
+    environment:
+      DATABASES_HOST: ${DATABASE_HOST:-postgres}
+      DATABASES_PORT: ${DATABASE_PORT:-5432}
+      DATABASES_DATABASE: ${DATABASE_NAME:-nukelab}
+      DATABASES_USER: ${DATABASE_USER:-nukelab}
+      DATABASES_PASSWORD: ${DATABASE_PASSWORD:-nukelab123}
+      POOL_MODE: ${PGBOUNCER_POOL_MODE:-transaction}
+      MAX_CLIENT_CONN: ${PGBOUNCER_MAX_CLIENT_CONN:-1000}
+      DEFAULT_POOL_SIZE: ${PGBOUNCER_DEFAULT_POOL_SIZE:-20}
+      MIN_POOL_SIZE: ${PGBOUNCER_MIN_POOL_SIZE:-5}
+      RESERVE_POOL_SIZE: ${PGBOUNCER_RESERVE_POOL_SIZE:-5}
+      MAX_DB_CONNECTIONS: ${PGBOUNCER_MAX_DB_CONNECTIONS:-50}
+      SERVER_IDLE_TIMEOUT: ${PGBOUNCER_SERVER_IDLE_TIMEOUT:-600}
+      SERVER_LIFETIME: ${PGBOUNCER_SERVER_LIFETIME:-3600}
+      # Logging
+      LOG_CONNECTIONS: ${PGBOUNCER_LOG_CONNECTIONS:-0}
+      LOG_DISCONNECTIONS: ${PGBOUNCER_LOG_DISCONNECTIONS:-0}
+      STATS_PERIOD: ${PGBOUNCER_STATS_PERIOD:-300}
+    ports:
+      - "${PGBOUNCER_PORT:-6432}:6432"
+    networks:
+      - nukelab-network
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "pgbouncer", "-V"]
+      interval: 10s
+      timeout: 3s
+      retries: 3

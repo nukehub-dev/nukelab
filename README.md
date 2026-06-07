@@ -2,8 +2,8 @@
 
 Multi-user scientific computing platform with granular RBAC, real-time monitoring, and credit-based resource management.
 
-**Status**: Active Development (Phases 1-4 Complete)  
-**Last Updated**: April 29, 2026
+**Status**: Active Development  
+**Last Updated**: June 7, 2026
 
 ## Quick Start
 
@@ -215,6 +215,10 @@ The platform exposes 52+ REST API endpoints. Auto-generated docs available at `/
 
 ## Documentation
 
+- [Operations Guide](docs/OPERATIONS.md) — Database profiling, backup/restore, scaling
+- [Backup & Restore](docs/BACKUP-RESTORE.md) — Disaster recovery procedures
+- [Production Deployment](docs/PRODUCTION-DEPLOYMENT.md) — Production setup guide
+- [Read Replicas](docs/READ-REPLICAS.md) — Future scaling reference (not yet implemented)
 - [Phase 1 Plan](phases/01-foundation/PLAN.md)
 - [Phase 2 Plan](phases/02-user-management/PLAN.md)
 - [Phase 3 Plan](phases/03-environment-resource-management/PLAN.md)
