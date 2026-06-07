@@ -336,77 +336,59 @@ class VolumeService:
 
         return None
 
-    async def check_quota(
-        self,
-        volume_id: str,
-        plan_disk_limit: str
-    ) -> Dict[str, Any]:
-        """Check if volume size is within plan limit"""
-        volume = await self.get_volume(volume_id)
-        if not volume:
-            return {"allowed": False, "reason": "Volume not found"}
-
-        # Update size before checking
-        await self.update_volume_size(volume_id)
-        await self.db.refresh(volume)
-
-        # Parse plan limit
-        plan_bytes = self._parse_memory(plan_disk_limit)
-
-        if volume.size_bytes > plan_bytes:
-            over_by = volume.size_bytes - plan_bytes
-            return {
-                "allowed": False,
-                "reason": (
-                    f"Volume size ({self._human_size(volume.size_bytes)}) exceeds "
-                    f"plan limit ({plan_disk_limit}). "
-                    f"Free up {self._human_size(over_by)} or upgrade your plan."
-                ),
-                "volume_size": volume.size_bytes,
-                "plan_limit": plan_bytes,
-                "over_by": over_by,
-            }
-
-        return {"allowed": True}
-
-    async def check_aggregate_quota(
+    async def check_volumes_quota(
         self,
         volume_ids: List[str],
         plan_disk_limit: str
     ) -> Dict[str, Any]:
-        """Check if the total size of all mounted volumes is within plan limit.
+        """Batch quota check: fetches all volumes once, updates sizes once,
+        and performs both per-volume and aggregate checks in-memory.
 
-        This prevents users from circumventing per-volume checks by mounting
-        multiple volumes whose individual sizes are under the plan limit but
-        whose combined size exceeds it.
-
-        Uses max_size_bytes when available (potential capacity) otherwise falls
-        back to size_bytes (current usage) for a conservative check.
+        This eliminates the N+1 pattern of calling check_quota() and
+        check_aggregate_quota() separately for the same volumes.
         """
-        total_bytes = 0
-        volume_sizes = []
+        # 1. Batch fetch all volumes
+        result = await self.db.execute(
+            select(Volume).where(Volume.id.in_(volume_ids))
+        )
+        volumes = {str(v.id): v for v in result.scalars().all()}
 
-        for volume_id in volume_ids:
-            volume = await self.get_volume(volume_id)
-            if not volume:
-                return {"allowed": False, "reason": f"Volume {volume_id} not found"}
+        if missing := set(volume_ids) - set(volumes):
+            return {
+                "allowed": False,
+                "reason": f"Volume(s) not found: {', '.join(sorted(missing))}"
+            }
 
-            # Update size before checking
-            await self.update_volume_size(volume_id)
-            await self.db.refresh(volume)
+        # 2. Update sizes once per volume on the ORM objects
+        # (caller is responsible for committing the session)
+        for vid in volume_ids:
+            volume = volumes[vid]
+            size_bytes = await self.get_volume_size(volume.name)
+            if size_bytes is not None and volume.size_bytes != size_bytes:
+                volume.size_bytes = size_bytes
 
-            # Use max_size_bytes if set, otherwise fall back to current size_bytes
-            effective_size = volume.max_size_bytes if volume.max_size_bytes is not None else (volume.size_bytes or 0)
-            total_bytes += effective_size
-            volume_sizes.append({
-                "volume_id": volume_id,
-                "size_bytes": volume.size_bytes or 0,
-                "max_size_bytes": volume.max_size_bytes,
-                "effective_size": effective_size,
-                "name": volume.display_name or volume.name,
-            })
-
+        # 3. Parse plan limit once
         plan_bytes = self._parse_memory(plan_disk_limit)
+
+        # 4. Per-volume checks
+        for vid in volume_ids:
+            volume = volumes[vid]
+            if volume.size_bytes and volume.size_bytes > plan_bytes:
+                over_by = volume.size_bytes - plan_bytes
+                return {
+                    "allowed": False,
+                    "reason": (
+                        f"Volume '{volume.display_name or volume.name}' "
+                        f"({self._human_size(volume.size_bytes)}) exceeds plan limit "
+                        f"({plan_disk_limit}). Free up {self._human_size(over_by)} or upgrade your plan."
+                    )
+                }
+
+        # 5. Aggregate check
+        total_bytes = sum(
+            v.max_size_bytes if v.max_size_bytes is not None else (v.size_bytes or 0)
+            for v in volumes.values()
+        )
 
         if total_bytes > plan_bytes:
             over_by = total_bytes - plan_bytes
@@ -420,7 +402,6 @@ class VolumeService:
                 "total_size": total_bytes,
                 "plan_limit": plan_bytes,
                 "over_by": over_by,
-                "volumes": volume_sizes,
             }
 
         return {"allowed": True}

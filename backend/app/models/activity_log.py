@@ -8,6 +8,7 @@ class ActivityLog(Base):
     __tablename__ = "activity_logs"
     __table_args__ = (
         Index('ix_activity_logs_created_at', 'created_at'),
+        {"postgresql_partition_by": "RANGE (created_at)"},
     )
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -21,7 +22,7 @@ class ActivityLog(Base):
     request_id = Column(UUID(as_uuid=True), nullable=True)
     ip_address = Column(INET, nullable=True)
     user_agent = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=utc_now)
+    created_at = Column(DateTime, default=utc_now, nullable=False, primary_key=True)
 
     def to_dict(self):
         return {

@@ -193,6 +193,7 @@ class WorkspaceService:
         result = await self.db.execute(
             select(SharedWorkspace)
             .options(
+                selectinload(SharedWorkspace.owner),
                 selectinload(SharedWorkspace.members).selectinload(WorkspaceMember.user),
                 selectinload(SharedWorkspace.volume_associations).selectinload(WorkspaceVolume.volume),
                 selectinload(SharedWorkspace.invitations).selectinload(WorkspaceInvitation.user),

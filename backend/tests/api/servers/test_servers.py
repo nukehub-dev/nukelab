@@ -157,12 +157,12 @@ class TestServerVolumeIntegration:
             mock_size.return_value = 16106127360  # 15GB
             
             # Should fail with 10GB plan
-            result = await service.check_quota(str(volume.id), "10g")
+            result = await service.check_volumes_quota([str(volume.id)], "10g")
             assert result["allowed"] is False
             assert "exceeds" in result["reason"].lower()
 
             # Should pass with 20GB plan
-            result = await service.check_quota(str(volume.id), "20g")
+            result = await service.check_volumes_quota([str(volume.id)], "20g")
             assert result["allowed"] is True
 
 
@@ -954,7 +954,7 @@ class TestCreateServerHappyPath:
                 vs_inst = MockVS.return_value
                 vs_inst.create_volume = mock.AsyncMock(return_value=real_vol)
                 vs_inst.check_quota = mock.AsyncMock(return_value={"allowed": True})
-                vs_inst.check_aggregate_quota = mock.AsyncMock(return_value={"allowed": True})
+                vs_inst.check_volumes_quota = mock.AsyncMock(return_value={"allowed": True})
                 vs_inst.record_mount = mock.AsyncMock()
                 vs_inst.mark_home_volume = mock.AsyncMock()
                 vs_inst._parse_memory = mock.Mock(return_value=10737418240)
@@ -1031,7 +1031,7 @@ class TestCreateServerHappyPath:
                 vs_inst = MockVS.return_value
                 vs_inst.create_volume = mock.AsyncMock(return_value=mock_vol)
                 vs_inst.check_quota = mock.AsyncMock(return_value={"allowed": True})
-                vs_inst.check_aggregate_quota = mock.AsyncMock(return_value={"allowed": True})
+                vs_inst.check_volumes_quota = mock.AsyncMock(return_value={"allowed": True})
                 vs_inst.record_mount = mock.AsyncMock()
                 vs_inst.mark_home_volume = mock.AsyncMock()
                 vs_inst._parse_memory = mock.Mock(return_value=10737418240)
@@ -1175,6 +1175,7 @@ class TestCreateServerVolumeQuotaFail:
             with mock.patch("app.services.volume_service.VolumeService") as MockVS:
                 vs_inst = MockVS.return_value
                 vs_inst.check_quota = mock.AsyncMock(return_value={"allowed": False, "reason": "over quota"})
+                vs_inst.check_volumes_quota = mock.AsyncMock(return_value={"allowed": False, "reason": "over quota"})
                 with mock.patch("app.services.plan_service.PlanService") as MockPS:
                     ps_inst = MockPS.return_value
                     ps_inst.can_user_use_plan = mock.AsyncMock(return_value=True)
@@ -1224,7 +1225,7 @@ class TestCreateServerException:
                 vs_inst = MockVS.return_value
                 vs_inst.create_volume = mock.AsyncMock(return_value=real_vol)
                 vs_inst.check_quota = mock.AsyncMock(return_value={"allowed": True})
-                vs_inst.check_aggregate_quota = mock.AsyncMock(return_value={"allowed": True})
+                vs_inst.check_volumes_quota = mock.AsyncMock(return_value={"allowed": True})
                 vs_inst._parse_memory = mock.Mock(return_value=10737418240)
 
                 with mock.patch("app.services.volume_access_service.VolumeAccessService") as MockVA:
@@ -1366,7 +1367,7 @@ class TestCreateServerValidationMore:
             with mock.patch("app.services.volume_service.VolumeService") as MockVS:
                 vs_inst = MockVS.return_value
                 vs_inst.check_quota = mock.AsyncMock(return_value={"allowed": True})
-                vs_inst.check_aggregate_quota = mock.AsyncMock(return_value={"allowed": False, "reason": "aggregate exceeded"})
+                vs_inst.check_volumes_quota = mock.AsyncMock(return_value={"allowed": False, "reason": "aggregate exceeded"})
                 with mock.patch("app.services.plan_service.PlanService") as MockPS:
                     ps_inst = MockPS.return_value
                     ps_inst.can_user_use_plan = mock.AsyncMock(return_value=True)
@@ -1428,7 +1429,7 @@ class TestCreateServerValidationMore:
                 vs_inst = MockVS.return_value
                 vs_inst.create_volume = mock.AsyncMock(return_value=real_vol)
                 vs_inst.check_quota = mock.AsyncMock(return_value={"allowed": True})
-                vs_inst.check_aggregate_quota = mock.AsyncMock(return_value={"allowed": True})
+                vs_inst.check_volumes_quota = mock.AsyncMock(return_value={"allowed": True})
                 vs_inst.record_mount = mock.AsyncMock()
                 vs_inst.mark_home_volume = mock.AsyncMock()
                 vs_inst._parse_memory = mock.Mock(return_value=10737418240)
@@ -2449,7 +2450,7 @@ class TestUpdateServerAdditionalBranches:
             with mock.patch("app.services.volume_service.VolumeService") as MockVS:
                 vs_inst = MockVS.return_value
                 vs_inst.check_quota = mock.AsyncMock(return_value={"allowed": True})
-                vs_inst.check_aggregate_quota = mock.AsyncMock(return_value={"allowed": True})
+                vs_inst.check_volumes_quota = mock.AsyncMock(return_value={"allowed": True})
 
                 with mock.patch("app.services.volume_access_service.VolumeAccessService") as MockVA:
                     va_inst = MockVA.return_value
@@ -2840,7 +2841,7 @@ class TestUpdateServerVolumeAutoCreate:
             vs_inst = MockVS.return_value
             vs_inst.create_volume = mock.AsyncMock(return_value=real_vol)
             vs_inst.check_quota = mock.AsyncMock(return_value={"allowed": True})
-            vs_inst.check_aggregate_quota = mock.AsyncMock(return_value={"allowed": True})
+            vs_inst.check_volumes_quota = mock.AsyncMock(return_value={"allowed": True})
             vs_inst.record_mount = mock.AsyncMock()
             vs_inst.mark_home_volume = mock.AsyncMock()
             vs_inst._parse_memory = mock.Mock(return_value=10737418240)
@@ -2914,7 +2915,7 @@ class TestCreateServerExceptionCleanup:
             vs_inst = MockVS.return_value
             vs_inst.create_volume = mock.AsyncMock(return_value=vol)
             vs_inst.check_quota = mock.AsyncMock(return_value={"allowed": True})
-            vs_inst.check_aggregate_quota = mock.AsyncMock(return_value={"allowed": True})
+            vs_inst.check_volumes_quota = mock.AsyncMock(return_value={"allowed": True})
             vs_inst.record_mount = mock.AsyncMock()
             vs_inst.mark_home_volume = mock.AsyncMock()
             vs_inst._parse_memory = mock.Mock(return_value=10737418240)
@@ -3066,6 +3067,7 @@ class TestRestartServerVolumeQuotaFail:
                     with mock.patch("app.services.volume_service.VolumeService") as MockVS:
                         vs_inst = MockVS.return_value
                         vs_inst.check_quota = mock.AsyncMock(return_value={"allowed": False, "reason": "quota exceeded"})
+                        vs_inst.check_volumes_quota = mock.AsyncMock(return_value={"allowed": False, "reason": "quota exceeded"})
                         response = await client.post(
                             f"/api/servers/{s1.id}/restart",
                             headers={"Authorization": f"Bearer {user_token}"}
@@ -3179,6 +3181,7 @@ class TestStartServerVolumeQuotaFail:
             with mock.patch("app.services.volume_service.VolumeService") as MockVS:
                 vs_inst = MockVS.return_value
                 vs_inst.check_quota = mock.AsyncMock(return_value={"allowed": False, "reason": "over quota"})
+                vs_inst.check_volumes_quota = mock.AsyncMock(return_value={"allowed": False, "reason": "over quota"})
                 response = await client.post(
                     f"/api/servers/{s1.id}/start",
                     headers={"Authorization": f"Bearer {user_token}"}
@@ -3245,7 +3248,7 @@ class TestStartServerVolumeRecording:
                 with mock.patch("app.services.volume_service.VolumeService") as MockVS:
                     vs_inst = MockVS.return_value
                     vs_inst.check_quota = mock.AsyncMock(return_value={"allowed": True})
-                    vs_inst.check_aggregate_quota = mock.AsyncMock(return_value={"allowed": True})
+                    vs_inst.check_volumes_quota = mock.AsyncMock(return_value={"allowed": True})
                     vs_inst.record_mount = mock.AsyncMock()
                     with mock.patch("app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()):
                         response = await client.post(
@@ -3287,7 +3290,7 @@ class TestStartServerVolumeRecording:
                 with mock.patch("app.services.volume_service.VolumeService") as MockVS:
                     vs_inst = MockVS.return_value
                     vs_inst.check_quota = mock.AsyncMock(return_value={"allowed": True})
-                    vs_inst.check_aggregate_quota = mock.AsyncMock(return_value={"allowed": True})
+                    vs_inst.check_volumes_quota = mock.AsyncMock(return_value={"allowed": True})
                     vs_inst.record_mount = mock.AsyncMock()
                     with mock.patch("app.services.notification_service.NotificationService") as MockNS:
                         ns_inst = MockNS.return_value
@@ -3493,7 +3496,7 @@ class TestStartServerAggregateQuotaFail:
             with mock.patch("app.services.volume_service.VolumeService") as MockVS:
                 vs_inst = MockVS.return_value
                 vs_inst.check_quota = mock.AsyncMock(return_value={"allowed": True})
-                vs_inst.check_aggregate_quota = mock.AsyncMock(return_value={"allowed": False, "reason": "aggregate exceeded"})
+                vs_inst.check_volumes_quota = mock.AsyncMock(return_value={"allowed": False, "reason": "aggregate exceeded"})
                 response = await client.post(
                     f"/api/servers/{s1.id}/start",
                     headers={"Authorization": f"Bearer {user_token}"}
@@ -3541,7 +3544,7 @@ class TestRestartServerAggregateQuotaFail:
                     with mock.patch("app.services.volume_service.VolumeService") as MockVS:
                         vs_inst = MockVS.return_value
                         vs_inst.check_quota = mock.AsyncMock(return_value={"allowed": True})
-                        vs_inst.check_aggregate_quota = mock.AsyncMock(return_value={"allowed": False, "reason": "aggregate exceeded"})
+                        vs_inst.check_volumes_quota = mock.AsyncMock(return_value={"allowed": False, "reason": "aggregate exceeded"})
                         response = await client.post(
                             f"/api/servers/{s1.id}/restart",
                             headers={"Authorization": f"Bearer {user_token}"}
@@ -3582,7 +3585,7 @@ class TestUpdateServerAggregateQuotaFail:
         with mock.patch("app.services.volume_service.VolumeService") as MockVS:
             vs_inst = MockVS.return_value
             vs_inst.check_quota = mock.AsyncMock(return_value={"allowed": True})
-            vs_inst.check_aggregate_quota = mock.AsyncMock(return_value={"allowed": False, "reason": "aggregate exceeded"})
+            vs_inst.check_volumes_quota = mock.AsyncMock(return_value={"allowed": False, "reason": "aggregate exceeded"})
             with mock.patch("app.services.volume_access_service.VolumeAccessService") as MockVA:
                 va_inst = MockVA.return_value
                 va_inst.can_access_volume = mock.AsyncMock(return_value=True)
@@ -3996,7 +3999,7 @@ class TestUpdateServerHomeVolumeMark:
         with mock.patch("app.services.volume_service.VolumeService") as MockVS:
             vs_inst = MockVS.return_value
             vs_inst.check_quota = mock.AsyncMock(return_value={"allowed": True})
-            vs_inst.check_aggregate_quota = mock.AsyncMock(return_value={"allowed": True})
+            vs_inst.check_volumes_quota = mock.AsyncMock(return_value={"allowed": True})
             vs_inst.record_mount = mock.AsyncMock()
             vs_inst.mark_home_volume = mock.AsyncMock()
             with mock.patch("app.services.volume_access_service.VolumeAccessService") as MockVA:

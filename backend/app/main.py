@@ -27,6 +27,17 @@ async def startup():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+    # Ensure partitions exist for time-series tables (safety net if Celery Beat is down)
+    try:
+        from app.db.partitioning import PartitionManager
+        async with AsyncSessionLocal() as db:
+            pm = PartitionManager(db)
+            for table in pm.PARTITION_CONFIG:
+                await pm.ensure_partitions(table, months_ahead=3)
+            await db.commit()
+    except Exception as e:
+        logger.warning(f"Failed to ensure partitions: {e}")
+
     # Seed default data
     try:
         from app.db.seed import seed_all

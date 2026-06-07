@@ -408,10 +408,8 @@ class TestBulkUserActionUnknown:
             headers={"Authorization": f"Bearer {admin_token}"},
             json={"action": "unknown", "user_ids": [str(test_user.id)]}
         )
-        assert response.status_code == 200
-        data = response.json()
-        assert len(data["results"]["failed"]) == 1
-        assert "unknown action" in data["results"]["failed"][0]["error"].lower()
+        assert response.status_code == 400
+        assert "unknown action" in response.json()["detail"].lower()
 
 
 class TestBulkServerActionBranches:
@@ -455,10 +453,8 @@ class TestBulkServerActionBranches:
             headers={"Authorization": f"Bearer {admin_token}"},
             json={"action": "unknown", "server_ids": [str(server.id)]}
         )
-        assert response.status_code == 200
-        data = response.json()
-        assert len(data["results"]["failed"]) == 1
-        assert "unknown action" in data["results"]["failed"][0]["error"].lower()
+        assert response.status_code == 400
+        assert "unknown action" in response.json()["detail"].lower()
 
 
 class TestSystemHealthDbError:
@@ -1257,21 +1253,17 @@ class TestUsersBulkAction:
 
     @pytest.mark.asyncio
     async def test_users_bulk_action_exception(self, client, admin_token):
-        """Exception on one user should be caught and reported."""
-        with mock.patch("app.api.admin.UserService") as mock_svc_cls:
-            mock_svc = mock_svc_cls.return_value
-            mock_svc.disable_user = mock.AsyncMock(side_effect=Exception("user locked"))
-
-            response = await client.post(
-                "/api/admin/users/bulk-action",
-                headers={"Authorization": f"Bearer {admin_token}"},
-                json={"action": "disable", "user_ids": [str(uuid_mod.uuid4())]},
-            )
+        """Missing user should be caught and reported in the failed list."""
+        response = await client.post(
+            "/api/admin/users/bulk-action",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"action": "disable", "user_ids": [str(uuid_mod.uuid4())]},
+        )
 
         assert response.status_code == 200
         data = response.json()
         assert len(data["results"]["failed"]) == 1
-        assert "user locked" in data["results"]["failed"][0]["error"].lower()
+        assert "not found" in data["results"]["failed"][0]["error"].lower()
 
 
 # ─────────────────────────────────────────────────────────────

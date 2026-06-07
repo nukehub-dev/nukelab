@@ -1,6 +1,6 @@
 # NukeLab Platform v2.0 — Architecture & Implementation Plan
 
-**Status**: Phase 5 & Phase 7 100% Complete · DB Pooling & Query Timeouts Delivered
+**Status**: Phase 5 & Phase 7 100% Complete · DB Pooling, Query Timeouts, & Redis Response Caching Delivered
 **Last Updated**: June 7, 2026  
 **Target Timeline**: 6+ months  
 **Tech Stack**: Vite + React 19 SPA, FastAPI, PostgreSQL 18, Redis, Traefik v3, Docker/Podman
@@ -40,6 +40,7 @@
 - **Graceful Shutdown** — `ShutdownCoordinator` with bounded timeouts: background task cancellation (3s), WebSocket drain (3s), metrics flush (5s), Redis stop (3s), DB engine dispose (3s); `/health` returns 503 during shutdown
 - **Request Size Limits** — `RequestSizeLimitMiddleware` with O(1) Content-Length fast path and chunked-transfer abort; 10 MB default
 - **Strict CORS** — Explicit origin whitelist, restricted methods/headers in production, preflight caching; rejects `*` with credentials
+- **Redis Response Caching** — `app.core.cache` with msgpack serialization, circuit breaker, stampede protection, and SET-based invalidation; caches `GET /servers/` and `GET /admin/servers` with 30s TTL; complete invalidation on all mutations
 
 ### Model Updates
 - **ServerPlan** — Added `max_runtime`, `idle_timeout`, `allow_scheduling`, `allow_snapshots`
@@ -48,7 +49,7 @@
 
 ### Tests
 - 500+ tests passing
-- Test files: `test_system.py`, `test_plans.py`, `test_credits.py`, `test_environments.py`, `test_auth.py`, `test_bulk.py`, `test_admin_workspaces.py`, `test_admin_volumes.py`, `test_ip_restrictions.py`, `test_volumes.py`, `test_security_headers.py`, `test_filesystem.py`, `test_config.py`, `test_csrf.py`, `test_maintenance_windows.py`, `test_shutdown.py`, `test_logging.py`, `test_request_size_limit.py`, `test_websocket_shutdown.py`
+- Test files: `test_system.py`, `test_plans.py`, `test_credits.py`, `test_environments.py`, `test_auth.py`, `test_bulk.py`, `test_admin_workspaces.py`, `test_admin_volumes.py`, `test_ip_restrictions.py`, `test_volumes.py`, `test_security_headers.py`, `test_filesystem.py`, `test_config.py`, `test_csrf.py`, `test_maintenance_windows.py`, `test_shutdown.py`, `test_logging.py`, `test_request_size_limit.py`, `test_websocket_shutdown.py`, `test_cache.py`, `test_redis_client.py`, `test_roles_cache.py`
 
 ---
 
@@ -1647,8 +1648,8 @@ Then the server stops and the bulk API returns success
 
 - [ ] **Performance**
   - [x] Database connection pooling — `pool_size`, `max_overflow`, `pool_timeout`, `pool_recycle`, `pool_pre_ping` wired into `create_async_engine`; asyncpg `command_timeout` for query abort
+  - [x] Redis response caching — msgpack serialization, circuit breaker, stampede protection, SET-based invalidation; server list + admin list endpoints; 30s TTL with proactive invalidation
   - [ ] Database query optimization
-  - [ ] Caching strategy (Redis)
   - [ ] CDN for static assets
   - [ ] PgBouncer setup
 
@@ -1739,6 +1740,7 @@ Then the deployment completes with zero downtime
   - [x] Security headers (HSTS, CSP) — `security-headers@file` and `csp-header@file` middlewares deployed in Traefik dynamic config
   - [x] CSRF protection — double-submit cookie pattern with smart exemptions
   - [x] IP allowlist/blocklist middleware with CIDR support, admin CRUD API, and UI
+  - [x] Redis response caching — msgpack + circuit breaker + stampede protection + SET-based invalidation
 
 - [x] **Database — Connection Pooling & Timeouts**
   - [x] SQLAlchemy `pool_recycle=3600` — stale connection recycling
@@ -1754,7 +1756,18 @@ Then the deployment completes with zero downtime
   - [x] WebSocket message-level throttling (120/min per user)
   - [x] 14 tests covering all tiers, expired JWT, Redis fail-open, strict endpoints
 
-#### Status: Complete ✅ — All Phase 7 quick wins delivered; graceful shutdown, request size limits, strict CORS, structured logging, HTTP metrics, and connection pooling all implemented and tested
+- [x] **Redis Response Caching**
+  - [x] Shared Redis client singleton (`app.core.redis_client`) — replaces ~15 ad-hoc `redis.from_url()` calls
+  - [x] `app.core.cache` utility — msgpack serialization (faster + more compact than JSON), base64-safe storage with `decode_responses=True`
+  - [x] Circuit breaker — in-memory `_CacheCircuitBreaker` with CLOSED/OPEN/HALF_OPEN states; 5-failure threshold, 30s recovery timeout; prevents hammering degraded Redis
+  - [x] Stampede protection — `cache_get_or_set` with Redis `SET NX EX` lock; only one coroutine rebuilds; waiters poll and retry
+  - [x] SET-based invalidation — `cache_track_key` + `cache_delete_tracked` using Redis SETs for O(M) deletion instead of O(N) SCAN
+  - [x] Server list caching — `GET /servers/` cached per-user (30s TTL); `GET /admin/servers` cached per query params (30s TTL)
+  - [x] Complete invalidation — all 8 mutation paths invalidate: create, start, stop, restart, delete, update, bulk-action, ping-activity
+  - [x] Fail-safe — Redis errors logged and treated as cache misses; never returns 500 due to cache failure
+  - [x] 32 tests covering serialization, all primitives, stampede protection, SET tracking, circuit breaker states
+
+#### Status: Complete ✅ — All Phase 7 quick wins delivered; graceful shutdown, request size limits, strict CORS, structured logging, HTTP metrics, connection pooling, and Redis response caching all implemented and tested
 
 ---
 
@@ -1821,6 +1834,9 @@ nukelab/
 │   ├── core/                        # Core modules
 │   │   ├── __init__.py
 │   │   ├── security.py              # JWT, bcrypt, permissions
+│   │   ├── roles.py                 # Role-permission matrix with precomputed O(1) expansion cache
+│   │   ├── cache.py                 # Redis caching: msgpack, circuit breaker, stampede protection, SET invalidation
+│   │   ├── redis_client.py          # Shared async Redis client singleton
 │   │   ├── exceptions.py            # Custom exceptions
 │   │   ├── logging.py               # Structured logging (JSON/text formatters)
 │   │   └── context.py               # contextvars (correlation_id)
@@ -2261,8 +2277,8 @@ DEFAULT_MAX_SERVERS=3
 
 ---
 
-**Next Steps**: Phases 1–5 and 7 are complete. Platform is production-hardened with structured logging, metrics, graceful shutdown, rate limiting, CSRF, security headers, IP restrictions, request size limits, and database connection pooling. Recommended next work:
+**Next Steps**: Phases 1–5 and 7 are complete. Platform is production-hardened with structured logging, metrics, graceful shutdown, rate limiting, CSRF, security headers, IP restrictions, request size limits, database connection pooling, and Redis response caching. Recommended next work:
 
-1. **Redis caching layer for hot reads** (permissions, server lists, system config) — high impact, medium effort
-2. **Database query optimization + E2E tests (Playwright)** — parallel tracks for stability
+1. **Database query optimization** — analyze slow queries, add missing indexes, optimize N+1 patterns
+2. **E2E tests (Playwright)** — critical user flows: login, spawn server, stop server, admin bulk actions
 3. **Phase 6 items** (Kubernetes, CI/CD, Prometheus/Grafana) remain future goals for multi-node scaling

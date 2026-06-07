@@ -130,6 +130,10 @@ celery_app.conf.update(
             'task': 'app.tasks.cleanup_expired_data',
             'schedule': crontab(hour=4, minute=0),  # Daily at 4 AM
         },
+        'ensure-partitions': {
+            'task': 'app.tasks.ensure_partitions',
+            'schedule': crontab(hour=0, minute=5),  # Daily at 00:05
+        },
     },
 )
 

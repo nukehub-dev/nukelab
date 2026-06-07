@@ -17,6 +17,7 @@ class RequestMetric(Base):
     __table_args__ = (
         Index('ix_request_metrics_path_status', 'path', 'status_code'),
         Index('ix_request_metrics_created_at', 'created_at'),
+        {"postgresql_partition_by": "RANGE (created_at)"},
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -28,7 +29,7 @@ class RequestMetric(Base):
     ip_address = Column(INET, nullable=True)
     user_agent = Column(String, nullable=True)
     correlation_id = Column(String(36), nullable=True, index=True)
-    created_at = Column(DateTime, default=utc_now)
+    created_at = Column(DateTime, default=utc_now, nullable=False, primary_key=True)
 
     def to_dict(self):
         return {

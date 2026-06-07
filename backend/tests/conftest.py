@@ -49,10 +49,36 @@ async def setup_test_database():
 
     await admin_engine.dispose()
 
+    # Create pg_stat_statements extension in test database (matches production)
+    async with test_engine.begin() as conn:
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_stat_statements"))
+
     # Create all tables in test database
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
+
+    # Create partitions for time-series tables so INSERTs don't fail
+    from datetime import datetime, timezone
+    from dateutil.relativedelta import relativedelta
+    now = datetime.now(timezone.utc)
+    start = now.strftime("%Y-%m-01")
+    end = (now + relativedelta(months=1)).strftime("%Y-%m-01")
+    partitioned = {
+        "activity_logs": "created_at",
+        "server_metrics": "collected_at",
+        "request_metrics": "created_at",
+    }
+    async with test_engine.begin() as conn:
+        for table in partitioned:
+            await conn.execute(text(f'CREATE TABLE IF NOT EXISTS "{table}_default" PARTITION OF "{table}" DEFAULT'))
+            part_name = f"{table}_y{now.year}m{now.month:02d}"
+            await conn.execute(
+                text(
+                    f'CREATE TABLE IF NOT EXISTS "{part_name}" PARTITION OF "{table}" '
+                    f"FOR VALUES FROM ('{start}') TO ('{end}')"
+                )
+            )
 
     # Patch app.db.session to use test_engine so middleware/tasks also
     # connect to the test database instead of the main database.

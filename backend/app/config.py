@@ -100,6 +100,10 @@ class Settings(BaseSettings):
     database_query_timeout_seconds: int = 30  # asyncpg command_timeout (seconds)
     database_echo: bool = False
 
+    # Observability — Query Performance Monitoring
+    observability_slow_query_threshold_ms: int = 100
+    observability_pg_stat_statements_enabled: bool = True
+
     redis_url: str = "redis://redis:6379/0"
     redis_password: str = ""
     redis_db: int = 0

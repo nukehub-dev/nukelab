@@ -864,3 +864,26 @@ def cleanup_expired_data(self):
         return _run_async(_cleanup())
     except Exception as e:
         return f"Error in cleanup: {e}"
+
+
+@celery_app.task(bind=True)
+def ensure_partitions(self):
+    """Create upcoming monthly partitions for time-series tables.
+    Runs daily via Celery Beat to ensure partitions exist before data arrives.
+    """
+    async def _ensure():
+        from app.db.partitioning import PartitionManager
+
+        async with AsyncSessionLocal() as db:
+            pm = PartitionManager(db)
+            created_all = []
+            for table in pm.PARTITION_CONFIG:
+                created = await pm.ensure_partitions(table, months_ahead=3)
+                created_all.extend(created)
+            await db.commit()
+            return f"Partitions ensured: {len(created_all)} created ({', '.join(created_all)})"
+
+    try:
+        return _run_async(_ensure())
+    except Exception as e:
+        return f"Error ensuring partitions: {e}"

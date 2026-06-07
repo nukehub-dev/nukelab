@@ -10,6 +10,7 @@ class ServerMetric(Base):
     __table_args__ = (
         Index('ix_server_metrics_collected_at', 'collected_at'),
         Index('ix_server_metrics_server_id_collected_at', 'server_id', 'collected_at'),
+        {"postgresql_partition_by": "RANGE (collected_at)"},
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -52,8 +53,8 @@ class ServerMetric(Base):
     # Process
     pids = Column(Integer)
 
-    # Timestamp
-    collected_at = Column(DateTime, nullable=False, default=utc_now)
+    # Timestamp (partition key — must be part of PK)
+    collected_at = Column(DateTime, nullable=False, default=utc_now, primary_key=True)
 
     def to_dict(self):
         return {

@@ -79,12 +79,12 @@ async def get_admin_stats(
     disabled_users = total_users - active_users
     
     # Users by role
-    role_stats = {}
+    result = await db.execute(
+        select(User.role, func.count()).group_by(User.role)
+    )
+    role_stats = dict(result.all())
     for role in ["super_admin", "admin", "moderator", "support", "user", "guest"]:
-        result = await db.execute(
-            select(func.count()).where(User.role == role)
-        )
-        role_stats[role] = result.scalar()
+        role_stats.setdefault(role, 0)
     
     # Server stats
     total_servers_result = await db.execute(select(func.count()).select_from(Server))
@@ -201,24 +201,83 @@ async def bulk_user_action(
     _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
-    """Perform bulk action on users"""
-    service = UserService(db)
+    """Perform bulk action on users (atomic batch operation)."""
+    import os
+    from uuid import UUID
+    from app.config import settings
+    
     results = {"success": [], "failed": []}
     
-    for user_id in body.user_ids:
-        try:
-            if body.action == "disable":
-                await service.disable_user(user_id, disabled=True)
-            elif body.action == "enable":
-                await service.disable_user(user_id, disabled=False)
-            elif body.action == "delete":
-                await service.delete_user(user_id)
-            else:
-                raise ValueError(f"Unknown action: {body.action}")
-            
-            results["success"].append(user_id)
-        except Exception as e:
-            results["failed"].append({"user_id": user_id, "error": str(e)})
+    # Convert and validate UUIDs
+    try:
+        user_uuids = [UUID(uid) for uid in body.user_ids]
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid user ID format: {e}"
+        )
+    
+    # Batch fetch all users
+    result = await db.execute(
+        select(User).where(User.id.in_(user_uuids))
+    )
+    users = {str(u.id): u for u in result.scalars().all()}
+    
+    # Track missing users
+    missing = set(body.user_ids) - set(users)
+    for uid in missing:
+        results["failed"].append({"user_id": uid, "error": "User not found"})
+    
+    deleted_users: list[User] = []
+
+    if body.action == "delete":
+        for uid, user in users.items():
+            if uid in missing:
+                continue
+            try:
+                await db.delete(user)
+                results["success"].append(uid)
+                deleted_users.append(user)
+            except Exception as e:
+                results["failed"].append({"user_id": uid, "error": str(e)})
+    elif body.action in ("disable", "enable"):
+        disabled = body.action == "disable"
+        for uid, user in users.items():
+            if uid in missing:
+                continue
+            try:
+                user.is_active = not disabled
+                security = dict(user.security or {})
+                if disabled:
+                    security["disabled_reason"] = None
+                    security["disabled_at"] = datetime.now(UTC).replace(tzinfo=None).isoformat()
+                else:
+                    security.pop("disabled_reason", None)
+                    security.pop("disabled_at", None)
+                user.security = security
+                results["success"].append(uid)
+            except Exception as e:
+                results["failed"].append({"user_id": uid, "error": str(e)})
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown action: {body.action}"
+        )
+    
+    # Single atomic commit for all successful changes
+    await db.commit()
+    
+    # Clean up avatar files only after successful DB commit
+    if body.action == "delete" and deleted_users:
+        avatars_dir = os.path.join(settings.upload_dir, "avatars")
+        if os.path.isdir(avatars_dir):
+            for user in deleted_users:
+                try:
+                    for old_file in os.listdir(avatars_dir):
+                        if old_file.startswith(str(user.id)):
+                            os.remove(os.path.join(avatars_dir, old_file))
+                except Exception:
+                    pass
     
     return {
         "message": f"Processed {len(body.user_ids)} users",
@@ -304,51 +363,83 @@ async def bulk_server_action(
     _jwt = Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db)
 ):
-    """Perform bulk action on servers"""
+    """Perform bulk action on servers (batch fetch, single commit)."""
     from app.container.spawner import spawner
+    from uuid import UUID
+    
+    # Validate action up front
+    if body.action not in ("start", "stop", "delete"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown action: {body.action}"
+        )
     
     results = {"success": [], "failed": []}
     affected_user_ids: set[str] = set()
-
+    status_changes: list[tuple[str, str, str]] = []  # (user_id, server_id, status)
+    
+    # Validate UUIDs
+    try:
+        server_uuids = [UUID(sid) for sid in body.server_ids]
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid server ID format"
+        )
+    
+    # Batch fetch all servers
+    result = await db.execute(
+        select(Server).where(Server.id.in_(server_uuids))
+    )
+    servers = {str(s.id): s for s in result.scalars().all()}
+    
+    # Track missing servers
+    missing = set(body.server_ids) - set(servers)
+    for sid in missing:
+        results["failed"].append({"server_id": sid, "error": "Server not found"})
+    
+    # Process actions
     for server_id in body.server_ids:
+        if server_id in missing:
+            continue
+        
+        server = servers[server_id]
         try:
-            result = await db.execute(
-                select(Server).where(Server.id == server_id)
-            )
-            server = result.scalar_one_or_none()
-
-            if not server:
-                results["failed"].append({"server_id": server_id, "error": "Server not found"})
-                continue
-
             if body.action == "start":
                 if server.container_id:
                     await spawner.start(server.container_id)
                     server.status = "running"
+                    status_changes.append((str(server.user_id), server_id, "running"))
             elif body.action == "stop":
                 if server.container_id:
                     await spawner.stop(server.container_id)
                     server.status = "stopped"
+                    status_changes.append((str(server.user_id), server_id, "stopped"))
             elif body.action == "delete":
+                user_id = str(server.user_id)
                 if server.container_id:
                     await spawner.delete(server.container_id)
                 await db.delete(server)
-            else:
-                raise ValueError(f"Unknown action: {body.action}")
-
-            await db.commit()
+                affected_user_ids.add(user_id)
+            
             if body.action in ("start", "stop"):
-                await broadcast_server_status_change(server.user_id, str(server.id), server.status)
+                affected_user_ids.add(str(server.user_id))
             results["success"].append(server_id)
-            affected_user_ids.add(str(server.user_id))
         except Exception as e:
             results["failed"].append({"server_id": server_id, "error": str(e)})
-
+    
+    # Single atomic commit for all successful DB changes
+    await db.commit()
+    
+    # Broadcast status changes after successful commit
+    for user_id, sid, srv_status in status_changes:
+        await broadcast_server_status_change(user_id, sid, srv_status)
+    
     # Invalidate caches for all affected users + admin lists
     from app.api.servers import _invalidate_server_list_cache
     for uid in affected_user_ids:
         await _invalidate_server_list_cache(uid)
-
+    
     return {
         "message": f"Processed {len(body.server_ids)} servers",
         "action": body.action,
@@ -1532,44 +1623,41 @@ async def get_health_monitoring(
             })
 
     # Summary counts — count ALL running servers by their latest health status
-    # Uses a single optimized query with a CTE-like subquery
+    # Uses a window function to get the latest check per server entirely in SQL
     status_counts = {}
     unhealthy_count = 0
     unknown_count = 0
     restarting_count = 0
     restart_failed_count = 0
 
-    # Get all running server IDs for summary (just IDs, light query)
-    all_running_result = await db.execute(
-        select(Server.id).where(Server.status == "running")
+    # Pure SQL approach — no Python round-trip of server IDs
+    latest_check_subq = (
+        select(
+            HealthCheck.server_id,
+            HealthCheck.status,
+            func.row_number().over(
+                partition_by=HealthCheck.server_id,
+                order_by=desc(HealthCheck.checked_at)
+            ).label("rn")
+        )
+        .join(Server, HealthCheck.server_id == Server.id)
+        .where(
+            Server.status == "running",
+            HealthCheck.checked_at >= recent
+        )
+        .subquery()
     )
-    all_running_ids = [row[0] for row in all_running_result.all()]
 
-    if all_running_ids:
-        # Get latest check status for each running server
-        summary_subq = (
-            select(
-                HealthCheck.server_id,
-                HealthCheck.status
-            )
-            .distinct(HealthCheck.server_id)
-            .where(
-                HealthCheck.server_id.in_(all_running_ids),
-                HealthCheck.checked_at >= recent
-            )
-            .order_by(HealthCheck.server_id, desc(HealthCheck.checked_at))
-            .subquery()
-        )
-
-        summary_result = await db.execute(
-            select(summary_subq.c.status, func.count())
-            .group_by(summary_subq.c.status)
-        )
-        status_counts = {status: count for status, count in summary_result.all()}
-        unhealthy_count = status_counts.get('unhealthy', 0)
-        unknown_count = status_counts.get('unknown', 0)
-        restarting_count = status_counts.get('restarting', 0)
-        restart_failed_count = status_counts.get('restart_failed', 0)
+    summary_result = await db.execute(
+        select(latest_check_subq.c.status, func.count())
+        .where(latest_check_subq.c.rn == 1)
+        .group_by(latest_check_subq.c.status)
+    )
+    status_counts = {status: count for status, count in summary_result.all()}
+    unhealthy_count = status_counts.get('unhealthy', 0)
+    unknown_count = status_counts.get('unknown', 0)
+    restarting_count = status_counts.get('restarting', 0)
+    restart_failed_count = status_counts.get('restart_failed', 0)
 
     container_data = {
         "status_counts": status_counts,
