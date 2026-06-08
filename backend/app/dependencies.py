@@ -6,7 +6,7 @@ from typing import List
 from fastapi import Depends, HTTPException, status, Response
 from app.api.auth import get_current_user
 from app.core.permissions import Permission
-from app.core.security import has_permission, has_any_permission
+from app.core.security import has_permission, has_any_permission, has_all_permissions
 from app.models.user import User
 
 

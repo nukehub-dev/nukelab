@@ -98,7 +98,7 @@ class TestServerAuthTokenGeneration:
         from app.services.server_auth_service import server_auth_service
         from app.config import settings
 
-        before = datetime.now(UTC).replace(tzinfo=None)
+        before = datetime.now(UTC)
 
         token = await server_auth_service.generate_access_token(
             db=db_session,
@@ -108,8 +108,8 @@ class TestServerAuthTokenGeneration:
         )
 
         claims = jwt.decode(token, key="", audience=str(test_server.id), options={"verify_signature": False})
-        exp = datetime.utcfromtimestamp(claims["exp"])
-        iat = datetime.utcfromtimestamp(claims["iat"])
+        exp = datetime.fromtimestamp(claims["exp"], UTC)
+        iat = datetime.fromtimestamp(claims["iat"], UTC)
 
         # Token should expire within configured TTL + small buffer
         ttl = timedelta(seconds=settings.server_auth_token_ttl)
@@ -200,7 +200,7 @@ class TestServerAuthTokenVerification:
             public_key = server_auth_service.get_public_key_pem()
 
             with pytest.raises(ExpiredSignatureError):
-                jwt.decode(token, public_key, algorithms=["RS256"])
+                jwt.decode(token, public_key, algorithms=["RS256"], audience=str(test_server.id))
         finally:
             settings.server_auth_token_ttl = original_ttl
 

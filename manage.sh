@@ -218,12 +218,15 @@ services:
   backend:
     volumes:
       - ./backend:/app:Z
+      - ./resources:/app/resources:ro
   celery-worker:
     volumes:
       - ./backend:/app:Z
+      - ./resources:/app/resources:ro
   celery-beat:
     volumes:
       - ./backend:/app:Z
+      - ./resources:/app/resources:ro
 EOF
         COMPOSE_ARGS=(-f "$COMPOSE_FILE" -f "$DEV_COMPOSE_FILE")
     else

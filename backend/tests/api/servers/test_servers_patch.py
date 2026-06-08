@@ -316,6 +316,7 @@ class TestPatchVolumeMounts:
             mock_vol = mock_vol_cls.return_value
             mock_vol.check_quota = mock.AsyncMock(return_value={"allowed": True})
             mock_vol.check_aggregate_quota = mock.AsyncMock(return_value={"allowed": True})
+            mock_vol.check_volumes_quota = mock.AsyncMock(return_value={"allowed": True})
             mock_vol.get_volume = mock.AsyncMock(return_value=patch_volume)
             mock_vol.mark_home_volume = mock.AsyncMock()
 
@@ -380,6 +381,7 @@ class TestPatchVolumeMounts:
             mock_vol.create_volume = mock.AsyncMock(return_value=auto_vol)
             mock_vol.check_quota = mock.AsyncMock(return_value={"allowed": True})
             mock_vol.check_aggregate_quota = mock.AsyncMock(return_value={"allowed": True})
+            mock_vol.check_volumes_quota = mock.AsyncMock(return_value={"allowed": True})
             mock_vol.mark_home_volume = mock.AsyncMock()
 
             with mock.patch(
@@ -451,7 +453,7 @@ class TestPatchVolumeMounts:
         """Single volume quota exceeded should return 400."""
         with mock.patch("app.services.volume_service.VolumeService") as mock_vol_cls:
             mock_vol = mock_vol_cls.return_value
-            mock_vol.check_quota = mock.AsyncMock(
+            mock_vol.check_volumes_quota = mock.AsyncMock(
                 return_value={"allowed": False, "reason": "single quota exceeded"}
             )
 
@@ -486,8 +488,7 @@ class TestPatchVolumeMounts:
         """Aggregate volume quota exceeded should return 400."""
         with mock.patch("app.services.volume_service.VolumeService") as mock_vol_cls:
             mock_vol = mock_vol_cls.return_value
-            mock_vol.check_quota = mock.AsyncMock(return_value={"allowed": True})
-            mock_vol.check_aggregate_quota = mock.AsyncMock(
+            mock_vol.check_volumes_quota = mock.AsyncMock(
                 return_value={"allowed": False, "reason": "aggregate quota exceeded"}
             )
 

@@ -145,7 +145,7 @@ class TestCSRFMiddlewareUnit:
                 messages.append(message)
 
             await middleware(
-                {"type": "http", "method": "POST", "path": "/api/test"},
+                {"type": "http", "method": "POST", "path": "/api/test", "headers": []},
                 None,
                 capture_send,
             )

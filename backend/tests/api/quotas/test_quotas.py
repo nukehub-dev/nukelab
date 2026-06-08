@@ -186,20 +186,7 @@ class TestQuotasEndpoints:
         data = response.json()
         assert data["success"] is True
 
-    @pytest.mark.asyncio
-    @pytest.mark.skip(reason="Quota service causes DB deadlocks in test transaction isolation")
-    async def test_get_user_quota_admin(self, client, admin_token, test_user):
-        pass
 
-    @pytest.mark.asyncio
-    @pytest.mark.skip(reason="Quota service causes DB deadlocks in test transaction isolation")
-    async def test_update_user_quota_admin(self, client, admin_token, test_user):
-        pass
-
-    @pytest.mark.asyncio
-    @pytest.mark.skip(reason="Quota service causes DB deadlocks in test transaction isolation")
-    async def test_check_spawn_allowed_admin(self, client, admin_token):
-        pass
 
 
 

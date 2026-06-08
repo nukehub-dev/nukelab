@@ -354,7 +354,7 @@ class TestVolumeServiceDelete:
 
 
 class TestVolumeServiceQuota:
-    """Tests for check_quota and check_aggregate_quota."""
+    """Tests for check_volumes_quota batch quota check."""
 
     @pytest.mark.asyncio
     async def test_check_quota_allowed(self, db_session, vol_service, test_user):
@@ -363,8 +363,8 @@ class TestVolumeServiceQuota:
         await db_session.commit()
         await db_session.refresh(vol)
 
-        with mock.patch.object(vol_service, "update_volume_size", return_value=100):
-            result = await vol_service.check_quota(str(vol.id), "10g")
+        with mock.patch.object(vol_service, "get_volume_size", return_value=None):
+            result = await vol_service.check_volumes_quota([str(vol.id)], "10g")
 
         assert result["allowed"] is True
 
@@ -375,17 +375,17 @@ class TestVolumeServiceQuota:
         await db_session.commit()
         await db_session.refresh(vol)
 
-        with mock.patch.object(vol_service, "update_volume_size", return_value=200):
-            result = await vol_service.check_quota(str(vol.id), "1b")
+        with mock.patch.object(vol_service, "get_volume_size", return_value=None):
+            result = await vol_service.check_volumes_quota([str(vol.id)], "1b")
 
         assert result["allowed"] is False
         assert "exceeds" in result["reason"]
 
     @pytest.mark.asyncio
     async def test_check_quota_volume_not_found(self, vol_service):
-        result = await vol_service.check_quota(str(uuid.uuid4()), "10g")
+        result = await vol_service.check_volumes_quota([str(uuid.uuid4())], "10g")
         assert result["allowed"] is False
-        assert "Volume not found" in result["reason"]
+        assert "not found" in result["reason"]
 
     @pytest.mark.asyncio
     async def test_check_aggregate_allowed(self, db_session, vol_service, test_user):
@@ -396,8 +396,8 @@ class TestVolumeServiceQuota:
         await db_session.refresh(vol1)
         await db_session.refresh(vol2)
 
-        with mock.patch.object(vol_service, "update_volume_size", return_value=100):
-            result = await vol_service.check_aggregate_quota([str(vol1.id), str(vol2.id)], "10g")
+        with mock.patch.object(vol_service, "get_volume_size", return_value=None):
+            result = await vol_service.check_volumes_quota([str(vol1.id), str(vol2.id)], "10g")
 
         assert result["allowed"] is True
 
@@ -410,11 +410,11 @@ class TestVolumeServiceQuota:
         await db_session.refresh(vol1)
         await db_session.refresh(vol2)
 
-        with mock.patch.object(vol_service, "update_volume_size", return_value=200):
-            result = await vol_service.check_aggregate_quota([str(vol1.id), str(vol2.id)], "1b")
+        with mock.patch.object(vol_service, "get_volume_size", return_value=None):
+            result = await vol_service.check_volumes_quota([str(vol1.id), str(vol2.id)], "1b")
 
         assert result["allowed"] is False
-        assert "volumes" in result
+        assert "exceeds" in result["reason"]
 
     @pytest.mark.asyncio
     async def test_check_aggregate_missing_volume(self, db_session, vol_service, test_user):
@@ -422,8 +422,8 @@ class TestVolumeServiceQuota:
         db_session.add(vol)
         await db_session.commit()
 
-        with mock.patch.object(vol_service, "update_volume_size", return_value=100):
-            result = await vol_service.check_aggregate_quota([str(vol.id), str(uuid.uuid4())], "10g")
+        with mock.patch.object(vol_service, "get_volume_size", return_value=None):
+            result = await vol_service.check_volumes_quota([str(vol.id), str(uuid.uuid4())], "10g")
 
         assert result["allowed"] is False
         assert "not found" in result["reason"]

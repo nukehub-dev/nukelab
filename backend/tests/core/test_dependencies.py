@@ -101,12 +101,10 @@ class TestPermissionChecker:
             checker.require_any([Permission.ADMIN_ACCESS, Permission.USERS_READ])
         assert exc_info.value.status_code == 403
 
-    @pytest.mark.skip(reason="has_all_permissions import missing from app/dependencies.py")
     def test_require_all_allows(self, admin_user):
         checker = PermissionChecker(admin_user)
         checker.require_all([Permission.ADMIN_ACCESS, Permission.USERS_READ])
 
-    @pytest.mark.skip(reason="has_all_permissions import missing from app/dependencies.py")
     def test_require_all_raises(self, test_user):
         checker = PermissionChecker(test_user)
         with pytest.raises(HTTPException) as exc_info:

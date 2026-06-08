@@ -8,6 +8,13 @@ import os
 from app.services.system_metrics_collector import SystemMetricsCollector
 
 
+def _mock_session():
+    """Return a mock async DB session where add() is sync (not awaited)."""
+    s = mock.AsyncMock()
+    s.add = mock.Mock()
+    return s
+
+
 class TestSystemMetricsCollect:
     """Tests for the collect method."""
 
@@ -44,7 +51,7 @@ class TestSystemMetricsCollect:
                                     with mock.patch("asyncio.sleep"):
                                         with mock.patch("app.services.system_metrics_collector.get_fresh_container_client", side_effect=Exception("no docker")):
                                             with mock.patch("sqlalchemy.ext.asyncio.create_async_engine"):
-                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=lambda: mock.AsyncMock()):
+                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=_mock_session):
                                                     with mock.patch("redis.asyncio.from_url"):
                                                         result = await collector.collect()
 
@@ -71,7 +78,7 @@ class TestSystemMetricsCollect:
                                     with mock.patch("asyncio.sleep"):
                                         with mock.patch("app.services.system_metrics_collector.get_fresh_container_client", side_effect=Exception("no docker")):
                                             with mock.patch("sqlalchemy.ext.asyncio.create_async_engine"):
-                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=lambda: mock.AsyncMock()):
+                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=_mock_session):
                                                     with mock.patch("redis.asyncio.from_url"):
                                                         result = await collector.collect()
 
@@ -103,7 +110,7 @@ class TestSystemMetricsCollect:
                                     with mock.patch("asyncio.sleep"):
                                         with mock.patch("app.services.system_metrics_collector.get_fresh_container_client", return_value=mock_client):
                                             with mock.patch("sqlalchemy.ext.asyncio.create_async_engine"):
-                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=lambda: mock.AsyncMock()):
+                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=_mock_session):
                                                     with mock.patch("redis.asyncio.from_url"):
                                                         result = await collector.collect()
 
@@ -136,7 +143,7 @@ class TestSystemMetricsCollect:
                                     with mock.patch("asyncio.sleep"):
                                         with mock.patch("app.services.system_metrics_collector.get_fresh_container_client", side_effect=Exception("no docker")):
                                             with mock.patch("sqlalchemy.ext.asyncio.create_async_engine"):
-                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=lambda: mock.AsyncMock()):
+                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=_mock_session):
                                                     with mock.patch("redis.asyncio.from_url"):
                                                         result = await collector.collect()
 
@@ -209,7 +216,7 @@ class TestSystemMetricsCollectorEdgeCases:
                                     with mock.patch("asyncio.sleep"):
                                         with mock.patch("app.services.system_metrics_collector.get_fresh_container_client", return_value=mock_client):
                                             with mock.patch("sqlalchemy.ext.asyncio.create_async_engine"):
-                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=lambda: mock.AsyncMock()):
+                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=_mock_session):
                                                     with mock.patch("redis.asyncio.from_url"):
                                                         result = await collector.collect()
 
@@ -242,7 +249,7 @@ class TestSystemMetricsCollectorEdgeCases:
                                     with mock.patch("asyncio.sleep"):
                                         with mock.patch("app.services.system_metrics_collector.get_fresh_container_client", side_effect=Exception("no docker")):
                                             with mock.patch("sqlalchemy.ext.asyncio.create_async_engine"):
-                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=lambda: mock.AsyncMock()):
+                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=_mock_session):
                                                     with mock.patch("redis.asyncio.from_url"):
                                                         result = await collector.collect()
 
@@ -256,6 +263,7 @@ class TestSystemMetricsCollectorEdgeCases:
         collector = SystemMetricsCollector()
 
         mock_session = mock.AsyncMock()
+        mock_session.add = mock.Mock()
         mock_session.commit = mock.AsyncMock(side_effect=Exception("commit failed"))
         mock_session.rollback = mock.AsyncMock()
         mock_session.close = mock.AsyncMock()
@@ -296,7 +304,7 @@ class TestSystemMetricsCollectorEdgeCases:
                                     with mock.patch("asyncio.sleep"):
                                         with mock.patch("app.services.system_metrics_collector.get_fresh_container_client", side_effect=Exception("no docker")):
                                             with mock.patch("sqlalchemy.ext.asyncio.create_async_engine"):
-                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=lambda: mock.AsyncMock()):
+                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=_mock_session):
                                                     with mock.patch("redis.asyncio.from_url", side_effect=Exception("redis down")):
                                                         result = await collector.collect()
 
@@ -317,7 +325,7 @@ class TestSystemMetricsCollectorEdgeCases:
                                     with mock.patch("asyncio.sleep"):
                                         with mock.patch("app.services.system_metrics_collector.get_fresh_container_client", side_effect=Exception("no docker")):
                                             with mock.patch("sqlalchemy.ext.asyncio.create_async_engine"):
-                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=lambda: mock.AsyncMock()):
+                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=_mock_session):
                                                     with mock.patch("redis.asyncio.from_url"):
                                                         result = await collector.collect()
 
@@ -339,7 +347,7 @@ class TestSystemMetricsCollectorEdgeCases:
                                     with mock.patch("asyncio.sleep"):
                                         with mock.patch("app.services.system_metrics_collector.get_fresh_container_client", side_effect=Exception("no docker")):
                                             with mock.patch("sqlalchemy.ext.asyncio.create_async_engine"):
-                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=lambda: mock.AsyncMock()):
+                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=_mock_session):
                                                     with mock.patch("redis.asyncio.from_url"):
                                                         result = await collector.collect()
 
@@ -371,7 +379,7 @@ class TestSystemMetricsCollectorEdgeCases:
                                     with mock.patch("asyncio.sleep"):
                                         with mock.patch("app.services.system_metrics_collector.get_fresh_container_client", side_effect=Exception("no docker")):
                                             with mock.patch("sqlalchemy.ext.asyncio.create_async_engine"):
-                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=lambda: mock.AsyncMock()):
+                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=_mock_session):
                                                     with mock.patch("redis.asyncio.from_url"):
                                                         result = await collector.collect()
 
@@ -405,7 +413,7 @@ class TestSystemMetricsCollectorEdgeCases:
                                     with mock.patch("asyncio.sleep"):
                                         with mock.patch("app.services.system_metrics_collector.get_fresh_container_client", return_value=mock_client):
                                             with mock.patch("sqlalchemy.ext.asyncio.create_async_engine"):
-                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=lambda: mock.AsyncMock()):
+                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=_mock_session):
                                                     with mock.patch("redis.asyncio.from_url"):
                                                         result = await collector.collect()
 
@@ -430,7 +438,7 @@ class TestSystemMetricsCollectorEdgeCases:
                                     with mock.patch("asyncio.sleep"):
                                         with mock.patch("app.services.system_metrics_collector.get_fresh_container_client", side_effect=Exception("no docker")):
                                             with mock.patch("sqlalchemy.ext.asyncio.create_async_engine"):
-                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=lambda: mock.AsyncMock()):
+                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=_mock_session):
                                                     with mock.patch("redis.asyncio.from_url", return_value=mock_redis):
                                                         result = await collector.collect()
 
@@ -442,6 +450,7 @@ class TestSystemMetricsCollectorEdgeCases:
         collector = SystemMetricsCollector()
 
         mock_session = mock.AsyncMock()
+        mock_session.add = mock.Mock()
         mock_session.commit = mock.AsyncMock(side_effect=Exception("commit failed"))
         mock_session.rollback = mock.AsyncMock(side_effect=Exception("rollback failed"))
         mock_session.close = mock.AsyncMock()

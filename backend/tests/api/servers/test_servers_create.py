@@ -92,6 +92,7 @@ class TestCreateServerHappyPaths:
                             mock_vol.mark_home_volume = mock.AsyncMock()
                             mock_vol.check_quota = mock.AsyncMock(return_value={"allowed": True})
                             mock_vol.check_aggregate_quota = mock.AsyncMock(return_value={"allowed": True})
+                            mock_vol.check_volumes_quota = mock.AsyncMock(return_value={"allowed": True})
                             mock_vol._parse_memory = mock.Mock(return_value=10737418240)
                             with mock.patch("app.services.volume_access_service.VolumeAccessService") as mock_access_cls:
                                 mock_access = mock_access_cls.return_value
@@ -202,6 +203,7 @@ class TestCreateServerExceptionCleanup:
                         mock_vol.mark_home_volume = mock.AsyncMock()
                         mock_vol.check_quota = mock.AsyncMock(return_value={"allowed": True})
                         mock_vol.check_aggregate_quota = mock.AsyncMock(return_value={"allowed": True})
+                        mock_vol.check_volumes_quota = mock.AsyncMock(return_value={"allowed": True})
                         mock_vol._parse_memory = mock.Mock(return_value=10737418240)
                         with mock.patch("app.services.volume_access_service.VolumeAccessService") as mock_access_cls:
                             mock_access = mock_access_cls.return_value

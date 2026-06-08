@@ -80,7 +80,7 @@ class TestWebhookServiceDispatch:
             mock_session = MagicMock()
             mock_session.__aenter__ = AsyncMock(return_value=mock_session)
             mock_session.__aexit__ = AsyncMock(return_value=False)
-            mock_session.post = AsyncMock(return_value=mock_response)
+            mock_session.post = MagicMock(return_value=mock_response)
             mock_cls.return_value = mock_session
 
             result = await service.dispatch("https://example.com/hook", "test.event", {"id": 1})

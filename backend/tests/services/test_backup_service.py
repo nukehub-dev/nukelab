@@ -74,14 +74,11 @@ class TestBackupServiceCreateBackup:
         assert backups[0].status == "completed"
         assert backups[0].description == "Test backup"
 
-    @pytest.mark.skip(reason="Fallback path requires complex fs mocking")
     @pytest.mark.asyncio
     async def test_create_backup_fallback_mountpoint(self, db_session, backup_service, tmp_path, test_user):
         """Should use fallback mountpoint when volume has none."""
-        pass
-        # Skipped: the core logic is tested by other backup tests
         mock_cls = _make_mock_volume_service(None)
-        
+
         with mock.patch("app.services.backup_service.VolumeService", mock_cls):
             with mock.patch("app.services.notification_service.NotificationService") as mock_notif_cls:
                 mock_notif = mock.AsyncMock()
@@ -92,6 +89,13 @@ class TestBackupServiceCreateBackup:
                     mock_tar_open.return_value.__exit__ = mock.Mock(return_value=False)
                     with mock.patch("os.path.getsize", return_value=100):
                         result = await backup_service.create_backup("test-vol", str(test_user.id))
+
+        assert result["status"] == "completed"
+        assert result["volume_name"] == "test-vol"
+        # tar.add should be called with the fallback mountpoint
+        mock_tar.add.assert_called_once()
+        call_args = mock_tar.add.call_args[0]
+        assert "/var/lib/docker/volumes/test-vol/_data" in call_args[0]
 
         assert result["status"] == "completed"
         # Verify tar was created with fallback path

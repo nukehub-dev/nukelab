@@ -4,6 +4,17 @@ Uses transactional test isolation: each test runs inside a savepoint that is
 rolled back at teardown, guaranteeing a clean database state without TRUNCATE.
 """
 
+import os
+
+# Force all app code to connect to the test database.  Must happen BEFORE any
+# app module is imported so that app.db.session.engine is created with the test
+# URL and every module that imports AsyncSessionLocal gets a sessionmaker
+# bound to the test database.
+TEST_DATABASE_URL = "postgresql+asyncpg://nukelab:nukelab123@postgres:5432/nukelab_test"
+os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+
+import asyncio
+
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
@@ -21,10 +32,8 @@ from app.api.auth import get_password_hash
 # Import all models to register them with Base.metadata
 from app.models import *
 
-# Test database URL (same server, different database)
-TEST_DATABASE_URL = "postgresql+asyncpg://nukelab:nukelab123@postgres:5432/nukelab_test"
-
 # Create test engine with NullPool to avoid connection issues
+# Each test gets a fresh connection that is closed immediately after
 test_engine = create_async_engine(
     TEST_DATABASE_URL,
     echo=False,
@@ -44,6 +53,25 @@ async def setup_test_database():
 
     async with admin_engine.connect() as conn:
         await conn.execution_options(isolation_level="AUTOCOMMIT")
+        # Force-close any leftover connections from a previous aborted run
+        await conn.execute(
+            text(
+                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                "WHERE datname = 'nukelab_test' AND pid <> pg_backend_pid()"
+            )
+        )
+        # Wait up to 3s for backends to actually terminate before dropping
+        for _ in range(30):
+            result = await conn.execute(
+                text(
+                    "SELECT count(*) FROM pg_stat_activity "
+                    "WHERE datname = 'nukelab_test' AND pid <> pg_backend_pid()"
+                )
+            )
+            remaining = result.scalar()
+            if remaining == 0:
+                break
+            await asyncio.sleep(0.1)
         await conn.execute(text("DROP DATABASE IF EXISTS nukelab_test"))
         await conn.execute(text("CREATE DATABASE nukelab_test"))
 
@@ -80,30 +108,54 @@ async def setup_test_database():
                 )
             )
 
-    # Patch app.db.session to use test_engine so middleware/tasks also
-    # connect to the test database instead of the main database.
-    from sqlalchemy.orm import sessionmaker
-    import app.db.session as _session_module
-    _original_engine = _session_module.engine
-    _original_AsyncSessionLocal = _session_module.AsyncSessionLocal
-    _session_module.engine = test_engine
-    _session_module.AsyncSessionLocal = sessionmaker(
-        test_engine,
-        class_=AsyncSession,
-        expire_on_commit=False,
-    )
-
     yield
 
-    # Restore original engine/sessionmaker
-    _session_module.engine = _original_engine
-    _session_module.AsyncSessionLocal = _original_AsyncSessionLocal
+    # Cleanup: terminate any leaked connections (e.g. from middleware background
+    # tasks) so DROP TABLE doesn't hang waiting for locks.
+    async with admin_engine.connect() as conn:
+        await conn.execution_options(isolation_level="AUTOCOMMIT")
+        await conn.execute(
+            text(
+                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                "WHERE datname = 'nukelab_test' AND pid <> pg_backend_pid()"
+            )
+        )
+        for _ in range(30):
+            result = await conn.execute(
+                text(
+                    "SELECT count(*) FROM pg_stat_activity "
+                    "WHERE datname = 'nukelab_test' AND pid <> pg_backend_pid()"
+                )
+            )
+            remaining = result.scalar()
+            if remaining == 0:
+                break
+            await asyncio.sleep(0.1)
 
     # Cleanup: drop tables
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
     await test_engine.dispose()
     await admin_engine.dispose()
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def dispose_stale_pool():
+    """Dispose the global SQLAlchemy engine pool before every test.
+
+    pytest-asyncio creates a fresh event loop for each async test.  The
+    module-level ``app.db.session.engine`` (used by middleware, tasks, etc.)
+    keeps connections in its pool that are tied to the *previous* test's
+    event loop.  When asyncpg tries to reuse one of those connections it
+    can either raise ``RuntimeError: Event loop is closed`` or, worse, the
+    ``pool_pre_ping`` checkout can hang indefinitely.  Disposing the pool
+    *before* every test guarantees the test starts with a clean set of
+    connections.
+    """
+    import app.db.session as _session_module
+
+    await _session_module.engine.dispose()
+    yield
 
 
 @pytest_asyncio.fixture
@@ -129,14 +181,16 @@ async def db_session():
 
 @pytest.fixture(autouse=True)
 def reset_maintenance_mode():
-    """Reset maintenance mode to disabled after each test.
+    """Reset maintenance mode to disabled before and after each test.
 
     Tests that toggle maintenance mode via the system API mutate the global
     settings singleton.  This fixture ensures subsequent tests don't get
     503 Service Unavailable from MaintenanceMiddleware.
     """
-    yield
     from app.config import settings
+    settings.maintenance_mode = False
+    settings.maintenance_message = ""
+    yield
     settings.maintenance_mode = False
     settings.maintenance_message = ""
 
@@ -153,6 +207,10 @@ def reset_role_permissions():
     # Restore defaults in-place so all imported references see the change
     for role, perms in _DEFAULT_ROLE_PERMISSIONS.items():
         ROLE_PERMISSIONS[role] = list(perms)
+
+    # Rebuild the expansion cache so permission lookups reflect the reset
+    from app.core.roles import _rebuild_expansion_cache
+    _rebuild_expansion_cache()
     yield
 
 
@@ -394,12 +452,62 @@ def reset_cache():
 
 
 @pytest.fixture(autouse=True)
-def reset_maintenance_request_log():
-    """Reset MaintenanceMiddleware in-memory request log before each test.
+def reset_cached_redis_clients():
+    """Clear all cached Redis client references before each test.
 
-    Prevents rate-limit state from maintenance-mode tests leaking into
-    subsequent tests (e.g. test_rate_limiting_on_blocked_requests).
+    Redis clients created by a previous test's event loop become invalid
+    when pytest-asyncio closes that loop and opens a new one. Using a
+    stale client causes 'Event loop is closed' errors.
     """
-    from app.middleware.maintenance import MaintenanceMiddleware
-    MaintenanceMiddleware._request_log.clear()
+    # 1. Global Redis client singleton
+    try:
+        from app.core import redis_client as _rc
+        _rc._redis_client = None
+    except Exception:
+        pass
+
+    # 2. MetricsWebSocketManager singleton
+    try:
+        from app.websocket.metrics_socket import manager as _ws_mgr
+        _ws_mgr.redis_client = None
+        _ws_mgr._running = False
+        _ws_mgr._shutting_down = False
+    except Exception:
+        pass
+
     yield
+
+
+@pytest.fixture(autouse=True)
+def reset_ip_restriction_cache():
+    """Reset IP restriction in-memory cache before each test."""
+    from app.middleware.ip_restriction import _invalidate_cache
+    _invalidate_cache()
+    yield
+
+
+@pytest.fixture(autouse=True)
+def reset_shutdown_coordinator():
+    """Reset global shutdown coordinator before each test."""
+    from app.core.shutdown import reset_shutdown_coordinator
+    reset_shutdown_coordinator()
+    yield
+
+
+@pytest.fixture(autouse=True)
+def cleanup_tmp_cache_files():
+    """Remove temporary cache files created by system metrics collector."""
+    import os
+    import glob
+    for f in glob.glob("/tmp/nukelab_*_cache.json"):
+        try:
+            os.remove(f)
+        except OSError:
+            pass
+    yield
+    # Also cleanup after test
+    for f in glob.glob("/tmp/nukelab_*_cache.json"):
+        try:
+            os.remove(f)
+        except OSError:
+            pass

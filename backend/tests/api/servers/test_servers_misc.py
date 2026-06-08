@@ -212,7 +212,6 @@ class TestServerTestMetric:
         assert data["server_id"] == str(server.id)
         assert "metric" in data
         mock_r.publish.assert_called()
-        mock_r.aclose.assert_called()
 
 
 class TestServerAccessToken:

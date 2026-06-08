@@ -2,7 +2,7 @@
 
 import pytest
 import asyncio
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import patch, AsyncMock, MagicMock, Mock
 
 from app.middleware.request_metrics import (
     RequestMetricsMiddleware,
@@ -44,6 +44,7 @@ class TestRequestMetricsBuffer:
         with patch("app.middleware.request_metrics.AsyncSessionLocal") as mock_session:
             mock_db = AsyncMock()
             mock_session.return_value.__aenter__.return_value = mock_db
+            mock_db.add = Mock()
             mock_db.commit = AsyncMock()
 
             await _metrics_buffer.flush()

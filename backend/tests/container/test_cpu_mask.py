@@ -12,7 +12,7 @@ import pytest
 
 # Path to C source file
 C_SOURCE = os.path.join(
-    os.path.dirname(__file__), "..", "app", "lib", "nukelab", "libnukelab_cpu.c"
+    os.path.dirname(__file__), "..", "..", "resources", "lib", "nukelab", "libnukelab_cpu.c"
 )
 
 # Small C test program that prints sysconf(_SC_NPROCESSORS_ONLN)

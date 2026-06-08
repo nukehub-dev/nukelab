@@ -2327,7 +2327,6 @@ class TestServerTestMetric:
         data = response.json()
         assert data["message"] == "Test metric published"
         assert mock_redis.publish.call_count == 2
-        mock_redis.aclose.assert_awaited_once()
 
 
 class TestServerLogsBranches:

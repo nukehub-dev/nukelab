@@ -16,18 +16,14 @@ class TestEngineConfiguration:
         with mock.patch("sqlalchemy.ext.asyncio.create_async_engine") as mock_create:
             mock_create.return_value = mock.Mock()
 
-            import importlib
             # Ensure session.py is not already imported in this process
             import sys
             for mod in list(sys.modules.keys()):
                 if mod.startswith("app.db.session"):
                     del sys.modules[mod]
-            # Also clear config cache so settings reload inside session.py
-            for mod in list(sys.modules.keys()):
-                if mod == "app.config":
-                    del sys.modules[mod]
 
-            import app.db.session as session_module  # noqa: F401
+            with mock.patch("sqlalchemy.event.listens_for", lambda *a, **kw: lambda fn: fn):
+                import app.db.session as session_module  # noqa: F401
 
             mock_create.assert_called_once()
             call_kwargs = mock_create.call_args.kwargs
@@ -41,6 +37,11 @@ class TestEngineConfiguration:
                 "command_timeout": settings.database_query_timeout_seconds,
             }
 
+        # Clean up so subsequent tests import the real session module
+        for mod in list(sys.modules.keys()):
+            if mod.startswith("app.db.session"):
+                del sys.modules[mod]
+
     def test_create_async_engine_uses_expected_values(self):
         """Engine creation must pass all configured values through."""
         from app.config import settings
@@ -52,11 +53,9 @@ class TestEngineConfiguration:
             for mod in list(sys.modules.keys()):
                 if mod.startswith("app.db.session"):
                     del sys.modules[mod]
-            for mod in list(sys.modules.keys()):
-                if mod == "app.config":
-                    del sys.modules[mod]
 
-            import app.db.session as session_module  # noqa: F401
+            with mock.patch("sqlalchemy.event.listens_for", lambda *a, **kw: lambda fn: fn):
+                import app.db.session as session_module  # noqa: F401
 
             call_kwargs = mock_create.call_args.kwargs
             assert call_kwargs["pool_size"] == settings.database_pool_size
@@ -67,6 +66,11 @@ class TestEngineConfiguration:
             assert call_kwargs["connect_args"] == {
                 "command_timeout": settings.database_query_timeout_seconds,
             }
+
+        # Clean up so subsequent tests import the real session module
+        for mod in list(sys.modules.keys()):
+            if mod.startswith("app.db.session"):
+                del sys.modules[mod]
 
 
 class TestGetDb:

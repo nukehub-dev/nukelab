@@ -150,6 +150,7 @@ class TestPersistMetrics:
         """Should save metric to database."""
         collector = MetricsCollector()
         mock_db = mock.AsyncMock()
+        mock_db.add = mock.Mock()
         mock_engine = mock.AsyncMock()
 
         with mock.patch("sqlalchemy.ext.asyncio.create_async_engine", return_value=mock_engine):
@@ -168,6 +169,7 @@ class TestPersistMetrics:
         """Should ignore IntegrityError (server deleted)."""
         collector = MetricsCollector()
         mock_db = mock.AsyncMock()
+        mock_db.add = mock.Mock()
         mock_db.commit = mock.AsyncMock(side_effect=Exception("IntegrityError"))
         mock_engine = mock.AsyncMock()
 

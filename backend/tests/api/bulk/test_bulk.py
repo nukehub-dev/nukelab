@@ -356,11 +356,12 @@ class TestBulkServerLifecycle:
     ):
         """Bulk action on another user's server without reason should fail."""
         from app.models.user import User
-        from app.core.roles import ROLE_PERMISSIONS
+        from app.core.roles import ROLE_PERMISSIONS, _rebuild_expansion_cache
 
         # Ensure admin role has SERVERS_ACCESS_OTHERS
         if "servers:access_others" not in ROLE_PERMISSIONS.get("admin", []):
             ROLE_PERMISSIONS["admin"] = list(set(ROLE_PERMISSIONS.get("admin", []) + ["servers:access_others"]))
+            _rebuild_expansion_cache()
 
         headers = {"Authorization": f"Bearer {admin_token}"}
 
@@ -386,11 +387,12 @@ class TestBulkServerLifecycle:
         self, client: AsyncClient, admin_token, stopped_server, test_user
     ):
         """Bulk action on another user's server with reason and JWT should succeed."""
-        from app.core.roles import ROLE_PERMISSIONS
+        from app.core.roles import ROLE_PERMISSIONS, _rebuild_expansion_cache
 
         # Ensure admin role has SERVERS_ACCESS_OTHERS
         if "servers:access_others" not in ROLE_PERMISSIONS.get("admin", []):
             ROLE_PERMISSIONS["admin"] = list(set(ROLE_PERMISSIONS.get("admin", []) + ["servers:access_others"]))
+            _rebuild_expansion_cache()
 
         headers = {"Authorization": f"Bearer {admin_token}"}
 

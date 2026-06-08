@@ -2,7 +2,7 @@
 
 import pytest
 import uuid
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch, AsyncMock, Mock
 
 from app.middleware.audit import AuditMiddleware
 from app.models.activity_log import ActivityLog
@@ -47,6 +47,7 @@ class TestAuditMiddleware:
             with patch('app.middleware.audit.AsyncSessionLocal') as mock_session:
                 mock_db = AsyncMock()
                 mock_session.return_value.__aenter__.return_value = mock_db
+                mock_db.add = Mock()
                 mock_db.commit = AsyncMock()
 
                 await middleware._log_activity(mock_request, mock_response, {})
@@ -64,6 +65,7 @@ class TestAuditMiddleware:
             with patch('app.middleware.audit.AsyncSessionLocal') as mock_session:
                 mock_db = AsyncMock()
                 mock_session.return_value.__aenter__.return_value = mock_db
+                mock_db.add = Mock()
                 mock_db.commit = AsyncMock()
 
                 await middleware._log_activity(mock_request, mock_response, {})
@@ -81,6 +83,7 @@ class TestAuditMiddleware:
             with patch('app.middleware.audit.AsyncSessionLocal') as mock_session:
                 mock_db = AsyncMock()
                 mock_session.return_value.__aenter__.return_value = mock_db
+                mock_db.add = Mock()
                 mock_db.commit = AsyncMock()
 
                 await middleware._log_activity(mock_request, mock_response, {})
@@ -98,6 +101,7 @@ class TestAuditMiddleware:
             with patch('app.middleware.audit.AsyncSessionLocal') as mock_session:
                 mock_db = AsyncMock()
                 mock_session.return_value.__aenter__.return_value = mock_db
+                mock_db.add = Mock()
                 mock_db.commit = AsyncMock()
 
                 await middleware._log_activity(mock_request, mock_response, {})
@@ -116,6 +120,7 @@ class TestAuditMiddleware:
             with patch('app.middleware.audit.AsyncSessionLocal') as mock_session:
                 mock_db = AsyncMock()
                 mock_session.return_value.__aenter__.return_value = mock_db
+                mock_db.add = Mock()
                 mock_db.commit = AsyncMock()
 
                 await middleware._log_activity(mock_request, mock_response, {})
@@ -162,6 +167,7 @@ class TestAuditMiddleware:
             with patch('app.middleware.audit.AsyncSessionLocal') as mock_session:
                 mock_db = AsyncMock()
                 mock_session.return_value.__aenter__.return_value = mock_db
+                mock_db.add = Mock()
                 mock_db.commit = AsyncMock()
 
                 await middleware._log_activity(mock_request, mock_response, {})
@@ -180,6 +186,7 @@ class TestAuditMiddleware:
             with patch('app.middleware.audit.AsyncSessionLocal') as mock_session:
                 mock_db = AsyncMock()
                 mock_session.return_value.__aenter__.return_value = mock_db
+                mock_db.add = Mock()
                 mock_db.commit = AsyncMock()
 
                 await middleware._log_activity(mock_request, mock_response, {})
@@ -198,6 +205,7 @@ class TestAuditMiddleware:
             with patch('app.middleware.audit.AsyncSessionLocal') as mock_session:
                 mock_db = AsyncMock()
                 mock_session.return_value.__aenter__.return_value = mock_db
+                mock_db.add = Mock()
                 mock_db.commit = AsyncMock()
 
                 await middleware._log_activity(mock_request, mock_response, {})
@@ -216,6 +224,7 @@ class TestAuditMiddleware:
             with patch('app.middleware.audit.AsyncSessionLocal') as mock_session:
                 mock_db = AsyncMock()
                 mock_session.return_value.__aenter__.return_value = mock_db
+                mock_db.add = Mock()
                 mock_db.commit = AsyncMock()
 
                 await middleware._log_activity(mock_request, mock_response, {})
@@ -233,6 +242,7 @@ class TestAuditMiddleware:
             with patch('app.middleware.audit.AsyncSessionLocal') as mock_session:
                 mock_db = AsyncMock()
                 mock_session.return_value.__aenter__.return_value = mock_db
+                mock_db.add = Mock()
                 mock_db.commit = AsyncMock()
 
                 await middleware._log_activity(mock_request, mock_response, {})

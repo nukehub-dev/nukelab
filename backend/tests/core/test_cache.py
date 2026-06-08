@@ -192,7 +192,12 @@ class TestCacheDeletePattern:
     @pytest.mark.asyncio
     async def test_silently_ignores_redis_error(self, mock_redis):
         from app.core.cache import cache_delete_pattern
-        mock_redis.scan_iter.side_effect = ConnectionError("Redis down")
+
+        async def _broken_scan_iter(*args, **kwargs):
+            raise ConnectionError("Redis down")
+            yield  # makes it an async generator
+
+        mock_redis.scan_iter = _broken_scan_iter
         count = await cache_delete_pattern("a:*")
         assert count == 0
 
