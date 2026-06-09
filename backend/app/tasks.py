@@ -890,6 +890,190 @@ def ensure_partitions(self):
 
 
 @celery_app.task(bind=True)
+def enforce_volume_quotas(self):
+    """Periodic volume quota enforcement: stop servers that exceed disk limits.
+
+    For each mounted volume on running servers, measures current size and
+    enforces limits. When XFS project quotas are enabled, reads size from
+    xfs_quota report (fast, no disk walk). Otherwise falls back to du -sb.
+
+    If a volume exceeds its max_size_bytes or the server's plan disk limit,
+    the server is stopped, the volume is marked `over_limit`, and the user
+    is notified. This closes the gap where a running container can write
+    unbounded data to a named Docker volume (Docker StorageOpt only limits
+    rootfs, not named volumes).
+    """
+    async def _enforce():
+        from sqlalchemy import select
+        from sqlalchemy.orm import selectinload
+        from app.models.server import Server
+        from app.models.server_plan import ServerPlan
+        from app.models.user import User
+        from app.models.volume import Volume
+        from app.models.server_volume import ServerVolume
+        from app.services.volume_service import VolumeService
+        from app.services.xfs_quota_service import xfs_quota_service
+        from app.services.notification_service import NotificationService, broadcast_server_status_change
+        from app.services.credit_service import CreditService
+        from app.services.quota_service import QuotaService
+        from app.container.spawner import spawner
+        from datetime import datetime, UTC
+        from app.config import settings
+
+        async with AsyncSessionLocal() as db:
+            volume_service = VolumeService(db)
+            xfs_available = xfs_quota_service._xfs_quota_available()
+            stopped_count = 0
+            warned_count = 0
+            xfs_used = 0
+            du_used = 0
+
+            # Get all running/healthy servers with their plans, users, and volume mounts
+            result = await db.execute(
+                select(Server, ServerPlan, User)
+                .join(ServerPlan, Server.plan_id == ServerPlan.id)
+                .join(User, Server.user_id == User.id)
+                .where(Server.status.in_(["running", "healthy"]))
+                .options(
+                    selectinload(Server.volume_mounts).selectinload(ServerVolume.volume)
+                )
+            )
+            servers = result.all()
+
+            for server, plan, user in servers:
+                should_stop = False
+                over_limit_volumes = []
+
+                # Parse plan disk limit once (0 = unlimited if not set)
+                plan_bytes = (
+                    volume_service._parse_memory(plan.disk_limit)
+                    if plan.disk_limit else 0
+                )
+
+                for sv in server.volume_mounts:
+                    volume = sv.volume
+                    if not volume:
+                        continue
+
+                    # Try XFS quota report first (fast, no disk walk)
+                    size_bytes = None
+                    if xfs_available:
+                        xfs_data = xfs_quota_service.get_quota_usage(volume.name)
+                        if xfs_data is not None:
+                            size_bytes = xfs_data["used_bytes"]
+                            xfs_used += 1
+
+                    # Fallback to du -sb for non-XFS volumes or if xfs_quota fails
+                    if size_bytes is None:
+                        size_bytes = await volume_service.get_volume_size(volume.name)
+                        du_used += 1
+
+                    if size_bytes is None:
+                        logger.warning(
+                            "Could not measure volume size",
+                            extra={"volume": volume.name, "server": server.id}
+                        )
+                        continue
+
+                    # Update size in DB
+                    volume.size_bytes = size_bytes
+
+                    # Check per-volume max_size_bytes (user-defined hard limit)
+                    if volume.max_size_bytes and size_bytes > volume.max_size_bytes:
+                        should_stop = True
+                        over_limit_volumes.append(
+                            f"'{volume.display_name or volume.name}' "
+                            f"({volume_service._human_size(size_bytes)} / "
+                            f"{volume_service._human_size(volume.max_size_bytes)})"
+                        )
+                        volume.status = "over_limit"
+                        continue
+
+                    # Check against plan disk limit
+                    # A single volume exceeding the plan limit is a violation
+                    if size_bytes > plan_bytes:
+                        should_stop = True
+                        over_limit_volumes.append(
+                            f"'{volume.display_name or volume.name}' "
+                            f"({volume_service._human_size(size_bytes)} / "
+                            f"{plan.disk_limit})"
+                        )
+                        volume.status = "over_limit"
+                        continue
+
+                    # Warn at 90% of max_size_bytes or plan limit
+                    limit_for_warning = volume.max_size_bytes or plan_bytes
+                    if limit_for_warning and limit_for_warning > 0:
+                        usage_pct = int((size_bytes / limit_for_warning) * 100)
+                        if usage_pct >= 90:
+                            notif_service = NotificationService(db)
+                            await notif_service.volume_near_limit(
+                                user_id=volume.owner_id,
+                                volume_name=volume.display_name or volume.name,
+                                usage_pct=usage_pct
+                            )
+                            warned_count += 1
+
+                if should_stop:
+                    try:
+                        if server.container_id:
+                            actual_status = await spawner.get_status(server.container_id)
+                            if actual_status in ("stopped", "unknown"):
+                                server.status = "stopped"
+                                server.container_id = None
+                            else:
+                                await spawner.delete(server.container_id)
+                                server.container_id = None
+
+                        server.status = "stopped"
+                        server.stopped_at = datetime.now(UTC).replace(tzinfo=None)
+                        server.stop_reason = "volume_quota_exceeded"
+
+                        # Reconcile billing
+                        if server.plan_id:
+                            credit_service = CreditService(db)
+                            await credit_service.reconcile_server_billing(server, plan)
+
+                        # Decrement quota
+                        if server.plan_id:
+                            quota_service = QuotaService(db)
+                            await quota_service.decrement_usage(
+                                user_id=str(user.id),
+                                plan_id=str(server.plan_id)
+                            )
+
+                        await db.commit()
+
+                        # Notify user
+                        notif_service = NotificationService(db)
+                        await notif_service.server_stopped(
+                            user_id=user.id,
+                            server_name=server.name,
+                            reason=f"volume quota exceeded: {', '.join(over_limit_volumes)}"
+                        )
+                        await broadcast_server_status_change(
+                            user.id, str(server.id), "stopped",
+                            {"stop_reason": "volume_quota_exceeded"}
+                        )
+                        stopped_count += 1
+
+                    except Exception:
+                        logger.exception(
+                            "Error stopping server %s for volume quota violation",
+                            server.id
+                        )
+
+            await db.commit()
+            method_summary = f"XFS={xfs_used} du={du_used}" if xfs_available else f"du={du_used}"
+            return f"Stopped {stopped_count} servers, warned {warned_count} volumes ({method_summary})"
+
+    try:
+        return _run_async(_enforce())
+    except Exception as e:
+        return f"Error in volume quota enforcement: {e}"
+
+
+@celery_app.task(bind=True)
 def check_autovacuum_health(self):
     """Log tables with high dead-tuple ratios for operational awareness.
     Run weekly via Celery Beat. Actual tuning is manual (see docs)."""

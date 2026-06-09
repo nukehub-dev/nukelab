@@ -165,6 +165,31 @@ async def update_volume(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
+    # Prevent destructive status changes on volumes mounted by running servers
+    if request.status and request.status in ("archived", "deleting"):
+        from sqlalchemy import func
+        from app.models.server_volume import ServerVolume
+        from app.models.server import Server
+        mount_result = await db.execute(
+            select(func.count())
+            .select_from(ServerVolume)
+            .join(Server, ServerVolume.server_id == Server.id)
+            .where(
+                ServerVolume.volume_id == volume.id,
+                Server.status.in_(["running", "healthy"]),
+            )
+        )
+        active_mounts = mount_result.scalar() or 0
+        if active_mounts > 0:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Cannot change status to '{request.status}': "
+                    f"volume is mounted by {active_mounts} running server(s). "
+                    f"Stop the server(s) first."
+                ),
+            )
+
     updated = await volume_service.update_volume(
         volume_id=volume_id,
         display_name=request.display_name,

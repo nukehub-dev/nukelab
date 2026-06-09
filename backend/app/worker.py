@@ -138,6 +138,10 @@ celery_app.conf.update(
             'task': 'app.tasks.ensure_partitions',
             'schedule': crontab(hour=0, minute=5),  # Daily at 00:05
         },
+        'enforce-volume-quotas': {
+            'task': 'app.tasks.enforce_volume_quotas',
+            'schedule': settings.volume_quota_check_interval_minutes * 60.0,
+        },
         'check-autovacuum-health': {
             'task': 'app.tasks.check_autovacuum_health',
             'schedule': crontab(day_of_week=0, hour=6, minute=0),  # Weekly Sunday 6 AM

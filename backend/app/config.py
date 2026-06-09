@@ -150,6 +150,14 @@ class Settings(BaseSettings):
     sentry_dsn: str = ""
     sentry_release: str = ""
 
+    # Volume Quota Enforcement
+    volume_quota_check_interval_minutes: int = 5  # How often to check running server volumes
+
+    # XFS Project Quotas — kernel-enforced real-time volume limits (optional)
+    xfs_quota_enabled: bool = False
+    xfs_project_id_start: int = 10000  # Starting project ID to avoid system conflicts
+    xfs_projects_file: str = "/data/xfs/projects.nukelab"
+
     # SMTP Email Configuration
     smtp_host: str = ""
     smtp_port: int = 587

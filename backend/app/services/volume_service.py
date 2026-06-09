@@ -15,6 +15,7 @@ from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
 from app.models.workspace_volume import WorkspaceVolume
 from app.container.client import get_container_client
 from app.config import settings
+from app.services.xfs_quota_service import xfs_quota_service
 
 
 class VolumeService:
@@ -75,6 +76,17 @@ class VolumeService:
         self.db.add(volume)
         await self.db.commit()
         await self.db.refresh(volume)
+
+        # Set XFS project quota if enabled and limit specified
+        if max_size_bytes:
+            quota_ok = xfs_quota_service.set_quota(name, max_size_bytes)
+            if not quota_ok and settings.xfs_quota_enabled:
+                logger.warning(
+                    "XFS quota could not be set for volume %s; "
+                    "falling back to periodic du-based enforcement",
+                    name,
+                )
+
         return volume
 
     async def get_volume(self, volume_id: str) -> Optional[Volume]:
@@ -255,6 +267,8 @@ class VolumeService:
             volume.visibility = visibility
         if max_size_bytes is not None:
             volume.max_size_bytes = max_size_bytes
+            # Update XFS project quota if enabled
+            xfs_quota_service.update_quota(volume.name, max_size_bytes)
         if status is not None:
             volume.status = status
 
@@ -275,6 +289,9 @@ class VolumeService:
         mount_count_value = mount_count.scalar()
         if mount_count_value > 0:
             raise ValueError(f"Volume is still mounted by {mount_count_value} server(s)")
+
+        # Remove XFS project quota (best-effort, do before Docker delete)
+        xfs_quota_service.remove_quota(volume.name)
 
         # Delete Docker volume
         container_client = await get_container_client()

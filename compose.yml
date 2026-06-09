@@ -162,12 +162,19 @@ services:
       # Error tracking
       - SENTRY_DSN=${SENTRY_DSN:-}
       - SENTRY_RELEASE=${SENTRY_RELEASE:-}
+      # XFS project quotas (requires host XFS + prjquota; add cap_add below)
+      - XFS_QUOTA_ENABLED=${XFS_QUOTA_ENABLED:-false}
+      - XFS_PROJECT_ID_START=${XFS_PROJECT_ID_START:-10000}
+      - XFS_PROJECTS_FILE=${XFS_PROJECTS_FILE:-/data/xfs/projects.nukelab}
     volumes:
       - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:Z
       - /var/lib/lxcfs:/var/lib/lxcfs:ro
       - ${VOLUME_STORAGE_PATH:?VOLUME_STORAGE_PATH must be set in .env}:${VOLUME_STORAGE_PATH}:rw
       - uploads:${UPLOAD_DIR:-/data/uploads}
       - secrets:${SERVER_AUTH_SECRETS_DIR:-/run/secrets}
+      - xfs-projects:/data/xfs
+    cap_add:
+      - SYS_ADMIN
     networks:
       - nukelab-network
     depends_on:
@@ -235,9 +242,17 @@ services:
       - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret}
       - SENTRY_DSN=${SENTRY_DSN:-}
       - SENTRY_RELEASE=${SENTRY_RELEASE:-}
+      - VOLUME_STORAGE_PATH=${VOLUME_STORAGE_PATH:-}
+      - XFS_QUOTA_ENABLED=${XFS_QUOTA_ENABLED:-false}
+      - XFS_PROJECT_ID_START=${XFS_PROJECT_ID_START:-10000}
+      - XFS_PROJECTS_FILE=${XFS_PROJECTS_FILE:-/data/xfs/projects.nukelab}
     volumes:
       - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+      - ${VOLUME_STORAGE_PATH:-/var/lib/docker/volumes}:${VOLUME_STORAGE_PATH:-/var/lib/docker/volumes}:rw
       - secrets:${SERVER_AUTH_SECRETS_DIR:-/run/secrets}
+      - xfs-projects:/data/xfs
+    cap_add:
+      - SYS_ADMIN
     networks:
       - nukelab-network
     depends_on:
@@ -258,6 +273,9 @@ services:
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
       - SENTRY_DSN=${SENTRY_DSN:-}
       - SENTRY_RELEASE=${SENTRY_RELEASE:-}
+      - XFS_QUOTA_ENABLED=${XFS_QUOTA_ENABLED:-false}
+      - XFS_PROJECT_ID_START=${XFS_PROJECT_ID_START:-10000}
+      - XFS_PROJECTS_FILE=${XFS_PROJECTS_FILE:-/data/xfs/projects.nukelab}
     volumes:
       - secrets:${SERVER_AUTH_SECRETS_DIR:-/run/secrets}
     networks:
@@ -277,6 +295,8 @@ volumes:
     name: nukelab-uploads
   secrets:
     name: nukelab-secrets
+  xfs-projects:
+    name: nukelab-xfs-projects
 
 networks:
   nukelab-network:
