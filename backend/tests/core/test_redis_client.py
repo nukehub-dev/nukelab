@@ -60,7 +60,7 @@ class TestCloseRedisClient:
 
         try:
             await close_redis_client()
-            mock_client.close.assert_awaited_once()
+            mock_client.aclose.assert_awaited_once()
             assert rc_module._redis_client is None
         finally:
             rc_module._redis_client = original

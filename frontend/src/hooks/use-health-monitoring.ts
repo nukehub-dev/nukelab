@@ -20,6 +20,7 @@ export interface SystemHealth {
     redis?: SystemServiceHealth;
     containers?: SystemServiceHealth;
     smtp?: SystemServiceHealth;
+    partitions?: SystemServiceHealth;
   };
   resources: {
     cpu: {

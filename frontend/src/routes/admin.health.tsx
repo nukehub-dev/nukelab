@@ -216,7 +216,7 @@ function AdminHealthContent() {
           <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-3">
             System Services
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             <ServiceCard name="Database" health={system.services.database} icon={Database} />
             <ServiceCard name="Redis" health={system.services.redis} icon={Wifi} />
             <ServiceCard
@@ -225,6 +225,7 @@ function AdminHealthContent() {
               icon={Container}
             />
             <ServiceCard name="SMTP" health={system.services.smtp} icon={Mail} />
+            <ServiceCard name="Partitions" health={system.services.partitions} icon={HardDrive} />
           </div>
         </motion.section>
 

@@ -16,8 +16,8 @@
 # List partitions for a table
 ./manage.sh exec backend python scripts/db_profiler.py partitions --table activity_logs
 
-# Partition health API endpoint
-curl -s http://localhost:8080/system/health/partitions | jq .
+# Partition health (via admin monitoring dashboard API)
+curl -s -H "Authorization: Bearer $ADMIN_TOKEN" http://localhost:8080/api/admin/health/monitoring | jq '.system.services.partitions'
 ```
 
 ### 1.2 Slow Query Analysis

@@ -123,7 +123,8 @@ docker exec -i nukelab-postgres psql -U nukelab -d nukelab < nukelab-backup-YYYY
 # 6. Verify
 ./manage.sh exec backend python scripts/db_profiler.py table-sizes
 ./manage.sh exec backend python scripts/db_profiler.py partitions --table activity_logs
-curl -s http://localhost:8080/system/health/partitions | jq .
+# Verify partition health via admin monitoring endpoint
+curl -s -H "Authorization: Bearer $ADMIN_TOKEN" http://localhost:8080/api/admin/health/monitoring | jq '.system.services.partitions'
 ```
 
 ### 2.2 Restore to a New Host (Migration)
@@ -261,7 +262,7 @@ After any restore, verify:
 
 - [ ] `./manage.sh exec backend python scripts/db_profiler.py table-sizes` shows expected tables
 - [ ] `./manage.sh exec backend python scripts/db_profiler.py partitions --table activity_logs` shows partitions
-- [ ] `curl -s http://localhost:8080/system/health/partitions | jq .` returns 200
+- [ ] Admin monitoring endpoint shows healthy partitions: `curl -s -H "Authorization: Bearer $ADMIN_TOKEN" http://localhost:8080/api/admin/health/monitoring | jq '.system.services.partitions.status'`
 - [ ] `./manage.sh exec backend alembic current` shows `281a4c5d5529 (head)`
 - [ ] Application starts without errors
 - [ ] Login works (verifies users table)

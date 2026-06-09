@@ -361,6 +361,10 @@ class TestAdminHealthMonitoring:
             headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
+        data = response.json()
+        assert "system" in data
+        assert "services" in data["system"]
+        assert "partitions" in data["system"]["services"]
 
 
 class TestAdminBulkActions:
@@ -1210,6 +1214,8 @@ class TestAdminHealthMonitoringExtended:
         assert "system" in data
         assert "containers" in data
         assert "recent_restarts" in data
+        assert "partitions" in data["system"]["services"]
+        assert data["system"]["services"]["partitions"]["status"] in ("healthy", "unhealthy")
 
 """Extended tests for admin.py — error branches and filter coverage."""
 

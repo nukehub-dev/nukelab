@@ -1473,6 +1473,34 @@ async def get_health_monitoring(
         }
         health_data["status"] = "degraded"
 
+    # Partition check
+    try:
+        from app.db.partitioning import PartitionManager
+        pm = PartitionManager(db)
+        issues = []
+        for table in pm.PARTITION_CONFIG:
+            parts = await pm.list_partitions(table)
+            month_parts = [p for p in parts if "_default" not in p["partition_name"]]
+            if not month_parts:
+                issues.append(f"{table}: no monthly partitions")
+        if issues:
+            health_data["services"]["partitions"] = {
+                "status": "unhealthy",
+                "error": "; ".join(issues)
+            }
+            health_data["status"] = "degraded"
+        else:
+            health_data["services"]["partitions"] = {
+                "status": "healthy",
+                "message": f"{len(pm.PARTITION_CONFIG)} tables OK"
+            }
+    except Exception as e:
+        health_data["services"]["partitions"] = {
+            "status": "unhealthy",
+            "error": str(e)
+        }
+        health_data["status"] = "degraded"
+
     # System resources
     try:
         def get_disk_info(path: str):
