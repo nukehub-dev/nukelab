@@ -1,4 +1,5 @@
 import { QueryClient } from '@tanstack/react-query';
+import * as Sentry from '@sentry/react';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -147,7 +148,15 @@ async function apiFetch<T>(
     } catch {
       // ignore JSON parse errors
     }
-    throw new ApiError(detail, response.status, retryAfter);
+    const error = new ApiError(detail, response.status, retryAfter);
+    // Capture server errors (5xx) in Sentry
+    if (response.status >= 500) {
+      Sentry.captureException(error, {
+        tags: { api_endpoint: path, api_status: String(response.status) },
+        extra: { response_detail: detail },
+      });
+    }
+    throw error;
   }
 
   return parseJson<T>(response);
@@ -215,7 +224,15 @@ export const api = {
       } catch {
         // ignore
       }
-      throw new ApiError(detail, response.status, retryAfter);
+      const error = new ApiError(detail, response.status, retryAfter);
+      // Capture server errors (5xx) in Sentry
+      if (response.status >= 500) {
+        Sentry.captureException(error, {
+          tags: { api_endpoint: path, api_status: String(response.status) },
+          extra: { response_detail: detail },
+        });
+      }
+      throw error;
     }
 
     const blob = await response.blob();

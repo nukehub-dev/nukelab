@@ -146,6 +146,10 @@ class Settings(BaseSettings):
 
     security_headers_enabled: bool = True
 
+    # Error Tracking
+    sentry_dsn: str = ""
+    sentry_release: str = ""
+
     # SMTP Email Configuration
     smtp_host: str = ""
     smtp_port: int = 587

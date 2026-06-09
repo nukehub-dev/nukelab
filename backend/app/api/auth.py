@@ -27,6 +27,7 @@ from app.models.server import Server
 from app.container.spawner import spawner
 from app.services.notification_service import NotificationService, broadcast_server_status_change
 from app.core.security import get_user_permissions
+from app.core.sentry import set_sentry_user, set_sentry_tag
 
 logger = logging.getLogger(__name__)
 
@@ -280,6 +281,8 @@ async def get_auth_context(
                     token_scopes=[],
                 )
                 request.state.auth_context = context
+                set_sentry_user(str(user.id), user.role)
+                set_sentry_tag("auth_method", "jwt")
                 return context
     except JWTError:
         pass
@@ -319,6 +322,8 @@ async def get_auth_context(
                     api_token_id=str(api_token.id),
                 )
                 request.state.auth_context = context
+                set_sentry_user(str(user.id), user.role)
+                set_sentry_tag("auth_method", "api_token")
                 return context
             raise credentials_exception
 

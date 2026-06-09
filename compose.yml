@@ -159,6 +159,9 @@ services:
       - SMTP_VERIFY_CERTS=${SMTP_VERIFY_CERTS:-true}
       - SMTP_FROM=${SMTP_FROM:-noreply@nukelab.local}
       - SMTP_FROM_NAME=${SMTP_FROM_NAME:-NukeLab}
+      # Error tracking
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - SENTRY_RELEASE=${SENTRY_RELEASE:-}
     volumes:
       - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:Z
       - /var/lib/lxcfs:/var/lib/lxcfs:ro
@@ -196,6 +199,8 @@ services:
     environment:
       - VITE_API_URL=${VITE_API_URL:-/api}
       - VITE_WS_URL=${VITE_WS_URL:-/ws}
+      - VITE_SENTRY_DSN=${VITE_SENTRY_DSN:-}
+      - VITE_SENTRY_RELEASE=${VITE_SENTRY_RELEASE:-}
     networks:
       - nukelab-network
     depends_on:
@@ -228,6 +233,8 @@ services:
       - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://nukelab:nukelab123@postgres:5432/nukelab}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
       - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret}
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - SENTRY_RELEASE=${SENTRY_RELEASE:-}
     volumes:
       - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
       - secrets:${SERVER_AUTH_SECRETS_DIR:-/run/secrets}
@@ -249,6 +256,8 @@ services:
     environment:
       - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://nukelab:nukelab123@postgres:5432/nukelab}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - SENTRY_RELEASE=${SENTRY_RELEASE:-}
     volumes:
       - secrets:${SERVER_AUTH_SECRETS_DIR:-/run/secrets}
     networks:

@@ -219,3 +219,43 @@ Too many connections?
 Disk filling up?
   └── Yes → Run db_profiler.py drop-old
 ```
+
+---
+
+## 8. Error Tracking
+
+NukeLab ships with the Sentry SDK integrated on both backend and frontend. By default it is a **no-op** (zero overhead) until you set a DSN.
+
+### 8.1 Self-Hosted GlitchTip (Recommended)
+
+Run [GlitchTip](https://glitchtip.com) on a separate server or VM:
+
+```bash
+docker run -d -p 9000:8000 \
+  -e DATABASE_URL=postgresql://user:pass@db/glitchtip \
+  -e REDIS_URL=redis://redis:6379/0 \
+  -e SECRET_KEY=$(openssl rand -hex 32) \
+  -e PORT=8000 \
+  docker.io/glitchtip/glitchtip:latest
+```
+
+Then point NukeLab to it:
+
+```bash
+# .env
+SENTRY_DSN=http://public@glitchtip-host:9000/1
+VITE_SENTRY_DSN=http://public@glitchtip-host:9000/1
+```
+
+### 8.2 Sentry SaaS
+
+If you prefer Sentry's hosted service, just paste your project DSN:
+
+```bash
+SENTRY_DSN=https://xxx@yyy.ingest.sentry.io/zzz
+VITE_SENTRY_DSN=https://xxx@yyy.ingest.sentry.io/zzz
+```
+
+### 8.3 Disable Error Tracking
+
+Leave both DSNs empty (default). The SDKs initialize as no-ops with zero runtime cost.

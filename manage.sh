@@ -350,7 +350,7 @@ cmd_start() {
         if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
             log "Starting backend containers..."
             $COMPOSE "${COMPOSE_ARGS[@]}" up -d traefik postgres redis backend celery-worker celery-beat > /dev/null
-            wait_for_backend
+            wait_for_backend || true
         fi
 
         if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then

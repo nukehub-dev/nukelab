@@ -4,8 +4,12 @@ from celery.schedules import crontab
 from app.config import settings
 from app.core.context import correlation_id
 from app.core.logging import get_logger
+from app.core.sentry import init_sentry
 
 logger = get_logger(__name__)
+
+# Initialize Sentry for Celery workers (idempotent — safe to call multiple times)
+init_sentry()
 
 
 def _get_cid_from_headers(headers: dict) -> str:

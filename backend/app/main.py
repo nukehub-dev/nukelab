@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.config import settings
 from app.core.logging import configure_logging, get_logger
+from app.core.sentry import init_sentry
 
 logger = get_logger(__name__)
 from app.api import (
@@ -22,6 +23,7 @@ from app.middleware.request_metrics import _metrics_buffer
 async def startup():
     """Application startup logic (tables, seeding, background tasks)."""
     configure_logging()
+    init_sentry()
 
     # Create tables
     async with engine.begin() as conn:
