@@ -465,10 +465,12 @@ class TestStreamLogsToWebsocket:
         connection_users[ws] = {"user_id": "u1"}
         connections["logs:srv-1"] = {ws}
 
+        async def async_iter():
+            yield "line1"
+            yield "line2"
+
         mock_container = mock.AsyncMock()
-        mock_logs = mock.AsyncMock()
-        mock_logs.__aiter__ = mock.Mock(return_value=iter(["line1", "line2"]))
-        mock_container.log = mock.AsyncMock(return_value=mock_logs)
+        mock_container.log = mock.AsyncMock(return_value=async_iter())
         mock_client = mock.AsyncMock()
         mock_client.client.containers.get = mock.AsyncMock(return_value=mock_container)
 
@@ -483,10 +485,11 @@ class TestStreamLogsToWebsocket:
         connection_users[ws] = {"user_id": "u1"}
         # Not in connections
 
+        async def async_iter():
+            yield "line1"
+
         mock_container = mock.AsyncMock()
-        mock_logs = mock.AsyncMock()
-        mock_logs.__aiter__ = mock.Mock(return_value=iter(["line1"]))
-        mock_container.log = mock.AsyncMock(return_value=mock_logs)
+        mock_container.log = mock.AsyncMock(return_value=async_iter())
         mock_client = mock.AsyncMock()
         mock_client.client.containers.get = mock.AsyncMock(return_value=mock_container)
 

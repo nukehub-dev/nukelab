@@ -419,11 +419,8 @@ def reset_rate_limiter():
         limiter._storage.reset()
     # Also clear Redis-backed rate limit keys used by RateLimitMiddleware
     try:
-        import redis.asyncio as redis
-        from app.config import settings
-        r = redis.from_url(settings.redis_url)
-        # Use sync client for sync fixture
         import redis as sync_redis
+        from app.config import settings
         sync_r = sync_redis.from_url(settings.redis_url)
         keys = sync_r.keys("rl:*")
         if keys:
@@ -451,9 +448,9 @@ def reset_cache():
     yield
 
 
-@pytest.fixture(autouse=True)
-def reset_cached_redis_clients():
-    """Clear all cached Redis client references before each test.
+@pytest_asyncio.fixture(autouse=True)
+async def reset_cached_redis_clients():
+    """Close and clear all cached Redis client references before each test.
 
     Redis clients created by a previous test's event loop become invalid
     when pytest-asyncio closes that loop and opens a new one. Using a
@@ -462,14 +459,18 @@ def reset_cached_redis_clients():
     # 1. Global Redis client singleton
     try:
         from app.core import redis_client as _rc
-        _rc._redis_client = None
+        if _rc._redis_client is not None:
+            await _rc._redis_client.aclose()
+            _rc._redis_client = None
     except Exception:
         pass
 
     # 2. MetricsWebSocketManager singleton
     try:
         from app.websocket.metrics_socket import manager as _ws_mgr
-        _ws_mgr.redis_client = None
+        if _ws_mgr.redis_client is not None:
+            await _ws_mgr.redis_client.aclose()
+            _ws_mgr.redis_client = None
         _ws_mgr._running = False
         _ws_mgr._shutting_down = False
     except Exception:

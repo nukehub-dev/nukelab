@@ -241,6 +241,10 @@ class MetricsWebSocketManager:
         done, pending = await asyncio.wait(close_tasks, timeout=timeout)
         for task in pending:
             task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
         connections.clear()
         connection_users.clear()
@@ -585,6 +589,13 @@ class MetricsWebSocketManager:
         except Exception:
             pass
         finally:
+            # Close Redis client if opened
+            if ws_redis is not None:
+                try:
+                    await ws_redis.aclose()
+                except Exception:
+                    pass
+
             # Clean up on disconnect/error
             connection_users.pop(websocket, None)
             for room in list(connections.keys()):
@@ -599,6 +610,10 @@ class MetricsWebSocketManager:
             ]
             for task in tasks_to_cancel:
                 task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
 
 
 async def _check_ws_message_rate_limit(
