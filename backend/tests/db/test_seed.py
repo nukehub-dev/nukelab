@@ -133,5 +133,42 @@ class TestDbSeed:
         await seed_plans(db_session)
         await seed_plans(db_session)
 
+    @pytest.mark.asyncio
+    async def test_seed_plans_exception_handling(self, db_session):
+        """Should log error when plan creation fails."""
+        from app.db.seed import seed_plans
+        from app.services.plan_service import PlanService
+
+        with mock.patch.object(PlanService, "get_by_slug", side_effect=Exception("db error")):
+            await seed_plans(db_session)  # should not raise
+
+    @pytest.mark.asyncio
+    async def test_seed_all(self, db_session):
+        """seed_all should run both seeders."""
+        from app.db.seed import seed_all
+
+        class _AsyncCtx:
+            def __init__(self, obj):
+                self._obj = obj
+            async def __aenter__(self):
+                return self._obj
+            async def __aexit__(self, *args):
+                return False
+
+        def _fake_session():
+            return _AsyncCtx(db_session)
+
+        with mock.patch("app.db.seed.async_session", _fake_session):
+            with mock.patch("app.db.seed.settings.dev_mode", True):
+                with mock.patch("app.db.seed.settings.dev_admin_user", "seedalladmin"):
+                    with mock.patch("app.db.seed.settings.dev_admin_password", "seedallpass"):
+                        await seed_all()
+
+        from sqlalchemy import select
+        from app.models.user import User
+        result = await db_session.execute(select(User).where(User.username == "seedalladmin"))
+        user = result.scalar_one_or_none()
+        assert user is not None
+
 
 

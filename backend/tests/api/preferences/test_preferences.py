@@ -62,3 +62,70 @@ class TestPreferencesUpdate:
                 json={"theme": theme}
             )
             assert response.status_code == 200, f"Theme '{theme}' should be valid"
+
+    @pytest.mark.asyncio
+    async def test_update_idle_shutdown_timeout_clamped(self, client, user_token):
+        """idle_shutdown_timeout should be clamped between 5 and 240."""
+        response = await client.put(
+            "/api/preferences/",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"idle_shutdown_timeout": 1}
+        )
+        assert response.status_code == 200
+        assert response.json()["idle_shutdown_timeout"] == 5
+
+        response = await client.put(
+            "/api/preferences/",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"idle_shutdown_timeout": 300}
+        )
+        assert response.status_code == 200
+        assert response.json()["idle_shutdown_timeout"] == 240
+
+    @pytest.mark.asyncio
+    async def test_partial_update(self, client, user_token):
+        """Updating only some fields should preserve others."""
+        response = await client.put(
+            "/api/preferences/",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"theme": "github"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["theme"] == "github"
+        assert data["language"] == "en"  # default preserved
+
+
+class TestPreferencesReset:
+    """Preferences reset tests."""
+
+    @pytest.mark.asyncio
+    async def test_reset_preferences(self, client, user_token):
+        """Reset should restore all defaults."""
+        await client.put(
+            "/api/preferences/",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"theme": "ocean", "sidebar_collapsed": True}
+        )
+
+        response = await client.delete(
+            "/api/preferences/",
+            headers={"Authorization": f"Bearer {user_token}"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["theme"] == "default"
+        assert data["sidebar_collapsed"] is False
+
+
+class TestPreferencesDefaultsEndpoint:
+    """GET /api/preferences/defaults tests."""
+
+    @pytest.mark.asyncio
+    async def test_get_default_prefs(self, client, user_token):
+        """Should return default preferences without auth."""
+        response = await client.get("/api/preferences/defaults")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["theme"] == "default"
+        assert data["idle_shutdown_enabled"] is True
