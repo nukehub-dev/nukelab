@@ -179,20 +179,30 @@ class SystemMetricsCollector:
         # Persist to DB using a fresh engine to avoid asyncpg conflicts in Celery threads
         from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
         from sqlalchemy.orm import sessionmaker
+        from sqlalchemy.pool import NullPool
+
+        _use_pgbouncer = bool(settings.database_pgbouncer_url)
+        _connect_args = {"command_timeout": settings.database_query_timeout_seconds}
+        if _use_pgbouncer:
+            _connect_args["statement_cache_size"] = 0
+            _connect_args["prepared_statement_name_func"] = lambda: ""
+
+        _engine_kwargs = {
+            "echo": False,
+            "future": True,
+            "connect_args": _connect_args,
+        }
+        if _use_pgbouncer:
+            _engine_kwargs["poolclass"] = NullPool
+        else:
+            _engine_kwargs.update(pool_size=1, max_overflow=0)
+
+        _db_url = settings.database_pgbouncer_url if _use_pgbouncer else settings.database_url
 
         engine = None
         db = None
         try:
-            engine = create_async_engine(
-                settings.database_url,
-                echo=False,
-                future=True,
-                pool_size=1,
-                max_overflow=0,
-                connect_args={
-                    "command_timeout": settings.database_query_timeout_seconds,
-                },
-            )
+            engine = create_async_engine(_db_url, **_engine_kwargs)
             AsyncSessionLocalFresh = sessionmaker(
                 engine,
                 class_=AsyncSession,

@@ -1,37 +1,87 @@
-# PgBouncer overlay for connection pooling.
-# Use when >80% of max_connections is consistently in use.
+# PgBouncer overlay for connection pooling at scale.
+# Use when approaching Postgres max_connections limits.
 #
 # Usage:
-#   1. Add to .env (or pass --overlay at runtime):
-#      COMPOSE_OVERLAYS=compose.pgbouncer.yml
-#   2. Update DATABASE_URL to use pgbouncer:6432
-#   3. ./manage.sh start
+#   Set DATABASE_PGBOUNCER_URL in your .env and run:
+#     ./manage.sh start
+#   The overlay is injected automatically by manage.sh.
 #
 # Or one-off:
 #   ./manage.sh start --overlay compose.pgbouncer.yml
 #
 # Then update .env:
-#   DATABASE_URL=postgresql+asyncpg://${DATABASE_USER}:${DATABASE_PASSWORD}@pgbouncer:6432/${DATABASE_NAME}
+#   DATABASE_URL=postgresql+asyncpg://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres:5432/${DATABASE_NAME}
+#   DATABASE_PGBOUNCER_URL=postgresql+asyncpg://${DATABASE_USER}:${DATABASE_PASSWORD}@pgbouncer:6432/${DATABASE_NAME}
+#
+# IMPORTANT: Keep DATABASE_URL pointed at direct Postgres so migrations and
+# DDL bypass PgBouncer automatically. When DATABASE_PGBOUNCER_URL is set,
+# SQLAlchemy client-side pooling is disabled (NullPool) to avoid double-pooling
+# and connection storms at scale. PgBouncer becomes the single source of truth.
 
 services:
   pgbouncer:
     image: pgbouncer/pgbouncer:1.24
     container_name: nukelab-pgbouncer
     environment:
+      # Target database
       DATABASES_HOST: ${DATABASE_HOST:-postgres}
       DATABASES_PORT: ${DATABASE_PORT:-5432}
       DATABASES_DATABASE: ${DATABASE_NAME:-nukelab}
       DATABASES_USER: ${DATABASE_USER:-nukelab}
       DATABASES_PASSWORD: ${DATABASE_PASSWORD:-nukelab123}
+
+      # Pool mode: transaction is REQUIRED for asyncpg/SQLAlchemy async.
+      # Do not change this unless you know exactly what you are doing.
       POOL_MODE: ${PGBOUNCER_POOL_MODE:-transaction}
-      MAX_CLIENT_CONN: ${PGBOUNCER_MAX_CLIENT_CONN:-1000}
-      DEFAULT_POOL_SIZE: ${PGBOUNCER_DEFAULT_POOL_SIZE:-20}
-      MIN_POOL_SIZE: ${PGBOUNCER_MIN_POOL_SIZE:-5}
-      RESERVE_POOL_SIZE: ${PGBOUNCER_RESERVE_POOL_SIZE:-5}
-      MAX_DB_CONNECTIONS: ${PGBOUNCER_MAX_DB_CONNECTIONS:-50}
+
+      # ── Client-facing limits (scale to 100k users) ─────────────────────────
+      # Max "fake" connections PgBouncer accepts from apps. 20k is safe with
+      # raised ulimits. Each app connection to PgBouncer is cheap (just a TCP
+      # socket). The real Postgres connections are bounded below.
+      MAX_CLIENT_CONN: ${PGBOUNCER_MAX_CLIENT_CONN:-20000}
+      LISTEN_BACKLOG: ${PGBOUNCER_LISTEN_BACKLOG:-4096}
+
+      # ── Backend pool sizing (tuned for Postgres max_connections=500) ───────
+      # DEFAULT_POOL_SIZE: real Postgres connections per pool.
+      # MIN_POOL_SIZE: keep this many warm connections ready.
+      # RESERVE_POOL_SIZE: emergency connections for login bursts.
+      # MAX_DB_CONNECTIONS: hard ceiling per database (all pools combined).
+      #
+      # Rule of thumb: DEFAULT_POOL_SIZE + RESERVE_POOL_SIZE should stay
+      # under ~80% of Postgres max_connections, leaving headroom for direct
+      # connections (migrations, monitoring, pg_dump, etc.).
+      DEFAULT_POOL_SIZE: ${PGBOUNCER_DEFAULT_POOL_SIZE:-100}
+      MIN_POOL_SIZE: ${PGBOUNCER_MIN_POOL_SIZE:-25}
+      RESERVE_POOL_SIZE: ${PGBOUNCER_RESERVE_POOL_SIZE:-25}
+      MAX_DB_CONNECTIONS: ${PGBOUNCER_MAX_DB_CONNECTIONS:-400}
+
+      # ── Fail-fast timeouts (critical at scale) ────────────────────────────
+      # QUERY_WAIT_TIMEOUT: how long a client waits for a backend connection.
+      #   At 100k users this MUST be short so requests queue in the app / LB
+      #   instead of hanging inside PgBouncer indefinitely.
+      QUERY_WAIT_TIMEOUT: ${PGBOUNCER_QUERY_WAIT_TIMEOUT:-15}
+      QUERY_TIMEOUT: ${PGBOUNCER_QUERY_TIMEOUT:-0}
+      CLIENT_IDLE_TIMEOUT: ${PGBOUNCER_CLIENT_IDLE_TIMEOUT:-600}
+      CLIENT_LOGIN_TIMEOUT: ${PGBOUNCER_CLIENT_LOGIN_TIMEOUT:-10}
+      IDLE_TRANSACTION_TIMEOUT: ${PGBOUNCER_IDLE_TRANSACTION_TIMEOUT:-0}
+
+      # ── Server connection lifecycle ───────────────────────────────────────
       SERVER_IDLE_TIMEOUT: ${PGBOUNCER_SERVER_IDLE_TIMEOUT:-600}
       SERVER_LIFETIME: ${PGBOUNCER_SERVER_LIFETIME:-3600}
-      # Logging
+      SERVER_RESET_QUERY: ${PGBOUNCER_SERVER_RESET_QUERY:-DISCARD ALL}
+
+      # ── TCP keepalive (detect dead peers at scale) ────────────────────────
+      TCP_KEEPALIVE: ${PGBOUNCER_TCP_KEEPALIVE:-1}
+      TCP_KEEPIDLE: ${PGBOUNCER_TCP_KEEPIDLE:-30}
+      TCP_KEEPINTVL: ${PGBOUNCER_TCP_KEEPINTVL:-10}
+      TCP_KEEPCNT: ${PGBOUNCER_TCP_KEEPCNT:-3}
+
+      # ── Observability & ops ───────────────────────────────────────────────
+      # Append client hostname to application_name in pg_stat_activity.
+      # Essential for tracing which app instance owns a backend connection.
+      APPLICATION_NAME_ADD_HOST: ${PGBOUNCER_APPLICATION_NAME_ADD_HOST:-1}
+      ADMIN_USERS: ${PGBOUNCER_ADMIN_USERS:-${DATABASE_USER:-nukelab}}
+      STATS_USERS: ${PGBOUNCER_STATS_USERS:-${DATABASE_USER:-nukelab}}
       LOG_CONNECTIONS: ${PGBOUNCER_LOG_CONNECTIONS:-0}
       LOG_DISCONNECTIONS: ${PGBOUNCER_LOG_DISCONNECTIONS:-0}
       STATS_PERIOD: ${PGBOUNCER_STATS_PERIOD:-300}
@@ -40,10 +90,27 @@ services:
     networks:
       - nukelab-network
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
+    # Critical for >10k client connections: raise file descriptor limits.
+    # Docker defaults (1024) will cause "too many open files" under load.
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    deploy:
+      resources:
+        limits:
+          cpus: "${PGBOUNCER_CPU_LIMIT:-1}"
+          memory: "${PGBOUNCER_MEMORY_LIMIT:-512M}"
+        reservations:
+          cpus: "${PGBOUNCER_CPU_RESERVATION:-0.25}"
+          memory: "${PGBOUNCER_MEMORY_RESERVATION:-128M}"
     healthcheck:
-      test: ["CMD", "pgbouncer", "-V"]
+      # Actually verify the service is listening, not just that the binary exists.
+      test: ["CMD-SHELL", "nc -z -w 2 127.0.0.1 6432 || exit 1"]
       interval: 10s
-      timeout: 3s
+      timeout: 5s
       retries: 3
+      start_period: 10s

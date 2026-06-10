@@ -92,6 +92,7 @@ class Settings(BaseSettings):
     oauth_pkce_enabled: bool = True
 
     database_url: str = "postgresql+asyncpg://nukelab:nukelab123@postgres:5432/nukelab"
+    database_pgbouncer_url: str = ""  # When set, app uses PgBouncer + NullPool
     database_pool_size: int = 10
     database_pool_max_overflow: int = 10
     database_pool_timeout: int = 30

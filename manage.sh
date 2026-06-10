@@ -106,21 +106,25 @@ parse_args() {
 load_env_file() {
     local env_file="$1"
     while IFS= read -r line || [[ -n "$line" ]]; do
-        # Skip pure comment lines
-        if [[ "$line" =~ ^[[:space:]]*#.*$ ]]; then
-            continue
+        # Skip pure comment lines and empty lines
+        [[ "$line" =~ ^[[:space:]]*#.*$ ]] && continue
+        [[ -z "${line// /}" ]] && continue
+
+        # Extract KEY=VALUE, then strip trailing inline comments
+        # (only when # is preceded by whitespace, preserving # in passwords/URLs)
+        local cleaned="$line"
+        if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)[[:space:]]+#.*$ ]]; then
+            cleaned="${BASH_REMATCH[1]}=${BASH_REMATCH[2]}"
+            while [[ "$cleaned" == *[[:space:]] ]]; do
+                cleaned="${cleaned%[[:space:]]}"
+            done
         fi
-        # Skip empty lines
-        if [[ -z "${line// /}" ]]; then
-            continue
+
+        # Only export if the variable is not already set in the environment
+        local key="${cleaned%%=*}"
+        if [ -z "${!key:-}" ]; then
+            export "$cleaned" 2>/dev/null || true
         fi
-        # Strip inline comments: remove everything from first # onwards
-        local cleaned="${line%%#*}"
-        # Trim trailing whitespace
-        while [[ "$cleaned" == *[[:space:]] ]]; do
-            cleaned="${cleaned%[[:space:]]}"
-        done
-        export "$cleaned" 2>/dev/null || true
     done < "$env_file"
 }
 
@@ -238,6 +242,28 @@ EOF
     if [ -n "${COMPOSE_OVERLAYS:-}" ]; then
         read -ra _env_overlays <<< "$COMPOSE_OVERLAYS"
         COMPOSE_OVERLAY_FILES+=("${_env_overlays[@]}")
+    fi
+
+    # Auto-inject PgBouncer overlay when DATABASE_PGBOUNCER_URL is set
+    if [ -n "${DATABASE_PGBOUNCER_URL:-}" ]; then
+        local _pgbouncer_overlay="compose.pgbouncer.yml"
+        local _pgbouncer_found=false
+        for _o in "${COMPOSE_OVERLAY_FILES[@]}"; do
+            if [ "$_o" = "$_pgbouncer_overlay" ]; then
+                _pgbouncer_found=true
+                break
+            fi
+        done
+        if ! $_pgbouncer_found; then
+            COMPOSE_OVERLAY_FILES+=("$_pgbouncer_overlay")
+            info "PgBouncer enabled via DATABASE_PGBOUNCER_URL — adding overlay"
+        fi
+
+        # Warn if DATABASE_URL also points to PgBouncer (migrations should use direct Postgres)
+        if [[ "${DATABASE_URL:-}" =~ pgbouncer ]] || [[ "${DATABASE_URL:-}" =~ :6432 ]]; then
+            warn "DATABASE_URL also points to PgBouncer. Migrations should use direct Postgres."
+            info "Hint: Keep DATABASE_URL pointed at postgres:5432 for DDL/migrations"
+        fi
     fi
 
     # Deduplicate
@@ -722,8 +748,10 @@ ${BOLD}Examples:${RESET}
                                          # Restore database from backup
   ./manage.sh test                       # Run all tests (auto-detect)
   ./manage.sh test backend --coverage    # Run backend tests with coverage
+  DATABASE_PGBOUNCER_URL=postgresql+asyncpg://... ./manage.sh start
+                                         # Start with PgBouncer (auto-overlay)
   ./manage.sh start --overlay compose.pgbouncer.yml
-                                         # Start with PgBouncer overlay
+                                         # Start with PgBouncer overlay (manual)
   ./manage.sh clean                      # Clean up dangling resources
   ./manage.sh update                     # Update all images
 

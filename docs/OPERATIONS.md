@@ -132,21 +132,24 @@ SELECT count(*) FROM pg_stat_activity WHERE state = 'active';
 ```
 
 **Enable PgBouncer when:**
-- You consistently use >80% of `max_connections` (160+ out of 200)
+- You consistently use >80% of `max_connections` (400+ out of 500)
 - You're getting `FATAL: sorry, too many clients already`
+- You need to scale beyond what direct Postgres connections allow
 
 **Don't enable it until then.** It adds complexity for no benefit at small scale.
 
 ### 4.2 How to Enable
 
+Set `DATABASE_PGBOUNCER_URL` in your `.env`. `manage.sh` auto-detects it and injects the overlay — no need to set `COMPOSE_OVERLAYS`.
+
 ```bash
-# 1. Add to .env
-COMPOSE_OVERLAYS=compose.pgbouncer.yml
+# 1. Keep DATABASE_URL on direct Postgres (used for migrations)
+DATABASE_URL=postgresql+asyncpg://nukelab:strong-password@postgres:5432/nukelab
 
-# 2. Update DATABASE_URL to point at pgbouncer
-DATABASE_URL=postgresql+asyncpg://nukelab:strong-password@pgbouncer:6432/nukelab
+# 2. Add PgBouncer URL for the app
+DATABASE_PGBOUNCER_URL=postgresql+asyncpg://nukelab:strong-password@pgbouncer:6432/nukelab
 
-# 3. Start with overlay
+# 3. Start — overlay is automatic
 ./manage.sh start
 ```
 
@@ -163,7 +166,31 @@ PgBouncer sits between your app and PostgreSQL:
 App → PgBouncer → PostgreSQL
 ```
 
-Your app opens 1000+ "fake" connections to PgBouncer. PgBouncer keeps only ~50 **real** connections open to Postgres and reuses them. Postgres never sees more than ~50 connections.
+Your app opens thousands of "fake" connections to PgBouncer. PgBouncer keeps a bounded pool of **real** connections open to Postgres and reuses them. Postgres never sees more than `MAX_DB_CONNECTIONS` (default 400) connections, even with 100k users.
+
+When `DATABASE_PGBOUNCER_URL` is set:
+- SQLAlchemy client-side pooling is disabled (`NullPool`)
+- asyncpg prepared statement caching is disabled
+- PgBouncer becomes the single source of truth for connection pooling
+
+This avoids **double-pooling**, which causes connection storms and starvation at scale.
+
+### 4.4 Operational Notes
+
+**Migrations use `DATABASE_URL` directly.** Because `DATABASE_URL` stays pointed at Postgres, Alembic migrations automatically bypass PgBouncer — no manual URL swapping needed. DDL and long-running migrations should never go through PgBouncer because transaction pooling interferes with session-level features required by schema changes.
+
+**Monitoring PgBouncer.** Connect to the admin console:
+
+```bash
+./manage.sh exec pgbouncer psql -p 6432 pgbouncer -U nukelab -c "SHOW POOLS;"
+./manage.sh exec pgbouncer psql -p 6432 pgbouncer -U nukelab -c "SHOW STATS;"
+```
+
+**Sizing for 100k users.** Defaults in `.env.example` are tuned for `max_connections=500`:
+- `DEFAULT_POOL_SIZE=100` + `RESERVE_POOL_SIZE=25` = 125 active backend connections
+- `MAX_DB_CONNECTIONS=400` hard ceiling per database
+- `MAX_CLIENT_CONN=20000` accepts 20k app-side connections
+- `QUERY_WAIT_TIMEOUT=15` fails fast when Postgres is saturated
 
 See `.env.example` for all PgBouncer environment variables (`PGBOUNCER_*`).
 
@@ -197,9 +224,7 @@ Only implement when query profiling proves reads are the bottleneck. For most wo
 
 | Setting | Value | Location |
 |---|---|---|
-| `max_connections` | 200 | `compose.yml` |
-| `shared_buffers` | 256MB | `compose.yml` |
-| `effective_cache_size` | 768MB | `compose.yml` |
+| `max_connections` | 500 | `compose.yml` |
 | `pg_stat_statements` | preloaded | `compose.yml` |
 
 ---

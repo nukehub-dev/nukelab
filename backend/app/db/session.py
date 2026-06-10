@@ -2,22 +2,46 @@ import time
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.pool import NullPool
 from app.config import settings
 from app.core.logging import get_logger
 
-engine = create_async_engine(
-    settings.database_url,
-    echo=settings.database_echo,
-    future=True,
-    pool_size=settings.database_pool_size,
-    max_overflow=settings.database_pool_max_overflow,
-    pool_timeout=settings.database_pool_timeout,
-    pool_recycle=settings.database_pool_recycle,
-    pool_pre_ping=settings.database_pool_pre_ping,
-    connect_args={
-        "command_timeout": settings.database_query_timeout_seconds,
-    },
-)
+# When DATABASE_PGBOUNCER_URL is set, the app routes through PgBouncer.
+# In that mode we disable asyncpg prepared statements (transaction pooling
+# breaks them) and switch SQLAlchemy to NullPool so PgBouncer is the single
+# source of truth for connection pooling.
+_use_pgbouncer = bool(settings.database_pgbouncer_url and settings.database_pgbouncer_url.strip())
+
+_connect_args: dict = {
+    "command_timeout": settings.database_query_timeout_seconds,
+}
+if _use_pgbouncer:
+    _connect_args["statement_cache_size"] = 0
+    _connect_args["prepared_statement_name_func"] = lambda: ""
+
+# Build engine kwargs. When PgBouncer is the pooler, disable SQLAlchemy
+# client-side pooling (NullPool) to avoid double-pooling and connection
+# storms at scale.
+_engine_kwargs: dict = {
+    "echo": settings.database_echo,
+    "future": True,
+    "connect_args": _connect_args,
+}
+
+if _use_pgbouncer:
+    _engine_kwargs["poolclass"] = NullPool
+else:
+    _engine_kwargs.update(
+        pool_size=settings.database_pool_size,
+        max_overflow=settings.database_pool_max_overflow,
+        pool_timeout=settings.database_pool_timeout,
+        pool_recycle=settings.database_pool_recycle,
+        pool_pre_ping=settings.database_pool_pre_ping,
+    )
+
+# Select the appropriate database URL.
+_db_url = settings.database_pgbouncer_url if _use_pgbouncer else settings.database_url
+engine = create_async_engine(_db_url, **_engine_kwargs)
 
 # ── SQLAlchemy slow query logging (gated by config) ─────────────────────────
 def _attach_slow_query_listener():
