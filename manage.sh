@@ -220,6 +220,7 @@ setup_compose_args() {
         cat > "$DEV_COMPOSE_FILE" << 'EOF'
 services:
   backend:
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     volumes:
       - ./backend:/app:Z
       - ./resources:/app/resources:ro

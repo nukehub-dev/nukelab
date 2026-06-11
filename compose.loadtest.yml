@@ -1,0 +1,61 @@
+# Load Testing Infrastructure
+# Runs Locust and k6 alongside the main stack.
+#
+# Usage:
+#   1. Ensure the main stack is running:
+#      ./manage.sh start
+#
+#   2. Seed test users:
+#      ./manage.sh exec backend python -m tests.load.setup_test_data --users 100
+#
+#   3. Run Locust with Web UI:
+#      docker compose -f compose.loadtest.yml up locust
+#      Open http://localhost:8089
+#
+#   4. Run k6 stress test:
+#      docker compose -f compose.loadtest.yml run --rm k6 run /scripts/api-stress.js
+#
+#   5. Or use the convenience script:
+#      ./scripts/run-load-tests.sh baseline
+
+services:
+  # Backend override: disable rate limiting so load tests measure actual capacity
+  backend:
+    environment:
+      - RATE_LIMIT_ENABLED=false
+
+  locust:
+    image: docker.io/locustio/locust:2.32.0
+    container_name: nukelab-locust
+    volumes:
+      - ./backend/tests/load:/mnt/locust:ro
+      - ./backend/tests/load/reports:/mnt/locust/reports:rw
+    command: >
+      -f /mnt/locust/locustfile.py
+      --host http://backend:8000
+    ports:
+      - "8089:8089"
+    networks:
+      - nukelab-network
+    environment:
+      - PYTHONPATH=/mnt/locust
+      - LOCUST_HOST=http://backend:8000
+
+  k6:
+    image: docker.io/grafana/k6:0.54.0
+    container_name: nukelab-k6
+    volumes:
+      - ./backend/tests/load/k6:/scripts:ro
+      - ./backend/tests/load/reports:/mnt/reports:rw
+      - ./backend/tests/load/tokens.json:/mnt/locust/tokens.json:ro
+    networks:
+      - nukelab-network
+    environment:
+      - K6_HOST=http://backend:8000
+      - K6_PROFILE=${K6_PROFILE:-baseline}
+      - TEST_USER_COUNT=${TEST_USER_COUNT:-100}
+
+networks:
+  nukelab-network:
+    name: nukelab-network
+    external: true

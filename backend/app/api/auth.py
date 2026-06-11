@@ -31,7 +31,20 @@ from app.core.sentry import set_sentry_user, set_sentry_tag
 
 logger = logging.getLogger(__name__)
 
-limiter = Limiter(key_func=get_remote_address)
+
+class _ConditionalLimiter:
+    """Wraps slowapi Limiter so decorators are no-ops when rate limiting is disabled."""
+
+    def __init__(self, key_func):
+        self._limiter = Limiter(key_func=key_func)
+
+    def limit(self, *args, **kwargs):
+        if not settings.rate_limit_enabled:
+            return lambda f: f
+        return self._limiter.limit(*args, **kwargs)
+
+
+limiter = _ConditionalLimiter(key_func=get_remote_address)
 
 router = APIRouter()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

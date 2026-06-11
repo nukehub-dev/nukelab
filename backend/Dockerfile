@@ -21,5 +21,6 @@ COPY app/ ./app/
 # Expose port
 EXPOSE 8000
 
-# Run application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Run application (production / load-test mode — 4 workers)
+# Dev mode injects --reload via compose override.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", "--loop", "uvloop"]

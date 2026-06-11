@@ -1,7 +1,7 @@
 # NukeLab Platform v2.0 — Architecture & Implementation Plan
 
-**Status**: Phase 5 & Phase 7 100% Complete · DB Pooling, Query Timeouts, & Redis Response Caching Delivered
-**Last Updated**: June 7, 2026  
+**Status**: Phase 5 & Phase 7 100% Complete · Phase 8 Load Testing Delivered · PgBouncer Hardened for 100k Users
+**Last Updated**: June 10, 2026  
 **Target Timeline**: 6+ months  
 **Tech Stack**: Vite + React 19 SPA, FastAPI, PostgreSQL 18, Redis, Traefik v3, Docker/Podman
 
@@ -1633,7 +1633,7 @@ Then the server stops and the bulk API returns success
   - [ ] Unit tests (backend >80% coverage)
   - [ ] Integration tests (API endpoints)
   - [ ] E2E tests (Playwright)
-  - [ ] Load testing (Locust/k6)
+  - [x] Load testing (Locust/k6) — Phase 8 delivered: Locust + k6 hybrid, 5 profiles, PgBouncer connection flood
 
 - [ ] **Security**
   - [ ] OWASP Top 10 audit
@@ -1651,7 +1651,7 @@ Then the server stops and the bulk API returns success
   - [x] Redis response caching — msgpack serialization, circuit breaker, stampede protection, SET-based invalidation; server list + admin list endpoints; 30s TTL with proactive invalidation
   - [ ] Database query optimization
   - [ ] CDN for static assets
-  - [ ] PgBouncer setup
+  - [x] PgBouncer setup — transaction mode, auto-overlay, 20k client conn
 
 - [ ] **Observability**
   - [x] Structured logging (JSON) — `app.core.logging` with `JSONFormatter`, `CorrelationIdFilter`, correlation ID propagation
@@ -1747,7 +1747,7 @@ Then the deployment completes with zero downtime
   - [x] SQLAlchemy `pool_pre_ping=True` — validate connections before checkout
   - [x] asyncpg `command_timeout` — query-level timeout (default 30s)
   - [x] Fixed dead config: `max_overflow` and `pool_timeout` were defined but never passed to `create_async_engine`
-  - [ ] PgBouncer setup (deferred — single-node deployment, SQLAlchemy pooling sufficient)
+  - [x] PgBouncer setup — `DATABASE_PGBOUNCER_URL` architecture, auto-overlay via `manage.sh`, NullPool, TCP keepalive, ulimits, healthcheck
   - [x] Proper index usage — indexes added on `request_metrics` (path, status_code, user_id, correlation_id, created_at)
 
 - [x] **Rate Limiting**
@@ -1767,7 +1767,90 @@ Then the deployment completes with zero downtime
   - [x] Fail-safe — Redis errors logged and treated as cache misses; never returns 500 due to cache failure
   - [x] 32 tests covering serialization, all primitives, stampede protection, SET tracking, circuit breaker states
 
-#### Status: Complete ✅ — All Phase 7 quick wins delivered; graceful shutdown, request size limits, strict CORS, structured logging, HTTP metrics, connection pooling, and Redis response caching all implemented and tested
+#### Status: Complete ✅ — All Phase 7 quick wins delivered; graceful shutdown, request size limits, strict CORS, structured logging, HTTP metrics, connection pooling, Redis response caching, and PgBouncer all implemented and tested
+
+---
+
+### Phase 8: Load Testing & Performance Validation
+
+**Goal**: Prove the platform handles 100k-user scale before moving to multi-node infrastructure
+**Priority**: High — required before claiming production readiness for large user bases
+**Status**: Delivered ✅
+
+#### Overview
+
+A hybrid load testing setup using **Locust** (realistic user behavior, Python) and **k6**
+(high-RPS endpoint stress testing, Go runtime). This covers two complementary needs:
+Locust models real user flows (login → browse → spawn → stop), while k6 finds the
+absolute RPS breaking point of individual endpoints.
+
+#### Deliverables
+
+**Infrastructure**
+- `backend/tests/load/locustfile.py` — Locust scenarios: AnonymousUser, RegularUser, AdminUser, ConnectionFloodUser
+- `backend/tests/load/k6/api-stress.js` — k6 scripts: smoke, baseline, stress, spike, endurance profiles
+- `backend/tests/load/setup_test_data.py` — Pre-seeds 100+ test users directly in DB (bypasses API rate limits)
+- `compose.loadtest.yml` — Docker Compose overlay for Locust (port 8089) and k6 containers
+- `scripts/run-load-tests.sh` — One-command runner for all profiles with automatic test-data verification
+- `backend/requirements-loadtest.txt` — Locust dependency (isolated from main requirements)
+
+**Test Profiles**
+
+| Tool | Profile | Load | Duration | Purpose |
+|------|---------|------|----------|---------|
+| Locust | smoke | 1 user | 60s | Verify system works |
+| Locust | baseline | 50 users | 5m | Normal production traffic |
+| Locust | stress | 500 users | 10m | Find breaking point |
+| Locust | spike | 300 users | 5m | Sudden traffic surge |
+| Locust | endurance | 50 users | 30m | Memory leak detection |
+| Locust | connection | 1000 idle users | 5m | PgBouncer connection stress |
+| k6 | smoke | 10 VUs | 30s | Minimal endpoint check |
+| k6 | baseline | 100 VUs | 5m | High-RPS sustained load |
+| k6 | stress | 500 VUs | 10m | Absolute breaking point |
+| k6 | spike | 10→500 VUs | 5m | Instant surge capacity |
+| k6 | endurance | 100 VUs | 30m | Long-term stability |
+
+**Key Design Decisions**
+
+1. **`DATABASE_PGBOUNCER_URL` auto-detection** — Load tests go through Traefik just like real users, hitting the full stack including PgBouncer when enabled.
+2. **ConnectionFloodUser** — A special Locust class that logs in and then stays nearly idle, stress-testing PgBouncer's ability to handle thousands of concurrent idle client connections.
+3. **Self-seeding test data** — `setup_test_data.py` creates users directly via SQLAlchemy, avoiding the 5/min registration rate limit that would skew load test results.
+4. **Controlled spawn/stop rates** — Container lifecycle endpoints (spawn, start, stop) have low weights (1-2) to avoid overwhelming the Docker daemon, which is a separate bottleneck from API/DB throughput.
+
+**Operational Playbook**
+
+During a load test, monitor these in parallel:
+
+```bash
+# PgBouncer pool saturation (cl_waiting should be 0)
+./manage.sh exec pgbouncer psql -p 6432 pgbouncer -U nukelab -c "SHOW POOLS;"
+
+# Postgres connection states
+./manage.sh exec postgres psql -U nukelab -c \
+  "SELECT state, count(*) FROM pg_stat_activity GROUP BY state;"
+
+# Slow queries under load
+./manage.sh exec backend python scripts/db_profiler.py slow-queries --limit 10
+
+# Container resource usage
+docker stats --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}"
+```
+
+**Success Criteria**
+
+```gherkin
+Given 500 concurrent simulated users
+When the Locust stress test runs for 10 minutes
+Then p95 latency stays below 1000ms
+And error rate stays below 5%
+And PgBouncer cl_waiting remains at 0
+And Postgres active connections stay below 400
+
+Given 1000 idle authenticated connections
+When the ConnectionFlood test runs for 5 minutes
+Then PgBouncer accepts all connections without refusal
+And Postgres backend connections stay bounded at ~125
+```
 
 ---
 
@@ -2277,8 +2360,10 @@ DEFAULT_MAX_SERVERS=3
 
 ---
 
-**Next Steps**: Phases 1–5 and 7 are complete. Platform is production-hardened with structured logging, metrics, graceful shutdown, rate limiting, CSRF, security headers, IP restrictions, request size limits, database connection pooling, and Redis response caching. Recommended next work:
+**Next Steps**: Phases 1–5, 7, and 8 are complete. Platform is production-hardened with PgBouncer, load testing infrastructure, structured logging, metrics, graceful shutdown, rate limiting, CSRF, security headers, IP restrictions, request size limits, database connection pooling, and Redis response caching. Recommended next work:
 
-1. **Database query optimization** — analyze slow queries, add missing indexes, optimize N+1 patterns
-2. **E2E tests (Playwright)** — critical user flows: login, spawn server, stop server, admin bulk actions
-3. **Phase 6 items** (Kubernetes, CI/CD, Prometheus/Grafana) remain future goals for multi-node scaling
+1. **Run load tests and act on results** — execute `./scripts/run-load-tests.sh baseline` and `./scripts/run-load-tests.sh stress`, then use `scripts/db_profiler.py slow-queries` to fix whatever breaks first
+2. **Database query optimization** — the project already has extensive indexing, partitioning, N+1 fixes, and profiling tools (`db_profiler.py`, `tune_autovacuum.py`). The next level is analyzing output from real load tests and adding targeted indexes or query rewrites
+3. **E2E tests (Playwright)** — critical user flows: login, spawn server, stop server, admin bulk actions
+4. **Prometheus + Grafana** — for 100k users, you need alerting on PgBouncer pool saturation, Postgres lock waits, and API p95 latency degradation. The custom metrics pipeline is good; Prometheus export makes it operable
+5. **Phase 6 items** (Kubernetes, CI/CD, blue-green deployment) remain future goals for multi-node scaling — only pursue after you've saturated a single large server (32+ cores, 128GB+ RAM) and proven you need distribution

@@ -74,6 +74,13 @@ certs/*.key
 # Runtime PID files
 .frontend.pid
 
+# Load test artifacts
+backend/tests/load/reports/
+backend/tests/load/tokens.json
+
+# Pytest cache
+.pytest_cache/
+
 # Docker volumes
 volumes/
 .nukelab-dev-compose.yml
