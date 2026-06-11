@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     # -------------------------------------------------------------------------
     rate_limit_enabled: bool = True
 
+    # Request metrics middleware writes every request to the DB for observability.
+    # Disable during load tests to avoid DB write pressure skewing results.
+    request_metrics_enabled: bool = True
+
     # Per-user tier limits (requests per minute, per user ID from JWT)
     rate_limit_guest_rpm: int = 30
     rate_limit_user_rpm: int = 120

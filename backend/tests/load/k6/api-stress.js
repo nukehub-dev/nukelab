@@ -210,7 +210,7 @@ export default function () {
   check(credits, { 'credits is 200': (r) => r.status === 200 });
   errorRate.add(credits.status !== 200);
 
-  const envs = makeRequest('get', `${HOST}/api/environments`, null, headers, { name: 'GET /api/environments' });
+  const envs = makeRequest('get', `${HOST}/api/environments/`, null, headers, { name: 'GET /api/environments' });
   check(envs, { 'environments is 200': (r) => r.status === 200 });
   errorRate.add(envs.status !== 200);
 

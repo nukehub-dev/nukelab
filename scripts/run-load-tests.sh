@@ -122,17 +122,6 @@ asyncio.run(seed())
 " || die "Failed to seed test data. Is the backend healthy?"
 fi
 
-# Pre-generate JWT tokens for load-test users (bypasses login rate limits)
-# Tokens have a 2-hour expiry so endurance tests work cleanly.
-log "Generating token pool..."
-$CONTAINER_ENGINE cp "$DIR/backend/tests/load/generate_tokens.py" nukelab-backend:/tmp/generate_tokens.py >/dev/null 2>&1
-if $CONTAINER_ENGINE exec nukelab-backend python /tmp/generate_tokens.py >/dev/null 2>&1; then
-    $CONTAINER_ENGINE cp nukelab-backend:/app/tests/load/tokens.json "$DIR/backend/tests/load/tokens.json" >/dev/null 2>&1
-    ok "Token pool generated"
-else
-    warn "Token generation failed — tests will fall back to per-user login (may hit rate limits)"
-fi
-
 # ─── Temporarily disable rate limits for accurate capacity measurement ──────
 # The backend overlay in compose.loadtest.yml sets RATE_LIMIT_ENABLED=false.
 # Each individual test run is wrapped so rate limits are disabled during the
@@ -143,16 +132,38 @@ if [ -f "$DEV_COMPOSE_FILE" ]; then
     RESTORE_COMPOSE_ARGS+=(-f "$DEV_COMPOSE_FILE")
 fi
 
+_wait_for_backend() {
+    local url="${BACKEND_HEALTH_URL:-http://localhost:8000/api/system/health}"
+    local attempts=0
+    local max_attempts=30
+    while [ $attempts -lt $max_attempts ]; do
+        if $CONTAINER_ENGINE exec nukelab-backend python -c "
+import urllib.request, sys
+try:
+    urllib.request.urlopen('$url', timeout=5)
+    sys.exit(0)
+except Exception:
+    sys.exit(1)
+" >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 1
+        attempts=$((attempts + 1))
+    done
+    warn "Backend health check did not pass after ${max_attempts}s — proceeding anyway"
+}
+
 _disable_rate_limits() {
     log "Disabling rate limits for load test..."
     $COMPOSE -f "$MAIN_COMPOSE_FILE" -f "$COMPOSE_FILE" up -d backend >/dev/null 2>&1
-    sleep 3
+    _wait_for_backend
     ok "Rate limits disabled"
 }
 
 _restore_rate_limits() {
     log "Restoring rate limits..."
     $COMPOSE "${RESTORE_COMPOSE_ARGS[@]}" up -d backend >/dev/null 2>&1
+    _wait_for_backend
     ok "Rate limits restored"
 }
 
@@ -165,13 +176,28 @@ _run_with_rate_limits_disabled() {
     return $rc
 }
 
+# ─── Setup (skipped when invoked as a child from the 'all' profile) ────────
+
+if [ -z "${_NUKELAB_SETUP_DONE:-}" ]; then
+    # Pre-generate JWT tokens for load-test users (bypasses login rate limits)
+    # Tokens have a 2-hour expiry so endurance tests work cleanly.
+    log "Generating token pool..."
+    $CONTAINER_ENGINE cp "$DIR/backend/tests/load/generate_tokens.py" nukelab-backend:/tmp/generate_tokens.py >/dev/null 2>&1
+    if $CONTAINER_ENGINE exec nukelab-backend python /tmp/generate_tokens.py >/dev/null 2>&1; then
+        $CONTAINER_ENGINE cp nukelab-backend:/app/tests/load/tokens.json "$DIR/backend/tests/load/tokens.json" >/dev/null 2>&1
+        ok "Token pool generated"
+    else
+        warn "Token generation failed — tests will fall back to per-user login (may hit rate limits)"
+    fi
+fi
+
 # ─── Run a single profile (used by 'all') ──────────────────────────────────
 
 run_profile() {
     local p="$1"
     log "Running profile: $p"
-    # Call ourselves recursively for the actual test
-    if bash "$0" "$p"; then
+    # Call ourselves recursively for the actual test, skipping setup
+    if _NUKELAB_SETUP_DONE=1 bash "$0" "$p"; then
         ok "Profile passed: $p"
         return 0
     else
@@ -226,90 +252,124 @@ case "$PROFILE" in
         ;;
 
     stress)
-        log "Running Locust stress test (ramp to 500 users, 10min)..."
+        # Single-process Locust tops out around 100 realistic users.
+        # For 500+ users run distributed Locust or use k6-stress.
+        log "Running Locust stress test (ramp to 100 users, 10min, API only)..."
         _run_with_rate_limits_disabled \
-            $COMPOSE -f "$COMPOSE_FILE" run --rm locust \
+            $COMPOSE -f "$COMPOSE_FILE" run --rm \
+                -e SKIP_CONTAINER_OPS=1 \
+                locust \
                 -f /mnt/locust/locustfile.py \
                 --host http://backend:8000 \
-                -u 500 -r 20 -t 10m --headless \
+                -u 100 -r 10 -t 10m --headless \
                 --html /mnt/locust/reports/stress_report.html
         ;;
 
     spike)
-        log "Running Locust spike test (10→300 users)..."
-        # Spike is hard to express in Locust CLI; we simulate with two phases
+        log "Running Locust spike test (10→100 users, API only)..."
         _run_with_rate_limits_disabled \
-            $COMPOSE -f "$COMPOSE_FILE" run --rm locust \
+            $COMPOSE -f "$COMPOSE_FILE" run --rm \
+                -e SKIP_CONTAINER_OPS=1 \
+                locust \
                 -f /mnt/locust/locustfile.py \
                 --host http://backend:8000 \
-                -u 300 -r 50 -t 5m --headless \
+                -u 100 -r 20 -t 5m --headless \
                 --html /mnt/locust/reports/spike_report.html
         ;;
 
     endurance)
-        log "Running Locust endurance test (50 users, 30min)..."
+        # Single-process Locust can't reliably drive 50 users for 30 min.
+        # For true 30-min endurance use k6-endurance (already covers it).
+        log "Running Locust endurance test (25 users, 15min, API only)..."
         _run_with_rate_limits_disabled \
-            $COMPOSE -f "$COMPOSE_FILE" run --rm locust \
+            $COMPOSE -f "$COMPOSE_FILE" run --rm \
+                -e SKIP_CONTAINER_OPS=1 \
+                locust \
                 -f /mnt/locust/locustfile.py \
                 --host http://backend:8000 \
-                -u 50 -r 2 -t 30m --headless \
+                -u 25 -r 2 -t 15m --headless \
                 --html /mnt/locust/reports/endurance_report.html
         ;;
 
     connection)
-        log "Running PgBouncer connection flood (1000 idle users, 5min)..."
+        # Scale connection flood to what the infrastructure can handle.
+        # Single-process Locust tops out around 50 idle-connection users.
+        if $CONTAINER_ENGINE ps --format '{{.Names}}' 2>/dev/null | grep -q 'nukelab-pgbouncer'; then
+            CONN_USERS=1000
+            log "Running PgBouncer connection flood ($CONN_USERS idle users, 5min)..."
+        else
+            CONN_USERS=50
+            warn "PgBouncer not running — scaling connection flood to $CONN_USERS users (single-process limit)"
+        fi
         _run_with_rate_limits_disabled \
-            $COMPOSE -f "$COMPOSE_FILE" run --rm locust \
+            $COMPOSE -f "$COMPOSE_FILE" run --rm \
+                -e SKIP_CONTAINER_OPS=1 \
+                locust \
                 -f /mnt/locust/locustfile.py \
                 --host http://backend:8000 \
-                -u 1000 -r 100 -t 5m --headless \
+                -u $CONN_USERS -r 25 -t 5m --headless \
                 ConnectionFloodUser \
                 --html /mnt/locust/reports/connection_report.html
         ;;
 
     k6-smoke)
         log "Running k6 smoke test..."
+        if [ "${K6_JSON_OUTPUT:-}" = "1" ]; then
+            _K6_OUT="--out json=/mnt/reports/k6_smoke_$(date +%s).json"
+        fi
         _run_with_rate_limits_disabled \
             $COMPOSE -f "$COMPOSE_FILE" run --rm \
                 -e K6_PROFILE=smoke \
                 -e TEST_USER_COUNT="${TEST_USER_COUNT:-100}" \
-                k6 run --out json=/mnt/reports/k6_smoke_$(date +%s).json /scripts/api-stress.js
+                k6 run ${_K6_OUT:-} /scripts/api-stress.js
         ;;
 
     k6-baseline)
         log "Running k6 baseline test..."
+        if [ "${K6_JSON_OUTPUT:-}" = "1" ]; then
+            _K6_OUT="--out json=/mnt/reports/k6_baseline_$(date +%s).json"
+        fi
         _run_with_rate_limits_disabled \
             $COMPOSE -f "$COMPOSE_FILE" run --rm \
                 -e K6_PROFILE=baseline \
                 -e TEST_USER_COUNT="${TEST_USER_COUNT:-100}" \
-                k6 run --out json=/mnt/reports/k6_baseline_$(date +%s).json /scripts/api-stress.js
+                k6 run ${_K6_OUT:-} /scripts/api-stress.js
         ;;
 
     k6-stress)
         log "Running k6 stress test..."
+        if [ "${K6_JSON_OUTPUT:-}" = "1" ]; then
+            _K6_OUT="--out json=/mnt/reports/k6_stress_$(date +%s).json"
+        fi
         _run_with_rate_limits_disabled \
             $COMPOSE -f "$COMPOSE_FILE" run --rm \
                 -e K6_PROFILE=stress \
                 -e TEST_USER_COUNT="${TEST_USER_COUNT:-100}" \
-                k6 run --out json=/mnt/reports/k6_stress_$(date +%s).json /scripts/api-stress.js
+                k6 run ${_K6_OUT:-} /scripts/api-stress.js
         ;;
 
     k6-spike)
         log "Running k6 spike test..."
+        if [ "${K6_JSON_OUTPUT:-}" = "1" ]; then
+            _K6_OUT="--out json=/mnt/reports/k6_spike_$(date +%s).json"
+        fi
         _run_with_rate_limits_disabled \
             $COMPOSE -f "$COMPOSE_FILE" run --rm \
                 -e K6_PROFILE=spike \
                 -e TEST_USER_COUNT="${TEST_USER_COUNT:-100}" \
-                k6 run --out json=/mnt/reports/k6_spike_$(date +%s).json /scripts/api-stress.js
+                k6 run ${_K6_OUT:-} /scripts/api-stress.js
         ;;
 
     k6-endurance)
         log "Running k6 endurance test..."
+        if [ "${K6_JSON_OUTPUT:-}" = "1" ]; then
+            _K6_OUT="--out json=/mnt/reports/k6_endurance_$(date +%s).json"
+        fi
         _run_with_rate_limits_disabled \
             $COMPOSE -f "$COMPOSE_FILE" run --rm \
                 -e K6_PROFILE=endurance \
                 -e TEST_USER_COUNT="${TEST_USER_COUNT:-100}" \
-                k6 run --out json=/mnt/reports/k6_endurance_$(date +%s).json /scripts/api-stress.js
+                k6 run ${_K6_OUT:-} /scripts/api-stress.js
         ;;
 
     *)

@@ -16,16 +16,11 @@ import asyncio
 import sys
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 # Ensure backend is on path
 sys.path.insert(0, ".")
 
-from app.config import settings
-from app.db.session import engine
 from app.models.user import User
 from app.core.security import get_password_hash
-from app.db.base import Base
 
 TEST_PASSWORD = "LoadTest123!"
 

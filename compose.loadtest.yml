@@ -19,10 +19,12 @@
 #      ./scripts/run-load-tests.sh baseline
 
 services:
-  # Backend override: disable rate limiting so load tests measure actual capacity
+  # Backend override: disable rate limiting and request metrics so load tests
+  # measure actual API/DB capacity without observability write pressure.
   backend:
     environment:
       - RATE_LIMIT_ENABLED=false
+      - REQUEST_METRICS_ENABLED=false
 
   locust:
     image: docker.io/locustio/locust:2.32.0

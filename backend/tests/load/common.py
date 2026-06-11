@@ -42,7 +42,7 @@ PATHS = {
     "register": "/api/auth/register",
     "me": "/api/auth/me",
     "servers": "/api/servers",
-    "environments": "/api/environments",
+    "environments": "/api/environments/",
     "credits_balance": "/api/credits/",
     "credits_history": "/api/credits/history",
     "users": "/api/users",

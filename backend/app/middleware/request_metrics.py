@@ -16,6 +16,7 @@ from starlette.types import ASGIApp
 
 from app.core.logging import get_logger
 from app.core.context import correlation_id
+from app.config import settings
 from app.db.session import AsyncSessionLocal
 from app.models.request_metric import RequestMetric
 
@@ -205,6 +206,9 @@ class RequestMetricsMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
 
     async def dispatch(self, request: Request, call_next):
+        if not settings.request_metrics_enabled:
+            return await call_next(request)
+
         path = request.url.path
 
         # Skip certain paths entirely

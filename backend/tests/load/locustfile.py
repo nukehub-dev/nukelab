@@ -12,18 +12,25 @@ Docker (via compose.loadtest.yml):
 Profiles:
     smoke       → 1 user,  60s
     baseline    → 50 users, 5min
-    stress      → 500 users, 10min
-    spike       → 10→300 users, 5min
-    endurance   → 50 users, 30min
-    connection  → 1000 users, idle (PgBouncer test)
+    stress      → 100 users, 10min (API only)
+    spike       → 10→100 users, 5min (API only)
+    endurance   → 25 users, 15min (API only)
+    connection  → up to 1000 users, idle (PgBouncer test; 50 without PgBouncer)
 """
 
 import itertools
 import json
+import os
 import random
 import time
 from pathlib import Path
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from locust import HttpUser, task, between, events
+
+# When running high-load API tests, skip container ops (spawn/stop)
+# which bottleneck on the Docker daemon rather than the API.
+_SKIP_CONTAINER_OPS = os.environ.get("SKIP_CONTAINER_OPS", "0") == "1"
 
 from common import (
     ENDPOINT_WEIGHTS,
@@ -38,6 +45,23 @@ TEST_USER_COUNT = 100  # Must match seeded test users (loadtest_0000 .. loadtest
 
 # JWT expires in 15 min; refresh 1 min before expiry to avoid 401 storms
 TOKEN_REFRESH_THRESHOLD_SECONDS = 14 * 60
+
+
+def _configure_retries(client):
+    """Retry transient connection drops; do NOT retry 5xx responses."""
+    retry = Retry(
+        total=0,
+        connect=3,
+        read=0,
+        backoff_factor=0.2,
+        status_forcelist=None,
+        raise_on_status=False,
+        allowed_methods=False,
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    client.mount("http://", adapter)
+    client.mount("https://", adapter)
+
 
 # Pre-generated token pool (populated by generate_tokens.py)
 _TOKEN_POOL: dict[str, str] = {}
@@ -160,6 +184,9 @@ class AnonymousUser(HttpUser):
     weight = 1
     wait_time = between(1, 5)
 
+    def on_start(self):
+        _configure_retries(self.client)
+
     @task(ENDPOINT_WEIGHTS["health"])
     def health_check(self):
         self.client.get(PATHS["health"], name="GET /health")
@@ -176,6 +203,7 @@ class RegularUser(HttpUser, AuthMixin):
     wait_time = between(2, 10)
 
     def on_start(self):
+        _configure_retries(self.client)
         user_index = next(_user_counter) % TEST_USER_COUNT
         username = f"loadtest_{user_index:04d}"
         self.created_servers = []
@@ -237,9 +265,11 @@ class RegularUser(HttpUser, AuthMixin):
             name="GET /api/auth/me",
         )
 
-    @task(ENDPOINT_WEIGHTS["spawn_server"])
+    @task(ENDPOINT_WEIGHTS["spawn_server"] if not _SKIP_CONTAINER_OPS else 0)
     def spawn_server(self):
-        """Expensive: spawns a Docker container."""
+        """Expensive: spawns a container."""
+        if _SKIP_CONTAINER_OPS:
+            return
         if not self._require_auth():
             return
         with self.client.post(
@@ -263,9 +293,11 @@ class RegularUser(HttpUser, AuthMixin):
             else:
                 resp.failure(f"Spawn failed: {resp.status_code}")
 
-    @task(ENDPOINT_WEIGHTS["stop_server"])
+    @task(ENDPOINT_WEIGHTS["stop_server"] if not _SKIP_CONTAINER_OPS else 0)
     def stop_server(self):
-        """Expensive: stops a Docker container the user created."""
+        """Expensive: stops a container the user created."""
+        if _SKIP_CONTAINER_OPS:
+            return
         if not self._require_auth():
             return
         if not self.created_servers:
@@ -298,6 +330,7 @@ class AdminUser(HttpUser, AuthMixin):
     wait_time = between(3, 15)
 
     def on_start(self):
+        _configure_retries(self.client)
         self._login(DEFAULT_ADMIN["username"], DEFAULT_ADMIN["password"])
 
     @task(ENDPOINT_WEIGHTS["admin_list_users"])
@@ -358,6 +391,7 @@ class ConnectionFloodUser(HttpUser, AuthMixin):
     wait_time = between(30, 60)
 
     def on_start(self):
+        _configure_retries(self.client)
         user_index = next(_user_counter) % TEST_USER_COUNT
         username = f"loadtest_{user_index:04d}"
 
