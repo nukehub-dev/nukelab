@@ -16,10 +16,38 @@ import {
   HeartPulse,
   GlobeLock,
   Wrench,
+  Monitor,
+  Flame,
+  Bell,
+  ExternalLink,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
 import { cn } from '../lib/utils';
+import { refreshAccessToken } from '../lib/api';
+
+function getMonitoringUrl(redirect = '/grafana', token?: string | null): string {
+  const accessToken = token ?? (typeof window !== 'undefined' ? localStorage.getItem('nukelab-token') : null);
+  const base = import.meta.env.VITE_MONITORING_BASE_URL || import.meta.env.VITE_API_URL || '/api';
+  return `${base.replace(/\/$/, '')}/auth/monitoring?redirect=${encodeURIComponent(redirect)}&token=${encodeURIComponent(accessToken || '')}`;
+}
+
+async function openMonitoringTool(redirect: string) {
+  const refreshed = await refreshAccessToken();
+  if (!refreshed) {
+    window.location.href = '/login';
+    return;
+  }
+  const token = localStorage.getItem('nukelab-token');
+  const url = getMonitoringUrl(redirect, token);
+  const a = document.createElement('a');
+  a.href = url;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
 
 interface AdminCategory {
   label: string;
@@ -28,6 +56,7 @@ interface AdminCategory {
   href: string;
   requiredPermission?: string;
   color: string;
+  external?: boolean;
 }
 
 const categories: AdminCategory[] = [
@@ -151,6 +180,33 @@ const categories: AdminCategory[] = [
     requiredPermission: PERMISSIONS.ADMIN_ACCESS,
     color: 'bg-primary/10 text-primary',
   },
+  {
+    label: 'Grafana',
+    description: 'Metrics dashboards and visualizations',
+    icon: Monitor,
+    href: '/grafana',
+    requiredPermission: PERMISSIONS.ADMIN_ACCESS,
+    color: 'bg-orange-500/10 text-orange-400',
+    external: true,
+  },
+  {
+    label: 'Prometheus',
+    description: 'Time-series metrics and query explorer',
+    icon: Flame,
+    href: '/prometheus',
+    requiredPermission: PERMISSIONS.ADMIN_ACCESS,
+    color: 'bg-yellow-500/10 text-yellow-400',
+    external: true,
+  },
+  {
+    label: 'Alertmanager',
+    description: 'Alert routing, silences, and notifications',
+    icon: Bell,
+    href: '/alertmanager',
+    requiredPermission: PERMISSIONS.ADMIN_ACCESS,
+    color: 'bg-red-500/10 text-red-400',
+    external: true,
+  },
 ];
 
 export const Route = createFileRoute('/admin/')({
@@ -186,38 +242,62 @@ function AdminIndexPage() {
       {/* Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {visibleCategories.map((category, i) => (
-          <motion.div
-            key={category.label}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.05, duration: 0.4 }}
-            className="h-full"
-          >
-            <Link
-              to={category.href}
-              className="group flex items-start gap-4 p-5 rounded-xl bg-card/50 border border-border/50 hover:border-primary/30 hover:bg-card/80 transition-all duration-200 h-full"
-            >
-              <div
-                className={cn(
-                  'w-10 h-10 rounded-xl flex items-center justify-center shrink-0',
-                  category.color
-                )}
-              >
-                <category.icon className="w-5 h-5" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-base group-hover:text-primary transition-colors">
-                  {category.label}
-                </h3>
-                <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                  {category.description}
-                </p>
-              </div>
-              <ChevronRight className="w-5 h-5 text-muted-foreground/50 group-hover:text-muted-foreground group-hover:translate-x-0.5 transition-all shrink-0 mt-1" />
-            </Link>
-          </motion.div>
+          <AdminCard key={category.label} category={category} index={i} />
         ))}
       </div>
     </div>
+  );
+}
+
+function AdminCard({ category, index }: { category: AdminCategory; index: number }) {
+  const content = (
+    <>
+      <div
+        className={cn(
+          'w-10 h-10 rounded-xl flex items-center justify-center shrink-0',
+          category.color
+        )}
+      >
+        <category.icon className="w-5 h-5" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <h3 className="font-semibold text-base group-hover:text-primary transition-colors">
+          {category.label}
+        </h3>
+        <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+          {category.description}
+        </p>
+      </div>
+      {category.external ? (
+        <ExternalLink className="w-5 h-5 text-muted-foreground/50 group-hover:text-muted-foreground transition-all shrink-0 mt-1" />
+      ) : (
+        <ChevronRight className="w-5 h-5 text-muted-foreground/50 group-hover:text-muted-foreground group-hover:translate-x-0.5 transition-all shrink-0 mt-1" />
+      )}
+    </>
+  );
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.05, duration: 0.4 }}
+      className="h-full"
+    >
+      {category.external ? (
+        <button
+          onClick={() => openMonitoringTool(category.href)}
+          className="group flex items-start gap-4 p-5 rounded-xl bg-card/50 border border-border/50 hover:border-primary/30 hover:bg-card/80 transition-all duration-200 h-full w-full text-left"
+        >
+          {content}
+        </button>
+      ) : (
+        <Link
+          to={category.href}
+          className="group flex items-start gap-4 p-5 rounded-xl bg-card/50 border border-border/50 hover:border-primary/30 hover:bg-card/80 transition-all duration-200 h-full"
+        >
+          {content}
+        </Link>
+      )}
+    </motion.div>
   );
 }

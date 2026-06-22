@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, UTC
 from typing import Optional, List
 from dataclasses import dataclass
 from fastapi import APIRouter, Depends, HTTPException, status, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm, HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from jose import JWTError, jwt
@@ -26,7 +26,8 @@ from app.models.refresh_token import RefreshToken
 from app.models.server import Server
 from app.container.spawner import spawner
 from app.services.notification_service import NotificationService, broadcast_server_status_change
-from app.core.security import get_user_permissions
+from app.core.security import get_user_permissions, has_permission
+from app.core.permissions import Permission
 from app.core.sentry import set_sentry_user, set_sentry_tag
 
 logger = logging.getLogger(__name__)
@@ -614,6 +615,19 @@ async def logout_endpoint(request: Request, body: Optional[RefreshRequest] = Non
     return response
 
 
+@router.get("/signout")
+async def signout_endpoint():
+    """Browser-friendly sign-out used by external tools (e.g., Grafana).
+
+    Clears the backend session cookie and redirects to the frontend login page.
+    """
+    redirect_url = settings.frontend_url or settings.public_url
+    response = RedirectResponse(url=f"{redirect_url.rstrip('/')}/login?signed_out=1")
+    response.delete_cookie("nukelab_token")
+    response.headers["Clear-Site-Data"] = '"cache", "cookies", "storage"'
+    return response
+
+
 @router.get("/csrf-token")
 async def get_csrf_token():
     """Generate a CSRF token for double-submit cookie protection.
@@ -698,6 +712,127 @@ async def verify_auth(request: Request, db: AsyncSession = Depends(get_db)):
                 )
     
     raise HTTPException(status_code=401, detail="Invalid token")
+
+
+async def _resolve_user_from_token(token: str, db: AsyncSession) -> Optional[User]:
+    """Resolve a User from a JWT access token or active API token hash."""
+    try:
+        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+        username: str = payload.get("sub")
+        if username:
+            result = await db.execute(select(User).where(User.username == username))
+            user = result.scalar_one_or_none()
+            if user and user.is_active:
+                return user
+    except JWTError:
+        pass
+
+    result = await db.execute(
+        select(ApiToken).where(ApiToken.is_active == True, ApiToken.revoked_at == None)
+    )
+    for api_token in result.scalars().all():
+        if verify_password(token, api_token.token_hash):
+            if api_token.expires_at and api_token.expires_at < datetime.now(UTC).replace(tzinfo=None):
+                raise HTTPException(status_code=401, detail="Token expired")
+            result = await db.execute(select(User).where(User.id == api_token.user_id))
+            user = result.scalar_one_or_none()
+            if user and user.is_active:
+                return user
+            break
+
+    return None
+
+
+def _extract_token_from_request(request: Request) -> str:
+    """Extract bearer/API token from Authorization header, query param, or cookie."""
+    # 1. Authorization header
+    authorization = request.headers.get("Authorization", "")
+    if authorization:
+        if " " in authorization:
+            scheme, token = authorization.split(" ", 1)
+            if scheme.lower() in ("bearer", "token"):
+                return token
+        return authorization
+
+    # 2. Query parameter (used by the monitoring redirect shim)
+    query_token = request.query_params.get("token")
+    if query_token:
+        return query_token
+
+    # 3. Cookie
+    cookie_token = request.cookies.get("nukelab_token")
+    if cookie_token:
+        return cookie_token
+
+    raise HTTPException(status_code=401, detail="Missing token")
+
+
+@router.get("/verify-admin")
+async def verify_admin_auth(request: Request, db: AsyncSession = Depends(get_db)):
+    """Verify admin authentication for nginx auth_request / Traefik ForwardAuth.
+
+    Returns 200 with X-User-Id header only if the user has ADMIN_ACCESS.
+    Non-admin authenticated users receive 403.
+    """
+    token = _extract_token_from_request(request)
+    user = await _resolve_user_from_token(token, db)
+
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    if not has_permission(user, Permission.ADMIN_ACCESS):
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    from fastapi.responses import Response
+    return Response(
+        status_code=200,
+        headers={
+            "X-User-Id": str(user.id),
+            "X-User-Name": user.username,
+            "X-User-Role": "Admin",
+        },
+    )
+
+
+@router.get("/monitoring")
+async def monitoring_auth_redirect(
+    request: Request,
+    redirect: str = "/grafana",
+    db: AsyncSession = Depends(get_db),
+):
+    """Set the backend session cookie and redirect to a monitoring UI.
+
+    Firefox (and other browsers with strict cookie partitioning) keep cookies
+    scoped to the site where they were set. Logging in on localhost:5173 and
+    then navigating to localhost:8080 can fail because the cookie is not sent.
+    This endpoint validates the token and explicitly sets the cookie on the
+    backend domain, then redirects to Prometheus/Grafana.
+    """
+    token = _extract_token_from_request(request)
+    user = await _resolve_user_from_token(token, db)
+
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    if not has_permission(user, Permission.ADMIN_ACCESS):
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    # Only allow redirects to our own monitoring paths to avoid open redirect.
+    if redirect not in ("/grafana", "/prometheus", "/alertmanager"):
+        redirect = "/grafana"
+
+    response = RedirectResponse(url=redirect)
+    response.set_cookie(
+        key="nukelab_token",
+        value=token,
+        domain="localhost",
+        path="/",
+        max_age=settings.session_max_age,
+        httponly=settings.session_httponly,
+        secure=settings.session_secure,
+        samesite=settings.session_samesite,
+    )
+    return response
 
 
 @router.get("/me")

@@ -10,15 +10,19 @@ services:
     command:
       - --config.file=/etc/alertmanager/alertmanager.yml
       - --storage.path=/alertmanager
-      - --web.external-url=http://localhost:${ALERTMANAGER_PORT:-9093}
+      - --web.external-url=${ALERTMANAGER_EXTERNAL_URL:-http://localhost:8080/alertmanager}
+      - --web.route-prefix=/
     volumes:
       - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
       - alertmanager-data:/alertmanager
     networks:
       - nukelab-network
-    ports:
-      - "${ALERTMANAGER_PORT:-9093}:9093"
     restart: unless-stopped
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.alertmanager.rule=PathPrefix(`/alertmanager`)'
+      - 'traefik.http.routers.alertmanager.middlewares=monitoring-auth@file,strip-alertmanager@file'
+      - 'traefik.http.services.alertmanager.loadbalancer.server.port=9093'
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:9093/-/healthy"]
       interval: 30s

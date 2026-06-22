@@ -55,7 +55,6 @@ class Settings(BaseSettings):
     # Prometheus metrics export (used by /api/metrics endpoint)
     prometheus_enabled: bool = False
     prometheus_multiproc_dir: Optional[str] = None
-    prometheus_scrape_token: str = ""  # Bearer token required when non-empty
 
     # Per-user tier limits (requests per minute, per user ID from JWT)
     rate_limit_guest_rpm: int = 30

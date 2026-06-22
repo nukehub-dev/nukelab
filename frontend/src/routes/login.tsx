@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { LogIn, AlertCircle, ExternalLink, Cloud, Wrench, Users, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { NukeLabLogo } from '../components/logo';
+import { useAuthStore } from '../stores/auth-store';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -39,11 +40,19 @@ function LoginPage() {
     const token = params.get('token');
     const refresh = params.get('refresh');
     const errMsg = params.get('error');
+    const signedOut = params.get('signed_out') === '1';
+    if (signedOut) {
+      localStorage.removeItem('nukelab-token');
+      localStorage.removeItem('nukelab-refresh');
+      document.cookie = 'nukelab_token=; path=/; Domain=localhost; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+      useAuthStore.getState().setUser(null);
+      window.history.replaceState({}, '', '/login');
+    }
     if (errMsg) { setError(decodeURIComponent(errMsg)); window.history.replaceState({}, '', '/login'); }
     if (token) {
       localStorage.setItem('nukelab-token', token);
       if (refresh) localStorage.setItem('nukelab-refresh', refresh);
-      document.cookie = `nukelab_token=${token}; path=/; SameSite=Lax`;
+      document.cookie = `nukelab_token=${token}; path=/; Domain=localhost; SameSite=Lax`;
       navigate({ to: '/' });
     }
   }, [navigate]);

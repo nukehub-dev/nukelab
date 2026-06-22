@@ -17,10 +17,6 @@ scrape_configs:
       - targets: ['backend:8000']
     metrics_path: /api/metrics
     scheme: http
-    # Bearer token is injected from .env when PROMETHEUS_SCRAPE_TOKEN is set.
-    # If the variable is unset, Prometheus substitutes an empty string and
-    # scrapes without auth (local dev default).
-    bearer_token: '${PROMETHEUS_SCRAPE_TOKEN}'
 
   - job_name: 'postgres-exporter'
     static_configs:

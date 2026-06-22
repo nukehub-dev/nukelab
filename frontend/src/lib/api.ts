@@ -41,10 +41,10 @@ function getRefreshToken(): string {
   return localStorage.getItem('nukelab-refresh') || '';
 }
 
-function setTokens(access: string, refresh: string) {
+export function setTokens(access: string, refresh: string) {
   localStorage.setItem('nukelab-token', access);
   localStorage.setItem('nukelab-refresh', refresh);
-  document.cookie = `nukelab_token=${access}; path=/; SameSite=Lax`;
+  document.cookie = `nukelab_token=${access}; path=/; Domain=localhost; SameSite=Lax`;
 }
 
 function clearTokens() {
@@ -87,7 +87,7 @@ async function doRefresh(): Promise<boolean> {
   }
 }
 
-async function refreshAccessToken(): Promise<boolean> {
+export async function refreshAccessToken(): Promise<boolean> {
   if (isRefreshing && refreshPromise) {
     return refreshPromise;
   }

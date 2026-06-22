@@ -3,8 +3,8 @@
 # Slack/PagerDuty/Discord/etc. in production.
 
 global:
-  smtp_smarthost: '${SMTP_HOST:-localhost}:${SMTP_PORT:-587}'
-  smtp_from: '${ALERTMANAGER_FROM:-alerts@nukelab.local}'
+  smtp_smarthost: 'localhost:587'
+  smtp_from: 'alerts@nukelab.local'
 
 route:
   receiver: 'default'

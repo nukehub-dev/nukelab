@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, WebSocket, Request, Depends, HTTPException, Header
+from fastapi import FastAPI, WebSocket, Request, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from app.config import settings
@@ -262,19 +262,15 @@ async def health():
 
 
 @app.get("/metrics", include_in_schema=False)
-async def prometheus_metrics(authorization: str = Header(None)):
-    """Prometheus metrics endpoint."""
+async def prometheus_metrics():
+    """Prometheus metrics endpoint.
+
+    This endpoint is intentionally unauthenticated at the application layer.
+    External access is gated by Traefik ForwardAuth on /api/metrics; Prometheus
+    scrapes the backend container directly inside the Docker network.
+    """
     if not settings.prometheus_enabled:
         raise HTTPException(status_code=404, detail="Prometheus metrics disabled")
-
-    # Optional bearer-token auth to prevent unauthorized scraping.
-    # In k3s this can be replaced by network policies / ServiceMonitor auth.
-    expected_token = settings.prometheus_scrape_token
-    if expected_token:
-        if not authorization or not authorization.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="Missing Bearer token")
-        if authorization[7:] != expected_token:
-            raise HTTPException(status_code=401, detail="Invalid Bearer token")
 
     from app.core.prometheus_metrics import get_metrics_output
 

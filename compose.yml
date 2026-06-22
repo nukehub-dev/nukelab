@@ -136,7 +136,6 @@ services:
       - OBSERVABILITY_SLOW_QUERY_THRESHOLD_MS=${OBSERVABILITY_SLOW_QUERY_THRESHOLD_MS:-100}
       - OBSERVABILITY_PG_STAT_STATEMENTS_ENABLED=${OBSERVABILITY_PG_STAT_STATEMENTS_ENABLED:-true}
       - PROMETHEUS_ENABLED=${PROMETHEUS_ENABLED:-true}
-      - PROMETHEUS_SCRAPE_TOKEN=${PROMETHEUS_SCRAPE_TOKEN:-}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
       - REDIS_PASSWORD=${REDIS_PASSWORD:-}
       - REDIS_DB=${REDIS_DB:-0}
@@ -193,6 +192,12 @@ services:
       - "traefik.http.routers.backend-auth.priority=100"
       - "traefik.http.routers.backend-auth.middlewares=auth-chain@file"
       - "traefik.http.routers.backend-auth.service=backend"
+      # Metrics endpoint — externally accessible only to authenticated admins.
+      # Prometheus scrapes the backend container directly inside the Docker network.
+      - "traefik.http.routers.backend-metrics.rule=PathPrefix(`/api/metrics`)"
+      - "traefik.http.routers.backend-metrics.priority=200"
+      - "traefik.http.routers.backend-metrics.middlewares=monitoring-auth@file"
+      - "traefik.http.routers.backend-metrics.service=backend"
       # WebSocket endpoint
       - "traefik.http.routers.ws.rule=PathPrefix(`/ws`)"
       - "traefik.http.routers.ws.middlewares=ws-chain@file"

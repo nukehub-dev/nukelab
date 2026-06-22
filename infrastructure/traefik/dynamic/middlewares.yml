@@ -136,3 +136,34 @@ http:
           - security-headers
           - csp-header
           - permissions-policy
+
+    # -------------------------------------------------------------------------
+    # Monitoring Authentication — ForwardAuth to backend session/JWT verifier
+    #   Reuses the app's existing login (including OAuth providers). Users must
+    #   be authenticated in the app before accessing /prometheus or /grafana.
+    # -------------------------------------------------------------------------
+    monitoring-auth:
+      forwardAuth:
+        address: "http://backend:8000/api/auth/verify-admin"
+        trustForwardHeader: true
+        authRequestHeaders:
+          - "Authorization"
+          - "Cookie"
+          - "X-Forwarded-Host"
+          - "X-Forwarded-Proto"
+          - "X-Forwarded-For"
+        authResponseHeaders:
+          - "X-User-Id"
+          - "X-User-Name"
+          - "X-User-Role"
+
+    # Strip /prometheus before forwarding to Prometheus container
+    strip-prometheus:
+      stripPrefix:
+        prefixes:
+          - "/prometheus"
+
+    strip-alertmanager:
+      stripPrefix:
+        prefixes:
+          - "/alertmanager"
