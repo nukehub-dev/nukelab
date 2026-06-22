@@ -108,7 +108,46 @@ async def setup_test_database():
                 )
             )
 
+    # Patch the global engine/sessionmaker so middleware, tasks, and any code
+    # that imports AsyncSessionLocal directly use the test database.  This is
+    # the same technique that commit 0830330756 used and is needed because
+    # some modules cache the engine/sessionmaker at import time.
+    #
+    # We use a separate pooled engine (not the NullPool test_engine) so that
+    # the dispose_stale_pool fixture can forcibly close any leaked connections
+    # between tests instead of relying on every session to be closed explicitly.
+    import app.db.session as _session_module
+    from sqlalchemy.orm import sessionmaker
+
+    _original_engine = _session_module.engine
+    _original_async_session_local = _session_module.AsyncSessionLocal
+
+    _patched_engine = create_async_engine(
+        TEST_DATABASE_URL,
+        echo=False,
+        future=True,
+        pool_size=5,
+        max_overflow=10,
+        pool_timeout=10,
+        pool_recycle=300,
+        pool_pre_ping=True,
+    )
+    _session_module.engine = _patched_engine
+    _session_module.AsyncSessionLocal = sessionmaker(
+        _patched_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
     yield
+
+    # Close any leaked connections on the patched engine before restoring.
+    await _patched_engine.dispose()
+
+    # Restore original engine/sessionmaker before teardown so the live dev
+    # server (if it shares the module) is not left pointing at the patched engine.
+    _session_module.engine = _original_engine
+    _session_module.AsyncSessionLocal = _original_async_session_local
 
     # Cleanup: terminate any leaked connections (e.g. from middleware background
     # tasks) so DROP TABLE doesn't hang waiting for locks.
@@ -141,7 +180,7 @@ async def setup_test_database():
 
 @pytest_asyncio.fixture(autouse=True)
 async def dispose_stale_pool():
-    """Dispose the global SQLAlchemy engine pool before every test.
+    """Dispose all global SQLAlchemy engine pools before every test.
 
     pytest-asyncio creates a fresh event loop for each async test.  The
     module-level ``app.db.session.engine`` (used by middleware, tasks, etc.)
@@ -151,10 +190,19 @@ async def dispose_stale_pool():
     ``pool_pre_ping`` checkout can hang indefinitely.  Disposing the pool
     *before* every test guarantees the test starts with a clean set of
     connections.
+
+    We also dispose ``app.main.engine`` because many modules imported
+    ``AsyncSessionLocal`` at load time, binding them to the original engine
+    rather than the patched test engine.
     """
     import app.db.session as _session_module
 
     await _session_module.engine.dispose()
+    try:
+        from app.main import engine as _main_engine
+        await _main_engine.dispose()
+    except Exception:
+        pass
     yield
 
 

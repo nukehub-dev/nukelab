@@ -1112,3 +1112,61 @@ def check_autovacuum_health(self):
         return _run_async(_check())
     except Exception as e:
         return f"Error checking autovacuum: {e}"
+
+
+@celery_app.task(bind=True)
+def update_prometheus_business_metrics(self):
+    """Update Prometheus gauges for business-level metrics.
+
+    Runs every 60s via Celery Beat. Updates:
+    - nukelab_users_total
+    - nukelab_servers_total (by status)
+    - nukelab_nuke_balance_total
+    """
+    if not settings.prometheus_enabled:
+        return "Prometheus disabled; skipping business metrics update"
+
+    async def _update():
+        from sqlalchemy import select, func
+        from app.models.user import User
+        from app.models.server import Server
+
+        async with AsyncSessionLocal() as db:
+            # Total users
+            result = await db.execute(select(func.count()).select_from(User))
+            users_total = result.scalar() or 0
+
+            # Total NUKE balance
+            result = await db.execute(select(func.coalesce(func.sum(User.nuke_balance), 0)))
+            nuke_total = result.scalar() or 0
+
+            # Servers by status
+            result = await db.execute(
+                select(Server.status, func.count())
+                .group_by(Server.status)
+            )
+            server_counts = {status: count for status, count in result.all()}
+
+        from app.core.prometheus_metrics import (
+            set_users_total,
+            set_nuke_balance_total,
+            set_servers_total,
+        )
+
+        set_users_total(users_total)
+        set_nuke_balance_total(int(nuke_total))
+
+        # Reset all known status gauges, then set current values
+        known_statuses = {"pending", "starting", "running", "stopping", "stopped", "error"}
+        for status in known_statuses:
+            set_servers_total(status, server_counts.get(status, 0))
+
+        return (
+            f"Business metrics updated: users={users_total}, "
+            f"nuke={nuke_total}, servers={dict(server_counts)}"
+        )
+
+    try:
+        return _run_async(_update())
+    except Exception as e:
+        return f"Error updating business metrics: {e}"

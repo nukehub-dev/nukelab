@@ -1,0 +1,31 @@
+# Optional Alertmanager overlay for NukeLab monitoring.
+# Enable with:
+#   ./manage.sh start --overlay compose.monitoring.yml --overlay compose.alertmanager.yml
+# Or set ALERTMANAGER_ENABLED=true in .env for auto-overlay.
+
+services:
+  alertmanager:
+    image: docker.io/prom/alertmanager:v0.27.0
+    container_name: nukelab-alertmanager
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+      - --web.external-url=http://localhost:${ALERTMANAGER_PORT:-9093}
+    volumes:
+      - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    networks:
+      - nukelab-network
+    ports:
+      - "${ALERTMANAGER_PORT:-9093}:9093"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9093/-/healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  alertmanager-data:
+    name: nukelab-alertmanager-data

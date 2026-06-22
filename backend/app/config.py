@@ -1,4 +1,5 @@
 import os
+from typing import Optional
 from pydantic_settings import BaseSettings
 from pydantic import model_validator
 
@@ -46,6 +47,15 @@ class Settings(BaseSettings):
     # Request metrics middleware writes every request to the DB for observability.
     # Disable during load tests to avoid DB write pressure skewing results.
     request_metrics_enabled: bool = True
+
+    # Where to store request metrics: "db", "prometheus", or "both".
+    # "prometheus" removes DB write pressure; "both" keeps backward compatibility.
+    request_metrics_store: str = "both"
+
+    # Prometheus metrics export (used by /api/metrics endpoint)
+    prometheus_enabled: bool = False
+    prometheus_multiproc_dir: Optional[str] = None
+    prometheus_scrape_token: str = ""  # Bearer token required when non-empty
 
     # Per-user tier limits (requests per minute, per user ID from JWT)
     rate_limit_guest_rpm: int = 30

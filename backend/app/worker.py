@@ -146,6 +146,10 @@ celery_app.conf.update(
             'task': 'app.tasks.check_autovacuum_health',
             'schedule': crontab(day_of_week=0, hour=6, minute=0),  # Weekly Sunday 6 AM
         },
+        'update-prometheus-business-metrics': {
+            'task': 'app.tasks.update_prometheus_business_metrics',
+            'schedule': 60.0,  # Every 60 seconds
+        },
     },
 )
 

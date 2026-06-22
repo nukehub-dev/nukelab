@@ -1,0 +1,28 @@
+# Alertmanager configuration for NukeLab.
+# This is a minimal default that logs alerts; configure receivers for
+# Slack/PagerDuty/Discord/etc. in production.
+
+global:
+  smtp_smarthost: '${SMTP_HOST:-localhost}:${SMTP_PORT:-587}'
+  smtp_from: '${ALERTMANAGER_FROM:-alerts@nukelab.local}'
+
+route:
+  receiver: 'default'
+  group_by: ['alertname', 'severity']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: 'default'
+    # Log alerts to stdout by default. Replace with real integrations.
+    webhook_configs:
+      - url: 'http://localhost:5001'
+        send_resolved: false
+
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname']

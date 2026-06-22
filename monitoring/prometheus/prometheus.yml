@@ -1,0 +1,37 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# Alertmanager is optional; enable by adding compose.alertmanager.yml.
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+scrape_configs:
+  - job_name: 'nukelab-backend'
+    static_configs:
+      - targets: ['backend:8000']
+    metrics_path: /api/metrics
+    scheme: http
+    # Bearer token is injected from .env when PROMETHEUS_SCRAPE_TOKEN is set.
+    # If the variable is unset, Prometheus substitutes an empty string and
+    # scrapes without auth (local dev default).
+    bearer_token: '${PROMETHEUS_SCRAPE_TOKEN}'
+
+  - job_name: 'postgres-exporter'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+
+  - job_name: 'redis-exporter'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+
+  # PgBouncer is provided by a separate overlay (compose.pgbouncer.yml).
+  # Add this job only when that overlay is active.
+  # - job_name: 'pgbouncer-exporter'
+  #   static_configs:
+  #     - targets: ['pgbouncer-exporter:9127']

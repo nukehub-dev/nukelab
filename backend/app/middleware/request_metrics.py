@@ -16,6 +16,7 @@ from starlette.types import ASGIApp
 
 from app.core.logging import get_logger
 from app.core.context import correlation_id
+from app.core.prometheus_metrics import record_http_request
 from app.config import settings
 from app.db.session import AsyncSessionLocal
 from app.models.request_metric import RequestMetric
@@ -199,7 +200,8 @@ class RequestMetricsMiddleware(BaseHTTPMiddleware):
         "/api/docs",
         "/api/openapi.json",
         "/api/ws",
-        "/api/metrics",  # skip self to avoid recursion
+        "/api/metrics",  # skip self to avoid recursion (production path)
+        "/metrics",      # same endpoint when root_path is not present (tests/local)
     ]
 
     def __init__(self, app: ASGIApp):
@@ -251,25 +253,41 @@ class RequestMetricsMiddleware(BaseHTTPMiddleware):
         if request.client and request.client.host:
             ip_address = request.client.host
 
-        # Build record (normalize path for meaningful aggregation)
-        record = {
-            "method": request.method,
-            "path": _normalize_path(path),
-            "status_code": response.status_code,
-            "duration_ms": round(duration_ms, 3),
-            "user_id": user_id,
-            "ip_address": ip_address,
-            "user_agent": request.headers.get("user-agent"),
-            "correlation_id": correlation_id.get(""),
-        }
+        # Normalize path for aggregation
+        normalized_path = _normalize_path(path)
 
-        # Fire-and-forget buffer add (tracked so shutdown can wait for stragglers)
-        try:
-            task = asyncio.create_task(_metrics_buffer.add(record))
-            _metrics_buffer._pending_adds.add(task)
-            task.add_done_callback(_metrics_buffer._pending_adds.discard)
-        except Exception:
-            logger.exception("Failed to buffer request metric")
+        # Record to Prometheus if enabled (independent of DB store setting)
+        if settings.prometheus_enabled:
+            try:
+                record_http_request(
+                    method=request.method,
+                    path=normalized_path,
+                    status_code=response.status_code,
+                    duration_seconds=duration_ms / 1000.0,
+                )
+            except Exception:
+                logger.exception("Failed to record Prometheus request metric")
+
+        # Build DB record and buffer if DB storage is enabled
+        if settings.request_metrics_store in ("db", "both"):
+            record = {
+                "method": request.method,
+                "path": normalized_path,
+                "status_code": response.status_code,
+                "duration_ms": round(duration_ms, 3),
+                "user_id": user_id,
+                "ip_address": ip_address,
+                "user_agent": request.headers.get("user-agent"),
+                "correlation_id": correlation_id.get(""),
+            }
+
+            # Fire-and-forget buffer add (tracked so shutdown can wait for stragglers)
+            try:
+                task = asyncio.create_task(_metrics_buffer.add(record))
+                _metrics_buffer._pending_adds.add(task)
+                task.add_done_callback(_metrics_buffer._pending_adds.discard)
+            except Exception:
+                logger.exception("Failed to buffer request metric")
 
         return response
 

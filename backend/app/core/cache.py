@@ -25,6 +25,7 @@ import time
 from typing import Any, Awaitable, Callable, Optional
 
 from app.core.redis_client import get_redis_client
+from app.core.prometheus_metrics import increment_redis_cache_hit, increment_redis_cache_miss
 
 try:
     import msgpack
@@ -159,11 +160,15 @@ async def cache_get(key: str) -> Optional[Any]:
         data = await client.get(_full_key(key))
         _circuit_breaker.record_success()
         if data is None:
+            increment_redis_cache_miss()
             return None
         try:
-            return _deserialize(data)
+            value = _deserialize(data)
+            increment_redis_cache_hit()
+            return value
         except Exception:
             await client.delete(_full_key(key))
+            increment_redis_cache_miss()
             return None
     except Exception as exc:
         _circuit_breaker.record_failure()
@@ -274,7 +279,7 @@ async def cache_get_or_set(
     Returns:
         The cached or freshly-built value.
     """
-    # Fast path — cache hit
+    # Fast path — cache hit (cache_get already records the hit)
     cached = await cache_get(key)
     if cached is not None:
         return cached

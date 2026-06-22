@@ -211,7 +211,19 @@ kill_frontend() {
 
 # ─── Backend Detection ─────────────────────────────────────────────────────
 is_backend_container_running() {
-    $COMPOSE "${COMPOSE_ARGS[@]}" ps 2>/dev/null | grep -q 'Up .*nukelab-backend'
+    # Check via compose first (respects selected overlays), but fall back to
+    # checking the container engine directly. This lets `manage.sh test backend`
+    # work even when the stack was started with a slightly different set of
+    # overlays (e.g. --dev) because the container name stays the same.
+    if $COMPOSE "${COMPOSE_ARGS[@]}" ps 2>/dev/null | grep -q 'Up .*nukelab-backend'; then
+        return 0
+    fi
+
+    local _container_cmd="podman"
+    if [ "$CONTAINER_ENGINE" = "docker" ]; then
+        _container_cmd="docker"
+    fi
+    $_container_cmd ps --filter "name=^nukelab-backend$" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -qx "nukelab-backend"
 }
 
 # ─── Compose Args ──────────────────────────────────────────────────────────
@@ -267,6 +279,45 @@ EOF
         fi
     fi
 
+    # Auto-inject monitoring overlay when Prometheus or Grafana is enabled.
+    # Skip it during backend tests to avoid postgres-exporter consuming
+    # connections and competing with the test database.
+    if [ "${CMD:-}" != "test" ] && ([[ "${PROMETHEUS_ENABLED:-false}" == "true" ]] || [[ "${GRAFANA_ENABLED:-false}" == "true" ]]); then
+        local _monitoring_overlays=("compose.monitoring.yml")
+        if [ -n "${DATABASE_PGBOUNCER_URL:-}" ]; then
+            _monitoring_overlays+=("compose.monitoring-pgbouncer.yml")
+        fi
+        for _monitoring_overlay in "${_monitoring_overlays[@]}"; do
+            local _monitoring_found=false
+            for _o in "${COMPOSE_OVERLAY_FILES[@]}"; do
+                if [ "$_o" = "$_monitoring_overlay" ]; then
+                    _monitoring_found=true
+                    break
+                fi
+            done
+            if ! $_monitoring_found; then
+                COMPOSE_OVERLAY_FILES+=("$_monitoring_overlay")
+                info "Monitoring enabled via PROMETHEUS_ENABLED/GRAFANA_ENABLED — adding $_monitoring_overlay"
+            fi
+        done
+    fi
+
+    # Auto-inject Alertmanager overlay when enabled
+    if [[ "${ALERTMANAGER_ENABLED:-false}" == "true" ]]; then
+        local _alertmanager_overlay="compose.alertmanager.yml"
+        local _alertmanager_found=false
+        for _o in "${COMPOSE_OVERLAY_FILES[@]}"; do
+            if [ "$_o" = "$_alertmanager_overlay" ]; then
+                _alertmanager_found=true
+                break
+            fi
+        done
+        if ! $_alertmanager_found; then
+            COMPOSE_OVERLAY_FILES+=("$_alertmanager_overlay")
+            info "Alertmanager enabled via ALERTMANAGER_ENABLED — adding $_alertmanager_overlay"
+        fi
+    fi
+
     # Deduplicate
     declare -A _seen_overlays
     for overlay in "${COMPOSE_OVERLAY_FILES[@]}"; do
@@ -279,6 +330,40 @@ EOF
             fi
         fi
     done
+}
+
+# ─── Helpers ───────────────────────────────────────────────────────────────
+_has_overlay() {
+    # Return 0 if the given compose overlay file is in COMPOSE_ARGS.
+    local file="$1"
+    for arg in "${COMPOSE_ARGS[@]}"; do
+        if [[ "$arg" == "$file" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+_backend_services() {
+    # Print the list of backend services, including monitoring when enabled.
+    local services="traefik postgres redis backend celery-worker celery-beat"
+    if _has_overlay "compose.monitoring.yml"; then
+        services="$services prometheus grafana postgres-exporter redis-exporter"
+    fi
+    if _has_overlay "compose.alertmanager.yml"; then
+        services="$services alertmanager"
+    fi
+    echo "$services"
+}
+
+_stop_dev_stack() {
+    # Dev-mode Ctrl+C handler: stop Vite and all backend/monitoring containers.
+    echo ""
+    step "Shutting down..."
+    kill_frontend
+    $COMPOSE "${COMPOSE_ARGS[@]}" stop $(_backend_services) > /dev/null 2>&1 || true
+    ok "Goodbye!"
+    exit 0
 }
 
 # ─── CPU Lib Volume ────────────────────────────────────────────────────────
@@ -374,9 +459,12 @@ cmd_start() {
 
         $COMPOSE "${COMPOSE_ARGS[@]}" stop frontend > /dev/null 2>&1 || true
 
+        local _dev_backend_services
+        _dev_backend_services=$(_backend_services)
+
         if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
             log "Starting backend containers..."
-            $COMPOSE "${COMPOSE_ARGS[@]}" up -d traefik postgres redis backend celery-worker celery-beat > /dev/null
+            $COMPOSE "${COMPOSE_ARGS[@]}" up -d $_dev_backend_services > /dev/null
             wait_for_backend || true
         fi
 
@@ -397,14 +485,17 @@ cmd_start() {
         echo -e "  API:      ${CYAN}http://localhost:8080/api${RESET}"
         echo -e "\n  ${YELLOW}Ctrl+C to stop${RESET}"
         
-        trap 'echo ""; step "Shutting down..."; kill_frontend; $COMPOSE "${COMPOSE_ARGS[@]}" stop traefik postgres redis backend celery-worker celery-beat > /dev/null 2>&1; ok "Goodbye!"; exit 0' INT TERM
+        trap '_stop_dev_stack' INT TERM
         wait
     else
         step "Starting production stack..."
         
+        local _prod_backend_services
+        _prod_backend_services=$(_backend_services)
+        
         if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
             log "Starting backend services..."
-            $COMPOSE "${COMPOSE_ARGS[@]}" up -d traefik postgres redis backend celery-worker celery-beat > /dev/null
+            $COMPOSE "${COMPOSE_ARGS[@]}" up -d $_prod_backend_services > /dev/null
         fi
         
         if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
@@ -421,13 +512,16 @@ cmd_start() {
 cmd_stop() {
     step "Stopping services..."
     
+    local _services
+    _services=$(_backend_services)
+    
     if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
         kill_frontend
         $COMPOSE "${COMPOSE_ARGS[@]}" stop frontend > /dev/null 2>&1 || true
     fi
     
     if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
-        $COMPOSE "${COMPOSE_ARGS[@]}" stop traefik postgres redis backend celery-worker celery-beat > /dev/null 2>&1 || true
+        $COMPOSE "${COMPOSE_ARGS[@]}" stop $_services > /dev/null 2>&1 || true
     fi
     
     ok "Stopped"
@@ -478,6 +572,9 @@ cmd_pull() {
 cmd_remove() {
     step "Removing containers..."
     
+    local _services
+    _services=$(_backend_services)
+    
     if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
         kill_frontend
         $COMPOSE "${COMPOSE_ARGS[@]}" rm -f frontend 2>/dev/null || true
@@ -485,7 +582,7 @@ cmd_remove() {
     fi
     
     if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
-        $COMPOSE "${COMPOSE_ARGS[@]}" rm -f traefik postgres redis backend celery-worker celery-beat 2>/dev/null || true
+        $COMPOSE "${COMPOSE_ARGS[@]}" rm -f $_services 2>/dev/null || true
         ok "Backend containers removed"
     fi
 }
@@ -597,18 +694,50 @@ cmd_test() {
     
     if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
         step "Running backend tests..."
-        cd "$DIR/backend"
-        
+        # Stay in $DIR so relative compose overlay paths resolve correctly.
+        # pytest itself runs inside the container at /app, so the host CWD
+        # does not affect test discovery.
         local pytest_args="${EXTRA_ARGS[*]:-}"
         if $USE_COVERAGE; then
             pytest_args="--cov=app --cov-report=term --cov-report=html ${pytest_args}"
         fi
-        
+
+:         # To avoid Postgres connection exhaustion from the live dev server
+        # (uvicorn workers + Celery) while tests run, stop the backend services
+        # first, run tests in a fresh one-off container, then restart them.
+        local _backend_was_running=false
+        local _celery_worker_was_running=false
+        local _celery_beat_was_running=false
+
         if is_backend_container_running; then
-            # Backend is running in containers, run tests there
-            $COMPOSE "${COMPOSE_ARGS[@]}" exec backend bash -c "cd /app && python -m pytest ${pytest_args}" || warn "Tests failed or not configured"
-        else
-            die "Backend not running. Start it first:\n  ./manage.sh start backend"
+            _backend_was_running=true
+            info "Stopping backend services for isolated test run..."
+            $COMPOSE "${COMPOSE_ARGS[@]}" stop backend celery-worker celery-beat >/dev/null 2>&1 || true
+        fi
+
+        # Run tests in a fresh container with backend source bind-mounted.
+        local _test_run_cmd="cd /app && python -m pytest ${pytest_args}"
+        local _test_exit=0
+        $COMPOSE "${COMPOSE_ARGS[@]}" run --rm \
+            -v "${DIR}/backend:/app:Z" \
+            -v "${DIR}/resources:/app/resources:ro" \
+            -e "DATABASE_URL=postgresql+asyncpg://${DATABASE_USER:-nukelab}:${DATABASE_PASSWORD:-nukelab123}@postgres:5432/${DATABASE_NAME:-nukelab}_test" \
+            -e "REDIS_URL=redis://redis:6379/1" \
+            -e "RATE_LIMIT_ENABLED=false" \
+            -e "SENTRY_DSN=" \
+            -e "PROMETHEUS_SCRAPE_TOKEN=" \
+            -e "PROMETHEUS_ENABLED=false" \
+            -e "TESTING=true" \
+            backend bash -c "${_test_run_cmd}" || _test_exit=$?
+
+        # Restart backend services if they were running before.
+        if $_backend_was_running; then
+            info "Restarting backend services..."
+            $COMPOSE "${COMPOSE_ARGS[@]}" up -d backend celery-worker celery-beat >/dev/null 2>&1 || warn "Failed to restart backend services"
+        fi
+
+        if [ $_test_exit -ne 0 ]; then
+            warn "Tests failed or not configured"
         fi
     fi
 }
@@ -753,6 +882,10 @@ ${BOLD}Examples:${RESET}
                                          # Start with PgBouncer (auto-overlay)
   ./manage.sh start --overlay compose.pgbouncer.yml
                                          # Start with PgBouncer overlay (manual)
+  PROMETHEUS_ENABLED=true GRAFANA_ENABLED=true ./manage.sh start
+                                         # Start with Prometheus + Grafana (auto-overlay)
+  ./manage.sh start --overlay compose.monitoring.yml
+                                         # Start with monitoring overlay (manual)
   ./manage.sh clean                      # Clean up dangling resources
   ./manage.sh update                     # Update all images
 

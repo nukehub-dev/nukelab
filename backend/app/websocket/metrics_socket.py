@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import redis.asyncio as redis
 from app.config import settings
+from app.core.prometheus_metrics import set_active_websocket_connections
 from app.db.session import AsyncSessionLocal
 from app.models.user import User
 from app.models.server import Server
@@ -47,6 +48,12 @@ connection_users: Dict[WebSocket, dict] = {}
 
 # Track active log streaming tasks
 log_streams: Dict[str, asyncio.Task] = {}
+
+
+def _update_active_websocket_connections() -> None:
+    """Update Prometheus gauge with total active WebSocket connections."""
+    total = sum(len(ws_set) for ws_set in connections.values())
+    set_active_websocket_connections(total)
 
 
 async def stream_logs_to_websocket(websocket: WebSocket, server_id: str, container_id: str, tail: int = 100):
@@ -371,6 +378,7 @@ class MetricsWebSocketManager:
             return
 
         await websocket.send_json({"event": "auth:success"})
+        _update_active_websocket_connections()
 
         # Store user data for this connection
         connection_users[websocket] = {
@@ -603,6 +611,8 @@ class MetricsWebSocketManager:
                 if not connections[room]:
                     connections.pop(room, None)
             
+            _update_active_websocket_connections()
+
             # Cancel any active log streaming tasks for this connection
             tasks_to_cancel = [
                 task for key, task in log_streams.items()
