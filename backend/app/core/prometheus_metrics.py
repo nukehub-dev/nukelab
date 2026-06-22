@@ -12,13 +12,20 @@ from prometheus_client import (
     Counter,
     Gauge,
     Histogram,
+    PlatformCollector,
+    ProcessCollector,
     generate_latest,
     CONTENT_TYPE_LATEST,
 )
+from sqlalchemy import func, select
 
 from app.config import settings
 
 REGISTRY = CollectorRegistry(auto_describe=True)
+# Expose per-process resource metrics (memory, CPU seconds, etc.) on the
+# custom registry used by the /api/metrics endpoint.
+ProcessCollector(registry=REGISTRY)
+PlatformCollector(registry=REGISTRY)
 
 
 def _metric_name(name: str) -> str:
@@ -143,6 +150,41 @@ def set_nuke_balance_total(balance: int) -> None:
         NUKE_BALANCE_TOTAL.set(balance)
 
 
-def get_metrics_output() -> tuple[bytes, str]:
+async def refresh_business_metrics() -> None:
+    """Refresh user/server/NUKE gauges from the database on each scrape.
+
+    These gauges are cheap to recalculate (small tables) and doing it here
+    keeps the dashboard accurate without a separate background task.
+    """
+    if not settings.prometheus_enabled:
+        return
+
+    from app.db.session import AsyncSessionLocal
+    from app.models.user import User
+    from app.models.server import Server
+
+    async with AsyncSessionLocal() as db:
+        user_count = (
+            await db.execute(select(func.count(User.id)))
+        ).scalar() or 0
+
+        nuke_sum = (
+            await db.execute(select(func.coalesce(func.sum(User.nuke_balance), 0)))
+        ).scalar() or 0
+
+        server_rows = (
+            await db.execute(
+                select(Server.status, func.count()).group_by(Server.status)
+            )
+        ).all()
+
+    set_users_total(user_count)
+    set_nuke_balance_total(nuke_sum)
+    for status, count in server_rows:
+        set_servers_total(status, count)
+
+
+async def get_metrics_output() -> tuple[bytes, str]:
     """Return (data, content_type) for the /api/metrics endpoint."""
+    await refresh_business_metrics()
     return generate_latest(REGISTRY), CONTENT_TYPE_LATEST

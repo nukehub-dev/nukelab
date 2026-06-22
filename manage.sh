@@ -348,7 +348,7 @@ _backend_services() {
     # Print the list of backend services, including monitoring when enabled.
     local services="traefik postgres redis backend celery-worker celery-beat"
     if _has_overlay "compose.monitoring.yml"; then
-        services="$services prometheus grafana postgres-exporter redis-exporter"
+        services="$services prometheus grafana postgres-exporter redis-exporter node-exporter celery-exporter"
     fi
     if _has_overlay "compose.alertmanager.yml"; then
         services="$services alertmanager"

@@ -30,6 +30,14 @@ scrape_configs:
     static_configs:
       - targets: ['redis-exporter:9121']
 
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+
+  - job_name: 'celery-exporter'
+    static_configs:
+      - targets: ['celery-exporter:9808']
+
   # PgBouncer is provided by a separate overlay (compose.pgbouncer.yml).
   # Add this job only when that overlay is active.
   # - job_name: 'pgbouncer-exporter'

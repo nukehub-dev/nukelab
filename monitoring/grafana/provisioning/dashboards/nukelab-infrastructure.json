@@ -16,12 +16,22 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {"drawStyle": "line", "lineWidth": 1, "pointSize": 5, "spanNulls": false},
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "spanNulls": false
+          },
           "unit": "percent"
         },
         "overrides": []
       },
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
       "id": 1,
       "targets": [
         {
@@ -39,17 +49,27 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {"drawStyle": "line", "lineWidth": 1, "pointSize": 5, "spanNulls": false},
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "spanNulls": false
+          },
           "unit": "bytes"
         },
         "overrides": []
       },
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
       "id": 2,
       "targets": [
         {
-          "expr": "process_resident_memory_bytes{job=~\"api|celery|worker\"}",
-          "legendFormat": "{{job}}"
+          "expr": "process_resident_memory_bytes{job=\"nukelab-backend\"}",
+          "legendFormat": "backend"
         }
       ],
       "title": "Backend Memory Usage",
@@ -62,19 +82,29 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {"drawStyle": "line", "lineWidth": 1, "pointSize": 5, "spanNulls": false}
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "spanNulls": false
+          }
         },
         "overrides": []
       },
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
       "id": 3,
       "targets": [
         {
-          "expr": "pg_stat_activity_count",
+          "expr": "sum(pg_stat_activity_count)",
           "legendFormat": "Active connections"
         },
         {
-          "expr": "pg_settings_max_connections - pg_stat_activity_count",
+          "expr": "sum(pg_settings_max_connections) - sum(pg_stat_activity_count)",
           "legendFormat": "Available connections"
         }
       ],
@@ -88,12 +118,22 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {"drawStyle": "line", "lineWidth": 1, "pointSize": 5, "spanNulls": false},
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "spanNulls": false
+          },
           "unit": "s"
         },
         "overrides": []
       },
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
       "id": 4,
       "targets": [
         {
@@ -111,17 +151,27 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {"drawStyle": "line", "lineWidth": 1, "pointSize": 5, "spanNulls": false},
-          "unit": "percentunit"
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "spanNulls": false
+          },
+          "unit": "bytes"
         },
         "overrides": []
       },
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
       "id": 5,
       "targets": [
         {
-          "expr": "redis_memory_used_bytes / redis_memory_max_bytes",
-          "legendFormat": "Memory usage"
+          "expr": "redis_memory_used_bytes",
+          "legendFormat": "Used memory"
         }
       ],
       "title": "Redis Memory Usage",
@@ -134,11 +184,21 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {"drawStyle": "line", "lineWidth": 1, "pointSize": 5, "spanNulls": false}
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "spanNulls": false
+          }
         },
         "overrides": []
       },
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
       "id": 6,
       "targets": [
         {
@@ -156,24 +216,34 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {"drawStyle": "line", "lineWidth": 1, "pointSize": 5, "spanNulls": false}
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "spanNulls": false
+          }
         },
         "overrides": []
       },
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
       "id": 7,
       "targets": [
         {
-          "expr": "nukelab_registered_users_total",
+          "expr": "nukelab_users_total",
           "legendFormat": "Users"
         },
         {
-          "expr": "nukelab_active_servers_total",
+          "expr": "sum(nukelab_servers_total)",
           "legendFormat": "Servers"
         },
         {
-          "expr": "nukelab_nuke_instances_total",
-          "legendFormat": "Nukes"
+          "expr": "nukelab_nuke_balance_total",
+          "legendFormat": "NUKE balance"
         }
       ],
       "title": "Business Metrics",
@@ -186,31 +256,52 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {"drawStyle": "line", "lineWidth": 1, "pointSize": 5, "spanNulls": false},
-          "unit": "percentunit"
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "spanNulls": false
+          },
+          "unit": "none"
         },
         "overrides": []
       },
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
       "id": 8,
       "targets": [
         {
-          "expr": "sum by (queue) (celery_task_received_total) / sum by (queue) (celery_task_sent_total)",
-          "legendFormat": "{{queue}}"
+          "expr": "sum(celery_active_worker_count)",
+          "legendFormat": "Active workers"
+        },
+        {
+          "expr": "sum(celery_queue_length)",
+          "legendFormat": "Queue length"
         }
       ],
-      "title": "Celery Task Processing Rate",
+      "title": "Celery Workers & Queue Depth",
       "type": "timeseries"
     }
   ],
   "refresh": "5s",
   "schemaVersion": 38,
   "style": "dark",
-  "tags": ["nukelab", "infrastructure"],
+  "tags": [
+    "nukelab",
+    "infrastructure"
+  ],
   "templating": {
     "list": [
       {
-        "current": {"selected": false, "text": "Prometheus", "value": "Prometheus"},
+        "current": {
+          "selected": false,
+          "text": "Prometheus",
+          "value": "Prometheus"
+        },
         "hide": 0,
         "includeAll": false,
         "label": "Datasource",
@@ -225,7 +316,10 @@
       }
     ]
   },
-  "time": {"from": "now-1h", "to": "now"},
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
   "timepicker": {},
   "timezone": "",
   "title": "NukeLab Infrastructure",

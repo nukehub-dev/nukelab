@@ -278,5 +278,5 @@ async def prometheus_metrics(authorization: str = Header(None)):
 
     from app.core.prometheus_metrics import get_metrics_output
 
-    data, content_type = get_metrics_output()
+    data, content_type = await get_metrics_output()
     return Response(content=data, media_type=content_type)

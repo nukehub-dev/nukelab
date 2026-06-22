@@ -94,6 +94,44 @@ services:
       retries: 3
       start_period: 10s
 
+  node-exporter:
+    image: docker.io/prom/node-exporter:v1.8.2
+    container_name: nukelab-node-exporter
+    command:
+      - --path.rootfs=/host
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+    volumes:
+      - /:/host:ro,rslave
+    networks:
+      - nukelab-network
+    pid: host
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9100/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  celery-exporter:
+    image: docker.io/danihodovic/celery-exporter:0.10.14
+    container_name: nukelab-celery-exporter
+    command:
+      - --broker-url=redis://redis:6379/0
+    networks:
+      - nukelab-network
+    depends_on:
+      - redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9808/metrics"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
 volumes:
   prometheus-data:
     name: nukelab-prometheus-data
