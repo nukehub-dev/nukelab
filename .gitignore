@@ -84,3 +84,4 @@ backend/tests/load/tokens.json
 # Docker volumes
 volumes/
 .nukelab-dev-compose.yml
+monitoring/alertmanager/alertmanager.generated.yml

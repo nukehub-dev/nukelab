@@ -449,6 +449,15 @@ wait_for_backend() {
 cmd_start() {
     setup_cpu_lib_volume
 
+    # Generate Alertmanager config from template before compose reads it.
+    local _env_file=".env"
+    if $USE_DEV_MODE && [ -f ".env.development" ]; then
+        _env_file=".env.development"
+    fi
+    if [ -f "$DIR/scripts/generate-alertmanager-config.sh" ]; then
+        "$DIR/scripts/generate-alertmanager-config.sh" "$_env_file" >/dev/null
+    fi
+
     if $USE_DEV_MODE; then
         step "Starting development stack..."
 

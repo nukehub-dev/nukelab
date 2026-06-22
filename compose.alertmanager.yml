@@ -12,8 +12,19 @@ services:
       - --storage.path=/alertmanager
       - --web.external-url=${ALERTMANAGER_EXTERNAL_URL:-http://localhost:8080/alertmanager}
       - --web.route-prefix=/
+    environment:
+      - SMTP_HOST=${SMTP_HOST:-localhost}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_REQUIRE_TLS=${SMTP_REQUIRE_TLS:-false}
+      - ALERTMANAGER_FROM=${ALERTMANAGER_FROM:-alerts@nukelab.local}
+      - ALERTMANAGER_EMAIL_TO=${ALERTMANAGER_EMAIL_TO:-admin@nukelab.local}
+      - ALERTMANAGER_WEBHOOK_URL=${ALERTMANAGER_WEBHOOK_URL:-http://localhost:5001/webhook}
+      - ALERTMANAGER_DEADMAN_URL=${ALERTMANAGER_DEADMAN_URL:-http://localhost:5001/deadman}
     volumes:
-      - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./monitoring/alertmanager/alertmanager.generated.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./monitoring/alertmanager/templates:/etc/alertmanager/templates:ro
       - alertmanager-data:/alertmanager
     networks:
       - nukelab-network
