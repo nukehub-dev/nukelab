@@ -122,6 +122,7 @@ class ServerSpawner:
             "NUKELAB_USER_ID": user_id,
             "NUKELAB_USERNAME": username,
             "NUKELAB_SERVER_ID": server_id,
+            "NUKELAB_SERVER_NAME": server_name,
             # Auth sidecar configuration
             "NUKELAB_AUTH_ENABLED": "true" if settings.server_auth_enabled else "false",
             "NUKELAB_AUTH_PUBLIC_KEY_PATH": "/etc/nukelab/auth/server-auth-public.pem",

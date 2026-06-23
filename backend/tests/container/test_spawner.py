@@ -632,6 +632,7 @@ class TestSpawnSuccess:
         env = call_kwargs["env"]
         assert env["FOO"] == "bar"
         assert env["NUKELAB_USERNAME"] == "testuser"
+        assert env["NUKELAB_SERVER_NAME"] == "srv1"
 
     @pytest.mark.asyncio
     async def test_spawn_with_volume_mounts_no_vol_id(self, fresh_spawner):
