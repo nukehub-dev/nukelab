@@ -383,6 +383,7 @@ function LoginCard({ error, hasLocal, hasOAuth, authMethods, handleOAuth, handle
                   <div className="relative group">
                     <input
                       type="text"
+                      data-testid="login-username"
                       value={username}
                       onChange={e => setUsername(e.target.value)}
                       placeholder="Enter your username"
@@ -396,6 +397,7 @@ function LoginCard({ error, hasLocal, hasOAuth, authMethods, handleOAuth, handle
                   <div className="relative group">
                     <input
                       type={showPass ? 'text' : 'password'}
+                      data-testid="login-password"
                       value={password}
                       onChange={e => setPassword(e.target.value)}
                       placeholder="••••••••"
@@ -414,6 +416,7 @@ function LoginCard({ error, hasLocal, hasOAuth, authMethods, handleOAuth, handle
 
                 <button
                   type="submit"
+                  data-testid="login-submit"
                   disabled={loading}
                   className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 active:scale-[0.98] transition-all duration-150 disabled:opacity-50 disabled:pointer-events-none shadow-lg shadow-primary/20 hover:-translate-y-0.5"
                 >

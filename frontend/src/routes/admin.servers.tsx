@@ -155,12 +155,14 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
       id: 'select' as const,
       header: ({ table }: { table: { getIsAllPageRowsSelected: () => boolean; toggleAllPageRowsSelected: (value?: boolean) => void } }) => (
         <Checkbox
+          data-testid="select-all-servers"
           checked={table.getIsAllPageRowsSelected()}
           onChange={(checked) => table.toggleAllPageRowsSelected(checked)}
         />
       ),
-      cell: ({ row }: { row: { getIsSelected: () => boolean; toggleSelected: (value?: boolean) => void } }) => (
+      cell: ({ row }: { row: { original: ServerType; getIsSelected: () => boolean; toggleSelected: (value?: boolean) => void } }) => (
         <Checkbox
+          data-testid={`select-server-${row.original.id}`}
           checked={row.getIsSelected()}
           onChange={(checked) => row.toggleSelected(checked)}
         />

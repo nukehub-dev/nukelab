@@ -76,6 +76,7 @@ async def bulk_server_action(
 
     succeeded = []
     failed = []
+    affected_user_ids: set[str] = set()
 
     for server_id in body.server_ids:
         try:
@@ -88,6 +89,10 @@ async def bulk_server_action(
             if not server:
                 failed.append({"server_id": server_id, "error": "Server not found"})
                 continue
+
+            # Capture owner before any mutation; deleted servers are no longer
+            # queryable after the action commits.
+            affected_user_ids.add(str(server.user_id))
 
             # Check ownership and cross-user access requirements
             is_cross_user = str(server.user_id) != str(current_user.id)
@@ -156,6 +161,12 @@ async def bulk_server_action(
             failed.append({"server_id": server_id, "error": e.detail})
         except Exception as e:
             failed.append({"server_id": server_id, "error": str(e)})
+
+    # Invalidate server list caches for affected users and admin lists
+    if affected_user_ids:
+        from app.api.servers import _invalidate_server_list_cache
+        for user_id in affected_user_ids:
+            await _invalidate_server_list_cache(user_id)
 
     return {
         "succeeded": succeeded,

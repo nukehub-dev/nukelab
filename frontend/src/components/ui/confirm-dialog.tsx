@@ -152,6 +152,7 @@ export function useConfirmDialog() {
         <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 mt-6 pt-4 border-t border-border/50">
           <Button
             variant="outline"
+            data-testid="confirm-dialog-cancel"
             onClick={() => handleClose(false)}
             className="w-full sm:w-auto"
           >
@@ -159,6 +160,7 @@ export function useConfirmDialog() {
           </Button>
           <Button
             variant={config.buttonVariant}
+            data-testid="confirm-dialog-confirm"
             onClick={() => handleClose(true)}
             className="w-full sm:w-auto"
             disabled={confirmDisabled}

@@ -10,11 +10,13 @@ interface SelectProps {
   placeholder?: string;
   className?: string;
   disabled?: boolean;
+  'data-testid'?: string;
 }
 
 interface SelectItemProps {
   value: string;
   children: React.ReactNode;
+  'data-testid'?: string;
 }
 
 interface SelectContextType {
@@ -26,7 +28,7 @@ interface SelectContextType {
 
 const SelectContext = React.createContext<SelectContextType | null>(null);
 
-function Select({ value, onChange, children, placeholder, className, disabled }: SelectProps) {
+function Select({ value, onChange, children, placeholder, className, disabled, 'data-testid': dataTestId }: SelectProps) {
   const [open, setOpen] = React.useState(false);
   const containerRef = React.useRef<HTMLDivElement>(null);
 
@@ -52,9 +54,10 @@ function Select({ value, onChange, children, placeholder, className, disabled }:
 
   return (
     <SelectContext.Provider value={{ value, onChange, open, setOpen }}>
-      <div ref={containerRef} className={cn('relative', className)}>
+      <div ref={containerRef} data-testid={dataTestId} className={cn('relative', className)}>
         <button
           type="button"
+          data-testid={dataTestId ? `${dataTestId}-trigger` : undefined}
           disabled={disabled}
           onClick={() => setOpen(!open)}
           className={cn(
@@ -75,7 +78,8 @@ function Select({ value, onChange, children, placeholder, className, disabled }:
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -4, scale: 0.98 }}
               transition={{ duration: 0.15 }}
-              className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-xl border border-border bg-popover p-1.5 shadow-lg space-y-1"
+                className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-xl border border-border bg-popover p-1.5 shadow-lg space-y-1"
+                data-testid="select-dropdown"
             >
               {children}
             </motion.div>
@@ -86,7 +90,7 @@ function Select({ value, onChange, children, placeholder, className, disabled }:
   );
 }
 
-function SelectItem({ value, children }: SelectItemProps) {
+function SelectItem({ value, children, 'data-testid': dataTestId }: SelectItemProps) {
   const context = React.useContext(SelectContext);
   if (!context) throw new Error('SelectItem must be used within Select');
 
@@ -96,6 +100,7 @@ function SelectItem({ value, children }: SelectItemProps) {
   return (
     <button
       type="button"
+      data-testid={dataTestId}
       onClick={() => {
         onChange(value);
         setOpen(false);

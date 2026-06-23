@@ -767,6 +767,24 @@ cmd_db_migrate() {
     ok "Migrations applied"
 }
 
+cmd_e2e() {
+    step "Running E2E tests..."
+    cd "$DIR/frontend"
+    [ -d "node_modules" ] || die "Run: ./manage.sh install frontend"
+    if ! command -v npx > /dev/null 2>&1; then
+        die "npx not found"
+    fi
+    if ! npx playwright test --version > /dev/null 2>&1; then
+        warn "Playwright not installed. Run: ./manage.sh install frontend"
+    fi
+    if ! curl -sf "${APP_URL:-http://localhost:8080}/api/health" > /dev/null 2>&1; then
+        warn "Backend does not appear to be running. Start it first:\n  ./manage.sh start --dev"
+        die "Backend health check failed"
+    fi
+    ok "Backend detected"
+    npx playwright test
+}
+
 cmd_db_shell() {
     step "Opening database shell..."
     $COMPOSE "${COMPOSE_ARGS[@]}" exec postgres psql -U "${DATABASE_USER:-nukelab}" -d "${DATABASE_NAME:-nukelab}"
@@ -865,10 +883,11 @@ ${BOLD}Database:${RESET}
 
 ${BOLD}Testing:${RESET}
   ${GREEN}test${RESET}       [target] [--coverage]      Run tests
+  ${GREEN}e2e${RESET}                                  Run Playwright E2E tests (backend must be running)
 
 ${BOLD}Targets:${RESET} ${DIM}(optional, default: all)${RESET}
   backend    Backend services (api, workers, db, redis, traefik)
-  frontend   Frontend service
+  frontend   Frontend unit/lint tests
   all        Everything ${DIM}(default)${RESET}
 
 ${BOLD}Flags:${RESET}
@@ -932,6 +951,12 @@ main() {
                 setup_compose_args
             fi
             ;;
+        e2e)
+            init_env
+            detect_engine
+            setup_podman_socket
+            setup_compose_args
+            ;;
     esac
 
     case "$CMD" in
@@ -949,6 +974,7 @@ main() {
         logs)        cmd_logs ;;
         install)     cmd_install ;;
         test)        cmd_test ;;
+        e2e)         cmd_e2e ;;
         db-migrate)  cmd_db_migrate ;;
         db-shell)    cmd_db_shell ;;
         backup)      cmd_backup ;;

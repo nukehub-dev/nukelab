@@ -6,12 +6,13 @@ export interface CheckboxProps
   extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange'> {
   checked: boolean;
   onChange: (checked: boolean) => void;
+  'data-testid'?: string;
 }
 
 const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
-  ({ className, checked, onChange, ...props }, ref) => {
+  ({ className, checked, onChange, 'data-testid': dataTestId, ...props }, ref) => {
     return (
-      <label className={cn('flex items-center gap-3 cursor-pointer group', className)}>
+      <label data-testid={dataTestId} className={cn('flex items-center gap-3 cursor-pointer group', className)}>
         <div className="relative">
           <input
             type="checkbox"

@@ -156,7 +156,7 @@ export function DeployServerDialog({
           <DialogTitle>Deploy New Server</DialogTitle>
           <DialogDescription>Create and spawn a new simulation server.</DialogDescription>
         </DialogHeader>
-        <form id="deploy-form" onSubmit={handleSubmit} className="space-y-4 mt-4" noValidate>
+        <form id="deploy-form" data-testid="deploy-form" onSubmit={handleSubmit} className="space-y-4 mt-4" noValidate>
           {visibleError && (
             <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
               <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
@@ -167,6 +167,7 @@ export function DeployServerDialog({
             <label className="text-sm font-medium">Server Name *</label>
             <Input
               type="text"
+              data-testid="deploy-server-name"
               value={deployForm.name}
               onChange={(e) => {
                 setDeployForm({ ...deployForm, name: e.target.value });
@@ -179,6 +180,7 @@ export function DeployServerDialog({
             <label className="text-sm font-medium">Plan *</label>
             <Select
               value={deployForm.plan_id}
+              data-testid="deploy-server-plan"
               onChange={(value) => {
                 setDeployForm({ ...deployForm, plan_id: value });
                 if (visibleError) setVisibleError(null);
@@ -186,7 +188,7 @@ export function DeployServerDialog({
               placeholder="Select a plan..."
             >
               {plans.map((plan) => (
-                <SelectItem key={plan.id} value={plan.id}>
+                <SelectItem key={plan.id} value={plan.id} data-testid={`deploy-server-plan-${plan.id}`}>
                   {plan.name} ({plan.cpu_limit} CPU / {plan.memory_limit} / {formatPlanResource(plan.disk_limit)} disk)
                 </SelectItem>
               ))}
@@ -196,6 +198,7 @@ export function DeployServerDialog({
             <label className="text-sm font-medium">Environment *</label>
             <Select
               value={deployForm.environment_id}
+              data-testid="deploy-server-environment"
               onChange={(value) => {
                 setDeployForm({ ...deployForm, environment_id: value });
                 if (visibleError) setVisibleError(null);
@@ -203,7 +206,7 @@ export function DeployServerDialog({
               placeholder="Select an environment..."
             >
               {environments.map((env) => (
-                <SelectItem key={env.id} value={env.id}>
+                <SelectItem key={env.id} value={env.id} data-testid={`deploy-server-environment-${env.id}`}>
                   {env.name} ({env.slug})
                 </SelectItem>
               ))}
@@ -359,7 +362,7 @@ export function DeployServerDialog({
           <Button variant="outline" type="button" onClick={handleCancel}>
             Cancel
           </Button>
-          <Button type="submit" form="deploy-form" loading={isPending} disabled={!isValid}>
+          <Button type="submit" form="deploy-form" data-testid="deploy-server-submit" loading={isPending} disabled={!isValid}>
             {isPending ? 'Deploying...' : 'Deploy'}
           </Button>
         </DialogFooter>

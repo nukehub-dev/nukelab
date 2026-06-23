@@ -25,3 +25,8 @@ dist-ssr
 
 # Generated service worker (source is sw.js.tpl)
 public/sw.js
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/

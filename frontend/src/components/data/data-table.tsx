@@ -221,6 +221,7 @@ export function DataTable<TData>({
                     {table.getRowModel().rows.map((row, i) => (
                       <motion.tr
                         key={row.id}
+                        data-testid={`table-row-${getRowId?.(row.original) || row.id}`}
                         initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: 20 }}

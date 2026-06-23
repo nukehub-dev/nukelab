@@ -1649,17 +1649,17 @@ Then the server stops and the bulk API returns success
 - [ ] **Performance**
   - [x] Database connection pooling — `pool_size`, `max_overflow`, `pool_timeout`, `pool_recycle`, `pool_pre_ping` wired into `create_async_engine`; asyncpg `command_timeout` for query abort
   - [x] Redis response caching — msgpack serialization, circuit breaker, stampede protection, SET-based invalidation; server list + admin list endpoints; 30s TTL with proactive invalidation
-  - [ ] Database query optimization
+  - [x] Database query optimization — `db_profiler.py`, `tune_autovacuum.py`, `app/services/query_stats.py`, slow-query SQLAlchemy event listener, and model indexes
   - [ ] CDN for static assets
   - [x] PgBouncer setup — transaction mode, auto-overlay, 20k client conn
 
 - [ ] **Observability**
   - [x] Structured logging (JSON) — `app.core.logging` with `JSONFormatter`, `CorrelationIdFilter`, correlation ID propagation
   - [x] Custom HTTP request metrics — `RequestMetric` model, route-aware normalization, batched DB writes, admin dashboard
-  - [ ] Prometheus metrics export — deferred; custom pipeline sufficient for single-node, revisit for K8s
-  - [ ] Grafana dashboards — deferred; custom React charts + admin analytics UI sufficient
+  - [x] Prometheus metrics export — `app/core/prometheus_metrics.py`, `/api/metrics` endpoint, request counter, WebSocket/Redis-cache/business gauges, multiprocess support
+  - [x] Grafana dashboards — provisioned dashboards (`nukelab-api.json`, `nukelab-infrastructure.json`) with Prometheus datasource; exporters for Postgres, Redis, Celery, Node, PgBouncer
   - [ ] Distributed tracing (OpenTelemetry)
-  - [ ] Error tracking (Sentry)
+  - [x] Error tracking (Sentry) — backend (`app/core/sentry.py`) with FastAPI/Celery/SQLAlchemy/Redis integrations and PII scrubbing; frontend (`@sentry/react`) captures server errors
 
 - [ ] **Kubernetes**
   - [ ] Kubernetes manifests (Deployments, Services, Ingress)
@@ -2360,10 +2360,10 @@ DEFAULT_MAX_SERVERS=3
 
 ---
 
-**Next Steps**: Phases 1–5, 7, and 8 are complete. Platform is production-hardened with PgBouncer, load testing infrastructure, structured logging, metrics, graceful shutdown, rate limiting, CSRF, security headers, IP restrictions, request size limits, database connection pooling, and Redis response caching. Recommended next work:
+**Next Steps**: Phases 1–5, 7, and 8 are complete. Platform is production-hardened with PgBouncer, load testing infrastructure, structured logging, metrics, graceful shutdown, rate limiting, CSRF, security headers, IP restrictions, request size limits, database connection pooling, Redis response caching, Prometheus + Grafana, Sentry, and database profiling tooling. Recommended next work:
 
 1. **Run load tests and act on results** — execute `./scripts/run-load-tests.sh baseline` and `./scripts/run-load-tests.sh stress`, then use `scripts/db_profiler.py slow-queries` to fix whatever breaks first
-2. **Database query optimization** — the project already has extensive indexing, partitioning, N+1 fixes, and profiling tools (`db_profiler.py`, `tune_autovacuum.py`). The next level is analyzing output from real load tests and adding targeted indexes or query rewrites
-3. **E2E tests (Playwright)** — critical user flows: login, spawn server, stop server, admin bulk actions
-4. **Prometheus + Grafana** — for 100k users, you need alerting on PgBouncer pool saturation, Postgres lock waits, and API p95 latency degradation. The custom metrics pipeline is good; Prometheus export makes it operable
+2. **E2E tests (Playwright)** — critical user flows: login, spawn server, stop server, admin bulk actions
+3. **OpenTelemetry distributed tracing** — end-to-end request tracing across FastAPI, Celery, and database calls
+4. **Environment image build pipeline** — automated builds, registry integration, image versioning, and base-image updates
 5. **Phase 6 items** (Kubernetes, CI/CD, blue-green deployment) remain future goals for multi-node scaling — only pursue after you've saturated a single large server (32+ cores, 128GB+ RAM) and proven you need distribution

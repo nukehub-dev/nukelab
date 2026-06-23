@@ -55,6 +55,7 @@ export function ActionButton({
 
   return (
     <button
+      data-testid={`action-${action}`}
       onClick={onClick}
       disabled={disabled || loading}
       className={cn(

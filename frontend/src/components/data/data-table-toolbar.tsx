@@ -324,6 +324,7 @@ export function DataTableToolbar<TData>({
               {bulkActions.map((action) => (
                 <button
                   key={action.label}
+                  data-testid={`bulk-action-${action.label.toLowerCase()}`}
                   onClick={() => action.onClick(selectedIds)}
                   className={cn(
                     'h-8 px-3 rounded-lg text-sm font-medium flex items-center gap-2',

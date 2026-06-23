@@ -607,6 +607,7 @@ function ServersPage() {
             <>
               <Tooltip content={isOperationPending(server.id, 'stop') ? 'Stopping...' : 'Stop'}>
                 <button
+                  data-testid={`stop-server-${server.id}`}
                   onClick={() => stopServer.mutate({ serverId: server.id })}
                   disabled={isOperationPending(server.id, 'stop')}
                   className="p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-all duration-100 inline-flex disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-[1px] active:translate-y-[1px]"
