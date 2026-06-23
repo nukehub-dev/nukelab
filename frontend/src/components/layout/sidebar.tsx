@@ -17,8 +17,8 @@ import {
   Monitor,
   LogOut,
   Pin,
-  PanelLeftClose,
-  PanelLeft,
+  ArrowLeftFromLine,
+  ArrowRightFromLine,
   UserCircle,
   Clock,
 } from 'lucide-react';
@@ -67,7 +67,7 @@ const navGroups: NavGroup[] = [
     label: 'System',
     items: [
       { label: 'Settings', icon: Settings, href: '/settings' },
-      { label: 'Administration', icon: Shield, href: '/admin', requiredPermission: undefined as any },
+      { label: 'Administration', icon: Shield, href: '/admin' },
     ],
   },
 ];
@@ -165,9 +165,9 @@ export function Sidebar() {
                   <NukeLabLogo size={32} className="text-primary" />
                 </span>
                 <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  {mode === 'expanded' && <PanelLeftClose className="w-5 h-5 text-primary" />}
+                  {mode === 'expanded' && <ArrowLeftFromLine className="w-5 h-5 text-primary" />}
                   {mode === 'auto' && <Pin className="w-5 h-5 text-primary" />}
-                  {mode === 'collapsed' && <PanelLeft className="w-5 h-5 text-primary" />}
+                  {mode === 'collapsed' && <ArrowRightFromLine className="w-5 h-5 text-primary" />}
                 </span>
               </button>
             </Tooltip>
@@ -196,9 +196,9 @@ export function Sidebar() {
               className="p-1.5 rounded-md transition-colors hover:bg-sidebar-accent shrink-0"
               style={{ opacity: isOpen ? 1 : 0, transition: 'all 0.3s ease' }}
             >
-              {mode === 'expanded' && <PanelLeftClose className="w-4 h-4" />}
+              {mode === 'expanded' && <ArrowLeftFromLine className="w-4 h-4" />}
               {mode === 'auto' && <Pin className="w-4 h-4" />}
-              {mode === 'collapsed' && <PanelLeft className="w-4 h-4" />}
+              {mode === 'collapsed' && <ArrowRightFromLine className="w-4 h-4" />}
             </button>
           </Tooltip>
         </div>
