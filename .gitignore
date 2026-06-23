@@ -84,4 +84,7 @@ backend/tests/load/tokens.json
 # Docker volumes
 volumes/
 .nukelab-dev-compose.yml
+
+# Generated files
 monitoring/alertmanager/alertmanager.generated.yml
+monitoring/prometheus/prometheus.generated.yml

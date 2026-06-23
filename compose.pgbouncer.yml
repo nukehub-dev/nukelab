@@ -2,19 +2,22 @@
 # Use when approaching Postgres max_connections limits.
 #
 # Usage:
-#   Set DATABASE_PGBOUNCER_URL in your .env and run:
+#   Set PGBOUNCER_ENABLED=true in your .env and run:
 #     ./manage.sh start
-#   The overlay is injected automatically by manage.sh.
+#   The overlay is injected automatically by manage.sh. You can also set
+#   DATABASE_PGBOUNCER_URL explicitly to override the generated URL.
 #
 # Or one-off:
 #   ./manage.sh start --overlay compose.pgbouncer.yml
 #
 # Then update .env:
 #   DATABASE_URL=postgresql+asyncpg://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres:5432/${DATABASE_NAME}
+#   PGBOUNCER_ENABLED=true
+#   # Optional explicit URL (defaults to pgbouncer:6432 with the same credentials)
 #   DATABASE_PGBOUNCER_URL=postgresql+asyncpg://${DATABASE_USER}:${DATABASE_PASSWORD}@pgbouncer:6432/${DATABASE_NAME}
 #
 # IMPORTANT: Keep DATABASE_URL pointed at direct Postgres so migrations and
-# DDL bypass PgBouncer automatically. When DATABASE_PGBOUNCER_URL is set,
+# DDL bypass PgBouncer automatically. When PgBouncer is enabled,
 # SQLAlchemy client-side pooling is disabled (NullPool) to avoid double-pooling
 # and connection storms at scale. PgBouncer becomes the single source of truth.
 

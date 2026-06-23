@@ -1,5 +1,5 @@
 # PgBouncer Prometheus exporter — only useful when PgBouncer overlay is active.
-# Auto-added by manage.sh when DATABASE_PGBOUNCER_URL is set.
+# Auto-added by manage.sh when PGBOUNCER_ENABLED=true.
 
 services:
   pgbouncer-exporter:

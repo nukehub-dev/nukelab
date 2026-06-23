@@ -19,7 +19,7 @@ services:
       - --web.external-url=${PROMETHEUS_EXTERNAL_URL:-http://localhost:8080/prometheus}
       - --web.route-prefix=/
     volumes:
-      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/prometheus.generated.yml:/etc/prometheus/prometheus.yml:ro
       - ./monitoring/prometheus/rules:/etc/prometheus/rules:ro
       - prometheus-data:/prometheus
     networks:

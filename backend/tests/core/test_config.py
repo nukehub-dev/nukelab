@@ -101,6 +101,29 @@ class TestCorsValidation:
         assert settings.cors_origins == "*"
 
 
+class TestPgBouncerSettings:
+    """PgBouncer auto-detection and URL derivation."""
+
+    def test_pgbouncer_disabled_by_default(self):
+        settings = Settings()
+        assert settings.pgbouncer_enabled is False
+        assert settings.database_pgbouncer_url == ""
+
+    def test_pgbouncer_enabled_derives_default_url(self):
+        settings = Settings(
+            pgbouncer_enabled=True,
+            database_url="postgresql+asyncpg://nukelab:secret@postgres:5432/nukelab",
+        )
+        assert settings.database_pgbouncer_url == (
+            "postgresql+asyncpg://nukelab:secret@pgbouncer:6432/nukelab"
+        )
+
+    def test_pgbouncer_url_can_be_overridden(self):
+        explicit = "postgresql+asyncpg://user:pass@pgbouncer:6432/db"
+        settings = Settings(pgbouncer_enabled=True, database_pgbouncer_url=explicit)
+        assert settings.database_pgbouncer_url == explicit
+
+
 class TestDatabasePoolSettings:
     """Database connection pool configuration defaults."""
 

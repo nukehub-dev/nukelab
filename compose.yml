@@ -125,6 +125,7 @@ services:
       - DEV_ADMIN_USER=${DEV_ADMIN_USER:-admin}
       - DEV_ADMIN_PASSWORD=${DEV_ADMIN_PASSWORD:-admin123}
       - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://nukelab:nukelab123@postgres:5432/nukelab}
+      - PGBOUNCER_ENABLED=${PGBOUNCER_ENABLED:-false}
       - DATABASE_PGBOUNCER_URL=${DATABASE_PGBOUNCER_URL:-}
       - DATABASE_POOL_SIZE=${DATABASE_POOL_SIZE:-10}
       - DATABASE_POOL_MAX_OVERFLOW=${DATABASE_POOL_MAX_OVERFLOW:-10}
@@ -246,6 +247,7 @@ services:
     command: celery -A app.worker worker --loglevel=info -P threads -c 4
     environment:
       - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://nukelab:nukelab123@postgres:5432/nukelab}
+      - PGBOUNCER_ENABLED=${PGBOUNCER_ENABLED:-false}
       - DATABASE_PGBOUNCER_URL=${DATABASE_PGBOUNCER_URL:-}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
       - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret}
@@ -279,6 +281,7 @@ services:
     command: celery -A app.worker beat --loglevel=info --schedule /tmp/celerybeat-schedule
     environment:
       - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://nukelab:nukelab123@postgres:5432/nukelab}
+      - PGBOUNCER_ENABLED=${PGBOUNCER_ENABLED:-false}
       - DATABASE_PGBOUNCER_URL=${DATABASE_PGBOUNCER_URL:-}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
       - SENTRY_DSN=${SENTRY_DSN:-}

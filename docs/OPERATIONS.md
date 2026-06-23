@@ -140,14 +140,15 @@ SELECT count(*) FROM pg_stat_activity WHERE state = 'active';
 
 ### 4.2 How to Enable
 
-Set `DATABASE_PGBOUNCER_URL` in your `.env`. `manage.sh` auto-detects it and injects the overlay — no need to set `COMPOSE_OVERLAYS`.
+Set `PGBOUNCER_ENABLED=true` in your `.env`. `manage.sh` auto-detects it and
+injects the overlay — no need to set `COMPOSE_OVERLAYS`.
 
 ```bash
 # 1. Keep DATABASE_URL on direct Postgres (used for migrations)
 DATABASE_URL=postgresql+asyncpg://nukelab:strong-password@postgres:5432/nukelab
 
-# 2. Add PgBouncer URL for the app
-DATABASE_PGBOUNCER_URL=postgresql+asyncpg://nukelab:strong-password@pgbouncer:6432/nukelab
+# 2. Enable PgBouncer (DATABASE_PGBOUNCER_URL is optional; a default is used)
+PGBOUNCER_ENABLED=true
 
 # 3. Start — overlay is automatic
 ./manage.sh start
@@ -168,7 +169,7 @@ App → PgBouncer → PostgreSQL
 
 Your app opens thousands of "fake" connections to PgBouncer. PgBouncer keeps a bounded pool of **real** connections open to Postgres and reuses them. Postgres never sees more than `MAX_DB_CONNECTIONS` (default 400) connections, even with 100k users.
 
-When `DATABASE_PGBOUNCER_URL` is set:
+When `PGBOUNCER_ENABLED=true`:
 - SQLAlchemy client-side pooling is disabled (`NullPool`)
 - asyncpg prepared statement caching is disabled
 - PgBouncer becomes the single source of truth for connection pooling

@@ -257,8 +257,8 @@ EOF
         COMPOSE_OVERLAY_FILES+=("${_env_overlays[@]}")
     fi
 
-    # Auto-inject PgBouncer overlay when DATABASE_PGBOUNCER_URL is set
-    if [ -n "${DATABASE_PGBOUNCER_URL:-}" ]; then
+    # Auto-inject PgBouncer overlay when explicitly enabled
+    if [ "${PGBOUNCER_ENABLED:-false}" = "true" ]; then
         local _pgbouncer_overlay="compose.pgbouncer.yml"
         local _pgbouncer_found=false
         for _o in "${COMPOSE_OVERLAY_FILES[@]}"; do
@@ -269,7 +269,7 @@ EOF
         done
         if ! $_pgbouncer_found; then
             COMPOSE_OVERLAY_FILES+=("$_pgbouncer_overlay")
-            info "PgBouncer enabled via DATABASE_PGBOUNCER_URL — adding overlay"
+            info "PgBouncer enabled — adding overlay"
         fi
 
         # Warn if DATABASE_URL also points to PgBouncer (migrations should use direct Postgres)
@@ -284,7 +284,7 @@ EOF
     # connections and competing with the test database.
     if [ "${CMD:-}" != "test" ] && ([[ "${PROMETHEUS_ENABLED:-false}" == "true" ]] || [[ "${GRAFANA_ENABLED:-false}" == "true" ]]); then
         local _monitoring_overlays=("compose.monitoring.yml")
-        if [ -n "${DATABASE_PGBOUNCER_URL:-}" ]; then
+        if [ "${PGBOUNCER_ENABLED:-false}" = "true" ]; then
             _monitoring_overlays+=("compose.monitoring-pgbouncer.yml")
         fi
         for _monitoring_overlay in "${_monitoring_overlays[@]}"; do
@@ -449,13 +449,16 @@ wait_for_backend() {
 cmd_start() {
     setup_cpu_lib_volume
 
-    # Generate Alertmanager config from template before compose reads it.
+    # Generate dynamic config files from templates before compose reads them.
     local _env_file=".env"
     if $USE_DEV_MODE && [ -f ".env.development" ]; then
         _env_file=".env.development"
     fi
     if [ -f "$DIR/scripts/generate-alertmanager-config.sh" ]; then
         "$DIR/scripts/generate-alertmanager-config.sh" "$_env_file" >/dev/null
+    fi
+    if [ -f "$DIR/scripts/generate-prometheus-config.sh" ]; then
+        "$DIR/scripts/generate-prometheus-config.sh" "$_env_file" >/dev/null
     fi
 
     if $USE_DEV_MODE; then
@@ -887,8 +890,10 @@ ${BOLD}Examples:${RESET}
                                          # Restore database from backup
   ./manage.sh test                       # Run all tests (auto-detect)
   ./manage.sh test backend --coverage    # Run backend tests with coverage
-  DATABASE_PGBOUNCER_URL=postgresql+asyncpg://... ./manage.sh start
+  PGBOUNCER_ENABLED=true ./manage.sh start
                                          # Start with PgBouncer (auto-overlay)
+  PGBOUNCER_ENABLED=true DATABASE_PGBOUNCER_URL=postgresql+asyncpg://... ./manage.sh start
+                                         # Start with explicit PgBouncer URL
   ./manage.sh start --overlay compose.pgbouncer.yml
                                          # Start with PgBouncer overlay (manual)
   PROMETHEUS_ENABLED=true GRAFANA_ENABLED=true ./manage.sh start

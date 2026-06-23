@@ -34,8 +34,4 @@ scrape_configs:
     static_configs:
       - targets: ['celery-exporter:9808']
 
-  # PgBouncer is provided by a separate overlay (compose.pgbouncer.yml).
-  # Add this job only when that overlay is active.
-  # - job_name: 'pgbouncer-exporter'
-  #   static_configs:
-  #     - targets: ['pgbouncer-exporter:9127']
+${PGBOUNCER_SCRAPE_JOBS}

@@ -60,8 +60,8 @@ faster.
 └─────────────┘          └─────────────┘
 ```
 
-When `DATABASE_PGBOUNCER_URL` is set, `manage.sh` also adds the PgBouncer
-exporter overlay (`compose.monitoring-pgbouncer.yml`).
+When `PGBOUNCER_ENABLED=true`, `manage.sh` also adds the PgBouncer exporter
+overlay (`compose.monitoring-pgbouncer.yml`).
 
 ---
 
@@ -229,8 +229,10 @@ Then restart:
 
 Alertmanager will be available at `http://localhost:9093`.
 
-The default config (`monitoring/alertmanager/alertmanager.yml`) only logs
-alerts. Edit it to add real receivers (Slack, PagerDuty, email, Discord, etc.).
+The generated config (`monitoring/alertmanager/alertmanager.generated.yml`) is
+produced from `monitoring/alertmanager/alertmanager.yml.tpl` by `manage.sh`.
+Adjust environment variables (e.g., `ALERTMANAGER_EMAIL_TO`, `SMTP_*`) or edit
+the template to change receivers (Slack, PagerDuty, email, Discord, etc.).
 
 Included alert rules live in `monitoring/prometheus/rules/nukelab.yml`:
 
@@ -264,7 +266,7 @@ When you move to k3s, the same instrumentation works without changes:
 |---------------|----------------|
 | `compose.monitoring.yml` | `kube-prometheus-stack` Helm chart |
 | `compose.alertmanager.yml` | Alertmanager managed by the Operator |
-| `monitoring/prometheus/prometheus.yml` | `ServiceMonitor` + `Prometheus` CRD |
+| `monitoring/prometheus/prometheus.yml.tpl` | `ServiceMonitor` + `Prometheus` CRD |
 | `monitoring/prometheus/rules/nukelab.yml` | `PrometheusRule` CRD |
 | `monitoring/grafana/provisioning/dashboards/*.json` | Grafana dashboard ConfigMap |
 | `PROMETHEUS_SCRAPE_TOKEN` | Network policies or ServiceMonitor auth |

@@ -1,5 +1,6 @@
 import os
 from typing import Optional
+from urllib.parse import urlparse, urlunparse
 from pydantic_settings import BaseSettings
 from pydantic import model_validator
 
@@ -105,7 +106,8 @@ class Settings(BaseSettings):
     oauth_pkce_enabled: bool = True
 
     database_url: str = "postgresql+asyncpg://nukelab:nukelab123@postgres:5432/nukelab"
-    database_pgbouncer_url: str = ""  # When set, app uses PgBouncer + NullPool
+    pgbouncer_enabled: bool = False
+    database_pgbouncer_url: str = ""  # Optional override; default derived from database_url
     database_pool_size: int = 10
     database_pool_max_overflow: int = 10
     database_pool_timeout: int = 30
@@ -221,6 +223,18 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "SESSION_SECRET is using a default/dev value. "
                     "Set a strong random secret before running in production."
+                )
+        return self
+
+    @model_validator(mode='after')
+    def set_pgbouncer_url(self) -> 'Settings':
+        """Derive a default PgBouncer URL when pooling is enabled explicitly."""
+        if self.pgbouncer_enabled and not self.database_pgbouncer_url:
+            parsed = urlparse(self.database_url)
+            if parsed.username is not None and parsed.password is not None:
+                netloc = f"{parsed.username}:{parsed.password}@pgbouncer:6432"
+                self.database_pgbouncer_url = urlunparse(
+                    (parsed.scheme, netloc, parsed.path, "", parsed.query, "")
                 )
         return self
 

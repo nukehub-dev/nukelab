@@ -6,11 +6,12 @@ from sqlalchemy.pool import NullPool
 from app.config import settings
 from app.core.logging import get_logger
 
-# When DATABASE_PGBOUNCER_URL is set, the app routes through PgBouncer.
-# In that mode we disable asyncpg prepared statements (transaction pooling
-# breaks them) and switch SQLAlchemy to NullPool so PgBouncer is the single
-# source of truth for connection pooling.
-_use_pgbouncer = bool(settings.database_pgbouncer_url and settings.database_pgbouncer_url.strip())
+# PgBouncer is controlled by PGBOUNCER_ENABLED. When enabled, the app routes
+# through PgBouncer (DATABASE_PGBOUNCER_URL is optional and overrides the
+# generated URL). In that mode we disable asyncpg prepared statements
+# (transaction pooling breaks them) and switch SQLAlchemy to NullPool so
+# PgBouncer is the single source of truth for connection pooling.
+_use_pgbouncer = settings.pgbouncer_enabled
 
 _connect_args: dict = {
     "command_timeout": settings.database_query_timeout_seconds,
