@@ -2,7 +2,7 @@ import { createFileRoute, Link } from '@tanstack/react-router';
 import { Server, Activity, Cpu, MemoryStick, Play, Square, RotateCcw, Trash2, ExternalLink, Eye, Users } from 'lucide-react';
 import { Tooltip } from '../components/ui/tooltip';
 import { Checkbox } from '../components/ui/checkbox';
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { type ColumnDef, type SortingState, type ColumnFiltersState, type VisibilityState } from '@tanstack/react-table';
 import { ResourcePageLayout } from '../components/layout/resource-page-layout';
 import { DataTable } from '../components/data/data-table';
@@ -37,6 +37,7 @@ function AdminServersPage() {
 }
 
 function AdminServersContent({ enableManagement }: { enableManagement: boolean }) {
+  const density = useThemeStore((state) => state.density);
   const { confirm, dialog } = useConfirmDialog();
   const { data: servers = [], isLoading, isError, error } = useServers();
   const { createServer, startServer, stopServer, restartServer, deleteServer, startServerAsync, promptAccessReason, isOperationPending, dialog: reasonDialog } = useServerActionsWithReason();
@@ -44,7 +45,10 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
   const { prompt } = useReasonDialog();
   const user = useAuthStore((state) => state.user);
   const canAccessOthersServers = useAuthStore((state) => state.canAccessOthersServers());
-  const canAccessServer = (server: ServerType) => !user || server.user_id === user.id || canAccessOthersServers;
+  const canAccessServer = useCallback(
+    (server: ServerType) => !user || server.user_id === user.id || canAccessOthersServers,
+    [user, canAccessOthersServers]
+  );
   const { data: envData } = useEnvironments({ is_active: true, limit: 100 });
   const { data: plansData } = usePlans({ is_active: true, limit: 100 });
   const { data: volumesData } = useVolumes();
@@ -359,7 +363,7 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
       },
       enableSorting: false,
     }] : []),
-  ], [enableManagement, isOperationPending, startServer, stopServer, restartServer, deleteServer, confirm, startServerAsync, user, canAccessOthersServers]);
+  ], [enableManagement, isOperationPending, startServer, stopServer, restartServer, deleteServer, confirm, startServerAsync, canAccessServer, promptAccessReason]);
 
   const activeServers = servers.filter((s) => s.status === 'running').length;
   const parseMemory = (mem: string | undefined) => {
@@ -624,7 +628,7 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
           filters={filters}
           searchable
           searchPlaceholder="Search by name, status, or owner..."
-          density={useThemeStore().density}
+          density={density}
           mobileCardRenderer={mobileCardRenderer}
           enableRowSelection={enableManagement}
         />

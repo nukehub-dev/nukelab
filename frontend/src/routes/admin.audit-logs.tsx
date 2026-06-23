@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, createElement } from 'react';
 import {
   FileText,
   Shield,
@@ -85,13 +85,12 @@ function getStatusBadge(statusCode: number | undefined): { icon: typeof CheckCir
 }
 
 function DetailRow({ label, value, mono = false }: { label: string; value: React.ReactNode; mono?: boolean }) {
-  const Icon = getDetailIcon(label);
   return (
     <div className="flex items-center justify-between py-2.5 border-b border-border/30 last:border-0"
     >
       <span className="text-xs text-muted-foreground flex items-center gap-2"
       >
-        <Icon className="w-3.5 h-3.5 text-muted-foreground/70" />
+        {createElement(getDetailIcon(label), { className: 'w-3.5 h-3.5 text-muted-foreground/70' })}
         {label}
       </span>
       <span className={mono ? 'font-mono text-xs text-foreground' : 'text-sm font-medium text-foreground'}>{value}</span>
@@ -135,6 +134,7 @@ function CopyableId({ id }: { id: string }) {
 function AuditLogsPage() {
   const navigate = useNavigate();
   const canViewAudit = useAuthStore((state) => state.hasPermission(PERMISSIONS.AUDIT_READ));
+  const density = useThemeStore((state) => state.density);
 
   useEffect(() => {
     if (!canViewAudit) {
@@ -441,7 +441,7 @@ function AuditLogsPage() {
           filters={filters}
           searchable
           searchPlaceholder="Search audit logs..."
-          density={useThemeStore().density}
+          density={density}
           mobileCardRenderer={mobileCardRenderer}
           enableRowSelection={false}
           defaultMobileView={false}

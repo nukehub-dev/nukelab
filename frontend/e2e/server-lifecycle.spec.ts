@@ -9,14 +9,14 @@ import {
 } from './helpers/api';
 
 test.describe('Server lifecycle', () => {
-  let testEnvId: string;
-  let planId: string;
+  let _testEnvId: string;
+  let _planId: string;
   const serverName = `e2e-server-${Date.now()}`;
 
   test.beforeAll(async ({ request }) => {
     const { access_token } = await apiLogin(request, ADMIN_USERNAME, ADMIN_PASSWORD);
-    testEnvId = await getOrCreateTestEnvironment(request, access_token);
-    planId = await getPlanId(request, access_token);
+    _testEnvId = await getOrCreateTestEnvironment(request, access_token);
+    _planId = await getPlanId(request, access_token);
   });
 
   test.afterAll(async ({ request }) => {
@@ -58,7 +58,7 @@ test.describe('Server lifecycle', () => {
     const serverRow = row.filter({ hasText: serverName });
     // Table defaults to mobile card view; the TR is present but hidden. Use visible card text.
     await expect(page.getByText(serverName).locator('visible=true')).toBeVisible({ timeout: 30000 });
-    await expect(serverRow).toContainText(/running|pending|stopped|error|Start \& Open/, { timeout: 60000 });
+    await expect(serverRow).toContainText(/running|pending|stopped|error|Start & Open/, { timeout: 60000 });
 
     const stopButton = page.getByTestId(new RegExp(`stop-server-.*`)).first();
     if (await stopButton.isVisible().catch(() => false)) {

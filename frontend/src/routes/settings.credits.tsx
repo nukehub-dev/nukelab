@@ -42,6 +42,11 @@ function getTypeConfig(type: string) {
   return TYPE_CONFIG[type] || { label: type, icon: Clock, color: 'text-muted-foreground', bg: 'bg-muted' };
 }
 
+function getSortIcon(column: string, sortBy: string, sortDesc: boolean): React.ReactNode {
+  if (sortBy !== column) return <ArrowUpDown className="w-3 h-3 opacity-30" />;
+  return sortDesc ? <ArrowDown className="w-3 h-3" /> : <ArrowUp className="w-3 h-3" />;
+}
+
 export const Route = createFileRoute('/settings/credits')({
   component: CreditsSettingsPage,
 });
@@ -79,11 +84,6 @@ function CreditsSettingsPage() {
       setSortDesc(column === 'created_at');
     }
     setPage(1);
-  };
-
-  const SortIcon = ({ column }: { column: string }) => {
-    if (sortBy !== column) return <ArrowUpDown className="w-3 h-3 opacity-30" />;
-    return sortDesc ? <ArrowDown className="w-3 h-3" /> : <ArrowUp className="w-3 h-3" />;
   };
 
   return (
@@ -207,19 +207,19 @@ function CreditsSettingsPage() {
             {/* Column Headers */}
             <div className="grid grid-cols-[100px_1fr_100px_100px_130px] gap-3 px-5 py-2.5 text-xs font-medium text-muted-foreground border-b border-border/30 bg-muted/20 min-w-[600px]">
               <button onClick={() => handleSort('type')} className="flex items-center gap-1 hover:text-primary transition-colors text-left">
-                Type <SortIcon column="type" />
+                  Type {getSortIcon('type', sortBy, sortDesc)}
               </button>
               <button onClick={() => handleSort('description')} className="flex items-center gap-1 hover:text-primary transition-colors text-left">
-                Description <SortIcon column="description" />
+                  Description {getSortIcon('description', sortBy, sortDesc)}
               </button>
               <button onClick={() => handleSort('amount')} className="flex items-center gap-1 hover:text-primary transition-colors justify-end">
-                Amount <SortIcon column="amount" />
+                  Amount {getSortIcon('amount', sortBy, sortDesc)}
               </button>
               <button onClick={() => handleSort('balance_after')} className="flex items-center gap-1 hover:text-primary transition-colors justify-end">
-                Balance <SortIcon column="balance_after" />
+                  Balance {getSortIcon('balance_after', sortBy, sortDesc)}
               </button>
               <button onClick={() => handleSort('created_at')} className="flex items-center gap-1 hover:text-primary transition-colors justify-end">
-                Time <SortIcon column="created_at" />
+                  Time {getSortIcon('created_at', sortBy, sortDesc)}
               </button>
             </div>
 

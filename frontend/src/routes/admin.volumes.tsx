@@ -53,8 +53,7 @@ function visibilityBadgeClass(visibility: string): string {
 
 function VolumesAdminPage() {
   const allowed = usePageGuard({ permission: PERMISSIONS.ADMIN_ACCESS });
-  if (!allowed) return null;
-
+  const density = useThemeStore((state) => state.density);
   const hasPermission = useAuthStore((state) => state.hasPermission);
   const canManageVolumes = hasPermission(PERMISSIONS.VOLUMES_WRITE_ALL);
 
@@ -424,6 +423,8 @@ function VolumesAdminPage() {
     );
   };
 
+  if (!allowed) return null;
+
   return (
     <>
       <ResourcePageLayout
@@ -464,7 +465,7 @@ function VolumesAdminPage() {
           filters={filters}
           searchable
           searchPlaceholder="Search volumes..."
-          density={useThemeStore().density}
+          density={density}
           mobileCardRenderer={mobileCardRenderer}
           bulkActions={bulkActions}
           enableRowSelection={canManageVolumes}

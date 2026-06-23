@@ -54,8 +54,9 @@ export interface WorkspaceVolume {
     server_count?: number;
     description?: string | null;
     labels?: Record<string, string>;
-    created_at?: string;
-    updated_at?: string;
+  created_at?: string;
+  updated_at?: string;
+  expires_at?: string;
     last_mounted_at?: string | null;
     owner?: {
       id: string;
@@ -74,6 +75,7 @@ export interface WorkspaceInvitation {
   status: 'pending' | 'accepted' | 'rejected';
   created_at?: string;
   updated_at?: string;
+  expires_at?: string;
   username?: string;
   display_name?: string;
   avatar_url?: string;

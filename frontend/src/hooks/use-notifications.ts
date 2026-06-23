@@ -11,7 +11,7 @@ export interface Notification {
   read: boolean;
   read_at?: string;
   action_url?: string;
-  extra_data: Record<string, any>;
+  extra_data: Record<string, unknown>;
   created_at: string;
 }
 

@@ -167,11 +167,12 @@ export function UserServerMetrics({ servers }: UserServerMetricsProps) {
       }
     });
 
+    const subscribedIds = Array.from(subscribedRef.current);
+
     return () => {
-      subscribedRef.current.forEach((id) => {
+      subscribedIds.forEach((id) => {
         unsubscribe('server', id);
       });
-      subscribedRef.current.clear();
     };
   }, [isConnected, runningServers, subscribe, unsubscribe]);
 

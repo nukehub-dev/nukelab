@@ -63,13 +63,15 @@ export function useConfirmDialog() {
     });
   }, []);
 
+  const resolve = state.resolve;
+
   const handleClose = useCallback(
     (value: boolean) => {
-      state.resolve?.(value);
+      resolve?.(value);
       setState((prev) => ({ ...prev, isOpen: false, resolve: null }));
       setTypedText('');
     },
-    [state.resolve]
+    [resolve]
   );
 
   const config = variantConfig[state.variant ?? 'info'];

@@ -20,7 +20,8 @@ import {
 } from 'lucide-react';
 import { useUserUsage } from '../hooks/use-analytics';
 import { useCurrentUser } from '../hooks/use-current-user';
-import { MetricsAreaChart, formatters } from '../components/charts/area-chart';
+import { MetricsAreaChart } from '../components/charts/area-chart';
+import { formatters } from '../components/charts/chart-formatters';
 import {
   BarChart,
   Bar,

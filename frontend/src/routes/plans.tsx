@@ -131,8 +131,8 @@ function PlansCatalogPage() {
 
   const { data, isLoading } = usePlans({});
 
-  const plans = data?.data || [];
-  const activePlans = plans.filter((p) => p.is_active);
+  const plans = useMemo(() => data?.data || [], [data?.data]);
+  const activePlans = useMemo(() => plans.filter((p) => p.is_active), [plans]);
 
   // Filter and sort: active first, then inactive
   const filteredPlans = useMemo(() => {

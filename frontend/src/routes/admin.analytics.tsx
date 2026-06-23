@@ -36,7 +36,8 @@ import {
   useRequestMetrics,
 } from '../hooks/use-analytics';
 import { StatCard } from '../components/data/stat-card';
-import { MetricsAreaChart, formatters } from '../components/charts/area-chart';
+import { MetricsAreaChart } from '../components/charts/area-chart';
+import { formatters } from '../components/charts/chart-formatters';
 import { TimeSeriesBarChart } from '../components/charts/time-series-bar-chart';
 import { GaugeChart } from '../components/charts/gauge-chart';
 import { SegmentedBar } from '../components/charts/segmented-bar';
@@ -182,8 +183,6 @@ function ExportButton({ data, filename }: { data: unknown[]; filename: string })
 
 function AnalyticsDashboard() {
   const allowed = usePageGuard({ permission: PERMISSIONS.ANALYTICS_READ });
-  if (!allowed) return null;
-
   const [dateRange, setDateRange] = useState<DateRange>(getDefaultDateRange);
   const [compareMode, setCompareMode] = useState(false);
   const [heatmapTab, setHeatmapTab] = useState<'signups' | 'credits' | 'servers' | 'logins'>('signups');
@@ -324,6 +323,8 @@ function AnalyticsDashboard() {
       })) || []
     );
   }, [heatmapTab, userGrowth, creditFlow, loginEvents, globalUsage]);
+
+  if (!allowed) return null;
 
   return (
     <div className="min-h-screen p-6 lg:p-10 space-y-10">

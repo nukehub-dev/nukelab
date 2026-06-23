@@ -68,15 +68,17 @@ export function DeployServerDialog({
     if (open) {
       const planId = defaultPlanId && plans.some((p) => p.id === defaultPlanId) ? defaultPlanId : '';
       const envId = defaultEnvironmentId && environments.some((e) => e.id === defaultEnvironmentId) ? defaultEnvironmentId : '';
-      setDeployForm({ name: '', plan_id: planId, environment_id: envId });
-      setVolumeMounts([{ volume_id: '', mount_path: '', mode: 'read_write', max_size_gb: 10 }]);
-      setVisibleError(null);
+      queueMicrotask(() => {
+        setDeployForm({ name: '', plan_id: planId, environment_id: envId });
+        setVolumeMounts([{ volume_id: '', mount_path: '', mode: 'read_write', max_size_gb: 10 }]);
+        setVisibleError(null);
+      });
     }
   }, [open, defaultPlanId, defaultEnvironmentId, plans, environments]);
 
   useEffect(() => {
     if (error) {
-      setVisibleError(error.message);
+      queueMicrotask(() => setVisibleError(error.message));
     }
   }, [error]);
 

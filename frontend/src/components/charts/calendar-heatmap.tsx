@@ -227,14 +227,6 @@ export function CalendarHeatmap({ data, from, to, metric = 'signups', className 
     [maxValue]
   );
 
-  if (weeks.length === 0) {
-    return (
-      <div className={cn('py-8 text-center text-sm text-muted-foreground', className)}>
-        No data for selected range
-      </div>
-    );
-  }
-
   const visibleMonthLabels = useMemo(() => {
     const minGap = 28;
     const kept: { label: string; left: number }[] = [];
@@ -247,6 +239,14 @@ export function CalendarHeatmap({ data, from, to, metric = 'signups', className 
     });
     return kept;
   }, [monthLabels, weekWidth]);
+
+  if (weeks.length === 0) {
+    return (
+      <div className={cn('py-8 text-center text-sm text-muted-foreground', className)}>
+        No data for selected range
+      </div>
+    );
+  }
 
   return (
     <div ref={containerRef} className={cn('select-none w-full', className)}>

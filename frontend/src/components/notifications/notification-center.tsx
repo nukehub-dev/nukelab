@@ -21,6 +21,7 @@ import {
   useMarkAsRead,
   useMarkAllAsRead,
   useDeleteNotification,
+  type Notification,
 } from '../../hooks/use-notifications';
 import { cn } from '../../lib/utils';
 import { Tooltip } from '../ui/tooltip';
@@ -56,7 +57,7 @@ function useIsMobile() {
 
 interface NotificationPanelProps {
   unreadCount: number;
-  notifications: any[];
+  notifications: Notification[];
   totalCount: number;
   onClose: () => void;
   markAsRead: ReturnType<typeof useMarkAsRead>;
@@ -287,9 +288,9 @@ export function NotificationCenter({ variant = 'default' }: NotificationCenterPr
       const actualHeight = Math.min(dropdown.offsetHeight, MAX_DROPDOWN_HEIGHT);
 
       let left = rect.right + gap;
-      let top = rect.top;
+      let top: number;
       let originX: 'left' | 'right' = 'left';
-      let originY: 'top' | 'bottom' = 'top';
+      let originY: 'top' | 'bottom';
 
       if (left + dropdownWidth > window.innerWidth - gap) {
         left = rect.left - dropdownWidth - gap;

@@ -196,7 +196,7 @@ function WorkspaceDetailPage() {
     e.preventDefault();
     if (!selectedVolumeId) return;
 
-    const selectedVolume = availableVolumes.find((v: any) => v.id === selectedVolumeId);
+    const selectedVolume = availableVolumes.find((v) => v.id === selectedVolumeId);
     const isHomeVolume = selectedVolume && selectedVolume.is_home_volume;
     const isMountedOnServer = selectedVolume && selectedVolume.server_count > 0;
 
@@ -473,12 +473,12 @@ function WorkspaceDetailPage() {
   }));
 
   const availableVolumes = volumesData?.filter(
-    (v: any) =>
+    (v) =>
       v.owner_id === currentUser?.id &&
       !allWorkspaceVolumes?.volumes?.some((wv) => wv.volume_id === v.id)
   ) || [];
 
-  const volumeOptions = availableVolumes.map((vol: any) => ({
+  const volumeOptions = availableVolumes.map((vol) => ({
     value: vol.id,
     label: `${vol.display_name} (${vol.server_count} servers)`,
   }));
@@ -1038,7 +1038,7 @@ function WorkspaceDetailPage() {
             <h3 className="text-base font-semibold">Pending Invitations</h3>
           </div>
           <div className="space-y-2">
-            {invitationsData.map((invitation: any) => (
+            {invitationsData.map((invitation) => (
               <div
                 key={invitation.id}
                 className="flex items-center justify-between p-3 rounded-lg bg-surface/50 border border-border/50"
@@ -1677,8 +1677,8 @@ function UserProfileDialog({ member, onClose }: { member: WorkspaceMember | null
               </div>
             </div>
 
-            {profile?.profile?.bio && (
-              <p className="text-sm text-muted-foreground">{profile.profile.bio}</p>
+            {(profile?.profile?.bio as string | undefined) && (
+              <p className="text-sm text-muted-foreground">{profile?.profile?.bio as string | undefined}</p>
             )}
 
             <div className="divide-y divide-border/50">

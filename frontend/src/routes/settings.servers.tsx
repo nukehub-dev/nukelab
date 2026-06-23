@@ -45,21 +45,23 @@ function ServerBehaviorSettingsPage() {
   useEffect(() => {
     if (user?.preferences) {
       const prefs = user.preferences;
-      if (typeof prefs.idle_shutdown_enabled === 'boolean') {
-        setIdleEnabled(prefs.idle_shutdown_enabled);
-      }
-      if (typeof prefs.idle_shutdown_timeout === 'number') {
-        setIdleTimeout(prefs.idle_shutdown_timeout);
-      }
-      if (typeof prefs.stop_on_logout === 'boolean') {
-        setStopOnLogout(prefs.stop_on_logout);
-      }
-      if (typeof prefs.default_plan === 'string') {
-        setDefaultPlan(prefs.default_plan);
-      }
-      if (typeof prefs.default_environment === 'string') {
-        setDefaultEnvironment(prefs.default_environment);
-      }
+      queueMicrotask(() => {
+        if (typeof prefs.idle_shutdown_enabled === 'boolean') {
+          setIdleEnabled(prefs.idle_shutdown_enabled);
+        }
+        if (typeof prefs.idle_shutdown_timeout === 'number') {
+          setIdleTimeout(prefs.idle_shutdown_timeout);
+        }
+        if (typeof prefs.stop_on_logout === 'boolean') {
+          setStopOnLogout(prefs.stop_on_logout);
+        }
+        if (typeof prefs.default_plan === 'string') {
+          setDefaultPlan(prefs.default_plan);
+        }
+        if (typeof prefs.default_environment === 'string') {
+          setDefaultEnvironment(prefs.default_environment);
+        }
+      });
     }
   }, [user]);
 
@@ -71,21 +73,22 @@ function ServerBehaviorSettingsPage() {
     },
     onSuccess: (_result, variables) => {
       setSaveStatus('saved');
-      queryClient.setQueryData(['me'], (old: any) => {
+      queryClient.setQueryData(['me'], (old: unknown) => {
         if (!old) return old;
+        const prev = old as { preferences?: Record<string, unknown> };
         return {
           ...old,
           preferences: {
-            ...(old.preferences || {}),
+            ...(prev.preferences || {}),
             ...variables,
           },
         };
       });
       setTimeout(() => setSaveStatus('idle'), 2000);
     },
-    onError: (err: any) => {
+    onError: (err) => {
       setSaveStatus('idle');
-      error('Failed to save preferences', err?.message || 'Please try again');
+      error('Failed to save preferences', err instanceof Error ? err.message : 'Please try again');
     },
   });
 

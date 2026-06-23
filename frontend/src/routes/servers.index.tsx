@@ -2,7 +2,7 @@ import { createFileRoute, Link } from '@tanstack/react-router';
 import { Server, Activity, Cpu, MemoryStick, Play, Square, RotateCcw, Trash2, ExternalLink, Eye, HardDrive, Plus, X, Pencil, Calendar, AlertTriangle } from 'lucide-react';
 import { Tooltip } from '../components/ui/tooltip';
 import { Checkbox } from '../components/ui/checkbox';
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { type ColumnDef, type SortingState, type ColumnFiltersState, type VisibilityState } from '@tanstack/react-table';
 import { ResourcePageLayout } from '../components/layout/resource-page-layout';
 import { DataTable } from '../components/data/data-table';
@@ -95,18 +95,13 @@ function ServersPage() {
   const [editVisibleError, setEditVisibleError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (editDialogOpen) {
-      setEditVisibleError(null);
-    }
-  }, [editDialogOpen]);
-
-  useEffect(() => {
     if (updateServer.error) {
-      setEditVisibleError(updateServer.error.message);
+      queueMicrotask(() => setEditVisibleError(updateServer.error.message));
     }
   }, [updateServer.error]);
 
-  const openEditDialog = (server: ServerType) => {
+  const openEditDialog = useCallback((server: ServerType) => {
+    setEditVisibleError(null);
     setEditServerId(server.id);
     setEditForm({
       name: server.name,
@@ -135,7 +130,7 @@ function ServersPage() {
       ]);
     }
     setEditDialogOpen(true);
-  };
+  }, [user?.username]);
 
   const handleEdit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -205,7 +200,7 @@ function ServersPage() {
     // Handle navigation from other pages via Alt+N shortcut
     if (sessionStorage.getItem('nukelab-new-server') === 'true') {
       sessionStorage.removeItem('nukelab-new-server');
-      setDialogOpen(true);
+      queueMicrotask(() => setDialogOpen(true));
     }
   }, []);
 
@@ -448,7 +443,7 @@ function ServersPage() {
       },
       enableSorting: false,
     },
-  ], [isOperationPending, startServer, stopServer, restartServer, deleteServer, confirm]);
+  ], [isOperationPending, startServer, stopServer, restartServer, deleteServer, confirm, openEditDialog, prompt, user?.id]);
 
   const activeServers = myServers.filter((s) => s.status === 'running').length;
   const parseMemory = (mem: string | undefined) => {

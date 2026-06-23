@@ -97,7 +97,9 @@ export function DataTable<TData>({
 }: DataTableProps<TData>) {
   const [showMobile, setShowMobile] = useState(defaultMobileView);
 
-  const table = useReactTable({
+  const table =
+    // eslint-disable-next-line react-hooks/incompatible-library
+    useReactTable({
     data,
     columns,
     pageCount,

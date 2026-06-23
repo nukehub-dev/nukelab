@@ -240,8 +240,6 @@ function CurrentIPBadge({
 
 function IPRestrictionsPage() {
   const allowed = usePageGuard({ permission: PERMISSIONS.ADMIN_ACCESS });
-  if (!allowed) return null;
-
   const density = useThemeStore((state) => state.density);
   const { confirm, dialog } = useConfirmDialog();
   const { success: showSuccess } = useToast();
@@ -285,8 +283,8 @@ function IPRestrictionsPage() {
       setFormError('');
       showSuccess('Added', 'IP restriction created successfully');
     },
-    onError: (err: any) => {
-      setFormError(err.message || 'Failed to create restriction');
+    onError: (err) => {
+      setFormError((err instanceof Error ? err.message : 'Failed to create restriction') || 'Failed to create restriction');
     },
   });
 
@@ -441,6 +439,8 @@ function IPRestrictionsPage() {
       enableSorting: false,
     },
   ];
+
+  if (!allowed) return null;
 
   return (
     <>

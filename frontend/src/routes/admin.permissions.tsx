@@ -188,7 +188,7 @@ function PermissionsPage() {
   }, []);
 
   useEffect(() => {
-    fetchMatrix();
+    queueMicrotask(fetchMatrix);
   }, [fetchMatrix]);
 
   const togglePermission = (role: string, permission: string) => {

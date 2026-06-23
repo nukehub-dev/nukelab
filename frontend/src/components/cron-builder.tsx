@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { cn } from '../lib/utils';
+import { parseCron, humanizeSchedule } from '../lib/cron-utils';
 import { Clock, CalendarDays, Sunrise, Sunset, RotateCcw, Zap, ChevronRight, ChevronLeft } from 'lucide-react';
 
 interface CronBuilderProps {
@@ -44,34 +45,9 @@ const minute5Positions = Array.from({ length: 12 }, (_, i) => {
   return { num, x: 50 + r * Math.cos(angle), y: 50 + r * Math.sin(angle) };
 });
 
-export function parseCron(cron: string) {
-  const parts = cron.split(' ');
-  if (parts.length !== 5) return { minute: 0, hour: 9, days: [1, 2, 3, 4, 5] };
-  const m = parseInt(parts[0]);
-  const h = parseInt(parts[1]);
-  const dow = parts[4];
-  let days: number[] = [];
-  if (dow === '*') days = [0, 1, 2, 3, 4, 5, 6];
-  else if (dow.includes('-')) {
-    const [start, end] = dow.split('-').map(Number);
-    for (let i = start; i <= end; i++) days.push(i);
-  } else if (dow.includes(',')) days = dow.split(',').map(Number);
-  else if (!isNaN(Number(dow))) days = [Number(dow)];
-  return { minute: isNaN(m) ? 0 : m, hour: isNaN(h) ? 9 : h, days };
-}
-
 function buildCron(minute: number, hour: number, days: number[]) {
   const daysStr = days.length === 7 || days.length === 0 ? '*' : days.sort().join(',');
   return `${minute} ${hour} * * ${daysStr}`;
-}
-
-export function humanizeSchedule(minute: number, hour: number, days: number[]) {
-  const time = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-  if (days.length === 7) return `Every day at ${time}`;
-  if (days.length === 5 && days.every((d, i) => d === i + 1)) return `Weekdays at ${time}`;
-  if (days.length === 2 && days.includes(0) && days.includes(6)) return `Weekends at ${time}`;
-  if (days.length === 1) return `${daysOfWeek[days[0]].label} at ${time}`;
-  return `${days.map((d) => daysOfWeek[d].label).join(', ')} at ${time}`;
 }
 
 export function CronBuilder({ value, onChange }: CronBuilderProps) {
@@ -84,11 +60,13 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
   const [selectedDays, setSelectedDays] = useState<number[]>(parsed.days);
 
   useEffect(() => {
-    setMinute(parsed.minute);
-    setHour(parsed.hour);
-    setIsPM(parsed.hour >= 12);
-    setSelectedDays(parsed.days);
-  }, [value]);
+    queueMicrotask(() => {
+      setMinute(parsed.minute);
+      setHour(parsed.hour);
+      setIsPM(parsed.hour >= 12);
+      setSelectedDays(parsed.days);
+    });
+  }, [value, parsed]);
 
   useEffect(() => {
     if (mode === 'custom') {

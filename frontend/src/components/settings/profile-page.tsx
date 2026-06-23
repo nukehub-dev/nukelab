@@ -228,10 +228,10 @@ function EditDialog({
     first_name: user.first_name || '',
     last_name: user.last_name || '',
     email: user.email || '',
-    about: user.profile?.about || '',
-    organization: user.profile?.organization || '',
-    department: user.profile?.department || '',
-    occupation: user.profile?.occupation || '',
+    about: (user.profile?.about as string | undefined) || '',
+    organization: (user.profile?.organization as string | undefined) || '',
+    department: (user.profile?.department as string | undefined) || '',
+    occupation: (user.profile?.occupation as string | undefined) || '',
   });
 
   const save = async () => {
@@ -387,7 +387,7 @@ export function ProfilePage() {
 
   // Reset syncing state on mount (in case we returned from a redirect)
   useEffect(() => {
-    setSyncing(false);
+    queueMicrotask(() => setSyncing(false));
   }, []);
 
   const startSync = useCallback(async () => {
@@ -396,8 +396,9 @@ export function ProfilePage() {
       const updated = await api.post<User>('/auth/oauth/sync', {});
       setUser({ ...user, ...updated });
       success('Profile synced', 'Your profile has been updated from ' + (providerName || 'provider'));
-    } catch (err: any) {
-      error('Sync failed', err?.message || 'Could not sync profile');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not sync profile';
+      error('Sync failed', message);
     } finally {
       setSyncing(false);
     }
@@ -547,10 +548,10 @@ export function ProfilePage() {
             </div>
 
             {/* About */}
-            {user.profile?.about && (
+            {(user.profile?.about as string | undefined) && (
               <div className="w-full order-3 xl:order-last xl:mt-4 rounded-xl bg-muted/40 border border-border/50 p-4">
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  {user.profile.about}
+                  {user.profile?.about as string | undefined}
                 </p>
               </div>
             )}
@@ -567,9 +568,9 @@ export function ProfilePage() {
             <div className="divide-y divide-border/30">
               <DetailRow icon={UserCircle} label="Username" value={user.username} />
               <DetailRow icon={Mail} label="Email" value={user.email} />
-              <DetailRow icon={Building2} label="Organization" value={user.profile?.organization || '—'} />
-              <DetailRow icon={Users} label="Department" value={user.profile?.department || '—'} />
-              <DetailRow icon={Briefcase} label="Occupation" value={user.profile?.occupation || '—'} />
+              <DetailRow icon={Building2} label="Organization" value={(user.profile?.organization as string | undefined) || '—'} />
+              <DetailRow icon={Users} label="Department" value={(user.profile?.department as string | undefined) || '—'} />
+              <DetailRow icon={Briefcase} label="Occupation" value={(user.profile?.occupation as string | undefined) || '—'} />
               <DetailRow icon={LogIn} label="Total Logins" value={user.login_count.toLocaleString()} />
               <DetailRow icon={Calendar} label="Member Since" value={fmtDate(user.created_at)} />
               <DetailRow icon={Clock} label="Last Login" value={fmtDate(user.last_login)} />

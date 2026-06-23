@@ -79,6 +79,7 @@ export const Route = createFileRoute('/activity')({
 });
 
 function ActivityPage() {
+  const density = useThemeStore((state) => state.density);
   const [selectedActivity, setSelectedActivity] = useState<ActivityItem | null>(null);
   const [sorting, setSorting] = useState<SortingState>([{ id: 'timestamp', desc: true }]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -264,7 +265,7 @@ function ActivityPage() {
           filters={filters}
           searchable
           searchPlaceholder="Search activity..."
-          density={useThemeStore().density}
+          density={density}
           mobileCardRenderer={mobileCardRenderer}
           enableRowSelection={false}
         />

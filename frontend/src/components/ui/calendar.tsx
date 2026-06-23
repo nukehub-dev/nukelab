@@ -98,10 +98,10 @@ export function Calendar({ value, onSelect, minDate, maxDate, open, onClose, anc
   // Position when opening
   useEffect(() => {
     if (!open || !usePortal) {
-      setPositioned(false);
+      queueMicrotask(() => setPositioned(false));
       return;
     }
-    setPositioned(false);
+    queueMicrotask(() => setPositioned(false));
     requestAnimationFrame(() => {
       requestAnimationFrame(updatePosition);
     });

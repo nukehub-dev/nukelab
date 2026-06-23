@@ -27,8 +27,7 @@ export const Route = createFileRoute('/admin/environments')({
 
 function EnvironmentsPage() {
   const allowed = usePageGuard({ permissions: [PERMISSIONS.ENVIRONMENT_CREATE, PERMISSIONS.ENVIRONMENT_UPDATE, PERMISSIONS.ENVIRONMENT_DELETE] });
-  if (!allowed) return null;
-
+  const density = useThemeStore((state) => state.density);
   const { confirm, dialog } = useConfirmDialog();
   const canManageEnvironments = useAuthStore((state) => state.canManageEnvironments());
 
@@ -93,7 +92,7 @@ function EnvironmentsPage() {
     is_public: true,
   });
 
-  const environments = data?.data || [];
+  const environments = useMemo(() => data?.data || [], [data?.data]);
   const pagination = data?.pagination;
 
   const openCreateDialog = () => {
@@ -478,6 +477,8 @@ function EnvironmentsPage() {
     </div>
   );
 
+  if (!allowed) return null;
+
   return (
     <>
       <ResourcePageLayout
@@ -525,7 +526,7 @@ function EnvironmentsPage() {
           filters={filters}
           searchable
           searchPlaceholder="Search environments..."
-          density={useThemeStore().density}
+          density={density}
           mobileCardRenderer={mobileCardRenderer}
           enableRowSelection={canManageEnvironments}
         />

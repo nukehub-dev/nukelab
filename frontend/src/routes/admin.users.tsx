@@ -27,8 +27,7 @@ export const Route = createFileRoute('/admin/users')({
 
 function UsersPage() {
   const allowed = usePageGuard({ permission: PERMISSIONS.USERS_READ });
-  if (!allowed) return null;
-
+  const density = useThemeStore((state) => state.density);
   const hasPermission = useAuthStore((state) => state.hasPermission);
   const canCreateUsers = hasPermission(PERMISSIONS.USERS_CREATE);
   const canUpdateUsers = hasPermission(PERMISSIONS.USERS_UPDATE);
@@ -499,6 +498,8 @@ function UsersPage() {
     </div>
   );
 
+  if (!allowed) return null;
+
   return (
     <>
       <ResourcePageLayout
@@ -546,7 +547,7 @@ function UsersPage() {
           filters={filters}
           searchable
           searchPlaceholder="Search users..."
-          density={useThemeStore().density}
+          density={density}
           mobileCardRenderer={mobileCardRenderer}
           enableRowSelection={canManageUsers}
         />

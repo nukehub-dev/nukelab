@@ -544,14 +544,14 @@ function ServerGatewayPage() {
       const alreadyRedirected = sessionStorage.getItem(redirectKey);
 
       if (alreadyRedirected) {
-        setManualOpenReady(true);
+        queueMicrotask(() => setManualOpenReady(true));
         return;
       }
 
       // For cross-user access, don't auto-redirect; show manual open button
       // so user can provide a reason via prompt
       if (!isOwnServer) {
-        setManualOpenReady(true);
+        queueMicrotask(() => setManualOpenReady(true));
         return;
       }
 

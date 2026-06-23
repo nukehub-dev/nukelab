@@ -154,21 +154,23 @@ export function useDashboardMetrics() {
     if (historyData && !hasInitializedRef.current) {
       const parsed = historyData.metrics.map(parseApiMetric);
       if (parsed.length > 0) {
-        setMetrics(parsed);
-        const latest = parsed[parsed.length - 1];
-        setCurrentMetrics({
-          cpu: latest.cpu,
-          cpuCount: latest.cpuCount,
-          memoryPercent: latest.memoryPercent,
-          memoryUsed: latest.memoryUsed,
-          memoryTotal: latest.memoryTotal,
-          diskRead: latest.diskRead,
-          diskWrite: latest.diskWrite,
-          diskPercent: latest.diskPercent,
-          diskUsed: latest.diskUsed,
-          diskTotal: latest.diskTotal,
-          networkRx: latest.networkRx,
-          networkTx: latest.networkTx,
+        queueMicrotask(() => {
+          setMetrics(parsed);
+          const latest = parsed[parsed.length - 1];
+          setCurrentMetrics({
+            cpu: latest.cpu,
+            cpuCount: latest.cpuCount,
+            memoryPercent: latest.memoryPercent,
+            memoryUsed: latest.memoryUsed,
+            memoryTotal: latest.memoryTotal,
+            diskRead: latest.diskRead,
+            diskWrite: latest.diskWrite,
+            diskPercent: latest.diskPercent,
+            diskUsed: latest.diskUsed,
+            diskTotal: latest.diskTotal,
+            networkRx: latest.networkRx,
+            networkTx: latest.networkTx,
+          });
         });
       }
       hasInitializedRef.current = true;

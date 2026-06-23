@@ -39,8 +39,7 @@ const ROLE_OPTIONS = [
 
 function PlansPage() {
   const allowed = usePageGuard({ permissions: [PERMISSIONS.PLAN_CREATE, PERMISSIONS.PLAN_UPDATE, PERMISSIONS.PLAN_DELETE] });
-  if (!allowed) return null;
-
+  const density = useThemeStore((state) => state.density);
   const { confirm, dialog } = useConfirmDialog();
   const canManagePlans = useAuthStore((state) => state.canManagePlans());
 
@@ -114,7 +113,7 @@ function PlansPage() {
   const [accessDialogOpen, setAccessDialogOpen] = useState(false);
   const [accessPlan, setAccessPlan] = useState<Plan | null>(null);
 
-  const plans = data?.data || [];
+  const plans = useMemo(() => data?.data || [], [data?.data]);
   const pagination = data?.pagination;
 
   const openCreateDialog = () => {
@@ -544,6 +543,8 @@ function PlansPage() {
     </div>
   );
 
+  if (!allowed) return null;
+
   return (
     <>
       <ResourcePageLayout
@@ -591,7 +592,7 @@ function PlansPage() {
           filters={filters}
           searchable
           searchPlaceholder="Search plans..."
-          density={useThemeStore().density}
+          density={density}
           mobileCardRenderer={mobileCardRenderer}
           enableRowSelection={canManagePlans}
         />
@@ -816,6 +817,7 @@ function AccessManagementDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const density = useThemeStore((state) => state.density);
   const [tab, setTab] = useState<'users' | 'workspaces'>('users');
 
   // ─── Users Tab State ───
@@ -842,7 +844,7 @@ function AccessManagementDialog({
       queryClient.invalidateQueries({ queryKey: ['plans', plan.id, 'users'] });
       queryClient.invalidateQueries({ queryKey: ['plans', plan.id, 'workspaces'] });
     }
-  }, [open, plan.id, queryClient]);
+  }, [open, plan, plan.id, queryClient]);
 
   // ─── Data ───
   const { data: planUsers, isLoading: usersLoading } = usePlanUsers(plan.id);
@@ -1197,7 +1199,7 @@ function AccessManagementDialog({
                 getRowId={(row) => row.user_id}
                 searchable
                 searchPlaceholder="Search assigned users..."
-                density={useThemeStore().density}
+                density={density}
           mobileCardRenderer={userMobileCard}
                 enableRowSelection={false}
                 emptyState={
@@ -1262,7 +1264,7 @@ function AccessManagementDialog({
                 getRowId={(row) => row.workspace_id}
                 searchable
                 searchPlaceholder="Search assigned workspaces..."
-                density={useThemeStore().density}
+                density={density}
           mobileCardRenderer={workspaceMobileCard}
                 enableRowSelection={false}
                 emptyState={

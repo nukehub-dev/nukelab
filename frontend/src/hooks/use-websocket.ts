@@ -194,7 +194,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
   useEffect(() => {
     if (autoConnect) {
       shouldReconnectRef.current = true;
-      connect();
+      queueMicrotask(connect);
     }
 
     return () => {

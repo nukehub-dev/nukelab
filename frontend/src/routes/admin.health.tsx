@@ -21,6 +21,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { FloatingHeader } from '../components/layout/floating-header';
+import type { StatCardProps } from '../components/data/stat-card';
 import { StatusBadge } from '../components/data/status-badge';
 import { Select, SelectItem } from '../components/ui/select';
 import { useHealthMonitoring } from '../hooks/use-health-monitoring';
@@ -67,7 +68,7 @@ function AdminHealthContent() {
   }, [searchQuery]);
 
   useEffect(() => {
-    setPage(1);
+    queueMicrotask(() => setPage(1));
   }, [statusFilter, debouncedSearch]);
 
   const { data, isLoading, isError, refetch } = useHealthMonitoring({
@@ -165,7 +166,7 @@ function AdminHealthContent() {
   const systemHealthy = system.status === 'healthy';
   const failingContainers = containers.unhealthy_count + containers.unknown_count + containers.restart_failed_count;
 
-  const headerStats = [
+  const headerStats: StatCardProps[] = [
     {
       title: 'System Status',
       value: system.status,
@@ -203,7 +204,7 @@ function AdminHealthContent() {
         subtitle="System services and container health status"
         icon={HeartPulse}
         backTo="/admin"
-        stats={headerStats as any}
+        stats={headerStats}
       />
 
       <div className="px-6 lg:px-10 pb-10 space-y-6">

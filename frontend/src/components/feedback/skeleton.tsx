@@ -1,5 +1,6 @@
 import { cn } from '../../lib/utils';
 import { motion } from 'framer-motion';
+import { useState } from 'react';
 
 interface SkeletonProps extends React.HTMLAttributes<HTMLDivElement> {
   className?: string;
@@ -23,6 +24,12 @@ interface SkeletonCardProps {
 }
 
 export function SkeletonCard({ className, rows = 3 }: SkeletonCardProps) {
+  const [widths] = useState(() =>
+    Array.from({ length: rows }, () =>
+      `${85 + Math.floor(Math.random() * 15)}%`
+    )
+  );
+
   return (
     <motion.div
       className={cn('bubble p-5 space-y-4', className)}
@@ -37,8 +44,8 @@ export function SkeletonCard({ className, rows = 3 }: SkeletonCardProps) {
       <Skeleton className="h-8 w-16" />
       {rows > 0 && (
         <div className="space-y-2">
-          {Array.from({ length: rows }).map((_, i) => (
-            <Skeleton key={i} className="h-3 w-full" style={{ width: `${85 + Math.random() * 15}%` }} />
+          {widths.map((width, i) => (
+            <Skeleton key={i} className="h-3" style={{ width }} />
           ))}
         </div>
       )}

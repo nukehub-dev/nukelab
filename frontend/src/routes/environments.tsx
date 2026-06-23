@@ -122,7 +122,7 @@ function EnvironmentsCatalogPage() {
     search: searchQuery || undefined,
   });
 
-  const environments = data?.data || [];
+  const environments = useMemo(() => data?.data || [], [data?.data]);
 
   // Filter by category client-side, sort active first
   const filteredEnvironments = useMemo(() => {

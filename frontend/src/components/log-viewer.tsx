@@ -50,7 +50,7 @@ function parseLogs(raw: string): LogEntry[] {
   const lines = Array.isArray(raw) ? raw : raw.split('\n');
   return lines.filter(Boolean).map((line) => {
     // Try to extract ISO timestamp at the start
-    const tsMatch = line.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[\d\.]*(?:[+-]\d{2}:\d{2})?)\s*/);
+    const tsMatch = line.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[\d.]*(?:[+-]\d{2}:\d{2})?)\s*/);
     if (tsMatch) {
       return {
         raw: line,

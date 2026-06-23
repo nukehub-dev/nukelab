@@ -70,8 +70,8 @@ export interface User {
   updated_at?: string;
   login_count: number;
   oauth_provider?: string;
-  profile?: Record<string, any>;
-  preferences?: Record<string, any>;
+  profile?: Record<string, unknown>;
+  preferences?: Record<string, unknown>;
   profile_visibility?: 'private' | 'public';
 }
 
@@ -189,7 +189,7 @@ export interface WorkspaceActivity {
   action: string;
   target_type: string;
   target_id: string | null;
-  details: Record<string, any>;
+  details: Record<string, unknown>;
   created_at: string;
   actor?: {
     username: string;
@@ -205,7 +205,7 @@ export interface PublicProfile {
   avatar_url: string;
   role: string;
   profile_visibility: 'private' | 'public';
-  profile: Record<string, any>;
+  profile: Record<string, unknown>;
   created_at?: string;
 }
 
@@ -222,8 +222,8 @@ export interface UserPreferences {
   sidebar_pinned?: boolean;
   density?: 'compact' | 'comfortable';
   pinned_workspace_ids?: string[];
-  notifications?: Record<string, any>;
-  dashboard?: Record<string, any>;
+  notifications?: Record<string, unknown>;
+  dashboard?: Record<string, unknown>;
   idle_shutdown_enabled?: boolean;
   idle_shutdown_timeout?: number;
   stop_on_logout?: boolean;

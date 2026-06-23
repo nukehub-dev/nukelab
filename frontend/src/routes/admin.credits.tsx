@@ -35,8 +35,7 @@ export const Route = createFileRoute('/admin/credits')({
 
 function CreditsAdminPage() {
   const allowed = usePageGuard({ permission: PERMISSIONS.CREDITS_READ_ALL });
-  if (!allowed) return null;
-
+  const density = useThemeStore((state) => state.density);
   const hasPermission = useAuthStore((state) => state.hasPermission);
   const canGrant = hasPermission(PERMISSIONS.CREDITS_GRANT);
   const canDeduct = hasPermission(PERMISSIONS.CREDITS_DEDUCT);
@@ -76,13 +75,13 @@ function CreditsAdminPage() {
   useEffect(() => {
     if (searchParams.user && usersData?.data) {
       const user = usersData.data.find((u) => u.id === searchParams.user);
-      if (user) setSelectedUser(user);
+      if (user) queueMicrotask(() => setSelectedUser(user));
     }
   }, [searchParams.user, usersData]);
 
-  const users = usersData?.data || [];
+  const users = useMemo(() => usersData?.data || [], [usersData?.data]);
   const pagination = usersData?.pagination;
-  const lowBalanceUsers = lowBalanceData?.users || [];
+  const lowBalanceUsers = useMemo(() => lowBalanceData?.users || [], [lowBalanceData?.users]);
 
   const usersMap = useMemo(() => {
     const map: Record<string, string> = {};
@@ -303,6 +302,8 @@ function CreditsAdminPage() {
     );
   };
 
+  if (!allowed) return null;
+
   return (
     <div className="min-h-screen p-6 lg:p-10 space-y-8">
       {/* Header */}
@@ -459,7 +460,7 @@ function CreditsAdminPage() {
           getRowId={(row) => row.id}
           searchable
           searchPlaceholder="Search users..."
-          density={useThemeStore().density}
+          density={density}
           mobileCardRenderer={mobileCardRenderer}
         />
       </motion.div>

@@ -37,7 +37,6 @@ interface FileBrowserProps {
 const PAGE_SIZE = 100;
 
 export function FileBrowser({ open, volumeId, volumeName, onClose }: FileBrowserProps) {
-  if (!open) return null;
   const [currentPath, setCurrentPath] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -114,8 +113,11 @@ export function FileBrowser({ open, volumeId, volumeName, onClose }: FileBrowser
     setDeleting(itemName);
     try {
       await deleteFile.mutateAsync({ volumeId, path });
-    } catch (err: any) {
-      const message = err?.response?.data?.detail || err.message || 'Failed to delete';
+    } catch (err) {
+      const message =
+        (err as { response?: { data?: { detail?: string } }; message?: string })?.response?.data?.detail ||
+        (err as Error).message ||
+        'Failed to delete';
       toastError('Delete Failed', message);
     } finally {
       setDeleting(null);
@@ -159,6 +161,8 @@ export function FileBrowser({ open, volumeId, volumeName, onClose }: FileBrowser
 
   const visibleItems = data?.items.slice(0, scrolledItems) || [];
   const hasMore = scrolledItems < (data?.items.length || 0);
+
+  if (!open) return null;
 
   return (
     <>

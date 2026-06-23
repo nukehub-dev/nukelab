@@ -12,7 +12,7 @@ import {
   X,
 } from 'lucide-react';
 import { Tooltip } from '../components/ui/tooltip';
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
 import {
   useMaintenanceWindows,
@@ -93,8 +93,6 @@ function getWindowStatus(w: MaintenanceWindow): {
 
 function MaintenanceWindowsPage() {
   const allowed = usePageGuard({ permission: PERMISSIONS.ADMIN_ACCESS });
-  if (!allowed) return null;
-
   const density = useThemeStore((state) => state.density);
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const toast = useToast();
@@ -134,6 +132,7 @@ function MaintenanceWindowsPage() {
   const [endAt, setEndAt] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [notifyOffsets, setNotifyOffsets] = useState<number[]>([15]);
+  const [now] = useState(() => Date.now());
 
   const windows = data?.windows || [];
   const total = windows.length;
@@ -405,6 +404,14 @@ function MaintenanceWindowsPage() {
       </div>
     );
   };
+
+  const minutesUntilStart = useMemo(() => {
+    return startAt
+      ? Math.max(0, Math.floor((new Date(startAt).getTime() - now) / 60000))
+      : 0;
+  }, [startAt, now]);
+
+  if (!allowed) return null;
 
   return (
     <>
@@ -707,14 +714,12 @@ function MaintenanceWindowsPage() {
                 <Bell className="w-3.5 h-3.5 text-muted-foreground" />
                 Notification Reminders
               </label>
-              {(() => {
-                const minutesUntilStart = startAt
-                  ? Math.max(0, Math.floor((new Date(startAt).getTime() - Date.now()) / 60000))
-                  : 0;
-                const impossibleOffsets = notifyOffsets.filter((o) => o >= minutesUntilStart);
-                return (
-                  <>
-                    <div className="flex flex-wrap gap-2">
+              {
+                (() => {
+                  const impossibleOffsets = notifyOffsets.filter((o) => o >= minutesUntilStart);
+                  return (
+                    <>
+                      <div className="flex flex-wrap gap-2">
                       {[
                         { value: 15, label: '15 min' },
                         { value: 60, label: '1 hour' },

@@ -45,8 +45,6 @@ export const Route = createFileRoute('/admin/settings')({
 
 function AdminSettingsPage() {
   const allowed = usePageGuard({ permission: PERMISSIONS.ADMIN_ACCESS });
-  if (!allowed) return null;
-
   const {
     data: config,
     isLoading: configLoading,
@@ -70,10 +68,10 @@ function AdminSettingsPage() {
       onSuccess: (data) => {
         success('Test email sent', data.message);
       },
-      onError: (err: any) => {
+      onError: (err) => {
         error(
           'Failed to send test email',
-          err?.response?.data?.detail || err.message
+          (err instanceof Error ? err.message : 'Unknown error')
         );
       },
     });
@@ -100,8 +98,8 @@ function AdminSettingsPage() {
         success('Retention policy updated', 'Data lifecycle settings saved.');
         setRetentionEdits({});
       },
-      onError: (err: any) => {
-        error('Failed to update retention policy', err?.response?.data?.detail || err.message);
+      onError: (err) => {
+        error('Failed to update retention policy', err instanceof Error ? err.message : 'Unknown error');
       },
     });
   };
@@ -179,6 +177,8 @@ function AdminSettingsPage() {
     },
   ];
 
+  if (!allowed) return null;
+
   return (
     <div className="min-h-screen space-y-6">
       <PageHeader
@@ -248,7 +248,7 @@ function AdminSettingsPage() {
                 <p className="font-medium text-sm">Failed to load email settings</p>
                 <p className="text-xs mt-1 opacity-80">
                   {configError
-                    ? `Config endpoint error: ${(configErrorObj as any)?.message || 'Unknown error'}`
+                    ? `Config endpoint error: ${(configErrorObj as Error)?.message || 'Unknown error'}`
                     : 'Status endpoint error'}
                 </p>
                 <button

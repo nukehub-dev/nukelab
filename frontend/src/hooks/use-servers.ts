@@ -127,7 +127,7 @@ export function useServerActions() {
     );
 
     return () => timers.forEach(clearTimeout);
-  }, [pendingOps]);
+  }, [pendingOps, removePendingOp]);
 
   const isOperationPending = useCallback(
     (serverId: string, type?: PendingOperation['type']) => {

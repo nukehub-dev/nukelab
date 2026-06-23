@@ -162,7 +162,6 @@ function checkPermission(user: User | null, permission: string): boolean {
     case PERMISSIONS.WORKSPACES_READ_OWN:
     case PERMISSIONS.VOLUMES_READ_OWN:
     case PERMISSIONS.VOLUMES_WRITE_OWN:
-    case PERMISSIONS.WORKSPACES_READ_OWN:
     case PERMISSIONS.WORKSPACES_WRITE_OWN:
       return roleLevel >= ROLE_LEVELS.user;
     case PERMISSIONS.WORKSPACES_READ_ALL:

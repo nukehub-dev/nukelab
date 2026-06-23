@@ -23,7 +23,8 @@ import {
   Clock,
   AlertTriangle,
 } from 'lucide-react';
-import { MetricsAreaChart, formatters } from '../components/charts/area-chart';
+import { MetricsAreaChart } from '../components/charts/area-chart';
+import { formatters } from '../components/charts/chart-formatters';
 import { SemiCircularGauge } from '../components/charts/semi-circular-gauge';
 import { StatusBadge } from '../components/data/status-badge';
 import { useServers, useServerLogs } from '../hooks/use-servers';

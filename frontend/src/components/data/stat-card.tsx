@@ -23,30 +23,34 @@ function AnimatedNumber({
   const startTime = useRef<number | null>(null);
   const startValue = useRef(0);
   const rafId = useRef<number | null>(null);
+  const displayValueRef = useRef(0);
 
   useEffect(() => {
     const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
-    
+
+    startValue.current = displayValueRef.current;
+    startTime.current = null;
+
     const animate = (timestamp: number) => {
       if (!startTime.current) {
         startTime.current = timestamp;
-        startValue.current = displayValue;
       }
-      
+
       const elapsed = timestamp - startTime.current;
       const progress = Math.min(elapsed / duration, 1);
       const easedProgress = easeOutCubic(progress);
-      
+
       const currentValue = startValue.current + (value - startValue.current) * easedProgress;
+      displayValueRef.current = currentValue;
       setDisplayValue(currentValue);
-      
+
       if (progress < 1) {
         rafId.current = requestAnimationFrame(animate);
       }
     };
-    
+
     rafId.current = requestAnimationFrame(animate);
-    
+
     return () => {
       if (rafId.current) {
         cancelAnimationFrame(rafId.current);

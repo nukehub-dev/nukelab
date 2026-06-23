@@ -83,10 +83,10 @@ export function TimePicker({ hour, minute, onChange, open = true, onClose, ancho
 
   useEffect(() => {
     if (!isOpen || !usePortal) {
-      setPositioned(false);
+      queueMicrotask(() => setPositioned(false));
       return;
     }
-    setPositioned(false);
+    queueMicrotask(() => setPositioned(false));
     requestAnimationFrame(() => {
       requestAnimationFrame(updatePosition);
     });

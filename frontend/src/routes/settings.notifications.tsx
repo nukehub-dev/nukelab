@@ -79,13 +79,15 @@ function NotificationsSettingsPage() {
   // Load saved preferences
   useEffect(() => {
     if (user?.preferences?.notifications) {
-      const saved = user.preferences.notifications;
-      if (saved.events) {
-        setPreferences(saved.events);
-      }
-      if (saved.webhook_url !== undefined) {
-        setWebhookUrl(saved.webhook_url);
-      }
+      const saved = user.preferences.notifications as { events?: EventPreference[]; webhook_url?: string };
+      queueMicrotask(() => {
+        if (saved.events) {
+          setPreferences(saved.events);
+        }
+        if (saved.webhook_url !== undefined) {
+          setWebhookUrl(saved.webhook_url);
+        }
+      });
     }
   }, [user]);
 
@@ -99,12 +101,13 @@ function NotificationsSettingsPage() {
     onSuccess: (_result, variables) => {
       setSaveStatus('saved');
       // Update cached user data directly instead of refetching
-      queryClient.setQueryData(['me'], (old: any) => {
+      queryClient.setQueryData(['me'], (old: unknown) => {
         if (!old) return old;
+        const prev = old as { preferences?: Record<string, unknown> };
         return {
           ...old,
           preferences: {
-            ...(old.preferences || {}),
+            ...(prev.preferences || {}),
             notifications: {
               events: variables.events,
               webhook_url: variables.webhook_url,
@@ -114,9 +117,9 @@ function NotificationsSettingsPage() {
       });
       setTimeout(() => setSaveStatus('idle'), 2000);
     },
-    onError: (err: any) => {
+    onError: (err) => {
       setSaveStatus('idle');
-      error('Failed to save preferences', err?.message || 'Please try again');
+      error('Failed to save preferences', err instanceof Error ? err.message : 'Please try again');
     },
   });
 

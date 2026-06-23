@@ -21,6 +21,7 @@ import {
   useWorkspaces,
   useCreateWorkspace,
   useDeleteWorkspace,
+  type Workspace,
 } from '../hooks/use-workspaces';
 import { springs } from '../lib/animations';
 import { cn } from '../lib/utils';
@@ -62,7 +63,7 @@ function WorkspaceCard({
   isPinned,
   onTogglePin,
 }: { 
-  workspace: any; 
+  workspace: Workspace; 
   index: number; 
   onDelete?: () => void;
   isPinned?: boolean;
@@ -182,7 +183,7 @@ function WorkspaceListRow({
   isPinned,
   onTogglePin,
 }: {
-  workspace: any;
+  workspace: Workspace;
   index: number;
   onDelete?: () => void;
   isPinned?: boolean;
@@ -345,14 +346,14 @@ function WorkspacesListPage() {
     });
 
     return result;
-  }, [workspaces, searchQuery, activeFilter, sortBy, isPinned]);
+  }, [workspaces, searchQuery, activeFilter, sortBy, isPinned, currentUser?.id]);
 
   const filterCounts = useMemo(() => ({
     all: workspaces.length,
     owned: workspaces.filter((w) => w.owner_id === currentUser?.id).length,
     member: workspaces.filter((w) => w.owner_id !== currentUser?.id && !w.has_pending_invitation).length,
     pending: workspaces.filter((w) => w.has_pending_invitation).length,
-  }), [workspaces]);
+  }), [workspaces, currentUser?.id]);
 
   const stats = useMemo(() => {
     const totalWorkspaces = workspaces.length;
@@ -373,7 +374,7 @@ function WorkspacesListPage() {
     });
   };
 
-  const handleDelete = async (workspace: any) => {
+  const handleDelete = async (workspace: Workspace) => {
     const confirmed = await confirm({
       title: 'Delete Workspace',
       description: `Are you sure you want to delete "${workspace.name}"? This action cannot be undone.`,

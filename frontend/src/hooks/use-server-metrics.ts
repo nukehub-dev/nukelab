@@ -106,17 +106,19 @@ export function useServerMetrics(serverId: string | undefined) {
     if (historyData && !hasInitializedRef.current) {
       const parsed = historyData.metrics.map(parseApiMetric);
       if (parsed.length > 0) {
-        setMetrics(parsed);
-        const latest = parsed[parsed.length - 1];
-        setCurrentMetrics({
-          cpu: latest.cpu,
-          memory: latest.memory,
-          memoryUsed: latest.memoryUsed,
-          memoryTotal: latest.memoryTotal,
-          diskRead: latest.diskRead,
-          diskWrite: latest.diskWrite,
-          networkRx: latest.networkRx,
-          networkTx: latest.networkTx,
+        queueMicrotask(() => {
+          setMetrics(parsed);
+          const latest = parsed[parsed.length - 1];
+          setCurrentMetrics({
+            cpu: latest.cpu,
+            memory: latest.memory,
+            memoryUsed: latest.memoryUsed,
+            memoryTotal: latest.memoryTotal,
+            diskRead: latest.diskRead,
+            diskWrite: latest.diskWrite,
+            networkRx: latest.networkRx,
+            networkTx: latest.networkTx,
+          });
         });
       }
       hasInitializedRef.current = true;
@@ -177,8 +179,10 @@ export function useServerMetrics(serverId: string | undefined) {
   // 5. Reset initialization when serverId changes
   useEffect(() => {
     hasInitializedRef.current = false;
-    setMetrics([]);
-    setCurrentMetrics({ cpu: 0, memory: 0, memoryUsed: 0, memoryTotal: 0, diskRead: 0, diskWrite: 0, networkRx: 0, networkTx: 0 });
+    queueMicrotask(() => {
+      setMetrics([]);
+      setCurrentMetrics({ cpu: 0, memory: 0, memoryUsed: 0, memoryTotal: 0, diskRead: 0, diskWrite: 0, networkRx: 0, networkTx: 0 });
+    });
   }, [serverId]);
 
   return {

@@ -34,13 +34,15 @@ export function useReasonDialog() {
     });
   }, []);
 
+  const resolve = state.resolve;
+
   const handleClose = useCallback(
     (value: string | null) => {
-      state.resolve?.(value);
+      resolve?.(value);
       setState((prev) => ({ ...prev, isOpen: false, resolve: null }));
       setReason('');
     },
-    [state.resolve]
+    [resolve]
   );
 
   const dialog = (

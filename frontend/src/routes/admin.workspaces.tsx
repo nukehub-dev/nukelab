@@ -26,8 +26,7 @@ export const Route = createFileRoute('/admin/workspaces')({
 
 function WorkspacesAdminPage() {
   const allowed = usePageGuard({ permission: PERMISSIONS.ADMIN_ACCESS });
-  if (!allowed) return null;
-
+  const density = useThemeStore((state) => state.density);
   const hasPermission = useAuthStore((state) => state.hasPermission);
   const canManageWorkspaces = hasPermission(PERMISSIONS.WORKSPACES_WRITE_ALL);
 
@@ -353,6 +352,8 @@ function WorkspacesAdminPage() {
     </div>
   );
 
+  if (!allowed) return null;
+
   return (
     <>
       <ResourcePageLayout
@@ -393,7 +394,7 @@ function WorkspacesAdminPage() {
           filters={filters}
           searchable
           searchPlaceholder="Search workspaces..."
-          density={useThemeStore().density}
+          density={density}
           mobileCardRenderer={mobileCardRenderer}
           bulkActions={bulkActions}
           enableRowSelection={canManageWorkspaces}

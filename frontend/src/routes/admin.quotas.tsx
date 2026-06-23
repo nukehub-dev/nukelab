@@ -20,8 +20,7 @@ export const Route = createFileRoute('/admin/quotas')({
 
 function QuotasPage() {
   const allowed = usePageGuard({ permission: PERMISSIONS.QUOTA_READ });
-  if (!allowed) return null;
-
+  const density = useThemeStore((state) => state.density);
   const hasPermission = useAuthStore((state) => state.hasPermission);
   const canUpdateQuotas = hasPermission(PERMISSIONS.QUOTA_UPDATE);
 
@@ -287,6 +286,8 @@ function QuotasPage() {
     </div>
   );
 
+  if (!allowed) return null;
+
   return (
     <>
       <ResourcePageLayout
@@ -326,7 +327,7 @@ function QuotasPage() {
           getRowId={(row) => row.user_id}
           searchable
           searchPlaceholder="Search users..."
-          density={useThemeStore().density}
+          density={density}
           mobileCardRenderer={mobileCard}
         />
       </ResourcePageLayout>
