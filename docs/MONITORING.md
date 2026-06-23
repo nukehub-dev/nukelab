@@ -103,6 +103,66 @@ They appear under *Dashboards → Browse* after Grafana starts.
 
 ---
 
+## Distributed Tracing (OpenTelemetry + Jaeger)
+
+NukeLab supports end-to-end distributed tracing across FastAPI, Celery,
+SQLAlchemy, and Redis via OpenTelemetry. Traces are exported in OTLP format to
+an OpenTelemetry Collector, which forwards them to Jaeger for visualization.
+Tracing is **disabled by default** to avoid runtime overhead.
+
+### Enable tracing
+
+```env
+TRACING_ENABLED=true
+OTEL_TRACES_ENABLED=true
+```
+
+`manage.sh` auto-injects `compose.tracing.yml` when `TRACING_ENABLED=true`.
+
+### Architecture
+
+```
+┌──────────┐  OTLP/gRPC   ┌───────────────┐  OTLP/gRPC   ┌─────────┐
+│ FastAPI  │─────────────►│ OTel Collector│─────────────►│ Jaeger  │
+│ Celery   │              │ :4317 / :4318 │              │ :16686  │
+└──────────┘              └───────────────┘              └─────────┘
+                                                                  │
+                                                                  ▼
+                                                            ┌─────────┐
+                                                            │ Grafana │
+                                                            │ (Jaeger │
+                                                            │  ds)    │
+                                                            └─────────┘
+```
+
+### Access the UIs
+
+| Service | URL                     | Notes |
+|---------|-------------------------|-------|
+| Jaeger  | http://localhost:8080/jaeger | Traefik ForwardAuth (admin login) |
+| Grafana | http://localhost:3001    | Jaeger datasource provisioned automatically |
+
+### Trace context propagation
+
+- HTTP requests receive a `traceparent` response header when tracing is active.
+- The existing `X-Correlation-ID` header continues to work; when no explicit
+  correlation ID is provided, the OTel trace ID is used for log correlation.
+- Celery tasks inherit the producer's trace context automatically.
+
+### PII policy
+
+Only `enduser.id` and `enduser.role` are attached to spans, matching the
+existing Sentry scrubbing policy. Usernames and emails are never included in
+trace attributes.
+
+### Production alternatives
+
+Replace the Jaeger exporter in `monitoring/otel/otel-collector.yml` with any
+OTLP-compatible backend (Grafana Tempo, AWS X-Ray, Datadog, Honeycomb, etc.).
+No application changes are required.
+
+---
+
 ## Controlling Request Metrics Storage
 
 The `REQUEST_METRICS_STORE` setting controls where per-request telemetry goes:

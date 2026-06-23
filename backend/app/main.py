@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse, Response
 from app.config import settings
 from app.core.logging import configure_logging, get_logger
 from app.core.sentry import init_sentry
+from app.core.tracing import init_tracing, is_tracing_enabled
 
 logger = get_logger(__name__)
 from app.api import (
@@ -23,6 +24,7 @@ from app.middleware.request_metrics import _metrics_buffer
 async def startup():
     """Application startup logic (tables, seeding, background tasks)."""
     configure_logging()
+    init_tracing()
     init_sentry()
 
     # Create tables
@@ -122,6 +124,7 @@ async def rate_limit_exceeded_handler(request: Request, exc):
 
 
 from app.middleware.request_size_limit import RequestBodyTooLarge
+from app.middleware.tracing import TracingEnrichmentMiddleware
 
 
 @app.exception_handler(RequestBodyTooLarge)
@@ -204,6 +207,9 @@ app.add_middleware(
     max_age=settings.cors_max_age,
 )
 
+# OpenTelemetry span enrichment (runs inside the span created by FastAPIInstrumentor)
+app.add_middleware(TracingEnrichmentMiddleware)
+
 # Include routers
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(users.router, prefix="/users", tags=["users"])
@@ -276,3 +282,18 @@ async def prometheus_metrics():
 
     data, content_type = await get_metrics_output()
     return Response(content=data, media_type=content_type)
+
+
+# Apply OpenTelemetry instrumentation after all middleware and routes are registered.
+# This places the OTel middleware outermost so every other middleware runs inside
+# the request span. Skip entirely when tracing is disabled to avoid any overhead.
+# Initialize the tracer provider before instrumenting so the middleware gets a
+# real tracer rather than a no-op one.
+init_tracing()
+if is_tracing_enabled():
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+    FastAPIInstrumentor.instrument_app(
+        app,
+        excluded_urls="/api/health,/api/metrics,/api/docs,/api/openapi.json",
+    )

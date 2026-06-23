@@ -41,6 +41,7 @@
 - **Request Size Limits** — `RequestSizeLimitMiddleware` with O(1) Content-Length fast path and chunked-transfer abort; 10 MB default
 - **Strict CORS** — Explicit origin whitelist, restricted methods/headers in production, preflight caching; rejects `*` with credentials
 - **Redis Response Caching** — `app.core.cache` with msgpack serialization, circuit breaker, stampede protection, and SET-based invalidation; caches `GET /servers/` and `GET /admin/servers` with 30s TTL; complete invalidation on all mutations
+- **OpenTelemetry Distributed Tracing** — end-to-end tracing across FastAPI, Celery, SQLAlchemy, Redis; OTLP exporter to collector; Jaeger UI at `/jaeger`; Grafana Jaeger datasource; preserves existing correlation ID logging
 
 ### Model Updates
 - **ServerPlan** — Added `max_runtime`, `idle_timeout`, `allow_scheduling`, `allow_snapshots`
@@ -1658,7 +1659,7 @@ Then the server stops and the bulk API returns success
   - [x] Custom HTTP request metrics — `RequestMetric` model, route-aware normalization, batched DB writes, admin dashboard
   - [x] Prometheus metrics export — `app/core/prometheus_metrics.py`, `/api/metrics` endpoint, request counter, WebSocket/Redis-cache/business gauges, multiprocess support
   - [x] Grafana dashboards — provisioned dashboards (`nukelab-api.json`, `nukelab-infrastructure.json`) with Prometheus datasource; exporters for Postgres, Redis, Celery, Node, PgBouncer
-  - [ ] Distributed tracing (OpenTelemetry)
+  - [x] Distributed tracing (OpenTelemetry) — OTLP exporter, Jaeger UI, FastAPI/Celery/SQLAlchemy/Redis auto-instrumentation
   - [x] Error tracking (Sentry) — backend (`app/core/sentry.py`) with FastAPI/Celery/SQLAlchemy/Redis integrations and PII scrubbing; frontend (`@sentry/react`) captures server errors
 
 - [ ] **Kubernetes**
@@ -2364,6 +2365,6 @@ DEFAULT_MAX_SERVERS=3
 
 1. **Run load tests and act on results** — execute `./scripts/run-load-tests.sh baseline` and `./scripts/run-load-tests.sh stress`, then use `scripts/db_profiler.py slow-queries` to fix whatever breaks first
 2. **E2E tests (Playwright)** — critical user flows: login, spawn server, stop server, admin bulk actions
-3. **OpenTelemetry distributed tracing** — end-to-end request tracing across FastAPI, Celery, and database calls
-4. **Environment image build pipeline** — automated builds, registry integration, image versioning, and base-image updates
+3. **Environment image build pipeline** — automated builds, registry integration, image versioning, and base-image updates
+4. **E2E tests (Playwright)** — critical user flows: login, spawn server, stop server, admin bulk actions
 5. **Phase 6 items** (Kubernetes, CI/CD, blue-green deployment) remain future goals for multi-node scaling — only pursue after you've saturated a single large server (32+ cores, 128GB+ RAM) and proven you need distribution

@@ -167,3 +167,9 @@ http:
       stripPrefix:
         prefixes:
           - "/alertmanager"
+
+    # Strip /jaeger before forwarding to Jaeger UI container
+    strip-jaeger:
+      stripPrefix:
+        prefixes:
+          - "/jaeger"

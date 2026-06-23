@@ -166,6 +166,15 @@ class Settings(BaseSettings):
     sentry_dsn: str = ""
     sentry_release: str = ""
 
+    # OpenTelemetry Distributed Tracing
+    otel_traces_enabled: bool = False
+    otel_exporter_otlp_endpoint: str = "http://otel-collector:4317"
+    otel_exporter_otlp_protocol: str = "grpc"  # grpc | http
+    otel_service_name: str = "nukelab-backend"
+    otel_service_version: str = "2.0.0"
+    otel_log_correlation: bool = True
+    otel_sampler_ratio: float = 1.0
+
     # Volume Quota Enforcement
     volume_quota_check_interval_minutes: int = 5  # How often to check running server volumes
 

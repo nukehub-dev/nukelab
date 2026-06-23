@@ -195,12 +195,16 @@ async def dispose_stale_pool():
     ``AsyncSessionLocal`` at load time, binding them to the original engine
     rather than the patched test engine.
     """
+    from sqlalchemy.ext.asyncio import AsyncEngine
+
     import app.db.session as _session_module
 
-    await _session_module.engine.dispose()
+    if isinstance(_session_module.engine, AsyncEngine):
+        await _session_module.engine.dispose()
     try:
         from app.main import engine as _main_engine
-        await _main_engine.dispose()
+        if isinstance(_main_engine, AsyncEngine):
+            await _main_engine.dispose()
     except Exception:
         pass
     yield

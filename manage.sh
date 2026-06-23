@@ -318,6 +318,22 @@ EOF
         fi
     fi
 
+    # Auto-inject tracing overlay when enabled
+    if [[ "${TRACING_ENABLED:-false}" == "true" ]]; then
+        local _tracing_overlay="compose.tracing.yml"
+        local _tracing_found=false
+        for _o in "${COMPOSE_OVERLAY_FILES[@]}"; do
+            if [ "$_o" = "$_tracing_overlay" ]; then
+                _tracing_found=true
+                break
+            fi
+        done
+        if ! $_tracing_found; then
+            COMPOSE_OVERLAY_FILES+=("$_tracing_overlay")
+            info "Tracing enabled via TRACING_ENABLED — adding $_tracing_overlay"
+        fi
+    fi
+
     # Deduplicate
     declare -A _seen_overlays
     for overlay in "${COMPOSE_OVERLAY_FILES[@]}"; do
@@ -736,6 +752,7 @@ cmd_test() {
             -e "DATABASE_URL=postgresql+asyncpg://${DATABASE_USER:-nukelab}:${DATABASE_PASSWORD:-nukelab123}@postgres:5432/${DATABASE_NAME:-nukelab}_test" \
             -e "REDIS_URL=redis://redis:6379/1" \
             -e "RATE_LIMIT_ENABLED=false" \
+            -e "OTEL_TRACES_ENABLED=false" \
             -e "SENTRY_DSN=" \
             -e "PROMETHEUS_SCRAPE_TOKEN=" \
             -e "PROMETHEUS_ENABLED=false" \

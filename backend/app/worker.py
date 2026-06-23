@@ -1,15 +1,20 @@
 from celery import Celery, Task
 from celery.signals import before_task_publish, task_prerun, task_postrun
 from celery.schedules import crontab
+from opentelemetry.instrumentation.celery import CeleryInstrumentor
+
 from app.config import settings
 from app.core.context import correlation_id
 from app.core.logging import get_logger
 from app.core.sentry import init_sentry
+from app.core.tracing import init_tracing, is_tracing_enabled
 
 logger = get_logger(__name__)
 
-# Initialize Sentry for Celery workers (idempotent — safe to call multiple times)
+# Initialize Sentry and OpenTelemetry for Celery workers (both idempotent)
 init_sentry()
+if init_tracing():
+    CeleryInstrumentor().instrument()
 
 
 def _get_cid_from_headers(headers: dict) -> str:

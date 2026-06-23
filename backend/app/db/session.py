@@ -1,3 +1,4 @@
+import os
 import time
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
@@ -5,6 +6,7 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.pool import NullPool
 from app.config import settings
 from app.core.logging import get_logger
+from app.core.tracing import is_tracing_enabled
 
 # PgBouncer is controlled by PGBOUNCER_ENABLED. When enabled, the app routes
 # through PgBouncer (DATABASE_PGBOUNCER_URL is optional and overrides the
@@ -43,6 +45,19 @@ else:
 # Select the appropriate database URL.
 _db_url = settings.database_pgbouncer_url if _use_pgbouncer else settings.database_url
 engine = create_async_engine(_db_url, **_engine_kwargs)
+
+# ── OpenTelemetry SQLAlchemy instrumentation ────────────────────────────────
+# Skip instrumentation during tests to avoid monkey-patching the Engine class
+# while sync tests mock create_async_engine / use mock sessions.
+if is_tracing_enabled() and not os.environ.get("TESTING"):
+    try:
+        from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+
+        SQLAlchemyInstrumentor().instrument(
+            engine=engine.sync_engine,
+        )
+    except Exception:
+        logger.exception("Failed to instrument SQLAlchemy for OpenTelemetry")
 
 # ── SQLAlchemy slow query logging (gated by config) ─────────────────────────
 def _attach_slow_query_listener():
