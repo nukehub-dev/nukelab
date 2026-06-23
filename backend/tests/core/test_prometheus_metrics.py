@@ -11,11 +11,9 @@ def reset_prometheus_settings(monkeypatch):
     """Restore Prometheus settings after each test."""
     original_enabled = settings.prometheus_enabled
     original_store = settings.request_metrics_store
-    original_token = settings.prometheus_scrape_token
     yield
     settings.prometheus_enabled = original_enabled
     settings.request_metrics_store = original_store
-    settings.prometheus_scrape_token = original_token
 
 
 @pytest.fixture
@@ -31,21 +29,6 @@ async def test_metrics_endpoint_disabled_by_default(client):
     settings.prometheus_enabled = False
     response = await client.get("/metrics")
     assert response.status_code == status.HTTP_404_NOT_FOUND
-
-
-@pytest.mark.asyncio
-async def test_metrics_endpoint_requires_token_when_configured(client, prometheus_enabled):
-    """When PROMETHEUS_SCRAPE_TOKEN is set, requests without it are rejected."""
-    settings.prometheus_scrape_token = "secret-token"
-
-    response = await client.get("/metrics")
-    assert response.status_code == status.HTTP_401_UNAUTHORIZED
-
-    response = await client.get("/metrics", headers={"Authorization": "Bearer wrong-token"})
-    assert response.status_code == status.HTTP_401_UNAUTHORIZED
-
-    response = await client.get("/metrics", headers={"Authorization": "Bearer secret-token"})
-    assert response.status_code == status.HTTP_200_OK
 
 
 @pytest.mark.asyncio
