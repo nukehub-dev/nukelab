@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Offline — NukeLab</title>
+    <meta name="color-scheme" content="dark light" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <style>
+      :root {
+        --bg: #0a0a0a;
+        --fg: #fafafa;
+        --muted: #a1a1aa;
+        --primary: #f37524;
+        --primary-hover: #e06b1f;
+        --card: rgba(255, 255, 255, 0.05);
+        --border: rgba(255, 255, 255, 0.12);
+      }
+      * { box-sizing: border-box; margin: 0; }
+      html, body { height: 100%; }
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        background: var(--bg);
+        color: var(--fg);
+        padding: 1.5rem;
+      }
+      .center {
+        position: relative;
+        width: 100%;
+        max-width: 420px;
+        text-align: center;
+      }
+      .glow {
+        position: absolute;
+        left: 50%;
+        top: 80px;
+        transform: translateX(-50%);
+        width: 260px;
+        height: 260px;
+        border-radius: 50%;
+        background: radial-gradient(circle, color-mix(in srgb, var(--primary) 14%, transparent) 0%, transparent 65%);
+        pointer-events: none;
+      }
+      .icon-wrap {
+        position: relative;
+        width: 180px;
+        height: 180px;
+        margin: 0 auto 2rem;
+      }
+      .icon-wrap svg {
+        width: 100%;
+        height: 100%;
+        color: var(--primary);
+      }
+      h1 { font-size: 2rem; font-weight: 800; letter-spacing: -0.025em; margin-bottom: 0.5rem; }
+      p { color: var(--muted); line-height: 1.6; margin-bottom: 2rem; font-size: 1rem; }
+      .actions { display: flex; justify-content: center; gap: 0.75rem; flex-wrap: wrap; }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.65rem 1.25rem;
+        border-radius: 0.625rem;
+        font-size: 0.9375rem;
+        font-weight: 600;
+        text-decoration: none;
+        border: 1px solid transparent;
+        cursor: pointer;
+        transition: transform 0.1s, opacity 0.2s, background 0.2s;
+      }
+      .btn:hover { opacity: 0.9; }
+      .btn:active { transform: translateY(1px); }
+      .btn-primary { background: var(--primary); color: #fff; }
+      .btn-primary:hover { filter: brightness(1.1); }
+      .btn-secondary { background: var(--card); color: var(--fg); border-color: var(--border); }
+      .btn-secondary:hover { background: color-mix(in srgb, var(--fg) 8%, var(--card)); }
+      .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+      .spin { animation: spin 1s linear infinite; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) {
+        .spin { animation: none; }
+      }
+    </style>
+    <script>
+      (function () {
+        var THEME_PREVIEWS = {
+          default: {
+            light: { background: '#fafafa', foreground: '#18181b', muted: '#71717a', primary: '#8b5cf6', card: 'rgba(0,0,0,0.04)', border: 'rgba(0,0,0,0.08)' },
+            dark: { background: '#24262b', foreground: '#f5f7fa', muted: '#a1a1aa', primary: '#a855f7', card: 'rgba(255,255,255,0.05)', border: 'rgba(255,255,255,0.10)' }
+          },
+          graphite: {
+            light: { background: '#f5f6f8', foreground: '#1f2937', muted: '#6b7280', primary: '#4b6bfb', card: 'rgba(0,0,0,0.04)', border: 'rgba(0,0,0,0.08)' },
+            dark: { background: '#1a1d23', foreground: '#e2e5e9', muted: '#9ca3af', primary: '#5b7cfa', card: 'rgba(255,255,255,0.05)', border: 'rgba(255,255,255,0.10)' }
+          },
+          ocean: {
+            light: { background: '#f0f9ff', foreground: '#0c4a6e', muted: '#64748b', primary: '#0ea5e9', card: 'rgba(0,0,0,0.04)', border: 'rgba(0,0,0,0.08)' },
+            dark: { background: '#0f172a', foreground: '#e0f2fe', muted: '#94a3b8', primary: '#38bdf8', card: 'rgba(255,255,255,0.05)', border: 'rgba(255,255,255,0.10)' }
+          },
+          amber: {
+            light: { background: '#fefce8', foreground: '#422006', muted: '#78716c', primary: '#eab308', card: 'rgba(0,0,0,0.04)', border: 'rgba(0,0,0,0.08)' },
+            dark: { background: '#1c1917', foreground: '#fef3c7', muted: '#a8a29e', primary: '#fbbf24', card: 'rgba(255,255,255,0.05)', border: 'rgba(255,255,255,0.10)' }
+          },
+          github: {
+            light: { background: '#ffffff', foreground: '#1f2328', muted: '#6e7781', primary: '#0969da', card: 'rgba(0,0,0,0.04)', border: 'rgba(0,0,0,0.08)' },
+            dark: { background: '#0d1117', foreground: '#c9d1d9', muted: '#8b949e', primary: '#58a6ff', card: 'rgba(255,255,255,0.05)', border: 'rgba(255,255,255,0.10)' }
+          },
+          nord: {
+            light: { background: '#eceff4', foreground: '#2e3440', muted: '#4c566a', primary: '#5e81ac', card: 'rgba(0,0,0,0.04)', border: 'rgba(0,0,0,0.08)' },
+            dark: { background: '#2e3440', foreground: '#eceff4', muted: '#d8dee9', primary: '#88c0d0', card: 'rgba(255,255,255,0.05)', border: 'rgba(255,255,255,0.10)' }
+          },
+          everforest: {
+            light: { background: '#fdf6e3', foreground: '#3c3836', muted: '#665c54', primary: '#689d6a', card: 'rgba(0,0,0,0.04)', border: 'rgba(0,0,0,0.08)' },
+            dark: { background: '#2b3339', foreground: '#d3c6aa', muted: '#a89984', primary: '#a7c080', card: 'rgba(255,255,255,0.05)', border: 'rgba(255,255,255,0.10)' }
+          },
+          rosepine: {
+            light: { background: '#faf4ed', foreground: '#575279', muted: '#797593', primary: '#907aa9', card: 'rgba(0,0,0,0.04)', border: 'rgba(0,0,0,0.08)' },
+            dark: { background: '#191724', foreground: '#e0def4', muted: '#908caa', primary: '#c4a7e7', card: 'rgba(255,255,255,0.05)', border: 'rgba(255,255,255,0.10)' }
+          }
+        };
+        var ACCENT_COLORS = {
+          default: '#f37524',
+          purple: '#a855f7',
+          blue: '#3b82f6',
+          red: '#ef4444',
+          green: '#22c55e'
+        };
+
+        var raw = '';
+        try { raw = localStorage.getItem('nukelab-theme') || ''; } catch (e) {}
+        var state = {};
+        try {
+          var parsed = JSON.parse(raw);
+          if (parsed && parsed.state) state = parsed.state;
+        } catch (e) {}
+
+        var themeKey = state.theme || 'default';
+        var isDark = state.isDark !== false;
+        var isOled = !!state.isOled;
+        var accent = state.accentColor || 'default';
+        var mode = isDark ? 'dark' : 'light';
+        var theme = (THEME_PREVIEWS[themeKey] || THEME_PREVIEWS.default)[mode];
+
+        var bg = isDark && isOled ? '#000000' : theme.background;
+        var primary = ACCENT_COLORS[accent] || ACCENT_COLORS.default;
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (!meta) {
+          meta = document.createElement('meta');
+          meta.name = 'theme-color';
+          document.head.appendChild(meta);
+        }
+        meta.content = primary;
+
+        var root = document.documentElement;
+        root.style.setProperty('--bg', bg);
+        root.style.setProperty('--fg', theme.foreground);
+        root.style.setProperty('--muted', theme.muted);
+        root.style.setProperty('--primary', primary);
+        root.style.setProperty('--card', theme.card);
+        root.style.setProperty('--border', theme.border);
+      })();
+    </script>
+  </head>
+  <body>
+    <div class="center">
+      <div class="glow"></div>
+
+      <div class="icon-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Offline">
+          <path d="M12 20h.01" />
+          <path d="M8.5 16.5a7 7 0 0 1 7 0" />
+          <path d="M5 12.5a11 11 0 0 1 14 0" />
+          <path d="M1.5 8.5a15 15 0 0 1 21 0" />
+          <line x1="22" y1="2" x2="2" y2="22" />
+        </svg>
+      </div>
+
+      <h1>You are offline</h1>
+      <p>NukeLab can't reach the platform right now. Check your connection and try again.</p>
+
+      <div class="actions">
+        <a href="/" class="btn btn-secondary">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          Home
+        </a>
+        <button id="retry" class="btn btn-primary" type="button">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+          Retry connection
+        </button>
+      </div>
+    </div>
+
+    <script>
+      document.getElementById('retry').addEventListener('click', function () {
+        this.disabled = true;
+        this.innerHTML = '<svg class="spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Checking…';
+        fetch(location.href, { method: 'HEAD', cache: 'no-store' })
+          .then(function () { location.reload(); })
+          .catch(function () {
+            var btn = document.getElementById('retry');
+            btn.disabled = false;
+            btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg> Retry connection';
+          });
+      });
+    </script>
+  </body>
+</html>

@@ -1,13 +1,16 @@
 {
+  "id": "nukelab",
   "name": "NukeLab",
   "short_name": "NukeLab",
   "description": "Your Nuclear Simulation Workspace",
   "start_url": "/",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "browser"],
   "background_color": "#0a0a0a",
   "theme_color": "#f37524",
   "orientation": "any",
   "scope": "/",
+  "categories": ["productivity", "utilities", "science"],
   "icons": [
     {
       "src": "/icon-192x192.png",

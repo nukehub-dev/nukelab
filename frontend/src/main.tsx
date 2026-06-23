@@ -6,6 +6,8 @@ import * as Sentry from '@sentry/react';
 import { routeTree } from './routeTree.gen';
 import { queryClient } from './lib/api';
 import { ErrorBoundary } from './components/feedback/error-boundary';
+import { NotFound } from './components/feedback/not-found';
+import { registerServiceWorker } from './lib/register-sw';
 import './styles/index.css';
 
 // Initialize Sentry error tracking
@@ -60,6 +62,7 @@ const router = createRouter({
   context: { queryClient },
   defaultPreload: 'intent',
   defaultPreloadStaleTime: 0,
+  defaultNotFoundComponent: () => <NotFound />,
   defaultErrorComponent: () => (
     <ErrorBoundary>
       <div className="p-8 text-center">
@@ -87,3 +90,5 @@ createRoot(document.getElementById('root')!).render(
     </ErrorBoundary>
   </StrictMode>,
 );
+
+registerServiceWorker();

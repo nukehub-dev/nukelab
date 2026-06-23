@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Generated service worker (source is sw.js.tpl)
+public/sw.js
