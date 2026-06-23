@@ -62,6 +62,8 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
   const shouldReconnectRef = useRef(true);
   const isConnectingRef = useRef(false);
 
+  const connectRef = useRef<() => void>(() => {});
+
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
     if (isConnectingRef.current) return;
@@ -138,7 +140,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
         if (shouldReconnectRef.current && reconnectAttemptsRef.current < maxReconnectAttempts) {
           reconnectAttemptsRef.current += 1;
           reconnectTimerRef.current = setTimeout(() => {
-            connect();
+            connectRef.current();
           }, reconnectInterval);
         }
       };
@@ -148,6 +150,10 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
       setIsConnecting(false);
     }
   }, [explicitUrl, reconnectInterval, maxReconnectAttempts]);
+
+  useEffect(() => {
+    connectRef.current = connect;
+  }, [connect]);
 
   const disconnect = useCallback(() => {
     shouldReconnectRef.current = false;

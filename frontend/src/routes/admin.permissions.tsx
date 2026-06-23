@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, Link } from '@tanstack/react-router';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Shield,
@@ -169,11 +169,7 @@ function PermissionsPage() {
     if (!canAccessAdmin) navigate({ to: '/' });
   }, [canAccessAdmin, navigate]);
 
-  useEffect(() => {
-    fetchMatrix();
-  }, []);
-
-  const fetchMatrix = async () => {
+  const fetchMatrix = useCallback(async () => {
     try {
       setLoading(true);
       const response = await api.get<PermissionMatrix>('/admin/permissions');
@@ -189,7 +185,11 @@ function PermissionsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchMatrix();
+  }, [fetchMatrix]);
 
   const togglePermission = (role: string, permission: string) => {
     setEditedRoles((prev) => {

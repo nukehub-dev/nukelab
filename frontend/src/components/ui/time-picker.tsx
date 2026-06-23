@@ -64,8 +64,12 @@ export function TimePicker({ hour, minute, onChange, open = true, onClose, ancho
   const panelRef = useRef<HTMLDivElement>(null);
   const [coords, setCoords] = useState({ left: 0, top: 0 });
   const [positioned, setPositioned] = useState(false);
+  const [usePortal, setUsePortal] = useState(false);
 
-  const usePortal = Boolean(anchorRef);
+  useEffect(() => {
+    setUsePortal(Boolean(anchorRef));
+  }, [anchorRef]);
+
   const isOpen = open;
 
   const updatePosition = useCallback(() => {

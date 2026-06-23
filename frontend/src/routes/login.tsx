@@ -48,7 +48,10 @@ function LoginPage() {
       useAuthStore.getState().setUser(null);
       window.history.replaceState({}, '', '/login');
     }
-    if (errMsg) { setError(decodeURIComponent(errMsg)); window.history.replaceState({}, '', '/login'); }
+    if (errMsg) {
+      queueMicrotask(() => setError(decodeURIComponent(errMsg)));
+      window.history.replaceState({}, '', '/login');
+    }
     if (token) {
       localStorage.setItem('nukelab-token', token);
       if (refresh) localStorage.setItem('nukelab-refresh', refresh);
@@ -80,8 +83,8 @@ function LoginPage() {
       if (data.refresh_token) localStorage.setItem('nukelab-refresh', data.refresh_token);
       document.cookie = `nukelab_token=${data.access_token}; path=/; SameSite=Lax`;
       navigate({ to: '/' });
-    } catch (err: any) {
-      setError(err.message || 'Login failed');
+    } catch (err) {
+      setError((err instanceof Error ? err.message : String(err)) || 'Login failed');
     } finally {
       setLoading(false);
     }

@@ -80,8 +80,11 @@ export function Calendar({ value, onSelect, minDate, maxDate, open, onClose, anc
   const panelRef = useRef<HTMLDivElement>(null);
   const [coords, setCoords] = useState({ left: 0, top: 0 });
   const [positioned, setPositioned] = useState(false);
+  const [usePortal, setUsePortal] = useState(false);
 
-  const usePortal = Boolean(anchorRef);
+  useEffect(() => {
+    setUsePortal(Boolean(anchorRef));
+  }, [anchorRef]);
 
   const updatePosition = useCallback(() => {
     if (!usePortal || !anchorRef?.current || !panelRef.current) return;
