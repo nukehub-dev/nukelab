@@ -745,6 +745,18 @@ setup_cpu_lib_volume() {
     ok "Built and stored libnukelab_cpu.so in volume"
 }
 
+# Returns a direct Postgres URL by rewriting the host/port in DATABASE_URL to
+# postgres:5432. This is useful for migrations and other DDL operations that
+# must not go through PgBouncer.
+_direct_database_url() {
+    local url="${DATABASE_URL:-}"
+    if [ -z "$url" ]; then
+        echo "postgresql+asyncpg://${DATABASE_USER:-nukelab}:${DATABASE_PASSWORD:-nukelab123}@postgres:5432/${DATABASE_NAME:-nukelab}"
+        return
+    fi
+    echo "$url" | sed -E 's|@([^/]+)|@postgres:5432|'
+}
+
 wait_for_backend() {
     local url="${APP_URL:-http://localhost:8080}/api/health"
     local waited=0
