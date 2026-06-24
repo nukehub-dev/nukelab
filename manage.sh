@@ -30,14 +30,58 @@ COMPOSE_FILE="$DIR/compose.yml"
 DEV_COMPOSE_FILE="$DIR/.nukelab-dev-compose.yml"
 COMPOSE_ARGS=(-f "$COMPOSE_FILE")
 
-# ─── Helpers ───────────────────────────────────────────────────────────────
-log()   { echo -e "${BLUE}▶${RESET} $*"; }
-info()  { echo -e "${CYAN}ℹ${RESET}  $*"; }
-ok()    { echo -e "${GREEN}✓${RESET}  $*"; }
-warn()  { echo -e "${YELLOW}⚠${RESET}  $*"; }
-err()   { echo -e "${RED}✗${RESET}  $*" >&2; }
-die()   { err "$*"; exit 1; }
-step()  { echo -e "\n${BOLD}${MAGENTA}▸${RESET} ${BOLD}$*${RESET}"; }
+# ─── Logging ───────────────────────────────────────────────────────────────
+# Levels: DEBUG < INFO < OK < WARN < ERROR. Default is INFO.
+declare -A _LOG_LEVELS=([DEBUG]=0 [INFO]=1 [OK]=2 [WARN]=3 [ERROR]=4)
+LOG_LEVEL="${LOG_LEVEL:-INFO}"
+VERBOSE=false
+QUIET=false
+
+_log_level_value() {
+    echo "${_LOG_LEVELS[$1]:-1}"
+}
+
+_log_should_print() {
+    local requested="$1"
+    local min
+    min=$(_log_level_value "$LOG_LEVEL")
+    local cur
+    cur=$(_log_level_value "$requested")
+    [[ $cur -ge $min ]]
+}
+
+log_debug() {
+    _log_should_print DEBUG || return 0
+    echo -e "${DIM}⛏ $*${RESET}" >&2
+}
+log_info() {
+    _log_should_print INFO || return 0
+    echo -e "${BLUE}▶${RESET} $*"
+}
+log_ok() {
+    _log_should_print OK || return 0
+    echo -e "${GREEN}✓${RESET}  $*"
+}
+log_warn() {
+    _log_should_print WARN || return 0
+    echo -e "${YELLOW}⚠${RESET}  $*" >&2
+}
+log_error() {
+    _log_should_print ERROR || return 0
+    echo -e "${RED}✗${RESET}  $*" >&2
+}
+
+# Backwards-compatible wrappers used by existing command modules.
+log()   { log_info "$@"; }
+info()  { log_info "$@"; }
+ok()    { log_ok "$@"; }
+warn()  { log_warn "$@"; }
+err()   { log_error "$@"; }
+die()   { log_error "$@"; exit 1; }
+step()  {
+    _log_should_print INFO || return 0
+    echo -e "\n${BOLD}${MAGENTA}▸${RESET} ${BOLD}$*${RESET}"
+}
 
 # ─── State Persistence ─────────────────────────────────────────────────────
 # Remember the compose configuration used at start so stop/status/logs/etc.
@@ -153,6 +197,7 @@ TARGET=""
 USE_DEV_MODE=false
 USE_COVERAGE=false
 SHOW_HELP=false
+SKIP_PORT_CHECK=false
 EXTRA_ARGS=()
 COMPOSE_OVERLAY_FILES=()
 
@@ -161,10 +206,54 @@ COMPOSE_OVERLAY_FILES=()
 VALUE_OPTIONS=("--tail" "-n" "--timeout" "-t")
 
 parse_args() {
+    # Phase 1: consume global flags that may appear before the command.
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --help|-h)
+                print_help
+                exit 0
+                ;;
+            --dev|-d)
+                USE_DEV_MODE=true
+                ;;
+            --coverage)
+                USE_COVERAGE=true
+                ;;
+            --verbose|-v)
+                VERBOSE=true
+                QUIET=false
+                LOG_LEVEL=DEBUG
+                ;;
+            --quiet|-q)
+                QUIET=true
+                VERBOSE=false
+                LOG_LEVEL=ERROR
+                ;;
+            --overlay|-o)
+                shift
+                COMPOSE_OVERLAY_FILES+=("$1")
+                ;;
+            --skip-port-check)
+                SKIP_PORT_CHECK=true
+                ;;
+            -*)
+                # Unknown leading option or a command-specific option placed
+                # before the command. Stop global parsing and let the next
+                # phase decide.
+                break
+                ;;
+            *)
+                # First positional token is the command.
+                break
+                ;;
+        esac
+        shift
+    done
+
     CMD="${1:-help}"
     shift || true
 
-    # Short-circuit for top-level help.
+    # Normalize top-level help requests.
     case "$CMD" in
         help|--help|-h)
             print_help
@@ -172,6 +261,7 @@ parse_args() {
             ;;
     esac
 
+    # Phase 2: parse command arguments, targets, and per-command options.
     while [[ $# -gt 0 ]]; do
         case "$1" in
             backend|frontend|all)
@@ -183,9 +273,22 @@ parse_args() {
             --coverage)
                 USE_COVERAGE=true
                 ;;
+            --verbose|-v)
+                VERBOSE=true
+                QUIET=false
+                LOG_LEVEL=DEBUG
+                ;;
+            --quiet|-q)
+                QUIET=true
+                VERBOSE=false
+                LOG_LEVEL=ERROR
+                ;;
             --overlay|-o)
                 shift
                 COMPOSE_OVERLAY_FILES+=("$1")
+                ;;
+            --skip-port-check)
+                SKIP_PORT_CHECK=true
                 ;;
             --help|-h)
                 SHOW_HELP=true
@@ -402,6 +505,10 @@ ${BOLD}Testing:${RESET}
   ${GREEN}test${RESET}       [target] [--coverage]      Run tests
   ${GREEN}e2e${RESET}                                  Run Playwright E2E tests
   ${GREEN}loadtest${RESET}   [profile]                  Run Locust/k6 load tests
+  ${GREEN}selftest${RESET}                             Quick manage.sh sanity check
+
+${BOLD}Other:${RESET}
+  ${GREEN}install-completion${RESET}                   Install bash tab-completion
 
 ${BOLD}Targets:${RESET} ${DIM}(optional, default: all)${RESET}
   backend    Backend services (api, workers, db, redis, traefik)
@@ -412,6 +519,9 @@ ${BOLD}Flags:${RESET}
   --dev, -d      Development mode: backend containers + local Vite dev server
   --coverage     Run tests with coverage report (backend only)
   --overlay, -o  Add a compose overlay file (repeatable)
+  --verbose, -v  Show debug output
+  --quiet, -q    Suppress non-error output
+  --skip-port-check  Bypass the pre-flight port check
 
 ${BOLD}Examples:${RESET}
   ./manage.sh start                      # Production: all containers
@@ -468,6 +578,12 @@ _dispatch_command() {
 main() {
     parse_args "$@"
 
+    # Top-level help (./manage.sh help or ./manage.sh --help).
+    if [ "$CMD" = "help" ]; then
+        print_help
+        return 0
+    fi
+
     # Command-specific help can be shown without loading env/engine state.
     if $SHOW_HELP; then
         _dispatch_command "$CMD"
@@ -476,13 +592,25 @@ main() {
 
     case "$CMD" in
         start|build|update|pull|clean)
+            _acquire_lock
             init_env
             detect_engine
             setup_podman_socket
             setup_compose_args
+            preflight_checks
             _dispatch_command "$CMD"
             ;;
-        stop|restart|status|logs|remove|reset|shell|exec|db-migrate|db-shell|backup|restore|e2e|loadtest)
+        stop|restart|remove|reset)
+            _acquire_lock
+            init_env
+            detect_engine
+            setup_podman_socket
+            if ! restore_state; then
+                setup_compose_args
+            fi
+            _dispatch_command "$CMD"
+            ;;
+        status|logs|shell|exec|db-migrate|db-shell|backup|restore|e2e|loadtest)
             init_env
             detect_engine
             setup_podman_socket
@@ -493,17 +621,20 @@ main() {
             ;;
         install|test)
             if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
+                _acquire_lock
                 init_env
                 detect_engine
                 setup_podman_socket
                 if ! restore_state; then
                     setup_compose_args
                 fi
+                preflight_checks
             fi
             _dispatch_command "$CMD"
             ;;
         rm)
             CMD="remove"
+            _acquire_lock
             init_env
             detect_engine
             setup_podman_socket
@@ -511,6 +642,9 @@ main() {
                 setup_compose_args
             fi
             _dispatch_command "remove"
+            ;;
+        install-completion|selftest)
+            _dispatch_command "$CMD"
             ;;
         *)
             die "Unknown command: $CMD\nRun './manage.sh help' for usage."

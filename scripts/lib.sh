@@ -288,3 +288,136 @@ wait_for_backend() {
     ok "Backend ready (${waited}s)"
 }
 
+# ─── Pre-flight Validation ─────────────────────────────────────────────────
+# Usage: preflight_checks
+# Performs a set of cheap, host-side sanity checks before mutating commands
+# such as start/build/update/test. Prints actionable errors and exits on
+# failure. Set SKIP_PORT_CHECK=true to bypass the port checks.
+
+_preflight_port_in_use() {
+    local port="$1"
+    if command -v ss >/dev/null 2>&1; then
+        ss -tln 2>/dev/null | grep -Eq ":${port}[[:space:]]" && return 0
+    elif command -v netstat >/dev/null 2>&1; then
+        netstat -tln 2>/dev/null | grep -Eq ":${port}[[:space:]]" && return 0
+    else
+        # No tool available — warn once but do not block.
+        return 1
+    fi
+    return 1
+}
+
+_preflight_check_ports() {
+    local ports=(8080 8443)
+    if $USE_DEV_MODE; then
+        ports+=(5173)
+    fi
+    if [ "${PGBOUNCER_ENABLED:-false}" = "true" ]; then
+        ports+=(6432)
+    fi
+    if [ "${TRACING_ENABLED:-false}" = "true" ]; then
+        ports+=(4317 4318)
+    fi
+
+    local busy=()
+    for port in "${ports[@]}"; do
+        if _preflight_port_in_use "$port"; then
+            busy+=("$port")
+        fi
+    done
+
+    if [ ${#busy[@]} -gt 0 ]; then
+        die "Port(s) already in use: ${busy[*]}\n\nFree them or choose different ports.\nUse --skip-port-check to bypass this check."
+    fi
+}
+
+# ─── Concurrency Lock ──────────────────────────────────────────────────────
+# Prevents two manage.sh invocations from running conflicting operations at the
+# same time. The lock file stores the PID and command of the holding process.
+
+LOCK_DIR="${XDG_RUNTIME_DIR:-$HOME/.local/share}/nukelab"
+LOCK_FILE="$LOCK_DIR/manage.lock"
+
+_acquire_lock() {
+    mkdir -p "$LOCK_DIR"
+    if [ -f "$LOCK_FILE" ]; then
+        local other_pid
+        other_pid=$(awk 'NR==1' "$LOCK_FILE" 2>/dev/null || true)
+        if [ -n "$other_pid" ] && kill -0 "$other_pid" 2>/dev/null; then
+            local other_cmd
+            other_cmd=$(sed -n '2p' "$LOCK_FILE" 2>/dev/null || true)
+            die "Another manage.sh process is already running (PID $other_pid, command: ${other_cmd:-unknown}).\nWait for it to finish or remove $LOCK_FILE if it crashed."
+        fi
+        warn "Stale lock found (PID ${other_pid:-unknown}). Removing..."
+        rm -f "$LOCK_FILE"
+    fi
+    echo "$$" > "$LOCK_FILE"
+    echo "$CMD ${TARGET:-}" >> "$LOCK_FILE"
+    trap '_release_lock' EXIT INT TERM
+}
+
+_release_lock() {
+    if [ -f "$LOCK_FILE" ] && [ "$(awk 'NR==1' "$LOCK_FILE" 2>/dev/null || true)" = "$$" ]; then
+        rm -f "$LOCK_FILE"
+    fi
+}
+
+preflight_checks() {
+    log_debug "Running pre-flight checks"
+
+    # 1. Environment files
+    if $USE_DEV_MODE; then
+        if [ ! -f .env ] && [ ! -f .env.development ]; then
+            die "No environment file found.\n\n  cp .env.example .env.development"
+        fi
+    else
+        if [ ! -f .env ] && [ ! -f .env.development ]; then
+            die "No environment file found.\n\n  cp .env.example .env"
+        fi
+    fi
+
+    # 2. Container engine and daemon/socket reachability
+    if ! command -v "$CONTAINER_ENGINE" >/dev/null 2>&1; then
+        die "Container engine '$CONTAINER_ENGINE' not found"
+    fi
+    if ! "$CONTAINER_ENGINE" info >/dev/null 2>&1; then
+        die "Container engine '$CONTAINER_ENGINE' is not running or not reachable\n\nPodman: podman machine start\nDocker: sudo systemctl start docker"
+    fi
+
+    # 3. Production secrets sanity check
+    if [ "${APP_ENV:-development}" = "production" ]; then
+        local jwt="${JWT_SECRET:-}"
+        if [ -z "$jwt" ] || [[ "$jwt" == dev-jwt-secret-change-in-production* ]] || [ "${#jwt}" -lt 32 ]; then
+            die "JWT_SECRET is unset or still using the development default.\nSet a strong, unique secret before running in production."
+        fi
+
+        local session="${SESSION_SECRET:-}"
+        if [ -z "$session" ] || [[ "$session" == dev-session-secret-change-in-production* ]]; then
+            die "SESSION_SECRET is unset or still using the development default.\nSet a strong, unique secret before running in production."
+        fi
+    fi
+
+    # 4. Volume storage path
+    if [ "${APP_ENV:-development}" = "production" ]; then
+        if [ -z "${VOLUME_STORAGE_PATH:-}" ]; then
+            die "VOLUME_STORAGE_PATH is required in production.\nSet it to the host path where container volumes are stored."
+        fi
+        if [ ! -d "$VOLUME_STORAGE_PATH" ]; then
+            die "VOLUME_STORAGE_PATH does not exist: $VOLUME_STORAGE_PATH"
+        fi
+    else
+        if [ -n "${VOLUME_STORAGE_PATH:-}" ] && [ ! -d "$VOLUME_STORAGE_PATH" ]; then
+            warn "VOLUME_STORAGE_PATH does not exist: $VOLUME_STORAGE_PATH"
+        fi
+    fi
+
+    # 5. Ports
+    if [ "${SKIP_PORT_CHECK:-false}" != "true" ]; then
+        _preflight_check_ports
+    else
+        log_debug "Skipping port checks (--skip-port-check)"
+    fi
+
+    log_debug "Pre-flight checks passed"
+}
+
