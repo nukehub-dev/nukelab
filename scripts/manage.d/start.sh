@@ -130,12 +130,27 @@ cmd_start() {
             _up_args+=(--no-build)
         fi
 
-        # Start backend and frontend together when target is "all".
-        # Doing it in one compose call avoids compose emitting noisy
-        # "no container with name ..." messages while reconciling services.
         if [ "$TARGET" = "all" ]; then
-            log "Starting backend services and frontend container..."
-            _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" up "${_up_args[@]}" $_prod_backend_services frontend
+            # Start backend services first, then the frontend container.
+            # Doing this in two calls lets podman-compose reconcile the
+            # backend services without the frontend container confusing it,
+            # while we suppress harmless "no container with name ..." warnings.
+            log "Starting backend services..."
+            if $VERBOSE; then
+                _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" up "${_up_args[@]}" $_prod_backend_services
+            else
+                local _up_out
+                _up_out=$(mktemp)
+                if ! $COMPOSE "${COMPOSE_ARGS[@]}" up "${_up_args[@]}" $_prod_backend_services > "$_up_out" 2>&1; then
+                    cat "$_up_out" >&2
+                    rm -f "$_up_out"
+                    return 1
+                fi
+                rm -f "$_up_out"
+            fi
+
+            log "Starting frontend container..."
+            _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" up "${_up_args[@]}" frontend
         elif [ "$TARGET" = "backend" ]; then
             log "Starting backend services..."
             _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" up "${_up_args[@]}" $_prod_backend_services

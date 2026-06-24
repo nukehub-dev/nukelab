@@ -319,14 +319,15 @@ class RegularUser(HttpUser, AuthMixin):
 class AdminUser(HttpUser, AuthMixin):
     """Admin performing dashboard operations.
 
-    Disabled by default (weight=0) because all AdminUsers share the same
-    login account, which rapidly hits per-IP rate limits and causes 401
-    cascades. Run explicitly when you want to test admin endpoints:
+    Excluded from default runs (fixed_count=0) because all AdminUsers share
+    the same login account, which rapidly hits per-IP rate limits and causes
+    401 cascades. Run explicitly when you want to test admin endpoints:
 
         locust -f locustfile.py AdminUser --host http://... -u 5 -r 1
     """
 
-    weight = 0
+    weight = 1
+    fixed_count = 0
     wait_time = between(3, 15)
 
     def on_start(self):
@@ -387,7 +388,8 @@ class ConnectionFloodUser(HttpUser, AuthMixin):
         locust -f locustfile.py ConnectionFloodUser --host http://... -u 1000 -r 100
     """
 
-    weight = 0  # Disabled by default; run explicitly via class name
+    weight = 1
+    fixed_count = 0  # Excluded from default runs; still selectable by class name
     wait_time = between(30, 60)
 
     def on_start(self):

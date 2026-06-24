@@ -46,15 +46,25 @@ detect_engine
 setup_podman_socket
 
 
-# Check main stack is reachable (use container engine directly, more reliable)
-if ! $CONTAINER_ENGINE ps --format '{{.Names}} {{.Status}}' 2>/dev/null | grep -q 'nukelab-traefik'; then
-    die "Main stack is not running. Start it first:
-  ./nukelabctl start"
-fi
+# Wait briefly for the main stack to be reachable; containers may still be
+# starting after a recent ./nukelabctl start.
+_wait_for_stack() {
+    local attempts=0
+    local max_attempts=15
+    while [ $attempts -lt $max_attempts ]; do
+        if $CONTAINER_ENGINE ps --format '{{.Names}}' 2>/dev/null | grep -q '^nukelab-traefik$'; then
+            if $CONTAINER_ENGINE ps --format '{{.Names}}' 2>/dev/null | grep -q '^nukelab-backend$'; then
+                return 0
+            fi
+        fi
+        sleep 1
+        attempts=$((attempts + 1))
+    done
+    return 1
+}
 
-# Check backend container is running
-if ! $CONTAINER_ENGINE ps --format '{{.Names}} {{.Status}}' 2>/dev/null | grep -q 'nukelab-backend'; then
-    die "Backend container is not running. Start the stack first:
+if ! _wait_for_stack; then
+    die "Main stack is not running. Start it first:
   ./nukelabctl start"
 fi
 
