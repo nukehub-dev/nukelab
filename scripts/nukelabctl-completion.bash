@@ -13,7 +13,7 @@ _manage_sh_complete() {
         backup restore reset doctor version install-completion selftest help
     )
 
-    local global_flags=(--dev -d --coverage --overlay -o --verbose -v --quiet -q --help -h)
+    local global_flags=(--dev -d --coverage --overlay -o --verbose -v --quiet -q --skip-port-check --no-alertmanager --help -h)
 
     # First argument: command names only.
     if [[ $COMP_CWORD -eq 1 ]]; then

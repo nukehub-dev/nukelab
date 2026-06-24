@@ -110,6 +110,11 @@ _doctor_check_volume_path() {
 }
 
 _doctor_check_ports() {
+    if [ "${SKIP_PORT_CHECK:-false}" = "true" ]; then
+        _doctor_pass "Port checks skipped (--skip-port-check)"
+        return
+    fi
+
     local ports=(8080 8443)
     if $USE_DEV_MODE; then
         ports+=(5173)

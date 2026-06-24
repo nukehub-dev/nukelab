@@ -28,6 +28,7 @@ USE_DEV_MODE=false
 USE_COVERAGE=false
 SHOW_HELP=false
 SKIP_PORT_CHECK=false
+NO_ALERTMANAGER=false
 EXTRA_ARGS=()
 COMPOSE_OVERLAY_FILES=()
 
@@ -65,6 +66,9 @@ parse_args() {
                 ;;
             --skip-port-check)
                 SKIP_PORT_CHECK=true
+                ;;
+            --no-alertmanager)
+                NO_ALERTMANAGER=true
                 ;;
             --version)
                 CMD="version"
@@ -129,6 +133,9 @@ parse_args() {
                 ;;
             --skip-port-check)
                 SKIP_PORT_CHECK=true
+                ;;
+            --no-alertmanager)
+                NO_ALERTMANAGER=true
                 ;;
             --version)
                 # Ignore --version when it appears after the command.
@@ -228,6 +235,7 @@ ${BOLD}Flags:${RESET}
   --verbose, -v      Show debug output
   --quiet, -q        Suppress non-error output
   --skip-port-check  Bypass the pre-flight port check
+  --no-alertmanager  Skip the Alertmanager overlay (useful for tests/load tests)
 
 ${BOLD}Examples:${RESET}
   ./nukelabctl start                      # Production: all containers
@@ -286,6 +294,12 @@ main() {
     if [ "$CMD" = "help" ]; then
         print_help
         return 0
+    fi
+
+    # Tests and load tests don't need Alertmanager; skip its overlay unless
+    # the user explicitly requests it via --no-alertmanager is not set here.
+    if [ "$CMD" = "test" ] || [ "$CMD" = "loadtest" ]; then
+        NO_ALERTMANAGER=true
     fi
 
     # Command-specific help can be shown without loading env/engine state.

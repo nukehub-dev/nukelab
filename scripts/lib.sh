@@ -390,7 +390,9 @@ EOF
     fi
 
     # Auto-inject Alertmanager overlay when enabled
-    if [[ "${ALERTMANAGER_ENABLED:-false}" == "true" ]]; then
+    if [ "${NO_ALERTMANAGER:-false}" = "true" ]; then
+        log_debug "Skipping Alertmanager overlay (--no-alertmanager / test mode)"
+    elif [[ "${ALERTMANAGER_ENABLED:-false}" == "true" ]]; then
         local _alertmanager_overlay="compose.alertmanager.yml"
         local _alertmanager_found=false
         for _o in "${COMPOSE_OVERLAY_FILES[@]}"; do

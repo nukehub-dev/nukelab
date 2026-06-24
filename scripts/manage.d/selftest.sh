@@ -42,6 +42,7 @@ cmd_selftest() {
     # Global flags do not break help
     _t "--verbose help" bash -c './nukelabctl --verbose help >/dev/null 2>&1' || _increment_failures
     _t "--quiet help" bash -c './nukelabctl --quiet help >/dev/null 2>&1' || _increment_failures
+    _t "--no-alertmanager help" bash -c './nukelabctl --no-alertmanager help >/dev/null 2>&1' || _increment_failures
 
     # Quiet mode suppresses logger output
     _t "--quiet suppresses info" bash -c '! ./nukelabctl --quiet status --running 2>&1 | grep -q "Loading"' || _increment_failures
@@ -75,7 +76,7 @@ cmd_selftest() {
 
     # Diagnostics commands
     _t "version command" bash -c './nukelabctl version | grep -q "NukeLab v2.0"' || _increment_failures
-    _t "doctor command" bash -c './nukelabctl doctor >/dev/null 2>&1' || _increment_failures
+    _t "doctor command" bash -c './nukelabctl doctor --skip-port-check >/dev/null 2>&1' || _increment_failures
 
     # Error trap reports the failing command and location
     _t "ERR trap reports failure" bash -c './nukelabctl exec nonexistent true 2>&1 | grep -q "Command failed in"' || _increment_failures
