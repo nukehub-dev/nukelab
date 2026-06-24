@@ -32,24 +32,19 @@ warn()  { echo -e "${YELLOW}⚠${RESET}  $*"; }
 ok()    { echo -e "${GREEN}✓${RESET}  $*"; }
 die()   { echo -e "${RED}✗${RESET}  $*" >&2; exit 1; }
 
-# ─── Container Engine Detection ────────────────────────────────────────────
-if command -v podman > /dev/null 2>&1; then
-    CONTAINER_ENGINE=podman
-elif command -v docker > /dev/null 2>&1; then
-    CONTAINER_ENGINE=docker
-else
-    die "Neither podman nor docker found"
-fi
+# ─── Shared Helpers ────────────────────────────────────────────────────────
+source "$DIR/scripts/lib.sh"
 
-if command -v podman-compose > /dev/null 2>&1; then
-    COMPOSE="podman-compose"
-elif command -v docker-compose > /dev/null 2>&1; then
-    COMPOSE="docker-compose"
-elif $CONTAINER_ENGINE compose version > /dev/null 2>&1; then
-    COMPOSE="$CONTAINER_ENGINE compose"
-else
-    die "No compose command found"
-fi
+# ─── Environment ───────────────────────────────────────────────────────────
+# Dev mode is implied when manage.sh created the dev overlay file.
+USE_DEV_MODE=false
+[ -f "$DIR/.nukelab-dev-compose.yml" ] && USE_DEV_MODE=true
+init_env "$USE_DEV_MODE"
+
+# ─── Container Engine ──────────────────────────────────────────────────────
+detect_engine
+setup_podman_socket
+
 
 # Check main stack is reachable (use container engine directly, more reliable)
 if ! $CONTAINER_ENGINE ps --format '{{.Names}} {{.Status}}' 2>/dev/null | grep -q 'nukelab-traefik'; then
