@@ -3,10 +3,10 @@
 #
 # Usage:
 #   1. Ensure the main stack is running:
-#      ./manage.sh start
+#      ./nukelabctl start
 #
 #   2. Seed test users:
-#      ./manage.sh exec backend python -m tests.load.setup_test_data --users 100
+#      ./nukelabctl exec backend python -m tests.load.setup_test_data --users 100
 #
 #   3. Run Locust with Web UI:
 #      docker compose -f compose.loadtest.yml up locust

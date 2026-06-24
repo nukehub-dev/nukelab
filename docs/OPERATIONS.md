@@ -11,10 +11,10 @@
 
 ```bash
 # Table sizes and approximate row counts
-./manage.sh exec backend python scripts/db_profiler.py table-sizes
+./nukelabctl exec backend python scripts/db_profiler.py table-sizes
 
 # List partitions for a table
-./manage.sh exec backend python scripts/db_profiler.py partitions --table activity_logs
+./nukelabctl exec backend python scripts/db_profiler.py partitions --table activity_logs
 
 # Partition health (via admin monitoring dashboard API)
 curl -s -H "Authorization: Bearer $ADMIN_TOKEN" http://localhost:8080/api/admin/health/monitoring | jq '.system.services.partitions'
@@ -24,10 +24,10 @@ curl -s -H "Authorization: Bearer $ADMIN_TOKEN" http://localhost:8080/api/admin/
 
 ```bash
 # Top slow queries by total execution time
-./manage.sh exec backend python scripts/db_profiler.py slow-queries --limit 10 --min-calls 10
+./nukelabctl exec backend python scripts/db_profiler.py slow-queries --limit 10 --min-calls 10
 
 # Check current connections
-./manage.sh exec postgres psql -U nukelab -c "
+./nukelabctl exec postgres psql -U nukelab -c "
 SELECT count(*) AS active_connections
 FROM pg_stat_activity
 WHERE state = 'active';
@@ -40,10 +40,10 @@ Partitions are auto-created on startup and via Celery Beat daily, but you can ma
 
 ```bash
 # Create partitions for current month + N months ahead
-./manage.sh exec backend python scripts/db_profiler.py ensure-partitions --months-ahead 3
+./nukelabctl exec backend python scripts/db_profiler.py ensure-partitions --months-ahead 3
 
 # Drop partitions older than N months (detaches them — data is preserved)
-./manage.sh exec backend python scripts/db_profiler.py drop-old --months-to-keep 12
+./nukelabctl exec backend python scripts/db_profiler.py drop-old --months-to-keep 12
 ```
 
 **Operational notes:**
@@ -60,7 +60,7 @@ Partitions are auto-created on startup and via Celery Beat daily, but you can ma
 Run weekly. If `dead_pct` > 20% for any table, tune autovacuum.
 
 ```bash
-./manage.sh exec postgres psql -U nukelab -d nukelab -c "
+./nukelabctl exec postgres psql -U nukelab -d nukelab -c "
 SELECT
     relname AS table_name,
     n_live_tup AS live_rows,
@@ -76,10 +76,10 @@ ORDER BY dead_pct DESC NULLS LAST;
 
 ```bash
 # Run the metrics-gated tuning script (dry-run by default)
-./manage.sh exec backend python scripts/tune_autovacuum.py --dry-run
+./nukelabctl exec backend python scripts/tune_autovacuum.py --dry-run
 
 # Apply changes if metrics justify them
-./manage.sh exec backend python scripts/tune_autovacuum.py
+./nukelabctl exec backend python scripts/tune_autovacuum.py
 ```
 
 The script only applies tuning when `dead_pct` > 10% for partitioned tables.
@@ -111,10 +111,10 @@ Quick reference:
 
 ```bash
 # Create backup
-./manage.sh backup
+./nukelabctl backup
 
 # Restore from backup
-./manage.sh restore backups/nukelab_backup_YYYYMMDD_HHMMSS.sql
+./nukelabctl restore backups/nukelab_backup_YYYYMMDD_HHMMSS.sql
 ```
 
 ---
@@ -126,7 +126,7 @@ Quick reference:
 **Only when metrics justify it.** Check connection usage:
 
 ```bash
-./manage.sh exec postgres psql -U nukelab -c "
+./nukelabctl exec postgres psql -U nukelab -c "
 SELECT count(*) FROM pg_stat_activity WHERE state = 'active';
 "
 ```
@@ -140,7 +140,7 @@ SELECT count(*) FROM pg_stat_activity WHERE state = 'active';
 
 ### 4.2 How to Enable
 
-Set `PGBOUNCER_ENABLED=true` in your `.env`. `manage.sh` auto-detects it and
+Set `PGBOUNCER_ENABLED=true` in your `.env`. `nukelabctl` auto-detects it and
 injects the overlay — no need to set `COMPOSE_OVERLAYS`.
 
 ```bash
@@ -151,12 +151,12 @@ DATABASE_URL=postgresql+asyncpg://nukelab:strong-password@postgres:5432/nukelab
 PGBOUNCER_ENABLED=true
 
 # 3. Start — overlay is automatic
-./manage.sh start
+./nukelabctl start
 ```
 
 Or one-off:
 ```bash
-./manage.sh start --overlay compose.pgbouncer.yml
+./nukelabctl start --overlay compose.pgbouncer.yml
 ```
 
 ### 4.3 What PgBouncer Does
@@ -183,8 +183,8 @@ This avoids **double-pooling**, which causes connection storms and starvation at
 **Monitoring PgBouncer.** Connect to the admin console:
 
 ```bash
-./manage.sh exec pgbouncer psql -p 6432 pgbouncer -U nukelab -c "SHOW POOLS;"
-./manage.sh exec pgbouncer psql -p 6432 pgbouncer -U nukelab -c "SHOW STATS;"
+./nukelabctl exec pgbouncer psql -p 6432 pgbouncer -U nukelab -c "SHOW POOLS;"
+./nukelabctl exec pgbouncer psql -p 6432 pgbouncer -U nukelab -c "SHOW STATS;"
 ```
 
 **Sizing for 100k users.** Defaults in `.env.example` are tuned for `max_connections=500`:

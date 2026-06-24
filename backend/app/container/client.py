@@ -175,7 +175,7 @@ class ContainerClient:
     async def _ensure_cpu_lib_volume(self) -> None:
         """Ensure the CPU mask library volume is mounted into containers.
 
-        The volume is created and populated by manage.sh during startup.
+        The volume is created and populated by nukelabctl during startup.
         The backend only checks for its existence and mounts it.
         """
         if self._cpu_lib_volume_ready:
@@ -187,7 +187,7 @@ class ContainerClient:
         except Exception:
             logger.warning(
                 f"Volume {self.VOLUME_CPU_LIB} not found. "
-                f"Run './manage.sh start' or './manage.sh build' to create it."
+                f"Run './nukelabctl start' or './nukelabctl build' to create it."
             )
 
     async def _check_storage_support(self) -> bool:

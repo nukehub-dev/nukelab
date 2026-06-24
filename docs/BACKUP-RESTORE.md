@@ -9,14 +9,14 @@
 
 ```bash
 # Full backup (schema + data + partitions)
-./manage.sh backup
+./nukelabctl backup
 
 # Restore from backup
-./manage.sh restore backups/nukelab_backup_YYYYMMDD_HHMMSS.sql
+./nukelabctl restore backups/nukelab_backup_YYYYMMDD_HHMMSS.sql
 
 # Verify after restore
-./manage.sh exec backend python scripts/db_profiler.py table-sizes
-./manage.sh exec backend python scripts/db_profiler.py partitions --table activity_logs
+./nukelabctl exec backend python scripts/db_profiler.py table-sizes
+./nukelabctl exec backend python scripts/db_profiler.py partitions --table activity_logs
 ```
 
 ---
@@ -29,8 +29,8 @@ Uses `pg_dump` — includes schema, partitions, extensions, and data.
 
 ```bash
 # Full backup (postgres container must be running)
-# Using manage.sh:
-./manage.sh backup
+# Using nukelabctl:
+./nukelabctl backup
 
 # Or directly with your container engine:
 docker exec -i nukelab-postgres pg_dump \
@@ -105,24 +105,24 @@ For point-in-time recovery (PITR), enable WAL archiving in `compose.yml`:
 
 ```bash
 # 1. Stop the backend to prevent writes during restore
-./manage.sh stop
+./nukelabctl stop
 
 # 2. Drop and recreate the database
-./manage.sh exec postgres psql -U nukelab -c "DROP DATABASE IF EXISTS nukelab;"
-./manage.sh exec postgres psql -U nukelab -c "CREATE DATABASE nukelab;"
+./nukelabctl exec postgres psql -U nukelab -c "DROP DATABASE IF EXISTS nukelab;"
+./nukelabctl exec postgres psql -U nukelab -c "CREATE DATABASE nukelab;"
 
 # 3. Restore from backup
 docker exec -i nukelab-postgres psql -U nukelab -d nukelab < nukelab-backup-YYYYMMDD.sql
 
 # 4. Stamp alembic version so migrations don't try to re-run
-./manage.sh exec backend python -m alembic stamp 281a4c5d5529
+./nukelabctl exec backend python -m alembic stamp 281a4c5d5529
 
 # 5. Restart services
-./manage.sh start
+./nukelabctl start
 
 # 6. Verify
-./manage.sh exec backend python scripts/db_profiler.py table-sizes
-./manage.sh exec backend python scripts/db_profiler.py partitions --table activity_logs
+./nukelabctl exec backend python scripts/db_profiler.py table-sizes
+./nukelabctl exec backend python scripts/db_profiler.py partitions --table activity_logs
 # Verify partition health via admin monitoring endpoint
 curl -s -H "Authorization: Bearer $ADMIN_TOKEN" http://localhost:8080/api/admin/health/monitoring | jq '.system.services.partitions'
 ```
@@ -131,24 +131,24 @@ curl -s -H "Authorization: Bearer $ADMIN_TOKEN" http://localhost:8080/api/admin/
 
 ```bash
 # 1. Start fresh postgres container
-./manage.sh start
+./nukelabctl start
 
 # 2. Wait for postgres to be ready
-until ./manage.sh exec postgres pg_isready -U nukelab; do sleep 1; done
+until ./nukelabctl exec postgres pg_isready -U nukelab; do sleep 1; done
 
 # 3. Create database and user
-./manage.sh exec postgres psql -U postgres -c "CREATE DATABASE nukelab;"
-./manage.sh exec postgres psql -U postgres -d nukelab -c "CREATE USER nukelab WITH PASSWORD 'nukelab123';"
-./manage.sh exec postgres psql -U postgres -d nukelab -c "GRANT ALL PRIVILEGES ON DATABASE nukelab TO nukelab;"
+./nukelabctl exec postgres psql -U postgres -c "CREATE DATABASE nukelab;"
+./nukelabctl exec postgres psql -U postgres -d nukelab -c "CREATE USER nukelab WITH PASSWORD 'nukelab123';"
+./nukelabctl exec postgres psql -U postgres -d nukelab -c "GRANT ALL PRIVILEGES ON DATABASE nukelab TO nukelab;"
 
 # 4. Restore
 docker exec -i nukelab-postgres psql -U nukelab -d nukelab < nukelab-backup-YYYYMMDD.sql
 
 # 5. Ensure partitions exist for current month
-./manage.sh exec backend python scripts/db_profiler.py ensure-partitions --months-ahead 3
+./nukelabctl exec backend python scripts/db_profiler.py ensure-partitions --months-ahead 3
 
 # 6. Stamp alembic
-./manage.sh exec backend python -m alembic stamp 281a4c5d5529
+./nukelabctl exec backend python -m alembic stamp 281a4c5d5529
 ```
 
 ### 2.3 Partial Restore (Single Table Recovery)
@@ -260,10 +260,10 @@ find /backups -name "nukelab-backup-*.sql" -mtime +30 -delete
 
 After any restore, verify:
 
-- [ ] `./manage.sh exec backend python scripts/db_profiler.py table-sizes` shows expected tables
-- [ ] `./manage.sh exec backend python scripts/db_profiler.py partitions --table activity_logs` shows partitions
+- [ ] `./nukelabctl exec backend python scripts/db_profiler.py table-sizes` shows expected tables
+- [ ] `./nukelabctl exec backend python scripts/db_profiler.py partitions --table activity_logs` shows partitions
 - [ ] Admin monitoring endpoint shows healthy partitions: `curl -s -H "Authorization: Bearer $ADMIN_TOKEN" http://localhost:8080/api/admin/health/monitoring | jq '.system.services.partitions.status'`
-- [ ] `./manage.sh exec backend alembic current` shows `281a4c5d5529 (head)`
+- [ ] `./nukelabctl exec backend alembic current` shows `281a4c5d5529 (head)`
 - [ ] Application starts without errors
 - [ ] Login works (verifies users table)
 - [ ] Server list loads (verifies servers + cache)

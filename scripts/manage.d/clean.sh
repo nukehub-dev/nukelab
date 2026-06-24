@@ -18,12 +18,12 @@ cmd_clean() {
 
 help_clean() {
     cat <<-EOF
-${BOLD}Usage:${RESET} ./manage.sh clean
+${BOLD}Usage:${RESET} ./nukelabctl clean
 
 Remove stopped containers, dangling images, dangling volumes, and build cache.
 
 ${BOLD}Examples:${RESET}
-  ./manage.sh clean
+  ./nukelabctl clean
 EOF
 }
 

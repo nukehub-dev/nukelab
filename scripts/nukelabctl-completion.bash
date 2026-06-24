@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Bash completion for ./manage.sh
-# Source this file or install it via ./manage.sh install-completion
+# Bash completion for ./nukelabctl
+# Source this file or install it via ./nukelabctl install-completion
 
 _manage_sh_complete() {
     local cur="${COMP_WORDS[COMP_CWORD]}"
@@ -57,4 +57,4 @@ _manage_sh_complete() {
     esac
 }
 
-complete -F _manage_sh_complete ./manage.sh
+complete -F _manage_sh_complete ./nukelabctl

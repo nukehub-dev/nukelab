@@ -3,12 +3,12 @@
 #
 # Usage:
 #   Set PGBOUNCER_ENABLED=true in your .env and run:
-#     ./manage.sh start
-#   The overlay is injected automatically by manage.sh. You can also set
+#     ./nukelabctl start
+#   The overlay is injected automatically by nukelabctl. You can also set
 #   DATABASE_PGBOUNCER_URL explicitly to override the generated URL.
 #
 # Or one-off:
-#   ./manage.sh start --overlay compose.pgbouncer.yml
+#   ./nukelabctl start --overlay compose.pgbouncer.yml
 #
 # Then update .env:
 #   DATABASE_URL=postgresql+asyncpg://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres:5432/${DATABASE_NAME}

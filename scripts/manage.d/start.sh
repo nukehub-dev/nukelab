@@ -4,7 +4,7 @@ START_WAIT=true
 
 help_start() {
     cat <<-EOF
-${BOLD}Usage:${RESET} ./manage.sh start [target] [options]
+${BOLD}Usage:${RESET} ./nukelabctl start [target] [options]
 
 Start the NukeLab stack.
 
@@ -21,10 +21,10 @@ ${BOLD}Options:${RESET}
   --help, -h      Show this help
 
 ${BOLD}Examples:${RESET}
-  ./manage.sh start
-  ./manage.sh start --dev
-  ./manage.sh start backend --no-build
-  PGBOUNCER_ENABLED=true ./manage.sh start
+  ./nukelabctl start
+  ./nukelabctl start --dev
+  ./nukelabctl start backend --no-build
+  PGBOUNCER_ENABLED=true ./nukelabctl start
 EOF
 }
 
@@ -100,7 +100,7 @@ cmd_start() {
 
         if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
             command -v npm > /dev/null 2>&1 || die "npm not found"
-            [ -d "$DIR/frontend/node_modules" ] || die "Run: ./manage.sh install frontend"
+            [ -d "$DIR/frontend/node_modules" ] || die "Run: ./nukelabctl install frontend"
             log "Starting Vite dev server..."
 
             cd "$DIR/frontend"

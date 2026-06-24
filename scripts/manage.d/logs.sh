@@ -4,7 +4,7 @@ LOGS_FOLLOW=true
 
 help_logs() {
     cat <<-EOF
-${BOLD}Usage:${RESET} ./manage.sh logs [service] [options]
+${BOLD}Usage:${RESET} ./nukelabctl logs [service] [options]
 
 Stream container logs.
 
@@ -14,10 +14,10 @@ ${BOLD}Options:${RESET}
   --help, -h        Show this help
 
 ${BOLD}Examples:${RESET}
-  ./manage.sh logs backend          # Stream backend logs
-  ./manage.sh logs backend --tail 50
-  ./manage.sh logs --tail 100
-  ./manage.sh logs --no-follow
+  ./nukelabctl logs backend          # Stream backend logs
+  ./nukelabctl logs backend --tail 50
+  ./nukelabctl logs --tail 100
+  ./nukelabctl logs --no-follow
 EOF
 }
 

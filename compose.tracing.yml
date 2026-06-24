@@ -4,7 +4,7 @@
 # Adds an OpenTelemetry Collector and Jaeger all-in-one instance for distributed
 # tracing. Activate with:
 #
-#   TRACING_ENABLED=true ./manage.sh start --overlay compose.monitoring.yml
+#   TRACING_ENABLED=true ./nukelabctl start --overlay compose.monitoring.yml
 #
 # The backend sends OTLP to the collector over gRPC; the collector forwards
 # traces to Jaeger. Jaeger UI is exposed through Traefik at /jaeger.

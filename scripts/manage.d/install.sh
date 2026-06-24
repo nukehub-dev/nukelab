@@ -14,15 +14,15 @@ cmd_install() {
 
 help_install() {
     cat <<-EOF
-${BOLD}Usage:${RESET} ./manage.sh install [target]
+${BOLD}Usage:${RESET} ./nukelabctl install [target]
 
 Install local dependencies.
 
 ${BOLD}Targets:${RESET} frontend | backend | all
 
 ${BOLD}Examples:${RESET}
-  ./manage.sh install frontend
-  ./manage.sh install
+  ./nukelabctl install frontend
+  ./nukelabctl install
 EOF
 }
 

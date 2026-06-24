@@ -1,6 +1,6 @@
 # Optional Alertmanager overlay for NukeLab monitoring.
 # Enable with:
-#   ./manage.sh start --overlay compose.monitoring.yml --overlay compose.alertmanager.yml
+#   ./nukelabctl start --overlay compose.monitoring.yml --overlay compose.alertmanager.yml
 # Or set ALERTMANAGER_ENABLED=true in .env for auto-overlay.
 
 services:

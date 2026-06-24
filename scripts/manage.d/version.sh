@@ -1,12 +1,12 @@
 help_version() {
     cat <<-EOF
-${BOLD}Usage:${RESET} ./manage.sh version
+${BOLD}Usage:${RESET} ./nukelabctl version
 
 Show the NukeLab version and detected container engine versions.
 
 ${BOLD}Examples:${RESET}
-  ./manage.sh version
-  ./manage.sh --version
+  ./nukelabctl version
+  ./nukelabctl --version
 EOF
 }
 

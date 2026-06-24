@@ -3,7 +3,7 @@ STATUS_RUNNING_ONLY=false
 
 help_status() {
     cat <<-EOF
-${BOLD}Usage:${RESET} ./manage.sh status [options]
+${BOLD}Usage:${RESET} ./nukelabctl status [options]
 
 Show the status of all containers managed by the stack.
 
@@ -12,8 +12,8 @@ ${BOLD}Options:${RESET}
   --help, -h    Show this help
 
 ${BOLD}Examples:${RESET}
-  ./manage.sh status
-  ./manage.sh status --running
+  ./nukelabctl status
+  ./nukelabctl status --running
 EOF
 }
 

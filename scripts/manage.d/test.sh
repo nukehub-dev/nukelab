@@ -2,7 +2,7 @@ cmd_test() {
     if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
         step "Running frontend tests..."
         cd "$DIR/frontend"
-        [ -d "node_modules" ] || die "Run: ./manage.sh install frontend"
+        [ -d "node_modules" ] || die "Run: ./nukelabctl install frontend"
         npm run test 2>/dev/null || npm run lint || warn "No test script found"
     fi
 
@@ -60,7 +60,7 @@ cmd_test() {
 
 help_test() {
     cat <<-EOF
-${BOLD}Usage:${RESET} ./manage.sh test [target] [options]
+${BOLD}Usage:${RESET} ./nukelabctl test [target] [options]
 
 Run tests.
 
@@ -70,8 +70,8 @@ ${BOLD}Options:${RESET}
   --coverage    Run backend tests with coverage report
 
 ${BOLD}Examples:${RESET}
-  ./manage.sh test
-  ./manage.sh test backend --coverage
+  ./nukelabctl test
+  ./nukelabctl test backend --coverage
 EOF
 }
 

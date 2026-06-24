@@ -5,7 +5,7 @@ cmd_exec() {
     fi
 
     if [ ${#EXTRA_ARGS[@]} -eq 0 ]; then
-        die "Usage: ./manage.sh exec <service> <command>\nExample: ./manage.sh exec backend ls -la"
+        die "Usage: ./nukelabctl exec <service> <command>\nExample: ./nukelabctl exec backend ls -la"
     fi
 
     $COMPOSE "${COMPOSE_ARGS[@]}" exec "$service" "${EXTRA_ARGS[@]}"
@@ -13,13 +13,13 @@ cmd_exec() {
 
 help_exec() {
     cat <<-EOF
-${BOLD}Usage:${RESET} ./manage.sh exec <service> <command> [args...]
+${BOLD}Usage:${RESET} ./nukelabctl exec <service> <command> [args...]
 
 Execute a command inside a running container.
 
 ${BOLD}Examples:${RESET}
-  ./manage.sh exec backend ls -la
-  ./manage.sh exec backend python -v
+  ./nukelabctl exec backend ls -la
+  ./nukelabctl exec backend python -v
 EOF
 }
 

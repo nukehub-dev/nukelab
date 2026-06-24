@@ -21,12 +21,12 @@ cmd_reset() {
 
 help_reset() {
     cat <<-EOF
-${BOLD}Usage:${RESET} ./manage.sh reset
+${BOLD}Usage:${RESET} ./nukelabctl reset
 
 ⚠️  Delete ALL data, containers, and volumes. Requires confirmation.
 
 ${BOLD}Examples:${RESET}
-  ./manage.sh reset
+  ./nukelabctl reset
 EOF
 }
 

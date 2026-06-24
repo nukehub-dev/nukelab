@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Generate Prometheus config from template, conditionally adding PgBouncer scrape jobs.
-# Run automatically by manage.sh before compose up.
+# Run automatically by nukelabctl before compose up.
 
 set -euo pipefail
 

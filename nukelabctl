@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # NukeLab Platform v2.0 — Unified Management Script
-# Usage: ./manage.sh <command> [target] [flags]
+# Usage: ./nukelabctl <command> [target] [flags]
 #
 # Commands are implemented as modules in scripts/manage.d/*.sh
 # Shared infrastructure lives in scripts/lib.sh.
@@ -171,14 +171,14 @@ parse_args() {
 # ─── Help ─────────────────────────────────────────────────────────────────-
 print_help() {
     cat <<-EOF
-${BOLD}${CYAN}NukeLab v2.0${RESET} — Management Script
+${BOLD}${CYAN}NukeLab${RESET} — Management Script
 
-${BOLD}Usage:${RESET} ./manage.sh <command> [target] [flags]
+${BOLD}Usage:${RESET} ./nukelabctl <command> [target] [flags]
 
 ${BOLD}${MAGENTA}Quick Start:${RESET}
-  ${GREEN}start${RESET}      [target] [--dev]         Start services
+  ${GREEN}start${RESET}      [target] [--dev]          Start services
   ${GREEN}stop${RESET}       [target]                  Stop services
-  ${GREEN}restart${RESET}    [target] [--dev]         Restart services
+  ${GREEN}restart${RESET}    [target] [--dev]          Restart services
   ${GREEN}status${RESET}                               Show status
 
 ${BOLD}Build & Deploy:${RESET}
@@ -204,10 +204,10 @@ ${BOLD}Database:${RESET}
   ${GREEN}restore${RESET}     <file>                   Restore database from backup
 
 ${BOLD}Testing:${RESET}
-  ${GREEN}test${RESET}       [target] [--coverage]      Run tests
+  ${GREEN}test${RESET}       [target] [--coverage]     Run tests
   ${GREEN}e2e${RESET}                                  Run Playwright E2E tests
-  ${GREEN}loadtest${RESET}   [profile]                  Run Locust/k6 load tests
-  ${GREEN}selftest${RESET}                             Quick manage.sh sanity check
+  ${GREEN}loadtest${RESET}   [profile]                 Run Locust/k6 load tests
+  ${GREEN}selftest${RESET}                             Quick nukelabctl sanity check
 
 ${BOLD}Diagnostics:${RESET}
   ${GREEN}doctor${RESET}                               Check host environment readiness
@@ -222,29 +222,27 @@ ${BOLD}Targets:${RESET} ${DIM}(optional, default: all)${RESET}
   all        Everything ${DIM}(default)${RESET}
 
 ${BOLD}Flags:${RESET}
-  --dev, -d      Development mode: backend containers + local Vite dev server
-  --coverage     Run tests with coverage report (backend only)
-  --overlay, -o  Add a compose overlay file (repeatable)
-  --verbose, -v  Show debug output
-  --quiet, -q    Suppress non-error output
+  --dev, -d          Development mode: backend containers + local Vite dev server
+  --coverage         Run tests with coverage report (backend only)
+  --overlay, -o      Add a compose overlay file (repeatable)
+  --verbose, -v      Show debug output
+  --quiet, -q        Suppress non-error output
   --skip-port-check  Bypass the pre-flight port check
 
 ${BOLD}Examples:${RESET}
-  ./manage.sh start                      # Production: all containers
-  ./manage.sh start --dev                # Dev: backend containers + Vite
-  ./manage.sh stop frontend              # Stop only frontend
-  ./manage.sh build backend              # Build backend image only
-  ./manage.sh shell backend              # Shell into backend container
-  ./manage.sh exec backend python -v     # Run command in backend
-  ./manage.sh logs backend -f            # Stream backend logs
-  ./manage.sh db-migrate                 # Run migrations
-  ./manage.sh backup                     # Backup database
-  ./manage.sh restore backups/nukelab_backup_20250607_120000.sql
-  ./manage.sh test backend --coverage    # Run backend tests with coverage
-  ./manage.sh loadtest baseline          # Run Locust baseline load test
-  PGBOUNCER_ENABLED=true ./manage.sh start
-                                         # Start with PgBouncer overlay
-  ./manage.sh clean                      # Clean up dangling resources
+  ./nukelabctl start                      # Production: all containers
+  ./nukelabctl start --dev                # Dev: backend containers + Vite
+  ./nukelabctl stop frontend              # Stop only frontend
+  ./nukelabctl build backend              # Build backend image only
+  ./nukelabctl shell backend              # Shell into backend container
+  ./nukelabctl exec backend python -v     # Run command in backend
+  ./nukelabctl logs backend -f            # Stream backend logs
+  ./nukelabctl db-migrate                 # Run migrations
+  ./nukelabctl backup                     # Backup database
+  ./nukelabctl restore backups/nukelab_backup_20250607_120000.sql
+  ./nukelabctl test backend --coverage    # Run backend tests with coverage
+  ./nukelabctl loadtest baseline          # Run Locust baseline load test
+  ./nukelabctl clean                      # Clean up dangling resources
 
 EOF
 }
@@ -284,7 +282,7 @@ _dispatch_command() {
 main() {
     parse_args "$@"
 
-    # Top-level help (./manage.sh help or ./manage.sh --help).
+    # Top-level help (./nukelabctl help or ./nukelabctl --help).
     if [ "$CMD" = "help" ]; then
         print_help
         return 0
@@ -357,7 +355,7 @@ main() {
             _dispatch_command "$CMD"
             ;;
         *)
-            die "Unknown command: $CMD\nRun './manage.sh help' for usage."
+            die "Unknown command: $CMD\nRun './nukelabctl help' for usage."
             ;;
     esac
 }

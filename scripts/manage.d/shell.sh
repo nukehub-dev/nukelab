@@ -28,14 +28,14 @@ cmd_shell() {
 
 help_shell() {
     cat <<-EOF
-${BOLD}Usage:${RESET} ./manage.sh shell [service]
+${BOLD}Usage:${RESET} ./nukelabctl shell [service]
 
 Open an interactive shell inside a running container.
 
 ${BOLD}Examples:${RESET}
-  ./manage.sh shell backend
-  ./manage.sh shell postgres
-  ./manage.sh shell redis
+  ./nukelabctl shell backend
+  ./nukelabctl shell postgres
+  ./nukelabctl shell redis
 EOF
 }
 

@@ -24,15 +24,15 @@ cmd_remove() {
 
 help_remove() {
     cat <<-EOF
-${BOLD}Usage:${RESET} ./manage.sh remove [target]
+${BOLD}Usage:${RESET} ./nukelabctl remove [target]
 
 Remove containers while keeping volumes and data.
 
 ${BOLD}Targets:${RESET} backend | frontend | all
 
 ${BOLD}Examples:${RESET}
-  ./manage.sh remove
-  ./manage.sh remove backend
+  ./nukelabctl remove
+  ./nukelabctl remove backend
 EOF
 }
 

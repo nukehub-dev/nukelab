@@ -4,7 +4,7 @@ cmd_backup() {
     local backup_file="$backup_dir/nukelab_backup_$timestamp.sql"
 
     if ! _container_running nukelab-postgres; then
-        die "Postgres container is not running. Start the backend first:\n  ./manage.sh start backend"
+        die "Postgres container is not running. Start the backend first:\n  ./nukelabctl start backend"
     fi
 
     mkdir -p "$backup_dir"
@@ -17,12 +17,12 @@ cmd_backup() {
 
 help_backup() {
     cat <<-EOF
-${BOLD}Usage:${RESET} ./manage.sh backup
+${BOLD}Usage:${RESET} ./nukelabctl backup
 
 Create a database backup in backups/.
 
 ${BOLD}Examples:${RESET}
-  ./manage.sh backup
+  ./nukelabctl backup
 EOF
 }
 

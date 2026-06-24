@@ -2,7 +2,7 @@ cmd_restore() {
     local backup_file="${TARGET:-}"
 
     if [ -z "$backup_file" ] || [ "$backup_file" = "all" ]; then
-        die "Usage: ./manage.sh restore <backup-file>\nExample: ./manage.sh restore backups/nukelab_backup_20250607_120000.sql"
+        die "Usage: ./nukelabctl restore <backup-file>\nExample: ./nukelabctl restore backups/nukelab_backup_20250607_120000.sql"
     fi
 
     if [ ! -f "$backup_file" ]; then
@@ -10,7 +10,7 @@ cmd_restore() {
     fi
 
     if ! _container_running nukelab-postgres; then
-        die "Postgres container is not running. Start the backend first:\n  ./manage.sh start backend"
+        die "Postgres container is not running. Start the backend first:\n  ./nukelabctl start backend"
     fi
 
     step "Restoring from ${BOLD}$backup_file${RESET}..."
@@ -35,12 +35,12 @@ cmd_restore() {
 
 help_restore() {
     cat <<-EOF
-${BOLD}Usage:${RESET} ./manage.sh restore <backup-file>
+${BOLD}Usage:${RESET} ./nukelabctl restore <backup-file>
 
 Restore the database from a backup file.
 
 ${BOLD}Examples:${RESET}
-  ./manage.sh restore backups/nukelab_backup_20250607_120000.sql
+  ./nukelabctl restore backups/nukelab_backup_20250607_120000.sql
 EOF
 }
 

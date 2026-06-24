@@ -1,13 +1,13 @@
 help_doctor() {
     cat <<-EOF
-${BOLD}Usage:${RESET} ./manage.sh doctor
+${BOLD}Usage:${RESET} ./nukelabctl doctor
 
 Run non-destructive checks and report whether the host environment is ready
 to run NukeLab.
 
 ${BOLD}Examples:${RESET}
-  ./manage.sh doctor
-  ./manage.sh doctor --verbose
+  ./nukelabctl doctor
+  ./nukelabctl doctor --verbose
 EOF
 }
 

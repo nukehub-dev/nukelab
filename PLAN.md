@@ -1548,7 +1548,7 @@ The following features are fully implemented and in active use:
 - **[x] Notifications** — 20+ notification types; email + in-app + webhook delivery; WebSocket real-time; preferences UI
 - **[x] Maintenance Mode** — Toggle with graceful draining; dedicated `/maintenance` page; admin settings panel
 - **[x] Rate Limiting (Two-Layer)** — Traefik DDoS protection (10K/min per IP) + FastAPI per-user Redis-backed throttling (role-based tiers: guest 30/min → super_admin ∞)
-- **[x] Backup & Restore** — Database backup (`./manage.sh backup`); volume backup service with retention policy
+- **[x] Backup & Restore** — Database backup (`./nukelabctl backup`); volume backup service with retention policy
 - **[x] Health Checks** — Container health monitoring; auto-restart with rate limiting; system health dashboard
 - **[x] Bulk Operations** — Server start/stop/restart/delete; workspace activate/deactivate/delete; volume activate/archive/delete
 - **[x] Quick Spawn** — `Alt+N` opens deploy dialog pre-filled with saved user preferences
@@ -1748,7 +1748,7 @@ Then the deployment completes with zero downtime
   - [x] SQLAlchemy `pool_pre_ping=True` — validate connections before checkout
   - [x] asyncpg `command_timeout` — query-level timeout (default 30s)
   - [x] Fixed dead config: `max_overflow` and `pool_timeout` were defined but never passed to `create_async_engine`
-  - [x] PgBouncer setup — `DATABASE_PGBOUNCER_URL` architecture, auto-overlay via `manage.sh`, NullPool, TCP keepalive, ulimits, healthcheck
+  - [x] PgBouncer setup — `DATABASE_PGBOUNCER_URL` architecture, auto-overlay via `nukelabctl`, NullPool, TCP keepalive, ulimits, healthcheck
   - [x] Proper index usage — indexes added on `request_metrics` (path, status_code, user_id, correlation_id, created_at)
 
 - [x] **Rate Limiting**
@@ -1824,14 +1824,14 @@ During a load test, monitor these in parallel:
 
 ```bash
 # PgBouncer pool saturation (cl_waiting should be 0)
-./manage.sh exec pgbouncer psql -p 6432 pgbouncer -U nukelab -c "SHOW POOLS;"
+./nukelabctl exec pgbouncer psql -p 6432 pgbouncer -U nukelab -c "SHOW POOLS;"
 
 # Postgres connection states
-./manage.sh exec postgres psql -U nukelab -c \
+./nukelabctl exec postgres psql -U nukelab -c \
   "SELECT state, count(*) FROM pg_stat_activity GROUP BY state;"
 
 # Slow queries under load
-./manage.sh exec backend python scripts/db_profiler.py slow-queries --limit 10
+./nukelabctl exec backend python scripts/db_profiler.py slow-queries --limit 10
 
 # Container resource usage
 docker stats --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}"

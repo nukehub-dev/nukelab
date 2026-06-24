@@ -23,16 +23,16 @@ faster.
    REQUEST_METRICS_STORE=prometheus   # or "both" to keep DB metrics too
    ```
 
-3. Start the stack. `manage.sh` auto-detects the monitoring overlay:
+3. Start the stack. `nukelabctl` auto-detects the monitoring overlay:
 
    ```bash
-   ./manage.sh start
+   ./nukelabctl start
    ```
 
    Or explicitly:
 
    ```bash
-   ./manage.sh start --overlay compose.monitoring.yml
+   ./nukelabctl start --overlay compose.monitoring.yml
    ```
 
 4. Open the UIs:
@@ -60,7 +60,7 @@ faster.
 └─────────────┘          └─────────────┘
 ```
 
-When `PGBOUNCER_ENABLED=true`, `manage.sh` also adds the PgBouncer exporter
+When `PGBOUNCER_ENABLED=true`, `nukelabctl` also adds the PgBouncer exporter
 overlay (`compose.monitoring-pgbouncer.yml`).
 
 ---
@@ -117,7 +117,7 @@ TRACING_ENABLED=true
 OTEL_TRACES_ENABLED=true
 ```
 
-`manage.sh` auto-injects `compose.tracing.yml` when `TRACING_ENABLED=true`.
+`nukelabctl` auto-injects `compose.tracing.yml` when `TRACING_ENABLED=true`.
 
 ### Architecture
 
@@ -284,13 +284,13 @@ ALERTMANAGER_ENABLED=true
 Then restart:
 
 ```bash
-./manage.sh start
+./nukelabctl start
 ```
 
 Alertmanager will be available at `http://localhost:9093`.
 
 The generated config (`monitoring/alertmanager/alertmanager.generated.yml`) is
-produced from `monitoring/alertmanager/alertmanager.yml.tpl` by `manage.sh`.
+produced from `monitoring/alertmanager/alertmanager.yml.tpl` by `nukelabctl`.
 Adjust environment variables (e.g., `ALERTMANAGER_EMAIL_TO`, `SMTP_*`) or edit
 the template to change receivers (Slack, PagerDuty, email, Discord, etc.).
 

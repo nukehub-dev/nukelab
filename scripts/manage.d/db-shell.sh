@@ -5,12 +5,12 @@ cmd_db_shell() {
 
 help_db_shell() {
     cat <<-EOF
-${BOLD}Usage:${RESET} ./manage.sh db-shell
+${BOLD}Usage:${RESET} ./nukelabctl db-shell
 
 Open a psql shell inside the postgres container.
 
 ${BOLD}Examples:${RESET}
-  ./manage.sh db-shell
+  ./nukelabctl db-shell
 EOF
 }
 

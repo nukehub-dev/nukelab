@@ -36,7 +36,7 @@ die()   { echo -e "${RED}✗${RESET}  $*" >&2; exit 1; }
 source "$DIR/scripts/lib.sh"
 
 # ─── Environment ───────────────────────────────────────────────────────────
-# Dev mode is implied when manage.sh created the dev overlay file.
+# Dev mode is implied when nukelabctl created the dev overlay file.
 USE_DEV_MODE=false
 [ -f "$DIR/.nukelab-dev-compose.yml" ] && USE_DEV_MODE=true
 init_env "$USE_DEV_MODE"
@@ -49,13 +49,13 @@ setup_podman_socket
 # Check main stack is reachable (use container engine directly, more reliable)
 if ! $CONTAINER_ENGINE ps --format '{{.Names}} {{.Status}}' 2>/dev/null | grep -q 'nukelab-traefik'; then
     die "Main stack is not running. Start it first:
-  ./manage.sh start"
+  ./nukelabctl start"
 fi
 
 # Check backend container is running
 if ! $CONTAINER_ENGINE ps --format '{{.Names}} {{.Status}}' 2>/dev/null | grep -q 'nukelab-backend'; then
     die "Backend container is not running. Start the stack first:
-  ./manage.sh start"
+  ./nukelabctl start"
 fi
 
 # Check test data exists

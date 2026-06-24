@@ -69,7 +69,7 @@ Add to `compose.yml` postgres command:
 - hot_standby=on
 ```
 
-Create replication user (run via `./manage.sh db-shell`):
+Create replication user (run via `./nukelabctl db-shell`):
 
 ```sql
 CREATE USER replicator WITH REPLICATION ENCRYPTED PASSWORD '${REPLICATOR_PASSWORD:-change-me}';

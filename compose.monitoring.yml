@@ -1,6 +1,6 @@
 # NukeLab monitoring stack — Prometheus + Grafana + infrastructure exporters
 # Enable with:
-#   ./manage.sh start --overlay compose.monitoring.yml
+#   ./nukelabctl start --overlay compose.monitoring.yml
 # Or set PROMETHEUS_ENABLED=true / GRAFANA_ENABLED=true in .env for auto-overlay.
 #
 # Optional: add Alertmanager with --overlay compose.alertmanager.yml.

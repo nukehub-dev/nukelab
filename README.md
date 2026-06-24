@@ -34,7 +34,7 @@ git checkout new
 cp .env.example .env.development
 
 # Start services
-./manage.sh start
+./nukelabctl start
 ```
 
 **Access points:**
@@ -54,10 +54,10 @@ cp .env.example .env
 vim .env
 
 # Start services
-./manage.sh start
+./nukelabctl start
 ```
 
-### Manual Start (without manage.sh)
+### Manual Start (without nukelabctl)
 
 ```bash
 # Docker
@@ -72,7 +72,7 @@ podman-compose up -d
 The project automatically detects Podman and configures the correct socket path. Just run:
 
 ```bash
-./manage.sh start
+./nukelabctl start
 ```
 
 The script will:
@@ -85,7 +85,7 @@ The script will:
 For full local development with hot reload:
 
 ```bash
-./manage.sh start --dev
+./nukelabctl start --dev
 ```
 
 This starts:
@@ -103,12 +103,12 @@ npm run dev
 ## Management Commands
 
 ```bash
-./manage.sh start          # Start all services
-./manage.sh stop           # Stop all services
-./manage.sh restart        # Restart all services
-./manage.sh build          # Rebuild containers
-./manage.sh logs [service] # View logs (backend, frontend, etc.)
-./manage.sh status         # Show running containers
+./nukelabctl start          # Start all services
+./nukelabctl stop           # Stop all services
+./nukelabctl restart        # Restart all services
+./nukelabctl build          # Rebuild containers
+./nukelabctl logs [service] # View logs (backend, frontend, etc.)
+./nukelabctl status         # Show running containers
 ```
 
 ## Project Structure
@@ -131,7 +131,7 @@ nukelab/
 ├── database/                # Schema and migrations
 ├── phases/                 # Implementation phases
 ├── compose.yml             # All services
-├── manage.sh               # Management script (Docker/Podman)
+├── nukelabctl               # Management script (Docker/Podman)
 └── README.md
 ```
 

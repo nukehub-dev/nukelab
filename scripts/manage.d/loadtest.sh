@@ -12,14 +12,14 @@ cmd_loadtest() {
 
 help_loadtest() {
     cat <<-EOF
-${BOLD}Usage:${RESET} ./manage.sh loadtest [profile]
+${BOLD}Usage:${RESET} ./nukelabctl loadtest [profile]
 
 Run Locust/k6 load tests. The backend must be running.
 
 ${BOLD}Examples:${RESET}
-  ./manage.sh loadtest smoke
-  ./manage.sh loadtest baseline
-  ./manage.sh loadtest stress
+  ./nukelabctl loadtest smoke
+  ./nukelabctl loadtest baseline
+  ./nukelabctl loadtest stress
 EOF
 }
 

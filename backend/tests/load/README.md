@@ -25,8 +25,8 @@ testing to create test accounts directly in the database (bypassing API
 rate limits):
 
 ```bash
-# Via manage.sh (uses running backend container)
-./manage.sh exec backend python -m tests.load.setup_test_data --users 100
+# Via nukelabctl (uses running backend container)
+./nukelabctl exec backend python -m tests.load.setup_test_data --users 100
 
 # Or directly
 cd backend && python -m tests.load.setup_test_data --users 100
@@ -113,7 +113,7 @@ docker compose -f compose.loadtest.yml run --rm \
 ### 1. PgBouncer Pool Health
 
 ```bash
-./manage.sh exec pgbouncer psql -p 6432 pgbouncer -U nukelab -c "SHOW POOLS;"
+./nukelabctl exec pgbouncer psql -p 6432 pgbouncer -U nukelab -c "SHOW POOLS;"
 ```
 
 Key columns:
@@ -129,14 +129,14 @@ If `cl_waiting` > 0, your backend pool is saturated. Increase
 
 ```bash
 # Active connections
-./manage.sh exec postgres psql -U nukelab -c \
+./nukelabctl exec postgres psql -U nukelab -c \
   "SELECT state, count(*) FROM pg_stat_activity GROUP BY state;"
 
 # Slow queries (requires pg_stat_statements)
-./manage.sh exec backend python scripts/db_profiler.py slow-queries --limit 10
+./nukelabctl exec backend python scripts/db_profiler.py slow-queries --limit 10
 
 # Lock waits
-./manage.sh exec postgres psql -U nukelab -c \
+./nukelabctl exec postgres psql -U nukelab -c \
   "SELECT * FROM pg_locks WHERE NOT granted;"
 ```
 
@@ -156,7 +156,7 @@ k6 outputs these natively plus custom trends (`health_p95`, `list_servers_p95`).
 docker stats --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}"
 
 # Inside containers
-./manage.sh exec backend ps aux --sort=-%mem | head
+./nukelabctl exec backend ps aux --sort=-%mem | head
 ```
 
 ## Interpreting Results

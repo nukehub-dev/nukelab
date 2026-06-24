@@ -6,12 +6,12 @@ cmd_pull() {
 
 help_pull() {
     cat <<-EOF
-${BOLD}Usage:${RESET} ./manage.sh pull
+${BOLD}Usage:${RESET} ./nukelabctl pull
 
 Pull the latest base images used by compose services.
 
 ${BOLD}Examples:${RESET}
-  ./manage.sh pull
+  ./nukelabctl pull
 EOF
 }
 

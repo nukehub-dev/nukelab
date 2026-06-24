@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Generate Alertmanager config from template, substituting env vars.
-# Run automatically by manage.sh before compose up.
+# Run automatically by nukelabctl before compose up.
 
 set -euo pipefail
 

@@ -316,7 +316,7 @@ sudo apt install lxcfs && sudo systemctl enable --now lxcfs
 # - /var/lib/lxcfs:/var/lib/lxcfs:ro
 
 # Restart backend
-./manage.sh restart backend
+./nukelabctl restart backend
 ```
 
 ### Issue: `nproc` shows all host CPUs
@@ -491,7 +491,7 @@ The `csp-header-strict@file` middleware removes `'unsafe-eval'` from `script-src
 To avoid HSTS lock-in while testing HTTPS:
 
 1. Set `forceSTSHeader: false` in `infrastructure/traefik/dynamic/middlewares.yml`
-2. Restart Traefik: `./manage.sh restart traefik`
+2. Restart Traefik: `./nukelabctl restart traefik`
 
 Once your TLS certificate is working, re-enable it.
 
@@ -544,7 +544,7 @@ RATE_LIMIT_SUPER_ADMIN_RPM=3000
 Restart the backend:
 
 ```bash
-./manage.sh restart backend
+./nukelabctl restart backend
 ```
 
 ### Verify Rate Limiting

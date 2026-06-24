@@ -3,7 +3,7 @@ STOP_TIMEOUT=10
 
 help_stop() {
     cat <<-EOF
-${BOLD}Usage:${RESET} ./manage.sh stop [target] [options]
+${BOLD}Usage:${RESET} ./nukelabctl stop [target] [options]
 
 Stop running containers.
 
@@ -17,9 +17,9 @@ ${BOLD}Options:${RESET}
   --help, -h          Show this help
 
 ${BOLD}Examples:${RESET}
-  ./manage.sh stop
-  ./manage.sh stop backend
-  ./manage.sh stop backend --timeout 5
+  ./nukelabctl stop
+  ./nukelabctl stop backend
+  ./nukelabctl stop backend --timeout 5
 EOF
 }
 

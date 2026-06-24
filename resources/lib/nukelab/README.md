@@ -31,11 +31,11 @@ Containers with CPU limits (`--cpus`, `--cpuset-cpus`) still expose the **host's
 
 ## Setup
 
-Run `./manage.sh start` or `./manage.sh build` — it creates the volume and builds `libnukelab_cpu.so` automatically. No manual steps needed.
+Run `./nukelabctl start` or `./nukelabctl build` — it creates the volume and builds `libnukelab_cpu.so` automatically. No manual steps needed.
 
 ## How It Works
 
-1. `./manage.sh start` creates a named Docker volume `nukelab-cpu-lib` and compiles `libnukelab_cpu.c` into it via a temporary `gcc` container
+1. `./nukelabctl start` creates a named Docker volume `nukelab-cpu-lib` and compiles `libnukelab_cpu.c` into it via a temporary `gcc` container
 2. The backend injects two files into every spawned container via `put_archive`:
    - `/etc/ld.so.preload` — system-wide library preload (root-only, survives any env clearing)
    - `/etc/profile.d/nukelab-cpu.sh` — env vars for login shells

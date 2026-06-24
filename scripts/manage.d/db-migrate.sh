@@ -5,7 +5,7 @@ cmd_db_migrate() {
         # Backend is running in containers, run migrations there
         $COMPOSE "${COMPOSE_ARGS[@]}" exec backend alembic upgrade head
     else
-        die "Backend not running. Start it first:\n  ./manage.sh start backend"
+        die "Backend not running. Start it first:\n  ./nukelabctl start backend"
     fi
 
     ok "Migrations applied"
@@ -13,12 +13,12 @@ cmd_db_migrate() {
 
 help_db_migrate() {
     cat <<-EOF
-${BOLD}Usage:${RESET} ./manage.sh db-migrate
+${BOLD}Usage:${RESET} ./nukelabctl db-migrate
 
 Run Alembic database migrations inside the backend container.
 
 ${BOLD}Examples:${RESET}
-  ./manage.sh db-migrate
+  ./nukelabctl db-migrate
 EOF
 }
 
