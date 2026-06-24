@@ -3,29 +3,13 @@
 # NukeLab Platform v2.0 — Unified Management Script
 # Usage: ./manage.sh <command> [target] [flags]
 #
-# Examples:
-#   ./manage.sh start                    # Start production stack (containers)
-#   ./manage.sh start --dev              # Start dev stack (backend containers + Vite)
-#   ./manage.sh stop                     # Stop everything
-#   ./manage.sh stop frontend            # Stop only frontend dev server
-#   ./manage.sh build                    # Build all containers
-#   ./manage.sh build frontend           # Build only frontend container
-#   ./manage.sh update                   # Pull latest images and rebuild
-#   ./manage.sh clean                    # Remove dangling images/volumes
-#   ./manage.sh shell backend            # Open shell in backend container
-#   ./manage.sh db-migrate               # Run database migrations
-#   ./manage.sh test                     # Run tests
-#   ./manage.sh restart backend          # Restart backend only
-#   ./manage.sh status                   # Show status of everything
-#   ./manage.sh logs backend             # Stream backend logs
-#   ./manage.sh install                  # Install all dependencies
-#   ./manage.sh install frontend         # Install only frontend deps
-#   ./manage.sh reset                    # ⚠️ Reset everything
+# Commands are implemented as modules in scripts/manage.d/*.sh
 
 set -euo pipefail
 
 # ─── Shared Helpers ────────────────────────────────────────────────────────
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" > /dev/null 2>&1 && pwd)"
+cd "$DIR"
 source "$DIR/scripts/lib.sh"
 
 # ─── Colors ────────────────────────────────────────────────────────────────
@@ -40,8 +24,6 @@ DIM=$'\033[2m'
 RESET=$'\033[0m'
 
 # ─── Setup ─────────────────────────────────────────────────────────────────
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" > /dev/null 2>&1 && pwd)"
-cd "$DIR"
 FRONTEND_PID_FILE="$DIR/.frontend.pid"
 STATE_FILE="$DIR/.nukelab-state.sh"
 COMPOSE_FILE="$DIR/compose.yml"
@@ -93,7 +75,9 @@ restore_state() {
         return 1
     fi
 
-    # Capture env values before the state file overwrites them.
+    # Capture env values and the command-line target before the state file
+    # overwrites them. The user-specified target always wins over saved state.
+    local _orig_target="$TARGET"
     local _orig_pgbouncer="${PGBOUNCER_ENABLED:-}"
     local _orig_prometheus="${PROMETHEUS_ENABLED:-}"
     local _orig_grafana="${GRAFANA_ENABLED:-}"
@@ -103,8 +87,9 @@ restore_state() {
     # shellcheck source=/dev/null
     source "$STATE_FILE"
 
+    TARGET="$_orig_target"
+
     USE_DEV_MODE="${NUKELAB_USE_DEV_MODE:-false}"
-    TARGET="${NUKELAB_TARGET:-all}"
     PGBOUNCER_ENABLED="${NUKELAB_PGBOUNCER_ENABLED:-false}"
     PROMETHEUS_ENABLED="${NUKELAB_PROMETHEUS_ENABLED:-false}"
     GRAFANA_ENABLED="${NUKELAB_GRAFANA_ENABLED:-false}"
@@ -162,7 +147,7 @@ clear_state() {
     rm -f "$STATE_FILE"
 }
 
-# ─── Argument Parsing ──────────────────────────────────────────────────────
+# ─── Argument Parsing ─────────────────────────────────────────────────────-
 CMD=""
 TARGET=""
 USE_DEV_MODE=false
@@ -231,57 +216,7 @@ init_env() {
     fi
 }
 
-# ─── Frontend Process Utils ────────────────────────────────────────────────
-is_frontend_running() {
-    [ -f "$FRONTEND_PID_FILE" ] && kill -0 "$(cat "$FRONTEND_PID_FILE")" 2>/dev/null
-}
-
-kill_frontend() {
-    if is_frontend_running; then
-        local pid=$(cat "$FRONTEND_PID_FILE")
-        log "Stopping frontend (PID: $pid)..."
-        kill "$pid" 2>/dev/null || true
-        rm -f "$FRONTEND_PID_FILE"
-        ok "Frontend stopped"
-    fi
-}
-
-# ─── Orphan Container Helpers ──────────────────────────────────────────────
-_container_exists() {
-    local name="$1"
-    local _cmd="podman"
-    [ "$CONTAINER_ENGINE" = "docker" ] && _cmd="docker"
-    $_cmd ps -a --filter "name=^${name}$" --format "{{.Names}}" 2>/dev/null | grep -qx "$name"
-}
-
-_stop_orphan_container() {
-    local name="$1"
-    local _cmd="podman"
-    [ "$CONTAINER_ENGINE" = "docker" ] && _cmd="docker"
-    if $_cmd ps --filter "name=^${name}$" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -qx "$name"; then
-        log "Stopping orphan container ${BOLD}$name${RESET}..."
-        $_cmd stop -t 10 "$name" > /dev/null 2>&1 || true
-    fi
-}
-
-# ─── Backend Detection ─────────────────────────────────────────────────────
-is_backend_container_running() {
-    # Check via compose first (respects selected overlays), but fall back to
-    # checking the container engine directly. This lets `manage.sh test backend`
-    # work even when the stack was started with a slightly different set of
-    # overlays (e.g. --dev) because the container name stays the same.
-    if $COMPOSE "${COMPOSE_ARGS[@]}" ps 2>/dev/null | grep -q 'Up .*nukelab-backend'; then
-        return 0
-    fi
-
-    local _container_cmd="podman"
-    if [ "$CONTAINER_ENGINE" = "docker" ]; then
-        _container_cmd="docker"
-    fi
-    $_container_cmd ps --filter "name=^nukelab-backend$" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -qx "nukelab-backend"
-}
-
-# ─── Compose Args ──────────────────────────────────────────────────────────
+# ─── Compose Args ─────────────────────────────────────────────────────────-
 setup_compose_args() {
     if $USE_DEV_MODE; then
         cat > "$DEV_COMPOSE_FILE" << 'EOF'
@@ -403,550 +338,7 @@ EOF
     done
 }
 
-# ─── Helpers ───────────────────────────────────────────────────────────────
-_has_overlay() {
-    # Return 0 if the given compose overlay file is in COMPOSE_ARGS.
-    local file="$1"
-    for arg in "${COMPOSE_ARGS[@]}"; do
-        if [[ "$arg" == "$file" ]]; then
-            return 0
-        fi
-    done
-    return 1
-}
-
-_backend_services() {
-    # Print the list of backend services, including PgBouncer and monitoring when enabled.
-    local services="traefik postgres redis backend celery-worker celery-beat"
-    if _has_overlay "compose.pgbouncer.yml"; then
-        services="$services pgbouncer"
-    fi
-    if _has_overlay "compose.monitoring.yml"; then
-        services="$services prometheus grafana postgres-exporter redis-exporter node-exporter celery-exporter"
-    fi
-    if _has_overlay "compose.alertmanager.yml"; then
-        services="$services alertmanager"
-    fi
-    echo "$services"
-}
-
-_stop_dev_stack() {
-    # Dev-mode Ctrl+C handler: stop Vite and all backend/monitoring containers.
-    echo ""
-    step "Shutting down..."
-    kill_frontend
-    $COMPOSE "${COMPOSE_ARGS[@]}" stop $(_backend_services) > /dev/null 2>&1 || true
-    _stop_orphan_container nukelab-pgbouncer
-    ok "Goodbye!"
-    exit 0
-}
-
-# ─── CPU Lib Volume ────────────────────────────────────────────────────────
-setup_cpu_lib_volume() {
-    local vol_name="nukelab-cpu-lib"
-    local c_file="$DIR/resources/lib/nukelab/libnukelab_cpu.c"
-
-    if [ ! -f "$c_file" ]; then
-        warn "CPU mask source not found: $c_file"
-        return
-    fi
-
-    # Skip if volume already exists
-    if $CONTAINER_ENGINE volume inspect "$vol_name" > /dev/null 2>&1; then
-        return
-    fi
-
-    step "Setting up CPU mask library..."
-
-    # Create volume
-    $CONTAINER_ENGINE volume create "$vol_name" > /dev/null
-    ok "Created volume: $vol_name"
-
-    # Build .so inside a temporary gcc container
-    log "Building libnukelab_cpu.so (one-time)..."
-    local tmp_name="nukelab-tmp-build-cpu-lib"
-    local build_image="docker.io/library/gcc:latest"
-
-    # Pull gcc image if not present
-    if ! $CONTAINER_ENGINE image exists "$build_image" 2>/dev/null; then
-        log "Pulling $build_image..."
-        $CONTAINER_ENGINE pull "$build_image" > /dev/null 2>&1 || {
-            warn "Failed to pull $build_image"
-            warn "Check your internet connection or container registry access"
-            return
-        }
-    fi
-
-    # Create temp container with volume mounted
-    $CONTAINER_ENGINE run --rm -d \
-        --name "$tmp_name" \
-        -v "$vol_name:/dst" \
-        -v "$c_file:/src/libnukelab_cpu.c:ro" \
-        "$build_image" \
-        sleep 3600 > /dev/null 2>&1 || {
-        warn "Failed to start build container"
-        return
-    }
-
-    # Compile
-    $CONTAINER_ENGINE exec "$tmp_name" \
-        gcc -shared -fPIC -o /dst/libnukelab_cpu.so /src/libnukelab_cpu.c -ldl
-
-    local exit_code=$?
-    $CONTAINER_ENGINE rm -f "$tmp_name" > /dev/null 2>&1
-
-    if [ $exit_code -ne 0 ]; then
-        err "Failed to build libnukelab_cpu.so"
-        $CONTAINER_ENGINE volume rm "$vol_name" > /dev/null 2>&1 || true
-        return
-    fi
-
-    ok "Built and stored libnukelab_cpu.so in volume"
-}
-
-# ─── Health Check ──────────────────────────────────────────────────────────
-wait_for_backend() {
-    local url="${APP_URL:-http://localhost:8080}/api/health"
-    local waited=0
-    step "Waiting for backend..."
-    while ! curl -sf "$url" > /dev/null 2>&1; do
-        sleep 2
-        waited=$((waited + 2))
-        [ "$waited" -ge 60 ] && { warn "Timeout, continuing..."; return 1; }
-        printf "."
-    done
-    echo ""
-    ok "Backend ready (${waited}s)"
-}
-
-# ─── Command Implementations ───────────────────────────────────────────────
-
-cmd_start() {
-    setup_cpu_lib_volume
-
-    # Generate dynamic config files from templates before compose reads them.
-    local _env_file=".env"
-    if $USE_DEV_MODE && [ -f ".env.development" ]; then
-        _env_file=".env.development"
-    fi
-    if [ -f "$DIR/scripts/generate-alertmanager-config.sh" ]; then
-        "$DIR/scripts/generate-alertmanager-config.sh" "$_env_file" >/dev/null
-    fi
-    if [ -f "$DIR/scripts/generate-prometheus-config.sh" ]; then
-        "$DIR/scripts/generate-prometheus-config.sh" "$_env_file" >/dev/null
-    fi
-
-    if $USE_DEV_MODE; then
-        step "Starting development stack..."
-
-        # In dev mode, frontend runs on Vite dev server (port 5173)
-        # This tells the backend where to redirect after OAuth login
-        export FRONTEND_URL="${FRONTEND_URL:-http://localhost:5173}"
-        info "FRONTEND_URL=$FRONTEND_URL"
-
-        $COMPOSE "${COMPOSE_ARGS[@]}" stop frontend > /dev/null 2>&1 || true
-
-        local _dev_backend_services
-        _dev_backend_services=$(_backend_services)
-
-        if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
-            log "Starting backend containers..."
-            $COMPOSE "${COMPOSE_ARGS[@]}" up -d $_dev_backend_services > /dev/null
-            wait_for_backend || true
-        fi
-
-        if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
-            command -v npm > /dev/null 2>&1 || die "npm not found"
-            [ -d "$DIR/frontend/node_modules" ] || die "Run: ./manage.sh install frontend"
-            log "Starting Vite dev server..."
-
-            cd "$DIR/frontend"
-            npm run dev &
-            echo $! > "$FRONTEND_PID_FILE"
-            ok "Frontend started on ${CYAN}http://localhost:5173${RESET}"
-        fi
-
-        echo ""
-        ok "Development stack running!"
-        echo -e "  Frontend: ${CYAN}http://localhost:5173${RESET} ${DIM}(Vite dev)${RESET}"
-        echo -e "  API:      ${CYAN}http://localhost:8080/api${RESET}"
-        echo -e "\n  ${YELLOW}Ctrl+C to stop${RESET}"
-
-        persist_state
-
-        trap '_stop_dev_stack' INT TERM
-        wait
-    else
-        step "Starting production stack..."
-
-        local _prod_backend_services
-        _prod_backend_services=$(_backend_services)
-
-        if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
-            log "Starting backend services..."
-            $COMPOSE "${COMPOSE_ARGS[@]}" up -d $_prod_backend_services > /dev/null
-        fi
-
-        if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
-            log "Starting frontend container..."
-            $COMPOSE "${COMPOSE_ARGS[@]}" up -d frontend > /dev/null
-        fi
-
-        persist_state
-
-        ok "Stack running!"
-        echo -e "  URL: ${CYAN}http://localhost:8080${RESET}"
-        echo -e "  API: ${CYAN}http://localhost:8080/api${RESET}"
-    fi
-}
-
-cmd_stop() {
-    step "Stopping services..."
-
-    local _services
-    _services=$(_backend_services)
-
-    if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
-        kill_frontend
-        $COMPOSE "${COMPOSE_ARGS[@]}" stop frontend > /dev/null 2>&1 || true
-    fi
-
-    if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
-        $COMPOSE "${COMPOSE_ARGS[@]}" stop $_services > /dev/null 2>&1 || true
-    fi
-
-    # PgBouncer may have been started with the overlay but the env var is not
-    # set now (e.g. user forgot PGBOUNCER_ENABLED=true). Stop it directly so a
-    # restarting container does not block shutdown or keep consuming ports.
-    _stop_orphan_container nukelab-pgbouncer
-
-    ok "Stopped"
-}
-
-cmd_restart() {
-    cmd_stop
-    sleep 2
-    cmd_start
-}
-
-cmd_build() {
-    setup_cpu_lib_volume
-
-    step "Building..."
-
-    if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
-        log "Building backend containers..."
-        $COMPOSE "${COMPOSE_ARGS[@]}" build backend celery-worker celery-beat
-    fi
-
-    if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
-        log "Building frontend container..."
-        $COMPOSE "${COMPOSE_ARGS[@]}" build frontend
-    fi
-
-    ok "Build complete"
-}
-
-cmd_update() {
-    step "Updating NukeLab..."
-
-    log "Pulling latest images..."
-    $COMPOSE "${COMPOSE_ARGS[@]}" pull
-
-    log "Rebuilding containers..."
-    $COMPOSE "${COMPOSE_ARGS[@]}" build --no-cache
-
-    ok "Update complete! Run './manage.sh restart' to apply changes."
-}
-
-cmd_pull() {
-    step "Pulling latest images..."
-    $COMPOSE "${COMPOSE_ARGS[@]}" pull
-    ok "Images pulled"
-}
-
-cmd_remove() {
-    step "Removing containers..."
-
-    local _services
-    _services=$(_backend_services)
-
-    if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
-        kill_frontend
-        $COMPOSE "${COMPOSE_ARGS[@]}" rm -f frontend 2>/dev/null || true
-        ok "Frontend container removed"
-    fi
-
-    if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
-        $COMPOSE "${COMPOSE_ARGS[@]}" rm -f $_services 2>/dev/null || true
-        _stop_orphan_container nukelab-pgbouncer
-        local _cmd="podman"
-        [ "$CONTAINER_ENGINE" = "docker" ] && _cmd="docker"
-        $_cmd rm -f nukelab-pgbouncer > /dev/null 2>&1 || true
-        ok "Backend containers removed"
-    fi
-}
-
-cmd_clean() {
-    step "Cleaning up..."
-
-    log "Removing stopped containers..."
-    $CONTAINER_ENGINE container prune -f 2>/dev/null || true
-
-    log "Removing dangling images..."
-    $CONTAINER_ENGINE image prune -f 2>/dev/null || true
-
-    log "Removing dangling volumes..."
-    $CONTAINER_ENGINE volume prune -f 2>/dev/null || true
-
-    log "Removing build cache..."
-    $CONTAINER_ENGINE builder prune -f 2>/dev/null || true
-
-    ok "Cleanup complete"
-}
-
-cmd_shell() {
-    local service="${TARGET:-backend}"
-    if [[ "$service" = "all" ]]; then
-        service="backend"
-    fi
-
-    step "Opening shell in ${BOLD}$service${RESET}..."
-
-    case "$service" in
-        backend)
-            $COMPOSE "${COMPOSE_ARGS[@]}" exec backend /bin/bash || \
-            $COMPOSE "${COMPOSE_ARGS[@]}" exec backend /bin/sh
-            ;;
-        postgres)
-            $COMPOSE "${COMPOSE_ARGS[@]}" exec postgres psql -U "${DATABASE_USER:-nukelab}" -d "${DATABASE_NAME:-nukelab}"
-            ;;
-        redis)
-            $COMPOSE "${COMPOSE_ARGS[@]}" exec redis redis-cli
-            ;;
-        frontend)
-            $COMPOSE "${COMPOSE_ARGS[@]}" exec frontend /bin/sh
-            ;;
-        *)
-            $COMPOSE "${COMPOSE_ARGS[@]}" exec "$service" /bin/sh
-            ;;
-    esac
-}
-
-cmd_exec() {
-    local service="${TARGET:-backend}"
-    if [[ "$service" = "all" ]]; then
-        service="backend"
-    fi
-
-    if [ ${#EXTRA_ARGS[@]} -eq 0 ]; then
-        die "Usage: ./manage.sh exec <service> <command>\nExample: ./manage.sh exec backend ls -la"
-    fi
-
-    $COMPOSE "${COMPOSE_ARGS[@]}" exec "$service" "${EXTRA_ARGS[@]}"
-}
-
-cmd_logs() {
-    local service="${TARGET:-}"
-
-    # In dev mode, frontend runs locally via Vite, not container
-    if $USE_DEV_MODE && [[ "$service" == "" || "$service" == "all" ]]; then
-        log "Dev mode: frontend runs locally via Vite (check terminal for output)"
-        service="traefik postgres redis backend celery-worker celery-beat"
-    fi
-
-    $COMPOSE "${COMPOSE_ARGS[@]}" logs -f ${service:-}
-}
-
-cmd_status() {
-    step "Container Status"
-    $COMPOSE "${COMPOSE_ARGS[@]}" ps
-
-    echo ""
-    if is_frontend_running; then
-        ok "Frontend dev: ${CYAN}http://localhost:5173${RESET} ${DIM}(PID: $(cat "$FRONTEND_PID_FILE"))${RESET}"
-    else
-        info "Frontend dev: ${DIM}not running${RESET}"
-    fi
-}
-
-cmd_install() {
-    if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
-        step "Installing frontend dependencies..."
-        command -v npm > /dev/null 2>&1 || die "npm not found"
-        cd "$DIR/frontend"
-        npm install
-        ok "Frontend dependencies installed"
-    fi
-
-    if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
-        info "Backend dependencies are managed via Docker (requirements.txt). No local installation needed."
-    fi
-}
-
-cmd_test() {
-    if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
-        step "Running frontend tests..."
-        cd "$DIR/frontend"
-        [ -d "node_modules" ] || die "Run: ./manage.sh install frontend"
-        npm run test 2>/dev/null || npm run lint || warn "No test script found"
-    fi
-
-    if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
-        step "Running backend tests..."
-        # Stay in $DIR so relative compose overlay paths resolve correctly.
-        # pytest itself runs inside the container at /app, so the host CWD
-        # does not affect test discovery.
-        local pytest_args="${EXTRA_ARGS[*]:-}"
-        if $USE_COVERAGE; then
-            pytest_args="--cov=app --cov-report=term --cov-report=html ${pytest_args}"
-        fi
-
-:         # To avoid Postgres connection exhaustion from the live dev server
-        # (uvicorn workers + Celery) while tests run, stop the backend services
-        # first, run tests in a fresh one-off container, then restart them.
-        local _backend_was_running=false
-        local _celery_worker_was_running=false
-        local _celery_beat_was_running=false
-
-        if is_backend_container_running; then
-            _backend_was_running=true
-            info "Stopping backend services for isolated test run..."
-            $COMPOSE "${COMPOSE_ARGS[@]}" stop backend celery-worker celery-beat >/dev/null 2>&1 || true
-        fi
-
-        # Run tests in a fresh container with backend source bind-mounted.
-        local _test_run_cmd="cd /app && python -m pytest ${pytest_args}"
-        local _test_exit=0
-        $COMPOSE "${COMPOSE_ARGS[@]}" run --rm \
-            -v "${DIR}/backend:/app:Z" \
-            -v "${DIR}/resources:/app/resources:ro" \
-            -e "DATABASE_URL=postgresql+asyncpg://${DATABASE_USER:-nukelab}:${DATABASE_PASSWORD:-nukelab123}@postgres:5432/${DATABASE_NAME:-nukelab}_test" \
-            -e "REDIS_URL=redis://redis:6379/1" \
-            -e "RATE_LIMIT_ENABLED=false" \
-            -e "OTEL_TRACES_ENABLED=false" \
-            -e "SENTRY_DSN=" \
-            -e "PROMETHEUS_SCRAPE_TOKEN=" \
-            -e "PROMETHEUS_ENABLED=false" \
-            -e "PGBOUNCER_ENABLED=false" \
-            -e "TESTING=true" \
-            backend bash -c "${_test_run_cmd}" || _test_exit=$?
-
-        # Restart backend services if they were running before.
-        if $_backend_was_running; then
-            info "Restarting backend services..."
-            $COMPOSE "${COMPOSE_ARGS[@]}" up -d backend celery-worker celery-beat >/dev/null 2>&1 || warn "Failed to restart backend services"
-        fi
-
-        if [ $_test_exit -ne 0 ]; then
-            warn "Tests failed or not configured"
-        fi
-    fi
-}
-
-cmd_db_migrate() {
-    step "Running database migrations..."
-
-    if is_backend_container_running; then
-        # Backend is running in containers, run migrations there
-        $COMPOSE "${COMPOSE_ARGS[@]}" exec backend alembic upgrade head
-    else
-        die "Backend not running. Start it first:\n  ./manage.sh start backend"
-    fi
-
-    ok "Migrations applied"
-}
-
-cmd_e2e() {
-    step "Running E2E tests..."
-    cd "$DIR/frontend"
-    [ -d "node_modules" ] || die "Run: ./manage.sh install frontend"
-    if ! command -v npx > /dev/null 2>&1; then
-        die "npx not found"
-    fi
-    if ! npx playwright test --version > /dev/null 2>&1; then
-        warn "Playwright not installed. Run: ./manage.sh install frontend"
-    fi
-    if ! curl -sf "${APP_URL:-http://localhost:8080}/api/health" > /dev/null 2>&1; then
-        warn "Backend does not appear to be running. Start it first:\n  ./manage.sh start --dev"
-        die "Backend health check failed"
-    fi
-    ok "Backend detected"
-    npx playwright test
-}
-
-cmd_loadtest() {
-    local profile="${TARGET:-baseline}"
-    step "Running load test: ${BOLD}$profile${RESET}"
-    if [ ! -f "$DIR/scripts/run-load-tests.sh" ]; then
-        die "Load-test script not found: $DIR/scripts/run-load-tests.sh"
-    fi
-    bash "$DIR/scripts/run-load-tests.sh" "$profile"
-}
-
-cmd_db_shell() {
-    step "Opening database shell..."
-    $COMPOSE "${COMPOSE_ARGS[@]}" exec postgres psql -U "${DATABASE_USER:-nukelab}" -d "${DATABASE_NAME:-nukelab}"
-}
-
-cmd_backup() {
-    local backup_dir="$DIR/backups"
-    local timestamp=$(date +%Y%m%d_%H%M%S)
-    local backup_file="$backup_dir/nukelab_backup_$timestamp.sql"
-
-    mkdir -p "$backup_dir"
-    step "Creating backup..."
-
-    $COMPOSE "${COMPOSE_ARGS[@]}" exec -T postgres pg_dump -U "${DATABASE_USER:-nukelab}" "${DATABASE_NAME:-nukelab}" > "$backup_file"
-
-    ok "Backup created: ${CYAN}$backup_file${RESET}"
-}
-
-cmd_restore() {
-    local backup_file="${TARGET:-}"
-
-    if [ -z "$backup_file" ] || [ "$backup_file" = "all" ]; then
-        die "Usage: ./manage.sh restore <backup-file>\nExample: ./manage.sh restore backups/nukelab_backup_20250607_120000.sql"
-    fi
-
-    if [ ! -f "$backup_file" ]; then
-        die "Backup file not found: $backup_file"
-    fi
-
-    step "Restoring from ${BOLD}$backup_file${RESET}..."
-
-    local db_user="${DATABASE_USER:-nukelab}"
-    local db_name="${DATABASE_NAME:-nukelab}"
-
-    log "Dropping database if exists..."
-    $COMPOSE "${COMPOSE_ARGS[@]}" exec postgres psql -U "$db_user" -c "DROP DATABASE IF EXISTS $db_name;"
-
-    log "Creating database..."
-    $COMPOSE "${COMPOSE_ARGS[@]}" exec postgres psql -U "$db_user" -c "CREATE DATABASE $db_name;"
-
-    log "Restoring data..."
-    $COMPOSE "${COMPOSE_ARGS[@]}" exec -T postgres psql -U "$db_user" -d "$db_name" < "$backup_file"
-
-    log "Stamping alembic version..."
-    $COMPOSE "${COMPOSE_ARGS[@]}" exec backend python -m alembic stamp 281a4c5d5529
-
-    ok "Restore complete"
-}
-
-cmd_reset() {
-    step "${RED}${BOLD}WARNING:${RESET} This deletes ALL data and containers!"
-    read -rp "Type 'yes' to confirm: " confirm
-    [[ "$confirm" = "yes" ]] || { info "Aborted."; exit 0; }
-
-    log "Stopping everything..."
-    kill_frontend
-    $COMPOSE "${COMPOSE_ARGS[@]}" down -v --remove-orphans 2>/dev/null || true
-    $CONTAINER_ENGINE volume rm nukelab-postgres-data nukelab-letsencrypt 2>/dev/null || true
-    clear_state
-    ok "Reset complete"
-}
-
-# ─── Help ──────────────────────────────────────────────────────────────────
+# ─── Help ─────────────────────────────────────────────────────────────────-
 print_help() {
     cat <<-EOF
 ${BOLD}${CYAN}NukeLab v2.0${RESET} — Management Script
@@ -983,8 +375,8 @@ ${BOLD}Database:${RESET}
 
 ${BOLD}Testing:${RESET}
   ${GREEN}test${RESET}       [target] [--coverage]      Run tests
-  ${GREEN}e2e${RESET}                                  Run Playwright E2E tests (backend must be running)
-  ${GREEN}loadtest${RESET}   [profile]                  Run Locust/k6 load tests (backend must be running)
+  ${GREEN}e2e${RESET}                                  Run Playwright E2E tests
+  ${GREEN}loadtest${RESET}   [profile]                  Run Locust/k6 load tests
 
 ${BOLD}Targets:${RESET} ${DIM}(optional, default: all)${RESET}
   backend    Backend services (api, workers, db, redis, traefik)
@@ -1004,27 +396,32 @@ ${BOLD}Examples:${RESET}
   ./manage.sh shell backend              # Shell into backend container
   ./manage.sh exec backend python -v     # Run command in backend
   ./manage.sh logs backend -f            # Stream backend logs
-  ./manage.sh db-migrate                 # Run migrations (auto-detect)
+  ./manage.sh db-migrate                 # Run migrations
   ./manage.sh backup                     # Backup database
   ./manage.sh restore backups/nukelab_backup_20250607_120000.sql
-                                         # Restore database from backup
-  ./manage.sh test                       # Run all tests (auto-detect)
   ./manage.sh test backend --coverage    # Run backend tests with coverage
   ./manage.sh loadtest baseline          # Run Locust baseline load test
-  ./manage.sh loadtest smoke             # Run Locust smoke load test
   PGBOUNCER_ENABLED=true ./manage.sh start
-                                         # Start with PgBouncer (auto-overlay)
-  ./manage.sh start --overlay compose.pgbouncer.yml
-                                         # Start with PgBouncer overlay (manual)
-  ./manage.sh start --overlay compose.monitoring.yml
-                                         # Start with monitoring overlay (manual)
+                                         # Start with PgBouncer overlay
   ./manage.sh clean                      # Clean up dangling resources
-  ./manage.sh update                     # Update all images
 
 EOF
 }
 
-# ─── Main ──────────────────────────────────────────────────────────────────
+# ─── Command Loader ────────────────────────────────────────────────────────
+_dispatch_command() {
+    local command="$1"
+    local cmd_file="$DIR/scripts/manage.d/${command}.sh"
+    if [ ! -f "$cmd_file" ]; then
+        die "Command module missing: $cmd_file"
+    fi
+    source "$cmd_file"
+    # Function names cannot contain hyphens, so map db-migrate -> cmd_db_migrate.
+    local func_name="cmd_${command//-/_}"
+    "$func_name"
+}
+
+# ─── Main ─────────────────────────────────────────────────────────────────-
 main() {
     parse_args "$@"
 
@@ -1041,6 +438,7 @@ main() {
             detect_engine
             setup_podman_socket
             setup_compose_args
+            _dispatch_command "$CMD"
             ;;
         stop|restart|status|logs|remove|reset|shell|exec|db-migrate|db-shell|backup|restore|e2e|loadtest)
             init_env
@@ -1049,6 +447,7 @@ main() {
             if ! restore_state; then
                 setup_compose_args
             fi
+            _dispatch_command "$CMD"
             ;;
         install|test)
             if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
@@ -1059,32 +458,21 @@ main() {
                     setup_compose_args
                 fi
             fi
+            _dispatch_command "$CMD"
             ;;
-    esac
-
-    case "$CMD" in
-        start)       cmd_start ;;
-        stop)        cmd_stop ;;
-        restart)     cmd_restart ;;
-        build)       cmd_build ;;
-        update)      cmd_update ;;
-        pull)        cmd_pull ;;
-        remove|rm)   cmd_remove ;;
-        clean)       cmd_clean ;;
-        shell)       cmd_shell ;;
-        exec)        cmd_exec ;;
-        status)      cmd_status ;;
-        logs)        cmd_logs ;;
-        install)     cmd_install ;;
-        test)        cmd_test ;;
-        e2e)         cmd_e2e ;;
-        loadtest)    cmd_loadtest ;;
-        db-migrate)  cmd_db_migrate ;;
-        db-shell)    cmd_db_shell ;;
-        backup)      cmd_backup ;;
-        restore)     cmd_restore ;;
-        reset)       cmd_reset ;;
-        *)           die "Unknown command: $CMD\nRun './manage.sh help' for usage." ;;
+        rm)
+            CMD="remove"
+            init_env
+            detect_engine
+            setup_podman_socket
+            if ! restore_state; then
+                setup_compose_args
+            fi
+            _dispatch_command "remove"
+            ;;
+        *)
+            die "Unknown command: $CMD\nRun './manage.sh help' for usage."
+            ;;
     esac
 }
 
