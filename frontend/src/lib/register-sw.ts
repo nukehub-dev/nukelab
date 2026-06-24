@@ -3,7 +3,7 @@
  *
  * The service worker is intentionally disabled in development to avoid
  * intercepting Vite's HMR and serving stale assets. It also never intercepts
- * /api, /ws, /grafana, /prometheus, or /alertmanager.
+ * /api, /ws, /grafana, /prometheus, /alertmanager, or /jaeger.
  */
 export function registerServiceWorker() {
   if (import.meta.env.DEV) return;

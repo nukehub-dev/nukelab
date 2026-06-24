@@ -20,6 +20,7 @@ import {
   Flame,
   Bell,
   ExternalLink,
+  Activity,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
@@ -205,6 +206,15 @@ const categories: AdminCategory[] = [
     href: '/alertmanager',
     requiredPermission: PERMISSIONS.ADMIN_ACCESS,
     color: 'bg-red-500/10 text-red-400',
+    external: true,
+  },
+  {
+    label: 'Jaeger',
+    description: 'Distributed trace search and visualization',
+    icon: Activity,
+    href: '/jaeger',
+    requiredPermission: PERMISSIONS.ADMIN_ACCESS,
+    color: 'bg-purple-500/10 text-purple-400',
     external: true,
   },
 ];

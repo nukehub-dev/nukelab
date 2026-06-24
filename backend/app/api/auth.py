@@ -818,7 +818,7 @@ async def monitoring_auth_redirect(
         raise HTTPException(status_code=403, detail="Admin access required")
 
     # Only allow redirects to our own monitoring paths to avoid open redirect.
-    if redirect not in ("/grafana", "/prometheus", "/alertmanager"):
+    if redirect not in ("/grafana", "/prometheus", "/alertmanager", "/jaeger"):
         redirect = "/grafana"
 
     response = RedirectResponse(url=redirect)

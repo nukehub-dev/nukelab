@@ -4,68 +4,87 @@
 # Adds an OpenTelemetry Collector and Jaeger all-in-one instance for distributed
 # tracing. Activate with:
 #
-#   TRACING_ENABLED=true ./nukelabctl start --overlay compose.monitoring.yml
+#   TRACING_ENABLED=true ./nukelabctl start --overlay compose.tracing.yml
 #
 # The backend sends OTLP to the collector over gRPC; the collector forwards
 # traces to Jaeger. Jaeger UI is exposed through Traefik at /jaeger.
 # =============================================================================
 
 services:
-  otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.104.0
-    container_name: nukelab-otel-collector
-    command: ["--config=/etc/otelcol-contrib/otel-collector.yml"]
-    volumes:
-      - ./monitoring/otel/otel-collector.yml:/etc/otelcol-contrib/otel-collector.yml:ro
-    networks:
-      - nukelab-network
-    environment:
-      - OTEL_COLLECTOR_OTLP_GRPC_ENDPOINT=0.0.0.0:4317
-      - OTEL_COLLECTOR_OTLP_HTTP_ENDPOINT=0.0.0.0:4318
-    ports:
-      - "4317:4317"   # OTLP gRPC receiver (host access for local dev)
-      - "4318:4318"   # OTLP HTTP receiver (host access for local dev)
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:13133/"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: "1.0"
-          memory: 512M
-        reservations:
-          cpus: "0.25"
-          memory: 128M
+    otel-collector:
+        image: otel/opentelemetry-collector-contrib:0.104.0
+        container_name: nukelab-otel-collector
+        command: ["--config=/etc/otelcol-contrib/otel-collector.yml"]
+        volumes:
+            - ./monitoring/otel/otel-collector.yml:/etc/otelcol-contrib/otel-collector.yml:ro
+        networks:
+            - nukelab-network
+        environment:
+            - OTEL_COLLECTOR_OTLP_GRPC_ENDPOINT=0.0.0.0:4317
+            - OTEL_COLLECTOR_OTLP_HTTP_ENDPOINT=0.0.0.0:4318
+        ports:
+            - "4317:4317" # OTLP gRPC receiver (host access for local dev)
+            - "4318:4318" # OTLP HTTP receiver (host access for local dev)
+        healthcheck:
+            test:
+                [
+                    "CMD",
+                    "wget",
+                    "--no-verbose",
+                    "--tries=1",
+                    "--spider",
+                    "http://localhost:13133/",
+                ]
+            interval: 10s
+            timeout: 5s
+            retries: 3
+            start_period: 10s
+        restart: unless-stopped
+        deploy:
+            resources:
+                limits:
+                    cpus: "1.0"
+                    memory: 512M
+                reservations:
+                    cpus: "0.25"
+                    memory: 128M
 
-  jaeger:
-    image: jaegertracing/jaeger:1.59.0
-    container_name: nukelab-jaeger
-    networks:
-      - nukelab-network
-    environment:
-      - COLLECTOR_OTLP_ENABLED=true
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.jaeger.rule=PathPrefix(`/jaeger`)"
-      - "traefik.http.routers.jaeger.middlewares=monitoring-auth@file,strip-jaeger@file"
-      - "traefik.http.routers.jaeger.service=jaeger"
-      - "traefik.http.services.jaeger.loadbalancer.server.port=16686"
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:16686/"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: "1.0"
-          memory: 1G
-        reservations:
-          cpus: "0.25"
-          memory: 256M
+    jaeger:
+        image: docker.io/jaegertracing/jaeger:2.19.0
+        container_name: nukelab-jaeger
+        command: ["--config=/etc/jaeger/jaeger.yml"]
+        volumes:
+            - ./monitoring/jaeger/jaeger.yml:/etc/jaeger/jaeger.yml:ro
+        networks:
+            - nukelab-network
+        environment:
+            - COLLECTOR_OTLP_ENABLED=true
+        labels:
+            - "traefik.enable=true"
+            - "traefik.http.routers.jaeger.rule=PathPrefix(`/jaeger`)"
+            - "traefik.http.routers.jaeger.middlewares=monitoring-auth@file"
+            - "traefik.http.routers.jaeger.service=jaeger"
+            - "traefik.http.services.jaeger.loadbalancer.server.port=16686"
+        healthcheck:
+            test:
+                [
+                    "CMD",
+                    "wget",
+                    "--no-verbose",
+                    "--tries=1",
+                    "--spider",
+                    "http://localhost:16686/jaeger",
+                ]
+            interval: 10s
+            timeout: 5s
+            retries: 3
+            start_period: 10s
+        restart: unless-stopped
+        deploy:
+            resources:
+                limits:
+                    cpus: "1.0"
+                    memory: 1G
+                reservations:
+                    cpus: "0.25"
+                    memory: 256M
