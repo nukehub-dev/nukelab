@@ -15,7 +15,7 @@ from app.api import (
     ip_restriction
 )
 from app.db.base import Base
-from app.db.session import engine
+from app.db.session import engine, AsyncSessionLocal
 from app.websocket.metrics_socket import manager
 from app.core.shutdown import get_shutdown_coordinator
 from app.middleware.request_metrics import _metrics_buffer
@@ -51,7 +51,6 @@ async def startup():
 
     # Load dynamic system settings from database
     try:
-        from app.db.session import AsyncSessionLocal
         from app.services.setting_service import SettingService
         async with AsyncSessionLocal() as db:
             service = SettingService(db)
