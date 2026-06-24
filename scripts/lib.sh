@@ -356,7 +356,7 @@ EOF
         done
         if ! $_pgbouncer_found; then
             COMPOSE_OVERLAY_FILES+=("$_pgbouncer_overlay")
-            info "PgBouncer enabled — adding overlay"
+            info "Adding overlay $_pgbouncer_overlay"
         fi
 
         # Warn if DATABASE_URL also points to PgBouncer (migrations should use direct Postgres)
@@ -384,7 +384,7 @@ EOF
             done
             if ! $_monitoring_found; then
                 COMPOSE_OVERLAY_FILES+=("$_monitoring_overlay")
-                info "Monitoring enabled via PROMETHEUS_ENABLED/GRAFANA_ENABLED — adding $_monitoring_overlay"
+                info "Adding overlay $_monitoring_overlay"
             fi
         done
     fi
@@ -401,7 +401,7 @@ EOF
         done
         if ! $_alertmanager_found; then
             COMPOSE_OVERLAY_FILES+=("$_alertmanager_overlay")
-            info "Alertmanager enabled via ALERTMANAGER_ENABLED — adding $_alertmanager_overlay"
+            info "Adding overlay $_alertmanager_overlay"
         fi
     fi
 
@@ -417,7 +417,7 @@ EOF
         done
         if ! $_tracing_found; then
             COMPOSE_OVERLAY_FILES+=("$_tracing_overlay")
-            info "Tracing enabled via TRACING_ENABLED — adding $_tracing_overlay"
+            info "Adding overlay $_tracing_overlay"
         fi
     fi
 

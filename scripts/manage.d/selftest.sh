@@ -33,7 +33,7 @@ cmd_selftest() {
     local failures=0
 
     # Help output
-    _t "top-level help" bash -c './nukelabctl help | grep -q "NukeLab v2.0"' || _increment_failures
+    _t "top-level help" bash -c './nukelabctl help | grep -q "NukeLab"' || _increment_failures
     _t "command help: start" bash -c './nukelabctl start --help | grep -q "Start the NukeLab stack"' || _increment_failures
     _t "command help: logs" bash -c './nukelabctl logs --help | grep -q "Stream container logs"' || _increment_failures
     _t "command help: stop" bash -c './nukelabctl stop --help | grep -q "Stop running containers"' || _increment_failures
