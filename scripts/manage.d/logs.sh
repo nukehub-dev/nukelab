@@ -70,10 +70,22 @@ cmd_logs() {
         service=""
     fi
 
-    # In dev mode, frontend runs locally via Vite, not container
-    if $USE_DEV_MODE && [[ -z "$service" ]]; then
-        log "Dev mode: frontend runs locally via Vite (check terminal for output)"
-        service="traefik postgres redis backend celery-worker celery-beat"
+    # In dev mode, frontend runs locally via Vite, not a container.
+    if $USE_DEV_MODE; then
+        if [[ "$service" == "frontend" ]]; then
+            die "In dev mode the frontend runs locally via Vite, not a container.\nCheck the terminal where you ran './nukelabctl start --dev' for frontend output."
+        fi
+        if [[ -z "$service" ]]; then
+            log "Dev mode: frontend runs locally via Vite (check terminal for output)"
+            service="traefik postgres redis backend celery-worker celery-beat"
+        fi
+    elif [[ -z "$service" ]]; then
+        # Limit "all" logs to backend services plus frontend only when it is
+        # actually running, so we don't spam errors for an unstarted frontend.
+        service=$(_backend_services)
+        if _container_running nukelab-frontend; then
+            service="$service frontend"
+        fi
     fi
 
     local _log_args=()
