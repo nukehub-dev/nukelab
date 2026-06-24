@@ -71,10 +71,13 @@ cmd_stop() {
         $COMPOSE "${COMPOSE_ARGS[@]}" stop -t "$STOP_TIMEOUT" $_services > /dev/null 2>&1 || true
     fi
 
-    # PgBouncer may have been started with the overlay but the env var is not
-    # set now (e.g. user forgot PGBOUNCER_ENABLED=true). Stop it directly so a
-    # restarting container does not block shutdown or keep consuming ports.
-    _stop_orphan_if_unmanaged nukelab-pgbouncer
+    # PgBouncer and tracing may have been started with an overlay but the env
+    # var is not set now (e.g. user forgot PGBOUNCER_ENABLED=true or
+    # TRACING_ENABLED=true). Stop them directly so restarting containers do not
+    # block shutdown or keep consuming ports.
+    _stop_orphan_if_unmanaged "compose.pgbouncer.yml" nukelab-pgbouncer
+    _stop_orphan_if_unmanaged "compose.tracing.yml" nukelab-otel-collector
+    _stop_orphan_if_unmanaged "compose.tracing.yml" nukelab-jaeger
 
     ok "Stopped"
 }

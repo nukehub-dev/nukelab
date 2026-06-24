@@ -622,10 +622,11 @@ _stop_orphan_container() {
 
 # Stop a container only when it is not already managed through compose.
 _stop_orphan_if_unmanaged() {
-    local name="$1"
-    # If the current compose configuration already includes PgBouncer,
+    local overlay="$1"
+    local name="$2"
+    # If the current compose configuration already includes the overlay,
     # the regular compose stop/rm will handle it; no orphan cleanup needed.
-    if _has_overlay "compose.pgbouncer.yml"; then
+    if _has_overlay "$overlay"; then
         return
     fi
     _stop_orphan_container "$name"
@@ -659,7 +660,8 @@ _has_overlay() {
 }
 
 _backend_services() {
-    # Print the list of backend services, including PgBouncer and monitoring when enabled.
+    # Print the list of backend services, including PgBouncer, monitoring, and
+    # tracing overlays when enabled.
     local services="traefik postgres redis backend celery-worker celery-beat"
     if _has_overlay "compose.pgbouncer.yml"; then
         services="$services pgbouncer"
@@ -670,16 +672,21 @@ _backend_services() {
     if _has_overlay "compose.alertmanager.yml"; then
         services="$services alertmanager"
     fi
+    if _has_overlay "compose.tracing.yml"; then
+        services="$services otel-collector jaeger"
+    fi
     echo "$services"
 }
 
 _stop_dev_stack() {
-    # Dev-mode Ctrl+C handler: stop Vite and all backend/monitoring containers.
+    # Dev-mode Ctrl+C handler: stop Vite and all backend/monitoring/tracing containers.
     echo ""
     step "Shutting down..."
     kill_frontend
     $COMPOSE "${COMPOSE_ARGS[@]}" stop $(_backend_services) > /dev/null 2>&1 || true
-    _stop_orphan_if_unmanaged nukelab-pgbouncer
+    _stop_orphan_if_unmanaged "compose.pgbouncer.yml" nukelab-pgbouncer
+    _stop_orphan_if_unmanaged "compose.tracing.yml" nukelab-otel-collector
+    _stop_orphan_if_unmanaged "compose.tracing.yml" nukelab-jaeger
     _release_lock 2>/dev/null || true
     ok "Goodbye!"
     exit 0
