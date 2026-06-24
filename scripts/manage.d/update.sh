@@ -9,3 +9,15 @@ cmd_update() {
 
     ok "Update complete! Run './manage.sh restart' to apply changes."
 }
+
+help_update() {
+    cat <<-EOF
+${BOLD}Usage:${RESET} ./manage.sh update
+
+Pull latest base images and rebuild all containers.
+
+${BOLD}Examples:${RESET}
+  ./manage.sh update
+EOF
+}
+

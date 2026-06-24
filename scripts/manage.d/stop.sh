@@ -1,3 +1,61 @@
+# Default values for stop options.
+STOP_TIMEOUT=10
+
+help_stop() {
+    cat <<-EOF
+${BOLD}Usage:${RESET} ./manage.sh stop [target] [options]
+
+Stop running containers.
+
+${BOLD}Targets:${RESET}
+  backend    Stop backend services
+  frontend   Stop the frontend dev server (dev mode) or container
+  all        Stop everything ${DIM}(default)${RESET}
+
+${BOLD}Options:${RESET}
+  --timeout N, -t N   Seconds to wait before killing a container ${DIM}(default: 10)${RESET}
+  --help, -h          Show this help
+
+${BOLD}Examples:${RESET}
+  ./manage.sh stop
+  ./manage.sh stop backend
+  ./manage.sh stop backend --timeout 5
+EOF
+}
+
+parse_stop_args() {
+    while [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; do
+        case "${EXTRA_ARGS[0]}" in
+            --timeout|-t)
+                if [[ ${#EXTRA_ARGS[@]} -lt 2 ]]; then
+                    die "Option ${EXTRA_ARGS[0]} requires a value"
+                fi
+                STOP_TIMEOUT="${EXTRA_ARGS[1]}"
+                EXTRA_ARGS=("${EXTRA_ARGS[@]:2}")
+                ;;
+            --help|-h)
+                help_stop
+                exit 0
+                ;;
+            --*)
+                die "Unknown option for stop: ${EXTRA_ARGS[0]}"
+                ;;
+            *)
+                if [[ -z "${TARGET:-}" || "$TARGET" == "all" ]]; then
+                    TARGET="${EXTRA_ARGS[0]}"
+                    EXTRA_ARGS=("${EXTRA_ARGS[@]:1}")
+                else
+                    die "Unexpected argument: ${EXTRA_ARGS[0]}"
+                fi
+                ;;
+        esac
+    done
+
+    if ! [[ "$STOP_TIMEOUT" =~ ^[0-9]+$ ]]; then
+        die "--timeout requires a non-negative integer, got: $STOP_TIMEOUT"
+    fi
+}
+
 cmd_stop() {
     step "Stopping services..."
 
@@ -6,11 +64,11 @@ cmd_stop() {
 
     if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
         kill_frontend
-        $COMPOSE "${COMPOSE_ARGS[@]}" stop frontend > /dev/null 2>&1 || true
+        $COMPOSE "${COMPOSE_ARGS[@]}" stop -t "$STOP_TIMEOUT" frontend > /dev/null 2>&1 || true
     fi
 
     if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
-        $COMPOSE "${COMPOSE_ARGS[@]}" stop $_services > /dev/null 2>&1 || true
+        $COMPOSE "${COMPOSE_ARGS[@]}" stop -t "$STOP_TIMEOUT" $_services > /dev/null 2>&1 || true
     fi
 
     # PgBouncer may have been started with the overlay but the env var is not

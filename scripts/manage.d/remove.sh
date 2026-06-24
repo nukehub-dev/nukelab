@@ -21,3 +21,18 @@ cmd_remove() {
         ok "Backend containers removed"
     fi
 }
+
+help_remove() {
+    cat <<-EOF
+${BOLD}Usage:${RESET} ./manage.sh remove [target]
+
+Remove containers while keeping volumes and data.
+
+${BOLD}Targets:${RESET} backend | frontend | all
+
+${BOLD}Examples:${RESET}
+  ./manage.sh remove
+  ./manage.sh remove backend
+EOF
+}
+

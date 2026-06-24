@@ -10,3 +10,16 @@ cmd_exec() {
 
     $COMPOSE "${COMPOSE_ARGS[@]}" exec "$service" "${EXTRA_ARGS[@]}"
 }
+
+help_exec() {
+    cat <<-EOF
+${BOLD}Usage:${RESET} ./manage.sh exec <service> <command> [args...]
+
+Execute a command inside a running container.
+
+${BOLD}Examples:${RESET}
+  ./manage.sh exec backend ls -la
+  ./manage.sh exec backend python -v
+EOF
+}
+

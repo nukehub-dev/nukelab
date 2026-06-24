@@ -10,3 +10,15 @@ cmd_db_migrate() {
 
     ok "Migrations applied"
 }
+
+help_db_migrate() {
+    cat <<-EOF
+${BOLD}Usage:${RESET} ./manage.sh db-migrate
+
+Run Alembic database migrations inside the backend container.
+
+${BOLD}Examples:${RESET}
+  ./manage.sh db-migrate
+EOF
+}
+

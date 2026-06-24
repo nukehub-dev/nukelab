@@ -57,3 +57,21 @@ cmd_test() {
         fi
     fi
 }
+
+help_test() {
+    cat <<-EOF
+${BOLD}Usage:${RESET} ./manage.sh test [target] [options]
+
+Run tests.
+
+${BOLD}Targets:${RESET} frontend | backend | all
+
+${BOLD}Options:${RESET}
+  --coverage    Run backend tests with coverage report
+
+${BOLD}Examples:${RESET}
+  ./manage.sh test
+  ./manage.sh test backend --coverage
+EOF
+}
+

@@ -10,3 +10,15 @@ cmd_backup() {
 
     ok "Backup created: ${CYAN}$backup_file${RESET}"
 }
+
+help_backup() {
+    cat <<-EOF
+${BOLD}Usage:${RESET} ./manage.sh backup
+
+Create a database backup in backups/.
+
+${BOLD}Examples:${RESET}
+  ./manage.sh backup
+EOF
+}
+

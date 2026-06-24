@@ -25,3 +25,17 @@ cmd_shell() {
             ;;
     esac
 }
+
+help_shell() {
+    cat <<-EOF
+${BOLD}Usage:${RESET} ./manage.sh shell [service]
+
+Open an interactive shell inside a running container.
+
+${BOLD}Examples:${RESET}
+  ./manage.sh shell backend
+  ./manage.sh shell postgres
+  ./manage.sh shell redis
+EOF
+}
+

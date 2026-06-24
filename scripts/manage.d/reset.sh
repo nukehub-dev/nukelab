@@ -10,3 +10,15 @@ cmd_reset() {
     clear_state
     ok "Reset complete"
 }
+
+help_reset() {
+    cat <<-EOF
+${BOLD}Usage:${RESET} ./manage.sh reset
+
+⚠️  Delete ALL data, containers, and volumes. Requires confirmation.
+
+${BOLD}Examples:${RESET}
+  ./manage.sh reset
+EOF
+}
+

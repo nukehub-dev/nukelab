@@ -11,3 +11,18 @@ cmd_install() {
         info "Backend dependencies are managed via Docker (requirements.txt). No local installation needed."
     fi
 }
+
+help_install() {
+    cat <<-EOF
+${BOLD}Usage:${RESET} ./manage.sh install [target]
+
+Install local dependencies.
+
+${BOLD}Targets:${RESET} frontend | backend | all
+
+${BOLD}Examples:${RESET}
+  ./manage.sh install frontend
+  ./manage.sh install
+EOF
+}
+

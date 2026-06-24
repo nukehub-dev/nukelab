@@ -1,3 +1,63 @@
+# Default values for start options.
+START_BUILD=true
+START_WAIT=true
+
+help_start() {
+    cat <<-EOF
+${BOLD}Usage:${RESET} ./manage.sh start [target] [options]
+
+Start the NukeLab stack.
+
+${BOLD}Targets:${RESET}
+  backend    Start backend services ${DIM}(default if omitted)${RESET}
+  frontend   Start frontend container (or Vite dev server with --dev)
+  all        Start everything
+
+${BOLD}Options:${RESET}
+  --dev, -d       Development mode: backend containers + local Vite dev server
+  --no-build      Skip building images before starting
+  --no-wait       Do not wait for the backend health check
+  --overlay FILE  Add a compose overlay file (repeatable)
+  --help, -h      Show this help
+
+${BOLD}Examples:${RESET}
+  ./manage.sh start
+  ./manage.sh start --dev
+  ./manage.sh start backend --no-build
+  PGBOUNCER_ENABLED=true ./manage.sh start
+EOF
+}
+
+parse_start_args() {
+    while [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; do
+        case "${EXTRA_ARGS[0]}" in
+            --no-build)
+                START_BUILD=false
+                EXTRA_ARGS=("${EXTRA_ARGS[@]:1}")
+                ;;
+            --no-wait)
+                START_WAIT=false
+                EXTRA_ARGS=("${EXTRA_ARGS[@]:1}")
+                ;;
+            --help|-h)
+                help_start
+                exit 0
+                ;;
+            --*)
+                die "Unknown option for start: ${EXTRA_ARGS[0]}"
+                ;;
+            *)
+                if [[ -z "${TARGET:-}" || "$TARGET" == "all" ]]; then
+                    TARGET="${EXTRA_ARGS[0]}"
+                    EXTRA_ARGS=("${EXTRA_ARGS[@]:1}")
+                else
+                    die "Unexpected argument: ${EXTRA_ARGS[0]}"
+                fi
+                ;;
+        esac
+    done
+}
+
 cmd_start() {
     setup_cpu_lib_volume
 
@@ -28,8 +88,14 @@ cmd_start() {
 
         if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
             log "Starting backend containers..."
-            $COMPOSE "${COMPOSE_ARGS[@]}" up -d $_dev_backend_services > /dev/null
-            wait_for_backend || true
+            local _up_args=(-d)
+            if ! $START_BUILD; then
+                _up_args+=(--no-build)
+            fi
+            $COMPOSE "${COMPOSE_ARGS[@]}" up "${_up_args[@]}" $_dev_backend_services > /dev/null
+            if $START_WAIT; then
+                wait_for_backend || true
+            fi
         fi
 
         if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
@@ -61,12 +127,20 @@ cmd_start() {
 
         if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
             log "Starting backend services..."
-            $COMPOSE "${COMPOSE_ARGS[@]}" up -d $_prod_backend_services > /dev/null
+            local _up_args=(-d)
+            if ! $START_BUILD; then
+                _up_args+=(--no-build)
+            fi
+            $COMPOSE "${COMPOSE_ARGS[@]}" up "${_up_args[@]}" $_prod_backend_services > /dev/null
         fi
 
         if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
             log "Starting frontend container..."
-            $COMPOSE "${COMPOSE_ARGS[@]}" up -d frontend > /dev/null
+            local _up_args=(-d)
+            if ! $START_BUILD; then
+                _up_args+=(--no-build)
+            fi
+            $COMPOSE "${COMPOSE_ARGS[@]}" up "${_up_args[@]}" frontend > /dev/null
         fi
 
         persist_state

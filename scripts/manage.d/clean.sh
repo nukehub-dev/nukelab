@@ -15,3 +15,15 @@ cmd_clean() {
 
     ok "Cleanup complete"
 }
+
+help_clean() {
+    cat <<-EOF
+${BOLD}Usage:${RESET} ./manage.sh clean
+
+Remove stopped containers, dangling images, dangling volumes, and build cache.
+
+${BOLD}Examples:${RESET}
+  ./manage.sh clean
+EOF
+}
+

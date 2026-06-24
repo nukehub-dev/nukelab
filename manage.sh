@@ -152,12 +152,25 @@ CMD=""
 TARGET=""
 USE_DEV_MODE=false
 USE_COVERAGE=false
+SHOW_HELP=false
 EXTRA_ARGS=()
 COMPOSE_OVERLAY_FILES=()
+
+# Per-command options that take a value. These are passed through to command
+# parsers so the value is not misinterpreted as a target.
+VALUE_OPTIONS=("--tail" "-n" "--timeout" "-t")
 
 parse_args() {
     CMD="${1:-help}"
     shift || true
+
+    # Short-circuit for top-level help.
+    case "$CMD" in
+        help|--help|-h)
+            print_help
+            exit 0
+            ;;
+    esac
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -175,11 +188,23 @@ parse_args() {
                 COMPOSE_OVERLAY_FILES+=("$1")
                 ;;
             --help|-h)
-                print_help
-                exit 0
+                SHOW_HELP=true
                 ;;
-            --*)
+            -*)
                 EXTRA_ARGS+=("$1")
+                # Preserve the value of known value-taking options, but only
+                # while we have not yet fixed the positional target. After the
+                # target is known, subsequent tokens are command arguments and
+                # must not have their values consumed (e.g. `exec backend ls -t`).
+                if [[ -z "$TARGET" ]]; then
+                    for _opt in "${VALUE_OPTIONS[@]}"; do
+                        if [[ "$1" == "$_opt" && $# -gt 1 ]]; then
+                            shift
+                            EXTRA_ARGS+=("$1")
+                            break
+                        fi
+                    done
+                fi
                 ;;
             *)
                 if [[ -z "$TARGET" ]]; then
@@ -416,21 +441,38 @@ _dispatch_command() {
         die "Command module missing: $cmd_file"
     fi
     source "$cmd_file"
+
     # Function names cannot contain hyphens, so map db-migrate -> cmd_db_migrate.
-    local func_name="cmd_${command//-/_}"
-    "$func_name"
+    local base_name="${command//-/_}"
+
+    if $SHOW_HELP; then
+        local help_func="help_${base_name}"
+        if type -t "$help_func" | grep -q function; then
+            "$help_func"
+        else
+            warn "No detailed help available for '$command'."
+            print_help
+        fi
+        exit 0
+    fi
+
+    local parse_func="parse_${base_name}_args"
+    if type -t "$parse_func" | grep -q function; then
+        "$parse_func"
+    fi
+
+    "cmd_${base_name}"
 }
 
 # ─── Main ─────────────────────────────────────────────────────────────────-
 main() {
     parse_args "$@"
 
-    case "$CMD" in
-        help|--help|-h)
-            print_help
-            exit 0
-            ;;
-    esac
+    # Command-specific help can be shown without loading env/engine state.
+    if $SHOW_HELP; then
+        _dispatch_command "$CMD"
+        return 0
+    fi
 
     case "$CMD" in
         start|build|update|pull|clean)

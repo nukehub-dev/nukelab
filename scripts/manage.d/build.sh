@@ -15,3 +15,19 @@ cmd_build() {
 
     ok "Build complete"
 }
+
+help_build() {
+    cat <<-EOF
+${BOLD}Usage:${RESET} ./manage.sh build [target]
+
+Build container images.
+
+${BOLD}Targets:${RESET} backend | frontend | all
+
+${BOLD}Examples:${RESET}
+  ./manage.sh build
+  ./manage.sh build backend
+  ./manage.sh build frontend
+EOF
+}
+

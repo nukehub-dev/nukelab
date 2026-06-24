@@ -28,3 +28,15 @@ cmd_restore() {
 
     ok "Restore complete"
 }
+
+help_restore() {
+    cat <<-EOF
+${BOLD}Usage:${RESET} ./manage.sh restore <backup-file>
+
+Restore the database from a backup file.
+
+${BOLD}Examples:${RESET}
+  ./manage.sh restore backups/nukelab_backup_20250607_120000.sql
+EOF
+}
+

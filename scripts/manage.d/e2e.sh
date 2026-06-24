@@ -15,3 +15,15 @@ cmd_e2e() {
     ok "Backend detected"
     npx playwright test
 }
+
+help_e2e() {
+    cat <<-EOF
+${BOLD}Usage:${RESET} ./manage.sh e2e
+
+Run Playwright end-to-end tests. The backend must be running.
+
+${BOLD}Examples:${RESET}
+  ./manage.sh e2e
+EOF
+}
+
