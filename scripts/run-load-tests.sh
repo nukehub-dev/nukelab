@@ -137,6 +137,20 @@ if [ -f "$DEV_COMPOSE_FILE" ]; then
     RESTORE_COMPOSE_ARGS+=(-f "$DEV_COMPOSE_FILE")
 fi
 
+_wait_for_container() {
+    local name="$1"
+    local attempts=0
+    local max_attempts=30
+    while [ $attempts -lt $max_attempts ]; do
+        if $CONTAINER_ENGINE ps --format '{{.Names}} {{.Status}}' 2>/dev/null | grep -qE "^${name} .*\(healthy\)"; then
+            return 0
+        fi
+        sleep 1
+        attempts=$((attempts + 1))
+    done
+    warn "Container $name did not become healthy after ${max_attempts}s — proceeding anyway"
+}
+
 _wait_for_backend() {
     local url="${BACKEND_HEALTH_URL:-http://localhost:8000/api/system/health}"
     local attempts=0
@@ -160,6 +174,14 @@ except Exception:
 
 _disable_rate_limits() {
     log "Disabling rate limits for load test..."
+
+    # Make sure DB dependencies are healthy before recreating the backend,
+    # otherwise the new backend container can crash-loop until they are ready.
+    _wait_for_container nukelab-postgres
+    if $CONTAINER_ENGINE ps --format '{{.Names}}' 2>/dev/null | grep -q '^nukelab-pgbouncer$'; then
+        _wait_for_container nukelab-pgbouncer
+    fi
+
     $COMPOSE -f "$MAIN_COMPOSE_FILE" -f "$COMPOSE_FILE" up -d backend >/dev/null 2>&1
     _wait_for_backend
     ok "Rate limits disabled"
