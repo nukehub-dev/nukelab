@@ -125,21 +125,22 @@ cmd_start() {
         local _prod_backend_services
         _prod_backend_services=$(_backend_services)
 
-        if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
-            log "Starting backend services..."
-            local _up_args=(-d)
-            if ! $START_BUILD; then
-                _up_args+=(--no-build)
-            fi
-            _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" up "${_up_args[@]}" $_prod_backend_services
+        local _up_args=(-d)
+        if ! $START_BUILD; then
+            _up_args+=(--no-build)
         fi
 
-        if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
+        # Start backend and frontend together when target is "all".
+        # Doing it in one compose call avoids compose emitting noisy
+        # "no container with name ..." messages while reconciling services.
+        if [ "$TARGET" = "all" ]; then
+            log "Starting backend services and frontend container..."
+            _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" up "${_up_args[@]}" $_prod_backend_services frontend
+        elif [ "$TARGET" = "backend" ]; then
+            log "Starting backend services..."
+            _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" up "${_up_args[@]}" $_prod_backend_services
+        elif [ "$TARGET" = "frontend" ]; then
             log "Starting frontend container..."
-            local _up_args=(-d)
-            if ! $START_BUILD; then
-                _up_args+=(--no-build)
-            fi
             _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" up "${_up_args[@]}" frontend
         fi
 
