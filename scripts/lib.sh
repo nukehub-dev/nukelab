@@ -138,6 +138,13 @@ _container_exists() {
     $_cmd ps -a --filter "name=^${name}$" --format "{{.Names}}" 2>/dev/null | grep -qx "$name"
 }
 
+_container_running() {
+    local name="$1"
+    local _cmd="podman"
+    [ "$CONTAINER_ENGINE" = "docker" ] && _cmd="docker"
+    $_cmd ps --filter "name=^${name}$" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -qx "$name"
+}
+
 _stop_orphan_container() {
     local name="$1"
     local _cmd="podman"
@@ -208,6 +215,7 @@ _stop_dev_stack() {
     kill_frontend
     $COMPOSE "${COMPOSE_ARGS[@]}" stop $(_backend_services) > /dev/null 2>&1 || true
     _stop_orphan_if_unmanaged nukelab-pgbouncer
+    _release_lock 2>/dev/null || true
     ok "Goodbye!"
     exit 0
 }
@@ -286,6 +294,17 @@ wait_for_backend() {
     done
     echo ""
     ok "Backend ready (${waited}s)"
+}
+
+# ─── Output Helpers ────────────────────────────────────────────────────────
+# Run a command, hiding stdout unless --verbose is set. stderr is always shown
+# so failures are visible.
+_run_quiet_unless_verbose() {
+    if $VERBOSE; then
+        "$@"
+    else
+        "$@" > /dev/null
+    fi
 }
 
 # ─── Pre-flight Validation ─────────────────────────────────────────────────

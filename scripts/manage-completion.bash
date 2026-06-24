@@ -10,7 +10,7 @@ _manage_sh_complete() {
     local commands=(
         start stop restart status logs build update pull remove clean
         shell exec install test e2e loadtest db-migrate db-shell
-        backup restore reset install-completion selftest help
+        backup restore reset doctor version install-completion selftest help
     )
 
     local global_flags=(--dev -d --coverage --overlay -o --verbose -v --quiet -q --help -h)

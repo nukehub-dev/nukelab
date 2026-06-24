@@ -6,6 +6,7 @@
 # Commands are implemented as modules in scripts/manage.d/*.sh
 
 set -euo pipefail
+set -E
 
 # ─── Shared Helpers ────────────────────────────────────────────────────────
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" > /dev/null 2>&1 && pwd)"
@@ -82,6 +83,32 @@ step()  {
     _log_should_print INFO || return 0
     echo -e "\n${BOLD}${MAGENTA}▸${RESET} ${BOLD}$*${RESET}"
 }
+
+# ─── Error Handling & Cleanup ──────────────────────────────────────────────
+# These traps ensure the concurrency lock is always released and the user gets
+# a clear message when something goes wrong.
+
+_cleanup_trap() {
+    _release_lock 2>/dev/null || true
+}
+
+_interrupt_trap() {
+    log_warn "Interrupted by user"
+    _release_lock 2>/dev/null || true
+    exit 130
+}
+
+_error_trap() {
+    local last_cmd="$BASH_COMMAND"
+    local line_no="${BASH_LINENO[0]}"
+    local src="${BASH_SOURCE[1]:-unknown}"
+    log_error "Command failed in ${src}:${line_no}: ${last_cmd}"
+    _release_lock 2>/dev/null || true
+}
+
+trap '_error_trap' ERR
+trap '_interrupt_trap' INT TERM
+trap '_cleanup_trap' EXIT
 
 # ─── State Persistence ─────────────────────────────────────────────────────
 # Remember the compose configuration used at start so stop/status/logs/etc.
@@ -236,6 +263,11 @@ parse_args() {
             --skip-port-check)
                 SKIP_PORT_CHECK=true
                 ;;
+            --version)
+                CMD="version"
+                shift || true
+                break
+                ;;
             -*)
                 # Unknown leading option or a command-specific option placed
                 # before the command. Stop global parsing and let the next
@@ -249,6 +281,11 @@ parse_args() {
         esac
         shift
     done
+
+    # If --version was given, CMD is already set and we are done parsing.
+    if [ "$CMD" = "version" ]; then
+        return
+    fi
 
     CMD="${1:-help}"
     shift || true
@@ -289,6 +326,9 @@ parse_args() {
                 ;;
             --skip-port-check)
                 SKIP_PORT_CHECK=true
+                ;;
+            --version)
+                # Ignore --version when it appears after the command.
                 ;;
             --help|-h)
                 SHOW_HELP=true
@@ -507,6 +547,10 @@ ${BOLD}Testing:${RESET}
   ${GREEN}loadtest${RESET}   [profile]                  Run Locust/k6 load tests
   ${GREEN}selftest${RESET}                             Quick manage.sh sanity check
 
+${BOLD}Diagnostics:${RESET}
+  ${GREEN}doctor${RESET}                               Check host environment readiness
+  ${GREEN}version${RESET}                              Show version and engine info
+
 ${BOLD}Other:${RESET}
   ${GREEN}install-completion${RESET}                   Install bash tab-completion
 
@@ -610,13 +654,17 @@ main() {
             fi
             _dispatch_command "$CMD"
             ;;
-        status|logs|shell|exec|db-migrate|db-shell|backup|restore|e2e|loadtest)
+        status|logs|shell|exec|db-migrate|db-shell|backup|restore|e2e|loadtest|doctor)
             init_env
             detect_engine
             setup_podman_socket
             if ! restore_state; then
                 setup_compose_args
             fi
+            _dispatch_command "$CMD"
+            ;;
+        version)
+            detect_engine
             _dispatch_command "$CMD"
             ;;
         install|test)

@@ -81,7 +81,7 @@ cmd_start() {
         export FRONTEND_URL="${FRONTEND_URL:-http://localhost:5173}"
         info "FRONTEND_URL=$FRONTEND_URL"
 
-        $COMPOSE "${COMPOSE_ARGS[@]}" stop frontend > /dev/null 2>&1 || true
+        $COMPOSE "${COMPOSE_ARGS[@]}" stop frontend > /dev/null 2>&1 || log_debug "Frontend container was not running"
 
         local _dev_backend_services
         _dev_backend_services=$(_backend_services)
@@ -92,7 +92,7 @@ cmd_start() {
             if ! $START_BUILD; then
                 _up_args+=(--no-build)
             fi
-            $COMPOSE "${COMPOSE_ARGS[@]}" up "${_up_args[@]}" $_dev_backend_services > /dev/null
+            _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" up "${_up_args[@]}" $_dev_backend_services
             if $START_WAIT; then
                 wait_for_backend || true
             fi
@@ -131,7 +131,7 @@ cmd_start() {
             if ! $START_BUILD; then
                 _up_args+=(--no-build)
             fi
-            $COMPOSE "${COMPOSE_ARGS[@]}" up "${_up_args[@]}" $_prod_backend_services > /dev/null
+            _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" up "${_up_args[@]}" $_prod_backend_services
         fi
 
         if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
@@ -140,7 +140,7 @@ cmd_start() {
             if ! $START_BUILD; then
                 _up_args+=(--no-build)
             fi
-            $COMPOSE "${COMPOSE_ARGS[@]}" up "${_up_args[@]}" frontend > /dev/null
+            _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" up "${_up_args[@]}" frontend
         fi
 
         persist_state

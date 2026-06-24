@@ -9,22 +9,26 @@ cmd_restore() {
         die "Backup file not found: $backup_file"
     fi
 
+    if ! _container_running nukelab-postgres; then
+        die "Postgres container is not running. Start the backend first:\n  ./manage.sh start backend"
+    fi
+
     step "Restoring from ${BOLD}$backup_file${RESET}..."
 
     local db_user="${DATABASE_USER:-nukelab}"
     local db_name="${DATABASE_NAME:-nukelab}"
 
     log "Dropping database if exists..."
-    $COMPOSE "${COMPOSE_ARGS[@]}" exec postgres psql -U "$db_user" -c "DROP DATABASE IF EXISTS $db_name;"
+    _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" exec postgres psql -U "$db_user" -c "DROP DATABASE IF EXISTS $db_name;"
 
     log "Creating database..."
-    $COMPOSE "${COMPOSE_ARGS[@]}" exec postgres psql -U "$db_user" -c "CREATE DATABASE $db_name;"
+    _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" exec postgres psql -U "$db_user" -c "CREATE DATABASE $db_name;"
 
     log "Restoring data..."
-    $COMPOSE "${COMPOSE_ARGS[@]}" exec -T postgres psql -U "$db_user" -d "$db_name" < "$backup_file"
+    _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" exec -T postgres psql -U "$db_user" -d "$db_name" < "$backup_file"
 
     log "Stamping alembic version..."
-    $COMPOSE "${COMPOSE_ARGS[@]}" exec backend python -m alembic stamp 281a4c5d5529
+    _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" exec backend python -m alembic stamp 281a4c5d5529
 
     ok "Restore complete"
 }

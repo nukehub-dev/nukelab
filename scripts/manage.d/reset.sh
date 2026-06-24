@@ -5,8 +5,16 @@ cmd_reset() {
 
     log "Stopping everything..."
     kill_frontend
-    $COMPOSE "${COMPOSE_ARGS[@]}" down -v --remove-orphans 2>/dev/null || true
-    $CONTAINER_ENGINE volume rm nukelab-postgres-data nukelab-letsencrypt 2>/dev/null || true
+    if $COMPOSE "${COMPOSE_ARGS[@]}" down -v --remove-orphans; then
+        log_debug "compose down completed"
+    else
+        warn "compose down returned an error; continuing with manual volume cleanup"
+    fi
+    if $CONTAINER_ENGINE volume rm nukelab-postgres-data nukelab-letsencrypt 2>/dev/null; then
+        log_debug "Named volumes removed"
+    else
+        log_debug "Named volumes were already removed or do not exist"
+    fi
     clear_state
     ok "Reset complete"
 }

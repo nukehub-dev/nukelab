@@ -3,10 +3,14 @@ cmd_backup() {
     local timestamp=$(date +%Y%m%d_%H%M%S)
     local backup_file="$backup_dir/nukelab_backup_$timestamp.sql"
 
+    if ! _container_running nukelab-postgres; then
+        die "Postgres container is not running. Start the backend first:\n  ./manage.sh start backend"
+    fi
+
     mkdir -p "$backup_dir"
     step "Creating backup..."
 
-    $COMPOSE "${COMPOSE_ARGS[@]}" exec -T postgres pg_dump -U "${DATABASE_USER:-nukelab}" "${DATABASE_NAME:-nukelab}" > "$backup_file"
+    _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" exec -T postgres pg_dump -U "${DATABASE_USER:-nukelab}" "${DATABASE_NAME:-nukelab}" > "$backup_file"
 
     ok "Backup created: ${CYAN}$backup_file${RESET}"
 }
