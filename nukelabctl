@@ -171,7 +171,12 @@ parse_args() {
     done
 
     if [[ -z "$TARGET" ]]; then
-        TARGET="all"
+        # loadtest has its own "all" profile; default it to baseline instead.
+        if [ "$CMD" = "loadtest" ]; then
+            TARGET="baseline"
+        else
+            TARGET="all"
+        fi
     fi
 }
 

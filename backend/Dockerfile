@@ -23,4 +23,4 @@ EXPOSE 8000
 
 # Run application (production / load-test mode — 4 workers)
 # Dev mode injects --reload via compose override.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", "--loop", "uvloop"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", "--loop", "uvloop", "--timeout-keep-alive", "30"]
