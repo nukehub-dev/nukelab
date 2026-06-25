@@ -5,8 +5,8 @@ Audit middleware for automatic activity logging.
 import uuid
 from typing import Any
 
-from fastapi import Request, Response
 import jwt
+from fastapi import Request, Response
 from sqlalchemy import select
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp

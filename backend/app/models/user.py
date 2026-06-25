@@ -104,7 +104,9 @@ class User(Base):
 
     def get_gravatar_url(self, size=200, default="identicon"):
         """Generate Gravatar URL from email"""
-        email_hash = hashlib.md5(self.email.lower().strip().encode(), usedforsecurity=False).hexdigest()
+        email_hash = hashlib.md5(
+            self.email.lower().strip().encode(), usedforsecurity=False
+        ).hexdigest()
         return f"https://www.gravatar.com/avatar/{email_hash}?s={size}&d={default}&r=pg"
 
     def get_avatar_url(self, size=200):

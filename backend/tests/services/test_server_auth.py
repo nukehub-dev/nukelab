@@ -2,9 +2,9 @@
 
 from datetime import UTC, datetime, timedelta
 
+import jwt
 import pytest
 import pytest_asyncio
-import jwt
 
 
 @pytest_asyncio.fixture
@@ -222,7 +222,6 @@ class TestServerAuthTokenVerification:
 import uuid
 
 import pytest
-import jwt
 from sqlalchemy import select
 
 from app.config import settings

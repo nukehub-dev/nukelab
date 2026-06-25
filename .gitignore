@@ -85,6 +85,9 @@ backend/.venv-security/
 # Pytest cache
 .pytest_cache/
 
+# Local dev tooling virtualenv
+backend/.venv-dev/
+
 # Docker volumes / runtime state
 volumes/
 .nukelab-dev-compose.yml

@@ -4,11 +4,12 @@
 # Produces machine-readable reports under backend/reports/security/.
 #
 # If the scanners are not installed globally, this command automatically
-# creates/uses a project-local virtualenv at backend/.venv-security so the
-# scans still work without polluting the host or production image.
+# creates/uses the shared project-local dev virtualenv at backend/.venv-dev
+# (managed together with `nukelabctl lint`) so the scans still work without
+# polluting the host or production image.
 
 SECURITY_REPORT_DIR="${DIR}/backend/reports/security"
-SECURITY_VENV="${DIR}/backend/.venv-security"
+DEV_VENV="${DIR}/backend/.venv-dev"
 BANDIT_REPORT="${SECURITY_REPORT_DIR}/bandit-report.json"
 PIPAUDIT_REPORT="${SECURITY_REPORT_DIR}/pip-audit-report.json"
 FRONTEND_AUDIT_REPORT="${SECURITY_REPORT_DIR}/npm-audit-report.json"
@@ -67,41 +68,36 @@ parse_security_args() {
     done
 }
 
-# ─── Tool discovery ─────────────────────────────────────────────────────────
-# Ensure a tool exists, installing it into the project-local venv if needed.
-# Prints the absolute path to the tool on stdout; diagnostics go to stderr.
-_ensure_venv_tool() {
-    local tool_name="$1"
-    local tool_bin="${SECURITY_VENV}/bin/${tool_name}"
 
-    if [ -x "$tool_bin" ]; then
-        echo "$tool_bin"
+# Ensure the shared dev venv exists and contains the tools from
+# requirements-dev.txt. This venv is used by both `lint` and `security`.
+_ensure_dev_venv() {
+    if [ -x "${DEV_VENV}/bin/ruff" ] && [ -x "${DEV_VENV}/bin/bandit" ] && [ -x "${DEV_VENV}/bin/pip-audit" ]; then
         return 0
     fi
+
+    log_warn "Dev tools not found; creating isolated venv at ${DEV_VENV}..."
+    python3 -m venv "$DEV_VENV"
+    "$DEV_VENV/bin/pip" install -q --upgrade pip
+    "$DEV_VENV/bin/pip" install -q -r "$DIR/backend/requirements-dev.txt"
+
+    if [ ! -x "${DEV_VENV}/bin/bandit" ] || [ ! -x "${DEV_VENV}/bin/pip-audit" ]; then
+        die "Failed to install dev tools. Install manually or check network access."
+    fi
+}
+
+# Ensure a Python dev tool is available. Prefer global install, fall back to
+# the shared dev venv. Prints the absolute path to the tool on stdout.
+_ensure_venv_tool() {
+    local tool_name="$1"
 
     if command -v "$tool_name" >/dev/null 2>&1; then
         command -v "$tool_name"
         return 0
     fi
 
-    log_warn "${tool_name} not found; creating isolated security venv at ${SECURITY_VENV}..."
-    python3 -m venv "$SECURITY_VENV"
-    "$SECURITY_VENV/bin/pip" install -q --upgrade pip
-    case "$tool_name" in
-        bandit)
-            "$SECURITY_VENV/bin/pip" install -q 'bandit[toml]>=1.8.2,<2.0'
-            ;;
-        pip-audit)
-            "$SECURITY_VENV/bin/pip" install -q 'pip-audit==2.7.3'
-            ;;
-    esac
-
-    if [ -x "${SECURITY_VENV}/bin/${tool_name}" ]; then
-        echo "${SECURITY_VENV}/bin/${tool_name}"
-        return 0
-    fi
-
-    die "Failed to install ${tool_name}. Install manually or check network access."
+    _ensure_dev_venv
+    echo "${DEV_VENV}/bin/${tool_name}"
 }
 
 _bandit_severity_flag() {

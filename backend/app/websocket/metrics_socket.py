@@ -4,9 +4,9 @@ import json
 import logging
 import time
 
+import jwt
 import redis.asyncio as redis
 from fastapi import WebSocket, WebSocketDisconnect
-import jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 

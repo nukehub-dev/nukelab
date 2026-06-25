@@ -2,6 +2,9 @@
 
 Multi-user scientific computing platform with granular RBAC, real-time monitoring, and credit-based resource management.
 
+[![CI/CD](https://github.com/nukehub-dev/nukelab/actions/workflows/ci.yml/badge.svg)](https://github.com/nukehub-dev/nukelab/actions/workflows/ci.yml)
+[![Security Scans](https://github.com/nukehub-dev/nukelab/actions/workflows/security.yml/badge.svg)](https://github.com/nukehub-dev/nukelab/actions/workflows/security.yml)
+
 **Status**: Active Development  
 **Last Updated**: June 7, 2026
 
@@ -120,6 +123,30 @@ npm run dev
 ./nukelabctl logs [service] # View logs (backend, frontend, etc.)
 ./nukelabctl status         # Show running containers
 ```
+
+## CI/CD
+
+The repository uses GitHub Actions for continuous integration and delivery:
+
+- **`.github/workflows/ci.yml`** — lints backend/frontend, runs backend tests, builds container images, and pushes them to GitHub Container Registry on pushes to `main`/`develop`.
+- **`.github/workflows/security.yml`** — runs Bandit, `pip-audit`, and `npm audit` on every push/PR and weekly.
+
+Pushed images:
+
+```text
+ghcr.io/nukehub-dev/nukelab-backend:<version>
+ghcr.io/nukehub-dev/nukelab-frontend:<version>
+ghcr.io/nukehub-dev/nukelab-auth-sidecar:<version>
+```
+
+Tags applied depend on the branch/tag:
+
+| Git ref | Tags | `latest` |
+|---|---|---|
+| `v1.2.3` tag | `1.2.3`, `sha-abc1234` | yes |
+| `main` branch | `main`, `sha-abc1234` | yes |
+| `develop` branch | `develop`, `sha-abc1234` | no |
+| Pull request | `pr-42`, `sha-abc1234` | no |
 
 ## Project Structure
 

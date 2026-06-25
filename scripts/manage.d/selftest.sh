@@ -106,6 +106,9 @@ cmd_selftest() {
         type -t _is_stack_running | grep -q function && type -t _other_stack_running | grep -q function && type -t _require_other_stack_stopped | grep -q function
     ' || _increment_failures
 
+    # Lint command help
+    _t "command help: lint" bash -c './nukelabctl lint --help | grep -q "Run linters and format checks"' || _increment_failures
+
     echo ""
     if [ "$failures" -eq 0 ]; then
         ok "All self-tests passed"

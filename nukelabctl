@@ -237,6 +237,9 @@ ${BOLD}Testing:${RESET}
   ${GREEN}loadtest${RESET}   [profile]                 Run Locust/k6 load tests
   ${GREEN}selftest${RESET}                             Quick nukelabctl sanity check
 
+${BOLD}Code Quality:${RESET}
+  ${GREEN}lint${RESET}       [target] [--fix]            Lint backend/frontend code
+
 ${BOLD}Security:${RESET}
   ${GREEN}security${RESET}   [options]                 Run Bandit, pip-audit, and npm audit
 
@@ -277,6 +280,8 @@ ${BOLD}Examples:${RESET}
   ./nukelabctl test backend --coverage    # Run backend tests with coverage
   ./nukelabctl loadtest baseline          # Run Locust baseline load test
   ./nukelabctl security                   # Run all security scanners
+  ./nukelabctl lint                       # Lint backend and frontend
+  ./nukelabctl lint frontend --fix        # Auto-fix frontend issues
   ./nukelabctl clean                      # Clean up dangling resources
 
 EOF
@@ -393,6 +398,9 @@ main() {
             if ! restore_state; then
                 setup_compose_args
             fi
+            _dispatch_command "$CMD"
+            ;;
+        lint)
             _dispatch_command "$CMD"
             ;;
         status|logs|shell|exec|db-migrate|db-shell|backup|restore|e2e|security|doctor)

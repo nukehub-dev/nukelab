@@ -18,10 +18,10 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import jwt
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-import jwt
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 

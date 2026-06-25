@@ -6,13 +6,13 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
+import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.security import (
     HTTPBearer,
     OAuth2PasswordRequestForm,
 )
-import jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel
 from slowapi import Limiter
