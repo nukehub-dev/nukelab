@@ -13,6 +13,9 @@ cmd_clean() {
     log "Removing build cache..."
     $CONTAINER_ENGINE builder prune -f 2>/dev/null || true
 
+    log "Removing local runtime state files..."
+    clear_state
+
     ok "Cleanup complete"
 }
 

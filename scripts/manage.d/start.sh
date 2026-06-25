@@ -10,11 +10,10 @@ Start the NukeLab stack.
 
 ${BOLD}Targets:${RESET}
   backend    Start backend services ${DIM}(default if omitted)${RESET}
-  frontend   Start frontend container (or Vite dev server with --dev)
+  frontend   Start frontend container
   all        Start everything
 
 ${BOLD}Options:${RESET}
-  --dev, -d       Development mode: backend containers + local Vite dev server
   --no-build      Skip building images before starting
   --no-wait       Do not wait for the backend health check
   --overlay FILE  Add a compose overlay file (repeatable)
@@ -22,7 +21,6 @@ ${BOLD}Options:${RESET}
 
 ${BOLD}Examples:${RESET}
   ./nukelabctl start
-  ./nukelabctl start --dev
   ./nukelabctl start backend --no-build
   PGBOUNCER_ENABLED=true ./nukelabctl start
 EOF
@@ -59,6 +57,9 @@ parse_start_args() {
 }
 
 cmd_start() {
+    # Dev and prod share container names; only one may run at a time.
+    _require_other_stack_stopped
+
     setup_cpu_lib_volume
 
     # Generate dynamic config files from templates before compose reads them.
@@ -103,8 +104,13 @@ cmd_start() {
             [ -d "$DIR/frontend/node_modules" ] || die "Run: ./nukelabctl install frontend"
             log "Starting Vite dev server..."
 
-            cd "$DIR/frontend"
-            npm run dev &
+            # Start Vite in a subshell so the PID file points at the npm process.
+            # kill_frontend walks child processes to ensure the dev server dies
+            # cleanly when the user hits Ctrl+C or runs ./nukelabctl stop.
+            (
+                cd "$DIR/frontend"
+                npm run dev
+            ) &
             echo $! > "$FRONTEND_PID_FILE"
             ok "Frontend started on ${CYAN}http://localhost:5173${RESET}"
         fi

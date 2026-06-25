@@ -36,9 +36,9 @@ die()   { echo -e "${RED}✗${RESET}  $*" >&2; exit 1; }
 source "$DIR/scripts/lib.sh"
 
 # ─── Environment ───────────────────────────────────────────────────────────
-# Dev mode is implied when nukelabctl created the dev overlay file.
+# Load tests always run against the production stack. The dev stack uses a
+# single reload worker, which cannot drive k6 load tests reliably.
 USE_DEV_MODE=false
-[ -f "$DIR/.nukelab-dev-compose.yml" ] && USE_DEV_MODE=true
 init_env "$USE_DEV_MODE"
 
 # A Locust profile is still considered "passed" if its failure rate is at or
@@ -70,7 +70,7 @@ _wait_for_stack() {
 }
 
 if ! _wait_for_stack; then
-    die "Main stack is not running. Start it first:
+    die "Production stack is not running. Start it first:
   ./nukelabctl start"
 fi
 
@@ -138,10 +138,6 @@ fi
 # Each individual test run is wrapped so rate limits are disabled during the
 # test and restored immediately after. This keeps the all-profile loop safe.
 RESTORE_COMPOSE_ARGS=(-f "$MAIN_COMPOSE_FILE")
-DEV_COMPOSE_FILE="$DIR/.nukelab-dev-compose.yml"
-if [ -f "$DEV_COMPOSE_FILE" ]; then
-    RESTORE_COMPOSE_ARGS+=(-f "$DEV_COMPOSE_FILE")
-fi
 
 _wait_for_container() {
     local name="$1"

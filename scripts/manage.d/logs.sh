@@ -73,7 +73,7 @@ cmd_logs() {
     # In dev mode, frontend runs locally via Vite, not a container.
     if $USE_DEV_MODE; then
         if [[ "$service" == "frontend" ]]; then
-            die "In dev mode the frontend runs locally via Vite, not a container.\nCheck the terminal where you ran './nukelabctl start --dev' for frontend output."
+            die "In dev mode the frontend runs locally via Vite, not a container.\nCheck the terminal where you ran './nukelabctl dev' for frontend output."
         fi
         if [[ -z "$service" ]]; then
             log "Dev mode: frontend runs locally via Vite (check terminal for output)"

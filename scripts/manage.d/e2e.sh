@@ -9,7 +9,7 @@ cmd_e2e() {
         warn "Playwright not installed. Run: ./nukelabctl install frontend"
     fi
     if ! curl -sf "${APP_URL:-http://localhost:8080}/api/health" > /dev/null 2>&1; then
-        warn "Backend does not appear to be running. Start it first:\n  ./nukelabctl start --dev"
+        warn "Backend does not appear to be running. Start it first:\n  ./nukelabctl dev"
         die "Backend health check failed"
     fi
     ok "Backend detected"

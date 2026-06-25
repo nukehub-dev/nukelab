@@ -45,7 +45,9 @@ cmd_status() {
         local project_name="${COMPOSE_PROJECT_NAME:-$(basename "$DIR")}"
         $CONTAINER_ENGINE ps --filter "label=com.docker.compose.project=$project_name" --filter "status=running"
     else
-        $COMPOSE "${COMPOSE_ARGS[@]}" ps
+        # Use --filter so `status` shows only the containers belonging to the
+        # active project (prod vs dev) instead of every Compose project.
+        $COMPOSE "${COMPOSE_ARGS[@]}" ps --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME:-$(basename "$DIR")}"
     fi
 
     echo ""

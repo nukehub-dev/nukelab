@@ -20,8 +20,6 @@ cmd_test() {
         # (uvicorn workers + Celery) while tests run, stop the backend services
         # first, run tests in a fresh one-off container, then restart them.
         local _backend_was_running=false
-        local _celery_worker_was_running=false
-        local _celery_beat_was_running=false
 
         if is_backend_container_running; then
             _backend_was_running=true

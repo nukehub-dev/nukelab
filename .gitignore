@@ -85,10 +85,11 @@ backend/.venv-security/
 # Pytest cache
 .pytest_cache/
 
-# Docker volumes
+# Docker volumes / runtime state
 volumes/
 .nukelab-dev-compose.yml
 .nukelab-state.sh
+.nukelab-state-dev.sh
 
 # Generated files
 monitoring/alertmanager/alertmanager.generated.yml

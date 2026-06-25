@@ -85,12 +85,20 @@ The script will:
 For full local development with hot reload:
 
 ```bash
-./nukelabctl start --dev
+./nukelabctl dev              # start dev stack
+./nukelabctl dev restart      # restart dev stack
+./nukelabctl dev logs backend # stream backend logs
+./nukelabctl dev stop         # stop dev stack
 ```
 
 This starts:
 - Backend containers (API, PostgreSQL, Redis, Celery) with auto-reload
 - Frontend Vite dev server on http://localhost:5173
+
+The dev stack uses the same container names as the production stack, so only
+one may be running at a time. `start` and `dev start` will refuse to run if the
+other stack is already up. `stop`, `logs`, and `status` always operate on the
+stack matching the command you run.
 
 Or run frontend separately:
 
@@ -99,6 +107,8 @@ cd frontend
 npm install
 npm run dev
 ```
+
+
 
 ## Management Commands
 
@@ -124,7 +134,7 @@ nukelab/
 │   │   └── main.py         # FastAPI app
 │   ├── Dockerfile
 │   └── requirements.txt     # Pip dependencies
-├── frontend/                # Next.js 16 application
+├── frontend/                # Vite + React 19 SPA
 ├── environments/            # Docker images
 │   ├── base/               # Shared base image
 │   └── dev/                # NukeIDE dev environment
@@ -138,7 +148,7 @@ nukelab/
 ## Architecture
 
 - **Reverse Proxy**: Traefik v3
-- **Frontend**: Next.js 16 (App Router)
+- **Frontend**: Vite + React 19 SPA
 - **Backend**: FastAPI (Python 3.12)
 - **Database**: PostgreSQL 17
 - **Cache**: Redis

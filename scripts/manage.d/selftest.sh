@@ -35,6 +35,7 @@ cmd_selftest() {
     # Help output
     _t "top-level help" bash -c './nukelabctl help | grep -q "NukeLab"' || _increment_failures
     _t "command help: start" bash -c './nukelabctl start --help | grep -q "Start the NukeLab stack"' || _increment_failures
+    _t "command help: dev" bash -c './nukelabctl dev --help | grep -q "development stack"' || _increment_failures
     _t "command help: logs" bash -c './nukelabctl logs --help | grep -q "Stream container logs"' || _increment_failures
     _t "command help: stop" bash -c './nukelabctl stop --help | grep -q "Stop running containers"' || _increment_failures
     _t "command help: status" bash -c './nukelabctl status --help | grep -q "Show the status"' || _increment_failures
@@ -74,12 +75,36 @@ cmd_selftest() {
         ok "unknown option rejected"
     fi
 
+    # --dev global flag was removed; dev is now a meta-command
+    if ./nukelabctl start --dev >/dev/null 2>&1; then
+        err "removed --dev flag still accepted"
+        _increment_failures
+    else
+        ok "removed --dev flag rejected"
+    fi
+
+    # dev meta-command subcommand parsing
+    _t "dev defaults to start" bash -c './nukelabctl dev --help | grep -q "Start the dev stack"' || _increment_failures
+    _t "dev start help" bash -c './nukelabctl dev start --help | grep -q "Start the NukeLab stack"' || _increment_failures
+    _t "dev restart help" bash -c './nukelabctl dev restart --help | grep -q "Stop and then start"' || _increment_failures
+    _t "dev logs --tail parses" bash -c './nukelabctl dev logs --tail 5 --no-follow backend 2>&1 | grep -vq "Option --tail requires a value"' || _increment_failures
+
     # Diagnostics commands
     _t "version command" bash -c './nukelabctl version | grep -q "NukeLab v2.0"' || _increment_failures
     _t "doctor command" bash -c './nukelabctl doctor --skip-port-check >/dev/null 2>&1' || _increment_failures
 
     # Error trap reports the failing command and location
     _t "ERR trap reports failure" bash -c './nukelabctl exec nonexistent true 2>&1 | grep -q "Command failed in"' || _increment_failures
+
+    # Dev/prod isolation: separate state files and mutual exclusion helpers exist
+    _t "prod/dev state files are separate" bash -c '
+        source ./nukelabctl >/dev/null 2>&1 || true
+        [ "$PROD_STATE_FILE" = "${DIR:-.}/.nukelab-state.sh" ] && [ "$DEV_STATE_FILE" = "${DIR:-.}/.nukelab-state-dev.sh" ]
+    ' || _increment_failures
+    _t "mutual exclusion helpers exist" bash -c '
+        source ./nukelabctl >/dev/null 2>&1 || true
+        type -t _is_stack_running | grep -q function && type -t _other_stack_running | grep -q function && type -t _require_other_stack_stopped | grep -q function
+    ' || _increment_failures
 
     echo ""
     if [ "$failures" -eq 0 ]; then

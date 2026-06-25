@@ -255,7 +255,14 @@ restore_state() {
 
     TARGET="$_orig_target"
 
-    USE_DEV_MODE="${NUKELAB_USE_DEV_MODE:-false}"
+    # The state file is already mode-specific (prod vs dev), so the saved mode
+    # should match the current command. If it doesn't, trust the current mode
+    # and let setup_compose_args rebuild the correct project args.
+    if [ "${NUKELAB_USE_DEV_MODE:-false}" != "$USE_DEV_MODE" ]; then
+        warn "State file mode (${NUKELAB_USE_DEV_MODE:-false}) does not match current command (dev=$USE_DEV_MODE); using current mode"
+        return 1
+    fi
+
     PGBOUNCER_ENABLED="${NUKELAB_PGBOUNCER_ENABLED:-false}"
     PROMETHEUS_ENABLED="${NUKELAB_PROMETHEUS_ENABLED:-false}"
     GRAFANA_ENABLED="${NUKELAB_GRAFANA_ENABLED:-false}"
@@ -272,7 +279,22 @@ restore_state() {
         cat > "$DEV_COMPOSE_FILE" << 'EOF'
 services:
   backend:
-    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--timeout-keep-alive", "30"]
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --reload
+      - --reload-dir
+      - /app/app
+      - --reload-exclude
+      - "*__pycache__*"
+      - --reload-exclude
+      - "*.pyc"
+      - --timeout-keep-alive
+      - "30"
     volumes:
       - ./backend:/app:Z
       - ./resources:/app/resources:ro
@@ -311,15 +333,89 @@ EOF
 
 clear_state() {
     rm -f "$STATE_FILE"
+    rm -f "$DEV_COMPOSE_FILE"
+    rm -f "$FRONTEND_PID_FILE"
+}
+
+# ─── Mutual Exclusion ──────────────────────────────────────────────────────
+# Dev and prod share container names, so only one may be running at a time.
+# These helpers detect whether a stack is running and refuse to start a new
+# one when the opposite stack is active.
+
+# Return 0 if any service managed by the current COMPOSE_ARGS is running.
+_is_stack_running() {
+    $COMPOSE "${COMPOSE_ARGS[@]}" ps --format json 2>/dev/null | grep -q '"State": "running"' || \
+    $COMPOSE "${COMPOSE_ARGS[@]}" ps 2>/dev/null | grep -qE 'Up[[:space:]]+[a-z0-9-]+$'
+}
+
+# Return 0 if the opposite-mode stack is currently running.
+_other_stack_running() {
+    local other_state_file
+    if $USE_DEV_MODE; then
+        other_state_file="$PROD_STATE_FILE"
+    else
+        other_state_file="$DEV_STATE_FILE"
+    fi
+
+    [ -f "$other_state_file" ] || return 1
+
+    # Temporarily source the other state file and ask compose whether any of
+    # its services are up. We restore COMPOSE_ARGS afterwards.
+    local _saved_args=("${COMPOSE_ARGS[@]}")
+    # shellcheck source=/dev/null
+    source "$other_state_file"
+    if [ ${#NUKELAB_COMPOSE_ARGS[@]} -gt 0 ]; then
+        COMPOSE_ARGS=("${NUKELAB_COMPOSE_ARGS[@]}")
+    else
+        COMPOSE_ARGS=(-f "$COMPOSE_FILE")
+    fi
+
+    local _running=false
+    if _is_stack_running; then
+        _running=true
+    fi
+
+    COMPOSE_ARGS=("${_saved_args[@]}")
+    $_running
+}
+
+# Block start when the opposite stack is running.
+_require_other_stack_stopped() {
+    if _other_stack_running; then
+        if $USE_DEV_MODE; then
+            die "Production stack is already running.\n\nStop it first:\n  ./nukelabctl stop\n\nThen run:\n  ./nukelabctl dev start"
+        else
+            die "Development stack is already running.\n\nStop it first:\n  ./nukelabctl dev stop\n\nThen run:\n  ./nukelabctl start"
+        fi
+    fi
 }
 
 # ─── Compose Args ──────────────────────────────────────────────────────────
 setup_compose_args() {
+    # Option B: dev and prod are mutually exclusive stacks using the same
+    # Compose project and container names. Only one may be running at a time.
+    COMPOSE_ARGS=(-f "$COMPOSE_FILE")
+
     if $USE_DEV_MODE; then
         cat > "$DEV_COMPOSE_FILE" << 'EOF'
 services:
   backend:
-    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--timeout-keep-alive", "30"]
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --reload
+      - --reload-dir
+      - /app/app
+      - --reload-exclude
+      - "*__pycache__*"
+      - --reload-exclude
+      - "*.pyc"
+      - --timeout-keep-alive
+      - "30"
     volumes:
       - ./backend:/app:Z
       - ./resources:/app/resources:ro
@@ -332,10 +428,9 @@ services:
       - ./backend:/app:Z
       - ./resources:/app/resources:ro
 EOF
-        COMPOSE_ARGS=(-f "$COMPOSE_FILE" -f "$DEV_COMPOSE_FILE")
+        COMPOSE_ARGS+=(-f "$DEV_COMPOSE_FILE")
     else
         rm -f "$DEV_COMPOSE_FILE"
-        COMPOSE_ARGS=(-f "$COMPOSE_FILE")
     fi
 
     # Include overlays from env var (space-separated) and CLI flags
@@ -590,6 +685,14 @@ kill_frontend() {
     if is_frontend_running; then
         local pid=$(cat "$FRONTEND_PID_FILE")
         log "Stopping frontend (PID: $pid)..."
+        # Vite is spawned by npm/node; kill child processes first so the
+        # dev server does not outlive the PID file.
+        local children
+        children=$(pgrep -P "$pid" 2>/dev/null || true)
+        if [ -n "$children" ]; then
+            kill $children 2>/dev/null || true
+            sleep 0.2
+        fi
         kill "$pid" 2>/dev/null || true
         rm -f "$FRONTEND_PID_FILE"
         ok "Frontend stopped"
@@ -636,7 +739,7 @@ is_backend_container_running() {
     # Check via compose first (respects selected overlays), but fall back to
     # checking the container engine directly. This lets `nukelabctl test backend`
     # work even when the stack was started with a slightly different set of
-    # overlays (e.g. --dev) because the container name stays the same.
+    # overlays (e.g. dev mode) because the container name stays the same.
     if $COMPOSE "${COMPOSE_ARGS[@]}" ps 2>/dev/null | grep -q 'Up .*nukelab-backend'; then
         return 0
     fi

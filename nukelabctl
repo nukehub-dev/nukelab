@@ -16,10 +16,20 @@ source "$DIR/scripts/lib.sh"
 
 # ─── Setup ─────────────────────────────────────────────────────────────────
 FRONTEND_PID_FILE="$DIR/.frontend.pid"
-STATE_FILE="$DIR/.nukelab-state.sh"
+
+# Dev and prod are isolated as separate Compose projects with their own state.
+PROD_PROJECT_NAME="nukelab"
+DEV_PROJECT_NAME="nukelab-dev"
+PROD_STATE_FILE="$DIR/.nukelab-state.sh"
+DEV_STATE_FILE="$DIR/.nukelab-state-dev.sh"
+
 COMPOSE_FILE="$DIR/compose.yml"
 DEV_COMPOSE_FILE="$DIR/.nukelab-dev-compose.yml"
 COMPOSE_ARGS=(-f "$COMPOSE_FILE")
+
+# Defaults; the active mode selects the actual values before dispatch.
+COMPOSE_PROJECT_NAME="$PROD_PROJECT_NAME"
+STATE_FILE="$PROD_STATE_FILE"
 
 # ─── Argument Parsing ─────────────────────────────────────────────────────-
 CMD=""
@@ -43,9 +53,6 @@ parse_args() {
             --help|-h)
                 print_help
                 exit 0
-                ;;
-            --dev|-d)
-                USE_DEV_MODE=true
                 ;;
             --coverage)
                 USE_COVERAGE=true
@@ -109,10 +116,12 @@ parse_args() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
             backend|frontend|all)
-                TARGET="$1"
-                ;;
-            --dev|-d)
-                USE_DEV_MODE=true
+                if [ "$CMD" = "dev" ]; then
+                    # The dev meta-command parses subcommands/targets itself.
+                    EXTRA_ARGS+=("$1")
+                else
+                    TARGET="$1"
+                fi
                 ;;
             --coverage)
                 USE_COVERAGE=true
@@ -160,7 +169,7 @@ parse_args() {
                 fi
                 ;;
             *)
-                if [[ -z "$TARGET" ]]; then
+                if [[ -z "$TARGET" ]] && [ "$CMD" != "dev" ]; then
                     TARGET="$1"
                 else
                     EXTRA_ARGS+=("$1")
@@ -188,10 +197,18 @@ ${BOLD}${CYAN}NukeLab${RESET} — Management Script
 ${BOLD}Usage:${RESET} ./nukelabctl <command> [target] [flags]
 
 ${BOLD}${MAGENTA}Quick Start:${RESET}
-  ${GREEN}start${RESET}      [target] [--dev]          Start services
+  ${GREEN}start${RESET}      [target]                  Start services
   ${GREEN}stop${RESET}       [target]                  Stop services
-  ${GREEN}restart${RESET}    [target] [--dev]          Restart services
+  ${GREEN}restart${RESET}    [target]                  Restart services
   ${GREEN}status${RESET}                               Show status
+
+${BOLD}Development Stack:${RESET}
+  ${GREEN}dev${RESET}        <subcommand>              Manage the dev stack
+    start    [target] [options]        Start dev stack (default)
+    restart  [target]                  Restart dev stack
+    stop     [target]                  Stop dev stack
+    logs     [service] [options]       Stream dev stack logs
+    status   [options]                 Show dev stack status
 
 ${BOLD}Build & Deploy:${RESET}
   ${GREEN}build${RESET}      [target]                  Build containers
@@ -203,10 +220,9 @@ ${BOLD}Maintenance:${RESET}
   ${GREEN}remove${RESET}     [target]                  Remove containers (keep data)
   ${GREEN}reset${RESET}                                ⚠️ Delete ALL data & containers
 
-${BOLD}Development:${RESET}
+${BOLD}Development Tools:${RESET}
   ${GREEN}shell${RESET}      [service]                 Open shell in container
   ${GREEN}exec${RESET}       [service] [command]       Execute command in container
-  ${GREEN}logs${RESET}       [service]                 Stream logs
   ${GREEN}install${RESET}    [target]                  Install dependencies
 
 ${BOLD}Database:${RESET}
@@ -237,7 +253,6 @@ ${BOLD}Targets:${RESET} ${DIM}(optional, default: all)${RESET}
   all        Everything ${DIM}(default)${RESET}
 
 ${BOLD}Flags:${RESET}
-  --dev, -d          Development mode: backend containers + local Vite dev server
   --coverage         Run tests with coverage report (backend only)
   --overlay, -o      Add a compose overlay file (repeatable)
   --verbose, -v      Show debug output
@@ -247,12 +262,15 @@ ${BOLD}Flags:${RESET}
 
 ${BOLD}Examples:${RESET}
   ./nukelabctl start                      # Production: all containers
-  ./nukelabctl start --dev                # Dev: backend containers + Vite
+  ./nukelabctl dev                        # Start dev stack
+  ./nukelabctl dev backend --no-build     # Start backend only, no image build
+  ./nukelabctl dev restart backend        # Restart backend in dev mode
+  ./nukelabctl dev logs backend -f        # Stream backend logs in dev mode
+  ./nukelabctl dev stop                   # Stop dev stack
   ./nukelabctl stop frontend              # Stop only frontend
   ./nukelabctl build backend              # Build backend image only
   ./nukelabctl shell backend              # Shell into backend container
   ./nukelabctl exec backend python -v     # Run command in backend
-  ./nukelabctl logs backend -f            # Stream backend logs
   ./nukelabctl db-migrate                 # Run migrations
   ./nukelabctl backup                     # Backup database
   ./nukelabctl restore backups/nukelab_backup_20250607_120000.sql
@@ -277,6 +295,26 @@ _dispatch_command() {
     local base_name="${command//-/_}"
 
     if $SHOW_HELP; then
+        # Dev meta-command: `dev --help` shows dev help; `dev <sub> --help`
+        # shows help for that subcommand.
+        if [ "$command" = "dev" ] && type -t parse_dev_args | grep -q function; then
+            if [[ ${#EXTRA_ARGS[@]} -eq 0 ]]; then
+                help_dev
+                exit 0
+            fi
+            parse_dev_args
+            local _subcmd_file="$DIR/scripts/manage.d/${DEV_SUBCMD}.sh"
+            if [ -f "$_subcmd_file" ]; then
+                # shellcheck source=/dev/null
+                source "$_subcmd_file"
+                local _help_func="help_${DEV_SUBCMD}"
+                if type -t "$_help_func" | grep -q function; then
+                    "$_help_func"
+                    exit 0
+                fi
+            fi
+        fi
+
         local help_func="help_${base_name}"
         if type -t "$help_func" | grep -q function; then
             "$help_func"
@@ -318,13 +356,33 @@ main() {
     fi
 
     case "$CMD" in
-        start|build|update|pull|clean)
+        start|build|update|pull)
             _acquire_lock
             init_env "$USE_DEV_MODE"
             detect_engine
             setup_podman_socket
             setup_compose_args
             preflight_checks
+            _dispatch_command "$CMD"
+            ;;
+        clean)
+            # Clean does not need the stack to be reachable or ports to be free;
+            # it just prunes stopped resources and clears local state files.
+            _acquire_lock
+            init_env "$USE_DEV_MODE"
+            detect_engine
+            setup_podman_socket
+            _dispatch_command "$CMD"
+            ;;
+        dev)
+            # dev is a meta-command: it loads the dev environment and then
+            # dispatches to start/restart/stop/logs/status with USE_DEV_MODE=true.
+            USE_DEV_MODE=true
+            COMPOSE_PROJECT_NAME="$DEV_PROJECT_NAME"
+            STATE_FILE="$DEV_STATE_FILE"
+            init_env "$USE_DEV_MODE"
+            detect_engine
+            setup_podman_socket
             _dispatch_command "$CMD"
             ;;
         stop|restart|remove|reset)
@@ -337,7 +395,20 @@ main() {
             fi
             _dispatch_command "$CMD"
             ;;
-        status|logs|shell|exec|db-migrate|db-shell|backup|restore|e2e|loadtest|security|doctor)
+        status|logs|shell|exec|db-migrate|db-shell|backup|restore|e2e|security|doctor)
+            init_env "$USE_DEV_MODE"
+            detect_engine
+            setup_podman_socket
+            if ! restore_state; then
+                setup_compose_args
+            fi
+            _dispatch_command "$CMD"
+            ;;
+        loadtest)
+            # Load tests need the multi-worker prod backend; always target prod.
+            USE_DEV_MODE=false
+            COMPOSE_PROJECT_NAME="$PROD_PROJECT_NAME"
+            STATE_FILE="$PROD_STATE_FILE"
             init_env "$USE_DEV_MODE"
             detect_engine
             setup_podman_socket
