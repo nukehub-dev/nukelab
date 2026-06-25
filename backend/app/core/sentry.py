@@ -27,10 +27,24 @@ _IGNORED_PATHS = {
 
 # Sensitive keys to scrub from request data (bodies, query params, cookies)
 _SENSITIVE_KEYS = {
-    "password", "passwd", "pwd", "secret", "token", "api_token", "api_key",
-    "jwt_secret", "session_secret", "csrf_token", "refresh_token",
-    "smtp_password", "oauth_client_secret", "authorization",
-    "cookie", "credit_card", "cvv", "ssn",
+    "password",
+    "passwd",
+    "pwd",
+    "secret",
+    "token",
+    "api_token",
+    "api_key",
+    "jwt_secret",
+    "session_secret",
+    "csrf_token",
+    "refresh_token",
+    "smtp_password",
+    "oauth_client_secret",
+    "authorization",
+    "cookie",
+    "credit_card",
+    "cvv",
+    "ssn",
 }
 
 
@@ -75,10 +89,7 @@ def _filter_and_scrub(event: Event) -> Event | None:
     # Scrub user context PII (keep only id and role)
     user = event.get("user", {})
     if user:
-        event["user"] = {
-            k: v for k, v in user.items()
-            if k in {"id", "role", "ip_address"}
-        }
+        event["user"] = {k: v for k, v in user.items() if k in {"id", "role", "ip_address"}}
 
     return event
 
@@ -143,6 +154,7 @@ def set_sentry_user(user_id: str | None, role: str | None = None) -> None:
     if not settings.sentry_dsn:
         return
     from sentry_sdk import set_user
+
     user_context: dict[str, str | None] = {"id": user_id}
     if role:
         user_context["role"] = role
@@ -154,4 +166,5 @@ def set_sentry_tag(key: str, value: str) -> None:
     if not settings.sentry_dsn:
         return
     from sentry_sdk import set_tag
+
     set_tag(key, value)

@@ -67,29 +67,47 @@ class TestPathNormalization:
 
     def test_uuid_replacement(self):
         from app.middleware.request_metrics import _fallback_normalize
-        assert _fallback_normalize("/api/servers/e2dc7a61-4e86-4b47-8464-a8c46178579f/stop") == "/api/servers/:id/stop"
+
+        assert (
+            _fallback_normalize("/api/servers/e2dc7a61-4e86-4b47-8464-a8c46178579f/stop")
+            == "/api/servers/:id/stop"
+        )
 
     def test_numeric_replacement(self):
         from app.middleware.request_metrics import _fallback_normalize
+
         assert _fallback_normalize("/api/users/123/profile") == "/api/users/:id/profile"
 
     def test_mixed_uuid_and_numeric(self):
         from app.middleware.request_metrics import _fallback_normalize
-        assert _fallback_normalize("/api/servers/e2dc7a61-4e86-4b47-8464-a8c46178579f/logs/5") == "/api/servers/:id/logs/:id"
+
+        assert (
+            _fallback_normalize("/api/servers/e2dc7a61-4e86-4b47-8464-a8c46178579f/logs/5")
+            == "/api/servers/:id/logs/:id"
+        )
 
     def test_avatar_filename(self):
         from app.middleware.request_metrics import _fallback_normalize
-        assert _fallback_normalize("/api/users/avatar/16f9aa35-5522-498b-b67e-72cc540e9eff.jpg") == "/api/users/avatar/:id.jpg"
+
+        assert (
+            _fallback_normalize("/api/users/avatar/16f9aa35-5522-498b-b67e-72cc540e9eff.jpg")
+            == "/api/users/avatar/:id.jpg"
+        )
 
     def test_static_paths_unchanged(self):
         from app.middleware.request_metrics import _fallback_normalize
+
         assert _fallback_normalize("/api/users/me/profile") == "/api/users/me/profile"
         assert _fallback_normalize("/api/auth/login") == "/api/auth/login"
 
     def test_trailing_slash_removed(self):
         from app.middleware.request_metrics import _fallback_normalize
+
         assert _fallback_normalize("/api/servers/") == "/api/servers"
-        assert _fallback_normalize("/api/servers/e2dc7a61-4e86-4b47-8464-a8c46178579f/stop/") == "/api/servers/:id/stop"
+        assert (
+            _fallback_normalize("/api/servers/e2dc7a61-4e86-4b47-8464-a8c46178579f/stop/")
+            == "/api/servers/:id/stop"
+        )
         assert _fallback_normalize("/") == "/"
 
 
@@ -180,6 +198,7 @@ class TestRequestMetricsMiddleware:
     @pytest.mark.asyncio
     async def test_records_metric_for_api_path(self, middleware, mock_request):
         """Should buffer a metric for API paths."""
+
         async def call_next(req):
             return MagicMock(status_code=200)
 

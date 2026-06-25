@@ -34,9 +34,7 @@ class TestSystemMetricsCollect:
         """Should collect and return system metrics."""
         collector = SystemMetricsCollector()
 
-        mock_memory = mock.Mock(
-            used=1000, total=2000, percent=50.0, available=1000
-        )
+        mock_memory = mock.Mock(used=1000, total=2000, percent=50.0, available=1000)
         mock_disk = mock.Mock(used=500, total=1000)
         mock_disk_io = mock.Mock(read_bytes=100, write_bytes=200)
         mock_net_io = mock.Mock(bytes_recv=1000, bytes_sent=2000)
@@ -49,9 +47,17 @@ class TestSystemMetricsCollect:
                             with mock.patch("psutil.disk_io_counters", return_value=mock_disk_io):
                                 with mock.patch("psutil.net_io_counters", return_value=mock_net_io):
                                     with mock.patch("asyncio.sleep"):
-                                        with mock.patch("app.services.system_metrics_collector.get_fresh_container_client", side_effect=Exception("no docker")):
-                                            with mock.patch("sqlalchemy.ext.asyncio.create_async_engine"):
-                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=_mock_session):
+                                        with mock.patch(
+                                            "app.services.system_metrics_collector.get_fresh_container_client",
+                                            side_effect=Exception("no docker"),
+                                        ):
+                                            with mock.patch(
+                                                "sqlalchemy.ext.asyncio.create_async_engine"
+                                            ):
+                                                with mock.patch(
+                                                    "sqlalchemy.orm.sessionmaker",
+                                                    return_value=_mock_session,
+                                                ):
                                                     with mock.patch("redis.asyncio.from_url"):
                                                         result = await collector.collect()
 
@@ -71,14 +77,27 @@ class TestSystemMetricsCollect:
         with mock.patch("psutil.cpu_percent", return_value=10.0):
             with mock.patch("psutil.cpu_count", return_value=2):
                 with mock.patch("psutil.getloadavg", side_effect=OSError):
-                    with mock.patch("psutil.virtual_memory", return_value=mock.Mock(used=1, total=2, percent=50, available=1)):
-                        with mock.patch("psutil.disk_usage", return_value=mock.Mock(used=1, total=2)):
+                    with mock.patch(
+                        "psutil.virtual_memory",
+                        return_value=mock.Mock(used=1, total=2, percent=50, available=1),
+                    ):
+                        with mock.patch(
+                            "psutil.disk_usage", return_value=mock.Mock(used=1, total=2)
+                        ):
                             with mock.patch("psutil.disk_io_counters", return_value=None):
                                 with mock.patch("psutil.net_io_counters", return_value=None):
                                     with mock.patch("asyncio.sleep"):
-                                        with mock.patch("app.services.system_metrics_collector.get_fresh_container_client", side_effect=Exception("no docker")):
-                                            with mock.patch("sqlalchemy.ext.asyncio.create_async_engine"):
-                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=_mock_session):
+                                        with mock.patch(
+                                            "app.services.system_metrics_collector.get_fresh_container_client",
+                                            side_effect=Exception("no docker"),
+                                        ):
+                                            with mock.patch(
+                                                "sqlalchemy.ext.asyncio.create_async_engine"
+                                            ):
+                                                with mock.patch(
+                                                    "sqlalchemy.orm.sessionmaker",
+                                                    return_value=_mock_session,
+                                                ):
                                                     with mock.patch("redis.asyncio.from_url"):
                                                         result = await collector.collect()
 
@@ -91,9 +110,9 @@ class TestSystemMetricsCollect:
 
         mock_container = mock.Mock()
         mock_container._id = "cid1"
-        mock_container.show = mock.AsyncMock(return_value={
-            "Config": {"Labels": {"nukelab.server.id": "srv-1"}}
-        })
+        mock_container.show = mock.AsyncMock(
+            return_value={"Config": {"Labels": {"nukelab.server.id": "srv-1"}}}
+        )
 
         mock_client = mock.AsyncMock()
         mock_client.list_containers = mock.AsyncMock(return_value=[mock_container])
@@ -103,14 +122,27 @@ class TestSystemMetricsCollect:
         with mock.patch("psutil.cpu_percent", return_value=10.0):
             with mock.patch("psutil.cpu_count", return_value=2):
                 with mock.patch("psutil.getloadavg", return_value=(0.0, 0.0, 0.0)):
-                    with mock.patch("psutil.virtual_memory", return_value=mock.Mock(used=1, total=2, percent=50, available=1)):
-                        with mock.patch("psutil.disk_usage", return_value=mock.Mock(used=1, total=2)):
+                    with mock.patch(
+                        "psutil.virtual_memory",
+                        return_value=mock.Mock(used=1, total=2, percent=50, available=1),
+                    ):
+                        with mock.patch(
+                            "psutil.disk_usage", return_value=mock.Mock(used=1, total=2)
+                        ):
                             with mock.patch("psutil.disk_io_counters", return_value=None):
                                 with mock.patch("psutil.net_io_counters", return_value=None):
                                     with mock.patch("asyncio.sleep"):
-                                        with mock.patch("app.services.system_metrics_collector.get_fresh_container_client", return_value=mock_client):
-                                            with mock.patch("sqlalchemy.ext.asyncio.create_async_engine"):
-                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=_mock_session):
+                                        with mock.patch(
+                                            "app.services.system_metrics_collector.get_fresh_container_client",
+                                            return_value=mock_client,
+                                        ):
+                                            with mock.patch(
+                                                "sqlalchemy.ext.asyncio.create_async_engine"
+                                            ):
+                                                with mock.patch(
+                                                    "sqlalchemy.orm.sessionmaker",
+                                                    return_value=_mock_session,
+                                                ):
                                                     with mock.patch("redis.asyncio.from_url"):
                                                         result = await collector.collect()
 
@@ -125,25 +157,41 @@ class TestSystemMetricsCollect:
 
         # Write a cache file
         with open("/tmp/nukelab_disk_cache.json", "w") as f:
-            json.dump({
-                "timestamp": "2026-01-01T00:00:00",
-                "read_bytes": 0,
-                "write_bytes": 0,
-            }, f)
+            json.dump(
+                {
+                    "timestamp": "2026-01-01T00:00:00",
+                    "read_bytes": 0,
+                    "write_bytes": 0,
+                },
+                f,
+            )
 
         mock_disk_io = mock.Mock(read_bytes=1000, write_bytes=2000)
 
         with mock.patch("psutil.cpu_percent", return_value=10.0):
             with mock.patch("psutil.cpu_count", return_value=2):
                 with mock.patch("psutil.getloadavg", return_value=(0.0, 0.0, 0.0)):
-                    with mock.patch("psutil.virtual_memory", return_value=mock.Mock(used=1, total=2, percent=50, available=1)):
-                        with mock.patch("psutil.disk_usage", return_value=mock.Mock(used=1, total=2)):
+                    with mock.patch(
+                        "psutil.virtual_memory",
+                        return_value=mock.Mock(used=1, total=2, percent=50, available=1),
+                    ):
+                        with mock.patch(
+                            "psutil.disk_usage", return_value=mock.Mock(used=1, total=2)
+                        ):
                             with mock.patch("psutil.disk_io_counters", return_value=mock_disk_io):
                                 with mock.patch("psutil.net_io_counters", return_value=None):
                                     with mock.patch("asyncio.sleep"):
-                                        with mock.patch("app.services.system_metrics_collector.get_fresh_container_client", side_effect=Exception("no docker")):
-                                            with mock.patch("sqlalchemy.ext.asyncio.create_async_engine"):
-                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=_mock_session):
+                                        with mock.patch(
+                                            "app.services.system_metrics_collector.get_fresh_container_client",
+                                            side_effect=Exception("no docker"),
+                                        ):
+                                            with mock.patch(
+                                                "sqlalchemy.ext.asyncio.create_async_engine"
+                                            ):
+                                                with mock.patch(
+                                                    "sqlalchemy.orm.sessionmaker",
+                                                    return_value=_mock_session,
+                                                ):
                                                     with mock.patch("redis.asyncio.from_url"):
                                                         result = await collector.collect()
 
@@ -158,17 +206,29 @@ class TestSystemMetricsCollect:
         with mock.patch("psutil.cpu_percent", return_value=10.0):
             with mock.patch("psutil.cpu_count", return_value=2):
                 with mock.patch("psutil.getloadavg", return_value=(0.0, 0.0, 0.0)):
-                    with mock.patch("psutil.virtual_memory", return_value=mock.Mock(used=1, total=2, percent=50, available=1)):
-                        with mock.patch("psutil.disk_usage", return_value=mock.Mock(used=1, total=2)):
+                    with mock.patch(
+                        "psutil.virtual_memory",
+                        return_value=mock.Mock(used=1, total=2, percent=50, available=1),
+                    ):
+                        with mock.patch(
+                            "psutil.disk_usage", return_value=mock.Mock(used=1, total=2)
+                        ):
                             with mock.patch("psutil.disk_io_counters", return_value=None):
                                 with mock.patch("psutil.net_io_counters", return_value=None):
                                     with mock.patch("asyncio.sleep"):
-                                        with mock.patch("app.services.system_metrics_collector.get_fresh_container_client", side_effect=Exception("no docker")):
-                                            with mock.patch("sqlalchemy.ext.asyncio.create_async_engine", side_effect=Exception("db error")):
+                                        with mock.patch(
+                                            "app.services.system_metrics_collector.get_fresh_container_client",
+                                            side_effect=Exception("no docker"),
+                                        ):
+                                            with mock.patch(
+                                                "sqlalchemy.ext.asyncio.create_async_engine",
+                                                side_effect=Exception("db error"),
+                                            ):
                                                 with mock.patch("redis.asyncio.from_url"):
                                                     result = await collector.collect()
 
         assert result["cpu_percent"] == 10.0
+
 
 """Extended coverage tests for SystemMetricsCollector edge cases."""
 
@@ -209,14 +269,27 @@ class TestSystemMetricsCollectorEdgeCases:
         with mock.patch("psutil.cpu_percent", return_value=10.0):
             with mock.patch("psutil.cpu_count", return_value=2):
                 with mock.patch("psutil.getloadavg", return_value=(0.0, 0.0, 0.0)):
-                    with mock.patch("psutil.virtual_memory", return_value=mock.Mock(used=1, total=2, percent=50, available=1)):
-                        with mock.patch("psutil.disk_usage", return_value=mock.Mock(used=1, total=2)):
+                    with mock.patch(
+                        "psutil.virtual_memory",
+                        return_value=mock.Mock(used=1, total=2, percent=50, available=1),
+                    ):
+                        with mock.patch(
+                            "psutil.disk_usage", return_value=mock.Mock(used=1, total=2)
+                        ):
                             with mock.patch("psutil.disk_io_counters", return_value=None):
                                 with mock.patch("psutil.net_io_counters", return_value=None):
                                     with mock.patch("asyncio.sleep"):
-                                        with mock.patch("app.services.system_metrics_collector.get_fresh_container_client", return_value=mock_client):
-                                            with mock.patch("sqlalchemy.ext.asyncio.create_async_engine"):
-                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=_mock_session):
+                                        with mock.patch(
+                                            "app.services.system_metrics_collector.get_fresh_container_client",
+                                            return_value=mock_client,
+                                        ):
+                                            with mock.patch(
+                                                "sqlalchemy.ext.asyncio.create_async_engine"
+                                            ):
+                                                with mock.patch(
+                                                    "sqlalchemy.orm.sessionmaker",
+                                                    return_value=_mock_session,
+                                                ):
                                                     with mock.patch("redis.asyncio.from_url"):
                                                         result = await collector.collect()
 
@@ -231,25 +304,41 @@ class TestSystemMetricsCollectorEdgeCases:
 
         # Write cache with higher values than current
         with open("/tmp/nukelab_disk_cache.json", "w") as f:
-            json.dump({
-                "timestamp": "2026-01-01T00:00:00",
-                "read_bytes": 999999,
-                "write_bytes": 999999,
-            }, f)
+            json.dump(
+                {
+                    "timestamp": "2026-01-01T00:00:00",
+                    "read_bytes": 999999,
+                    "write_bytes": 999999,
+                },
+                f,
+            )
 
         mock_disk_io = mock.Mock(read_bytes=100, write_bytes=200)
 
         with mock.patch("psutil.cpu_percent", return_value=10.0):
             with mock.patch("psutil.cpu_count", return_value=2):
                 with mock.patch("psutil.getloadavg", return_value=(0.0, 0.0, 0.0)):
-                    with mock.patch("psutil.virtual_memory", return_value=mock.Mock(used=1, total=2, percent=50, available=1)):
-                        with mock.patch("psutil.disk_usage", return_value=mock.Mock(used=1, total=2)):
+                    with mock.patch(
+                        "psutil.virtual_memory",
+                        return_value=mock.Mock(used=1, total=2, percent=50, available=1),
+                    ):
+                        with mock.patch(
+                            "psutil.disk_usage", return_value=mock.Mock(used=1, total=2)
+                        ):
                             with mock.patch("psutil.disk_io_counters", return_value=mock_disk_io):
                                 with mock.patch("psutil.net_io_counters", return_value=None):
                                     with mock.patch("asyncio.sleep"):
-                                        with mock.patch("app.services.system_metrics_collector.get_fresh_container_client", side_effect=Exception("no docker")):
-                                            with mock.patch("sqlalchemy.ext.asyncio.create_async_engine"):
-                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=_mock_session):
+                                        with mock.patch(
+                                            "app.services.system_metrics_collector.get_fresh_container_client",
+                                            side_effect=Exception("no docker"),
+                                        ):
+                                            with mock.patch(
+                                                "sqlalchemy.ext.asyncio.create_async_engine"
+                                            ):
+                                                with mock.patch(
+                                                    "sqlalchemy.orm.sessionmaker",
+                                                    return_value=_mock_session,
+                                                ):
                                                     with mock.patch("redis.asyncio.from_url"):
                                                         result = await collector.collect()
 
@@ -274,14 +363,28 @@ class TestSystemMetricsCollectorEdgeCases:
         with mock.patch("psutil.cpu_percent", return_value=10.0):
             with mock.patch("psutil.cpu_count", return_value=2):
                 with mock.patch("psutil.getloadavg", return_value=(0.0, 0.0, 0.0)):
-                    with mock.patch("psutil.virtual_memory", return_value=mock.Mock(used=1, total=2, percent=50, available=1)):
-                        with mock.patch("psutil.disk_usage", return_value=mock.Mock(used=1, total=2)):
+                    with mock.patch(
+                        "psutil.virtual_memory",
+                        return_value=mock.Mock(used=1, total=2, percent=50, available=1),
+                    ):
+                        with mock.patch(
+                            "psutil.disk_usage", return_value=mock.Mock(used=1, total=2)
+                        ):
                             with mock.patch("psutil.disk_io_counters", return_value=None):
                                 with mock.patch("psutil.net_io_counters", return_value=None):
                                     with mock.patch("asyncio.sleep"):
-                                        with mock.patch("app.services.system_metrics_collector.get_fresh_container_client", side_effect=Exception("no docker")):
-                                            with mock.patch("sqlalchemy.ext.asyncio.create_async_engine", return_value=mock_engine):
-                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=lambda: mock_session):
+                                        with mock.patch(
+                                            "app.services.system_metrics_collector.get_fresh_container_client",
+                                            side_effect=Exception("no docker"),
+                                        ):
+                                            with mock.patch(
+                                                "sqlalchemy.ext.asyncio.create_async_engine",
+                                                return_value=mock_engine,
+                                            ):
+                                                with mock.patch(
+                                                    "sqlalchemy.orm.sessionmaker",
+                                                    return_value=lambda: mock_session,
+                                                ):
                                                     with mock.patch("redis.asyncio.from_url"):
                                                         result = await collector.collect()
 
@@ -297,15 +400,31 @@ class TestSystemMetricsCollectorEdgeCases:
         with mock.patch("psutil.cpu_percent", return_value=10.0):
             with mock.patch("psutil.cpu_count", return_value=2):
                 with mock.patch("psutil.getloadavg", return_value=(0.0, 0.0, 0.0)):
-                    with mock.patch("psutil.virtual_memory", return_value=mock.Mock(used=1, total=2, percent=50, available=1)):
-                        with mock.patch("psutil.disk_usage", return_value=mock.Mock(used=1, total=2)):
+                    with mock.patch(
+                        "psutil.virtual_memory",
+                        return_value=mock.Mock(used=1, total=2, percent=50, available=1),
+                    ):
+                        with mock.patch(
+                            "psutil.disk_usage", return_value=mock.Mock(used=1, total=2)
+                        ):
                             with mock.patch("psutil.disk_io_counters", return_value=None):
                                 with mock.patch("psutil.net_io_counters", return_value=None):
                                     with mock.patch("asyncio.sleep"):
-                                        with mock.patch("app.services.system_metrics_collector.get_fresh_container_client", side_effect=Exception("no docker")):
-                                            with mock.patch("sqlalchemy.ext.asyncio.create_async_engine"):
-                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=_mock_session):
-                                                    with mock.patch("redis.asyncio.from_url", side_effect=Exception("redis down")):
+                                        with mock.patch(
+                                            "app.services.system_metrics_collector.get_fresh_container_client",
+                                            side_effect=Exception("no docker"),
+                                        ):
+                                            with mock.patch(
+                                                "sqlalchemy.ext.asyncio.create_async_engine"
+                                            ):
+                                                with mock.patch(
+                                                    "sqlalchemy.orm.sessionmaker",
+                                                    return_value=_mock_session,
+                                                ):
+                                                    with mock.patch(
+                                                        "redis.asyncio.from_url",
+                                                        side_effect=Exception("redis down"),
+                                                    ):
                                                         result = await collector.collect()
 
         assert result["cpu_percent"] == 10.0
@@ -318,14 +437,29 @@ class TestSystemMetricsCollectorEdgeCases:
         with mock.patch("psutil.cpu_percent", return_value=10.0):
             with mock.patch("psutil.cpu_count", return_value=2):
                 with mock.patch("psutil.getloadavg", return_value=(0.0, 0.0, 0.0)):
-                    with mock.patch("psutil.virtual_memory", return_value=mock.Mock(used=1, total=2, percent=50, available=1)):
-                        with mock.patch("psutil.disk_usage", return_value=mock.Mock(used=1, total=2)):
-                            with mock.patch("psutil.disk_io_counters", side_effect=Exception("no io")):
+                    with mock.patch(
+                        "psutil.virtual_memory",
+                        return_value=mock.Mock(used=1, total=2, percent=50, available=1),
+                    ):
+                        with mock.patch(
+                            "psutil.disk_usage", return_value=mock.Mock(used=1, total=2)
+                        ):
+                            with mock.patch(
+                                "psutil.disk_io_counters", side_effect=Exception("no io")
+                            ):
                                 with mock.patch("psutil.net_io_counters", return_value=None):
                                     with mock.patch("asyncio.sleep"):
-                                        with mock.patch("app.services.system_metrics_collector.get_fresh_container_client", side_effect=Exception("no docker")):
-                                            with mock.patch("sqlalchemy.ext.asyncio.create_async_engine"):
-                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=_mock_session):
+                                        with mock.patch(
+                                            "app.services.system_metrics_collector.get_fresh_container_client",
+                                            side_effect=Exception("no docker"),
+                                        ):
+                                            with mock.patch(
+                                                "sqlalchemy.ext.asyncio.create_async_engine"
+                                            ):
+                                                with mock.patch(
+                                                    "sqlalchemy.orm.sessionmaker",
+                                                    return_value=_mock_session,
+                                                ):
                                                     with mock.patch("redis.asyncio.from_url"):
                                                         result = await collector.collect()
 
@@ -340,14 +474,29 @@ class TestSystemMetricsCollectorEdgeCases:
         with mock.patch("psutil.cpu_percent", return_value=10.0):
             with mock.patch("psutil.cpu_count", return_value=2):
                 with mock.patch("psutil.getloadavg", return_value=(0.0, 0.0, 0.0)):
-                    with mock.patch("psutil.virtual_memory", return_value=mock.Mock(used=1, total=2, percent=50, available=1)):
-                        with mock.patch("psutil.disk_usage", return_value=mock.Mock(used=1, total=2)):
+                    with mock.patch(
+                        "psutil.virtual_memory",
+                        return_value=mock.Mock(used=1, total=2, percent=50, available=1),
+                    ):
+                        with mock.patch(
+                            "psutil.disk_usage", return_value=mock.Mock(used=1, total=2)
+                        ):
                             with mock.patch("psutil.disk_io_counters", return_value=None):
-                                with mock.patch("psutil.net_io_counters", side_effect=Exception("no net")):
+                                with mock.patch(
+                                    "psutil.net_io_counters", side_effect=Exception("no net")
+                                ):
                                     with mock.patch("asyncio.sleep"):
-                                        with mock.patch("app.services.system_metrics_collector.get_fresh_container_client", side_effect=Exception("no docker")):
-                                            with mock.patch("sqlalchemy.ext.asyncio.create_async_engine"):
-                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=_mock_session):
+                                        with mock.patch(
+                                            "app.services.system_metrics_collector.get_fresh_container_client",
+                                            side_effect=Exception("no docker"),
+                                        ):
+                                            with mock.patch(
+                                                "sqlalchemy.ext.asyncio.create_async_engine"
+                                            ):
+                                                with mock.patch(
+                                                    "sqlalchemy.orm.sessionmaker",
+                                                    return_value=_mock_session,
+                                                ):
                                                     with mock.patch("redis.asyncio.from_url"):
                                                         result = await collector.collect()
 
@@ -360,26 +509,43 @@ class TestSystemMetricsCollectorEdgeCases:
         collector = SystemMetricsCollector()
 
         import json, os
+
         with open("/tmp/nukelab_network_cache.json", "w") as f:
-            json.dump({
-                "timestamp": "2026-01-01T00:00:00",
-                "rx_bytes": 0,
-                "tx_bytes": 0,
-            }, f)
+            json.dump(
+                {
+                    "timestamp": "2026-01-01T00:00:00",
+                    "rx_bytes": 0,
+                    "tx_bytes": 0,
+                },
+                f,
+            )
 
         mock_net_io = mock.Mock(bytes_recv=1000, bytes_sent=2000)
 
         with mock.patch("psutil.cpu_percent", return_value=10.0):
             with mock.patch("psutil.cpu_count", return_value=2):
                 with mock.patch("psutil.getloadavg", return_value=(0.0, 0.0, 0.0)):
-                    with mock.patch("psutil.virtual_memory", return_value=mock.Mock(used=1, total=2, percent=50, available=1)):
-                        with mock.patch("psutil.disk_usage", return_value=mock.Mock(used=1, total=2)):
+                    with mock.patch(
+                        "psutil.virtual_memory",
+                        return_value=mock.Mock(used=1, total=2, percent=50, available=1),
+                    ):
+                        with mock.patch(
+                            "psutil.disk_usage", return_value=mock.Mock(used=1, total=2)
+                        ):
                             with mock.patch("psutil.disk_io_counters", return_value=None):
                                 with mock.patch("psutil.net_io_counters", return_value=mock_net_io):
                                     with mock.patch("asyncio.sleep"):
-                                        with mock.patch("app.services.system_metrics_collector.get_fresh_container_client", side_effect=Exception("no docker")):
-                                            with mock.patch("sqlalchemy.ext.asyncio.create_async_engine"):
-                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=_mock_session):
+                                        with mock.patch(
+                                            "app.services.system_metrics_collector.get_fresh_container_client",
+                                            side_effect=Exception("no docker"),
+                                        ):
+                                            with mock.patch(
+                                                "sqlalchemy.ext.asyncio.create_async_engine"
+                                            ):
+                                                with mock.patch(
+                                                    "sqlalchemy.orm.sessionmaker",
+                                                    return_value=_mock_session,
+                                                ):
                                                     with mock.patch("redis.asyncio.from_url"):
                                                         result = await collector.collect()
 
@@ -393,9 +559,9 @@ class TestSystemMetricsCollectorEdgeCases:
 
         mock_container = mock.Mock()
         mock_container._id = "cid1"
-        mock_container.show = mock.AsyncMock(return_value={
-            "Config": {"Labels": {"nukelab.server.id": "srv-1"}}
-        })
+        mock_container.show = mock.AsyncMock(
+            return_value={"Config": {"Labels": {"nukelab.server.id": "srv-1"}}}
+        )
         mock_container.get = mock.Mock(return_value="running")
 
         mock_client = mock.AsyncMock()
@@ -406,14 +572,27 @@ class TestSystemMetricsCollectorEdgeCases:
         with mock.patch("psutil.cpu_percent", return_value=10.0):
             with mock.patch("psutil.cpu_count", return_value=2):
                 with mock.patch("psutil.getloadavg", return_value=(0.0, 0.0, 0.0)):
-                    with mock.patch("psutil.virtual_memory", return_value=mock.Mock(used=1, total=2, percent=50, available=1)):
-                        with mock.patch("psutil.disk_usage", return_value=mock.Mock(used=1, total=2)):
+                    with mock.patch(
+                        "psutil.virtual_memory",
+                        return_value=mock.Mock(used=1, total=2, percent=50, available=1),
+                    ):
+                        with mock.patch(
+                            "psutil.disk_usage", return_value=mock.Mock(used=1, total=2)
+                        ):
                             with mock.patch("psutil.disk_io_counters", return_value=None):
                                 with mock.patch("psutil.net_io_counters", return_value=None):
                                     with mock.patch("asyncio.sleep"):
-                                        with mock.patch("app.services.system_metrics_collector.get_fresh_container_client", return_value=mock_client):
-                                            with mock.patch("sqlalchemy.ext.asyncio.create_async_engine"):
-                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=_mock_session):
+                                        with mock.patch(
+                                            "app.services.system_metrics_collector.get_fresh_container_client",
+                                            return_value=mock_client,
+                                        ):
+                                            with mock.patch(
+                                                "sqlalchemy.ext.asyncio.create_async_engine"
+                                            ):
+                                                with mock.patch(
+                                                    "sqlalchemy.orm.sessionmaker",
+                                                    return_value=_mock_session,
+                                                ):
                                                     with mock.patch("redis.asyncio.from_url"):
                                                         result = await collector.collect()
 
@@ -431,15 +610,31 @@ class TestSystemMetricsCollectorEdgeCases:
         with mock.patch("psutil.cpu_percent", return_value=10.0):
             with mock.patch("psutil.cpu_count", return_value=2):
                 with mock.patch("psutil.getloadavg", return_value=(0.0, 0.0, 0.0)):
-                    with mock.patch("psutil.virtual_memory", return_value=mock.Mock(used=1, total=2, percent=50, available=1)):
-                        with mock.patch("psutil.disk_usage", return_value=mock.Mock(used=1, total=2)):
+                    with mock.patch(
+                        "psutil.virtual_memory",
+                        return_value=mock.Mock(used=1, total=2, percent=50, available=1),
+                    ):
+                        with mock.patch(
+                            "psutil.disk_usage", return_value=mock.Mock(used=1, total=2)
+                        ):
                             with mock.patch("psutil.disk_io_counters", return_value=None):
                                 with mock.patch("psutil.net_io_counters", return_value=None):
                                     with mock.patch("asyncio.sleep"):
-                                        with mock.patch("app.services.system_metrics_collector.get_fresh_container_client", side_effect=Exception("no docker")):
-                                            with mock.patch("sqlalchemy.ext.asyncio.create_async_engine"):
-                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=_mock_session):
-                                                    with mock.patch("redis.asyncio.from_url", return_value=mock_redis):
+                                        with mock.patch(
+                                            "app.services.system_metrics_collector.get_fresh_container_client",
+                                            side_effect=Exception("no docker"),
+                                        ):
+                                            with mock.patch(
+                                                "sqlalchemy.ext.asyncio.create_async_engine"
+                                            ):
+                                                with mock.patch(
+                                                    "sqlalchemy.orm.sessionmaker",
+                                                    return_value=_mock_session,
+                                                ):
+                                                    with mock.patch(
+                                                        "redis.asyncio.from_url",
+                                                        return_value=mock_redis,
+                                                    ):
                                                         result = await collector.collect()
 
         assert result["cpu_percent"] == 10.0
@@ -461,14 +656,28 @@ class TestSystemMetricsCollectorEdgeCases:
         with mock.patch("psutil.cpu_percent", return_value=10.0):
             with mock.patch("psutil.cpu_count", return_value=2):
                 with mock.patch("psutil.getloadavg", return_value=(0.0, 0.0, 0.0)):
-                    with mock.patch("psutil.virtual_memory", return_value=mock.Mock(used=1, total=2, percent=50, available=1)):
-                        with mock.patch("psutil.disk_usage", return_value=mock.Mock(used=1, total=2)):
+                    with mock.patch(
+                        "psutil.virtual_memory",
+                        return_value=mock.Mock(used=1, total=2, percent=50, available=1),
+                    ):
+                        with mock.patch(
+                            "psutil.disk_usage", return_value=mock.Mock(used=1, total=2)
+                        ):
                             with mock.patch("psutil.disk_io_counters", return_value=None):
                                 with mock.patch("psutil.net_io_counters", return_value=None):
                                     with mock.patch("asyncio.sleep"):
-                                        with mock.patch("app.services.system_metrics_collector.get_fresh_container_client", side_effect=Exception("no docker")):
-                                            with mock.patch("sqlalchemy.ext.asyncio.create_async_engine", return_value=mock_engine):
-                                                with mock.patch("sqlalchemy.orm.sessionmaker", return_value=lambda: mock_session):
+                                        with mock.patch(
+                                            "app.services.system_metrics_collector.get_fresh_container_client",
+                                            side_effect=Exception("no docker"),
+                                        ):
+                                            with mock.patch(
+                                                "sqlalchemy.ext.asyncio.create_async_engine",
+                                                return_value=mock_engine,
+                                            ):
+                                                with mock.patch(
+                                                    "sqlalchemy.orm.sessionmaker",
+                                                    return_value=lambda: mock_session,
+                                                ):
                                                     with mock.patch("redis.asyncio.from_url"):
                                                         result = await collector.collect()
 

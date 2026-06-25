@@ -32,20 +32,32 @@ class TestCanAccessVolume:
         await db_session.commit()
         await db_session.refresh(vol)
 
-        assert await service.can_access_volume(str(vol.id), str(test_user.id), "read_write") is False
+        assert (
+            await service.can_access_volume(str(vol.id), str(test_user.id), "read_write") is False
+        )
 
     @pytest.mark.asyncio
     async def test_public_volume_read_only(self, service, db_session, admin_user):
-        vol = Volume(name="pub", display_name="Pub", owner_id=admin_user.id, size_bytes=0, visibility="public")
+        vol = Volume(
+            name="pub",
+            display_name="Pub",
+            owner_id=admin_user.id,
+            size_bytes=0,
+            visibility="public",
+        )
         db_session.add(vol)
         await db_session.commit()
         await db_session.refresh(vol)
 
         assert await service.can_access_volume(str(vol.id), str(uuid.uuid4()), "read_only") is True
-        assert await service.can_access_volume(str(vol.id), str(uuid.uuid4()), "read_write") is False
+        assert (
+            await service.can_access_volume(str(vol.id), str(uuid.uuid4()), "read_write") is False
+        )
 
     @pytest.mark.asyncio
-    async def test_workspace_owner_gets_volume_role(self, service, db_session, test_user, admin_user):
+    async def test_workspace_owner_gets_volume_role(
+        self, service, db_session, test_user, admin_user
+    ):
         ws = SharedWorkspace(name="ws", owner_id=test_user.id)
         db_session.add(ws)
         await db_session.commit()
@@ -85,7 +97,9 @@ class TestCanAccessVolume:
         assert await service.can_access_volume(str(vol.id), str(test_user.id), "read_write") is True
 
     @pytest.mark.asyncio
-    async def test_workspace_member_ro_when_volume_ro(self, service, db_session, test_user, admin_user):
+    async def test_workspace_member_ro_when_volume_ro(
+        self, service, db_session, test_user, admin_user
+    ):
         ws = SharedWorkspace(name="ws", owner_id=admin_user.id)
         db_session.add(ws)
         await db_session.commit()
@@ -104,11 +118,15 @@ class TestCanAccessVolume:
         db_session.add(member)
         await db_session.commit()
 
-        assert await service.can_access_volume(str(vol.id), str(test_user.id), "read_write") is False
+        assert (
+            await service.can_access_volume(str(vol.id), str(test_user.id), "read_write") is False
+        )
         assert await service.can_access_volume(str(vol.id), str(test_user.id), "read_only") is True
 
     @pytest.mark.asyncio
-    async def test_workspace_member_ro_when_member_ro(self, service, db_session, test_user, admin_user):
+    async def test_workspace_member_ro_when_member_ro(
+        self, service, db_session, test_user, admin_user
+    ):
         ws = SharedWorkspace(name="ws", owner_id=admin_user.id)
         db_session.add(ws)
         await db_session.commit()
@@ -127,7 +145,9 @@ class TestCanAccessVolume:
         db_session.add(member)
         await db_session.commit()
 
-        assert await service.can_access_volume(str(vol.id), str(test_user.id), "read_write") is False
+        assert (
+            await service.can_access_volume(str(vol.id), str(test_user.id), "read_write") is False
+        )
         assert await service.can_access_volume(str(vol.id), str(test_user.id), "read_only") is True
 
     @pytest.mark.asyncio
@@ -223,7 +243,13 @@ class TestGetAccessibleVolumeIds:
 
     @pytest.mark.asyncio
     async def test_includes_public_for_read_only(self, service, db_session, admin_user):
-        vol = Volume(name="pub", display_name="Pub", owner_id=admin_user.id, size_bytes=0, visibility="public")
+        vol = Volume(
+            name="pub",
+            display_name="Pub",
+            owner_id=admin_user.id,
+            size_bytes=0,
+            visibility="public",
+        )
         db_session.add(vol)
         await db_session.commit()
         await db_session.refresh(vol)
@@ -233,7 +259,13 @@ class TestGetAccessibleVolumeIds:
 
     @pytest.mark.asyncio
     async def test_excludes_public_for_rw(self, service, db_session, admin_user):
-        vol = Volume(name="pub", display_name="Pub", owner_id=admin_user.id, size_bytes=0, visibility="public")
+        vol = Volume(
+            name="pub",
+            display_name="Pub",
+            owner_id=admin_user.id,
+            size_bytes=0,
+            visibility="public",
+        )
         db_session.add(vol)
         await db_session.commit()
         await db_session.refresh(vol)

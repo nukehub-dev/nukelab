@@ -12,10 +12,9 @@ class TestCreditsBalance:
     async def test_get_own_balance(self, client, user_token, test_user):
         """User should see their own balance."""
         response = await client.get(
-            "/api/credits/",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/credits/", headers={"Authorization": f"Bearer {user_token}"}
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "balance" in data
@@ -31,9 +30,9 @@ class TestCreditsAdmin:
         response = await client.post(
             f"/api/credits/users/{test_user.id}/grant",
             headers={"Authorization": f"Bearer {admin_token}"},
-            json={"amount": 100, "reason": "Bonus"}
+            json={"amount": 100, "reason": "Bonus"},
         )
-        
+
         assert response.status_code == 200
 
     @pytest.mark.asyncio
@@ -42,9 +41,9 @@ class TestCreditsAdmin:
         response = await client.post(
             "/api/credits/users/some-user-id/grant",
             headers={"Authorization": f"Bearer {user_token}"},
-            json={"amount": 100}
+            json={"amount": 100},
         )
-        
+
         assert response.status_code == 403
 
 
@@ -62,9 +61,7 @@ class TestCreditService:
         assert initial > 0
 
         tx = await service.consume_credits(
-            user_id=str(test_user.id),
-            amount=10,
-            description="Test consumption"
+            user_id=str(test_user.id), amount=10, description="Test consumption"
         )
 
         assert tx.amount == -10
@@ -85,9 +82,7 @@ class TestCreditService:
 
         amount = 5
         tx = await service.consume_credits(
-            user_id=str(test_user.id),
-            amount=amount,
-            description="E2E test consumption"
+            user_id=str(test_user.id), amount=amount, description="E2E test consumption"
         )
 
         assert tx.amount == -amount
@@ -100,7 +95,7 @@ class TestCreditService:
             user_id=str(test_user.id),
             amount=amount,
             actor_id=str(test_user.id),
-            reason="E2E test cleanup"
+            reason="E2E test cleanup",
         )
 
         assert grant_tx.amount == amount
@@ -266,11 +261,12 @@ class TestTransactions:
     async def test_view_transaction_history(self, client, user_token):
         """User should view their transaction history."""
         response = await client.get(
-            "/api/credits/history",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/credits/history", headers={"Authorization": f"Bearer {user_token}"}
         )
-        
+
         assert response.status_code == 200
+
+
 """Extended tests for small API modules — coverage gap closure."""
 
 import pytest
@@ -300,6 +296,7 @@ def reset_maintenance_state():
 # ─────────────────────────────────────────────────────────────
 # Schedules API
 # ─────────────────────────────────────────────────────────────
+
 
 class TestCreditsExtended:
     """Tests for credits endpoint coverage gaps."""
@@ -357,5 +354,3 @@ class TestCreditsExtended:
 # ─────────────────────────────────────────────────────────────
 # System API
 # ─────────────────────────────────────────────────────────────
-
-

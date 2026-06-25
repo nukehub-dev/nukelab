@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useCallback } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   Key,
   Plus,
@@ -18,42 +18,115 @@ import {
   ChevronDown,
   ChevronUp,
   Tag,
-} from 'lucide-react';
-import { useTokens, useTokenActions } from '../../hooks/use-tokens';
-import { useToast } from '../../stores/toast-store';
-import { useConfirmDialog } from '../ui/confirm-dialog';
-import { Tooltip } from '../ui/tooltip';
-import { cn } from '../../lib/utils';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '../ui/dialog';
-import { Input } from '../ui/input';
-import { Button } from '../ui/button';
-import { Select, SelectItem } from '../ui/select';
-import { Checkbox } from '../ui/checkbox';
-import { EmptyState } from '../feedback/empty-state';
-import type { ApiToken, ApiTokenWithValue } from '../../types/api';
+} from 'lucide-react'
+import { useTokens, useTokenActions } from '../../hooks/use-tokens'
+import { useToast } from '../../stores/toast-store'
+import { useConfirmDialog } from '../ui/confirm-dialog'
+import { Tooltip } from '../ui/tooltip'
+import { cn } from '../../lib/utils'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from '../ui/dialog'
+import { Input } from '../ui/input'
+import { Button } from '../ui/button'
+import { Select, SelectItem } from '../ui/select'
+import { Checkbox } from '../ui/checkbox'
+import { EmptyState } from '../feedback/empty-state'
+import type { ApiToken, ApiTokenWithValue } from '../../types/api'
 
 const AVAILABLE_SCOPES = [
   // Servers
-  { value: 'servers:read_own', label: 'Read Own Servers', description: 'View own server details', category: 'Servers' },
-  { value: 'servers:write_own', label: 'Write Own Servers', description: 'Create, start, stop, and delete own servers', category: 'Servers' },
+  {
+    value: 'servers:read_own',
+    label: 'Read Own Servers',
+    description: 'View own server details',
+    category: 'Servers',
+  },
+  {
+    value: 'servers:write_own',
+    label: 'Write Own Servers',
+    description: 'Create, start, stop, and delete own servers',
+    category: 'Servers',
+  },
   // Volumes
-  { value: 'volumes:read_own', label: 'Read Own Volumes', description: 'View own volume details', category: 'Volumes' },
-  { value: 'volumes:write_own', label: 'Write Own Volumes', description: 'Create and manage own volumes', category: 'Volumes' },
+  {
+    value: 'volumes:read_own',
+    label: 'Read Own Volumes',
+    description: 'View own volume details',
+    category: 'Volumes',
+  },
+  {
+    value: 'volumes:write_own',
+    label: 'Write Own Volumes',
+    description: 'Create and manage own volumes',
+    category: 'Volumes',
+  },
   // Workspaces
-  { value: 'workspaces:read_own', label: 'Read Own Workspaces', description: 'View own workspace details', category: 'Workspaces' },
-  { value: 'workspaces:write_own', label: 'Write Own Workspaces', description: 'Create and manage own workspaces', category: 'Workspaces' },
+  {
+    value: 'workspaces:read_own',
+    label: 'Read Own Workspaces',
+    description: 'View own workspace details',
+    category: 'Workspaces',
+  },
+  {
+    value: 'workspaces:write_own',
+    label: 'Write Own Workspaces',
+    description: 'Create and manage own workspaces',
+    category: 'Workspaces',
+  },
   // User
-  { value: 'user:read', label: 'Read User', description: 'View user profile information', category: 'User' },
-  { value: 'user:update', label: 'Update User', description: 'Update user profile', category: 'User' },
+  {
+    value: 'user:read',
+    label: 'Read User',
+    description: 'View user profile information',
+    category: 'User',
+  },
+  {
+    value: 'user:update',
+    label: 'Update User',
+    description: 'Update user profile',
+    category: 'User',
+  },
   // Credits
-  { value: 'credits:read_own', label: 'Read Own Credits', description: 'View own credit balance and history', category: 'Credits' },
+  {
+    value: 'credits:read_own',
+    label: 'Read Own Credits',
+    description: 'View own credit balance and history',
+    category: 'Credits',
+  },
   // Notifications
-  { value: 'notifications:read', label: 'Read Notifications', description: 'View notifications', category: 'Notifications' },
-  { value: 'notifications:write', label: 'Manage Notifications', description: 'Mark notifications as read', category: 'Notifications' },
+  {
+    value: 'notifications:read',
+    label: 'Read Notifications',
+    description: 'View notifications',
+    category: 'Notifications',
+  },
+  {
+    value: 'notifications:write',
+    label: 'Manage Notifications',
+    description: 'Mark notifications as read',
+    category: 'Notifications',
+  },
   // Preferences
-  { value: 'preferences:read', label: 'Read Preferences', description: 'View user preferences', category: 'Preferences' },
-  { value: 'preferences:write', label: 'Write Preferences', description: 'Update user preferences', category: 'Preferences' },
-];
+  {
+    value: 'preferences:read',
+    label: 'Read Preferences',
+    description: 'View user preferences',
+    category: 'Preferences',
+  },
+  {
+    value: 'preferences:write',
+    label: 'Write Preferences',
+    description: 'Update user preferences',
+    category: 'Preferences',
+  },
+]
 
 const EXPIRATION_OPTIONS = [
   { value: '7', label: '7 days' },
@@ -61,31 +134,31 @@ const EXPIRATION_OPTIONS = [
   { value: '90', label: '90 days' },
   { value: '180', label: '6 months' },
   { value: '365', label: '1 year' },
-];
+]
 
 export function TokensPage() {
-  const { data: tokens, isLoading } = useTokens();
-  const actions = useTokenActions();
-  const { confirm, dialog } = useConfirmDialog();
-  const { success: toastSuccess } = useToast();
+  const { data: tokens, isLoading } = useTokens()
+  const actions = useTokenActions()
+  const { confirm, dialog } = useConfirmDialog()
+  const { success: toastSuccess } = useToast()
 
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [newToken, setNewToken] = useState<ApiTokenWithValue | null>(null);
-  const [expandedTokenId, setExpandedTokenId] = useState<string | null>(null);
+  const [showCreateDialog, setShowCreateDialog] = useState(false)
+  const [newToken, setNewToken] = useState<ApiTokenWithValue | null>(null)
+  const [expandedTokenId, setExpandedTokenId] = useState<string | null>(null)
 
   const handleCreateSuccess = useCallback((token: ApiTokenWithValue) => {
-    setNewToken(token);
-    setShowCreateDialog(false);
-  }, []);
+    setNewToken(token)
+    setShowCreateDialog(false)
+  }, [])
 
   const handleRegenerateSuccess = useCallback((token: ApiTokenWithValue) => {
-    setNewToken(token);
-  }, []);
+    setNewToken(token)
+  }, [])
 
   const handleCopyToken = async (token: string) => {
-    await navigator.clipboard.writeText(token);
-    toastSuccess('Copied', 'Token copied to clipboard');
-  };
+    await navigator.clipboard.writeText(token)
+    toastSuccess('Copied', 'Token copied to clipboard')
+  }
 
   const handleRevoke = async (token: ApiToken) => {
     const confirmed = await confirm({
@@ -94,11 +167,11 @@ export function TokensPage() {
       variant: 'warning',
       confirmLabel: 'Revoke',
       cancelLabel: 'Cancel',
-    });
+    })
     if (confirmed) {
-      actions.revokeToken.mutate(token.id);
+      actions.revokeToken.mutate(token.id)
     }
-  };
+  }
 
   const handleDelete = async (token: ApiToken) => {
     const confirmed = await confirm({
@@ -107,11 +180,11 @@ export function TokensPage() {
       variant: 'danger',
       confirmLabel: 'Delete',
       cancelLabel: 'Cancel',
-    });
+    })
     if (confirmed) {
-      actions.deleteToken.mutate(token.id);
+      actions.deleteToken.mutate(token.id)
     }
-  };
+  }
 
   const handleRegenerate = async (token: ApiToken) => {
     const confirmed = await confirm({
@@ -120,18 +193,18 @@ export function TokensPage() {
       variant: 'info',
       confirmLabel: 'Regenerate',
       cancelLabel: 'Cancel',
-    });
+    })
     if (confirmed) {
       actions.regenerateToken.mutate(token.id, {
         onSuccess: (data) => {
-          handleRegenerateSuccess(data as unknown as ApiTokenWithValue);
+          handleRegenerateSuccess(data as unknown as ApiTokenWithValue)
         },
-      });
+      })
     }
-  };
+  }
 
-  const activeTokens = tokens?.filter((t) => t.is_active) ?? [];
-  const revokedTokens = tokens?.filter((t) => !t.is_active) ?? [];
+  const activeTokens = tokens?.filter((t) => t.is_active) ?? []
+  const revokedTokens = tokens?.filter((t) => !t.is_active) ?? []
 
   return (
     <>
@@ -154,8 +227,13 @@ export function TokensPage() {
             <div className="mt-4 space-y-4">
               <div className="p-4 rounded-xl bg-primary/5 border border-primary/20">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-medium text-primary uppercase tracking-wider">Token Value</span>
-                  <CopyButton text={newToken.token} onCopy={() => handleCopyToken(newToken.token)} />
+                  <span className="text-xs font-medium text-primary uppercase tracking-wider">
+                    Token Value
+                  </span>
+                  <CopyButton
+                    text={newToken.token}
+                    onCopy={() => handleCopyToken(newToken.token)}
+                  />
                 </div>
                 <TokenReveal value={newToken.token} />
               </div>
@@ -167,7 +245,9 @@ export function TokensPage() {
                 </div>
                 <div className="p-3 rounded-lg bg-muted/50">
                   <span className="text-muted-foreground block text-xs mb-1">Expires</span>
-                  <span className="font-medium">{newToken.expires_at ? formatDate(newToken.expires_at) : 'Never'}</span>
+                  <span className="font-medium">
+                    {newToken.expires_at ? formatDate(newToken.expires_at) : 'Never'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -268,7 +348,7 @@ export function TokensPage() {
         )}
       </div>
     </>
-  );
+  )
 }
 
 /* ------------------------------------------------------------------ */
@@ -281,34 +361,37 @@ function CreateTokenDialog({
   onSuccess,
   isCreating,
 }: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSuccess: (token: ApiTokenWithValue) => void;
-  isCreating: boolean;
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onSuccess: (token: ApiTokenWithValue) => void
+  isCreating: boolean
 }) {
-  const actions = useTokenActions();
-  const [name, setName] = useState('');
-  const [expiresDays, setExpiresDays] = useState('30');
-  const [selectedScopes, setSelectedScopes] = useState<string[]>(['servers:read_own', 'servers:write_own']);
-  const [nameError, setNameError] = useState('');
+  const actions = useTokenActions()
+  const [name, setName] = useState('')
+  const [expiresDays, setExpiresDays] = useState('30')
+  const [selectedScopes, setSelectedScopes] = useState<string[]>([
+    'servers:read_own',
+    'servers:write_own',
+  ])
+  const [nameError, setNameError] = useState('')
 
   const toggleScope = (scope: string) => {
     setSelectedScopes((prev) =>
       prev.includes(scope) ? prev.filter((s) => s !== scope) : [...prev, scope]
-    );
-  };
+    )
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+    e.preventDefault()
     if (!name.trim()) {
-      setNameError('Token name is required');
-      return;
+      setNameError('Token name is required')
+      return
     }
     if (selectedScopes.length === 0) {
-      setNameError('Select at least one scope');
-      return;
+      setNameError('Select at least one scope')
+      return
     }
-    setNameError('');
+    setNameError('')
 
     actions.createToken.mutate(
       {
@@ -318,24 +401,24 @@ function CreateTokenDialog({
       },
       {
         onSuccess: (data) => {
-          onSuccess(data as unknown as ApiTokenWithValue);
-          setName('');
-          setSelectedScopes(['servers:read_own', 'servers:write_own']);
-          setExpiresDays('30');
+          onSuccess(data as unknown as ApiTokenWithValue)
+          setName('')
+          setSelectedScopes(['servers:read_own', 'servers:write_own'])
+          setExpiresDays('30')
         },
       }
-    );
-  };
+    )
+  }
 
   const handleClose = () => {
     if (!isCreating) {
-      setName('');
-      setNameError('');
-      setSelectedScopes(['servers:read_own', 'servers:write_own']);
-      setExpiresDays('30');
-      onOpenChange(false);
+      setName('')
+      setNameError('')
+      setSelectedScopes(['servers:read_own', 'servers:write_own'])
+      setExpiresDays('30')
+      onOpenChange(false)
     }
-  };
+  }
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -358,8 +441,8 @@ function CreateTokenDialog({
               type="text"
               value={name}
               onChange={(e) => {
-                setName(e.target.value);
-                if (nameError) setNameError('');
+                setName(e.target.value)
+                if (nameError) setNameError('')
               }}
               placeholder="e.g., VS Code, GitHub Actions, CLI"
               disabled={isCreating}
@@ -373,11 +456,7 @@ function CreateTokenDialog({
           {/* Expiration */}
           <div className="space-y-2">
             <label className="text-sm font-medium">Expiration</label>
-            <Select
-              value={expiresDays}
-              onChange={setExpiresDays}
-              disabled={isCreating}
-            >
+            <Select value={expiresDays} onChange={setExpiresDays} disabled={isCreating}>
               {EXPIRATION_OPTIONS.map((opt) => (
                 <SelectItem key={opt.value} value={opt.value}>
                   {opt.label}
@@ -421,7 +500,9 @@ function CreateTokenDialog({
                               {scope.value}
                             </code>
                           </div>
-                          <p className="text-xs text-muted-foreground mt-0.5">{scope.description}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {scope.description}
+                          </p>
                         </div>
                       </label>
                     ))}
@@ -443,7 +524,7 @@ function CreateTokenDialog({
         <DialogClose onClick={handleClose} />
       </DialogContent>
     </Dialog>
-  );
+  )
 }
 
 /* ------------------------------------------------------------------ */
@@ -461,17 +542,17 @@ function TokenCard({
   isRevoking,
   isDeleting,
 }: {
-  token: ApiToken;
-  isExpanded: boolean;
-  onToggleExpand: () => void;
-  onRegenerate: () => void;
-  onRevoke: () => void;
-  onDelete: () => void;
-  isRegenerating: boolean;
-  isRevoking: boolean;
-  isDeleting: boolean;
+  token: ApiToken
+  isExpanded: boolean
+  onToggleExpand: () => void
+  onRegenerate: () => void
+  onRevoke: () => void
+  onDelete: () => void
+  isRegenerating: boolean
+  isRevoking: boolean
+  isDeleting: boolean
 }) {
-  const isBusy = isRegenerating || isRevoking || isDeleting;
+  const isBusy = isRegenerating || isRevoking || isDeleting
 
   return (
     <motion.div
@@ -497,13 +578,20 @@ function TokenCard({
               token.is_active ? 'bg-primary/10' : 'bg-muted'
             )}
           >
-            <Key className={cn('w-5 h-5', token.is_active ? 'text-primary' : 'text-muted-foreground')} />
+            <Key
+              className={cn('w-5 h-5', token.is_active ? 'text-primary' : 'text-muted-foreground')}
+            />
           </div>
 
           {/* Info */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className={cn('font-semibold', !token.is_active && 'line-through text-muted-foreground')}>
+              <h3
+                className={cn(
+                  'font-semibold',
+                  !token.is_active && 'line-through text-muted-foreground'
+                )}
+              >
                 {token.name}
               </h3>
               <TokenStatusBadge isActive={token.is_active} />
@@ -516,11 +604,15 @@ function TokenCard({
               </span>
               <span className="flex items-center gap-1">
                 <Clock className="w-3 h-3" />
-                {token.last_used_at ? `Last used ${formatRelativeTime(token.last_used_at)}` : 'Never used'}
+                {token.last_used_at
+                  ? `Last used ${formatRelativeTime(token.last_used_at)}`
+                  : 'Never used'}
               </span>
               <span className="flex items-center gap-1">
                 <Calendar className="w-3 h-3" />
-                {token.expires_at ? `Expires ${formatRelativeTime(token.expires_at)}` : 'No expiration'}
+                {token.expires_at
+                  ? `Expires ${formatRelativeTime(token.expires_at)}`
+                  : 'No expiration'}
               </span>
             </div>
 
@@ -584,12 +676,7 @@ function TokenCard({
               </Tooltip>
             )}
             <Tooltip content={isExpanded ? 'Collapse' : 'Expand'}>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={onToggleExpand}
-                className="w-8 h-8"
-              >
+              <Button variant="ghost" size="icon" onClick={onToggleExpand} className="w-8 h-8">
                 {isExpanded ? (
                   <ChevronUp className="w-4 h-4" />
                 ) : (
@@ -618,7 +705,11 @@ function TokenCard({
                 </h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                   <DetailItem icon={Tag} label="Token ID" value={token.id} />
-                  <DetailItem icon={Calendar} label="Created" value={formatDate(token.created_at)} />
+                  <DetailItem
+                    icon={Calendar}
+                    label="Created"
+                    value={formatDate(token.created_at)}
+                  />
                   <DetailItem
                     icon={Clock}
                     label="Last Used"
@@ -667,7 +758,7 @@ function TokenCard({
         )}
       </AnimatePresence>
     </motion.div>
-  );
+  )
 }
 
 /* ------------------------------------------------------------------ */
@@ -687,7 +778,7 @@ function TokenStatusBadge({ isActive }: { isActive: boolean }) {
       <span className={cn('w-1.5 h-1.5 rounded-full', isActive ? 'bg-green-400' : 'bg-red-400')} />
       {isActive ? 'Active' : 'Revoked'}
     </span>
-  );
+  )
 }
 
 function DetailItem({
@@ -695,9 +786,9 @@ function DetailItem({
   label,
   value,
 }: {
-  icon: React.ElementType;
-  label: string;
-  value: string;
+  icon: React.ElementType
+  label: string
+  value: string
 }) {
   return (
     <div className="flex items-start gap-2.5 p-3 rounded-lg bg-muted/30">
@@ -707,26 +798,21 @@ function DetailItem({
         <span className="text-sm font-medium break-all">{value}</span>
       </div>
     </div>
-  );
+  )
 }
 
 function CopyButton({ text, onCopy }: { text: string; onCopy: () => void }) {
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState(false)
 
   const handleClick = async () => {
-    await navigator.clipboard.writeText(text);
-    setCopied(true);
-    onCopy();
-    setTimeout(() => setCopied(false), 2000);
-  };
+    await navigator.clipboard.writeText(text)
+    setCopied(true)
+    onCopy()
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   return (
-    <Button
-      variant="ghost"
-      size="sm"
-      onClick={handleClick}
-      className="h-7 px-2 gap-1 text-xs"
-    >
+    <Button variant="ghost" size="sm" onClick={handleClick} className="h-7 px-2 gap-1 text-xs">
       {copied ? (
         <>
           <Check className="w-3.5 h-3.5 text-green-400" />
@@ -739,11 +825,11 @@ function CopyButton({ text, onCopy }: { text: string; onCopy: () => void }) {
         </>
       )}
     </Button>
-  );
+  )
 }
 
 function TokenReveal({ value }: { value: string }) {
-  const [revealed, setRevealed] = useState(false);
+  const [revealed, setRevealed] = useState(false)
 
   return (
     <div className="relative">
@@ -774,7 +860,7 @@ function TokenReveal({ value }: { value: string }) {
         </p>
       )}
     </div>
-  );
+  )
 }
 
 /* ------------------------------------------------------------------ */
@@ -785,10 +871,7 @@ function TokenListSkeleton() {
   return (
     <div className="space-y-3">
       {[1, 2, 3].map((i) => (
-        <div
-          key={i}
-          className="rounded-xl border border-border/40 bg-card/30 p-5 animate-pulse"
-        >
+        <div key={i} className="rounded-xl border border-border/40 bg-card/30 p-5 animate-pulse">
           <div className="flex items-start gap-4">
             <div className="w-10 h-10 rounded-xl bg-muted shrink-0" />
             <div className="flex-1 space-y-2">
@@ -803,7 +886,7 @@ function TokenListSkeleton() {
         </div>
       ))}
     </div>
-  );
+  )
 }
 
 /* ------------------------------------------------------------------ */
@@ -811,38 +894,38 @@ function TokenListSkeleton() {
 /* ------------------------------------------------------------------ */
 
 function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
+  const date = new Date(dateStr)
   return date.toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
-  });
+  })
 }
 
 function formatRelativeTime(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = date.getTime() - now.getTime();
-  const diffSec = Math.round(diffMs / 1000);
-  const diffMin = Math.round(diffSec / 60);
-  const diffHour = Math.round(diffMin / 60);
-  const diffDay = Math.round(diffHour / 24);
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diffMs = date.getTime() - now.getTime()
+  const diffSec = Math.round(diffMs / 1000)
+  const diffMin = Math.round(diffSec / 60)
+  const diffHour = Math.round(diffMin / 60)
+  const diffDay = Math.round(diffHour / 24)
 
-  const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+  const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
 
   if (Math.abs(diffDay) >= 365) {
-    return formatDate(dateStr);
+    return formatDate(dateStr)
   }
   if (Math.abs(diffDay) >= 1) {
-    return rtf.format(diffDay, 'day');
+    return rtf.format(diffDay, 'day')
   }
   if (Math.abs(diffHour) >= 1) {
-    return rtf.format(diffHour, 'hour');
+    return rtf.format(diffHour, 'hour')
   }
   if (Math.abs(diffMin) >= 1) {
-    return rtf.format(diffMin, 'minute');
+    return rtf.format(diffMin, 'minute')
   }
-  return rtf.format(diffSec, 'second');
+  return rtf.format(diffSec, 'second')
 }

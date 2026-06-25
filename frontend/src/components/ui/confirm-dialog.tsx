@@ -1,41 +1,38 @@
-import { useState, useCallback, type ReactNode } from 'react';
-import {
-  AlertTriangle,
-  Trash2,
-  Ban,
-  RefreshCw,
-  type LucideIcon,
-} from 'lucide-react';
-import { Button } from './button';
-import { Modal } from './modal';
-import { cn } from '../../lib/utils';
+import { useState, useCallback, type ReactNode } from 'react'
+import { AlertTriangle, Trash2, Ban, RefreshCw, type LucideIcon } from 'lucide-react'
+import { Button } from './button'
+import { Modal } from './modal'
+import { cn } from '../../lib/utils'
 
-export type ConfirmVariant = 'danger' | 'warning' | 'info' | 'destructive';
+export type ConfirmVariant = 'danger' | 'warning' | 'info' | 'destructive'
 
 interface ConfirmOptions {
-  title: string;
-  description?: string;
-  confirmLabel?: string;
-  cancelLabel?: string;
-  variant?: ConfirmVariant;
-  icon?: LucideIcon;
+  title: string
+  description?: string
+  confirmLabel?: string
+  cancelLabel?: string
+  variant?: ConfirmVariant
+  icon?: LucideIcon
   /** When set, user must type this exact string (case-insensitive) to enable confirm */
-  typeToConfirm?: string;
+  typeToConfirm?: string
   /** Extra content rendered between description and actions */
-  customContent?: ReactNode;
+  customContent?: ReactNode
 }
 
 interface ConfirmState extends ConfirmOptions {
-  isOpen: boolean;
-  resolve: ((value: boolean) => void) | null;
+  isOpen: boolean
+  resolve: ((value: boolean) => void) | null
 }
 
-const variantConfig: Record<ConfirmVariant, { icon: LucideIcon; color: string; buttonVariant: 'destructive' | 'default' | 'secondary' }> = {
+const variantConfig: Record<
+  ConfirmVariant,
+  { icon: LucideIcon; color: string; buttonVariant: 'destructive' | 'default' | 'secondary' }
+> = {
   danger: { icon: Trash2, color: 'text-destructive', buttonVariant: 'destructive' },
   warning: { icon: AlertTriangle, color: 'text-amber-500', buttonVariant: 'default' },
   info: { icon: RefreshCw, color: 'text-primary', buttonVariant: 'default' },
   destructive: { icon: Ban, color: 'text-destructive', buttonVariant: 'destructive' },
-};
+}
 
 export function useConfirmDialog() {
   const [state, setState] = useState<ConfirmState>({
@@ -46,12 +43,12 @@ export function useConfirmDialog() {
     cancelLabel: 'Cancel',
     variant: 'info',
     resolve: null,
-  });
-  const [typedText, setTypedText] = useState('');
+  })
+  const [typedText, setTypedText] = useState('')
 
   const confirm = useCallback((options: ConfirmOptions): Promise<boolean> => {
     return new Promise((resolve) => {
-      setTypedText('');
+      setTypedText('')
       setState({
         ...options,
         confirmLabel: options.confirmLabel ?? 'Confirm',
@@ -59,28 +56,35 @@ export function useConfirmDialog() {
         variant: options.variant ?? 'info',
         isOpen: true,
         resolve,
-      });
-    });
-  }, []);
+      })
+    })
+  }, [])
 
-  const resolve = state.resolve;
+  const resolve = state.resolve
 
   const handleClose = useCallback(
     (value: boolean) => {
-      resolve?.(value);
-      setState((prev) => ({ ...prev, isOpen: false, resolve: null }));
-      setTypedText('');
+      resolve?.(value)
+      setState((prev) => ({ ...prev, isOpen: false, resolve: null }))
+      setTypedText('')
     },
     [resolve]
-  );
+  )
 
-  const config = variantConfig[state.variant ?? 'info'];
-  const Icon = state.icon ?? config.icon;
+  const config = variantConfig[state.variant ?? 'info']
+  const Icon = state.icon ?? config.icon
 
-  const confirmDisabled = !!state.typeToConfirm && typedText.toLowerCase().trim() !== state.typeToConfirm.toLowerCase().trim();
+  const confirmDisabled =
+    !!state.typeToConfirm &&
+    typedText.toLowerCase().trim() !== state.typeToConfirm.toLowerCase().trim()
 
   const dialog = (
-    <Modal open={state.isOpen} onOpenChange={(v) => handleClose(v)} showClose={false} className={state.typeToConfirm || state.customContent ? 'max-w-lg' : 'max-w-md'}>
+    <Modal
+      open={state.isOpen}
+      onOpenChange={(v) => handleClose(v)}
+      showClose={false}
+      className={state.typeToConfirm || state.customContent ? 'max-w-lg' : 'max-w-md'}
+    >
       {/* Top accent line */}
       <div
         className={cn(
@@ -106,26 +110,18 @@ export function useConfirmDialog() {
                   : 'bg-primary/10'
             )}
           >
-            <Icon
-              className={cn('w-5 h-5', config.color)}
-            />
+            <Icon className={cn('w-5 h-5', config.color)} />
           </div>
           <div className="flex-1 min-w-0">
             <h3 className="text-lg font-semibold">{state.title}</h3>
             {state.description && (
-              <p className="text-sm text-muted-foreground mt-1">
-                {state.description}
-              </p>
+              <p className="text-sm text-muted-foreground mt-1">{state.description}</p>
             )}
           </div>
         </div>
 
         {/* Custom content */}
-        {state.customContent && (
-          <div className="mt-4">
-            {state.customContent}
-          </div>
-        )}
+        {state.customContent && <div className="mt-4">{state.customContent}</div>}
 
         {/* Type to confirm */}
         {state.typeToConfirm && (
@@ -141,8 +137,8 @@ export function useConfirmDialog() {
               className="w-full rounded-lg border border-border/60 bg-background px-3 py-2.5 text-sm placeholder:text-muted-foreground/50 focus:border-amber-500/60 focus:ring-1 focus:ring-amber-500/30 focus:outline-none transition-colors"
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !confirmDisabled) {
-                  e.preventDefault();
-                  handleClose(true);
+                  e.preventDefault()
+                  handleClose(true)
                 }
               }}
               autoFocus
@@ -172,7 +168,7 @@ export function useConfirmDialog() {
         </div>
       </div>
     </Modal>
-  );
+  )
 
-  return { confirm, dialog };
+  return { confirm, dialog }
 }

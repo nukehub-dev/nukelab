@@ -1,11 +1,11 @@
-import { createFileRoute, Link } from '@tanstack/react-router';
-import { ArrowLeft, KeyRound } from 'lucide-react';
-import { motion } from 'framer-motion';
-import { TokensPage } from '../components/settings/tokens-page';
+import { createFileRoute, Link } from '@tanstack/react-router'
+import { ArrowLeft, KeyRound } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { TokensPage } from '../components/settings/tokens-page'
 
 export const Route = createFileRoute('/settings/tokens')({
   component: TokensSettingsPage,
-});
+})
 
 function TokensSettingsPage() {
   return (
@@ -26,12 +26,14 @@ function TokensSettingsPage() {
         </div>
         <div>
           <h1 className="text-xl font-bold">API Tokens</h1>
-          <p className="text-sm text-muted-foreground">Manage personal access tokens for API and CLI access</p>
+          <p className="text-sm text-muted-foreground">
+            Manage personal access tokens for API and CLI access
+          </p>
         </div>
       </motion.div>
       <div className="px-6 lg:px-10 pb-10">
         <TokensPage />
       </div>
     </div>
-  );
+  )
 }

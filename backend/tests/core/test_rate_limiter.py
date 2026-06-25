@@ -107,7 +107,9 @@ class TestCheckLimit:
         with mock.patch("app.core.rate_limiter._get_redis_client", return_value=mock_redis):
             with mock.patch("app.core.rate_limiter.settings.rate_limit_enabled", True):
                 with mock.patch("app.core.rate_limiter.settings.rate_limit_window_seconds", 60):
-                    with mock.patch("app.core.rate_limiter.settings.rate_limit_bucket_ttl_multiplier", 2):
+                    with mock.patch(
+                        "app.core.rate_limiter.settings.rate_limit_bucket_ttl_multiplier", 2
+                    ):
                         req = Request({"type": "http", "headers": [], "client": ("1.1.1.1", 12345)})
                         limit, remaining = await _check_limit(req, multiplier=10.0)
                         assert remaining >= 0
@@ -127,7 +129,9 @@ class TestCheckLimit:
 
     @pytest.mark.asyncio
     async def test_redis_error_fails_open(self):
-        with mock.patch("app.core.rate_limiter._get_redis_client", side_effect=Exception("Redis down")):
+        with mock.patch(
+            "app.core.rate_limiter._get_redis_client", side_effect=Exception("Redis down")
+        ):
             with mock.patch("app.core.rate_limiter.settings.rate_limit_enabled", True):
                 req = Request({"type": "http", "headers": [], "client": ("1.1.1.1", 12345)})
                 limit, remaining = await _check_limit(req)

@@ -19,9 +19,7 @@ class AlertService:
 
     async def evaluate_all_rules(self):
         """Evaluate all active alert rules against latest metrics"""
-        result = await self.db.execute(
-            select(AlertRule).where(AlertRule.is_active == True)
-        )
+        result = await self.db.execute(select(AlertRule).where(AlertRule.is_active == True))
         rules = result.scalars().all()
 
         for rule in rules:
@@ -47,14 +45,16 @@ class AlertService:
     async def _handle_breach(self, rule: AlertRule, metric: ServerMetric, value: float):
         """Handle threshold breach"""
         # Check cooldown
-        cooldown_time = datetime.now(UTC).replace(tzinfo=None) - timedelta(seconds=rule.cooldown_seconds)
+        cooldown_time = datetime.now(UTC).replace(tzinfo=None) - timedelta(
+            seconds=rule.cooldown_seconds
+        )
         recent_alert = await self.db.execute(
             select(AlertHistory).where(
                 and_(
                     AlertHistory.rule_id == rule.id,
                     AlertHistory.server_id == metric.server_id,
                     AlertHistory.status.in_(["fired", "acknowledged"]),
-                    AlertHistory.fired_at >= cooldown_time
+                    AlertHistory.fired_at >= cooldown_time,
                 )
             )
         )
@@ -76,13 +76,15 @@ class AlertService:
     async def _check_resolution(self, rule: AlertRule, metric: ServerMetric, value: float):
         """Check if an active alert can be resolved"""
         result = await self.db.execute(
-            select(AlertHistory).where(
+            select(AlertHistory)
+            .where(
                 and_(
                     AlertHistory.rule_id == rule.id,
                     AlertHistory.server_id == metric.server_id,
                     AlertHistory.status.in_(["fired", "acknowledged"]),
                 )
-            ).order_by(AlertHistory.fired_at.desc())
+            )
+            .order_by(AlertHistory.fired_at.desc())
         )
         active_alert = result.scalar_one_or_none()
 
@@ -97,9 +99,7 @@ class AlertService:
         from app.services.email_service import EmailService
         from app.services.notification_service import NotificationService
 
-        result = await self.db.execute(
-            select(User).where(User.id == alert.server_id)
-        )
+        result = await self.db.execute(select(User).where(User.id == alert.server_id))
         user = result.scalar_one_or_none()
 
         if rule.notify_admin:
@@ -115,22 +115,25 @@ class AlertService:
                 message=f"{rule.metric_type.upper()} exceeded threshold ({alert.metric_value:.1f} > {rule.threshold:.1f})",
                 type="system",
                 severity="warning",
-                action_url=f"/servers/{alert.server_id}"
+                action_url=f"/servers/{alert.server_id}",
             )
 
         if rule.email_enabled and user and user.email:
             email_service = EmailService()
             if email_service.enabled:
-                template = email_service.render_template("server_ready", {
-                    "username": user.username,
-                    "server_name": rule.name,
-                    "message": f"{rule.metric_type.upper()} alert: {alert.metric_value:.1f} (threshold: {rule.threshold:.1f})"
-                })
+                template = email_service.render_template(
+                    "server_ready",
+                    {
+                        "username": user.username,
+                        "server_name": rule.name,
+                        "message": f"{rule.metric_type.upper()} alert: {alert.metric_value:.1f} (threshold: {rule.threshold:.1f})",
+                    },
+                )
                 result = await email_service.send_email(
                     to_email=user.email,
                     subject=f"[NukeLab Alert] {rule.name}",
                     html_body=template,
-                    text_body=f"Alert: {rule.name}\n{rule.metric_type.upper()}: {alert.metric_value:.1f} (threshold: {rule.threshold:.1f})"
+                    text_body=f"Alert: {rule.name}\n{rule.metric_type.upper()}: {alert.metric_value:.1f} (threshold: {rule.threshold:.1f})",
                 )
                 if result["success"]:
                     alert.email_sent = True
@@ -144,15 +147,17 @@ class AlertService:
         """Get latest metrics based on rule scope"""
         if rule.scope == "server" and rule.target_id:
             result = await self.db.execute(
-                select(ServerMetric).where(
-                    ServerMetric.server_id == rule.target_id
-                ).order_by(ServerMetric.collected_at.desc()).limit(1)
+                select(ServerMetric)
+                .where(ServerMetric.server_id == rule.target_id)
+                .order_by(ServerMetric.collected_at.desc())
+                .limit(1)
             )
             metric = result.scalar_one_or_none()
             return [metric] if metric else []
         elif rule.scope == "user" and rule.target_id:
             # Get all servers for user
             from app.models.server import Server
+
             server_result = await self.db.execute(
                 select(Server.id).where(Server.user_id == rule.target_id)
             )
@@ -160,9 +165,9 @@ class AlertService:
             if not server_ids:
                 return []
             result = await self.db.execute(
-                select(ServerMetric).where(
-                    ServerMetric.server_id.in_(server_ids)
-                ).order_by(ServerMetric.collected_at.desc())
+                select(ServerMetric)
+                .where(ServerMetric.server_id.in_(server_ids))
+                .order_by(ServerMetric.collected_at.desc())
             )
             return result.scalars().all()
         else:
@@ -175,11 +180,11 @@ class AlertService:
     def _extract_metric_value(self, metric: ServerMetric, metric_type: str) -> Optional[float]:
         """Extract the relevant value from a metric based on type"""
         mapping = {
-            'cpu': metric.cpu_percent,
-            'memory': metric.memory_percent,
-            'disk': metric.disk_read_bytes,
-            'gpu': metric.gpu_percent,
-            'pids': metric.pids,
+            "cpu": metric.cpu_percent,
+            "memory": metric.memory_percent,
+            "disk": metric.disk_read_bytes,
+            "gpu": metric.gpu_percent,
+            "pids": metric.pids,
         }
         return mapping.get(metric_type)
 

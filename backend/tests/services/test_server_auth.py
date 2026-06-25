@@ -44,7 +44,9 @@ class TestServerAuthTokenGeneration:
         )
 
         # Decode token without verification to inspect claims
-        claims = jwt.decode(token, key="", audience=str(test_server.id), options={"verify_signature": False})
+        claims = jwt.decode(
+            token, key="", audience=str(test_server.id), options={"verify_signature": False}
+        )
 
         assert claims["sub"] == str(test_user.id)
         assert claims["aud"] == str(test_server.id)
@@ -67,7 +69,9 @@ class TestServerAuthTokenGeneration:
             token_type="session",
         )
 
-        claims = jwt.decode(token, key="", audience=str(test_server.id), options={"verify_signature": False})
+        claims = jwt.decode(
+            token, key="", audience=str(test_server.id), options={"verify_signature": False}
+        )
 
         assert "client_ip" not in claims
         assert claims["sub"] == str(test_user.id)
@@ -86,7 +90,9 @@ class TestServerAuthTokenGeneration:
             custom_claims={"server_name": "test-server", "env": "prod"},
         )
 
-        claims = jwt.decode(token, key="", audience=str(test_server.id), options={"verify_signature": False})
+        claims = jwt.decode(
+            token, key="", audience=str(test_server.id), options={"verify_signature": False}
+        )
 
         assert claims["client_ip"] == "10.0.0.1"
         assert claims["server_name"] == "test-server"
@@ -107,7 +113,9 @@ class TestServerAuthTokenGeneration:
             token_type="session",
         )
 
-        claims = jwt.decode(token, key="", audience=str(test_server.id), options={"verify_signature": False})
+        claims = jwt.decode(
+            token, key="", audience=str(test_server.id), options={"verify_signature": False}
+        )
         exp = datetime.fromtimestamp(claims["exp"], UTC)
         iat = datetime.fromtimestamp(claims["iat"], UTC)
 
@@ -204,6 +212,7 @@ class TestServerAuthTokenVerification:
         finally:
             settings.server_auth_token_ttl = original_ttl
 
+
 """Extended tests for ServerAuthService (revocation, cleanup, stats, rate limits)."""
 
 import pytest
@@ -296,9 +305,15 @@ class TestServerAuthServiceRevocation:
         await db_session.refresh(server1)
         await db_session.refresh(server2)
 
-        await service.generate_access_token(db=db_session, server_id=server1.id, user_id=test_user.id)
-        await service.generate_access_token(db=db_session, server_id=server1.id, user_id=test_user.id)
-        await service.generate_access_token(db=db_session, server_id=server2.id, user_id=test_user.id)
+        await service.generate_access_token(
+            db=db_session, server_id=server1.id, user_id=test_user.id
+        )
+        await service.generate_access_token(
+            db=db_session, server_id=server1.id, user_id=test_user.id
+        )
+        await service.generate_access_token(
+            db=db_session, server_id=server2.id, user_id=test_user.id
+        )
 
         count = await service.revoke_server_tokens(db_session, server1.id, reason="server_stopped")
         assert count == 2
@@ -326,10 +341,16 @@ class TestServerAuthServiceRateLimit:
         original_limit = settings.server_auth_max_tokens_per_minute
         settings.server_auth_max_tokens_per_minute = 2
         try:
-            await service.generate_access_token(db=db_session, server_id=server.id, user_id=test_user.id)
-            await service.generate_access_token(db=db_session, server_id=server.id, user_id=test_user.id)
+            await service.generate_access_token(
+                db=db_session, server_id=server.id, user_id=test_user.id
+            )
+            await service.generate_access_token(
+                db=db_session, server_id=server.id, user_id=test_user.id
+            )
             with pytest.raises(ValueError, match="Rate limit exceeded"):
-                await service.generate_access_token(db=db_session, server_id=server.id, user_id=test_user.id)
+                await service.generate_access_token(
+                    db=db_session, server_id=server.id, user_id=test_user.id
+                )
         finally:
             settings.server_auth_max_tokens_per_minute = original_limit
 
@@ -420,7 +441,9 @@ class TestServerAuthServiceStats:
         await db_session.refresh(server)
 
         # Generate a token
-        await service.generate_access_token(db=db_session, server_id=server.id, user_id=test_user.id)
+        await service.generate_access_token(
+            db=db_session, server_id=server.id, user_id=test_user.id
+        )
 
         stats = await service.get_server_access_stats(db_session, server.id)
         assert stats["active_tokens"] == 1

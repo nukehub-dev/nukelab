@@ -4,32 +4,40 @@ from sqlalchemy import Column, String, Integer, Float, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.base import Base
 
+
 class ResourceQuota(Base):
     __tablename__ = "resource_quotas"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True, unique=True)
+    user_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True, unique=True
+    )
     role = Column(String(50), nullable=True, unique=True)
-    plan_id = Column(UUID(as_uuid=True), ForeignKey("server_plans.id", ondelete="CASCADE"), nullable=True, unique=True)
-    
+    plan_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("server_plans.id", ondelete="CASCADE"),
+        nullable=True,
+        unique=True,
+    )
+
     # Limits
     max_cpu_total = Column(Float, default=8.0)
     max_memory_total = Column(String(50), default="16g")
     max_disk_total = Column(String(50), default="100g")
     max_gpu_total = Column(Integer, default=0)
     max_servers_total = Column(Integer, default=5)
-    
+
     # Current usage (updated by scheduler)
     usage_cpu = Column(Float, default=0.0)
     usage_memory_mb = Column(Integer, default=0)
     usage_disk_mb = Column(Integer, default=0)
     usage_gpu = Column(Integer, default=0)
     usage_servers = Column(Integer, default=0)
-    
+
     # Timestamps
     created_at = Column(DateTime, default=utc_now)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
-    
+
     def to_dict(self):
         return {
             "id": str(self.id),

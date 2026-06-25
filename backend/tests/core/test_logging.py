@@ -22,8 +22,13 @@ class TestJSONFormatter:
         """Should produce valid JSON with core fields."""
         formatter = JSONFormatter()
         record = logging.LogRecord(
-            name="test", level=logging.INFO, pathname="", lineno=0,
-            msg="hello", args=(), exc_info=None,
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="hello",
+            args=(),
+            exc_info=None,
         )
         output = formatter.format(record)
         data = json.loads(output)
@@ -39,8 +44,13 @@ class TestJSONFormatter:
         try:
             formatter = JSONFormatter()
             record = logging.LogRecord(
-                name="test", level=logging.INFO, pathname="", lineno=0,
-                msg="hello", args=(), exc_info=None,
+                name="test",
+                level=logging.INFO,
+                pathname="",
+                lineno=0,
+                msg="hello",
+                args=(),
+                exc_info=None,
             )
             output = formatter.format(record)
             data = json.loads(output)
@@ -52,8 +62,13 @@ class TestJSONFormatter:
         """Should include extra record attributes."""
         formatter = JSONFormatter()
         record = logging.LogRecord(
-            name="test", level=logging.INFO, pathname="", lineno=0,
-            msg="hello", args=(), exc_info=None,
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="hello",
+            args=(),
+            exc_info=None,
         )
         record.path = "/api/test"
         record.method = "GET"
@@ -74,8 +89,13 @@ class TestJSONFormatter:
             raise ValueError("boom")
         except ValueError:
             record = logging.LogRecord(
-                name="test", level=logging.ERROR, pathname="", lineno=0,
-                msg="failed", args=(), exc_info=True,
+                name="test",
+                level=logging.ERROR,
+                pathname="",
+                lineno=0,
+                msg="failed",
+                args=(),
+                exc_info=True,
             )
             output = formatter.format(record)
 
@@ -91,8 +111,13 @@ class TestCorrelationIdFilter:
         """Should set correlation_id attribute on every record."""
         filt = CorrelationIdFilter()
         record = logging.LogRecord(
-            name="test", level=logging.INFO, pathname="", lineno=0,
-            msg="hello", args=(), exc_info=None,
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="hello",
+            args=(),
+            exc_info=None,
         )
         result = filt.filter(record)
         assert result is True
@@ -104,8 +129,13 @@ class TestCorrelationIdFilter:
         try:
             filt = CorrelationIdFilter()
             record = logging.LogRecord(
-                name="test", level=logging.INFO, pathname="", lineno=0,
-                msg="hello", args=(), exc_info=None,
+                name="test",
+                level=logging.INFO,
+                pathname="",
+                lineno=0,
+                msg="hello",
+                args=(),
+                exc_info=None,
             )
             filt.filter(record)
             assert record.correlation_id == "ctx-456"
@@ -120,8 +150,13 @@ class TestTextFormatter:
         """Should render correlation_id in output."""
         formatter = TextFormatter()
         record = logging.LogRecord(
-            name="test", level=logging.INFO, pathname="", lineno=0,
-            msg="hello", args=(), exc_info=None,
+            name="test",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="hello",
+            args=(),
+            exc_info=None,
         )
         record.correlation_id = "txt-789"  # type: ignore[attr-defined]
         output = formatter.format(record)

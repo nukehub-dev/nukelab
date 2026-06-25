@@ -59,6 +59,7 @@ if is_tracing_enabled() and not os.environ.get("TESTING"):
     except Exception:
         logger.exception("Failed to instrument SQLAlchemy for OpenTelemetry")
 
+
 # ── SQLAlchemy slow query logging (gated by config) ─────────────────────────
 def _attach_slow_query_listener():
     """Attach event listeners if slow-query logging is enabled in settings."""
@@ -82,7 +83,7 @@ def _attach_slow_query_listener():
                     "duration_ms": round(total_time, 2),
                     "statement": statement[:500],
                     "parameters": str(parameters)[:200],
-                }
+                },
             )
 
 

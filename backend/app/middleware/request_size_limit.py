@@ -91,16 +91,21 @@ class RequestSizeLimitMiddleware:
 
     async def _reject(self, send: Send, content_length: int) -> None:
         import json
-        body = json.dumps({
-            "detail": f"Request body too large. Maximum allowed is {self.max_size} bytes.",
-            "max_size": self.max_size,
-        }).encode("utf-8")
-        await send({
-            "type": "http.response.start",
-            "status": 413,
-            "headers": [
-                (b"content-type", b"application/json"),
-                (b"content-length", str(len(body)).encode("ascii")),
-            ],
-        })
+
+        body = json.dumps(
+            {
+                "detail": f"Request body too large. Maximum allowed is {self.max_size} bytes.",
+                "max_size": self.max_size,
+            }
+        ).encode("utf-8")
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 413,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"content-length", str(len(body)).encode("ascii")),
+                ],
+            }
+        )
         await send({"type": "http.response.body", "body": body})

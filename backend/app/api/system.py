@@ -31,25 +31,22 @@ async def health_check():
     if settings.maintenance_mode:
         return JSONResponse(
             status_code=503,
-            content={
-                "status": "maintenance",
-                "message": settings.maintenance_message
-            }
+            content={"status": "maintenance", "message": settings.maintenance_message},
         )
-    
+
     return {"status": "healthy", "timestamp": datetime.now(UTC).replace(tzinfo=None).isoformat()}
 
 
 @router.get("/config")
 async def get_system_config(
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get system configuration (admin only)"""
     service = SettingService(db)
     maint = await service.get_maintenance()
-    
+
     return {
         "app_name": settings.app_name,
         "app_env": settings.app_env,
@@ -63,30 +60,28 @@ async def get_system_config(
 async def update_system_config(
     config: SystemConfigUpdate,
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Update system configuration (admin only)"""
     service = SettingService(db)
     updates = {}
-    
+
     if config.maintenance_mode is not None or config.maintenance_message is not None:
         await service.save_maintenance(
-            enabled=config.maintenance_mode if config.maintenance_mode is not None else settings.maintenance_mode,
+            enabled=config.maintenance_mode
+            if config.maintenance_mode is not None
+            else settings.maintenance_mode,
             message=config.maintenance_message if config.maintenance_message is not None else None,
         )
         updates["maintenance_mode"] = settings.maintenance_mode
         if config.maintenance_message is not None:
             updates["maintenance_message"] = config.maintenance_message
-    
+
     if config.daily_allowance_default is not None:
         updates["daily_allowance_default"] = config.daily_allowance_default
-    
-    return {
-        "success": True,
-        "updates": updates,
-        "message": "Configuration updated"
-    }
+
+    return {"success": True, "updates": updates, "message": "Configuration updated"}
 
 
 @router.post("/maintenance")
@@ -94,59 +89,60 @@ async def toggle_maintenance(
     enabled: bool,
     message: Optional[str] = None,
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Toggle maintenance mode (admin only)"""
     service = SettingService(db)
-    
-    final_message = message or (settings.maintenance_message if not enabled else "System under maintenance")
+
+    final_message = message or (
+        settings.maintenance_message if not enabled else "System under maintenance"
+    )
     await service.save_maintenance(enabled=enabled, message=final_message)
-    
+
     return {
         "success": True,
         "maintenance_mode": settings.maintenance_mode,
-        "message": settings.maintenance_message
+        "message": settings.maintenance_message,
     }
 
 
 @router.get("/stats")
 async def get_system_stats(
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get system statistics (admin only)"""
     total_users_result = await db.execute(select(func.count()).select_from(User))
     total_users = total_users_result.scalar()
-    
-    active_users_result = await db.execute(
-        select(func.count()).where(User.is_active == True)
-    )
+
+    active_users_result = await db.execute(select(func.count()).where(User.is_active == True))
     active_users = active_users_result.scalar()
-    
+
     total_servers_result = await db.execute(select(func.count()).select_from(Server))
     total_servers = total_servers_result.scalar()
-    
+
     running_servers_result = await db.execute(
         select(func.count()).where(Server.status == "running")
     )
     running_servers = running_servers_result.scalar()
-    
+
     total_credits_result = await db.execute(
         select(func.sum(User.nuke_balance)).where(User.is_active == True)
     )
     total_credits = total_credits_result.scalar() or 0
-    
+
     return {
         "users": {"total": total_users, "active": active_users},
         "servers": {"total": total_servers, "running": running_servers},
         "credits": {"total": total_credits},
-        "timestamp": datetime.now(UTC).replace(tzinfo=None).isoformat()
+        "timestamp": datetime.now(UTC).replace(tzinfo=None).isoformat(),
     }
 
 
 # ─── Maintenance Window Schemas ─────────────────────────────────────────────
+
 
 class MaintenanceWindowCreate(BaseModel):
     title: str
@@ -154,7 +150,10 @@ class MaintenanceWindowCreate(BaseModel):
     start_at: datetime
     end_at: datetime
     is_active: Optional[bool] = True
-    notify_offsets: Optional[List[int]] = Field(default=None, description="Notification offsets in minutes before start (e.g. [10080, 1440, 15])")
+    notify_offsets: Optional[List[int]] = Field(
+        default=None,
+        description="Notification offsets in minutes before start (e.g. [10080, 1440, 15])",
+    )
 
 
 class MaintenanceWindowUpdate(BaseModel):
@@ -163,7 +162,9 @@ class MaintenanceWindowUpdate(BaseModel):
     start_at: Optional[datetime] = None
     end_at: Optional[datetime] = None
     is_active: Optional[bool] = None
-    notify_offsets: Optional[List[int]] = Field(default=None, description="Notification offsets in minutes before start")
+    notify_offsets: Optional[List[int]] = Field(
+        default=None, description="Notification offsets in minutes before start"
+    )
 
 
 def _naive_utc(dt: datetime) -> datetime:
@@ -175,13 +176,14 @@ def _naive_utc(dt: datetime) -> datetime:
 
 # ─── Maintenance Window Endpoints ───────────────────────────────────────────
 
+
 @router.get("/maintenance-windows")
 async def list_maintenance_windows(
     active_only: bool = False,
     future_only: bool = False,
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """List scheduled maintenance windows (admin only)"""
     service = MaintenanceWindowService(db)
@@ -196,8 +198,8 @@ async def list_maintenance_windows(
 async def create_maintenance_window(
     data: MaintenanceWindowCreate,
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Create a new scheduled maintenance window (admin only)"""
     service = MaintenanceWindowService(db)
@@ -220,8 +222,8 @@ async def create_maintenance_window(
 async def get_maintenance_window(
     window_id: str,
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get a single maintenance window (admin only)"""
     service = MaintenanceWindowService(db)
@@ -236,8 +238,8 @@ async def update_maintenance_window(
     window_id: str,
     data: MaintenanceWindowUpdate,
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Update a maintenance window (admin only)"""
     service = MaintenanceWindowService(db)
@@ -260,8 +262,8 @@ async def update_maintenance_window(
 async def delete_maintenance_window(
     window_id: str,
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Delete a maintenance window (admin only)"""
     service = MaintenanceWindowService(db)

@@ -1,6 +1,6 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { useState, useMemo } from 'react';
-import { motion } from 'framer-motion';
+import { createFileRoute } from '@tanstack/react-router'
+import { useState, useMemo } from 'react'
+import { motion } from 'framer-motion'
 import {
   Activity,
   CreditCard,
@@ -17,11 +17,11 @@ import {
   Database,
   BarChart3,
   LineChart,
-} from 'lucide-react';
-import { useUserUsage } from '../hooks/use-analytics';
-import { useCurrentUser } from '../hooks/use-current-user';
-import { MetricsAreaChart } from '../components/charts/area-chart';
-import { formatters } from '../components/charts/chart-formatters';
+} from 'lucide-react'
+import { useUserUsage } from '../hooks/use-analytics'
+import { useCurrentUser } from '../hooks/use-current-user'
+import { MetricsAreaChart } from '../components/charts/area-chart'
+import { formatters } from '../components/charts/chart-formatters'
 import {
   BarChart,
   Bar,
@@ -31,38 +31,38 @@ import {
   Tooltip,
   Cell,
   ResponsiveContainer,
-} from 'recharts';
-import { StatCard } from '../components/data/stat-card';
-import { EmptyState } from '../components/feedback/empty-state';
-import { Button } from '../components/ui/button';
-import { DateRangePicker, type DateRange } from '../components/ui/date-range-picker';
-import { exportToCSV } from '../lib/export';
-import { springs } from '../lib/animations';
-import { cn, formatBytes } from '../lib/utils';
+} from 'recharts'
+import { StatCard } from '../components/data/stat-card'
+import { EmptyState } from '../components/feedback/empty-state'
+import { Button } from '../components/ui/button'
+import { DateRangePicker, type DateRange } from '../components/ui/date-range-picker'
+import { exportToCSV } from '../lib/export'
+import { springs } from '../lib/animations'
+import { cn, formatBytes } from '../lib/utils'
 
 export const Route = createFileRoute('/usage')({
   component: UsagePage,
-});
+})
 
 function getDefaultDateRange(): DateRange {
-  const to = new Date().toISOString().split('T')[0];
-  const from = new Date();
-  from.setDate(from.getDate() - 29);
-  return { from: from.toISOString().split('T')[0], to };
+  const to = new Date().toISOString().split('T')[0]
+  const from = new Date()
+  from.setDate(from.getDate() - 29)
+  return { from: from.toISOString().split('T')[0], to }
 }
 
 function UsagePage() {
-  const { data: user } = useCurrentUser();
-  const [dateRange, setDateRange] = useState<DateRange>(getDefaultDateRange);
+  const { data: user } = useCurrentUser()
+  const [dateRange, setDateRange] = useState<DateRange>(getDefaultDateRange)
   const { data: usage, isLoading } = useUserUsage(user?.id || '', {
     from: dateRange.from,
     to: dateRange.to,
-  });
+  })
 
-  const hasData = usage && usage.daily_usage && usage.daily_usage.length > 0;
+  const hasData = usage && usage.daily_usage && usage.daily_usage.length > 0
 
   const chartData = useMemo(() => {
-    if (!usage?.daily_usage) return [];
+    if (!usage?.daily_usage) return []
     return usage.daily_usage.map((d) => ({
       timestamp: d.date,
       cpu: d.avg_cpu,
@@ -73,11 +73,11 @@ function UsagePage() {
       diskWrite: d.avg_disk_write,
       peakCpu: d.peak_cpu,
       peakMemory: d.peak_memory,
-    }));
-  }, [usage]);
+    }))
+  }, [usage])
 
   const serverBreakdownData = useMemo(() => {
-    if (!usage?.server_breakdown) return [];
+    if (!usage?.server_breakdown) return []
     return usage.server_breakdown.map((s, i) => ({
       label: s.server_name,
       value: s.cost,
@@ -88,18 +88,18 @@ function UsagePage() {
         'var(--chart-4)',
         'var(--chart-5)',
       ][i % 5],
-    }));
-  }, [usage]);
+    }))
+  }, [usage])
 
-  const cpuSparkline = useMemo(() => usage?.daily_usage?.map((d) => d.avg_cpu) || [], [usage]);
-  const memorySparkline = useMemo(() => usage?.daily_usage?.map((d) => d.avg_memory) || [], [usage]);
+  const cpuSparkline = useMemo(() => usage?.daily_usage?.map((d) => d.avg_cpu) || [], [usage])
+  const memorySparkline = useMemo(() => usage?.daily_usage?.map((d) => d.avg_memory) || [], [usage])
   const costSparkline = useMemo(() => {
-    if (!usage?.daily_usage) return [];
-    return usage.daily_usage.map((d) => d.daily_cost);
-  }, [usage]);
+    if (!usage?.daily_usage) return []
+    return usage.daily_usage.map((d) => d.daily_cost)
+  }, [usage])
 
   const handleExport = () => {
-    if (!usage?.daily_usage) return;
+    if (!usage?.daily_usage) return
     const data = usage.daily_usage.map((d) => ({
       Date: d.date,
       'Avg CPU %': d.avg_cpu.toFixed(2),
@@ -111,9 +111,9 @@ function UsagePage() {
       'Disk Read': d.avg_disk_read,
       'Disk Write': d.avg_disk_write,
       'Data Points': d.data_points,
-    }));
-    exportToCSV(data, `usage-report-${dateRange.from}-to-${dateRange.to}`);
-  };
+    }))
+    exportToCSV(data, `usage-report-${dateRange.from}-to-${dateRange.to}`)
+  }
 
   if (!isLoading && !hasData) {
     return (
@@ -143,7 +143,7 @@ function UsagePage() {
           description="You don't have any usage data for the selected period. Start using servers to collect real metrics."
         />
       </div>
-    );
+    )
   }
 
   return (
@@ -427,8 +427,19 @@ function UsagePage() {
                   layout="vertical"
                   margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" strokeOpacity={0.2} horizontal={false} />
-                  <XAxis type="number" stroke="var(--muted-foreground)" tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }} tickLine={false} axisLine={false} />
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="var(--border)"
+                    strokeOpacity={0.2}
+                    horizontal={false}
+                  />
+                  <XAxis
+                    type="number"
+                    stroke="var(--muted-foreground)"
+                    tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
+                    tickLine={false}
+                    axisLine={false}
+                  />
                   <YAxis
                     type="category"
                     dataKey="label"
@@ -440,17 +451,32 @@ function UsagePage() {
                   />
                   <Tooltip
                     content={({ active, payload, label }) => {
-                      if (!active || !payload || !payload.length) return null;
+                      if (!active || !payload || !payload.length) return null
                       return (
-                        <div className="rounded-lg border px-3 py-2 text-sm shadow-lg" style={{ background: 'var(--popover)', borderColor: 'var(--border)', color: 'var(--popover-foreground)' }}>
+                        <div
+                          className="rounded-lg border px-3 py-2 text-sm shadow-lg"
+                          style={{
+                            background: 'var(--popover)',
+                            borderColor: 'var(--border)',
+                            color: 'var(--popover-foreground)',
+                          }}
+                        >
                           <p className="font-medium text-muted-foreground mb-1">{label}</p>
-                          <p className="font-semibold" style={{ color: 'var(--primary)' }}>{payload[0].value} NUKE</p>
+                          <p className="font-semibold" style={{ color: 'var(--primary)' }}>
+                            {payload[0].value} NUKE
+                          </p>
                         </div>
-                      );
+                      )
                     }}
                     cursor={{ fill: 'var(--muted)', opacity: 0.2 }}
                   />
-                  <Bar dataKey="value" barSize={32} radius={[0, 6, 6, 0]} animationDuration={800} animationEasing="ease-out">
+                  <Bar
+                    dataKey="value"
+                    barSize={32}
+                    radius={[0, 6, 6, 0]}
+                    animationDuration={800}
+                    animationEasing="ease-out"
+                  >
                     {serverBreakdownData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
@@ -478,9 +504,7 @@ function UsagePage() {
                 <Gauge className="w-4 h-4 text-primary" />
                 Peak Usage
               </h3>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                Maximum recorded values
-              </p>
+              <p className="text-sm text-muted-foreground mt-0.5">Maximum recorded values</p>
             </div>
           </div>
 
@@ -511,7 +535,9 @@ function UsagePage() {
                   <Database className="w-3.5 h-3.5" />
                   Peak Memory
                 </span>
-                <span className="font-bold">{(usage?.peak_stats?.peak_memory || 0).toFixed(1)}%</span>
+                <span className="font-bold">
+                  {(usage?.peak_stats?.peak_memory || 0).toFixed(1)}%
+                </span>
               </div>
               <div className="h-2 bg-muted rounded-full overflow-hidden">
                 <motion.div
@@ -583,5 +609,5 @@ function UsagePage() {
         </motion.div>
       </div>
     </div>
-  );
+  )
 }

@@ -1,8 +1,8 @@
-import React from 'react';
+import React from 'react'
 
-export const NukeLabLogo: React.FC<{ className?: string; size?: number }> = ({ 
-  className = '', 
-  size = 256 
+export const NukeLabLogo: React.FC<{ className?: string; size?: number }> = ({
+  className = '',
+  size = 256,
 }) => (
   <svg
     version="1.1"
@@ -30,4 +30,4 @@ export const NukeLabLogo: React.FC<{ className?: string; size?: number }> = ({
       </g>
     </g>
   </svg>
-);
+)

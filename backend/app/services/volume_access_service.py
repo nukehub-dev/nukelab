@@ -27,10 +27,7 @@ class VolumeAccessService:
         self.db = db
 
     async def can_access_volume(
-        self,
-        volume_id: str,
-        user_id: str,
-        mode: str = "read_write"
+        self, volume_id: str, user_id: str, mode: str = "read_write"
     ) -> bool:
         """Check if user can access a volume in read_write or read_only mode.
 
@@ -76,9 +73,7 @@ class VolumeAccessService:
 
     async def _get_volume(self, volume_id: str) -> Optional[Volume]:
         """Get volume by ID"""
-        result = await self.db.execute(
-            select(Volume).where(Volume.id == volume_id)
-        )
+        result = await self.db.execute(select(Volume).where(Volume.id == volume_id))
         return result.scalar_one_or_none()
 
     async def _get_workspace_access(self, volume_id: str, user_id: str) -> Optional[str]:
@@ -88,9 +83,7 @@ class VolumeAccessService:
             "read_write", "read_only", or None if no workspace access.
         """
         # Find workspaces that contain this volume
-        workspace_query = select(WorkspaceVolume).where(
-            WorkspaceVolume.volume_id == volume_id
-        )
+        workspace_query = select(WorkspaceVolume).where(WorkspaceVolume.volume_id == volume_id)
         result = await self.db.execute(workspace_query)
         workspace_volumes = result.scalars().all()
 
@@ -106,18 +99,13 @@ class VolumeAccessService:
             # Check if user is workspace owner
             workspace_result = await self.db.execute(
                 select(SharedWorkspace).where(
-                    and_(
-                        SharedWorkspace.id == workspace_id,
-                        SharedWorkspace.owner_id == user_id
-                    )
+                    and_(SharedWorkspace.id == workspace_id, SharedWorkspace.owner_id == user_id)
                 )
             )
             ws = workspace_result.scalar_one_or_none()
             if ws:
                 # Workspace owner gets the volume's role in that workspace
-                workspace_access = self._most_restrictive(
-                    workspace_access, volume_role
-                )
+                workspace_access = self._most_restrictive(workspace_access, volume_role)
                 continue
 
             # Check if user is a member
@@ -125,7 +113,7 @@ class VolumeAccessService:
                 select(WorkspaceMember).where(
                     and_(
                         WorkspaceMember.workspace_id == workspace_id,
-                        WorkspaceMember.user_id == user_id
+                        WorkspaceMember.user_id == user_id,
                     )
                 )
             )
@@ -140,9 +128,7 @@ class VolumeAccessService:
                     else:
                         # admin, read_write members get RW
                         access = "read_write"
-                workspace_access = self._most_restrictive(
-                    workspace_access, access
-                )
+                workspace_access = self._most_restrictive(workspace_access, access)
 
         return workspace_access
 
@@ -163,8 +149,7 @@ class VolumeAccessService:
 
     @staticmethod
     def _compute_effective_access(
-        personal: Optional[str],
-        workspace: Optional[str]
+        personal: Optional[str], workspace: Optional[str]
     ) -> Optional[str]:
         """Compute effective access as MIN(personal, workspace).
 
@@ -181,28 +166,18 @@ class VolumeAccessService:
             return workspace
         return None
 
-    async def get_accessible_volume_ids(
-        self,
-        user_id: str,
-        mode: str = "read_write"
-    ) -> list:
+    async def get_accessible_volume_ids(self, user_id: str, mode: str = "read_write") -> list:
         """Get list of volume IDs accessible to user"""
         # Owned volumes
-        result = await self.db.execute(
-            select(Volume.id).where(Volume.owner_id == user_id)
-        )
+        result = await self.db.execute(select(Volume.id).where(Volume.owner_id == user_id))
         volume_ids = [str(row[0]) for row in result.all()]
 
         # Workspace volumes
-        workspace_query = select(WorkspaceVolume).join(
-            SharedWorkspace, WorkspaceVolume.workspace_id == SharedWorkspace.id
-        ).join(
-            WorkspaceMember, WorkspaceMember.workspace_id == SharedWorkspace.id
-        ).where(
-            or_(
-                WorkspaceMember.user_id == user_id,
-                SharedWorkspace.owner_id == user_id
-            )
+        workspace_query = (
+            select(WorkspaceVolume)
+            .join(SharedWorkspace, WorkspaceVolume.workspace_id == SharedWorkspace.id)
+            .join(WorkspaceMember, WorkspaceMember.workspace_id == SharedWorkspace.id)
+            .where(or_(WorkspaceMember.user_id == user_id, SharedWorkspace.owner_id == user_id))
         )
         result = await self.db.execute(workspace_query)
         for wv in result.scalars().all():
@@ -213,9 +188,7 @@ class VolumeAccessService:
 
         # Public volumes (read-only)
         if mode == "read_only":
-            result = await self.db.execute(
-                select(Volume.id).where(Volume.visibility == "public")
-            )
+            result = await self.db.execute(select(Volume.id).where(Volume.visibility == "public"))
             for row in result.all():
                 vid = str(row[0])
                 if vid not in volume_ids:

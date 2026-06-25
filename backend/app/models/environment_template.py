@@ -5,6 +5,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.db.base import Base
 
+
 class EnvironmentTemplate(Base):
     __tablename__ = "environment_templates"
 
@@ -12,36 +13,38 @@ class EnvironmentTemplate(Base):
     name = Column(String(255), unique=True, nullable=False)
     slug = Column(String(255), unique=True, nullable=False, index=True)
     description = Column(Text, nullable=True)
-    
+
     # Docker
     image = Column(String(500), nullable=False)
     dockerfile = Column(Text, nullable=True)
-    
+
     # Configuration
     packages = Column(JSON, default=list)
     environment_variables = Column(JSON, default=dict)
     volumes = Column(JSON, default=list)
     ports = Column(JSON, default=list)
-    
+
     # Branding
     icon = Column(String(50), default="🖥️")
     color = Column(String(7), default="#3B82F6")
     category = Column(String(50), default="base")
-    
+
     # Status
     is_active = Column(Boolean, default=True)
     is_public = Column(Boolean, default=True)
-    
+
     # Ownership
-    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    
+    created_by = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
     # Timestamps
     created_at = Column(DateTime, default=utc_now)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
-    
+
     # Relationships
     creator = relationship("User", foreign_keys=[created_by])
-    
+
     def to_dict(self):
         return {
             "id": str(self.id),

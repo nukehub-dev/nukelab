@@ -1,24 +1,24 @@
-import { useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Activity, Cpu, HardDrive, Network, Zap, ArrowDown, ArrowUp } from 'lucide-react';
-import { useDashboardMetrics } from '../../hooks/use-dashboard-metrics';
-import { useServers } from '../../hooks/use-servers';
-import { MetricsAreaChart } from './area-chart';
-import { formatters } from './chart-formatters';
-import { HorizontalBarChart } from './horizontal-bar-chart';
-import { SemiCircularGauge } from './semi-circular-gauge';
-import { cn, formatBytes } from '../../lib/utils';
-import { springs } from '../../lib/animations';
+import { useMemo } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Activity, Cpu, HardDrive, Network, Zap, ArrowDown, ArrowUp } from 'lucide-react'
+import { useDashboardMetrics } from '../../hooks/use-dashboard-metrics'
+import { useServers } from '../../hooks/use-servers'
+import { MetricsAreaChart } from './area-chart'
+import { formatters } from './chart-formatters'
+import { HorizontalBarChart } from './horizontal-bar-chart'
+import { SemiCircularGauge } from './semi-circular-gauge'
+import { cn, formatBytes } from '../../lib/utils'
+import { springs } from '../../lib/animations'
 
 interface MetricCardProps {
-  title: string;
-  value: string | number;
-  subtitle?: React.ReactNode;
-  icon: React.ElementType;
-  iconColor: string;
-  bgColor: string;
-  gaugeValue?: number;
-  gaugeMax?: number;
+  title: string
+  value: string | number
+  subtitle?: React.ReactNode
+  icon: React.ElementType
+  iconColor: string
+  bgColor: string
+  gaugeValue?: number
+  gaugeMax?: number
 }
 
 function MetricCard({
@@ -39,26 +39,25 @@ function MetricCard({
       animate={{ opacity: 1, scale: 1, y: 0 }}
       transition={springs.gentle}
     >
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-current/5 via-transparent to-transparent opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+      <div
+        className="pointer-events-none absolute inset-0 bg-gradient-to-br from-current/5 via-transparent to-transparent opacity-0 transition-opacity duration-200 group-hover:opacity-100"
         style={{ color: 'var(--primary)' }}
       />
-      
+
       <div className="relative">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
-            <div className={cn("p-2 rounded-lg", bgColor)}>
-              <Icon className={cn("w-4 h-4", iconColor)} />
+            <div className={cn('p-2 rounded-lg', bgColor)}>
+              <Icon className={cn('w-4 h-4', iconColor)} />
             </div>
             <span className="text-sm font-medium text-muted-foreground">{title}</span>
           </div>
         </div>
-        
+
         <div className="mt-2 flex items-end justify-between">
           <div>
             <p className="text-2xl font-bold tabular-nums">{value}</p>
-            {subtitle && (
-              <div className="text-xs text-muted-foreground mt-1">{subtitle}</div>
-            )}
+            {subtitle && <div className="text-xs text-muted-foreground mt-1">{subtitle}</div>}
           </div>
           {gaugeValue !== undefined && (
             <div className="mb-1">
@@ -68,22 +67,28 @@ function MetricCard({
                 width={80}
                 height={48}
                 strokeWidth={6}
-                color={iconColor.includes('destructive') ? 'var(--destructive)' : iconColor.includes('chart-3') ? 'var(--chart-3)' : 'var(--chart-2)'}
+                color={
+                  iconColor.includes('destructive')
+                    ? 'var(--destructive)'
+                    : iconColor.includes('chart-3')
+                      ? 'var(--chart-3)'
+                      : 'var(--chart-2)'
+                }
               />
             </div>
           )}
         </div>
       </div>
     </motion.div>
-  );
+  )
 }
 
 interface ChartCardProps {
-  title: string;
-  subtitle: string;
-  icon: React.ElementType;
-  children: React.ReactNode;
-  delay?: number;
+  title: string
+  subtitle: string
+  icon: React.ElementType
+  children: React.ReactNode
+  delay?: number
 }
 
 function ChartCard({ title, subtitle, icon: Icon, children, delay = 0 }: ChartCardProps) {
@@ -103,33 +108,35 @@ function ChartCard({ title, subtitle, icon: Icon, children, delay = 0 }: ChartCa
       </div>
       {children}
     </motion.div>
-  );
+  )
 }
 
 export function MetricsDashboard() {
-  const { metrics, currentMetrics, serverMetrics, isLoading, isLive } = useDashboardMetrics();
-  const { data: servers } = useServers();
+  const { metrics, currentMetrics, serverMetrics, isLoading, isLive } = useDashboardMetrics()
+  const { data: servers } = useServers()
 
   const serverBarData = useMemo(() => {
-    const serverMap = new Map(servers?.map((s) => [s.id, s]) ?? []);
+    const serverMap = new Map(servers?.map((s) => [s.id, s]) ?? [])
     return Object.entries(serverMetrics)
       .map(([id, metrics]) => {
-        const server = serverMap.get(id);
-        const label = server?.username && server?.name
-          ? `${server.username}/${server.name}`
-          : `Server ${id.slice(0, 8)}`;
+        const server = serverMap.get(id)
+        const label =
+          server?.username && server?.name
+            ? `${server.username}/${server.name}`
+            : `Server ${id.slice(0, 8)}`
         return {
           label,
           value: metrics.cpu,
-          color: metrics.cpu > 80
-            ? 'var(--destructive)'
-            : metrics.cpu > 60
-              ? 'var(--chart-3)'
-              : 'var(--chart-2)',
-        };
+          color:
+            metrics.cpu > 80
+              ? 'var(--destructive)'
+              : metrics.cpu > 60
+                ? 'var(--chart-3)'
+                : 'var(--chart-2)',
+        }
       })
-      .sort((a, b) => b.value - a.value);
-  }, [serverMetrics, servers]);
+      .sort((a, b) => b.value - a.value)
+  }, [serverMetrics, servers])
 
   // Prepare chart data with proper timestamps
   const chartData = useMemo(() => {
@@ -145,19 +152,21 @@ export function MetricsDashboard() {
       networkTotal: m.networkRx + m.networkTx,
       networkRx: m.networkRx,
       networkTx: m.networkTx,
-    }));
-  }, [metrics]);
+    }))
+  }, [metrics])
 
-  const totalNetwork = currentMetrics.networkRx + currentMetrics.networkTx;
+  const totalNetwork = currentMetrics.networkRx + currentMetrics.networkTx
 
   return (
     <div className="space-y-6">
       {/* Connection status */}
       <div className="flex items-center gap-2">
-        <div className={cn(
-          "w-2 h-2 rounded-full transition-colors",
-          isLive ? "bg-emerald-400 live-pulse" : "bg-muted-foreground"
-        )} />
+        <div
+          className={cn(
+            'w-2 h-2 rounded-full transition-colors',
+            isLive ? 'bg-emerald-400 live-pulse' : 'bg-muted-foreground'
+          )}
+        />
         <span className="text-xs text-muted-foreground">
           {isLive ? 'Live metrics' : isLoading ? 'Loading...' : 'Connecting...'}
         </span>
@@ -174,7 +183,7 @@ export function MetricsDashboard() {
           bgColor="bg-chart-1/10"
           gaugeValue={currentMetrics.cpu}
         />
-        
+
         <MetricCard
           title="Memory"
           value={`${currentMetrics.memoryPercent.toFixed(1)}%`}
@@ -184,7 +193,7 @@ export function MetricsDashboard() {
           bgColor="bg-chart-2/10"
           gaugeValue={currentMetrics.memoryPercent}
         />
-        
+
         <MetricCard
           title="Disk"
           value={`${currentMetrics.diskPercent.toFixed(1)}%`}
@@ -194,7 +203,7 @@ export function MetricsDashboard() {
           bgColor="bg-chart-3/10"
           gaugeValue={currentMetrics.diskPercent}
         />
-        
+
         <MetricCard
           title="Network"
           value={`${formatBytes(totalNetwork)}/s`}
@@ -231,7 +240,7 @@ export function MetricsDashboard() {
             yTickFormatter={formatters.percent}
           />
         </ChartCard>
-        
+
         <ChartCard
           title="Memory Usage"
           subtitle="Precise utilization at the recorded time"
@@ -245,7 +254,7 @@ export function MetricsDashboard() {
             yTickFormatter={formatters.percent}
           />
         </ChartCard>
-        
+
         <ChartCard
           title="Disk I/O"
           subtitle="Read/Write bytes per second"
@@ -261,13 +270,25 @@ export function MetricsDashboard() {
             height={240}
             yTickFormatter={formatters.bytesPerSecond}
             tooltipFormatter={(data) => [
-              { label: 'Write', value: formatters.bytesPerSecond(Number(data.diskWrite || 0)), color: 'var(--destructive)' },
-              { label: 'Read', value: formatters.bytesPerSecond(Number(data.diskRead || 0)), color: 'var(--chart-3)' },
-              { label: 'Total', value: formatters.bytesPerSecond(Number(data.diskTotal || 0)), color: undefined },
+              {
+                label: 'Write',
+                value: formatters.bytesPerSecond(Number(data.diskWrite || 0)),
+                color: 'var(--destructive)',
+              },
+              {
+                label: 'Read',
+                value: formatters.bytesPerSecond(Number(data.diskRead || 0)),
+                color: 'var(--chart-3)',
+              },
+              {
+                label: 'Total',
+                value: formatters.bytesPerSecond(Number(data.diskTotal || 0)),
+                color: undefined,
+              },
             ]}
           />
         </ChartCard>
-        
+
         <ChartCard
           title="Network Traffic"
           subtitle="Network traffic of public interfaces"
@@ -283,9 +304,21 @@ export function MetricsDashboard() {
             height={240}
             yTickFormatter={formatters.bytesPerSecond}
             tooltipFormatter={(data) => [
-              { label: 'TX (Upload)', value: formatters.bytesPerSecond(Number(data.networkTx || 0)), color: 'var(--destructive)' },
-              { label: 'RX (Download)', value: formatters.bytesPerSecond(Number(data.networkRx || 0)), color: 'var(--chart-4)' },
-              { label: 'Total', value: formatters.bytesPerSecond(Number(data.networkTotal || 0)), color: undefined },
+              {
+                label: 'TX (Upload)',
+                value: formatters.bytesPerSecond(Number(data.networkTx || 0)),
+                color: 'var(--destructive)',
+              },
+              {
+                label: 'RX (Download)',
+                value: formatters.bytesPerSecond(Number(data.networkRx || 0)),
+                color: 'var(--chart-4)',
+              },
+              {
+                label: 'Total',
+                value: formatters.bytesPerSecond(Number(data.networkTotal || 0)),
+                color: undefined,
+              },
             ]}
           />
         </ChartCard>
@@ -308,10 +341,12 @@ export function MetricsDashboard() {
             {serverBarData.every((d) => d.value === 0) ? (
               <div className="flex flex-col items-center justify-center py-10 text-center">
                 <Cpu className="w-8 h-8 text-muted-foreground/30 mb-3" />
-                <p className="text-sm text-muted-foreground font-medium">No active server metrics</p>
+                <p className="text-sm text-muted-foreground font-medium">
+                  No active server metrics
+                </p>
                 <p className="text-xs text-muted-foreground/60 mt-1 max-w-xs">
-                  Servers are either powered off or not reporting metrics yet.
-                  Start a server to see real-time CPU usage here.
+                  Servers are either powered off or not reporting metrics yet. Start a server to see
+                  real-time CPU usage here.
                 </p>
               </div>
             ) : (
@@ -326,7 +361,6 @@ export function MetricsDashboard() {
           </motion.div>
         )}
       </AnimatePresence>
-
     </div>
-  );
+  )
 }

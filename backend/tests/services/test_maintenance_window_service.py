@@ -18,8 +18,19 @@ def service(db_session):
 class TestListWindows:
     @pytest.mark.asyncio
     async def test_list_all(self, service, db_session):
-        w1 = MaintenanceWindow(title="t1", message="m1", start_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1), end_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=2))
-        w2 = MaintenanceWindow(title="t2", message="m2", start_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=3), end_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=4), is_active=False)
+        w1 = MaintenanceWindow(
+            title="t1",
+            message="m1",
+            start_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1),
+            end_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=2),
+        )
+        w2 = MaintenanceWindow(
+            title="t2",
+            message="m2",
+            start_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=3),
+            end_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=4),
+            is_active=False,
+        )
         db_session.add_all([w1, w2])
         await db_session.commit()
 
@@ -28,8 +39,20 @@ class TestListWindows:
 
     @pytest.mark.asyncio
     async def test_list_active_only(self, service, db_session):
-        w1 = MaintenanceWindow(title="t1", message="m1", start_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1), end_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=2), is_active=True)
-        w2 = MaintenanceWindow(title="t2", message="m2", start_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=3), end_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=4), is_active=False)
+        w1 = MaintenanceWindow(
+            title="t1",
+            message="m1",
+            start_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1),
+            end_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=2),
+            is_active=True,
+        )
+        w2 = MaintenanceWindow(
+            title="t2",
+            message="m2",
+            start_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=3),
+            end_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=4),
+            is_active=False,
+        )
         db_session.add_all([w1, w2])
         await db_session.commit()
 
@@ -39,8 +62,18 @@ class TestListWindows:
 
     @pytest.mark.asyncio
     async def test_list_future_only(self, service, db_session):
-        past = MaintenanceWindow(title="past", message="m", start_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=2), end_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1))
-        future = MaintenanceWindow(title="future", message="m", start_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1), end_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=2))
+        past = MaintenanceWindow(
+            title="past",
+            message="m",
+            start_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=2),
+            end_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1),
+        )
+        future = MaintenanceWindow(
+            title="future",
+            message="m",
+            start_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1),
+            end_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=2),
+        )
         db_session.add_all([past, future])
         await db_session.commit()
 
@@ -51,7 +84,14 @@ class TestListWindows:
     @pytest.mark.asyncio
     async def test_list_limit(self, service, db_session):
         for i in range(5):
-            db_session.add(MaintenanceWindow(title=f"t{i}", message="m", start_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=i), end_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=i+1)))
+            db_session.add(
+                MaintenanceWindow(
+                    title=f"t{i}",
+                    message="m",
+                    start_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=i),
+                    end_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=i + 1),
+                )
+            )
         await db_session.commit()
 
         result = await service.list_windows(limit=2)
@@ -61,7 +101,12 @@ class TestListWindows:
 class TestGetWindow:
     @pytest.mark.asyncio
     async def test_get_found(self, service, db_session):
-        w = MaintenanceWindow(title="t", message="m", start_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1), end_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=2))
+        w = MaintenanceWindow(
+            title="t",
+            message="m",
+            start_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1),
+            end_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=2),
+        )
         db_session.add(w)
         await db_session.commit()
         await db_session.refresh(w)
@@ -112,7 +157,12 @@ class TestCreateWindow:
 class TestUpdateWindow:
     @pytest.mark.asyncio
     async def test_update_title(self, service, db_session):
-        w = MaintenanceWindow(title="old", message="m", start_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1), end_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=2))
+        w = MaintenanceWindow(
+            title="old",
+            message="m",
+            start_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1),
+            end_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=2),
+        )
         db_session.add(w)
         await db_session.commit()
         await db_session.refresh(w)
@@ -127,17 +177,33 @@ class TestUpdateWindow:
 
     @pytest.mark.asyncio
     async def test_update_invalid_times_raises(self, service, db_session):
-        w = MaintenanceWindow(title="t", message="m", start_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=2), end_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=3))
+        w = MaintenanceWindow(
+            title="t",
+            message="m",
+            start_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=2),
+            end_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=3),
+        )
         db_session.add(w)
         await db_session.commit()
         await db_session.refresh(w)
 
         with pytest.raises(ValueError, match="End time must be after start time"):
-            await service.update_window(str(w.id), start_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=5), end_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1))
+            await service.update_window(
+                str(w.id),
+                start_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=5),
+                end_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1),
+            )
 
     @pytest.mark.asyncio
     async def test_update_resets_notification_state(self, service, db_session):
-        w = MaintenanceWindow(title="t", message="m", start_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1), end_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=2), auto_enabled=True, notified_offsets=[15])
+        w = MaintenanceWindow(
+            title="t",
+            message="m",
+            start_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1),
+            end_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=2),
+            auto_enabled=True,
+            notified_offsets=[15],
+        )
         db_session.add(w)
         await db_session.commit()
         await db_session.refresh(w)
@@ -152,7 +218,12 @@ class TestUpdateWindow:
 class TestDeleteWindow:
     @pytest.mark.asyncio
     async def test_delete_success(self, service, db_session):
-        w = MaintenanceWindow(title="t", message="m", start_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1), end_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=2))
+        w = MaintenanceWindow(
+            title="t",
+            message="m",
+            start_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1),
+            end_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=2),
+        )
         db_session.add(w)
         await db_session.commit()
         await db_session.refresh(w)
@@ -193,7 +264,14 @@ class TestPendingNotifications:
     @pytest.mark.asyncio
     async def test_no_pending_when_already_notified(self, service, db_session):
         start = datetime.now(UTC).replace(tzinfo=None) + timedelta(minutes=20)
-        w = MaintenanceWindow(title="t", message="m", start_at=start, end_at=start + timedelta(hours=1), notify_offsets=[15], notified_offsets=[15])
+        w = MaintenanceWindow(
+            title="t",
+            message="m",
+            start_at=start,
+            end_at=start + timedelta(hours=1),
+            notify_offsets=[15],
+            notified_offsets=[15],
+        )
         db_session.add(w)
         await db_session.commit()
 
@@ -203,7 +281,13 @@ class TestPendingNotifications:
     @pytest.mark.asyncio
     async def test_pending_when_threshold_met(self, service, db_session):
         start = datetime.now(UTC).replace(tzinfo=None) + timedelta(minutes=10)
-        w = MaintenanceWindow(title="t", message="m", start_at=start, end_at=start + timedelta(hours=1), notify_offsets=[15])
+        w = MaintenanceWindow(
+            title="t",
+            message="m",
+            start_at=start,
+            end_at=start + timedelta(hours=1),
+            notify_offsets=[15],
+        )
         db_session.add(w)
         await db_session.commit()
 
@@ -214,7 +298,13 @@ class TestPendingNotifications:
     @pytest.mark.asyncio
     async def test_skips_old_ideal_notification_time(self, service, db_session):
         start = datetime.now(UTC).replace(tzinfo=None) + timedelta(minutes=10)
-        w = MaintenanceWindow(title="t", message="m", start_at=start, end_at=start + timedelta(hours=1), notify_offsets=[15])
+        w = MaintenanceWindow(
+            title="t",
+            message="m",
+            start_at=start,
+            end_at=start + timedelta(hours=1),
+            notify_offsets=[15],
+        )
         db_session.add(w)
         await db_session.commit()
 
@@ -222,7 +312,13 @@ class TestPendingNotifications:
         # This requires start_at to be in the past by > 1h + offset
         # So we test the opposite: a window with start_at far in future shouldn't trigger
         start_far = datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=5)
-        w2 = MaintenanceWindow(title="t2", message="m", start_at=start_far, end_at=start_far + timedelta(hours=1), notify_offsets=[15])
+        w2 = MaintenanceWindow(
+            title="t2",
+            message="m",
+            start_at=start_far,
+            end_at=start_far + timedelta(hours=1),
+            notify_offsets=[15],
+        )
         db_session.add(w2)
         await db_session.commit()
 
@@ -234,7 +330,14 @@ class TestPendingNotifications:
 class TestWindowsToEnable:
     @pytest.mark.asyncio
     async def test_get_windows_to_enable(self, service, db_session):
-        w = MaintenanceWindow(title="t", message="m", start_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=5), end_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1), is_active=True, auto_enabled=False)
+        w = MaintenanceWindow(
+            title="t",
+            message="m",
+            start_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=5),
+            end_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1),
+            is_active=True,
+            auto_enabled=False,
+        )
         db_session.add(w)
         await db_session.commit()
 
@@ -243,7 +346,14 @@ class TestWindowsToEnable:
 
     @pytest.mark.asyncio
     async def test_no_windows_already_enabled(self, service, db_session):
-        w = MaintenanceWindow(title="t", message="m", start_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=5), end_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1), is_active=True, auto_enabled=True)
+        w = MaintenanceWindow(
+            title="t",
+            message="m",
+            start_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=5),
+            end_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1),
+            is_active=True,
+            auto_enabled=True,
+        )
         db_session.add(w)
         await db_session.commit()
 
@@ -254,7 +364,15 @@ class TestWindowsToEnable:
 class TestWindowsToDisable:
     @pytest.mark.asyncio
     async def test_get_windows_to_disable(self, service, db_session):
-        w = MaintenanceWindow(title="t", message="m", start_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=2), end_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=5), is_active=True, auto_enabled=True, auto_disabled=False)
+        w = MaintenanceWindow(
+            title="t",
+            message="m",
+            start_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=2),
+            end_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=5),
+            is_active=True,
+            auto_enabled=True,
+            auto_disabled=False,
+        )
         db_session.add(w)
         await db_session.commit()
 
@@ -263,7 +381,15 @@ class TestWindowsToDisable:
 
     @pytest.mark.asyncio
     async def test_no_windows_already_disabled(self, service, db_session):
-        w = MaintenanceWindow(title="t", message="m", start_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=2), end_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=5), is_active=True, auto_enabled=True, auto_disabled=True)
+        w = MaintenanceWindow(
+            title="t",
+            message="m",
+            start_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=2),
+            end_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=5),
+            is_active=True,
+            auto_enabled=True,
+            auto_disabled=True,
+        )
         db_session.add(w)
         await db_session.commit()
 
@@ -277,7 +403,9 @@ class TestSendAdvanceNotifications:
         user = User(username="u1", email="u1@test.com", password_hash="h", is_active=True)
         db_session.add(user)
         start = datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1)
-        w = MaintenanceWindow(title="t", message="m", start_at=start, end_at=start + timedelta(hours=2))
+        w = MaintenanceWindow(
+            title="t", message="m", start_at=start, end_at=start + timedelta(hours=2)
+        )
         db_session.add(w)
         await db_session.commit()
         await db_session.refresh(w)
@@ -295,7 +423,9 @@ class TestSendAdvanceNotifications:
         u2 = User(username="u2", email="u2@test.com", password_hash="h", is_active=True)
         db_session.add_all([u1, u2])
         start = datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1)
-        w = MaintenanceWindow(title="t", message="m", start_at=start, end_at=start + timedelta(hours=2))
+        w = MaintenanceWindow(
+            title="t", message="m", start_at=start, end_at=start + timedelta(hours=2)
+        )
         db_session.add(w)
         await db_session.commit()
         await db_session.refresh(w)
@@ -312,7 +442,9 @@ class TestSendAdvanceNotifications:
         user = User(username="u1", email="u1@test.com", password_hash="h", is_active=True)
         db_session.add(user)
         start = datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1)
-        w = MaintenanceWindow(title="t", message="m", start_at=start, end_at=start + timedelta(hours=2))
+        w = MaintenanceWindow(
+            title="t", message="m", start_at=start, end_at=start + timedelta(hours=2)
+        )
         db_session.add(w)
         await db_session.commit()
         await db_session.refresh(w)
@@ -342,7 +474,9 @@ class TestEnableDisableMaintenance:
     @pytest.mark.asyncio
     async def test_enable_maintenance(self, service, db_session):
         start = datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1)
-        w = MaintenanceWindow(title="t", message="m", start_at=start, end_at=start + timedelta(hours=2))
+        w = MaintenanceWindow(
+            title="t", message="m", start_at=start, end_at=start + timedelta(hours=2)
+        )
         db_session.add(w)
         await db_session.commit()
         await db_session.refresh(w)
@@ -351,13 +485,17 @@ class TestEnableDisableMaintenance:
             mock_setting = MockSetting.return_value
             mock_setting.save_maintenance = mock.AsyncMock()
             await service.enable_maintenance(w)
-            mock_setting.save_maintenance.assert_awaited_once_with(enabled=True, message=f"[{w.title}] {w.message}")
+            mock_setting.save_maintenance.assert_awaited_once_with(
+                enabled=True, message=f"[{w.title}] {w.message}"
+            )
             assert w.auto_enabled is True
 
     @pytest.mark.asyncio
     async def test_disable_maintenance(self, service, db_session):
         start = datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1)
-        w = MaintenanceWindow(title="t", message="m", start_at=start, end_at=start + timedelta(hours=2))
+        w = MaintenanceWindow(
+            title="t", message="m", start_at=start, end_at=start + timedelta(hours=2)
+        )
         db_session.add(w)
         await db_session.commit()
         await db_session.refresh(w)
@@ -374,12 +512,20 @@ class TestEvaluateWindows:
     @pytest.mark.asyncio
     async def test_evaluate_runs_all_phases(self, service, db_session):
         start = datetime.now(UTC).replace(tzinfo=None) + timedelta(minutes=10)
-        w = MaintenanceWindow(title="t", message="m", start_at=start, end_at=start + timedelta(hours=1), notify_offsets=[15])
+        w = MaintenanceWindow(
+            title="t",
+            message="m",
+            start_at=start,
+            end_at=start + timedelta(hours=1),
+            notify_offsets=[15],
+        )
         db_session.add(w)
         await db_session.commit()
         await db_session.refresh(w)
 
-        with mock.patch.object(service, "send_advance_notifications", new_callable=mock.AsyncMock, return_value=3):
+        with mock.patch.object(
+            service, "send_advance_notifications", new_callable=mock.AsyncMock, return_value=3
+        ):
             with mock.patch.object(service, "enable_maintenance", new_callable=mock.AsyncMock):
                 with mock.patch.object(service, "disable_maintenance", new_callable=mock.AsyncMock):
                     result = await service.evaluate_windows()
@@ -391,12 +537,23 @@ class TestEvaluateWindows:
     @pytest.mark.asyncio
     async def test_evaluate_enables_and_disables(self, service, db_session):
         start = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=5)
-        w = MaintenanceWindow(title="t", message="m", start_at=start, end_at=start + timedelta(hours=1), is_active=True, auto_enabled=False)
+        w = MaintenanceWindow(
+            title="t",
+            message="m",
+            start_at=start,
+            end_at=start + timedelta(hours=1),
+            is_active=True,
+            auto_enabled=False,
+        )
         db_session.add(w)
         await db_session.commit()
 
-        with mock.patch.object(service, "send_advance_notifications", new_callable=mock.AsyncMock, return_value=0):
-            with mock.patch.object(service, "enable_maintenance", new_callable=mock.AsyncMock) as mock_enable:
+        with mock.patch.object(
+            service, "send_advance_notifications", new_callable=mock.AsyncMock, return_value=0
+        ):
+            with mock.patch.object(
+                service, "enable_maintenance", new_callable=mock.AsyncMock
+            ) as mock_enable:
                 with mock.patch.object(service, "disable_maintenance", new_callable=mock.AsyncMock):
                     result = await service.evaluate_windows()
 

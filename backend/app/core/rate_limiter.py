@@ -62,6 +62,7 @@ class RateLimitExceeded(HTTPException):
 
 def _get_redis_client():
     import redis.asyncio as redis
+
     return redis.from_url(settings.redis_url)
 
 
@@ -91,14 +92,18 @@ def _get_user_key_and_role(request: Request) -> tuple[str, Optional[str]]:
         sub = _extract_jwt_sub(token)
         if sub:
             try:
-                payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+                payload = jwt.decode(
+                    token, settings.jwt_secret, algorithms=[settings.jwt_algorithm]
+                )
                 role = payload.get("role", "user")
                 return (sub, role)
             except JWTError:
                 pass
         return (f"tkn:{_hash_token(token)}", "user")
 
-    client_ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
+    client_ip = request.headers.get(
+        "X-Forwarded-For", request.client.host if request.client else "unknown"
+    )
     if client_ip and "," in client_ip:
         client_ip = client_ip.split(",")[0].strip()
     return (f"ip:{client_ip}", "unauthenticated")

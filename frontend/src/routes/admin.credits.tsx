@@ -1,6 +1,6 @@
-import { createFileRoute, useSearch, Link } from '@tanstack/react-router';
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { motion } from 'framer-motion';
+import { createFileRoute, useSearch, Link } from '@tanstack/react-router'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { motion } from 'framer-motion'
 import {
   CreditCard,
   AlertTriangle,
@@ -11,37 +11,42 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowLeft,
-} from 'lucide-react';
-import { useUsers } from '../hooks/use-users';
-import { useLowBalanceUsers } from '../hooks/use-credits';
-import { useDataTable } from '../hooks/use-data-table';
-import { useThemeStore } from '../stores/theme-store';
-import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
-import { usePageGuard } from '../hooks/use-page-guard';
-import { cn } from '../lib/utils';
-import { CreditAdjustDialog } from '../components/admin/credit-adjust-dialog';
-import { CreditHistoryDialog } from '../components/admin/credit-history-dialog';
-import { DataTable } from '../components/data/data-table';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { StatCard } from '../components/data/stat-card';
-import { Tooltip } from '../components/ui/tooltip';
-import { Button } from '../components/ui/button';
-import type { User } from '../types/api';
-import type { ColumnDef, SortingState, ColumnFiltersState, VisibilityState } from '@tanstack/react-table';
+} from 'lucide-react'
+import { useUsers } from '../hooks/use-users'
+import { useLowBalanceUsers } from '../hooks/use-credits'
+import { useDataTable } from '../hooks/use-data-table'
+import { useThemeStore } from '../stores/theme-store'
+import { useAuthStore, PERMISSIONS } from '../stores/auth-store'
+import { usePageGuard } from '../hooks/use-page-guard'
+import { cn } from '../lib/utils'
+import { CreditAdjustDialog } from '../components/admin/credit-adjust-dialog'
+import { CreditHistoryDialog } from '../components/admin/credit-history-dialog'
+import { DataTable } from '../components/data/data-table'
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
+import { StatCard } from '../components/data/stat-card'
+import { Tooltip } from '../components/ui/tooltip'
+import { Button } from '../components/ui/button'
+import type { User } from '../types/api'
+import type {
+  ColumnDef,
+  SortingState,
+  ColumnFiltersState,
+  VisibilityState,
+} from '@tanstack/react-table'
 
 export const Route = createFileRoute('/admin/credits')({
   component: CreditsAdminPage,
-});
+})
 
 function CreditsAdminPage() {
-  const allowed = usePageGuard({ permission: PERMISSIONS.CREDITS_READ_ALL });
-  const density = useThemeStore((state) => state.density);
-  const hasPermission = useAuthStore((state) => state.hasPermission);
-  const canGrant = hasPermission(PERMISSIONS.CREDITS_GRANT);
-  const canDeduct = hasPermission(PERMISSIONS.CREDITS_DEDUCT);
-  const canManageCredits = canGrant || canDeduct;
+  const allowed = usePageGuard({ permission: PERMISSIONS.CREDITS_READ_ALL })
+  const density = useThemeStore((state) => state.density)
+  const hasPermission = useAuthStore((state) => state.hasPermission)
+  const canGrant = hasPermission(PERMISSIONS.CREDITS_GRANT)
+  const canDeduct = hasPermission(PERMISSIONS.CREDITS_DEDUCT)
+  const canManageCredits = canGrant || canDeduct
 
-  const searchParams = useSearch({ from: '/admin/credits' }) as { user?: string };
+  const searchParams = useSearch({ from: '/admin/credits' }) as { user?: string }
 
   const {
     state: tableState,
@@ -49,62 +54,71 @@ function CreditsAdminPage() {
     setLimit,
     setSort,
     setSearch,
-  } = useDataTable({ defaultLimit: 20, defaultSortBy: 'nuke_balance', defaultSortOrder: 'asc' });
+  } = useDataTable({ defaultLimit: 20, defaultSortBy: 'nuke_balance', defaultSortOrder: 'asc' })
 
   const [sorting, setSorting] = useState<SortingState>([
-    { id: tableState.sortBy, desc: tableState.sortOrder === 'desc' }
-  ]);
-  const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+    { id: tableState.sortBy, desc: tableState.sortOrder === 'desc' },
+  ])
+  const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({})
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
 
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [adjustDialogOpen, setAdjustDialogOpen] = useState(false);
-  const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null)
+  const [adjustDialogOpen, setAdjustDialogOpen] = useState(false)
+  const [historyDialogOpen, setHistoryDialogOpen] = useState(false)
 
-  const { data: usersData, isLoading, isError, error } = useUsers({
+  const {
+    data: usersData,
+    isLoading,
+    isError,
+    error,
+  } = useUsers({
     page: tableState.page,
     limit: tableState.limit,
     sort_by: sorting[0]?.id || 'nuke_balance',
     sort_order: sorting[0]?.desc ? 'desc' : 'asc',
     search: tableState.search,
-  });
+  })
 
-  const { data: lowBalanceData } = useLowBalanceUsers({ threshold: 100, page: 1, limit: 3 });
+  const { data: lowBalanceData } = useLowBalanceUsers({ threshold: 100, page: 1, limit: 3 })
 
   useEffect(() => {
     if (searchParams.user && usersData?.data) {
-      const user = usersData.data.find((u) => u.id === searchParams.user);
-      if (user) queueMicrotask(() => setSelectedUser(user));
+      const user = usersData.data.find((u) => u.id === searchParams.user)
+      if (user) queueMicrotask(() => setSelectedUser(user))
     }
-  }, [searchParams.user, usersData]);
+  }, [searchParams.user, usersData])
 
-  const users = useMemo(() => usersData?.data || [], [usersData?.data]);
-  const pagination = usersData?.pagination;
-  const lowBalanceUsers = useMemo(() => lowBalanceData?.users || [], [lowBalanceData?.users]);
+  const users = useMemo(() => usersData?.data || [], [usersData?.data])
+  const pagination = usersData?.pagination
+  const lowBalanceUsers = useMemo(() => lowBalanceData?.users || [], [lowBalanceData?.users])
 
   const usersMap = useMemo(() => {
-    const map: Record<string, string> = {};
-    users.forEach((u) => { map[u.id] = u.username; });
-    lowBalanceUsers.forEach((u) => { map[u.id] = u.username; });
-    return map;
-  }, [users, lowBalanceUsers]);
+    const map: Record<string, string> = {}
+    users.forEach((u) => {
+      map[u.id] = u.username
+    })
+    lowBalanceUsers.forEach((u) => {
+      map[u.id] = u.username
+    })
+    return map
+  }, [users, lowBalanceUsers])
 
   const handleAdjust = useCallback((user: User) => {
-    setSelectedUser(user);
-    setAdjustDialogOpen(true);
-  }, []);
+    setSelectedUser(user)
+    setAdjustDialogOpen(true)
+  }, [])
 
   const handleViewHistory = useCallback((user: User) => {
-    setSelectedUser(user);
-    setHistoryDialogOpen(true);
-  }, []);
+    setSelectedUser(user)
+    setHistoryDialogOpen(true)
+  }, [])
 
   const SortIcon = ({ columnId }: { columnId: string }) => {
-    const sort = sorting.find((s) => s.id === columnId);
-    if (!sort) return <ArrowUpDown className="w-3 h-3 opacity-30" />;
-    return sort.desc ? <ArrowDown className="w-3 h-3" /> : <ArrowUp className="w-3 h-3" />;
-  };
+    const sort = sorting.find((s) => s.id === columnId)
+    if (!sort) return <ArrowUpDown className="w-3 h-3 opacity-30" />
+    return sort.desc ? <ArrowDown className="w-3 h-3" /> : <ArrowUp className="w-3 h-3" />
+  }
 
   const columns: ColumnDef<User>[] = [
     {
@@ -112,9 +126,9 @@ function CreditsAdminPage() {
       header: () => (
         <button
           onClick={() => {
-            const isAsc = sorting[0]?.id === 'username' && !sorting[0]?.desc;
-            setSorting([{ id: 'username', desc: isAsc }]);
-            setSort('username', isAsc ? 'desc' : 'asc');
+            const isAsc = sorting[0]?.id === 'username' && !sorting[0]?.desc
+            setSorting([{ id: 'username', desc: isAsc }])
+            setSort('username', isAsc ? 'desc' : 'asc')
           }}
           className="flex items-center gap-1 hover:text-primary transition-colors"
         >
@@ -123,15 +137,19 @@ function CreditsAdminPage() {
         </button>
       ),
       cell: ({ row }) => {
-        const user = row.original;
-        const isLow = user.nuke_balance <= 100;
+        const user = row.original
+        const isLow = user.nuke_balance <= 100
         return (
           <div className="flex items-center gap-3">
-            <div className={cn(
-              'w-9 h-9 rounded-full flex items-center justify-center shrink-0',
-              isLow ? 'bg-amber-500/10' : 'bg-primary/10'
-            )}>
-              <span className={cn('text-xs font-medium', isLow ? 'text-amber-400' : 'text-primary')}>
+            <div
+              className={cn(
+                'w-9 h-9 rounded-full flex items-center justify-center shrink-0',
+                isLow ? 'bg-amber-500/10' : 'bg-primary/10'
+              )}
+            >
+              <span
+                className={cn('text-xs font-medium', isLow ? 'text-amber-400' : 'text-primary')}
+              >
                 {user.username.slice(0, 2).toUpperCase()}
               </span>
             </div>
@@ -145,7 +163,7 @@ function CreditsAdminPage() {
               )}
             </div>
           </div>
-        );
+        )
       },
     },
     {
@@ -153,9 +171,9 @@ function CreditsAdminPage() {
       header: () => (
         <button
           onClick={() => {
-            const isAsc = sorting[0]?.id === 'email' && !sorting[0]?.desc;
-            setSorting([{ id: 'email', desc: isAsc }]);
-            setSort('email', isAsc ? 'desc' : 'asc');
+            const isAsc = sorting[0]?.id === 'email' && !sorting[0]?.desc
+            setSorting([{ id: 'email', desc: isAsc }])
+            setSort('email', isAsc ? 'desc' : 'asc')
           }}
           className="flex items-center gap-1 hover:text-primary transition-colors"
         >
@@ -172,9 +190,9 @@ function CreditsAdminPage() {
       header: () => (
         <button
           onClick={() => {
-            const isAsc = sorting[0]?.id === 'nuke_balance' && !sorting[0]?.desc;
-            setSorting([{ id: 'nuke_balance', desc: isAsc }]);
-            setSort('nuke_balance', isAsc ? 'desc' : 'asc');
+            const isAsc = sorting[0]?.id === 'nuke_balance' && !sorting[0]?.desc
+            setSorting([{ id: 'nuke_balance', desc: isAsc }])
+            setSort('nuke_balance', isAsc ? 'desc' : 'asc')
           }}
           className="flex items-center gap-1 hover:text-primary transition-colors ml-auto"
         >
@@ -183,16 +201,21 @@ function CreditsAdminPage() {
         </button>
       ),
       cell: ({ row }) => {
-        const balance = row.getValue('nuke_balance') as number;
-        const isLow = balance <= 100;
+        const balance = row.getValue('nuke_balance') as number
+        const isLow = balance <= 100
         return (
           <div className="text-right">
-            <div className={cn('font-mono font-semibold text-sm', isLow ? 'text-amber-400' : 'text-foreground')}>
+            <div
+              className={cn(
+                'font-mono font-semibold text-sm',
+                isLow ? 'text-amber-400' : 'text-foreground'
+              )}
+            >
               {balance.toLocaleString()}
             </div>
             <div className="text-[10px] text-muted-foreground">NUKE</div>
           </div>
-        );
+        )
       },
     },
     {
@@ -208,7 +231,7 @@ function CreditsAdminPage() {
       id: 'actions',
       header: 'Actions',
       cell: ({ row }) => {
-        const user = row.original;
+        const user = row.original
         return (
           <div className="flex items-center gap-1">
             <Tooltip content="View History">
@@ -230,10 +253,10 @@ function CreditsAdminPage() {
               </Tooltip>
             )}
           </div>
-        );
+        )
       },
     },
-  ];
+  ]
 
   const stats = [
     {
@@ -250,14 +273,19 @@ function CreditsAdminPage() {
       iconColor: 'text-emerald-400',
       bgColor: 'bg-emerald-500/10',
     },
-  ];
+  ]
 
   const mobileCardRenderer = (user: User) => {
-    const isLow = user.nuke_balance <= 100;
+    const isLow = user.nuke_balance <= 100
     return (
       <div className="p-4 space-y-3">
         <div className="flex items-center gap-3">
-          <div className={cn('w-10 h-10 rounded-full flex items-center justify-center', isLow ? 'bg-amber-500/10' : 'bg-primary/10')}>
+          <div
+            className={cn(
+              'w-10 h-10 rounded-full flex items-center justify-center',
+              isLow ? 'bg-amber-500/10' : 'bg-primary/10'
+            )}
+          >
             <span className={cn('text-sm font-medium', isLow ? 'text-amber-400' : 'text-primary')}>
               {user.username.slice(0, 2).toUpperCase()}
             </span>
@@ -266,7 +294,9 @@ function CreditsAdminPage() {
             <div className="flex items-center gap-2">
               <span className="font-medium">{user.username}</span>
               {isLow && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400">Low</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400">
+                  Low
+                </span>
               )}
             </div>
             <span className="text-xs text-muted-foreground">{user.email}</span>
@@ -299,10 +329,10 @@ function CreditsAdminPage() {
           )}
         </div>
       </div>
-    );
-  };
+    )
+  }
 
-  if (!allowed) return null;
+  if (!allowed) return null
 
   return (
     <div className="min-h-screen p-6 lg:p-10 space-y-8">
@@ -378,7 +408,9 @@ function CreditsAdminPage() {
                       </div>
                       <div className="min-w-0">
                         <p className="text-sm font-medium truncate">{lbUser.username}</p>
-                        <p className="text-xs text-amber-400">{lbUser.nuke_balance.toLocaleString()} NUKE</p>
+                        <p className="text-xs text-amber-400">
+                          {lbUser.nuke_balance.toLocaleString()} NUKE
+                        </p>
                       </div>
                     </div>
                     {canGrant && (
@@ -398,7 +430,7 @@ function CreditsAdminPage() {
                             is_verified: true,
                             display_name: lbUser.username,
                             avatar_url: '',
-                          } as User);
+                          } as User)
                         }}
                       >
                         Grant
@@ -409,9 +441,9 @@ function CreditsAdminPage() {
                 {lowBalanceData && lowBalanceData.pagination.total > 3 && (
                   <button
                     onClick={() => {
-                      setPage(1);
-                      setSorting([{ id: 'nuke_balance', desc: false }]);
-                      setSort('nuke_balance', 'asc');
+                      setPage(1)
+                      setSorting([{ id: 'nuke_balance', desc: false }])
+                      setSort('nuke_balance', 'asc')
                     }}
                     className="w-full text-xs text-muted-foreground hover:text-primary transition-colors py-1"
                   >
@@ -448,9 +480,9 @@ function CreditsAdminPage() {
           onPageChange={setPage}
           onLimitChange={setLimit}
           onSortingChange={(newSorting) => {
-            setSorting(newSorting);
+            setSorting(newSorting)
             if (newSorting.length > 0) {
-              setSort(newSorting[0].id, newSorting[0].desc ? 'desc' : 'asc');
+              setSort(newSorting[0].id, newSorting[0].desc ? 'desc' : 'asc')
             }
           }}
           onRowSelectionChange={setRowSelection}
@@ -478,5 +510,5 @@ function CreditsAdminPage() {
         usersMap={usersMap}
       />
     </div>
-  );
+  )
 }

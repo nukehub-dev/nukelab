@@ -44,7 +44,9 @@ def set_correlation_id(task_id=None, task=None, kwargs=None, **rest):
     cid = req_headers.get("correlation_id", "")
     if cid:
         correlation_id.set(cid)
-        logger.debug("Correlation ID restored for task", extra={"correlation_id": cid, "task_id": task_id})
+        logger.debug(
+            "Correlation ID restored for task", extra={"correlation_id": cid, "task_id": task_id}
+        )
 
 
 @task_postrun.connect
@@ -56,14 +58,29 @@ def clear_correlation_id(task_id=None, task=None, **rest):
 class ContextTask(Task):
     """Custom Celery task base that propagates correlation IDs."""
 
-    def apply_async(self, args=None, kwargs=None, task_id=None, producer=None,
-                    link=None, link_error=None, shadow=None, **options):
+    def apply_async(
+        self,
+        args=None,
+        kwargs=None,
+        task_id=None,
+        producer=None,
+        link=None,
+        link_error=None,
+        shadow=None,
+        **options,
+    ):
         # Ensure headers exist
         headers = options.setdefault("headers", {})
         headers.setdefault("correlation_id", correlation_id.get(""))
         return super().apply_async(
-            args=args, kwargs=kwargs, task_id=task_id, producer=producer,
-            link=link, link_error=link_error, shadow=shadow, **options
+            args=args,
+            kwargs=kwargs,
+            task_id=task_id,
+            producer=producer,
+            link=link,
+            link_error=link_error,
+            shadow=shadow,
+            **options,
         )
 
     def delay(self, *args, **kwargs):
@@ -88,72 +105,72 @@ celery_app.conf.update(
     task_track_started=True,
     task_time_limit=3600,
     worker_prefetch_multiplier=1,
-    worker_pool='threads',
+    worker_pool="threads",
     worker_concurrency=4,
     beat_schedule={
-        'collect-container-metrics': {
-            'task': 'app.tasks.collect_container_metrics',
-            'schedule': 5.0,  # Every 5 seconds
+        "collect-container-metrics": {
+            "task": "app.tasks.collect_container_metrics",
+            "schedule": 5.0,  # Every 5 seconds
         },
-        'collect-system-metrics': {
-            'task': 'app.tasks.collect_system_metrics',
-            'schedule': 60.0,  # Every 60 seconds
+        "collect-system-metrics": {
+            "task": "app.tasks.collect_system_metrics",
+            "schedule": 60.0,  # Every 60 seconds
         },
-        'check-container-health': {
-            'task': 'app.tasks.check_container_health',
-            'schedule': 30.0,  # Every 30 seconds
+        "check-container-health": {
+            "task": "app.tasks.check_container_health",
+            "schedule": 30.0,  # Every 30 seconds
         },
-        'evaluate-alert-rules': {
-            'task': 'app.tasks.evaluate_alert_rules',
-            'schedule': 60.0,  # Every 60 seconds
+        "evaluate-alert-rules": {
+            "task": "app.tasks.evaluate_alert_rules",
+            "schedule": 60.0,  # Every 60 seconds
         },
-        'process-nuke-billing': {
-            'task': 'app.tasks.process_nuke_billing',
-            'schedule': 900.0,  # Every 15 minutes
+        "process-nuke-billing": {
+            "task": "app.tasks.process_nuke_billing",
+            "schedule": 900.0,  # Every 15 minutes
         },
-        'enforce-auto-stop': {
-            'task': 'app.tasks.enforce_auto_stop',
-            'schedule': 60.0,  # Every 60 seconds
+        "enforce-auto-stop": {
+            "task": "app.tasks.enforce_auto_stop",
+            "schedule": 60.0,  # Every 60 seconds
         },
-        'shutdown-idle-servers': {
-            'task': 'app.tasks.shutdown_idle_servers',
-            'schedule': 300.0,  # Every 5 minutes
+        "shutdown-idle-servers": {
+            "task": "app.tasks.shutdown_idle_servers",
+            "schedule": 300.0,  # Every 5 minutes
         },
-        'process-server-queue': {
-            'task': 'app.tasks.process_server_queue',
-            'schedule': 30.0,  # Every 30 seconds
+        "process-server-queue": {
+            "task": "app.tasks.process_server_queue",
+            "schedule": 30.0,  # Every 30 seconds
         },
-        'evaluate-schedules': {
-            'task': 'app.tasks.evaluate_schedules',
-            'schedule': 60.0,  # Every 60 seconds
+        "evaluate-schedules": {
+            "task": "app.tasks.evaluate_schedules",
+            "schedule": 60.0,  # Every 60 seconds
         },
-        'evaluate-maintenance-windows': {
-            'task': 'app.tasks.evaluate_maintenance_windows',
-            'schedule': 60.0,  # Every 60 seconds
+        "evaluate-maintenance-windows": {
+            "task": "app.tasks.evaluate_maintenance_windows",
+            "schedule": 60.0,  # Every 60 seconds
         },
-        'rollup-server-metrics': {
-            'task': 'app.tasks.rollup_server_metrics',
-            'schedule': crontab(hour=3, minute=0),  # Daily at 3 AM
+        "rollup-server-metrics": {
+            "task": "app.tasks.rollup_server_metrics",
+            "schedule": crontab(hour=3, minute=0),  # Daily at 3 AM
         },
-        'cleanup-expired-data': {
-            'task': 'app.tasks.cleanup_expired_data',
-            'schedule': crontab(hour=4, minute=0),  # Daily at 4 AM
+        "cleanup-expired-data": {
+            "task": "app.tasks.cleanup_expired_data",
+            "schedule": crontab(hour=4, minute=0),  # Daily at 4 AM
         },
-        'ensure-partitions': {
-            'task': 'app.tasks.ensure_partitions',
-            'schedule': crontab(hour=0, minute=5),  # Daily at 00:05
+        "ensure-partitions": {
+            "task": "app.tasks.ensure_partitions",
+            "schedule": crontab(hour=0, minute=5),  # Daily at 00:05
         },
-        'enforce-volume-quotas': {
-            'task': 'app.tasks.enforce_volume_quotas',
-            'schedule': settings.volume_quota_check_interval_minutes * 60.0,
+        "enforce-volume-quotas": {
+            "task": "app.tasks.enforce_volume_quotas",
+            "schedule": settings.volume_quota_check_interval_minutes * 60.0,
         },
-        'check-autovacuum-health': {
-            'task': 'app.tasks.check_autovacuum_health',
-            'schedule': crontab(day_of_week=0, hour=6, minute=0),  # Weekly Sunday 6 AM
+        "check-autovacuum-health": {
+            "task": "app.tasks.check_autovacuum_health",
+            "schedule": crontab(day_of_week=0, hour=6, minute=0),  # Weekly Sunday 6 AM
         },
-        'update-prometheus-business-metrics': {
-            'task': 'app.tasks.update_prometheus_business_metrics',
-            'schedule': 60.0,  # Every 60 seconds
+        "update-prometheus-business-metrics": {
+            "task": "app.tasks.update_prometheus_business_metrics",
+            "schedule": 60.0,  # Every 60 seconds
         },
     },
 )

@@ -65,7 +65,9 @@ class TestGetUserPermissions:
 
 class TestHasPermission:
     def test_has_permission_true(self):
-        user = User(id=mock.Mock(), username="admin", email="a@test.com", role="admin", is_active=True)
+        user = User(
+            id=mock.Mock(), username="admin", email="a@test.com", role="admin", is_active=True
+        )
         assert has_permission(user, Permission.ADMIN_ACCESS) is True
 
     def test_has_permission_false(self):
@@ -81,13 +83,17 @@ class TestHasPermission:
 
     def test_has_permission_implied(self):
         # admin role has SERVERS_WRITE_ALL which implies SERVERS_READ_OWN
-        user = User(id=mock.Mock(), username="admin", email="a@test.com", role="admin", is_active=True)
+        user = User(
+            id=mock.Mock(), username="admin", email="a@test.com", role="admin", is_active=True
+        )
         assert has_permission(user, Permission.SERVERS_READ_OWN) is True
 
 
 class TestHasAnyPermission:
     def test_has_any_permission_true(self):
-        user = User(id=mock.Mock(), username="admin", email="a@test.com", role="admin", is_active=True)
+        user = User(
+            id=mock.Mock(), username="admin", email="a@test.com", role="admin", is_active=True
+        )
         assert has_any_permission(user, [Permission.ADMIN_ACCESS, "FAKE"]) is True
 
     def test_has_any_permission_false(self):
@@ -101,7 +107,9 @@ class TestHasAnyPermission:
 
 class TestHasAllPermissions:
     def test_has_all_permissions_true(self):
-        user = User(id=mock.Mock(), username="admin", email="a@test.com", role="admin", is_active=True)
+        user = User(
+            id=mock.Mock(), username="admin", email="a@test.com", role="admin", is_active=True
+        )
         assert has_all_permissions(user, [Permission.ADMIN_ACCESS]) is True
 
     def test_has_all_permissions_false(self):
@@ -115,11 +123,14 @@ class TestHasAllPermissions:
 
 class TestCheckPermission:
     def test_check_permission_passes(self):
-        user = User(id=mock.Mock(), username="admin", email="a@test.com", role="admin", is_active=True)
+        user = User(
+            id=mock.Mock(), username="admin", email="a@test.com", role="admin", is_active=True
+        )
         check_permission(user, Permission.ADMIN_ACCESS)  # should not raise
 
     def test_check_permission_raises(self):
         from fastapi import HTTPException
+
         user = User(id=mock.Mock(), username="u", email="u@test.com", role="user", is_active=True)
         with pytest.raises(HTTPException) as exc_info:
             check_permission(user, Permission.ADMIN_ACCESS)
@@ -128,11 +139,14 @@ class TestCheckPermission:
 
 class TestCheckAnyPermission:
     def test_check_any_permission_passes(self):
-        user = User(id=mock.Mock(), username="admin", email="a@test.com", role="admin", is_active=True)
+        user = User(
+            id=mock.Mock(), username="admin", email="a@test.com", role="admin", is_active=True
+        )
         check_any_permission(user, [Permission.ADMIN_ACCESS])  # should not raise
 
     def test_check_any_permission_raises(self):
         from fastapi import HTTPException
+
         user = User(id=mock.Mock(), username="u", email="u@test.com", role="user", is_active=True)
         with pytest.raises(HTTPException) as exc_info:
             check_any_permission(user, [Permission.ADMIN_ACCESS])
@@ -141,15 +155,18 @@ class TestCheckAnyPermission:
 
 # ===== app.api.auth primitives =====
 
+
 class TestAuthPasswordUtils:
     def test_get_password_hash(self):
         from app.api.auth import get_password_hash, verify_password
+
         hashed = get_password_hash("password123")
         assert hashed != "password123"
         assert verify_password("password123", hashed) is True
 
     def test_verify_password_wrong(self):
         from app.api.auth import get_password_hash, verify_password
+
         hashed = get_password_hash("password123")
         assert verify_password("wrong", hashed) is False
 
@@ -246,6 +263,7 @@ class TestRequireScopes:
         user = mock.Mock()
         # Should not raise
         import asyncio
+
         asyncio.get_event_loop().run_until_complete(checker(req, user))
 
     def test_require_scopes_api_token_match(self):
@@ -257,6 +275,7 @@ class TestRequireScopes:
         req.state.auth_context = mock.Mock(auth_method="api_token", token_scopes=["servers:read"])
         user = mock.Mock()
         import asyncio
+
         asyncio.get_event_loop().run_until_complete(checker(req, user))
 
     def test_require_scopes_api_token_no_match(self):
@@ -268,6 +287,7 @@ class TestRequireScopes:
         req.state.auth_context = mock.Mock(auth_method="api_token", token_scopes=["servers:read"])
         user = mock.Mock()
         import asyncio
+
         with pytest.raises(HTTPException) as exc_info:
             asyncio.get_event_loop().run_until_complete(checker(req, user))
         assert exc_info.value.status_code == 403
@@ -281,6 +301,7 @@ class TestRequireScopes:
         req.state.auth_context = mock.Mock(auth_method="api_token", token_scopes=["servers:*"])
         user = mock.Mock()
         import asyncio
+
         asyncio.get_event_loop().run_until_complete(checker(req, user))
 
     def test_require_scopes_no_auth_context(self):
@@ -292,6 +313,7 @@ class TestRequireScopes:
         req.state.auth_context = None
         user = mock.Mock()
         import asyncio
+
         with pytest.raises(HTTPException) as exc_info:
             asyncio.get_event_loop().run_until_complete(checker(req, user))
         assert exc_info.value.status_code == 401
@@ -307,6 +329,7 @@ class TestRequireJWTAuth:
         req.state.auth_context = mock.Mock(auth_method="jwt")
         user = mock.Mock()
         import asyncio
+
         asyncio.get_event_loop().run_until_complete(checker(req, user))
 
     def test_require_jwt_auth_rejects_api_token(self):
@@ -318,6 +341,7 @@ class TestRequireJWTAuth:
         req.state.auth_context = mock.Mock(auth_method="api_token")
         user = mock.Mock()
         import asyncio
+
         with pytest.raises(HTTPException) as exc_info:
             asyncio.get_event_loop().run_until_complete(checker(req, user))
         assert exc_info.value.status_code == 403
@@ -332,6 +356,7 @@ class TestRequireJWTAuth:
         req.state.auth_context = None
         user = mock.Mock()
         import asyncio
+
         with pytest.raises(HTTPException) as exc_info:
             asyncio.get_event_loop().run_until_complete(checker(req, user))
         assert exc_info.value.status_code == 401
@@ -364,7 +389,11 @@ class TestRefreshTokenUtils:
 
     @pytest.mark.asyncio
     async def test_revoke_refresh_token(self, db_session, test_user):
-        from app.api.auth import create_refresh_token_for_user, verify_refresh_token, revoke_refresh_token
+        from app.api.auth import (
+            create_refresh_token_for_user,
+            verify_refresh_token,
+            revoke_refresh_token,
+        )
 
         plaintext = await create_refresh_token_for_user(str(test_user.id), db_session)
         rt = await verify_refresh_token(plaintext, db_session)
@@ -419,7 +448,9 @@ class TestRefreshTokenUtils:
         plaintext = await create_refresh_token_for_user(str(test_user.id), db_session)
 
         # Manually expire it
-        result = await db_session.execute(select(RefreshToken).where(RefreshToken.user_id == test_user.id))
+        result = await db_session.execute(
+            select(RefreshToken).where(RefreshToken.user_id == test_user.id)
+        )
         rt = result.scalars().first()
         rt.expires_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1)
         await db_session.commit()
@@ -433,6 +464,7 @@ class TestRefreshTokenUtils:
         import asyncio
 
         call_count = 0
+
         async def fake_sleep(*args, **kwargs):
             nonlocal call_count
             call_count += 1
@@ -440,7 +472,9 @@ class TestRefreshTokenUtils:
                 raise SystemExit("stop")
 
         with mock.patch("app.api.auth.asyncio.sleep", side_effect=fake_sleep):
-            with mock.patch("app.api.auth.cleanup_expired_refresh_tokens", new_callable=mock.AsyncMock) as mock_cleanup:
+            with mock.patch(
+                "app.api.auth.cleanup_expired_refresh_tokens", new_callable=mock.AsyncMock
+            ) as mock_cleanup:
                 with pytest.raises(SystemExit):
                     await run_periodic_refresh_token_cleanup()
                 mock_cleanup.assert_called_once()

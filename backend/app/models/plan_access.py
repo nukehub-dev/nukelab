@@ -9,9 +9,15 @@ from app.db.base import Base
 class UserPlanAccess(Base):
     __tablename__ = "user_plan_access"
 
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
-    plan_id = Column(UUID(as_uuid=True), ForeignKey("server_plans.id", ondelete="CASCADE"), primary_key=True)
-    granted_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    user_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    plan_id = Column(
+        UUID(as_uuid=True), ForeignKey("server_plans.id", ondelete="CASCADE"), primary_key=True
+    )
+    granted_by = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     granted_at = Column(DateTime, default=utc_now)
     expires_at = Column(DateTime, nullable=True)
 
@@ -32,9 +38,15 @@ class UserPlanAccess(Base):
 class WorkspacePlanAccess(Base):
     __tablename__ = "workspace_plan_access"
 
-    workspace_id = Column(UUID(as_uuid=True), ForeignKey("shared_workspaces.id", ondelete="CASCADE"), primary_key=True)
-    plan_id = Column(UUID(as_uuid=True), ForeignKey("server_plans.id", ondelete="CASCADE"), primary_key=True)
-    granted_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    workspace_id = Column(
+        UUID(as_uuid=True), ForeignKey("shared_workspaces.id", ondelete="CASCADE"), primary_key=True
+    )
+    plan_id = Column(
+        UUID(as_uuid=True), ForeignKey("server_plans.id", ondelete="CASCADE"), primary_key=True
+    )
+    granted_by = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     granted_at = Column(DateTime, default=utc_now)
     expires_at = Column(DateTime, nullable=True)
 

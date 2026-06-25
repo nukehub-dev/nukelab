@@ -93,7 +93,9 @@ class TestResourcePoolServiceCanFit:
     @pytest.mark.asyncio
     async def test_can_fit_yes(self, db_session):
         """Should return True when plan fits."""
-        plan = ServerPlan(name="Small", slug="small", cpu_limit=1, memory_limit="1g", disk_limit="10g")
+        plan = ServerPlan(
+            name="Small", slug="small", cpu_limit=1, memory_limit="1g", disk_limit="10g"
+        )
         db_session.add(plan)
         await db_session.commit()
 
@@ -103,7 +105,9 @@ class TestResourcePoolServiceCanFit:
     @pytest.mark.asyncio
     async def test_can_fit_no(self, db_session, test_user):
         """Should return False when plan exceeds resources."""
-        plan = ServerPlan(name="Huge", slug="huge", cpu_limit=100, memory_limit="100g", disk_limit="1000g")
+        plan = ServerPlan(
+            name="Huge", slug="huge", cpu_limit=100, memory_limit="100g", disk_limit="1000g"
+        )
         db_session.add(plan)
         await db_session.commit()
 
@@ -135,6 +139,7 @@ class TestResourcePoolServiceQueue:
         await db_session.flush()
 
         from app.models.environment_template import EnvironmentTemplate
+
         env = EnvironmentTemplate(name="Env", slug="q-env", image="img")
         db_session.add(env)
         await db_session.flush()
@@ -167,11 +172,14 @@ class TestResourcePoolServiceQueue:
     @pytest.mark.asyncio
     async def test_get_next_in_queue_returns_entry(self, db_session, test_user):
         """Should return next queue entry that fits."""
-        plan = ServerPlan(name="Test", slug="q-next", cpu_limit=1, memory_limit="1g", disk_limit="10g")
+        plan = ServerPlan(
+            name="Test", slug="q-next", cpu_limit=1, memory_limit="1g", disk_limit="10g"
+        )
         db_session.add(plan)
         await db_session.flush()
 
         from app.models.environment_template import EnvironmentTemplate
+
         env = EnvironmentTemplate(name="Env", slug="q-env2", image="img")
         db_session.add(env)
         await db_session.flush()

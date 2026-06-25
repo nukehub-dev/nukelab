@@ -89,9 +89,7 @@ class ShutdownCoordinator:
         # 4. Stop Redis listener / close Redis client
         if websocket_manager is not None:
             try:
-                await asyncio.wait_for(
-                    websocket_manager.stop_redis_listener(), timeout=3.0
-                )
+                await asyncio.wait_for(websocket_manager.stop_redis_listener(), timeout=3.0)
                 logger.info("redis_listener_stopped")
             except Exception:
                 logger.exception("redis_listener_stop_failed")

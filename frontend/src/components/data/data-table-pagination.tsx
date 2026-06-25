@@ -1,15 +1,22 @@
-import { useState, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, Check } from 'lucide-react';
-import { cn } from '../../lib/utils';
+import { useState, useRef, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import {
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  ChevronDown,
+  Check,
+} from 'lucide-react'
+import { cn } from '../../lib/utils'
 
 interface DataTablePaginationProps {
-  page: number;
-  limit: number;
-  totalCount: number;
-  pageCount: number;
-  onPageChange: (page: number) => void;
-  onLimitChange: (limit: number) => void;
+  page: number
+  limit: number
+  totalCount: number
+  pageCount: number
+  onPageChange: (page: number) => void
+  onLimitChange: (limit: number) => void
 }
 
 export function DataTablePagination({
@@ -20,22 +27,22 @@ export function DataTablePagination({
   onPageChange,
   onLimitChange,
 }: DataTablePaginationProps) {
-  const startItem = (page - 1) * limit + 1;
-  const endItem = Math.min(page * limit, totalCount);
+  const startItem = (page - 1) * limit + 1
+  const endItem = Math.min(page * limit, totalCount)
 
-  const limitOptions = [10, 20, 50, 100];
-  const [showLimitDropdown, setShowLimitDropdown] = useState(false);
-  const limitRef = useRef<HTMLDivElement>(null);
+  const limitOptions = [10, 20, 50, 100]
+  const [showLimitDropdown, setShowLimitDropdown] = useState(false)
+  const limitRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (limitRef.current && !limitRef.current.contains(event.target as Node)) {
-        setShowLimitDropdown(false);
+        setShowLimitDropdown(false)
       }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   return (
     <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-4">
@@ -70,15 +77,15 @@ export function DataTablePagination({
 
           <div className="flex items-center gap-1 px-2">
             {Array.from({ length: Math.min(5, pageCount) }, (_, i) => {
-              let pageNum: number;
+              let pageNum: number
               if (pageCount <= 5) {
-                pageNum = i + 1;
+                pageNum = i + 1
               } else if (page <= 3) {
-                pageNum = i + 1;
+                pageNum = i + 1
               } else if (page >= pageCount - 2) {
-                pageNum = pageCount - 4 + i;
+                pageNum = pageCount - 4 + i
               } else {
-                pageNum = page - 2 + i;
+                pageNum = page - 2 + i
               }
 
               return (
@@ -94,7 +101,7 @@ export function DataTablePagination({
                 >
                   {pageNum}
                 </button>
-              );
+              )
             })}
           </div>
 
@@ -136,23 +143,20 @@ export function DataTablePagination({
           <AnimatePresence>
             {showLimitDropdown && (
               <>
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={() => setShowLimitDropdown(false)}
-                />
+                <div className="fixed inset-0 z-40" onClick={() => setShowLimitDropdown(false)} />
                 <motion.div
                   initial={{ opacity: 0, y: 4, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 4, scale: 0.95 }}
                   transition={{ duration: 0.1 }}
-                            className="absolute right-0 bottom-full mb-1 min-w-[120px] p-1.5 bg-popover border border-border rounded-xl shadow-lg z-50 space-y-1"
+                  className="absolute right-0 bottom-full mb-1 min-w-[120px] p-1.5 bg-popover border border-border rounded-xl shadow-lg z-50 space-y-1"
                 >
                   {limitOptions.map((opt) => (
-                      <button
+                    <button
                       key={opt}
                       onClick={() => {
-                        onLimitChange(opt);
-                        setShowLimitDropdown(false);
+                        onLimitChange(opt)
+                        setShowLimitDropdown(false)
                       }}
                       className={cn(
                         'w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors whitespace-nowrap',
@@ -161,7 +165,12 @@ export function DataTablePagination({
                           : 'hover:bg-accent text-foreground'
                       )}
                     >
-                      <Check className={cn('w-4 h-4 shrink-0', limit === opt ? 'opacity-100' : 'opacity-0')} />
+                      <Check
+                        className={cn(
+                          'w-4 h-4 shrink-0',
+                          limit === opt ? 'opacity-100' : 'opacity-0'
+                        )}
+                      />
                       <span>{opt} / page</span>
                     </button>
                   ))}
@@ -172,5 +181,5 @@ export function DataTablePagination({
         </div>
       </div>
     </div>
-  );
+  )
 }

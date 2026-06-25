@@ -1,6 +1,6 @@
-import { createFileRoute, Link } from '@tanstack/react-router';
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { createFileRoute, Link } from '@tanstack/react-router'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { motion } from 'framer-motion'
 import {
   Server,
   ArrowLeft,
@@ -17,39 +17,39 @@ import {
   ChevronRight,
   Terminal,
   Sparkles,
-} from 'lucide-react';
-import { useServerByPath } from '../hooks/use-servers';
-import { useServerActionsWithReason } from '../hooks/use-server-actions-with-reason';
-import { useAuthStore } from '../stores/auth-store';
-import { StatusBadge } from '../components/data/status-badge';
-import { Card, CardContent } from '../components/ui/card';
-import { Button } from '../components/ui/button';
+} from 'lucide-react'
+import { useServerByPath } from '../hooks/use-servers'
+import { useServerActionsWithReason } from '../hooks/use-server-actions-with-reason'
+import { useAuthStore } from '../stores/auth-store'
+import { StatusBadge } from '../components/data/status-badge'
+import { Card, CardContent } from '../components/ui/card'
+import { Button } from '../components/ui/button'
 
-import { formatDate, cn } from '../lib/utils';
-import { useQueryClient } from '@tanstack/react-query';
+import { formatDate, cn } from '../lib/utils'
+import { useQueryClient } from '@tanstack/react-query'
 
-const API_BASE = import.meta.env.VITE_API_URL || '/api';
+const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
 async function getServerAccessToken(serverId: string, reason?: string): Promise<void> {
-  const token = localStorage.getItem('nukelab-token') || '';
+  const token = localStorage.getItem('nukelab-token') || ''
   const response = await fetch(`${API_BASE}/servers/${serverId}/access-token`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ reason }),
     credentials: 'include',
-  });
+  })
   if (!response.ok) {
-    const body = await response.text().catch(() => '');
-    throw new Error(body || `Token request failed (${response.status})`);
+    const body = await response.text().catch(() => '')
+    throw new Error(body || `Token request failed (${response.status})`)
   }
 }
 
 export const Route = createFileRoute('/user/$username/$serverName')({
   component: ServerGatewayPage,
-});
+})
 
 // Animation variants
 const containerVariants = {
@@ -58,12 +58,12 @@ const containerVariants = {
     opacity: 1,
     transition: { staggerChildren: 0.08, delayChildren: 0.1 },
   },
-};
+}
 
 const itemVariants = {
   hidden: { opacity: 0, y: 16 },
   show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 400, damping: 28 } },
-};
+}
 
 const pulseRingVariants = {
   initial: { scale: 0.8, opacity: 0.6 },
@@ -72,21 +72,23 @@ const pulseRingVariants = {
     opacity: [0.6, 0, 0.6],
     transition: { duration: 2.5, repeat: Infinity, ease: 'easeInOut' },
   },
-};
+}
 
 const stepItems = [
   { icon: Terminal, label: 'Provisioning container', threshold: 0 },
   { icon: Zap, label: 'Starting services', threshold: 30 },
   { icon: Globe, label: 'Activating routing', threshold: 60 },
   { icon: Sparkles, label: 'Ready', threshold: 90 },
-];
+]
 
 function StepIndicator({ progress }: { progress: number }) {
   return (
     <div className="space-y-3">
       {stepItems.map((step, i) => {
-        const isActive = progress >= step.threshold;
-        const isCurrent = progress >= step.threshold && (i === stepItems.length - 1 || progress < stepItems[i + 1].threshold);
+        const isActive = progress >= step.threshold
+        const isCurrent =
+          progress >= step.threshold &&
+          (i === stepItems.length - 1 || progress < stepItems[i + 1].threshold)
         return (
           <motion.div
             key={step.label}
@@ -95,21 +97,30 @@ function StepIndicator({ progress }: { progress: number }) {
             animate={{ opacity: isActive ? 1 : 0.4, x: 0 }}
             transition={{ delay: i * 0.1 }}
           >
-            <div className={cn(
-              'w-6 h-6 rounded-full flex items-center justify-center transition-colors duration-500',
-              isActive ? 'bg-primary/20' : 'bg-muted',
-              isCurrent && 'ring-2 ring-primary/50'
-            )}>
+            <div
+              className={cn(
+                'w-6 h-6 rounded-full flex items-center justify-center transition-colors duration-500',
+                isActive ? 'bg-primary/20' : 'bg-muted',
+                isCurrent && 'ring-2 ring-primary/50'
+              )}
+            >
               {isActive ? (
-                <CheckCircle2 className={cn('w-3.5 h-3.5', isCurrent ? 'text-primary animate-pulse' : 'text-primary')} />
+                <CheckCircle2
+                  className={cn(
+                    'w-3.5 h-3.5',
+                    isCurrent ? 'text-primary animate-pulse' : 'text-primary'
+                  )}
+                />
               ) : (
                 <step.icon className="w-3.5 h-3.5 text-muted-foreground" />
               )}
             </div>
-            <span className={cn(
-              'text-sm transition-colors duration-500',
-              isActive ? 'text-foreground' : 'text-muted-foreground'
-            )}>
+            <span
+              className={cn(
+                'text-sm transition-colors duration-500',
+                isActive ? 'text-foreground' : 'text-muted-foreground'
+              )}
+            >
               {step.label}
             </span>
             {isCurrent && (
@@ -122,13 +133,19 @@ function StepIndicator({ progress }: { progress: number }) {
               </motion.div>
             )}
           </motion.div>
-        );
+        )
       })}
     </div>
-  );
+  )
 }
 
-function ServerInfoHeader({ server, username }: { server: { name: string; username?: string }; username: string }) {
+function ServerInfoHeader({
+  server,
+  username,
+}: {
+  server: { name: string; username?: string }
+  username: string
+}) {
   return (
     <motion.div variants={itemVariants} className="text-center space-y-2">
       <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/10 mb-2">
@@ -137,15 +154,23 @@ function ServerInfoHeader({ server, username }: { server: { name: string; userna
       <h1 className="text-2xl font-bold tracking-tight">{server.name}</h1>
       <p className="text-sm text-muted-foreground">@{username}</p>
     </motion.div>
-  );
+  )
 }
 
-function ServerSpecs({ server }: { server: { allocated_cpu?: number; allocated_memory?: string; allocated_disk?: string } }) {
+function ServerSpecs({
+  server,
+}: {
+  server: { allocated_cpu?: number; allocated_memory?: string; allocated_disk?: string }
+}) {
   const specs = [
-    { icon: Cpu, label: 'CPU', value: server.allocated_cpu ? `${server.allocated_cpu} cores` : '—' },
+    {
+      icon: Cpu,
+      label: 'CPU',
+      value: server.allocated_cpu ? `${server.allocated_cpu} cores` : '—',
+    },
     { icon: MemoryStick, label: 'Memory', value: server.allocated_memory || '—' },
     { icon: HardDrive, label: 'Storage', value: server.allocated_disk || '—' },
-  ];
+  ]
 
   return (
     <motion.div variants={itemVariants} className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -157,7 +182,7 @@ function ServerSpecs({ server }: { server: { allocated_cpu?: number; allocated_m
         </div>
       ))}
     </motion.div>
-  );
+  )
 }
 
 function LoadingState() {
@@ -185,7 +210,7 @@ function LoadingState() {
         </motion.p>
       </motion.div>
     </div>
-  );
+  )
 }
 
 function ErrorState({ serverName, error }: { serverName: string; error: Error | null }) {
@@ -205,7 +230,9 @@ function ErrorState({ serverName, error }: { serverName: string; error: Error | 
         <motion.div variants={itemVariants} className="space-y-2">
           <h2 className="text-xl font-semibold">Server Not Found</h2>
           <p className="text-sm text-muted-foreground">
-            {error instanceof Error ? error.message : `The server "${serverName}" does not exist or you don't have access.`}
+            {error instanceof Error
+              ? error.message
+              : `The server "${serverName}" does not exist or you don't have access.`}
           </p>
         </motion.div>
         <motion.div variants={itemVariants}>
@@ -218,7 +245,7 @@ function ErrorState({ serverName, error }: { serverName: string; error: Error | 
         </motion.div>
       </motion.div>
     </div>
-  );
+  )
 }
 
 function RunningRedirectState({ server }: { server: { name: string } }) {
@@ -249,12 +276,13 @@ function RunningRedirectState({ server }: { server: { name: string } }) {
 
         <motion.div variants={itemVariants} className="space-y-1">
           <p className="font-semibold text-lg">{server.name} is ready</p>
-          <p className="text-sm text-muted-foreground">
-            Opening your environment...
-          </p>
+          <p className="text-sm text-muted-foreground">Opening your environment...</p>
         </motion.div>
 
-        <motion.div variants={itemVariants} className="h-1.5 bg-muted rounded-full overflow-hidden w-56 mx-auto">
+        <motion.div
+          variants={itemVariants}
+          className="h-1.5 bg-muted rounded-full overflow-hidden w-56 mx-auto"
+        >
           <motion.div
             className="h-full bg-primary rounded-full"
             initial={{ width: '0%' }}
@@ -264,14 +292,27 @@ function RunningRedirectState({ server }: { server: { name: string } }) {
         </motion.div>
       </motion.div>
     </div>
-  );
+  )
 }
 
-function ManualOpenState({ server, username, onOpen, tokenError }: {
-  server: { id: string; name: string; username?: string; allocated_cpu?: number; allocated_memory?: string; allocated_disk?: string; created_at?: string };
-  username: string;
-  onOpen: () => void;
-  tokenError?: string | null;
+function ManualOpenState({
+  server,
+  username,
+  onOpen,
+  tokenError,
+}: {
+  server: {
+    id: string
+    name: string
+    username?: string
+    allocated_cpu?: number
+    allocated_memory?: string
+    allocated_disk?: string
+    created_at?: string
+  }
+  username: string
+  onOpen: () => void
+  tokenError?: string | null
 }) {
   return (
     <div className="min-h-screen flex items-center justify-center p-6">
@@ -323,8 +364,14 @@ function ManualOpenState({ server, username, onOpen, tokenError }: {
 
         <ServerSpecs server={server} />
 
-        <motion.div variants={itemVariants} className="flex items-center justify-center gap-4 text-sm">
-          <Link to="/servers" className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors">
+        <motion.div
+          variants={itemVariants}
+          className="flex items-center justify-center gap-4 text-sm"
+        >
+          <Link
+            to="/servers"
+            className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors"
+          >
             <ArrowLeft className="w-3.5 h-3.5" />
             All Servers
           </Link>
@@ -339,16 +386,28 @@ function ManualOpenState({ server, username, onOpen, tokenError }: {
         </motion.div>
       </motion.div>
     </div>
-  );
+  )
 }
 
-function StartingState({ server, username, pollCount, elapsedSeconds }: {
-  server: { name: string; username?: string; status: string; allocated_cpu?: number; allocated_memory?: string; allocated_disk?: string };
-  username: string;
-  pollCount: number;
-  elapsedSeconds: number;
+function StartingState({
+  server,
+  username,
+  pollCount,
+  elapsedSeconds,
+}: {
+  server: {
+    name: string
+    username?: string
+    status: string
+    allocated_cpu?: number
+    allocated_memory?: string
+    allocated_disk?: string
+  }
+  username: string
+  pollCount: number
+  elapsedSeconds: number
 }) {
-  const progress = Math.min(pollCount * 10, 85);
+  const progress = Math.min(pollCount * 10, 85)
 
   return (
     <div className="min-h-screen flex items-center justify-center p-6">
@@ -404,14 +463,29 @@ function StartingState({ server, username, pollCount, elapsedSeconds }: {
         </motion.div>
       </motion.div>
     </div>
-  );
+  )
 }
 
-function StoppedState({ server, username, onStart, isStarting }: {
-  server: { id: string; name: string; username?: string; status: string; external_url?: string; allocated_cpu?: number; allocated_memory?: string; allocated_disk?: string; created_at?: string };
-  username: string;
-  onStart: () => void;
-  isStarting: boolean;
+function StoppedState({
+  server,
+  username,
+  onStart,
+  isStarting,
+}: {
+  server: {
+    id: string
+    name: string
+    username?: string
+    status: string
+    external_url?: string
+    allocated_cpu?: number
+    allocated_memory?: string
+    allocated_disk?: string
+    created_at?: string
+  }
+  username: string
+  onStart: () => void
+  isStarting: boolean
 }) {
   return (
     <div className="min-h-screen flex items-center justify-center p-6">
@@ -441,12 +515,7 @@ function StoppedState({ server, username, onStart, isStarting }: {
                 )}
               </div>
 
-              <Button
-                onClick={onStart}
-                disabled={isStarting}
-                className="w-full gap-2"
-                size="lg"
-              >
+              <Button onClick={onStart} disabled={isStarting} className="w-full gap-2" size="lg">
                 {isStarting ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -465,8 +534,14 @@ function StoppedState({ server, username, onStart, isStarting }: {
 
         <ServerSpecs server={server} />
 
-        <motion.div variants={itemVariants} className="flex items-center justify-center gap-4 text-sm">
-          <Link to="/servers" className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors">
+        <motion.div
+          variants={itemVariants}
+          className="flex items-center justify-center gap-4 text-sm"
+        >
+          <Link
+            to="/servers"
+            className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors"
+          >
             <ArrowLeft className="w-3.5 h-3.5" />
             All Servers
           </Link>
@@ -487,121 +562,125 @@ function StoppedState({ server, username, onStart, isStarting }: {
         )}
       </motion.div>
     </div>
-  );
+  )
 }
 
 function ServerGatewayPage() {
-  const { username, serverName } = Route.useParams();
-  const { data: server, isLoading, isError, error } = useServerByPath(username, serverName);
-  const { startServerAsync, promptAccessReason, dialog: reasonDialog } = useServerActionsWithReason();
-  const queryClient = useQueryClient();
-  const user = useAuthStore((state) => state.user);
-  const isOwnServer = server ? server.user_id === user?.id : true;
+  const { username, serverName } = Route.useParams()
+  const { data: server, isLoading, isError, error } = useServerByPath(username, serverName)
+  const {
+    startServerAsync,
+    promptAccessReason,
+    dialog: reasonDialog,
+  } = useServerActionsWithReason()
+  const queryClient = useQueryClient()
+  const user = useAuthStore((state) => state.user)
+  const isOwnServer = server ? server.user_id === user?.id : true
 
-  const [isStarting, setIsStarting] = useState(false);
-  const [pollCount, setPollCount] = useState(0);
-  const startTimeRef = useRef<number | null>(null);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [manualOpenReady, setManualOpenReady] = useState(false);
-  const [tokenError, setTokenError] = useState<string | null>(null);
+  const [isStarting, setIsStarting] = useState(false)
+  const [pollCount, setPollCount] = useState(0)
+  const startTimeRef = useRef<number | null>(null)
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
+  const [manualOpenReady, setManualOpenReady] = useState(false)
+  const [tokenError, setTokenError] = useState<string | null>(null)
 
   useEffect(() => {
     if (server?.status === 'pending' && startTimeRef.current === null) {
-      startTimeRef.current = Date.now();
+      startTimeRef.current = Date.now()
     }
-  }, [server?.status]);
+  }, [server?.status])
 
   useEffect(() => {
     if (server?.status !== 'pending' && !isStarting) {
-      return;
+      return
     }
     const interval = setInterval(() => {
       if (startTimeRef.current) {
-        setElapsedSeconds(Math.floor((Date.now() - startTimeRef.current) / 1000));
+        setElapsedSeconds(Math.floor((Date.now() - startTimeRef.current) / 1000))
       }
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [server?.status, isStarting]);
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [server?.status, isStarting])
 
   // Poll server status when it's pending (starting up)
   useEffect(() => {
     if (!server || server.status !== 'pending') {
-      return;
+      return
     }
 
     const interval = setInterval(() => {
-      queryClient.invalidateQueries({ queryKey: ['server-by-path', username, serverName] });
-      setPollCount((c) => c + 1);
-    }, 2000);
+      queryClient.invalidateQueries({ queryKey: ['server-by-path', username, serverName] })
+      setPollCount((c) => c + 1)
+    }, 2000)
 
-    return () => clearInterval(interval);
-  }, [server, username, serverName, queryClient]);
+    return () => clearInterval(interval)
+  }, [server, username, serverName, queryClient])
 
   // When server transitions to running, get access token and redirect
   useEffect(() => {
     if (server?.status === 'running') {
-      const redirectKey = `server-redirect-${server.id}`;
-      const alreadyRedirected = sessionStorage.getItem(redirectKey);
+      const redirectKey = `server-redirect-${server.id}`
+      const alreadyRedirected = sessionStorage.getItem(redirectKey)
 
       if (alreadyRedirected) {
-        queueMicrotask(() => setManualOpenReady(true));
-        return;
+        queueMicrotask(() => setManualOpenReady(true))
+        return
       }
 
       // For cross-user access, don't auto-redirect; show manual open button
       // so user can provide a reason via prompt
       if (!isOwnServer) {
-        queueMicrotask(() => setManualOpenReady(true));
-        return;
+        queueMicrotask(() => setManualOpenReady(true))
+        return
       }
 
-      sessionStorage.setItem(redirectKey, 'true');
+      sessionStorage.setItem(redirectKey, 'true')
 
       const getAccessTokenAndRedirect = async () => {
         try {
-          await getServerAccessToken(server.id);
-          window.location.replace(server.external_url || window.location.href);
+          await getServerAccessToken(server.id)
+          window.location.replace(server.external_url || window.location.href)
         } catch (err) {
-          setTokenError(err instanceof Error ? err.message : 'Failed to get access token');
-          setManualOpenReady(true);
+          setTokenError(err instanceof Error ? err.message : 'Failed to get access token')
+          setManualOpenReady(true)
         }
-      };
+      }
 
       const timeout = setTimeout(() => {
-        getAccessTokenAndRedirect();
-      }, 3000);
-      return () => clearTimeout(timeout);
+        getAccessTokenAndRedirect()
+      }, 3000)
+      return () => clearTimeout(timeout)
     }
-  }, [server?.status, server?.id, server?.external_url, isOwnServer]);
+  }, [server?.status, server?.id, server?.external_url, isOwnServer])
 
   const handleStart = useCallback(async () => {
-    if (!server) return;
-    setIsStarting(true);
+    if (!server) return
+    setIsStarting(true)
     try {
-      await startServerAsync(server);
-      queryClient.invalidateQueries({ queryKey: ['server-by-path', username, serverName] });
+      await startServerAsync(server)
+      queryClient.invalidateQueries({ queryKey: ['server-by-path', username, serverName] })
     } catch {
-      setIsStarting(false);
+      setIsStarting(false)
     }
-  }, [server, startServerAsync, queryClient, username, serverName]);
+  }, [server, startServerAsync, queryClient, username, serverName])
 
   const handleManualOpen = useCallback(async () => {
-    const targetUrl = server?.external_url || window.location.href;
-    let reason: string | undefined;
+    const targetUrl = server?.external_url || window.location.href
+    let reason: string | undefined
     if (!isOwnServer && server) {
-      const entered = await promptAccessReason(server, 'open');
-      if (entered === null) return;
-      reason = entered || undefined;
+      const entered = await promptAccessReason(server, 'open')
+      if (entered === null) return
+      reason = entered || undefined
     }
     try {
       if (server?.id) {
-        await getServerAccessToken(server.id, reason);
+        await getServerAccessToken(server.id, reason)
       }
-      window.location.href = targetUrl;
+      window.location.href = targetUrl
     } catch (err) {
-      setTokenError(err instanceof Error ? err.message : 'Failed to get access token');
+      setTokenError(err instanceof Error ? err.message : 'Failed to get access token')
     }
-  }, [server, isOwnServer, promptAccessReason]);
+  }, [server, isOwnServer, promptAccessReason])
 
   if (isLoading) {
     return (
@@ -609,7 +688,7 @@ function ServerGatewayPage() {
         <LoadingState />
         {reasonDialog}
       </>
-    );
+    )
   }
 
   if (isError || !server) {
@@ -618,7 +697,7 @@ function ServerGatewayPage() {
         <ErrorState serverName={serverName} error={error} />
         {reasonDialog}
       </>
-    );
+    )
   }
 
   // Server is running - either redirecting or show manual open button
@@ -626,34 +705,49 @@ function ServerGatewayPage() {
     if (manualOpenReady) {
       return (
         <>
-          <ManualOpenState server={server} username={username} onOpen={handleManualOpen} tokenError={tokenError} />
+          <ManualOpenState
+            server={server}
+            username={username}
+            onOpen={handleManualOpen}
+            tokenError={tokenError}
+          />
           {reasonDialog}
         </>
-      );
+      )
     }
     return (
       <>
         <RunningRedirectState server={server} />
         {reasonDialog}
       </>
-    );
+    )
   }
 
   // Server is starting/pending
   if (server.status === 'pending' || server.status === 'error' || isStarting) {
     return (
       <>
-        <StartingState server={server} username={username} pollCount={pollCount} elapsedSeconds={elapsedSeconds} />
+        <StartingState
+          server={server}
+          username={username}
+          pollCount={pollCount}
+          elapsedSeconds={elapsedSeconds}
+        />
         {reasonDialog}
       </>
-    );
+    )
   }
 
   // Server is stopped - show start option
   return (
     <>
-      <StoppedState server={server} username={username} onStart={handleStart} isStarting={isStarting || false} />
+      <StoppedState
+        server={server}
+        username={username}
+        onStart={handleStart}
+        isStarting={isStarting || false}
+      />
       {reasonDialog}
     </>
-  );
+  )
 }

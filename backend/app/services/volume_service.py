@@ -36,9 +36,11 @@ class VolumeService:
         if mountpoint:
             paths.append(mountpoint)
 
-        paths.append(f'/var/lib/docker/volumes/{name}/_data')
-        paths.append(f'/var/lib/containers/storage/volumes/{name}/_data')
-        paths.append(f'{os.path.expanduser("~")}/.local/share/containers/storage/volumes/{name}/_data')
+        paths.append(f"/var/lib/docker/volumes/{name}/_data")
+        paths.append(f"/var/lib/containers/storage/volumes/{name}/_data")
+        paths.append(
+            f"{os.path.expanduser('~')}/.local/share/containers/storage/volumes/{name}/_data"
+        )
 
         return paths
 
@@ -49,19 +51,21 @@ class VolumeService:
         owner_id: str,
         max_size_bytes: Optional[int] = None,
         description: Optional[str] = None,
-        visibility: str = "private"
+        visibility: str = "private",
     ) -> Volume:
         """Create a new volume record and Docker volume"""
         container_client = await get_container_client()
 
         # Create Docker volume
-        await container_client.client.volumes.create({
-            "Name": name,
-            "Labels": {
-                "nukelab.managed": "true",
-                "nukelab.user.id": owner_id,
+        await container_client.client.volumes.create(
+            {
+                "Name": name,
+                "Labels": {
+                    "nukelab.managed": "true",
+                    "nukelab.user.id": owner_id,
+                },
             }
-        })
+        )
 
         # Create database record
         volume = Volume(
@@ -92,6 +96,7 @@ class VolumeService:
     async def get_volume(self, volume_id: str) -> Optional[Volume]:
         """Get volume by ID"""
         from sqlalchemy.orm import selectinload
+
         result = await self.db.execute(
             select(Volume)
             .options(selectinload(Volume.server_mounts))
@@ -102,30 +107,22 @@ class VolumeService:
 
     async def get_volume_by_name(self, name: str) -> Optional[Volume]:
         """Get volume by Docker name"""
-        result = await self.db.execute(
-            select(Volume).where(Volume.name == name)
-        )
+        result = await self.db.execute(select(Volume).where(Volume.name == name))
         return result.scalar_one_or_none()
 
     async def list_volumes(
-        self,
-        user_id: str,
-        include_workspace_volumes: bool = True
+        self, user_id: str, include_workspace_volumes: bool = True
     ) -> List[Volume]:
         """List volumes accessible to user (owned or in workspaces)"""
         conditions = [Volume.owner_id == user_id]
 
         if include_workspace_volumes:
             # Also include volumes from workspaces the user is a member of
-            workspace_volume_query = select(WorkspaceVolume.volume_id).join(
-                SharedWorkspace, WorkspaceVolume.workspace_id == SharedWorkspace.id
-            ).join(
-                WorkspaceMember, WorkspaceMember.workspace_id == SharedWorkspace.id
-            ).where(
-                or_(
-                    WorkspaceMember.user_id == user_id,
-                    SharedWorkspace.owner_id == user_id
-                )
+            workspace_volume_query = (
+                select(WorkspaceVolume.volume_id)
+                .join(SharedWorkspace, WorkspaceVolume.workspace_id == SharedWorkspace.id)
+                .join(WorkspaceMember, WorkspaceMember.workspace_id == SharedWorkspace.id)
+                .where(or_(WorkspaceMember.user_id == user_id, SharedWorkspace.owner_id == user_id))
             )
 
             result = await self.db.execute(workspace_volume_query)
@@ -137,11 +134,15 @@ class VolumeService:
         # Also include public volumes
         conditions.append(Volume.visibility == "public")
 
-        query = select(Volume).options(
-            selectinload(Volume.workspace_associations),
-            selectinload(Volume.server_mounts),
-            selectinload(Volume.owner),
-        ).where(or_(*conditions))
+        query = (
+            select(Volume)
+            .options(
+                selectinload(Volume.workspace_associations),
+                selectinload(Volume.server_mounts),
+                selectinload(Volume.owner),
+            )
+            .where(or_(*conditions))
+        )
         result = await self.db.execute(query)
         return result.scalars().all()
 
@@ -158,32 +159,29 @@ class VolumeService:
     ) -> Dict[str, Any]:
         """List ALL volumes (admin view) with pagination, sorting, and filtering."""
         from app.models.user import User
-        
-        query = (
-            select(Volume)
-            .options(
-                selectinload(Volume.owner),
-                selectinload(Volume.workspace_associations),
-            )
+
+        query = select(Volume).options(
+            selectinload(Volume.owner),
+            selectinload(Volume.workspace_associations),
         )
-        
+
         count_query = select(func.count()).select_from(Volume)
-        
+
         # Apply status filter
         if status:
             query = query.where(Volume.status == status)
             count_query = count_query.where(Volume.status == status)
-        
+
         # Apply visibility filter
         if visibility:
             query = query.where(Volume.visibility == visibility)
             count_query = count_query.where(Volume.visibility == visibility)
-        
+
         # Apply owner filter
         if owner_id:
             query = query.where(Volume.owner_id == owner_id)
             count_query = count_query.where(Volume.owner_id == owner_id)
-        
+
         # Apply search (volume name/display_name or owner username)
         if search:
             search_pattern = f"%{search}%"
@@ -197,11 +195,11 @@ class VolumeService:
         else:
             # Still join User for sorting by username
             query = query.join(User, Volume.owner_id == User.id)
-        
+
         # Get total count
         total_result = await self.db.execute(count_query)
         total = total_result.scalar() or 0
-        
+
         # Apply sorting
         sort_column_map = {
             "name": Volume.name,
@@ -211,19 +209,19 @@ class VolumeService:
             "username": User.username,
         }
         sort_column = sort_column_map.get(sort_by, Volume.created_at)
-        
+
         if sort_order == "desc":
             query = query.order_by(sort_column.desc())
         else:
             query = query.order_by(sort_column.asc())
-        
+
         # Apply pagination
         offset = (page - 1) * limit
         query = query.offset(offset).limit(limit)
-        
+
         result = await self.db.execute(query)
         volumes = result.scalars().all()
-        
+
         return {
             "volumes": [v.to_dict() for v in volumes],
             "total": total,
@@ -252,7 +250,7 @@ class VolumeService:
         description: Optional[str] = None,
         visibility: Optional[str] = None,
         max_size_bytes: Optional[int] = None,
-        status: Optional[str] = None
+        status: Optional[str] = None,
     ) -> Optional[Volume]:
         """Update volume metadata"""
         volume = await self.get_volume(volume_id)
@@ -283,6 +281,7 @@ class VolumeService:
             return False
 
         from app.models.server_volume import ServerVolume
+
         mount_count = await self.db.execute(
             select(func.count()).where(ServerVolume.volume_id == volume.id)
         )
@@ -322,11 +321,12 @@ class VolumeService:
                 usage_pct = int((size_bytes / volume.max_size_bytes) * 100)
                 if usage_pct >= 90:
                     from app.services.notification_service import NotificationService
+
                     notif_service = NotificationService(self.db)
                     await notif_service.volume_near_limit(
                         user_id=volume.owner_id,
                         volume_name=volume.display_name or volume.name,
-                        usage_pct=usage_pct
+                        usage_pct=usage_pct,
                     )
         return size_bytes
 
@@ -341,10 +341,7 @@ class VolumeService:
             if os.path.exists(path):
                 try:
                     result = subprocess.run(
-                        ['du', '-sb', path],
-                        capture_output=True,
-                        text=True,
-                        timeout=10
+                        ["du", "-sb", path], capture_output=True, text=True, timeout=10
                     )
                     if result.returncode == 0:
                         return int(result.stdout.split()[0])
@@ -354,9 +351,7 @@ class VolumeService:
         return None
 
     async def check_volumes_quota(
-        self,
-        volume_ids: List[str],
-        plan_disk_limit: str
+        self, volume_ids: List[str], plan_disk_limit: str
     ) -> Dict[str, Any]:
         """Batch quota check: fetches all volumes once, updates sizes once,
         and performs both per-volume and aggregate checks in-memory.
@@ -365,15 +360,13 @@ class VolumeService:
         check_aggregate_quota() separately for the same volumes.
         """
         # 1. Batch fetch all volumes
-        result = await self.db.execute(
-            select(Volume).where(Volume.id.in_(volume_ids))
-        )
+        result = await self.db.execute(select(Volume).where(Volume.id.in_(volume_ids)))
         volumes = {str(v.id): v for v in result.scalars().all()}
 
         if missing := set(volume_ids) - set(volumes):
             return {
                 "allowed": False,
-                "reason": f"Volume(s) not found: {', '.join(sorted(missing))}"
+                "reason": f"Volume(s) not found: {', '.join(sorted(missing))}",
             }
 
         # 2. Update sizes once per volume on the ORM objects
@@ -398,7 +391,7 @@ class VolumeService:
                         f"Volume '{volume.display_name or volume.name}' "
                         f"({self._human_size(volume.size_bytes)}) exceeds plan limit "
                         f"({plan_disk_limit}). Free up {self._human_size(over_by)} or upgrade your plan."
-                    )
+                    ),
                 }
 
         # 5. Aggregate check
@@ -444,11 +437,11 @@ class VolumeService:
         """Parse memory string to bytes"""
         memory_str = memory_str.lower()
         multipliers = {
-            'b': 1,
-            'k': 1024,
-            'm': 1024**2,
-            'g': 1024**3,
-            't': 1024**4,
+            "b": 1,
+            "k": 1024,
+            "m": 1024**2,
+            "g": 1024**3,
+            "t": 1024**4,
         }
 
         for suffix, multiplier in multipliers.items():
@@ -459,7 +452,7 @@ class VolumeService:
 
     def _human_size(self, size_bytes: int) -> str:
         """Convert bytes to human readable string"""
-        for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+        for unit in ["B", "KB", "MB", "GB", "TB"]:
             if size_bytes < 1024.0:
                 return f"{size_bytes:.1f} {unit}"
             size_bytes /= 1024.0

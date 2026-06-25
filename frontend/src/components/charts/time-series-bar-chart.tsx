@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo } from 'react'
 import {
   BarChart,
   Bar,
@@ -9,19 +9,19 @@ import {
   ResponsiveContainer,
   LabelList,
   type TooltipProps,
-} from 'recharts';
+} from 'recharts'
 
 export interface TimeSeriesBarPoint {
-  label: string;
-  value: number;
+  label: string
+  value: number
 }
 
 export interface TimeSeriesBarChartProps {
-  data: TimeSeriesBarPoint[];
-  height?: number;
-  name?: string;
-  color?: string;
-  className?: string;
+  data: TimeSeriesBarPoint[]
+  height?: number
+  name?: string
+  color?: string
+  className?: string
 }
 
 function CustomTooltip({
@@ -30,15 +30,15 @@ function CustomTooltip({
   label,
   name,
 }: TooltipProps<number, string> & { name?: string }) {
-  if (!active || !payload || !payload.length) return null;
+  if (!active || !payload || !payload.length) return null
 
-  const entry = payload[0];
+  const entry = payload[0]
   const value =
     typeof entry.value === 'number'
       ? Number.isInteger(entry.value)
         ? entry.value
         : entry.value.toFixed(2)
-      : entry.value;
+      : entry.value
 
   return (
     <div
@@ -55,15 +55,13 @@ function CustomTooltip({
           className="w-2 h-4 rounded-sm"
           style={{ backgroundColor: entry.color || 'var(--primary)' }}
         />
-        <span className="text-xs text-muted-foreground">
-          {name || entry.name || 'Value'}
-        </span>
+        <span className="text-xs text-muted-foreground">{name || entry.name || 'Value'}</span>
         <span className="font-semibold" style={{ color: 'var(--primary)' }}>
           {value}
         </span>
       </div>
     </div>
-  );
+  )
 }
 
 export function TimeSeriesBarChart({
@@ -79,19 +77,19 @@ export function TimeSeriesBarChart({
       axis: 'var(--muted-foreground)',
     }),
     []
-  );
+  )
 
   // For many data points, skip some X-axis labels to avoid overlap
   const labelInterval = useMemo(() => {
-    if (data.length <= 7) return 0;
-    if (data.length <= 14) return 1;
-    if (data.length <= 30) return 2;
-    if (data.length <= 60) return 4;
-    return Math.floor(data.length / 10);
-  }, [data.length]);
+    if (data.length <= 7) return 0
+    if (data.length <= 14) return 1
+    if (data.length <= 30) return 2
+    if (data.length <= 60) return 4
+    return Math.floor(data.length / 10)
+  }, [data.length])
 
   // Determine if we need angled labels
-  const shouldAngleLabels = data.length > 7;
+  const shouldAngleLabels = data.length > 7
 
   return (
     <div className={className} style={{ width: '100%', height }}>
@@ -158,5 +156,5 @@ export function TimeSeriesBarChart({
         </BarChart>
       </ResponsiveContainer>
     </div>
-  );
+  )
 }

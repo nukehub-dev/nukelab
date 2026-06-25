@@ -14,8 +14,7 @@ class TestQuotaAdminEndpoints:
     async def test_list_all_quotas_as_admin(self, client, admin_token, db_session):
         """Admin should be able to list all quotas."""
         response = await client.get(
-            "/api/quotas/all",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/quotas/all", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -26,8 +25,7 @@ class TestQuotaAdminEndpoints:
     async def test_list_all_quotas_pagination(self, client, admin_token, db_session):
         """Should support page and limit params."""
         response = await client.get(
-            "/api/quotas/all?page=1&limit=10",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/quotas/all?page=1&limit=10", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
 
@@ -35,8 +33,7 @@ class TestQuotaAdminEndpoints:
     async def test_list_all_quotas_search(self, client, admin_token, db_session):
         """Should support search param."""
         response = await client.get(
-            "/api/quotas/all?search=test",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/quotas/all?search=test", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
 
@@ -44,8 +41,7 @@ class TestQuotaAdminEndpoints:
     async def test_list_all_quotas_forbidden_for_user(self, client, user_token):
         """Regular user should not access admin quota list."""
         response = await client.get(
-            "/api/quotas/all",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/quotas/all", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 403
 
@@ -58,8 +54,7 @@ class TestQuotaAdminEndpoints:
 
         with mock.patch("app.api.quotas.QuotaService.recalculate_usage", return_value=quota):
             response = await client.get(
-                "/api/quotas/",
-                headers={"Authorization": f"Bearer {support_token}"}
+                "/api/quotas/", headers={"Authorization": f"Bearer {support_token}"}
             )
 
         assert response.status_code == 200
@@ -74,11 +69,14 @@ class TestQuotaAdminEndpoints:
         db_session.add(quota)
         await db_session.commit()
 
-        with mock.patch("app.api.quotas.QuotaService.check_spawn_allowed", return_value={"allowed": True, "reason": None}):
+        with mock.patch(
+            "app.api.quotas.QuotaService.check_spawn_allowed",
+            return_value={"allowed": True, "reason": None},
+        ):
             response = await client.post(
                 "/api/quotas/check",
                 headers={"Authorization": f"Bearer {support_token}"},
-                json={"plan_id": str(support_user.id)}
+                json={"plan_id": str(support_user.id)},
             )
 
         assert response.status_code == 200
@@ -92,7 +90,7 @@ class TestQuotaAdminEndpoints:
         response = await client.post(
             "/api/quotas/check",
             headers={"Authorization": f"Bearer {user_token}"},
-            json={"plan_id": str(uuid.uuid4())}
+            json={"plan_id": str(uuid.uuid4())},
         )
         assert response.status_code == 403
 
@@ -109,8 +107,7 @@ class TestQuotaAdminEndpoints:
 
         with mock.patch("app.api.quotas.QuotaService.recalculate_usage", return_value=quota):
             response = await client.get(
-                f"/api/quotas/{test_user.id}",
-                headers={"Authorization": f"Bearer {admin_token}"}
+                f"/api/quotas/{test_user.id}", headers={"Authorization": f"Bearer {admin_token}"}
             )
 
         assert response.status_code == 200
@@ -122,8 +119,7 @@ class TestQuotaAdminEndpoints:
         """Regular user should not access other user's quota by ID."""
         other_user_id = str(uuid.uuid4())
         response = await client.get(
-            f"/api/quotas/{other_user_id}",
-            headers={"Authorization": f"Bearer {user_token}"}
+            f"/api/quotas/{other_user_id}", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 403
 
@@ -138,7 +134,7 @@ class TestQuotaAdminEndpoints:
             response = await client.put(
                 f"/api/quotas/{test_user.id}",
                 headers={"Authorization": f"Bearer {admin_token}"},
-                json={"max_cpu_total": 8.0, "max_servers_total": 10}
+                json={"max_cpu_total": 8.0, "max_servers_total": 10},
             )
 
         assert response.status_code == 200
@@ -152,9 +148,10 @@ class TestQuotaAdminEndpoints:
         response = await client.put(
             f"/api/quotas/{test_user.id}",
             headers={"Authorization": f"Bearer {user_token}"},
-            json={"max_cpu_total": 8.0}
+            json={"max_cpu_total": 8.0},
         )
         assert response.status_code == 403
+
 
 """Coverage tests for smaller API modules: health, system, quotas, ip_restriction."""
 
@@ -162,14 +159,14 @@ import pytest
 from unittest import mock
 from datetime import datetime, timedelta, UTC
 
+
 class TestQuotasEndpoints:
     """app/api/quotas.py coverage."""
 
     @pytest.mark.asyncio
     async def test_get_my_quota_admin(self, client, admin_token):
         response = await client.get(
-            "/api/quotas/",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/quotas/", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -179,15 +176,11 @@ class TestQuotasEndpoints:
     @pytest.mark.asyncio
     async def test_list_all_quotas_admin(self, client, admin_token):
         response = await client.get(
-            "/api/quotas/all",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/quotas/all", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
-
-
-
 
 
 """Extended tests for smaller API endpoints (tokens, plans, quotas, schedules)."""
@@ -199,6 +192,7 @@ from app.models.server_plan import ServerPlan
 from app.models.server_schedule import ServerSchedule
 from app.models.server import Server
 
+
 class TestQuotasAPI:
     """Tests for quota endpoints."""
 
@@ -206,8 +200,7 @@ class TestQuotasAPI:
     async def test_get_my_quota(self, client, admin_token, admin_user):
         """Admin should get quota."""
         response = await client.get(
-            "/api/quotas/",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/quotas/", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -219,7 +212,7 @@ class TestQuotasAPI:
         response = await client.post(
             "/api/quotas/check",
             headers={"Authorization": f"Bearer {admin_token}"},
-            json={"plan_id": "00000000-0000-0000-0000-000000000000"}
+            json={"plan_id": "00000000-0000-0000-0000-000000000000"},
         )
         # May succeed or fail depending on quota state
         assert response.status_code in [200, 400, 404, 422]
@@ -228,8 +221,7 @@ class TestQuotasAPI:
     async def test_non_admin_cannot_list_all_quotas(self, client, user_token):
         """Regular user should not list all quotas."""
         response = await client.get(
-            "/api/quotas/all",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/quotas/all", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code in [403, 404]
 
@@ -239,9 +231,6 @@ class TestQuotasAPI:
         response = await client.put(
             "/api/quotas/00000000-0000-0000-0000-000000000000",
             headers={"Authorization": f"Bearer {user_token}"},
-            json={"max_servers_total": 10}
+            json={"max_servers_total": 10},
         )
         assert response.status_code in [403, 404]
-
-
-

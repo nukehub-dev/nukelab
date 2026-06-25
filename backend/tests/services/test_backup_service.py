@@ -26,7 +26,7 @@ def _make_mock_volume_service(mountpoint=None):
     else:
         mock_instance.get_volume.return_value = {"mountpoint": mountpoint}
     mock_instance.get_container_client = mock.AsyncMock()
-    
+
     mock_cls = mock.Mock()
     mock_cls.return_value = mock_instance
     return mock_cls
@@ -40,7 +40,7 @@ class TestBackupServiceCreateBackup:
         """Should raise ValueError when volume doesn't exist."""
         mock_cls = _make_mock_volume_service()
         mock_cls.return_value.get_volume.return_value = None
-        
+
         with mock.patch("app.services.backup_service.VolumeService", mock_cls):
             with pytest.raises(ValueError, match="Volume test-vol not found"):
                 await backup_service.create_backup("test-vol", str(uuid.uuid4()))
@@ -53,9 +53,11 @@ class TestBackupServiceCreateBackup:
         (mountpoint / "data.txt").write_text("hello")
 
         mock_cls = _make_mock_volume_service(str(mountpoint))
-        
+
         with mock.patch("app.services.backup_service.VolumeService", mock_cls):
-            with mock.patch("app.services.notification_service.NotificationService") as mock_notif_cls:
+            with mock.patch(
+                "app.services.notification_service.NotificationService"
+            ) as mock_notif_cls:
                 mock_notif = mock.AsyncMock()
                 mock_notif_cls.return_value = mock_notif
                 result = await backup_service.create_backup(
@@ -75,12 +77,16 @@ class TestBackupServiceCreateBackup:
         assert backups[0].description == "Test backup"
 
     @pytest.mark.asyncio
-    async def test_create_backup_fallback_mountpoint(self, db_session, backup_service, tmp_path, test_user):
+    async def test_create_backup_fallback_mountpoint(
+        self, db_session, backup_service, tmp_path, test_user
+    ):
         """Should use fallback mountpoint when volume has none."""
         mock_cls = _make_mock_volume_service(None)
 
         with mock.patch("app.services.backup_service.VolumeService", mock_cls):
-            with mock.patch("app.services.notification_service.NotificationService") as mock_notif_cls:
+            with mock.patch(
+                "app.services.notification_service.NotificationService"
+            ) as mock_notif_cls:
                 mock_notif = mock.AsyncMock()
                 mock_notif_cls.return_value = mock_notif
                 with mock.patch("tarfile.open") as mock_tar_open:
@@ -107,7 +113,7 @@ class TestBackupServiceCreateBackup:
     async def test_create_backup_failure_rolls_back(self, db_session, backup_service, test_user):
         """Should mark backup as failed on error."""
         mock_cls = _make_mock_volume_service("/nonexistent")
-        
+
         with mock.patch("app.services.backup_service.VolumeService", mock_cls):
             with pytest.raises(Exception):
                 await backup_service.create_backup("test-vol", str(test_user.id))
@@ -128,12 +134,18 @@ class TestBackupServiceListBackups:
         from datetime import datetime
 
         b1 = VolumeBackup(
-            id=uuid.uuid4(), volume_name="vol1", backup_path="/b1", status="completed",
-            created_at=datetime(2024, 1, 1)
+            id=uuid.uuid4(),
+            volume_name="vol1",
+            backup_path="/b1",
+            status="completed",
+            created_at=datetime(2024, 1, 1),
         )
         b2 = VolumeBackup(
-            id=uuid.uuid4(), volume_name="vol2", backup_path="/b2", status="completed",
-            created_at=datetime(2024, 1, 2)
+            id=uuid.uuid4(),
+            volume_name="vol2",
+            backup_path="/b2",
+            status="completed",
+            created_at=datetime(2024, 1, 2),
         )
         db_session.add_all([b1, b2])
         await db_session.commit()
@@ -145,8 +157,12 @@ class TestBackupServiceListBackups:
     @pytest.mark.asyncio
     async def test_list_filtered_by_volume(self, db_session, backup_service):
         """Should filter by volume name."""
-        b1 = VolumeBackup(id=uuid.uuid4(), volume_name="vol1", backup_path="/b1", status="completed")
-        b2 = VolumeBackup(id=uuid.uuid4(), volume_name="vol2", backup_path="/b2", status="completed")
+        b1 = VolumeBackup(
+            id=uuid.uuid4(), volume_name="vol1", backup_path="/b1", status="completed"
+        )
+        b2 = VolumeBackup(
+            id=uuid.uuid4(), volume_name="vol2", backup_path="/b2", status="completed"
+        )
         db_session.add_all([b1, b2])
         await db_session.commit()
 
@@ -158,8 +174,12 @@ class TestBackupServiceListBackups:
     async def test_list_filtered_by_user(self, db_session, backup_service, test_user):
         """Should filter by user ID."""
         uid = test_user.id
-        b1 = VolumeBackup(id=uuid.uuid4(), volume_name="vol1", backup_path="/b1", status="completed", user_id=uid)
-        b2 = VolumeBackup(id=uuid.uuid4(), volume_name="vol2", backup_path="/b2", status="completed", user_id=uid)
+        b1 = VolumeBackup(
+            id=uuid.uuid4(), volume_name="vol1", backup_path="/b1", status="completed", user_id=uid
+        )
+        b2 = VolumeBackup(
+            id=uuid.uuid4(), volume_name="vol2", backup_path="/b2", status="completed", user_id=uid
+        )
         db_session.add_all([b1, b2])
         await db_session.commit()
 
@@ -177,7 +197,9 @@ class TestBackupServiceGetBackup:
     async def test_get_existing_backup(self, db_session, backup_service):
         """Should return backup details."""
         bid = uuid.uuid4()
-        b = VolumeBackup(id=bid, volume_name="vol1", backup_path="/b1", status="completed", size_bytes=1024)
+        b = VolumeBackup(
+            id=bid, volume_name="vol1", backup_path="/b1", status="completed", size_bytes=1024
+        )
         db_session.add(b)
         await db_session.commit()
 
@@ -217,7 +239,9 @@ class TestBackupServiceRestoreBackup:
     async def test_restore_missing_file_raises(self, db_session, backup_service):
         """Should raise ValueError when backup file is missing."""
         bid = uuid.uuid4()
-        b = VolumeBackup(id=bid, volume_name="vol1", backup_path="/nonexistent/file.tar.gz", status="completed")
+        b = VolumeBackup(
+            id=bid, volume_name="vol1", backup_path="/nonexistent/file.tar.gz", status="completed"
+        )
         db_session.add(b)
         await db_session.commit()
 
@@ -239,14 +263,13 @@ class TestBackupServiceRestoreBackup:
 
         bid = uuid.uuid4()
         b = VolumeBackup(
-            id=bid, volume_name="vol1", backup_path=str(backup_file),
-            status="completed"
+            id=bid, volume_name="vol1", backup_path=str(backup_file), status="completed"
         )
         db_session.add(b)
         await db_session.commit()
 
         mock_cls = _make_mock_volume_service(str(extract_dir))
-        
+
         with mock.patch("app.services.backup_service.VolumeService", mock_cls):
             result = await backup_service.restore_backup(str(bid))
 
@@ -265,7 +288,9 @@ class TestBackupServiceDeleteBackup:
         backup_file.write_text("backup data")
 
         bid = uuid.uuid4()
-        b = VolumeBackup(id=bid, volume_name="vol1", backup_path=str(backup_file), status="completed")
+        b = VolumeBackup(
+            id=bid, volume_name="vol1", backup_path=str(backup_file), status="completed"
+        )
         db_session.add(b)
         await db_session.commit()
 
@@ -309,7 +334,7 @@ class TestBackupServiceApplyRetention:
                 volume_name="vol1",
                 backup_path=str(tmp_path / f"b{i}.tar.gz"),
                 status="completed",
-                created_at=datetime(2024, 1, 1) + timedelta(days=i)
+                created_at=datetime(2024, 1, 1) + timedelta(days=i),
             )
             (tmp_path / f"b{i}.tar.gz").write_text("data")
             db_session.add(b)
@@ -332,7 +357,7 @@ class TestBackupServiceApplyRetention:
                     volume_name=vol,
                     backup_path=str(tmp_path / f"{vol}_{i}.tar.gz"),
                     status="completed",
-                    created_at=datetime(2024, 1, 1) + timedelta(days=i)
+                    created_at=datetime(2024, 1, 1) + timedelta(days=i),
                 )
                 (tmp_path / f"{vol}_{i}.tar.gz").write_text("data")
                 db_session.add(b)
@@ -354,7 +379,7 @@ class TestBackupServiceApplyRetention:
                 volume_name="vol1",
                 backup_path=str(tmp_path / f"b{i}.tar.gz"),
                 status="completed",
-                created_at=datetime(2024, 1, 1) + timedelta(days=i)
+                created_at=datetime(2024, 1, 1) + timedelta(days=i),
             )
             (tmp_path / f"b{i}.tar.gz").write_text("data")
             db_session.add(b)

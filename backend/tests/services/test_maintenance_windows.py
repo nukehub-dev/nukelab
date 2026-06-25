@@ -16,6 +16,7 @@ from app.config import settings
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def reset_maintenance_state():
     """Reset global maintenance state before and after each test."""
@@ -43,6 +44,7 @@ async def sample_window(db_session):
 # ---------------------------------------------------------------------------
 # Model Tests
 # ---------------------------------------------------------------------------
+
 
 class TestMaintenanceWindowService:
     """Tests for MaintenanceWindowService business logic."""
@@ -294,5 +296,3 @@ class TestMaintenanceWindowService:
 # ---------------------------------------------------------------------------
 # API Tests
 # ---------------------------------------------------------------------------
-
-

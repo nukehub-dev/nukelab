@@ -53,7 +53,7 @@ class TestCreditServiceTransactions:
                 amount=i + 1,
                 balance_after=100 + i + 1,
                 type="admin_grant",
-                description=f"Grant {i}"
+                description=f"Grant {i}",
             )
             db_session.add(tx)
         await db_session.commit()
@@ -73,14 +73,14 @@ class TestCreditServiceTransactions:
             amount=10,
             balance_after=110,
             type="admin_grant",
-            description="Grant"
+            description="Grant",
         )
         tx2 = CreditTransaction(
             user_id=test_user.id,
             amount=-5,
             balance_after=105,
             type="server_usage",
-            description="Usage"
+            description="Usage",
         )
         db_session.add_all([tx1, tx2])
         await db_session.commit()
@@ -101,14 +101,14 @@ class TestCreditServiceTransactions:
             amount=10,
             balance_after=110,
             type="admin_grant",
-            description="First"
+            description="First",
         )
         tx2 = CreditTransaction(
             user_id=test_user.id,
             amount=20,
             balance_after=120,
             type="admin_grant",
-            description="Second"
+            description="Second",
         )
         db_session.add_all([tx1, tx2])
         await db_session.commit()
@@ -131,7 +131,7 @@ class TestCreditServiceTransactions:
                 user_id=str(test_user.id),
                 amount=-10,
                 transaction_type="server_usage",
-                description="Overdraft"
+                description="Overdraft",
             )
         assert "Insufficient credits" in str(exc_info.value)
 
@@ -146,7 +146,7 @@ class TestCreditServiceTransactions:
             transaction_type="admin_grant",
             description="Test grant",
             actor_id=str(admin_user.id),
-            meta={"reason": "testing"}
+            meta={"reason": "testing"},
         )
 
         assert tx.actor_id == admin_user.id
@@ -165,7 +165,7 @@ class TestCreditServiceDailyAllowance:
         service = CreditService(db_session)
         initial = test_user.nuke_balance
 
-        with patch.object(service, '_create_transaction', wraps=service._create_transaction):
+        with patch.object(service, "_create_transaction", wraps=service._create_transaction):
             tx = await service.grant_daily_allowance(str(test_user.id))
             assert tx.amount == test_user.daily_allowance
 
@@ -215,10 +215,7 @@ class TestCreditServiceGrantDeduct:
         initial = test_user.nuke_balance
 
         tx = await service.grant_credits(
-            user_id=str(test_user.id),
-            amount=100,
-            actor_id=str(admin_user.id),
-            reason="Bonus"
+            user_id=str(test_user.id), amount=100, actor_id=str(admin_user.id), reason="Bonus"
         )
 
         assert tx.amount == 100
@@ -234,10 +231,7 @@ class TestCreditServiceGrantDeduct:
         await db_session.commit()
 
         tx = await service.deduct_credits(
-            user_id=str(test_user.id),
-            amount=50,
-            actor_id=str(admin_user.id),
-            reason="Penalty"
+            user_id=str(test_user.id), amount=50, actor_id=str(admin_user.id), reason="Penalty"
         )
 
         assert tx.amount == -50
@@ -310,14 +304,14 @@ class TestCreditServiceChecks:
             amount=500,
             balance_after=1500,
             type="daily_allowance",
-            description="Daily"
+            description="Daily",
         )
         tx2 = CreditTransaction(
             user_id=test_user.id,
             amount=-200,
             balance_after=1300,
             type="server_usage",
-            description="Usage"
+            description="Usage",
         )
         db_session.add_all([tx1, tx2])
         await db_session.commit()

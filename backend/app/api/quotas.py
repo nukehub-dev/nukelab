@@ -17,9 +17,9 @@ router = APIRouter(tags=["quotas"])
 
 @router.get("/")
 async def get_my_quota(
-    current_user = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.QUOTA_READ)),
-    db: AsyncSession = Depends(get_db)
+    current_user=Depends(get_current_user),
+    _=Depends(require_permissions(Permission.QUOTA_READ)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get current user's quota"""
     service = QuotaService(db)
@@ -32,9 +32,9 @@ async def list_all_quotas(
     search: Optional[str] = None,
     page: int = 1,
     limit: int = 50,
-    current_user = Depends(require_permissions(Permission.QUOTA_READ)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    current_user=Depends(require_permissions(Permission.QUOTA_READ)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """List all users with their quotas (admin)"""
     service = QuotaService(db)
@@ -45,9 +45,9 @@ async def list_all_quotas(
 @router.get("/{user_id}")
 async def get_user_quota(
     user_id: str,
-    current_user = Depends(require_permissions(Permission.QUOTA_READ)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    current_user=Depends(require_permissions(Permission.QUOTA_READ)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get specific user's quota (admin/moderator)"""
     service = QuotaService(db)
@@ -59,9 +59,9 @@ async def get_user_quota(
 async def update_user_quota(
     user_id: str,
     data: dict,
-    current_user = Depends(require_permissions(Permission.QUOTA_UPDATE)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    current_user=Depends(require_permissions(Permission.QUOTA_UPDATE)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Update user's quota limits (admin only)"""
     service = QuotaService(db)
@@ -71,7 +71,7 @@ async def update_user_quota(
         max_memory_total=data.get("max_memory_total"),
         max_disk_total=data.get("max_disk_total"),
         max_gpu_total=data.get("max_gpu_total"),
-        max_servers_total=data.get("max_servers_total")
+        max_servers_total=data.get("max_servers_total"),
     )
     return {"success": True, "data": quota.to_dict(), "message": "Quota updated"}
 
@@ -79,14 +79,13 @@ async def update_user_quota(
 @router.post("/check")
 async def check_spawn_allowed(
     data: dict,
-    current_user = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.QUOTA_READ)),
-    db: AsyncSession = Depends(get_db)
+    current_user=Depends(get_current_user),
+    _=Depends(require_permissions(Permission.QUOTA_READ)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Check if spawn is allowed with given plan"""
     service = QuotaService(db)
     result = await service.check_spawn_allowed(
-        user_id=str(current_user.id),
-        plan_id=data["plan_id"]
+        user_id=str(current_user.id), plan_id=data["plan_id"]
     )
     return {"success": True, "data": result}

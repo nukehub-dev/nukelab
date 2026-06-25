@@ -6,43 +6,43 @@ Each permission represents a specific action that can be performed.
 
 class Permission:
     """Permission constants"""
-    
+
     # User management
     USERS_READ = "users:read"
     USERS_CREATE = "users:create"
     USERS_UPDATE = "users:update"
     USERS_DELETE = "users:delete"
     USERS_IMPERSONATE = "users:impersonate"
-    
+
     # Server management
     SERVERS_READ_OWN = "servers:read_own"
     SERVERS_WRITE_OWN = "servers:write_own"
     SERVERS_READ_ALL = "servers:read_all"
     SERVERS_WRITE_ALL = "servers:write_all"
     SERVERS_ACCESS_OTHERS = "servers:access_others"
-    
+
     # Environment management
     ENVIRONMENT_CREATE = "environment:create"
     ENVIRONMENT_READ = "environment:read"
     ENVIRONMENT_UPDATE = "environment:update"
     ENVIRONMENT_DELETE = "environment:delete"
-    
+
     # Plan management
     PLAN_CREATE = "plan:create"
     PLAN_READ = "plan:read"
     PLAN_UPDATE = "plan:update"
     PLAN_DELETE = "plan:delete"
-    
+
     # Quota management
     QUOTA_READ = "quota:read"
     QUOTA_UPDATE = "quota:update"
-    
+
     # Credit management
     CREDITS_READ_OWN = "credits:read_own"
     CREDITS_READ_ALL = "credits:read_all"
     CREDITS_GRANT = "credits:grant"
     CREDITS_DEDUCT = "credits:deduct"
-    
+
     # Analytics
     ANALYTICS_READ_OWN = "analytics:read_own"
     ANALYTICS_READ = "analytics:read"
@@ -67,7 +67,7 @@ class Permission:
 
     # Super admin wildcard
     ALL = "*"
-    
+
     @classmethod
     def all_permissions(cls):
         """Return list of all permission strings"""

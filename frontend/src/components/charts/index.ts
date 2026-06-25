@@ -1,5 +1,5 @@
-export { MetricsAreaChart } from './area-chart';
-export { MetricsBarChart } from './bar-chart';
-export { GaugeChart } from './gauge-chart';
-export { ResourceTimeline } from './resource-timeline';
-export { MetricsDashboard } from './metrics-dashboard';
+export { MetricsAreaChart } from './area-chart'
+export { MetricsBarChart } from './bar-chart'
+export { GaugeChart } from './gauge-chart'
+export { ResourceTimeline } from './resource-timeline'
+export { MetricsDashboard } from './metrics-dashboard'

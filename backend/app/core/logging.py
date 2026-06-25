@@ -48,6 +48,7 @@ class JSONFormatter(logging.Formatter):
             exc_info = record.exc_info
             if exc_info is True:
                 import sys
+
                 exc_info = sys.exc_info()
             if exc_info[0] is not None:
                 log_data["traceback"] = self.formatException(exc_info)

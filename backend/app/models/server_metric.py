@@ -8,13 +8,15 @@ from app.db.base import Base
 class ServerMetric(Base):
     __tablename__ = "server_metrics"
     __table_args__ = (
-        Index('ix_server_metrics_collected_at', 'collected_at'),
-        Index('ix_server_metrics_server_id_collected_at', 'server_id', 'collected_at'),
+        Index("ix_server_metrics_collected_at", "collected_at"),
+        Index("ix_server_metrics_server_id_collected_at", "server_id", "collected_at"),
         {"postgresql_partition_by": "RANGE (collected_at)"},
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    server_id = Column(UUID(as_uuid=True), ForeignKey("servers.id", ondelete="CASCADE"), nullable=False)
+    server_id = Column(
+        UUID(as_uuid=True), ForeignKey("servers.id", ondelete="CASCADE"), nullable=False
+    )
     container_id = Column(String(255), nullable=False)
 
     # CPU
@@ -82,7 +84,9 @@ class ServerMetric(Base):
                 "percent": self.gpu_percent,
                 "memory_used": self.gpu_memory_used,
                 "temperature": self.gpu_temperature,
-            } if self.gpu_percent else None,
+            }
+            if self.gpu_percent
+            else None,
             "pids": self.pids,
             "collected_at": self.collected_at.isoformat() if self.collected_at else None,
         }

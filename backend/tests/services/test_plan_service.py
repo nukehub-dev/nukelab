@@ -88,7 +88,11 @@ class TestPlanServiceList:
             name="Public Plan", slug="public-plan", is_public=True, cpu_limit=1
         )
         private_plan = ServerPlan(
-            name="Private Plan", slug="private-plan", is_public=False, visible_to_roles=["admin"], cpu_limit=1
+            name="Private Plan",
+            slug="private-plan",
+            is_public=False,
+            visible_to_roles=["admin"],
+            cpu_limit=1,
         )
         db_session.add_all([public_plan, private_plan])
         await db_session.commit()
@@ -117,7 +121,11 @@ class TestPlanServiceList:
     async def test_list_plans_role_visible(self, db_session):
         """User should see plans visible to their role."""
         role_plan = ServerPlan(
-            name="User Plan", slug="user-plan", is_public=False, visible_to_roles=["user"], cpu_limit=1
+            name="User Plan",
+            slug="user-plan",
+            is_public=False,
+            visible_to_roles=["user"],
+            cpu_limit=1,
         )
         db_session.add(role_plan)
         await db_session.commit()
@@ -159,9 +167,7 @@ class TestPlanServiceList:
         db_session.add(member)
         await db_session.flush()
 
-        private_plan = ServerPlan(
-            name="WS Plan", slug="ws-plan", is_public=False, cpu_limit=1
-        )
+        private_plan = ServerPlan(name="WS Plan", slug="ws-plan", is_public=False, cpu_limit=1)
         db_session.add(private_plan)
         await db_session.flush()
 
@@ -191,7 +197,7 @@ class TestPlanServiceCRUD:
             description="A new plan",
             cpu_limit=4,
             memory_limit="8g",
-            cost_per_hour=5
+            cost_per_hour=5,
         )
         assert plan.name == "New Plan"
         assert plan.slug == "new-plan"
@@ -261,9 +267,7 @@ class TestPlanServiceCRUD:
         service = PlanService(db_session)
         await service.delete_plan(str(plan.id))
 
-        result = await db_session.execute(
-            select(ServerPlan).where(ServerPlan.id == plan.id)
-        )
+        result = await db_session.execute(select(ServerPlan).where(ServerPlan.id == plan.id))
         assert result.scalar_one_or_none() is None
 
     @pytest.mark.asyncio
@@ -301,7 +305,9 @@ class TestPlanServiceCanUse:
     @pytest.mark.asyncio
     async def test_can_use_admin_override(self, db_session):
         """Admin can use any active plan."""
-        plan = ServerPlan(name="Private", slug="private", is_public=False, is_active=True, cpu_limit=1)
+        plan = ServerPlan(
+            name="Private", slug="private", is_public=False, is_active=True, cpu_limit=1
+        )
         db_session.add(plan)
         await db_session.commit()
 
@@ -312,8 +318,12 @@ class TestPlanServiceCanUse:
     async def test_can_use_role_visible(self, db_session):
         """User can use plan visible to their role."""
         plan = ServerPlan(
-            name="Role Plan", slug="role-plan", is_public=False,
-            visible_to_roles=["user"], is_active=True, cpu_limit=1
+            name="Role Plan",
+            slug="role-plan",
+            is_public=False,
+            visible_to_roles=["user"],
+            is_active=True,
+            cpu_limit=1,
         )
         db_session.add(plan)
         await db_session.commit()
@@ -348,7 +358,9 @@ class TestPlanServiceCanUse:
         db_session.add(member)
         await db_session.flush()
 
-        plan = ServerPlan(name="WS Plan", slug="ws-plan-2", is_public=False, is_active=True, cpu_limit=1)
+        plan = ServerPlan(
+            name="WS Plan", slug="ws-plan-2", is_public=False, is_active=True, cpu_limit=1
+        )
         db_session.add(plan)
         await db_session.flush()
 
@@ -407,10 +419,7 @@ class TestPlanServiceUserAccess:
 
         result = await db_session.execute(
             select(UserPlanAccess).where(
-                and_(
-                    UserPlanAccess.plan_id == plan.id,
-                    UserPlanAccess.user_id == test_user.id
-                )
+                and_(UserPlanAccess.plan_id == plan.id, UserPlanAccess.user_id == test_user.id)
             )
         )
         assert result.scalar_one_or_none() is None
@@ -467,7 +476,7 @@ class TestPlanServiceWorkspaceAccess:
             select(WorkspacePlanAccess).where(
                 and_(
                     WorkspacePlanAccess.plan_id == plan.id,
-                    WorkspacePlanAccess.workspace_id == ws.id
+                    WorkspacePlanAccess.workspace_id == ws.id,
                 )
             )
         )

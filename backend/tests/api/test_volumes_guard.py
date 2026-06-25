@@ -7,7 +7,9 @@ class TestVolumeStatusGuard:
     """Tests that destructive status changes are blocked on active mounts."""
 
     @pytest.mark.asyncio
-    async def test_cannot_archive_volume_mounted_by_running_server(self, client, admin_token, db_session):
+    async def test_cannot_archive_volume_mounted_by_running_server(
+        self, client, admin_token, db_session
+    ):
         """Should reject archiving a volume mounted by a running server."""
         from app.models.volume import Volume
         from app.models.server import Server
@@ -71,7 +73,9 @@ class TestVolumeStatusGuard:
         assert "Stop the server(s) first" in data["detail"]
 
     @pytest.mark.asyncio
-    async def test_can_resize_volume_mounted_by_running_server(self, client, admin_token, db_session):
+    async def test_can_resize_volume_mounted_by_running_server(
+        self, client, admin_token, db_session
+    ):
         """Should allow resizing a volume mounted by a running server."""
         from app.models.volume import Volume
         from app.models.server import Server
@@ -96,7 +100,7 @@ class TestVolumeStatusGuard:
             owner_id=str(user.id),
             status="active",
             size_bytes=1024,
-            max_size_bytes=10 * 1024 ** 3,
+            max_size_bytes=10 * 1024**3,
         )
         db_session.add(volume)
         await db_session.commit()
@@ -123,7 +127,7 @@ class TestVolumeStatusGuard:
         # Try to increase max_size_bytes
         response = await client.put(
             f"/api/volumes/{volume.id}",
-            json={"max_size_bytes": 20 * 1024 ** 3},
+            json={"max_size_bytes": 20 * 1024**3},
             headers=headers,
         )
         # 200 if admin can manage, 404/403 if permission model blocks it

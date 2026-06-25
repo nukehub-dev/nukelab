@@ -982,7 +982,7 @@ const ServersServerIdRouteChildren: ServersServerIdRouteChildren = {
 }
 
 const ServersServerIdRouteWithChildren = ServersServerIdRoute._addFileChildren(
-  ServersServerIdRouteChildren,
+  ServersServerIdRouteChildren
 )
 
 interface ServersRouteChildren {
@@ -995,8 +995,7 @@ const ServersRouteChildren: ServersRouteChildren = {
   ServersIndexRoute: ServersIndexRoute,
 }
 
-const ServersRouteWithChildren =
-  ServersRoute._addFileChildren(ServersRouteChildren)
+const ServersRouteWithChildren = ServersRoute._addFileChildren(ServersRouteChildren)
 
 interface SettingsRouteChildren {
   SettingsAppearanceRoute: typeof SettingsAppearanceRoute
@@ -1018,9 +1017,7 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsIndexRoute: SettingsIndexRoute,
 }
 
-const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
-  SettingsRouteChildren,
-)
+const SettingsRouteWithChildren = SettingsRoute._addFileChildren(SettingsRouteChildren)
 
 interface WorkspacesRouteChildren {
   WorkspacesWorkspaceIdRoute: typeof WorkspacesWorkspaceIdRoute
@@ -1032,9 +1029,7 @@ const WorkspacesRouteChildren: WorkspacesRouteChildren = {
   WorkspacesIndexRoute: WorkspacesIndexRoute,
 }
 
-const WorkspacesRouteWithChildren = WorkspacesRoute._addFileChildren(
-  WorkspacesRouteChildren,
-)
+const WorkspacesRouteWithChildren = WorkspacesRoute._addFileChildren(WorkspacesRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,

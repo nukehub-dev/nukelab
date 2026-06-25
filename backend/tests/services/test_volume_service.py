@@ -31,13 +31,13 @@ class TestVolumeServiceHelpers:
         assert vol_service._parse_memory("10k") == 10 * 1024
 
     def test_parse_memory_mb(self, vol_service):
-        assert vol_service._parse_memory("5m") == 5 * 1024 ** 2
+        assert vol_service._parse_memory("5m") == 5 * 1024**2
 
     def test_parse_memory_gb(self, vol_service):
-        assert vol_service._parse_memory("2g") == 2 * 1024 ** 3
+        assert vol_service._parse_memory("2g") == 2 * 1024**3
 
     def test_parse_memory_tb(self, vol_service):
-        assert vol_service._parse_memory("1t") == 1 * 1024 ** 4
+        assert vol_service._parse_memory("1t") == 1 * 1024**4
 
     def test_human_size_bytes(self, vol_service):
         assert vol_service._human_size(500) == "500.0 B"
@@ -46,7 +46,7 @@ class TestVolumeServiceHelpers:
         assert vol_service._human_size(1536) == "1.5 KB"
 
     def test_human_size_mb(self, vol_service):
-        result = vol_service._human_size(2 * 1024 ** 2)
+        result = vol_service._human_size(2 * 1024**2)
         assert "MB" in result
 
     def test_get_volume_storage_paths(self, vol_service):
@@ -71,7 +71,7 @@ class TestVolumeServiceCreate:
                 name="test-vol-1",
                 display_name="Test Volume 1",
                 owner_id=str(test_user.id),
-                max_size_bytes=1024 ** 3,
+                max_size_bytes=1024**3,
                 description="A test volume",
                 visibility="private",
             )
@@ -139,7 +139,9 @@ class TestVolumeServiceList:
 
     @pytest.mark.asyncio
     async def test_list_volumes_owned(self, db_session, vol_service, test_user):
-        vol = Volume(name="owned", display_name="Owned", owner_id=test_user.id, visibility="private")
+        vol = Volume(
+            name="owned", display_name="Owned", owner_id=test_user.id, visibility="private"
+        )
         db_session.add(vol)
         await db_session.commit()
 
@@ -215,8 +217,14 @@ class TestVolumeServiceList:
 
     @pytest.mark.asyncio
     async def test_list_all_volumes_status_filter(self, db_session, vol_service, test_user):
-        db_session.add(Volume(name="active-v", display_name="Active", owner_id=test_user.id, status="active"))
-        db_session.add(Volume(name="archived-v", display_name="Archived", owner_id=test_user.id, status="archived"))
+        db_session.add(
+            Volume(name="active-v", display_name="Active", owner_id=test_user.id, status="active")
+        )
+        db_session.add(
+            Volume(
+                name="archived-v", display_name="Archived", owner_id=test_user.id, status="archived"
+            )
+        )
         await db_session.commit()
 
         result = await vol_service.list_all_volumes(status="active")
@@ -225,8 +233,12 @@ class TestVolumeServiceList:
 
     @pytest.mark.asyncio
     async def test_list_all_volumes_visibility_filter(self, db_session, vol_service, test_user):
-        db_session.add(Volume(name="priv", display_name="Private", owner_id=test_user.id, visibility="private"))
-        db_session.add(Volume(name="pub2", display_name="Public", owner_id=test_user.id, visibility="public"))
+        db_session.add(
+            Volume(name="priv", display_name="Private", owner_id=test_user.id, visibility="private")
+        )
+        db_session.add(
+            Volume(name="pub2", display_name="Public", owner_id=test_user.id, visibility="public")
+        )
         await db_session.commit()
 
         result = await vol_service.list_all_volumes(visibility="public")
@@ -236,6 +248,7 @@ class TestVolumeServiceList:
     @pytest.mark.asyncio
     async def test_list_all_volumes_owner_filter(self, db_session, vol_service, test_user):
         from app.models.user import User
+
         other = User(username="other2", email="o2@test.com", role="user")
         db_session.add(other)
         await db_session.commit()
@@ -454,7 +467,12 @@ class TestVolumeServiceRecordMount:
 
     @pytest.mark.asyncio
     async def test_mark_home_volume_idempotent(self, db_session, vol_service, test_user):
-        vol = Volume(name="hm2-vol", display_name="HM2", owner_id=test_user.id, labels={"was_home_volume": True})
+        vol = Volume(
+            name="hm2-vol",
+            display_name="HM2",
+            owner_id=test_user.id,
+            labels={"was_home_volume": True},
+        )
         db_session.add(vol)
         await db_session.commit()
         await db_session.refresh(vol)

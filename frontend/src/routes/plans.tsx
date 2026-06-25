@@ -1,24 +1,33 @@
-import { createFileRoute, Link } from '@tanstack/react-router';
-import { CreditCard, Cpu, MemoryStick, HardDrive, Search, CheckCircle2, ExternalLink, XCircle } from 'lucide-react';
-import { useState, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { usePlans } from '../hooks/use-plans';
-import { useAuthStore } from '../stores/auth-store';
-import { springs } from '../lib/animations';
-import { cn, formatPlanResource } from '../lib/utils';
-import { ResourcePageLayout } from '../components/layout/resource-page-layout';
-import { Input } from '../components/ui/input';
-import { Card, CardContent } from '../components/ui/card';
-import { SkeletonCard } from '../components/feedback/skeleton';
-import { EmptyState } from '../components/feedback/empty-state';
-import type { Plan } from '../types/api';
+import { createFileRoute, Link } from '@tanstack/react-router'
+import {
+  CreditCard,
+  Cpu,
+  MemoryStick,
+  HardDrive,
+  Search,
+  CheckCircle2,
+  ExternalLink,
+  XCircle,
+} from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { usePlans } from '../hooks/use-plans'
+import { useAuthStore } from '../stores/auth-store'
+import { springs } from '../lib/animations'
+import { cn, formatPlanResource } from '../lib/utils'
+import { ResourcePageLayout } from '../components/layout/resource-page-layout'
+import { Input } from '../components/ui/input'
+import { Card, CardContent } from '../components/ui/card'
+import { SkeletonCard } from '../components/feedback/skeleton'
+import { EmptyState } from '../components/feedback/empty-state'
+import type { Plan } from '../types/api'
 
 export const Route = createFileRoute('/plans')({
   component: PlansCatalogPage,
-});
+})
 
 function PlanCard({ plan, index }: { plan: Plan; index: number }) {
-  const isUnavailable = !plan.is_active;
+  const isUnavailable = !plan.is_active
 
   return (
     <motion.div
@@ -30,22 +39,24 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
       <Card
         variant="bubble"
         interactive
-        className={cn(
-          "overflow-hidden h-full flex flex-col",
-          isUnavailable && "opacity-60"
-        )}
+        className={cn('overflow-hidden h-full flex flex-col', isUnavailable && 'opacity-60')}
       >
         <CardContent className="p-5 flex flex-col h-full">
           {/* Header */}
           <div className="flex items-start justify-between mb-4">
             <div>
-              <h3 className={cn("font-semibold text-lg", isUnavailable && "text-muted-foreground")}>
+              <h3 className={cn('font-semibold text-lg', isUnavailable && 'text-muted-foreground')}>
                 {plan.name}
               </h3>
               <code className="text-[10px] text-muted-foreground">{plan.slug}</code>
             </div>
             <div className="text-right">
-              <span className={cn("text-2xl font-bold", isUnavailable ? "text-muted-foreground" : "text-primary")}>
+              <span
+                className={cn(
+                  'text-2xl font-bold',
+                  isUnavailable ? 'text-muted-foreground' : 'text-primary'
+                )}
+              >
                 {plan.cost_per_hour}
               </span>
               <span className="text-xs text-muted-foreground"> NUKE/hr</span>
@@ -122,50 +133,91 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
         </CardContent>
       </Card>
     </motion.div>
-  );
+  )
 }
 
 function PlansCatalogPage() {
-  const canManagePlans = useAuthStore((state) => state.canManagePlans());
-  const [searchQuery, setSearchQuery] = useState('');
+  const canManagePlans = useAuthStore((state) => state.canManagePlans())
+  const [searchQuery, setSearchQuery] = useState('')
 
-  const { data, isLoading } = usePlans({});
+  const { data, isLoading } = usePlans({})
 
-  const plans = useMemo(() => data?.data || [], [data?.data]);
-  const activePlans = useMemo(() => plans.filter((p) => p.is_active), [plans]);
+  const plans = useMemo(() => data?.data || [], [data?.data])
+  const activePlans = useMemo(() => plans.filter((p) => p.is_active), [plans])
 
   // Filter and sort: active first, then inactive
   const filteredPlans = useMemo(() => {
-    let result = [...plans];
+    let result = [...plans]
 
     if (searchQuery) {
-      const query = searchQuery.toLowerCase();
+      const query = searchQuery.toLowerCase()
       result = result.filter(
         (p) =>
           p.name.toLowerCase().includes(query) ||
           p.slug.toLowerCase().includes(query) ||
           p.description?.toLowerCase().includes(query)
-      );
+      )
     }
 
     // Sort: active plans first
     result.sort((a, b) => {
-      if (a.is_active === b.is_active) return 0;
-      return a.is_active ? -1 : 1;
-    });
+      if (a.is_active === b.is_active) return 0
+      return a.is_active ? -1 : 1
+    })
 
-    return result;
-  }, [plans, searchQuery]);
+    return result
+  }, [plans, searchQuery])
 
-  const statCards = isLoading ? [
-    { title: 'Total Plans', value: '...', icon: CreditCard, iconColor: 'text-blue-400', bgColor: 'bg-blue-500/10' },
-    { title: 'Available', value: '...', icon: CheckCircle2, iconColor: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
-    { title: 'Avg Cost', value: '...', icon: CreditCard, iconColor: 'text-amber-400', bgColor: 'bg-amber-500/10' },
-  ] : [
-    { title: 'Total Plans', value: plans.length, icon: CreditCard, iconColor: 'text-blue-400', bgColor: 'bg-blue-500/10' },
-    { title: 'Available', value: activePlans.length, icon: CheckCircle2, iconColor: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
-    { title: 'Avg Cost', value: plans.length > 0 ? Math.round(plans.reduce((a, p) => a + p.cost_per_hour, 0) / plans.length) : 0, icon: CreditCard, iconColor: 'text-amber-400', bgColor: 'bg-amber-500/10' },
-  ];
+  const statCards = isLoading
+    ? [
+        {
+          title: 'Total Plans',
+          value: '...',
+          icon: CreditCard,
+          iconColor: 'text-blue-400',
+          bgColor: 'bg-blue-500/10',
+        },
+        {
+          title: 'Available',
+          value: '...',
+          icon: CheckCircle2,
+          iconColor: 'text-emerald-400',
+          bgColor: 'bg-emerald-500/10',
+        },
+        {
+          title: 'Avg Cost',
+          value: '...',
+          icon: CreditCard,
+          iconColor: 'text-amber-400',
+          bgColor: 'bg-amber-500/10',
+        },
+      ]
+    : [
+        {
+          title: 'Total Plans',
+          value: plans.length,
+          icon: CreditCard,
+          iconColor: 'text-blue-400',
+          bgColor: 'bg-blue-500/10',
+        },
+        {
+          title: 'Available',
+          value: activePlans.length,
+          icon: CheckCircle2,
+          iconColor: 'text-emerald-400',
+          bgColor: 'bg-emerald-500/10',
+        },
+        {
+          title: 'Avg Cost',
+          value:
+            plans.length > 0
+              ? Math.round(plans.reduce((a, p) => a + p.cost_per_hour, 0) / plans.length)
+              : 0,
+          icon: CreditCard,
+          iconColor: 'text-amber-400',
+          bgColor: 'bg-amber-500/10',
+        },
+      ]
 
   return (
     <ResourcePageLayout
@@ -211,7 +263,9 @@ function PlansCatalogPage() {
         <EmptyState
           icon={CreditCard}
           title="No Plans Found"
-          description={searchQuery ? "No plans match your search." : "No plans are currently available."}
+          description={
+            searchQuery ? 'No plans match your search.' : 'No plans are currently available.'
+          }
           action={
             searchQuery
               ? {
@@ -231,5 +285,5 @@ function PlansCatalogPage() {
         </div>
       )}
     </ResourcePageLayout>
-  );
+  )
 }

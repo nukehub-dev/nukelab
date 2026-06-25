@@ -20,7 +20,6 @@ from app.core.permissions import Permission
 # Role to permissions mapping
 ROLE_PERMISSIONS = {
     "super_admin": [Permission.ALL],
-
     "admin": [
         # User management (full)
         Permission.USERS_READ,
@@ -62,7 +61,6 @@ ROLE_PERMISSIONS = {
         # Admin dashboard
         Permission.ADMIN_ACCESS,
     ],
-    
     "moderator": [
         # User management (can create/update but not delete/impersonate)
         Permission.USERS_READ,
@@ -96,7 +94,6 @@ ROLE_PERMISSIONS = {
         # Audit
         Permission.AUDIT_READ,
     ],
-    
     "support": [
         # User management (view only)
         Permission.USERS_READ,
@@ -122,7 +119,6 @@ ROLE_PERMISSIONS = {
         Permission.VOLUMES_WRITE_OWN,
         Permission.VOLUMES_READ_ALL,
     ],
-    
     "user": [
         # Own resources (full CRUD)
         Permission.SERVERS_READ_OWN,
@@ -136,7 +132,6 @@ ROLE_PERMISSIONS = {
         # Analytics (view own)
         Permission.ANALYTICS_READ_OWN,
     ],
-
     "guest": [
         # Read-only access to own servers and volumes
         Permission.SERVERS_READ_OWN,
@@ -149,12 +144,12 @@ ROLE_PERMISSIONS = {
 # Admin/mutation endpoints use strict_multiplier (0.5x)
 # WebSocket uses rate_limit_websocket_cpm override
 ROLE_RATE_LIMITS = {
-    "guest":        30,
-    "user":         120,
-    "support":      300,
-    "moderator":    300,
-    "admin":        600,
-    "super_admin":  3000,
+    "guest": 30,
+    "user": 120,
+    "support": 300,
+    "moderator": 300,
+    "admin": 600,
+    "super_admin": 3000,
 }
 
 
@@ -164,12 +159,12 @@ VALID_ROLES = list(ROLE_PERMISSIONS.keys())
 
 # Role hierarchy for inheritance checks
 ROLE_HIERARCHY = {
-    'super_admin': 5,
-    'admin': 4,
-    'moderator': 3,
-    'support': 2,
-    'user': 1,
-    'guest': 0,
+    "super_admin": 5,
+    "admin": 4,
+    "moderator": 3,
+    "support": 2,
+    "user": 1,
+    "guest": 0,
 }
 
 
@@ -202,9 +197,11 @@ def get_role_rate_limit(role: str) -> int:
 # Expanded permission cache — precomputed so has_permission() skips the loop
 # ---------------------------------------------------------------------------
 
+
 def _expand_permissions(permissions: list) -> set:
     """Expand a permission list to include all implied permissions."""
     from app.core.permissions import Permission
+
     implications = {
         Permission.ALL: set(Permission.all_permissions()),
         Permission.SERVERS_READ_ALL: {Permission.SERVERS_READ_OWN},
@@ -256,8 +253,7 @@ def _rebuild_expansion_cache() -> None:
     """
     global _EXPANSION_CACHE
     _EXPANSION_CACHE = {
-        role: frozenset(_expand_permissions(perms))
-        for role, perms in ROLE_PERMISSIONS.items()
+        role: frozenset(_expand_permissions(perms)) for role, perms in ROLE_PERMISSIONS.items()
     }
 
 
@@ -282,6 +278,7 @@ async def load_role_permissions_from_db() -> None:
         from app.db.session import AsyncSessionLocal
         from app.services.setting_service import SettingService
         from app.core.permissions import Permission
+
         async with AsyncSessionLocal() as db:
             service = SettingService(db)
             raw = await service.get("role_permissions")
@@ -309,6 +306,7 @@ async def save_role_permissions_to_db() -> None:
     try:
         from app.db.session import AsyncSessionLocal
         from app.services.setting_service import SettingService
+
         async with AsyncSessionLocal() as db:
             service = SettingService(db)
             payload = json.dumps(ROLE_PERMISSIONS)

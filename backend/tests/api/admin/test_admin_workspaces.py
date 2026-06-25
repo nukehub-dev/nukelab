@@ -8,14 +8,24 @@ class TestAdminWorkspaceList:
     """Admin workspace listing tests."""
 
     @pytest.mark.asyncio
-    async def test_admin_can_list_all_workspaces(self, client: AsyncClient, test_user, admin_user, admin_token):
+    async def test_admin_can_list_all_workspaces(
+        self, client: AsyncClient, test_user, admin_user, admin_token
+    ):
         """Admin should see all workspaces, not just their own."""
         headers = {"Authorization": f"Bearer {admin_token}"}
 
         # Create workspaces via API
-        resp1 = await client.post("/api/workspaces/", json={"name": "Workspace One", "description": "First"}, headers=headers)
+        resp1 = await client.post(
+            "/api/workspaces/",
+            json={"name": "Workspace One", "description": "First"},
+            headers=headers,
+        )
         assert resp1.status_code == 201
-        resp2 = await client.post("/api/workspaces/", json={"name": "Workspace Two", "description": "Second"}, headers=headers)
+        resp2 = await client.post(
+            "/api/workspaces/",
+            json={"name": "Workspace Two", "description": "Second"},
+            headers=headers,
+        )
         assert resp2.status_code == 201
 
         # Admin list
@@ -30,7 +40,9 @@ class TestAdminWorkspaceList:
         assert "Workspace Two" in names
 
     @pytest.mark.asyncio
-    async def test_non_admin_cannot_list_workspaces(self, client: AsyncClient, test_user, user_token):
+    async def test_non_admin_cannot_list_workspaces(
+        self, client: AsyncClient, test_user, user_token
+    ):
         """Regular user should get 403 on admin workspace list."""
         headers = {"Authorization": f"Bearer {user_token}"}
         response = await client.get("/api/admin/workspaces", headers=headers)
@@ -41,9 +53,17 @@ class TestAdminWorkspaceList:
         """Admin should be able to search workspaces by name."""
         headers = {"Authorization": f"Bearer {admin_token}"}
 
-        resp1 = await client.post("/api/workspaces/", json={"name": "Alpha Workspace", "description": "Alpha"}, headers=headers)
+        resp1 = await client.post(
+            "/api/workspaces/",
+            json={"name": "Alpha Workspace", "description": "Alpha"},
+            headers=headers,
+        )
         assert resp1.status_code == 201
-        resp2 = await client.post("/api/workspaces/", json={"name": "Beta Workspace", "description": "Beta"}, headers=headers)
+        resp2 = await client.post(
+            "/api/workspaces/",
+            json={"name": "Beta Workspace", "description": "Beta"},
+            headers=headers,
+        )
         assert resp2.status_code == 201
 
         response = await client.get("/api/admin/workspaces?search=Alpha", headers=headers)
@@ -58,7 +78,9 @@ class TestAdminWorkspaceList:
         """Admin should be able to filter workspaces by status."""
         headers = {"Authorization": f"Bearer {admin_token}"}
 
-        await client.post("/workspaces", json={"name": "Active WS", "description": ""}, headers=headers)
+        await client.post(
+            "/workspaces", json={"name": "Active WS", "description": ""}, headers=headers
+        )
 
         # Filter active
         response = await client.get("/admin/workspaces?status=active", headers=headers)
@@ -71,11 +93,15 @@ class TestAdminWorkspaceDetail:
     """Admin workspace detail tests."""
 
     @pytest.mark.asyncio
-    async def test_admin_can_get_workspace_details(self, client: AsyncClient, admin_user, admin_token):
+    async def test_admin_can_get_workspace_details(
+        self, client: AsyncClient, admin_user, admin_token
+    ):
         """Admin should get workspace with members and volumes."""
         headers = {"Authorization": f"Bearer {admin_token}"}
 
-        create_resp = await client.post("/api/workspaces/", json={"name": "Detail WS", "description": ""}, headers=headers)
+        create_resp = await client.post(
+            "/api/workspaces/", json={"name": "Detail WS", "description": ""}, headers=headers
+        )
         assert create_resp.status_code == 201
         ws_id = create_resp.json()["id"]
 
@@ -88,17 +114,25 @@ class TestAdminWorkspaceDetail:
         assert data["workspace"]["name"] == "Detail WS"
 
     @pytest.mark.asyncio
-    async def test_admin_get_nonexistent_workspace(self, client: AsyncClient, admin_user, admin_token):
+    async def test_admin_get_nonexistent_workspace(
+        self, client: AsyncClient, admin_user, admin_token
+    ):
         """Admin should get 404 for nonexistent workspace."""
         headers = {"Authorization": f"Bearer {admin_token}"}
-        response = await client.get("/api/admin/workspaces/00000000-0000-0000-0000-000000000000", headers=headers)
+        response = await client.get(
+            "/api/admin/workspaces/00000000-0000-0000-0000-000000000000", headers=headers
+        )
         assert response.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_non_admin_cannot_get_workspace_details(self, client: AsyncClient, test_user, user_token):
+    async def test_non_admin_cannot_get_workspace_details(
+        self, client: AsyncClient, test_user, user_token
+    ):
         """Regular user should get 403."""
         headers = {"Authorization": f"Bearer {user_token}"}
-        response = await client.get("/api/admin/workspaces/00000000-0000-0000-0000-000000000000", headers=headers)
+        response = await client.get(
+            "/api/admin/workspaces/00000000-0000-0000-0000-000000000000", headers=headers
+        )
         assert response.status_code == 403
 
 
@@ -110,15 +144,19 @@ class TestAdminWorkspaceUpdate:
         """Admin with WORKSPACES_MANAGE should update any workspace."""
         headers = {"Authorization": f"Bearer {admin_token}"}
 
-        create_resp = await client.post("/api/workspaces/", json={"name": "Update WS", "description": "Old desc"}, headers=headers)
+        create_resp = await client.post(
+            "/api/workspaces/",
+            json={"name": "Update WS", "description": "Old desc"},
+            headers=headers,
+        )
         assert create_resp.status_code == 201
         ws_id = create_resp.json()["id"]
 
-        response = await client.put(f"/api/admin/workspaces/{ws_id}", json={
-            "name": "Updated Name",
-            "description": "New desc",
-            "is_active": False
-        }, headers=headers)
+        response = await client.put(
+            f"/api/admin/workspaces/{ws_id}",
+            json={"name": "Updated Name", "description": "New desc", "is_active": False},
+            headers=headers,
+        )
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
@@ -127,16 +165,24 @@ class TestAdminWorkspaceUpdate:
         assert data["workspace"]["is_active"] is False
 
     @pytest.mark.asyncio
-    async def test_non_admin_cannot_update_workspace(self, client: AsyncClient, test_user, user_token, admin_user, admin_token):
+    async def test_non_admin_cannot_update_workspace(
+        self, client: AsyncClient, test_user, user_token, admin_user, admin_token
+    ):
         """Regular user should get 403."""
         admin_headers = {"Authorization": f"Bearer {admin_token}"}
         user_headers = {"Authorization": f"Bearer {user_token}"}
 
-        create_resp = await client.post("/api/workspaces/", json={"name": "Protected WS", "description": ""}, headers=admin_headers)
+        create_resp = await client.post(
+            "/api/workspaces/",
+            json={"name": "Protected WS", "description": ""},
+            headers=admin_headers,
+        )
         assert create_resp.status_code == 201
         ws_id = create_resp.json()["id"]
 
-        response = await client.put(f"/api/admin/workspaces/{ws_id}", json={"name": "Hacked"}, headers=user_headers)
+        response = await client.put(
+            f"/api/admin/workspaces/{ws_id}", json={"name": "Hacked"}, headers=user_headers
+        )
         assert response.status_code == 403
 
 
@@ -148,7 +194,9 @@ class TestAdminWorkspaceDelete:
         """Admin with WORKSPACES_MANAGE should delete any workspace."""
         headers = {"Authorization": f"Bearer {admin_token}"}
 
-        create_resp = await client.post("/api/workspaces/", json={"name": "Delete WS", "description": ""}, headers=headers)
+        create_resp = await client.post(
+            "/api/workspaces/", json={"name": "Delete WS", "description": ""}, headers=headers
+        )
         assert create_resp.status_code == 201
         ws_id = create_resp.json()["id"]
 
@@ -162,12 +210,18 @@ class TestAdminWorkspaceDelete:
         assert get_resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_non_admin_cannot_delete_workspace(self, client: AsyncClient, test_user, user_token, admin_user, admin_token):
+    async def test_non_admin_cannot_delete_workspace(
+        self, client: AsyncClient, test_user, user_token, admin_user, admin_token
+    ):
         """Regular user should get 403."""
         admin_headers = {"Authorization": f"Bearer {admin_token}"}
         user_headers = {"Authorization": f"Bearer {user_token}"}
 
-        create_resp = await client.post("/api/workspaces/", json={"name": "Protected WS", "description": ""}, headers=admin_headers)
+        create_resp = await client.post(
+            "/api/workspaces/",
+            json={"name": "Protected WS", "description": ""},
+            headers=admin_headers,
+        )
         assert create_resp.status_code == 201
         ws_id = create_resp.json()["id"]
 
@@ -179,11 +233,15 @@ class TestAdminWorkspaceMembers:
     """Admin workspace member listing tests."""
 
     @pytest.mark.asyncio
-    async def test_admin_can_list_workspace_members(self, client: AsyncClient, admin_user, admin_token):
+    async def test_admin_can_list_workspace_members(
+        self, client: AsyncClient, admin_user, admin_token
+    ):
         """Admin should list workspace members."""
         headers = {"Authorization": f"Bearer {admin_token}"}
 
-        create_resp = await client.post("/api/workspaces/", json={"name": "Members WS", "description": ""}, headers=headers)
+        create_resp = await client.post(
+            "/api/workspaces/", json={"name": "Members WS", "description": ""}, headers=headers
+        )
         assert create_resp.status_code == 201
         ws_id = create_resp.json()["id"]
 
@@ -196,12 +254,18 @@ class TestAdminWorkspaceMembers:
         assert len(data["members"]) >= 1
 
     @pytest.mark.asyncio
-    async def test_non_admin_cannot_list_members(self, client: AsyncClient, test_user, user_token, admin_user, admin_token):
+    async def test_non_admin_cannot_list_members(
+        self, client: AsyncClient, test_user, user_token, admin_user, admin_token
+    ):
         """Regular user should get 403."""
         admin_headers = {"Authorization": f"Bearer {admin_token}"}
         user_headers = {"Authorization": f"Bearer {user_token}"}
 
-        create_resp = await client.post("/api/workspaces/", json={"name": "Members WS", "description": ""}, headers=admin_headers)
+        create_resp = await client.post(
+            "/api/workspaces/",
+            json={"name": "Members WS", "description": ""},
+            headers=admin_headers,
+        )
         assert create_resp.status_code == 201
         ws_id = create_resp.json()["id"]
 
@@ -218,7 +282,7 @@ class TestBulkWorkspaceActions:
         response = await client.post(
             "/api/admin/workspaces/bulk-action",
             headers={"Authorization": f"Bearer {admin_token}"},
-            json={"action": "invalid_action", "workspace_ids": ["123", "456"]}
+            json={"action": "invalid_action", "workspace_ids": ["123", "456"]},
         )
         assert response.status_code == 400
         assert "Invalid action" in response.json()["detail"]
@@ -229,7 +293,7 @@ class TestBulkWorkspaceActions:
         response = await client.post(
             "/api/admin/workspaces/bulk-action",
             headers={"Authorization": f"Bearer {admin_token}"},
-            json={"action": "delete", "workspace_ids": []}
+            json={"action": "delete", "workspace_ids": []},
         )
         assert response.status_code != 400
 
@@ -239,7 +303,7 @@ class TestBulkWorkspaceActions:
         response = await client.post(
             "/api/admin/workspaces/bulk-action",
             headers={"Authorization": f"Bearer {admin_token}"},
-            json={"action": "activate", "workspace_ids": []}
+            json={"action": "activate", "workspace_ids": []},
         )
         assert response.status_code != 400
 
@@ -249,7 +313,7 @@ class TestBulkWorkspaceActions:
         response = await client.post(
             "/api/admin/workspaces/bulk-action",
             headers={"Authorization": f"Bearer {admin_token}"},
-            json={"action": "deactivate", "workspace_ids": []}
+            json={"action": "deactivate", "workspace_ids": []},
         )
         assert response.status_code != 400
 
@@ -259,7 +323,7 @@ class TestBulkWorkspaceActions:
         response = await client.post(
             "/api/admin/workspaces/bulk-action",
             headers={"Authorization": f"Bearer {user_token}"},
-            json={"action": "delete", "workspace_ids": []}
+            json={"action": "delete", "workspace_ids": []},
         )
         assert response.status_code == 403
 
@@ -268,18 +332,26 @@ class TestBulkWorkspaceActions:
         """Admin should be able to bulk delete workspaces."""
         headers = {"Authorization": f"Bearer {admin_token}"}
 
-        create_resp1 = await client.post("/api/workspaces/", json={"name": "Bulk Delete WS 1", "description": ""}, headers=headers)
+        create_resp1 = await client.post(
+            "/api/workspaces/",
+            json={"name": "Bulk Delete WS 1", "description": ""},
+            headers=headers,
+        )
         assert create_resp1.status_code == 201
         ws_id1 = create_resp1.json()["id"]
 
-        create_resp2 = await client.post("/api/workspaces/", json={"name": "Bulk Delete WS 2", "description": ""}, headers=headers)
+        create_resp2 = await client.post(
+            "/api/workspaces/",
+            json={"name": "Bulk Delete WS 2", "description": ""},
+            headers=headers,
+        )
         assert create_resp2.status_code == 201
         ws_id2 = create_resp2.json()["id"]
 
         response = await client.post(
             "/api/admin/workspaces/bulk-action",
             headers=headers,
-            json={"action": "delete", "workspace_ids": [ws_id1, ws_id2]}
+            json={"action": "delete", "workspace_ids": [ws_id1, ws_id2]},
         )
         assert response.status_code == 200
         data = response.json()
@@ -294,11 +366,15 @@ class TestBulkWorkspaceActions:
         assert get_resp2.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_admin_can_bulk_activate_deactivate_workspaces(self, client: AsyncClient, admin_token):
+    async def test_admin_can_bulk_activate_deactivate_workspaces(
+        self, client: AsyncClient, admin_token
+    ):
         """Admin should be able to bulk activate and deactivate workspaces."""
         headers = {"Authorization": f"Bearer {admin_token}"}
 
-        create_resp = await client.post("/api/workspaces/", json={"name": "Bulk Toggle WS", "description": ""}, headers=headers)
+        create_resp = await client.post(
+            "/api/workspaces/", json={"name": "Bulk Toggle WS", "description": ""}, headers=headers
+        )
         assert create_resp.status_code == 201
         ws_id = create_resp.json()["id"]
 
@@ -306,7 +382,7 @@ class TestBulkWorkspaceActions:
         response = await client.post(
             "/api/admin/workspaces/bulk-action",
             headers=headers,
-            json={"action": "deactivate", "workspace_ids": [ws_id]}
+            json={"action": "deactivate", "workspace_ids": [ws_id]},
         )
         assert response.status_code == 200
         data = response.json()
@@ -320,7 +396,7 @@ class TestBulkWorkspaceActions:
         response = await client.post(
             "/api/admin/workspaces/bulk-action",
             headers=headers,
-            json={"action": "activate", "workspace_ids": [ws_id]}
+            json={"action": "activate", "workspace_ids": [ws_id]},
         )
         assert response.status_code == 200
         data = response.json()
@@ -331,7 +407,9 @@ class TestBulkWorkspaceActions:
         assert get_resp.json()["workspace"]["is_active"] is True
 
     @pytest.mark.asyncio
-    async def test_api_token_rejected_for_bulk_workspace_action(self, client: AsyncClient, admin_user, db_session):
+    async def test_api_token_rejected_for_bulk_workspace_action(
+        self, client: AsyncClient, admin_user, db_session
+    ):
         """API token authentication should be rejected for workspace bulk actions (JWT only)."""
         from app.models.api_token import ApiToken
         from app.api.auth import get_password_hash
@@ -354,7 +432,7 @@ class TestBulkWorkspaceActions:
         response = await client.post(
             "/api/admin/workspaces/bulk-action",
             headers={"Authorization": f"Bearer {raw_token}"},
-            json={"action": "delete", "workspace_ids": []}
+            json={"action": "delete", "workspace_ids": []},
         )
         assert response.status_code == 403
         assert "JWT authentication required" in response.json()["detail"]

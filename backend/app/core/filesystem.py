@@ -29,9 +29,7 @@ def secure_path(base_path: Path | str, subpath: str) -> Path:
     try:
         requested.relative_to(base)
     except ValueError:
-        raise HTTPException(
-            status_code=403, detail="Access denied: path traversal detected"
-        )
+        raise HTTPException(status_code=403, detail="Access denied: path traversal detected")
     return requested
 
 

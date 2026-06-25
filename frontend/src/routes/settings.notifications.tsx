@@ -1,17 +1,30 @@
-import { createFileRoute, Link } from '@tanstack/react-router';
-import { Bell, Server, CreditCard, AlertTriangle, Calendar, Users, Check, Loader2, ArrowLeft, HardDrive, FolderOpen, Key } from 'lucide-react';
-import { motion } from 'framer-motion';
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useCurrentUser } from '../hooks/use-current-user';
-import { api } from '../lib/api';
-import { Input } from '../components/ui/input';
-import { Checkbox } from '../components/ui/checkbox';
-import { useToast } from '../stores/toast-store';
+import { createFileRoute, Link } from '@tanstack/react-router'
+import {
+  Bell,
+  Server,
+  CreditCard,
+  AlertTriangle,
+  Calendar,
+  Users,
+  Check,
+  Loader2,
+  ArrowLeft,
+  HardDrive,
+  FolderOpen,
+  Key,
+} from 'lucide-react'
+import { motion } from 'framer-motion'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useCurrentUser } from '../hooks/use-current-user'
+import { api } from '../lib/api'
+import { Input } from '../components/ui/input'
+import { Checkbox } from '../components/ui/checkbox'
+import { useToast } from '../stores/toast-store'
 
 export const Route = createFileRoute('/settings/notifications')({
   component: NotificationsSettingsPage,
-});
+})
 
 // Icon mapping — kept locally, never sent to API
 const EVENT_ICONS: Record<string, React.ElementType> = {
@@ -35,75 +48,173 @@ const EVENT_ICONS: Record<string, React.ElementType> = {
   volume_deleted: HardDrive,
 
   api_key_created: Key,
-};
+}
 
 interface EventPreference {
-  event: string;
-  label: string;
-  description: string;
-  channels: Record<string, boolean>;
+  event: string
+  label: string
+  description: string
+  channels: Record<string, boolean>
 }
 
 // Serializable defaults (no icon component)
 const defaultEvents: EventPreference[] = [
-  { event: 'server_start', label: 'Server Started', description: 'When a server is started', channels: { email: false, webhook: false, in_app: true } },
-  { event: 'server_stop', label: 'Server Stopped', description: 'When a server is stopped', channels: { email: false, webhook: false, in_app: true } },
-  { event: 'server_ready', label: 'Server Ready', description: 'When a server is ready to use', channels: { email: true, webhook: false, in_app: true } },
-  { event: 'server_failed', label: 'Server Failed', description: 'When a server fails to start', channels: { email: true, webhook: false, in_app: true } },
-  { event: 'server_backup_completed', label: 'Backup Completed', description: 'When a server backup finishes', channels: { email: true, webhook: false, in_app: true } },
-  { event: 'credit_low', label: 'Low Credits', description: 'When your credit balance is low', channels: { email: true, webhook: true, in_app: true } },
-  { event: 'credit_granted', label: 'Credits Granted', description: 'When credits are added to your account', channels: { email: true, webhook: false, in_app: true } },
-  { event: 'queue_position', label: 'Queue Position', description: 'Updates on your queue position', channels: { email: false, webhook: false, in_app: true } },
-  { event: 'schedule_run', label: 'Schedule Executed', description: 'When a scheduled task runs', channels: { email: false, webhook: false, in_app: true } },
-  { event: 'alert_fired', label: 'Alert Fired', description: 'When a system alert is triggered', channels: { email: true, webhook: true, in_app: true } },
-  { event: 'maintenance', label: 'Maintenance Mode', description: 'System maintenance notifications', channels: { email: true, webhook: true, in_app: true } },
-  { event: 'workspace_invite', label: 'Workspace Invitation', description: 'When you are invited to a workspace', channels: { email: true, webhook: false, in_app: true } },
-  { event: 'workspace_member_added', label: 'Added to Workspace', description: 'When you are added to a workspace', channels: { email: true, webhook: false, in_app: true } },
-  { event: 'workspace_member_removed', label: 'Removed from Workspace', description: 'When you are removed from a workspace', channels: { email: true, webhook: false, in_app: true } },
-  { event: 'ownership_transferred', label: 'Ownership Transferred', description: 'When workspace ownership is transferred to you', channels: { email: true, webhook: false, in_app: true } },
-  { event: 'volume_created', label: 'Volume Created', description: 'When a new volume is provisioned', channels: { email: false, webhook: false, in_app: true } },
-  { event: 'volume_near_limit', label: 'Volume Near Limit', description: 'When a volume reaches 90% capacity', channels: { email: true, webhook: false, in_app: true } },
-  { event: 'volume_deleted', label: 'Volume Deleted', description: 'When a volume is permanently removed', channels: { email: true, webhook: false, in_app: true } },
+  {
+    event: 'server_start',
+    label: 'Server Started',
+    description: 'When a server is started',
+    channels: { email: false, webhook: false, in_app: true },
+  },
+  {
+    event: 'server_stop',
+    label: 'Server Stopped',
+    description: 'When a server is stopped',
+    channels: { email: false, webhook: false, in_app: true },
+  },
+  {
+    event: 'server_ready',
+    label: 'Server Ready',
+    description: 'When a server is ready to use',
+    channels: { email: true, webhook: false, in_app: true },
+  },
+  {
+    event: 'server_failed',
+    label: 'Server Failed',
+    description: 'When a server fails to start',
+    channels: { email: true, webhook: false, in_app: true },
+  },
+  {
+    event: 'server_backup_completed',
+    label: 'Backup Completed',
+    description: 'When a server backup finishes',
+    channels: { email: true, webhook: false, in_app: true },
+  },
+  {
+    event: 'credit_low',
+    label: 'Low Credits',
+    description: 'When your credit balance is low',
+    channels: { email: true, webhook: true, in_app: true },
+  },
+  {
+    event: 'credit_granted',
+    label: 'Credits Granted',
+    description: 'When credits are added to your account',
+    channels: { email: true, webhook: false, in_app: true },
+  },
+  {
+    event: 'queue_position',
+    label: 'Queue Position',
+    description: 'Updates on your queue position',
+    channels: { email: false, webhook: false, in_app: true },
+  },
+  {
+    event: 'schedule_run',
+    label: 'Schedule Executed',
+    description: 'When a scheduled task runs',
+    channels: { email: false, webhook: false, in_app: true },
+  },
+  {
+    event: 'alert_fired',
+    label: 'Alert Fired',
+    description: 'When a system alert is triggered',
+    channels: { email: true, webhook: true, in_app: true },
+  },
+  {
+    event: 'maintenance',
+    label: 'Maintenance Mode',
+    description: 'System maintenance notifications',
+    channels: { email: true, webhook: true, in_app: true },
+  },
+  {
+    event: 'workspace_invite',
+    label: 'Workspace Invitation',
+    description: 'When you are invited to a workspace',
+    channels: { email: true, webhook: false, in_app: true },
+  },
+  {
+    event: 'workspace_member_added',
+    label: 'Added to Workspace',
+    description: 'When you are added to a workspace',
+    channels: { email: true, webhook: false, in_app: true },
+  },
+  {
+    event: 'workspace_member_removed',
+    label: 'Removed from Workspace',
+    description: 'When you are removed from a workspace',
+    channels: { email: true, webhook: false, in_app: true },
+  },
+  {
+    event: 'ownership_transferred',
+    label: 'Ownership Transferred',
+    description: 'When workspace ownership is transferred to you',
+    channels: { email: true, webhook: false, in_app: true },
+  },
+  {
+    event: 'volume_created',
+    label: 'Volume Created',
+    description: 'When a new volume is provisioned',
+    channels: { email: false, webhook: false, in_app: true },
+  },
+  {
+    event: 'volume_near_limit',
+    label: 'Volume Near Limit',
+    description: 'When a volume reaches 90% capacity',
+    channels: { email: true, webhook: false, in_app: true },
+  },
+  {
+    event: 'volume_deleted',
+    label: 'Volume Deleted',
+    description: 'When a volume is permanently removed',
+    channels: { email: true, webhook: false, in_app: true },
+  },
 
-  { event: 'api_key_created', label: 'API Key Created', description: 'When a new API key is generated', channels: { email: true, webhook: false, in_app: true } },
-];
+  {
+    event: 'api_key_created',
+    label: 'API Key Created',
+    description: 'When a new API key is generated',
+    channels: { email: true, webhook: false, in_app: true },
+  },
+]
 
 function NotificationsSettingsPage() {
-  const { data: user } = useCurrentUser();
-  const queryClient = useQueryClient();
-  const { error } = useToast();
-  const [preferences, setPreferences] = useState<EventPreference[]>(defaultEvents);
-  const [webhookUrl, setWebhookUrl] = useState('');
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const { data: user } = useCurrentUser()
+  const queryClient = useQueryClient()
+  const { error } = useToast()
+  const [preferences, setPreferences] = useState<EventPreference[]>(defaultEvents)
+  const [webhookUrl, setWebhookUrl] = useState('')
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
 
   // Load saved preferences
   useEffect(() => {
     if (user?.preferences?.notifications) {
-      const saved = user.preferences.notifications as { events?: EventPreference[]; webhook_url?: string };
+      const saved = user.preferences.notifications as {
+        events?: EventPreference[]
+        webhook_url?: string
+      }
       queueMicrotask(() => {
         if (saved.events) {
-          setPreferences(saved.events);
+          setPreferences(saved.events)
         }
         if (saved.webhook_url !== undefined) {
-          setWebhookUrl(saved.webhook_url);
+          setWebhookUrl(saved.webhook_url)
         }
-      });
+      })
     }
-  }, [user]);
+  }, [user])
 
   // Debounced auto-save
-  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const saveMutation = useMutation({
     mutationFn: async (payload: { events: EventPreference[]; webhook_url: string }) => {
-      return api.put('/preferences/', { notifications: payload });
+      return api.put('/preferences/', { notifications: payload })
     },
     onSuccess: (_result, variables) => {
-      setSaveStatus('saved');
+      setSaveStatus('saved')
       // Update cached user data directly instead of refetching
       queryClient.setQueryData(['me'], (old: unknown) => {
-        if (!old) return old;
-        const prev = old as { preferences?: Record<string, unknown> };
+        if (!old) return old
+        const prev = old as { preferences?: Record<string, unknown> }
         return {
           ...old,
           preferences: {
@@ -113,76 +224,76 @@ function NotificationsSettingsPage() {
               webhook_url: variables.webhook_url,
             },
           },
-        };
-      });
-      setTimeout(() => setSaveStatus('idle'), 2000);
+        }
+      })
+      setTimeout(() => setSaveStatus('idle'), 2000)
     },
     onError: (err) => {
-      setSaveStatus('idle');
-      error('Failed to save preferences', err instanceof Error ? err.message : 'Please try again');
+      setSaveStatus('idle')
+      error('Failed to save preferences', err instanceof Error ? err.message : 'Please try again')
     },
-  });
+  })
 
   const triggerSave = useCallback(
     (newPreferences: EventPreference[], newWebhookUrl: string) => {
-      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-      setSaveStatus('saving');
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
+      setSaveStatus('saving')
       saveTimeoutRef.current = setTimeout(() => {
-        saveMutation.mutate({ events: newPreferences, webhook_url: newWebhookUrl });
-      }, 400);
+        saveMutation.mutate({ events: newPreferences, webhook_url: newWebhookUrl })
+      }, 400)
     },
     [saveMutation]
-  );
+  )
 
   const toggleChannel = (eventIndex: number, channelId: string) => {
     setPreferences((prev) => {
-      const updated = [...prev];
+      const updated = [...prev]
       updated[eventIndex] = {
         ...updated[eventIndex],
         channels: {
           ...updated[eventIndex].channels,
           [channelId]: !updated[eventIndex].channels[channelId],
         },
-      };
-      triggerSave(updated, webhookUrl);
-      return updated;
-    });
-  };
+      }
+      triggerSave(updated, webhookUrl)
+      return updated
+    })
+  }
 
   const handleWebhookChange = (value: string) => {
-    setWebhookUrl(value);
-    triggerSave(preferences, value);
-  };
+    setWebhookUrl(value)
+    triggerSave(preferences, value)
+  }
 
   const handleEnableAll = () => {
     const updated = preferences.map((p) => ({
       ...p,
       channels: { email: true, webhook: true, in_app: true },
-    }));
-    setPreferences(updated);
-    triggerSave(updated, webhookUrl);
-  };
+    }))
+    setPreferences(updated)
+    triggerSave(updated, webhookUrl)
+  }
 
   const handleDisableAll = () => {
     const updated = preferences.map((p) => ({
       ...p,
       channels: { email: false, webhook: false, in_app: false },
-    }));
-    setPreferences(updated);
-    triggerSave(updated, webhookUrl);
-  };
+    }))
+    setPreferences(updated)
+    triggerSave(updated, webhookUrl)
+  }
 
   const handleReset = () => {
-    setPreferences(defaultEvents);
-    setWebhookUrl('');
-    triggerSave(defaultEvents, '');
-  };
+    setPreferences(defaultEvents)
+    setWebhookUrl('')
+    triggerSave(defaultEvents, '')
+  }
 
   // Calculate summary stats
   const totalEnabled = preferences.reduce(
     (acc, pref) => acc + Object.values(pref.channels).filter(Boolean).length,
     0
-  );
+  )
 
   return (
     <div className="min-h-screen p-6 lg:p-10 space-y-10">
@@ -268,7 +379,7 @@ function NotificationsSettingsPage() {
             {/* Event Rows */}
             <div className="divide-y divide-border/30">
               {preferences.map((pref, index) => {
-                const Icon = EVENT_ICONS[pref.event] || Bell;
+                const Icon = EVENT_ICONS[pref.event] || Bell
                 return (
                   <div
                     key={pref.event}
@@ -303,7 +414,7 @@ function NotificationsSettingsPage() {
                       />
                     </div>
                   </div>
-                );
+                )
               })}
             </div>
           </div>
@@ -338,7 +449,7 @@ function NotificationsSettingsPage() {
         </SettingsSection>
       </div>
     </div>
-  );
+  )
 }
 
 function SettingsSection({
@@ -346,9 +457,9 @@ function SettingsSection({
   description,
   children,
 }: {
-  title?: string;
-  description?: string;
-  children: React.ReactNode;
+  title?: string
+  description?: string
+  children: React.ReactNode
 }) {
   return (
     <motion.div
@@ -359,12 +470,10 @@ function SettingsSection({
       {(title || description) && (
         <div className="mb-4">
           {title && <h3 className="text-lg font-semibold">{title}</h3>}
-          {description && (
-            <p className="text-sm text-muted-foreground mt-1">{description}</p>
-          )}
+          {description && <p className="text-sm text-muted-foreground mt-1">{description}</p>}
         </div>
       )}
       <div>{children}</div>
     </motion.div>
-  );
+  )
 }

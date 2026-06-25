@@ -25,9 +25,9 @@ class TestContainerClientBindFormatting:
         client.client.containers.create = AsyncMock(return_value=MagicMock())
 
         # Mock _check_storage_support to skip disk limit logic
-        with patch.object(client, '_check_storage_support', return_value=False):
-            with patch.object(client, '_check_lxcfs_support', return_value=[]):
-                with patch.object(client, '_get_available_controllers', return_value=set()):
+        with patch.object(client, "_check_storage_support", return_value=False):
+            with patch.object(client, "_check_lxcfs_support", return_value=[]):
+                with patch.object(client, "_get_available_controllers", return_value=set()):
                     await client.create_container(
                         name="test-ro",
                         image="hello-world",
@@ -48,9 +48,9 @@ class TestContainerClientBindFormatting:
         client.client = MagicMock()
         client.client.containers.create = AsyncMock(return_value=MagicMock())
 
-        with patch.object(client, '_check_storage_support', return_value=False):
-            with patch.object(client, '_check_lxcfs_support', return_value=[]):
-                with patch.object(client, '_get_available_controllers', return_value=set()):
+        with patch.object(client, "_check_storage_support", return_value=False):
+            with patch.object(client, "_check_lxcfs_support", return_value=[]):
+                with patch.object(client, "_get_available_controllers", return_value=set()):
                     await client.create_container(
                         name="test-rw",
                         image="hello-world",
@@ -70,9 +70,9 @@ class TestContainerClientBindFormatting:
         client.client = MagicMock()
         client.client.containers.create = AsyncMock(return_value=MagicMock())
 
-        with patch.object(client, '_check_storage_support', return_value=False):
-            with patch.object(client, '_check_lxcfs_support', return_value=[]):
-                with patch.object(client, '_get_available_controllers', return_value=set()):
+        with patch.object(client, "_check_storage_support", return_value=False):
+            with patch.object(client, "_check_lxcfs_support", return_value=[]):
+                with patch.object(client, "_get_available_controllers", return_value=set()):
                     await client.create_container(
                         name="test-mixed",
                         image="hello-world",
@@ -96,9 +96,9 @@ class TestContainerClientBindFormatting:
         client.client = MagicMock()
         client.client.containers.create = AsyncMock(return_value=MagicMock())
 
-        with patch.object(client, '_check_storage_support', return_value=False):
-            with patch.object(client, '_check_lxcfs_support', return_value=[]):
-                with patch.object(client, '_get_available_controllers', return_value=set()):
+        with patch.object(client, "_check_storage_support", return_value=False):
+            with patch.object(client, "_check_lxcfs_support", return_value=[]):
+                with patch.object(client, "_get_available_controllers", return_value=set()):
                     await client.create_container(
                         name="test-string",
                         image="hello-world",
@@ -172,9 +172,9 @@ class TestContainerClientCpuMasking:
         client.client.containers.create = AsyncMock(return_value=MagicMock())
         client._cpu_lib_volume_ready = True
 
-        with patch.object(client, '_check_storage_support', return_value=False):
-            with patch.object(client, '_check_lxcfs_support', return_value=[]):
-                with patch.object(client, '_get_available_controllers', return_value=set()):
+        with patch.object(client, "_check_storage_support", return_value=False):
+            with patch.object(client, "_check_lxcfs_support", return_value=[]):
+                with patch.object(client, "_get_available_controllers", return_value=set()):
                     await client.create_container(
                         name="test-cpu",
                         image="hello-world",
@@ -197,9 +197,9 @@ class TestContainerClientCpuMasking:
         client.client.containers.create = AsyncMock(return_value=MagicMock())
         client._cpu_lib_volume_ready = False
 
-        with patch.object(client, '_check_storage_support', return_value=False):
-            with patch.object(client, '_check_lxcfs_support', return_value=[]):
-                with patch.object(client, '_get_available_controllers', return_value=set()):
+        with patch.object(client, "_check_storage_support", return_value=False):
+            with patch.object(client, "_check_lxcfs_support", return_value=[]):
+                with patch.object(client, "_get_available_controllers", return_value=set()):
                     await client.create_container(
                         name="test-no-cpu",
                         image="hello-world",
@@ -228,6 +228,7 @@ class TestContainerClientCpuMasking:
         # Verify tar archive contents
         import io
         import tarfile
+
         tar_buffer = io.BytesIO(args[1])
         with tarfile.open(fileobj=tar_buffer, mode="r") as tar:
             names = tar.getnames()
@@ -278,6 +279,7 @@ class TestSpawnerVolumeDictBuilding:
 
         # Get volume name from DB (same as spawner)
         from sqlalchemy import select
+
         result = await db_session.execute(select(Volume).where(Volume.id == vol_id))
         vol = result.scalar_one_or_none()
         volume_name = vol.name if vol else f"nukelab-vol-{vol_id[:8]}"
@@ -314,6 +316,7 @@ class TestSpawnerVolumeDictBuilding:
 
         assert mount_mode == "rw"
 
+
 """Tests for app.container.spawner.ServerSpawner methods."""
 
 import pytest
@@ -326,12 +329,14 @@ from app.models.server import Server
 
 class MockContainer:
     """Mock Docker container."""
+
     def __init__(self, container_id=None):
         self.id = container_id or str(uuid_mod.uuid4())
 
 
 class MockExec:
     """Mock exec instance."""
+
     async def start(self, detach=False):
         pass
 
@@ -357,9 +362,9 @@ def mock_container_client():
     client.start_container = mock.AsyncMock()
     client.stop_container = mock.AsyncMock()
     client.delete_container = mock.AsyncMock()
-    client.get_container_info = mock.AsyncMock(return_value={
-        "State": {"Running": True, "Paused": False}
-    })
+    client.get_container_info = mock.AsyncMock(
+        return_value={"State": {"Running": True, "Paused": False}}
+    )
 
     # Mock container exec
     mock_exec = MockExec()
@@ -382,6 +387,7 @@ def fresh_spawner(mock_container_client):
 # ─────────────────────────────────────────────────────────────
 # _get_container_client
 # ─────────────────────────────────────────────────────────────
+
 
 class TestGetContainerClient:
     """Tests for _get_container_client lazy initialization."""
@@ -420,6 +426,7 @@ class TestGetContainerClient:
 # _ensure_volume
 # ─────────────────────────────────────────────────────────────
 
+
 class TestEnsureVolume:
     """Tests for _ensure_volume."""
 
@@ -446,6 +453,7 @@ class TestEnsureVolume:
 # ─────────────────────────────────────────────────────────────
 # start / stop / delete
 # ─────────────────────────────────────────────────────────────
+
 
 class TestStartStopDelete:
     """Tests for start, stop, and delete wrappers."""
@@ -487,7 +495,9 @@ class TestStartStopDelete:
         """delete should return True on success."""
         result = await fresh_spawner.delete("cid-123")
         assert result is True
-        fresh_spawner.container_client.delete_container.assert_awaited_once_with("cid-123", force=True)
+        fresh_spawner.container_client.delete_container.assert_awaited_once_with(
+            "cid-123", force=True
+        )
 
     @pytest.mark.asyncio
     async def test_delete_failure(self, fresh_spawner):
@@ -502,6 +512,7 @@ class TestStartStopDelete:
 # ─────────────────────────────────────────────────────────────
 # get_status
 # ─────────────────────────────────────────────────────────────
+
 
 class TestGetStatus:
     """Tests for get_status."""
@@ -542,6 +553,7 @@ class TestGetStatus:
 # ─────────────────────────────────────────────────────────────
 # spawn — success paths
 # ─────────────────────────────────────────────────────────────
+
 
 class TestSpawnSuccess:
     """Tests for spawn() success paths."""
@@ -752,7 +764,9 @@ class TestSpawnSuccess:
         """spawn should mount auth volume when server_auth_enabled."""
         with mock.patch("app.container.spawner.settings.public_url", "http://test"):
             with mock.patch("app.container.spawner.settings.server_auth_enabled", True):
-                with mock.patch("app.container.spawner.settings.server_auth_public_key_path", "/key.pem"):
+                with mock.patch(
+                    "app.container.spawner.settings.server_auth_public_key_path", "/key.pem"
+                ):
                     with mock.patch(
                         "app.services.server_auth_service.server_auth_service._ensure_keys_exist"
                     ) as mock_ensure:
@@ -788,6 +802,7 @@ class TestSpawnSuccess:
 # ─────────────────────────────────────────────────────────────
 # spawn — failure paths
 # ─────────────────────────────────────────────────────────────
+
 
 class TestSpawnFailure:
     """Tests for spawn() failure handling."""
@@ -839,6 +854,7 @@ class TestSpawnFailure:
 # ─────────────────────────────────────────────────────────────
 # spawn — DB volume lookup
 # ─────────────────────────────────────────────────────────────
+
 
 class TestSpawnVolumeLookup:
     """Tests for spawn() volume lookup from database."""
@@ -901,10 +917,12 @@ class TestSpawnVolumeLookup:
 # Module-level singleton
 # ─────────────────────────────────────────────────────────────
 
+
 class TestModuleSingleton:
     """Tests for the module-level spawner singleton."""
 
     def test_singleton_exists(self):
         """The module should export a spawner singleton instance."""
         from app.container.spawner import spawner as s
+
         assert isinstance(s, ServerSpawner)

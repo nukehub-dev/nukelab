@@ -40,7 +40,9 @@ class TestMaintenanceMiddlewareOff:
 class TestMaintenanceMiddlewareOn:
     def test_blocked_during_maintenance(self, app):
         with mock.patch("app.middleware.maintenance.settings.maintenance_mode", True):
-            with mock.patch("app.middleware.maintenance.settings.maintenance_message", "Down for maintenance"):
+            with mock.patch(
+                "app.middleware.maintenance.settings.maintenance_message", "Down for maintenance"
+            ):
                 client = TestClient(app)
                 response = client.get("/api/test")
                 assert response.status_code == 503
@@ -62,19 +64,13 @@ class TestMaintenanceMiddlewareOn:
     def test_admin_allowed_during_maintenance(self, app, admin_token):
         with mock.patch("app.middleware.maintenance.settings.maintenance_mode", True):
             client = TestClient(app)
-            response = client.get(
-                "/api/test",
-                headers={"Authorization": f"Bearer {admin_token}"}
-            )
+            response = client.get("/api/test", headers={"Authorization": f"Bearer {admin_token}"})
             assert response.status_code == 200
 
     def test_non_admin_blocked_during_maintenance(self, app, user_token):
         with mock.patch("app.middleware.maintenance.settings.maintenance_mode", True):
             client = TestClient(app)
-            response = client.get(
-                "/api/test",
-                headers={"Authorization": f"Bearer {user_token}"}
-            )
+            response = client.get("/api/test", headers={"Authorization": f"Bearer {user_token}"})
             assert response.status_code == 503
 
     def test_unauthenticated_blocked_during_maintenance(self, app):
@@ -84,7 +80,7 @@ class TestMaintenanceMiddlewareOn:
             assert response.status_code == 503
 
     def test_rate_limiting_503s(self, app):
-        with mock.patch.object(MaintenanceMiddleware, '_request_log', {}):
+        with mock.patch.object(MaintenanceMiddleware, "_request_log", {}):
             with mock.patch("app.middleware.maintenance.settings.maintenance_mode", True):
                 client = TestClient(app)
                 # Make many requests quickly
@@ -113,5 +109,7 @@ class TestIsAdmin:
         MaintenanceMiddleware._request_log.clear()
         with mock.patch("app.middleware.maintenance.settings.maintenance_mode", True):
             client = TestClient(app)
-            response = client.get("/api/test", headers={"Authorization": "Bearer invalid.token.here"})
+            response = client.get(
+                "/api/test", headers={"Authorization": "Bearer invalid.token.here"}
+            )
             assert response.status_code == 503

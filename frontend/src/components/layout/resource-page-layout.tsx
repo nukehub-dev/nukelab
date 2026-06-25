@@ -1,24 +1,24 @@
-import type { LucideIcon } from 'lucide-react';
-import { cn } from '../../lib/utils';
-import { FloatingHeader } from './floating-header';
-import type { StatCardProps } from '../data/stat-card';
-import type { ActionType } from '../actions/action-config';
+import type { LucideIcon } from 'lucide-react'
+import { cn } from '../../lib/utils'
+import { FloatingHeader } from './floating-header'
+import type { StatCardProps } from '../data/stat-card'
+import type { ActionType } from '../actions/action-config'
 
 interface ResourcePageLayoutProps {
-  title: string;
-  subtitle?: string;
-  icon?: LucideIcon;
-  stats?: StatCardProps[];
+  title: string
+  subtitle?: string
+  icon?: LucideIcon
+  stats?: StatCardProps[]
   actions?: Array<{
-    action: ActionType;
-    onClick: () => void;
-    loading?: boolean;
-    disabled?: boolean;
-  }>;
-  backTo?: string;
-  filters?: React.ReactNode;
-  children: React.ReactNode;
-  className?: string;
+    action: ActionType
+    onClick: () => void
+    loading?: boolean
+    disabled?: boolean
+  }>
+  backTo?: string
+  filters?: React.ReactNode
+  children: React.ReactNode
+  className?: string
 }
 
 export function ResourcePageLayout({
@@ -33,7 +33,7 @@ export function ResourcePageLayout({
   className,
 }: ResourcePageLayoutProps) {
   return (
-    <div className={cn('min-h-screen', className)} >
+    <div className={cn('min-h-screen', className)}>
       <FloatingHeader
         title={title}
         subtitle={subtitle}
@@ -55,5 +55,5 @@ export function ResourcePageLayout({
         {children}
       </div>
     </div>
-  );
+  )
 }

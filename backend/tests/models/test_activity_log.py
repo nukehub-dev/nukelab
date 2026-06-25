@@ -11,6 +11,6 @@ class TestActivityLogModel:
         from app.models.activity_log import ActivityLog
 
         log = ActivityLog()
-        assert hasattr(log, 'before_state')
-        assert hasattr(log, 'after_state')
-        assert hasattr(log, 'request_id')
+        assert hasattr(log, "before_state")
+        assert hasattr(log, "after_state")
+        assert hasattr(log, "request_id")

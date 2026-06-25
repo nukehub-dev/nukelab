@@ -87,7 +87,9 @@ def on_test_start(environment, **kwargs):
     """Log test configuration at startup."""
     host = environment.host or "unknown"
     print(f"\n🚀 Load test starting against {host}")
-    print(f"   Users: {getattr(environment.parsed_options, 'users', getattr(environment.parsed_options, 'num_users', 'unknown'))}")
+    print(
+        f"   Users: {getattr(environment.parsed_options, 'users', getattr(environment.parsed_options, 'num_users', 'unknown'))}"
+    )
     print(f"   Spawn rate: {environment.parsed_options.spawn_rate}")
     print(f"   Run time: {getattr(environment.parsed_options, 'run_time', 'unlimited')}")
     if _TOKEN_POOL:
@@ -165,10 +167,10 @@ class AuthMixin:
                 elif resp.status_code == 429 and attempt < max_attempts - 1:
                     # Rate-limited — back off and retry without counting as failure
                     resp.success()
-                    sleep_time = (2 ** attempt) + random.random() * 3  # jitter
+                    sleep_time = (2**attempt) + random.random() * 3  # jitter
                     time.sleep(sleep_time)
                 else:
-                    body = getattr(resp, 'text', '')[:200]
+                    body = getattr(resp, "text", "")[:200]
                     print(f"🔴 Login failed for {username}: HTTP {resp.status_code} {body}")
                     resp.failure(f"Login failed: {resp.status_code}")
                     self.auth_failed = True

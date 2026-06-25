@@ -1,18 +1,18 @@
-import * as React from 'react';
-import { cn } from '../../lib/utils';
+import * as React from 'react'
+import { cn } from '../../lib/utils'
 
 export interface SliderProps {
-  min?: number;
-  max?: number;
-  step?: number;
-  value: number;
-  onChange: (value: number) => void;
-  className?: string;
+  min?: number
+  max?: number
+  step?: number
+  value: number
+  onChange: (value: number) => void
+  className?: string
 }
 
 export const Slider = React.forwardRef<HTMLInputElement, SliderProps>(
   ({ min = 0, max = 100, step = 1, value, onChange, className }, ref) => {
-    const percentage = Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100));
+    const percentage = Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100))
 
     return (
       <input
@@ -32,8 +32,8 @@ export const Slider = React.forwardRef<HTMLInputElement, SliderProps>(
           background: `linear-gradient(to right, var(--primary) 0%, var(--primary) ${percentage}%, var(--muted) ${percentage}%, var(--muted) 100%)`,
         }}
       />
-    );
+    )
   }
-);
+)
 
-Slider.displayName = 'Slider';
+Slider.displayName = 'Slider'

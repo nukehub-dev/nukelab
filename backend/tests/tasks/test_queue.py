@@ -12,9 +12,9 @@ class TestQueueModel:
         from app.models.server_queue import ServerQueue
 
         queue = ServerQueue()
-        assert hasattr(queue, 'status')
-        assert hasattr(queue, 'priority')
-        assert hasattr(queue, 'server_name')
+        assert hasattr(queue, "status")
+        assert hasattr(queue, "priority")
+        assert hasattr(queue, "server_name")
 
 
 class TestQueueTasks:

@@ -43,7 +43,9 @@ def _server_list_cache_key(user_id: str) -> str:
     return f"servers:list:user:{user_id}"
 
 
-def _admin_server_list_cache_key(page: int, limit: int, status: Optional[str], user_id: Optional[str]) -> str:
+def _admin_server_list_cache_key(
+    page: int, limit: int, status: Optional[str], user_id: Optional[str]
+) -> str:
     return f"servers:list:admin:{page}:{limit}:{status or 'all'}:{user_id or 'all'}"
 
 
@@ -61,14 +63,15 @@ class VolumeMountRequest(BaseModel):
 
 
 # Docker-compatible name pattern used for container and volume names
-_SERVER_NAME_PATTERN = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9_-]*$')
+_SERVER_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$")
+
 
 class ServerCreateRequest(BaseModel):
     name: str = Field(
         ...,
         min_length=1,
         max_length=64,
-        pattern=r'^[a-zA-Z0-9][a-zA-Z0-9_-]*$',
+        pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$",
         description="Server name must start with alphanumeric and contain only letters, numbers, underscores, and hyphens",
     )
     plan_id: str
@@ -119,59 +122,53 @@ async def get_server_with_permission_check(
     db: AsyncSession,
     request: Request,
     require_ownership: bool = True,
-    admin_permissions: list[str] | None = None
+    admin_permissions: list[str] | None = None,
 ) -> Server:
     """
     Get server and check permissions.
     Admins can access any server via JWT only, users can only access their own.
     API tokens cannot be used for cross-user server access.
-    
+
     admin_permissions: list of permissions that grant cross-user access.
         Defaults to [SERVERS_ACCESS_OTHERS].
         For read operations, use [SERVERS_READ_ALL, SERVERS_ACCESS_OTHERS].
         For write operations, use [SERVERS_WRITE_ALL, SERVERS_ACCESS_OTHERS].
     """
-    result = await db.execute(
-        select(Server).where(Server.id == server_id)
-    )
+    result = await db.execute(select(Server).where(Server.id == server_id))
     server = result.scalar_one_or_none()
-    
+
     if not server:
         raise HTTPException(status_code=404, detail="Server not found")
-    
+
     if require_ownership and str(server.user_id) != str(current_user.id):
         # Cross-user access requires JWT authentication — API tokens are not allowed
         auth_context = getattr(request.state, "auth_context", None)
         if not auth_context or auth_context.auth_method != "jwt":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Cross-user server access requires JWT authentication. Please log in via the web interface."
+                detail="Cross-user server access requires JWT authentication. Please log in via the web interface.",
             )
         checker = PermissionChecker(current_user)
         perms_to_check = admin_permissions or [Permission.SERVERS_ACCESS_OTHERS]
         checker.require_any(perms_to_check)
-    
+
     return server
 
 
 async def _audit_cross_user_access(
-    server: Server,
-    current_user: User,
-    db: AsyncSession,
-    action: str,
-    reason: Optional[str] = None
+    server: Server, current_user: User, db: AsyncSession, action: str, reason: Optional[str] = None
 ):
     """Log audit trail and notify owner when admin accesses another user's server.
     Raises 400 if reason is not provided for cross-user access."""
     if str(server.user_id) == str(current_user.id):
         return
-    
+
     if not reason or not reason.strip():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="A reason is required for cross-user server access"
+            detail="A reason is required for cross-user server access",
         )
-    
+
     activity_service = ActivityService(db)
     await activity_service.log(
         action=action,
@@ -180,7 +177,7 @@ async def _audit_cross_user_access(
         actor_id=str(current_user.id),
         details={"reason": reason, "server_name": server.name},
     )
-    
+
     notif_service = NotificationService(db)
     await notif_service.create(
         user_id=server.user_id,
@@ -196,16 +193,14 @@ async def _audit_cross_user_access(
 async def _load_server_volume_mounts(db: AsyncSession, server_id: str) -> list:
     """Load volume mounts for spawning a server."""
     from app.models.server_volume import ServerVolume
-    
-    result = await db.execute(
-        select(ServerVolume).where(ServerVolume.server_id == server_id)
-    )
+
+    result = await db.execute(select(ServerVolume).where(ServerVolume.server_id == server_id))
     mounts = result.scalars().all()
-    
+
     if not mounts:
         # Fallback to legacy single volume
         return []
-    
+
     return [
         {
             "volume_id": str(m.volume_id),
@@ -220,19 +215,23 @@ async def _load_server_volume_mounts(db: AsyncSession, server_id: str) -> list:
 def _serialize_volume_mounts(server: Server) -> list:
     """Serialize server volume mounts for API response."""
     mounts = []
-    for vm in getattr(server, 'volume_mounts', []) or []:
-        mounts.append({
-            "volume_id": str(vm.volume_id),
-            "mount_path": vm.mount_path,
-            "mode": vm.mode,
-            "is_primary": vm.is_primary,
-            "volume": {
-                "id": str(vm.volume.id),
-                "name": vm.volume.name,
-                "display_name": vm.volume.display_name,
-                "size_bytes": vm.volume.size_bytes,
-            } if vm.volume else None,
-        })
+    for vm in getattr(server, "volume_mounts", []) or []:
+        mounts.append(
+            {
+                "volume_id": str(vm.volume_id),
+                "mount_path": vm.mount_path,
+                "mode": vm.mode,
+                "is_primary": vm.is_primary,
+                "volume": {
+                    "id": str(vm.volume.id),
+                    "name": vm.volume.name,
+                    "display_name": vm.volume.display_name,
+                    "size_bytes": vm.volume.size_bytes,
+                }
+                if vm.volume
+                else None,
+            }
+        )
     return mounts
 
 
@@ -241,7 +240,7 @@ async def _get_server_volume_mounts(db: AsyncSession, server_id: str) -> list:
     from sqlalchemy.orm import selectinload
     from app.models.server_volume import ServerVolume
     from app.models.volume import Volume
-    
+
     result = await db.execute(
         select(ServerVolume)
         .where(ServerVolume.server_id == server_id)
@@ -259,7 +258,9 @@ async def _get_server_volume_mounts(db: AsyncSession, server_id: str) -> list:
                 "name": m.volume.name,
                 "display_name": m.volume.display_name,
                 "size_bytes": m.volume.size_bytes,
-            } if m.volume else None,
+            }
+            if m.volume
+            else None,
         }
         for m in mounts
     ]
@@ -271,74 +272,74 @@ async def create_server(
     request: Request,
     body: ServerCreateRequest,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.SERVERS_WRITE_OWN)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.SERVERS_WRITE_OWN)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Create and spawn a new server using a plan and environment template."""
     from app.services.quota_service import QuotaService
     from app.services.plan_service import PlanService
     from app.services.environment_service import EnvironmentService
     import uuid
-    
+
     checker = PermissionChecker(current_user)
     checker.require(Permission.SERVERS_WRITE_OWN)
-    
+
     # Validate plan exists and user can use it
     plan_service = PlanService(db)
     plan = await plan_service.get_by_id(body.plan_id)
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
-    
+
     # Check plan access (public, role-based, direct, or workspace)
     can_use = await plan_service.can_user_use_plan(
         str(plan.id), current_user.role, str(current_user.id)
     )
     if not can_use:
         raise HTTPException(status_code=403, detail="Plan not available for your role")
-    
+
     if not plan.is_active:
         raise HTTPException(status_code=400, detail="Plan is not active")
-    
+
     # Validate environment exists
     env_service = EnvironmentService(db)
     environment = await env_service.get_by_id(body.environment_id)
     if not environment:
         raise HTTPException(status_code=404, detail="Environment not found")
-    
+
     # Check quota before spawning
     quota_service = QuotaService(db)
     quota_check = await quota_service.check_spawn_allowed(
-        user_id=str(current_user.id),
-        plan_id=body.plan_id
+        user_id=str(current_user.id), plan_id=body.plan_id
     )
-    
+
     if not quota_check["allowed"]:
         raise HTTPException(status_code=429, detail=quota_check["reason"])
-    
+
     # Check sufficient NUKE credits
     from app.services.credit_service import CreditService
+
     credit_service = CreditService(db)
-    
+
     if settings.credits_enabled:
         has_credits = await credit_service.check_sufficient_credits(
-            user_id=str(current_user.id),
-            required=plan.cost_per_hour
+            user_id=str(current_user.id), required=plan.cost_per_hour
         )
         if not has_credits:
             raise HTTPException(
                 status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                detail=f"Insufficient NUKE credits. Required: {plan.cost_per_hour} for 1 hour"
+                detail=f"Insufficient NUKE credits. Required: {plan.cost_per_hour} for 1 hour",
             )
-    
+
     # Check global resource pool
     from app.services.resource_pool_service import ResourcePoolService
+
     resource_pool = ResourcePoolService(db)
     can_fit = await resource_pool.can_fit(body.plan_id)
-    
+
     if not can_fit:
         # Queue the server instead of rejecting
         from app.models.server_queue import ServerQueue
-        
+
         queue_entry = ServerQueue(
             user_id=current_user.id,
             environment_id=uuid.UUID(body.environment_id),
@@ -353,27 +354,27 @@ async def create_server(
         db.add(queue_entry)
         await db.commit()
         await db.refresh(queue_entry)
-        
+
         queue_position = await resource_pool.get_queue_position(str(queue_entry.id))
-        
+
         return {
             "queued": True,
             "queue_id": str(queue_entry.id),
             "queue_position": queue_position,
             "message": "Server queued due to resource scarcity. It will start automatically when resources are available.",
         }
-    
+
     try:
         from app.services.volume_service import VolumeService
         from app.services.volume_access_service import VolumeAccessService
         from app.models.server_volume import ServerVolume
-        
+
         volume_service = VolumeService(db)
         volume_access = VolumeAccessService(db)
-        
+
         # Build volume_mounts list from new or legacy format
         volume_mounts = []
-        
+
         if body.volume_mounts:
             for idx, vm in enumerate(body.volume_mounts):
                 mount_data = {
@@ -384,31 +385,34 @@ async def create_server(
                 }
                 # Auto-create volume for empty volume_id mounts
                 if not vm.volume_id:
-                    safe_name = re.sub(r'[^a-zA-Z0-9_.-]', '-', body.name).lower()
+                    safe_name = re.sub(r"[^a-zA-Z0-9_.-]", "-", body.name).lower()
                     suffix = "data" if idx == 0 else f"data-{idx}"
                     volume_name = f"nukelab-server-{current_user.username}-{safe_name}-{suffix}"
                     new_vol = await volume_service.create_volume(
                         name=volume_name,
                         display_name=f"{body.name} {suffix.title()}",
                         owner_id=str(current_user.id),
-                        max_size_bytes=vm.max_size_bytes or volume_service._parse_memory(plan.disk_limit),
+                        max_size_bytes=vm.max_size_bytes
+                        or volume_service._parse_memory(plan.disk_limit),
                     )
                     mount_data["volume_id"] = str(new_vol.id)
                 volume_mounts.append(mount_data)
         elif body.volume_id:
             # Legacy single-volume support
-            volume_mounts.append({
-                "volume_id": body.volume_id,
-                "mount_path": f"/home/{current_user.username}",
-                "mode": body.volume_mode or "read_write",
-            })
-        
+            volume_mounts.append(
+                {
+                    "volume_id": body.volume_id,
+                    "mount_path": f"/home/{current_user.username}",
+                    "mode": body.volume_mode or "read_write",
+                }
+            )
+
         # Auto-create primary volume if none provided
         auto_created_volume = None
         auto_created_volume_name = None
         if not volume_mounts:
             # Sanitize volume name to ensure Docker compatibility
-            safe_name = re.sub(r'[^a-zA-Z0-9_.-]', '-', body.name).lower()
+            safe_name = re.sub(r"[^a-zA-Z0-9_.-]", "-", body.name).lower()
             volume_name = f"nukelab-server-{current_user.username}-{safe_name}-data"
             auto_created_volume_name = volume_name
             auto_created_volume = await volume_service.create_volume(
@@ -417,23 +421,25 @@ async def create_server(
                 owner_id=str(current_user.id),
                 max_size_bytes=volume_service._parse_memory(plan.disk_limit),
             )
-            volume_mounts.append({
-                "volume_id": str(auto_created_volume.id),
-                "mount_path": f"/home/{current_user.username}",
-                "mode": "read_write",
-                "is_primary": True,
-            })
+            volume_mounts.append(
+                {
+                    "volume_id": str(auto_created_volume.id),
+                    "mount_path": f"/home/{current_user.username}",
+                    "mode": "read_write",
+                    "is_primary": True,
+                }
+            )
         else:
             # Mark first mount as primary if none marked
             has_primary = any(m.get("is_primary") for m in volume_mounts)
             if not has_primary:
                 volume_mounts[0]["is_primary"] = True
-        
+
         # Validate each volume mount
         for vm in volume_mounts:
             vol_id = vm["volume_id"]
             mode = vm["mode"]
-            
+
             if not await volume_access.can_access_volume(vol_id, str(current_user.id), mode):
                 vol = await volume_service.get_volume(vol_id)
                 vol_name = vol.display_name if vol else vol_id
@@ -444,18 +450,17 @@ async def create_server(
                         f"Volume '{vol_name}' cannot be mounted as {mode_label}. "
                         f"You may have read-only access via a shared workspace. "
                         f"Contact the workspace owner to request write access."
-                    )
+                    ),
                 )
-            
+
         # Check volume quotas (per-volume + aggregate) in a single batch
         all_volume_ids = [vm["volume_id"] for vm in volume_mounts]
         quota_check = await volume_service.check_volumes_quota(all_volume_ids, plan.disk_limit)
         if not quota_check["allowed"]:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=quota_check["reason"]
+                status_code=status.HTTP_400_BAD_REQUEST, detail=quota_check["reason"]
             )
-        
+
         # Spawn the container using plan resources + environment image
         server = await spawner.spawn(
             user_id=str(current_user.id),
@@ -469,22 +474,25 @@ async def create_server(
             disk=plan.disk_limit,
             volume_mounts=volume_mounts,
         )
-        
+
         # Store plan reference
         server.plan_id = uuid.UUID(body.plan_id)
         server.last_activity = datetime.now(UTC).replace(tzinfo=None)
-        
+
         # Set expiration based on max_runtime
         from app.core.time_utils import parse_duration
+
         max_runtime_seconds = parse_duration(plan.max_runtime)
         if max_runtime_seconds > 0:
-            server.expires_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(seconds=max_runtime_seconds)
-        
+            server.expires_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(
+                seconds=max_runtime_seconds
+            )
+
         # Save to database
         db.add(server)
         await db.commit()
         await db.refresh(server)
-        
+
         # Create ServerVolume rows
         for vm in volume_mounts:
             sv = ServerVolume(
@@ -501,15 +509,12 @@ async def create_server(
             home_mount_path = f"/home/{current_user.username}"
             if vm["mount_path"] == home_mount_path:
                 await volume_service.mark_home_volume(vm["volume_id"])
-        
+
         await db.commit()
-        
+
         # Increment quota usage
-        await quota_service.increment_usage(
-            user_id=str(current_user.id),
-            plan_id=body.plan_id
-        )
-        
+        await quota_service.increment_usage(user_id=str(current_user.id), plan_id=body.plan_id)
+
         # Build volume_mounts response
         vm_response = [
             {
@@ -520,7 +525,7 @@ async def create_server(
             }
             for vm in volume_mounts
         ]
-        
+
         await _invalidate_server_list_cache(str(current_user.id))
 
         return ServerResponse(
@@ -548,27 +553,31 @@ async def create_server(
         raise
     except Exception:
         await db.rollback()
-        
+
         # Clean up auto-created Docker volume on failure to allow retries.
         # DB record is rolled back automatically by db.rollback() above.
         if auto_created_volume_name:
             try:
                 from app.container.client import get_container_client
+
                 container_client = await get_container_client()
                 try:
                     vol = await container_client.client.volumes.get(auto_created_volume_name)
                     await vol.delete()
                     logger.info(f"Cleaned up Docker volume: {auto_created_volume_name}")
                 except Exception as e:
-                    logger.warning(f"Failed to delete Docker volume {auto_created_volume_name}: {e}")
+                    logger.warning(
+                        f"Failed to delete Docker volume {auto_created_volume_name}: {e}"
+                    )
             except Exception as e:
                 logger.warning(f"Failed to clean up auto-created volume: {e}")
-        
+
         # Delete orphaned DB volume record using a fresh session to avoid greenlet issues
         if auto_created_volume_name:
             try:
                 from app.db.session import async_session
                 from app.models.volume import Volume
+
                 async with async_session() as cleanup_db:
                     result = await cleanup_db.execute(
                         select(Volume).where(Volume.name == auto_created_volume_name)
@@ -580,10 +589,11 @@ async def create_server(
                         logger.info(f"Cleaned up DB volume record: {auto_created_volume_name}")
             except Exception as e:
                 logger.warning(f"Failed to clean up DB volume record: {e}")
-        
+
         # Also clean up any container that may have been created
         try:
             from app.container.client import get_container_client
+
             container_client = await get_container_client()
             container_name = f"nukelab-server-{current_user.username}-{body.name}"
             try:
@@ -593,19 +603,19 @@ async def create_server(
                 pass
         except Exception:
             pass
-        
+
         logger.exception("Server creation failed")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create server. Please try again or contact support."
+            detail="Failed to create server. Please try again or contact support.",
         )
 
 
 @router.get("/")
 async def list_servers(
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.SERVERS_READ_ALL)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.SERVERS_READ_ALL)),
+    db: AsyncSession = Depends(get_db),
 ):
     """List servers. Users see own servers, admins see all.
 
@@ -616,6 +626,7 @@ async def list_servers(
 
     async def _build_response():
         from sqlalchemy.orm import joinedload
+
         checker = PermissionChecker(current_user)
 
         from sqlalchemy.orm import selectinload
@@ -629,7 +640,8 @@ async def list_servers(
             )
         else:
             result = await db.execute(
-                select(Server).where(Server.user_id == current_user.id)
+                select(Server)
+                .where(Server.user_id == current_user.id)
                 .options(joinedload(Server.user))
                 .options(selectinload(Server.volume_mounts).selectinload(ServerVolume.volume))
             )
@@ -692,13 +704,16 @@ async def get_server(
     server_id: str,
     request: Request,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.SERVERS_READ_ALL)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.SERVERS_READ_ALL)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get server details. Users can view own, admins can view any."""
     server = await get_server_with_permission_check(
-        server_id, current_user, db, request,
-        admin_permissions=[Permission.SERVERS_READ_ALL, Permission.SERVERS_ACCESS_OTHERS]
+        server_id,
+        current_user,
+        db,
+        request,
+        admin_permissions=[Permission.SERVERS_READ_ALL, Permission.SERVERS_ACCESS_OTHERS],
     )
 
     if server.container_id:
@@ -748,17 +763,17 @@ async def get_server_by_path(
     username: str,
     server_name: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.SERVERS_READ_ALL)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.SERVERS_READ_ALL)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get server by username and server name. Used by server gateway page."""
     from sqlalchemy.orm import joinedload
 
     result = await db.execute(
-        select(Server).join(User).where(
-            User.username == username,
-            Server.name == server_name
-        ).options(joinedload(Server.user))
+        select(Server)
+        .join(User)
+        .where(User.username == username, Server.name == server_name)
+        .options(joinedload(Server.user))
     )
     server = result.scalar_one_or_none()
 
@@ -844,13 +859,12 @@ async def _perform_server_start(
         if plan and plan.cost_per_hour > 0:
             credit_service = CreditService(db)
             has_credits = await credit_service.check_sufficient_credits(
-                user_id=str(server.user_id),
-                required=plan.cost_per_hour
+                user_id=str(server.user_id), required=plan.cost_per_hour
             )
             if not has_credits:
                 raise HTTPException(
                     status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                    detail=f"Insufficient NUKE credits. Required: {plan.cost_per_hour} for 1 hour"
+                    detail=f"Insufficient NUKE credits. Required: {plan.cost_per_hour} for 1 hour",
                 )
 
     # Load volume mounts
@@ -866,8 +880,7 @@ async def _perform_server_start(
             quota_check = await volume_service.check_volumes_quota(all_volume_ids, plan.disk_limit)
             if not quota_check["allowed"]:
                 raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=quota_check["reason"]
+                    status_code=status.HTTP_400_BAD_REQUEST, detail=quota_check["reason"]
                 )
 
     if server.container_id:
@@ -875,20 +888,30 @@ async def _perform_server_start(
             actual_status = await spawner.get_status(server.container_id)
             if actual_status == "running":
                 await broadcast_server_status_change(server.user_id, server_id, "running")
-                return {"message": "Server already running", "server_id": server_id, "status": "running"}
+                return {
+                    "message": "Server already running",
+                    "server_id": server_id,
+                    "status": "running",
+                }
 
             if actual_status in ("unknown", "stopped"):
                 if actual_status == "unknown":
                     logger.warning("Container %s not found, recreating...", server.container_id)
                 else:
-                    logger.warning("Container %s is stopped, deleting and recreating...", server.container_id)
+                    logger.warning(
+                        "Container %s is stopped, deleting and recreating...", server.container_id
+                    )
                     try:
                         await spawner.delete(server.container_id)
                     except Exception:
                         logger.exception("Warning: failed to delete stale container")
 
                 env_service = EnvironmentService(db)
-                environment = await env_service.get_by_id(str(server.environment_id)) if server.environment_id else None
+                environment = (
+                    await env_service.get_by_id(str(server.environment_id))
+                    if server.environment_id
+                    else None
+                )
                 plan_service = PlanService(db)
                 plan = await plan_service.get_by_id(str(server.plan_id)) if server.plan_id else None
 
@@ -921,7 +944,11 @@ async def _perform_server_start(
 
                 await db.commit()
                 await broadcast_server_status_change(server.user_id, server_id, "running")
-                return {"message": "Server container recreated and started", "server_id": server_id, "status": "running"}
+                return {
+                    "message": "Server container recreated and started",
+                    "server_id": server_id,
+                    "status": "running",
+                }
 
             success = await spawner.start(server.container_id)
             if not success:
@@ -942,9 +969,7 @@ async def _perform_server_start(
 
             notif_service = NotificationService(db)
             await notif_service.server_started(
-                user_id=server.user_id,
-                server_name=server.name,
-                action_url=f"/servers/{server_id}"
+                user_id=server.user_id, server_name=server.name, action_url=f"/servers/{server_id}"
             )
 
             await db.commit()
@@ -956,13 +981,12 @@ async def _perform_server_start(
             logger.exception("Server start failed")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to start server. Please try again or contact support."
+                detail="Failed to start server. Please try again or contact support.",
             )
     else:
         if not server.environment_id or not server.plan_id:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Server configuration incomplete"
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Server configuration incomplete"
             )
 
         env_service = EnvironmentService(db)
@@ -1016,9 +1040,7 @@ async def _perform_server_start(
 
             notif_service = NotificationService(db)
             await notif_service.server_started(
-                user_id=server.user_id,
-                server_name=server.name,
-                action_url=f"/servers/{server_id}"
+                user_id=server.user_id, server_name=server.name, action_url=f"/servers/{server_id}"
             )
 
             await broadcast_server_status_change(server.user_id, server_id, "running")
@@ -1029,7 +1051,7 @@ async def _perform_server_start(
             logger.exception("Server spawn failed during restart")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to restart server. Please try again or contact support."
+                detail="Failed to restart server. Please try again or contact support.",
             )
 
 
@@ -1054,7 +1076,11 @@ async def _perform_server_stop(
                 server.container_id = None
                 await db.commit()
                 await broadcast_server_status_change(server.user_id, server_id, "stopped")
-                return {"message": "Server already stopped", "server_id": server_id, "status": "stopped"}
+                return {
+                    "message": "Server already stopped",
+                    "server_id": server_id,
+                    "status": "stopped",
+                }
 
             await spawner.delete(server.container_id)
             server.container_id = None
@@ -1073,17 +1099,14 @@ async def _perform_server_stop(
             if server.plan_id:
                 quota_service = QuotaService(db)
                 await quota_service.decrement_usage(
-                    user_id=str(server.user_id),
-                    plan_id=str(server.plan_id)
+                    user_id=str(server.user_id), plan_id=str(server.plan_id)
                 )
 
             await db.commit()
 
             notif_service = NotificationService(db)
             await notif_service.server_stopped(
-                user_id=server.user_id,
-                server_name=server.name,
-                action_url=f"/servers/{server_id}"
+                user_id=server.user_id, server_name=server.name, action_url=f"/servers/{server_id}"
             )
 
             await broadcast_server_status_change(server.user_id, server_id, "stopped")
@@ -1094,7 +1117,7 @@ async def _perform_server_stop(
             logger.exception("Server stop failed")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to stop server. Please try again or contact support."
+                detail="Failed to stop server. Please try again or contact support.",
             )
 
     server.status = "stopped"
@@ -1102,9 +1125,7 @@ async def _perform_server_stop(
 
     notif_service = NotificationService(db)
     await notif_service.server_stopped(
-        user_id=server.user_id,
-        server_name=server.name,
-        action_url=f"/servers/{server_id}"
+        user_id=server.user_id, server_name=server.name, action_url=f"/servers/{server_id}"
     )
 
     await broadcast_server_status_change(server.user_id, server_id, "stopped")
@@ -1139,13 +1160,12 @@ async def _perform_server_restart(
         if plan and plan.cost_per_hour > 0:
             credit_service = CreditService(db)
             has_credits = await credit_service.check_sufficient_credits(
-                user_id=str(server.user_id),
-                required=plan.cost_per_hour
+                user_id=str(server.user_id), required=plan.cost_per_hour
             )
             if not has_credits:
                 raise HTTPException(
                     status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                    detail=f"Insufficient NUKE credits. Required: {plan.cost_per_hour} for 1 hour"
+                    detail=f"Insufficient NUKE credits. Required: {plan.cost_per_hour} for 1 hour",
                 )
 
     volume_mounts = await _load_server_volume_mounts(db, str(server.id))
@@ -1159,8 +1179,7 @@ async def _perform_server_restart(
             quota_check = await volume_service.check_volumes_quota(all_volume_ids, plan.disk_limit)
             if not quota_check["allowed"]:
                 raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=quota_check["reason"]
+                    status_code=status.HTTP_400_BAD_REQUEST, detail=quota_check["reason"]
                 )
 
     if server.container_id:
@@ -1168,7 +1187,11 @@ async def _perform_server_restart(
             actual_status = await spawner.get_status(server.container_id)
             if actual_status == "unknown":
                 env_service = EnvironmentService(db)
-                environment = await env_service.get_by_id(str(server.environment_id)) if server.environment_id else None
+                environment = (
+                    await env_service.get_by_id(str(server.environment_id))
+                    if server.environment_id
+                    else None
+                )
                 plan_service = PlanService(db)
                 plan = await plan_service.get_by_id(str(server.plan_id)) if server.plan_id else None
 
@@ -1204,11 +1227,15 @@ async def _perform_server_restart(
                 await notif_service.server_restarted(
                     user_id=server.user_id,
                     server_name=server.name,
-                    action_url=f"/servers/{server_id}"
+                    action_url=f"/servers/{server_id}",
                 )
 
                 await broadcast_server_status_change(server.user_id, server_id, "running")
-                return {"message": "Server container recreated and started", "server_id": server_id, "status": "running"}
+                return {
+                    "message": "Server container recreated and started",
+                    "server_id": server_id,
+                    "status": "running",
+                }
 
             await spawner.stop(server.container_id)
             await spawner.start(server.container_id)
@@ -1220,9 +1247,7 @@ async def _perform_server_restart(
 
             notif_service = NotificationService(db)
             await notif_service.server_restarted(
-                user_id=server.user_id,
-                server_name=server.name,
-                action_url=f"/servers/{server_id}"
+                user_id=server.user_id, server_name=server.name, action_url=f"/servers/{server_id}"
             )
 
             await broadcast_server_status_change(server.user_id, server_id, "running")
@@ -1233,12 +1258,11 @@ async def _perform_server_restart(
             logger.exception("Server restart failed")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to restart server. Please try again or contact support."
+                detail="Failed to restart server. Please try again or contact support.",
             )
 
     raise HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail="No container associated with this server"
+        status_code=status.HTTP_400_BAD_REQUEST, detail="No container associated with this server"
     )
 
 
@@ -1260,9 +1284,7 @@ async def _perform_server_delete(
         except Exception:
             logger.exception("Warning: Failed to delete container")
 
-    await db.execute(
-        delete(CreditTransaction).where(CreditTransaction.server_id == server.id)
-    )
+    await db.execute(delete(CreditTransaction).where(CreditTransaction.server_id == server.id))
 
     user_id = server.user_id
     server_name = server.name
@@ -1271,10 +1293,7 @@ async def _perform_server_delete(
     await db.commit()
 
     notif_service = NotificationService(db)
-    await notif_service.server_deleted(
-        user_id=user_id,
-        server_name=server_name
-    )
+    await notif_service.server_deleted(user_id=user_id, server_name=server_name)
 
     return {"message": "Server deleted", "server_id": server_id}
 
@@ -1285,13 +1304,16 @@ async def start_server(
     http_request: Request,
     body: ReasonRequest = ReasonRequest(),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.SERVERS_WRITE_OWN)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.SERVERS_WRITE_OWN)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Start a stopped server."""
     server = await get_server_with_permission_check(
-        server_id, current_user, db, http_request,
-        admin_permissions=[Permission.SERVERS_WRITE_ALL, Permission.SERVERS_ACCESS_OTHERS]
+        server_id,
+        current_user,
+        db,
+        http_request,
+        admin_permissions=[Permission.SERVERS_WRITE_ALL, Permission.SERVERS_ACCESS_OTHERS],
     )
 
     checker = PermissionChecker(current_user)
@@ -1312,13 +1334,16 @@ async def stop_server(
     http_request: Request,
     body: ReasonRequest = ReasonRequest(),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.SERVERS_WRITE_OWN)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.SERVERS_WRITE_OWN)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Stop a server."""
     server = await get_server_with_permission_check(
-        server_id, current_user, db, http_request,
-        admin_permissions=[Permission.SERVERS_WRITE_ALL, Permission.SERVERS_ACCESS_OTHERS]
+        server_id,
+        current_user,
+        db,
+        http_request,
+        admin_permissions=[Permission.SERVERS_WRITE_ALL, Permission.SERVERS_ACCESS_OTHERS],
     )
 
     checker = PermissionChecker(current_user)
@@ -1339,13 +1364,16 @@ async def restart_server(
     http_request: Request,
     body: ReasonRequest = ReasonRequest(),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.SERVERS_WRITE_OWN)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.SERVERS_WRITE_OWN)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Restart a server."""
     server = await get_server_with_permission_check(
-        server_id, current_user, db, http_request,
-        admin_permissions=[Permission.SERVERS_WRITE_ALL, Permission.SERVERS_ACCESS_OTHERS]
+        server_id,
+        current_user,
+        db,
+        http_request,
+        admin_permissions=[Permission.SERVERS_WRITE_ALL, Permission.SERVERS_ACCESS_OTHERS],
     )
 
     checker = PermissionChecker(current_user)
@@ -1366,13 +1394,16 @@ async def delete_server(
     request: Request,
     reason: Optional[str] = None,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.SERVERS_WRITE_OWN)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.SERVERS_WRITE_OWN)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Delete a server."""
     server = await get_server_with_permission_check(
-        server_id, current_user, db, request,
-        admin_permissions=[Permission.SERVERS_WRITE_ALL, Permission.SERVERS_ACCESS_OTHERS]
+        server_id,
+        current_user,
+        db,
+        request,
+        admin_permissions=[Permission.SERVERS_WRITE_ALL, Permission.SERVERS_ACCESS_OTHERS],
     )
 
     checker = PermissionChecker(current_user)
@@ -1392,13 +1423,16 @@ async def get_server_volumes(
     server_id: str,
     request: Request,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.SERVERS_READ_ALL)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.SERVERS_READ_ALL)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get volume mounts for a server."""
     server = await get_server_with_permission_check(
-        server_id, current_user, db, request,
-        admin_permissions=[Permission.SERVERS_READ_ALL, Permission.SERVERS_ACCESS_OTHERS]
+        server_id,
+        current_user,
+        db,
+        request,
+        admin_permissions=[Permission.SERVERS_READ_ALL, Permission.SERVERS_ACCESS_OTHERS],
     )
     return {"volume_mounts": await _get_server_volume_mounts(db, str(server.id))}
 
@@ -1409,20 +1443,23 @@ async def update_server(
     http_request: Request,
     body: ServerUpdateRequest,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.SERVERS_WRITE_ALL)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.SERVERS_WRITE_ALL)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Update server configuration. Any config change that affects the container
     triggers a recreate (stop → delete → spawn with new config)."""
     server = await get_server_with_permission_check(
-        server_id, current_user, db, http_request,
-        admin_permissions=[Permission.SERVERS_WRITE_ALL, Permission.SERVERS_ACCESS_OTHERS]
+        server_id,
+        current_user,
+        db,
+        http_request,
+        admin_permissions=[Permission.SERVERS_WRITE_ALL, Permission.SERVERS_ACCESS_OTHERS],
     )
-    
+
     # Audit cross-user config updates
     if str(server.user_id) != str(current_user.id):
         await _audit_cross_user_access(server, current_user, db, "server.update", body.reason)
-    
+
     from app.services.quota_service import QuotaService
     from app.services.plan_service import PlanService
     from app.services.environment_service import EnvironmentService
@@ -1431,17 +1468,17 @@ async def update_server(
     from app.models.server_volume import ServerVolume
     from sqlalchemy import delete as sa_delete
     import uuid
-    
+
     volume_service = VolumeService(db)
     volume_access = VolumeAccessService(db)
-    
+
     # Track if we need to recreate the container
     needs_recreate = False
-    
+
     # Validate and apply name change (no recreate needed)
     if body.name is not None:
         server.name = body.name
-    
+
     # Validate and apply plan change
     if body.plan_id is not None:
         plan_service = PlanService(db)
@@ -1455,23 +1492,21 @@ async def update_server(
             raise HTTPException(status_code=403, detail="Plan not available for your role")
         if not plan.is_active:
             raise HTTPException(status_code=400, detail="Plan is not active")
-        
+
         # Check quota - exclude current server since we're replacing its resources
         quota_service = QuotaService(db)
         quota_check = await quota_service.check_spawn_allowed(
-            user_id=str(current_user.id),
-            plan_id=body.plan_id,
-            exclude_server_id=str(server.id)
+            user_id=str(current_user.id), plan_id=body.plan_id, exclude_server_id=str(server.id)
         )
         if not quota_check["allowed"]:
             raise HTTPException(status_code=429, detail=quota_check["reason"])
-        
+
         server.plan_id = uuid.UUID(body.plan_id)
         server.allocated_cpu = plan.cpu_limit
         server.allocated_memory = plan.memory_limit
         server.allocated_disk = plan.disk_limit
         needs_recreate = True
-    
+
     # Validate and apply environment change
     if body.environment_id is not None:
         env_service = EnvironmentService(db)
@@ -1480,7 +1515,7 @@ async def update_server(
             raise HTTPException(status_code=404, detail="Environment not found")
         server.environment_id = uuid.UUID(body.environment_id)
         needs_recreate = True
-    
+
     # Validate and apply volume mounts change
     new_volume_mounts = None
     disk_limit = None
@@ -1491,28 +1526,32 @@ async def update_server(
             plan_service = PlanService(db)
             plan = await plan_service.get_by_id(str(server.plan_id))
         disk_limit = plan.disk_limit if plan else server.allocated_disk
-        
+
         for idx, vm in enumerate(body.volume_mounts):
             mount_data = {
                 "volume_id": vm.volume_id,
                 "mount_path": vm.mount_path or "/data",
                 "mode": vm.mode or "read_write",
             }
-            
+
             # Auto-create volume for empty volume_id mounts
             if not vm.volume_id:
-                safe_name = re.sub(r'[^a-zA-Z0-9_.-]', '-', server.name).lower()
+                safe_name = re.sub(r"[^a-zA-Z0-9_.-]", "-", server.name).lower()
                 suffix = "data" if idx == 0 else f"data-{idx}"
                 volume_name = f"nukelab-server-{current_user.username}-{safe_name}-{suffix}"
                 new_vol = await volume_service.create_volume(
                     name=volume_name,
                     display_name=f"{server.name} {suffix.title()}",
                     owner_id=str(current_user.id),
-                    max_size_bytes=vm.max_size_bytes or volume_service._parse_memory(disk_limit) if disk_limit else None,
+                    max_size_bytes=vm.max_size_bytes or volume_service._parse_memory(disk_limit)
+                    if disk_limit
+                    else None,
                 )
                 mount_data["volume_id"] = str(new_vol.id)
             else:
-                if not await volume_access.can_access_volume(vm.volume_id, str(current_user.id), vm.mode):
+                if not await volume_access.can_access_volume(
+                    vm.volume_id, str(current_user.id), vm.mode
+                ):
                     vol = await volume_service.get_volume(vm.volume_id)
                     vol_name = vol.display_name if vol else vm.volume_id
                     mode_label = "read-write" if vm.mode == "read_write" else "read-only"
@@ -1522,28 +1561,27 @@ async def update_server(
                             f"Volume '{vol_name}' cannot be mounted as {mode_label}. "
                             f"You may have read-only access via a shared workspace. "
                             f"Contact the workspace owner to request write access."
-                        )
+                        ),
                     )
-            
+
             new_volume_mounts.append(mount_data)
-        
+
         # Check volume quotas (per-volume + aggregate) in a single batch
         if new_volume_mounts and disk_limit:
             all_volume_ids = [vm["volume_id"] for vm in new_volume_mounts]
             quota_check = await volume_service.check_volumes_quota(all_volume_ids, disk_limit)
             if not quota_check["allowed"]:
                 raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=quota_check["reason"]
+                    status_code=status.HTTP_400_BAD_REQUEST, detail=quota_check["reason"]
                 )
-        
+
         # Mark first as primary if none specified
         has_primary = any(m.get("is_primary") for m in new_volume_mounts)
         if not has_primary and new_volume_mounts:
             new_volume_mounts[0]["is_primary"] = True
-        
+
         needs_recreate = True
-    
+
     # If server is running and needs recreate, stop and delete it first
     if needs_recreate and server.container_id:
         try:
@@ -1553,18 +1591,16 @@ async def update_server(
             await spawner.delete(server.container_id)
         except Exception:
             logger.exception("Warning: failed to stop/delete container during update")
-        
+
         server.container_id = None
         server.status = "stopped"
         server.stopped_at = datetime.now(UTC).replace(tzinfo=None)
-    
+
     # Apply volume mount changes in DB
     if new_volume_mounts is not None:
         # Delete old mounts
-        await db.execute(
-            sa_delete(ServerVolume).where(ServerVolume.server_id == server.id)
-        )
-        
+        await db.execute(sa_delete(ServerVolume).where(ServerVolume.server_id == server.id))
+
         # Create new mounts
         for vm in new_volume_mounts:
             sv = ServerVolume(
@@ -1576,43 +1612,52 @@ async def update_server(
             )
             db.add(sv)
             # Persist home-directory flag for privacy warnings even after deletion
-            if 'server_owner' not in locals():
+            if "server_owner" not in locals():
                 from sqlalchemy import select as sa_select
                 from app.models.user import User
+
                 result = await db.execute(sa_select(User).where(User.id == server.user_id))
                 server_owner = result.scalar_one_or_none()
             owner = server_owner or current_user
             home_mount_path = f"/home/{owner.username}"
             if vm["mount_path"] == home_mount_path:
                 await volume_service.mark_home_volume(vm["volume_id"])
-        
+
         # Update legacy fields
-        primary = next((m for m in new_volume_mounts if m.get("is_primary")), new_volume_mounts[0] if new_volume_mounts else None)
+        primary = next(
+            (m for m in new_volume_mounts if m.get("is_primary")),
+            new_volume_mounts[0] if new_volume_mounts else None,
+        )
         if primary:
             server.volume_id = uuid.UUID(primary["volume_id"])
-    
+
     await db.commit()
     if needs_recreate and server.status == "stopped":
         await broadcast_server_status_change(server.user_id, str(server.id), "stopped")
     await db.refresh(server)
-    
+
     # If container was deleted, respawn with new config
     if needs_recreate and not server.container_id:
         env_service = EnvironmentService(db)
-        environment = await env_service.get_by_id(str(server.environment_id)) if server.environment_id else None
+        environment = (
+            await env_service.get_by_id(str(server.environment_id))
+            if server.environment_id
+            else None
+        )
         plan_service = PlanService(db)
         plan = await plan_service.get_by_id(str(server.plan_id)) if server.plan_id else None
-        
+
         # Get server owner's username
         from sqlalchemy import select as sa_select
         from app.models.user import User
+
         result = await db.execute(sa_select(User).where(User.id == server.user_id))
         server_owner = result.scalar_one_or_none()
         owner_username = server_owner.username if server_owner else current_user.username
-        
+
         # Load current volume mounts for spawn
         spawn_mounts = await _load_server_volume_mounts(db, str(server.id))
-        
+
         try:
             new_server_container = await spawner.spawn(
                 user_id=str(server.user_id),
@@ -1627,7 +1672,7 @@ async def update_server(
                 volume_mounts=spawn_mounts or None,
                 server_id=str(server.id),
             )
-            
+
             server.container_id = new_server_container.container_id
             server.image = new_server_container.image
             server.volume_id = new_server_container.volume_id
@@ -1636,7 +1681,7 @@ async def update_server(
             server.external_url = new_server_container.external_url
             server.stop_reason = None
             server.stopped_at = None
-            
+
             await db.commit()
             await broadcast_server_status_change(server.user_id, str(server.id), "running")
         except Exception:
@@ -1646,9 +1691,9 @@ async def update_server(
             await db.commit()
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to apply configuration changes. Please try again or contact support."
+                detail="Failed to apply configuration changes. Please try again or contact support.",
             )
-    
+
     await _invalidate_server_list_cache(str(server.user_id))
 
     return ServerResponse(
@@ -1677,7 +1722,7 @@ async def update_server(
 async def test_metric(
     server_id: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.SERVERS_READ_ALL)),
+    _=Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.SERVERS_READ_ALL)),
 ):
     """Send a test metric via Redis pub/sub to verify WebSocket pipeline."""
     import json
@@ -1707,7 +1752,7 @@ async def test_metric(
         logger.exception("Failed to publish test metric")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to publish test metric"
+            detail="Failed to publish test metric",
         )
 
     # Check active WebSocket connections
@@ -1729,61 +1774,69 @@ async def ping_server_activity(
     server_id: str,
     request: Request,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.SERVERS_WRITE_OWN)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.SERVERS_WRITE_OWN)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Update last_activity timestamp for a server. Called when user accesses the server."""
     server = await get_server_with_permission_check(
-        server_id, current_user, db, request,
-        admin_permissions=[Permission.SERVERS_WRITE_ALL, Permission.SERVERS_ACCESS_OTHERS]
+        server_id,
+        current_user,
+        db,
+        request,
+        admin_permissions=[Permission.SERVERS_WRITE_ALL, Permission.SERVERS_ACCESS_OTHERS],
     )
-    
+
     if server.status != "running":
         raise HTTPException(status_code=400, detail="Server is not running")
-    
+
     server.last_activity = datetime.now(UTC).replace(tzinfo=None)
     await db.commit()
     await _invalidate_server_list_cache(str(server.user_id))
 
-    return {"message": "Activity recorded", "server_id": server_id, "last_activity": server.last_activity.isoformat()}
+    return {
+        "message": "Activity recorded",
+        "server_id": server_id,
+        "last_activity": server.last_activity.isoformat(),
+    }
 
 
 @router.get("/{server_id}/queue-status")
 async def get_server_queue_status(
     server_id: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.SERVERS_READ_ALL)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.SERVERS_READ_ALL)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get queue status for a server that is waiting in queue."""
     from app.models.server_queue import ServerQueue
     from app.services.resource_pool_service import ResourcePoolService
-    
+
     result = await db.execute(
-        select(ServerQueue).where(
-            ServerQueue.user_id == current_user.id,
-            ServerQueue.status == "pending"
-        ).order_by(ServerQueue.requested_at.desc())
+        select(ServerQueue)
+        .where(ServerQueue.user_id == current_user.id, ServerQueue.status == "pending")
+        .order_by(ServerQueue.requested_at.desc())
     )
     entries = result.scalars().all()
-    
+
     if not entries:
         return {"queued": False, "entries": []}
-    
+
     resource_pool = ResourcePoolService(db)
-    
+
     queue_data = []
     for entry in entries:
         position = await resource_pool.get_queue_position(str(entry.id))
-        queue_data.append({
-            "id": str(entry.id),
-            "server_name": entry.server_name,
-            "status": entry.status,
-            "priority": entry.priority,
-            "position": position,
-            "requested_at": entry.requested_at.isoformat() if entry.requested_at else None,
-        })
-    
+        queue_data.append(
+            {
+                "id": str(entry.id),
+                "server_name": entry.server_name,
+                "status": entry.status,
+                "priority": entry.priority,
+                "position": position,
+                "requested_at": entry.requested_at.isoformat() if entry.requested_at else None,
+            }
+        )
+
     return {
         "queued": True,
         "entries": queue_data,
@@ -1798,15 +1851,18 @@ async def get_server_logs(
     since: Optional[str] = None,
     follow: bool = False,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.SERVERS_READ_ALL)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.SERVERS_READ_ALL)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get server container logs."""
     server = await get_server_with_permission_check(
-        server_id, current_user, db, request,
-        admin_permissions=[Permission.SERVERS_READ_ALL, Permission.SERVERS_ACCESS_OTHERS]
+        server_id,
+        current_user,
+        db,
+        request,
+        admin_permissions=[Permission.SERVERS_READ_ALL, Permission.SERVERS_ACCESS_OTHERS],
     )
-    
+
     if not server.container_id:
         return {
             "server_id": server_id,
@@ -1815,26 +1871,26 @@ async def get_server_logs(
             "follow": follow,
             "status": "stopped",
         }
-    
+
     try:
         # Parse since timestamp
         since_timestamp = None
         if since:
             try:
-                since_dt = datetime.fromisoformat(since.replace('Z', '+00:00'))
+                since_dt = datetime.fromisoformat(since.replace("Z", "+00:00"))
                 since_timestamp = int(since_dt.timestamp())
             except ValueError:
                 pass
-        
+
         logs = await spawner.container_client.get_container_logs(
             container_id=server.container_id,
             tail=tail,
             since=since_timestamp,
             timestamps=True,
             stdout=True,
-            stderr=True
+            stderr=True,
         )
-        
+
         return {
             "server_id": server_id,
             "logs": logs,
@@ -1855,11 +1911,12 @@ async def get_server_logs(
         logger.exception("Server logs retrieval failed")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve logs. Please try again or contact support."
+            detail="Failed to retrieve logs. Please try again or contact support.",
         )
 
 
 # ── Server Access Token Endpoints ────────────────────────────────────────────
+
 
 class ServerAccessTokenResponse(BaseModel):
     access_token: str
@@ -1878,38 +1935,38 @@ async def create_server_access_token(
     request: Request,
     body: ServerAccessTokenRequest,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.SERVERS_WRITE_OWN)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.SERVERS_WRITE_OWN)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Generate a short-lived access token for direct server access.
-    
+
     Returns the token as an HttpOnly cookie for secure browser access.
     The cookie is scoped to path=/ and expires with the token (5 minutes default).
     A reason is required for cross-user access.
     """
     server = await get_server_with_permission_check(server_id, current_user, db, request)
-    
+
     if server.status != "running":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Server must be running to generate access token"
+            detail="Server must be running to generate access token",
         )
-    
+
     # Audit cross-user access (enforces reason for non-owners)
     await _audit_cross_user_access(server, current_user, db, "server_access", body.reason)
-    
+
     from app.services.server_auth_service import server_auth_service
-    
+
     if not server_auth_service.is_enabled:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Server authentication is not enabled"
+            detail="Server authentication is not enabled",
         )
-    
+
     try:
         client_ip = request.client.host if request.client else None
         user_agent = request.headers.get("user-agent")
-        
+
         token = await server_auth_service.generate_access_token(
             db=db,
             server_id=server.id,
@@ -1918,7 +1975,7 @@ async def create_server_access_token(
             user_agent=user_agent,
             token_type="session",
         )
-        
+
         # Return token as HttpOnly cookie - more secure than JSON body
         # Cookie is automatically sent by browser on subsequent requests
         response = Response(status_code=200)
@@ -1931,20 +1988,20 @@ async def create_server_access_token(
             secure=False,  # Set to True in production (HTTPS only)
             samesite="lax",
         )
-        
+
         return response
-        
+
     except ValueError:
         logger.exception("Access token rate limit exceeded")
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Rate limit exceeded. Please try again later."
+            detail="Rate limit exceeded. Please try again later.",
         )
     except Exception:
         logger.exception("Access token generation failed")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to generate access token. Please try again or contact support."
+            detail="Failed to generate access token. Please try again or contact support.",
         )
 
 
@@ -1953,14 +2010,18 @@ async def get_server_access_stats(
     server_id: str,
     request: Request,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.SERVERS_READ_ALL)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.SERVERS_READ_ALL)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get access statistics for a server."""
     server = await get_server_with_permission_check(
-        server_id, current_user, db, request,
-        admin_permissions=[Permission.SERVERS_READ_ALL, Permission.SERVERS_ACCESS_OTHERS]
+        server_id,
+        current_user,
+        db,
+        request,
+        admin_permissions=[Permission.SERVERS_READ_ALL, Permission.SERVERS_ACCESS_OTHERS],
     )
     from app.services.server_auth_service import server_auth_service
+
     stats = await server_auth_service.get_server_access_stats(db, server.id)
     return {"server_id": server_id, **stats}

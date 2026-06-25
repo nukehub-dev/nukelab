@@ -28,7 +28,9 @@ class TestInitTracing:
 
     def test_enabled_sets_tracer_provider(self):
         with mock.patch.object(tracing.settings, "otel_traces_enabled", True):
-            with mock.patch.object(tracing.settings, "otel_exporter_otlp_endpoint", "http://otel-collector:4317"):
+            with mock.patch.object(
+                tracing.settings, "otel_exporter_otlp_endpoint", "http://otel-collector:4317"
+            ):
                 with mock.patch("app.core.tracing.trace.set_tracer_provider") as mock_set:
                     with mock.patch("app.core.tracing.BatchSpanProcessor") as mock_processor:
                         with mock.patch("app.core.tracing.GRPCExporter") as mock_exporter:
@@ -47,7 +49,9 @@ class TestInitTracing:
 
     def test_uses_http_exporter_when_configured(self):
         with mock.patch.object(tracing.settings, "otel_traces_enabled", True):
-            with mock.patch.object(tracing.settings, "otel_exporter_otlp_endpoint", "http://otel-collector:4318"):
+            with mock.patch.object(
+                tracing.settings, "otel_exporter_otlp_endpoint", "http://otel-collector:4318"
+            ):
                 with mock.patch.object(tracing.settings, "otel_exporter_otlp_protocol", "http"):
                     with mock.patch.dict(os.environ, {}, clear=False):
                         os.environ.pop("OTEL_EXPORTER_OTLP_PROTOCOL", None)
@@ -62,9 +66,13 @@ class TestInitTracing:
 
     def test_env_endpoint_overrides_settings(self):
         with mock.patch.object(tracing.settings, "otel_traces_enabled", True):
-            with mock.patch.object(tracing.settings, "otel_exporter_otlp_endpoint", "http://settings:4317"):
+            with mock.patch.object(
+                tracing.settings, "otel_exporter_otlp_endpoint", "http://settings:4317"
+            ):
                 with mock.patch.object(tracing.settings, "otel_exporter_otlp_protocol", "grpc"):
-                    with mock.patch.dict(os.environ, {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://env:4318"}):
+                    with mock.patch.dict(
+                        os.environ, {"OTEL_EXPORTER_OTLP_ENDPOINT": "http://env:4318"}
+                    ):
                         with mock.patch("app.core.tracing.trace.set_tracer_provider"):
                             with mock.patch("app.core.tracing.BatchSpanProcessor"):
                                 with mock.patch("app.core.tracing.GRPCExporter") as mock_grpc:
@@ -76,7 +84,9 @@ class TestInitTracing:
 
     def test_idempotent(self):
         with mock.patch.object(tracing.settings, "otel_traces_enabled", True):
-            with mock.patch.object(tracing.settings, "otel_exporter_otlp_endpoint", "http://otel-collector:4317"):
+            with mock.patch.object(
+                tracing.settings, "otel_exporter_otlp_endpoint", "http://otel-collector:4317"
+            ):
                 with mock.patch("app.core.tracing.trace.set_tracer_provider") as mock_set:
                     tracing._tracing_initialized = False
                     tracing.init_tracing()

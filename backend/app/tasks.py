@@ -60,6 +60,7 @@ def example_task(self, message: str):
 @celery_app.task(bind=True)
 def evaluate_maintenance_windows(self):
     """Evaluate scheduled maintenance windows: send notifications, enable/disable maintenance mode."""
+
     async def _evaluate():
         from app.services.maintenance_window_service import MaintenanceWindowService
 
@@ -86,6 +87,7 @@ def cleanup_inactive_servers(self):
 @celery_app.task(bind=True)
 def shutdown_idle_servers(self):
     """Stop servers that have been idle beyond user preference timeout"""
+
     async def _enforce():
         from sqlalchemy import select
         from app.models.server import Server
@@ -96,37 +98,37 @@ def shutdown_idle_servers(self):
         from app.services.quota_service import QuotaService
         from app.container.spawner import spawner
         from datetime import datetime, timedelta, UTC
-        
+
         async with AsyncSessionLocal() as db:
             stopped_count = 0
             warned_count = 0
-            
+
             # Get all running servers with their users
             result = await db.execute(
-                select(Server, User).join(
-                    User, Server.user_id == User.id
-                ).where(Server.status.in_(["running", "healthy"]))
+                select(Server, User)
+                .join(User, Server.user_id == User.id)
+                .where(Server.status.in_(["running", "healthy"]))
             )
             servers = result.all()
-            
+
             for server, user in servers:
                 prefs = user.preferences or {}
-                
+
                 # Skip if user disabled idle shutdown
                 if not prefs.get("idle_shutdown_enabled", True):
                     continue
-                
+
                 timeout_mins = prefs.get("idle_shutdown_timeout", 30)
                 cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=timeout_mins)
-                
+
                 # Determine last activity time
                 last_activity = server.last_activity or server.started_at
                 if not last_activity:
                     continue
-                
+
                 if last_activity >= cutoff:
                     continue
-                
+
                 # Server is idle beyond user threshold — stop it
                 try:
                     if server.container_id:
@@ -136,14 +138,14 @@ def shutdown_idle_servers(self):
                             server.container_id = None
                             await db.commit()
                             continue
-                        
+
                         await spawner.delete(server.container_id)
                         server.container_id = None
-                    
+
                     server.status = "stopped"
                     server.stopped_at = datetime.now(UTC).replace(tzinfo=None)
                     server.stop_reason = "idle_timeout"
-                    
+
                     # Reconcile billing
                     if server.plan_id:
                         credit_service = CreditService(db)
@@ -153,34 +155,34 @@ def shutdown_idle_servers(self):
                         plan = plan_result.scalar_one_or_none()
                         if plan:
                             await credit_service.reconcile_server_billing(server, plan)
-                    
+
                     # Decrement quota
                     if server.plan_id:
                         quota_service = QuotaService(db)
                         await quota_service.decrement_usage(
-                            user_id=str(user.id),
-                            plan_id=str(server.plan_id)
+                            user_id=str(user.id), plan_id=str(server.plan_id)
                         )
-                    
+
                     await db.commit()
-                    
+
                     # Notify user
                     notif_service = NotificationService(db)
                     await notif_service.server_stopped(
                         user_id=user.id,
                         server_name=server.name,
-                        reason=f"inactivity ({timeout_mins} minutes)"
+                        reason=f"inactivity ({timeout_mins} minutes)",
                     )
-                    
+
                     from app.services.notification_service import broadcast_server_status_change
+
                     await broadcast_server_status_change(user.id, str(server.id), "stopped")
                     stopped_count += 1
-                
+
                 except Exception:
                     logger.exception("Error auto-stopping idle server %s", server.id)
-            
+
             return f"Stopped {stopped_count} idle servers"
-    
+
     try:
         return _run_async(_enforce())
     except Exception as e:
@@ -212,6 +214,7 @@ def collect_system_metrics(self):
 @celery_app.task(bind=True)
 def check_container_health(self):
     """Check health of all running containers"""
+
     async def _check():
         async with AsyncSessionLocal() as db:
             service = HealthCheckService(db)
@@ -227,6 +230,7 @@ def check_container_health(self):
 @celery_app.task(bind=True)
 def evaluate_alert_rules(self):
     """Evaluate all active alert rules"""
+
     async def _evaluate():
         async with AsyncSessionLocal() as db:
             service = AlertService(db)
@@ -242,101 +246,108 @@ def evaluate_alert_rules(self):
 @celery_app.task(bind=True)
 def process_nuke_billing(self):
     """Periodic NUKE billing - deduct usage costs for running servers"""
+
     async def _bill():
         from sqlalchemy import select
         from app.models.server import Server
         from app.models.server_plan import ServerPlan
         from app.models.user import User
-        from app.services.notification_service import NotificationService, broadcast_server_status_change
+        from app.services.notification_service import (
+            NotificationService,
+            broadcast_server_status_change,
+        )
         from app.services.credit_service import CreditService
         from datetime import datetime, timedelta, UTC
         from app.config import settings
-        
+
         async with AsyncSessionLocal() as db:
             credit_service = CreditService(db)
-            
+
             # Get all running servers with their plans
             result = await db.execute(
-                select(Server, ServerPlan).join(
-                    ServerPlan, Server.plan_id == ServerPlan.id
-                ).where(Server.status == "running")
+                select(Server, ServerPlan)
+                .join(ServerPlan, Server.plan_id == ServerPlan.id)
+                .where(Server.status == "running")
             )
             servers = result.all()
-            
+
             billed_count = 0
             stopped_count = 0
-            
+
             for server, plan in servers:
                 if plan.cost_per_hour <= 0:
                     continue
-                
+
                 # Calculate billing amount (15 minutes = 0.25 hours)
                 billing_amount = int(plan.cost_per_hour * 0.25)
                 if billing_amount <= 0:
                     billing_amount = 1  # Minimum 1 credit
-                
+
                 # Get user balance
                 user_result = await db.execute(
                     select(User.nuke_balance).where(User.id == server.user_id)
                 )
                 current_balance = user_result.scalar_one_or_none() or 0
-                
+
                 if current_balance <= 0:
                     # Auto-stop server if credits depleted
                     if settings.server_auto_stop_on_depletion:
                         from app.container.spawner import spawner
+
                         try:
                             await spawner.delete(server.container_id)
                             server.container_id = None
                             server.status = "stopped"
                             server.stopped_at = datetime.now(UTC).replace(tzinfo=None)
                             server.stop_reason = "credit_depleted"
-                            
+
                             # Reconcile exact billing for final partial interval
                             await credit_service.reconcile_server_billing(server, plan)
-                            await broadcast_server_status_change(server.user_id, str(server.id), "stopped", {"stop_reason": "credit_depleted"})
-                            
+                            await broadcast_server_status_change(
+                                server.user_id,
+                                str(server.id),
+                                "stopped",
+                                {"stop_reason": "credit_depleted"},
+                            )
+
                             # Notify user
                             notif_service = NotificationService(db)
                             await notif_service.server_stopped(
                                 user_id=server.user_id,
                                 server_name=server.name,
-                                reason="insufficient NUKE credits"
+                                reason="insufficient NUKE credits",
                             )
                             stopped_count += 1
                         except Exception:
                             logger.exception("Error stopping server %s", server.id)
                     continue
-                
+
                 # Deduct credits
                 try:
                     await credit_service.consume_credits(
                         user_id=str(server.user_id),
                         amount=billing_amount,
                         description=f"Server usage: '{server.name}' (15 min at {plan.cost_per_hour} NUKE/hour)",
-                        server_id=str(server.id)
+                        server_id=str(server.id),
                     )
-                    
+
                     # Update server billing state
                     server.total_cost = (server.total_cost or 0) + billing_amount
                     server.last_billed_at = datetime.now(UTC).replace(tzinfo=None)
                     billed_count += 1
-                    
+
                     # Warn user if credits getting low
                     new_balance = current_balance - billing_amount
                     if new_balance <= plan.cost_per_hour * 2:
                         notif_service = NotificationService(db)
-                        await notif_service.low_balance(
-                            user_id=server.user_id,
-                            balance=new_balance
-                        )
-                
+                        await notif_service.low_balance(user_id=server.user_id, balance=new_balance)
+
                 except Exception:
                     logger.exception("Error billing server %s", server.id)
-            
+
             await db.commit()
             return f"Billed {billed_count} servers, stopped {stopped_count} servers"
-    
+
     try:
         return _run_async(_bill())
     except Exception as e:
@@ -346,61 +357,67 @@ def process_nuke_billing(self):
 @celery_app.task(bind=True)
 def enforce_auto_stop(self):
     """Enforce idle timeout and max runtime limits on running servers"""
+
     async def _enforce():
         from sqlalchemy import select
         from app.models.server import Server
         from app.models.server_plan import ServerPlan
-        from app.services.notification_service import NotificationService, broadcast_server_status_change
+        from app.services.notification_service import (
+            NotificationService,
+            broadcast_server_status_change,
+        )
         from datetime import datetime, timedelta, UTC
         from app.core.time_utils import parse_duration
         from app.config import settings
         from app.container.spawner import spawner
         from app.services.quota_service import QuotaService
-        
+
         async with AsyncSessionLocal() as db:
             quota_service = QuotaService(db)
             stopped_count = 0
             warned_count = 0
-            
+
             result = await db.execute(
-                select(Server, ServerPlan).join(
-                    ServerPlan, Server.plan_id == ServerPlan.id
-                ).where(Server.status == "running")
+                select(Server, ServerPlan)
+                .join(ServerPlan, Server.plan_id == ServerPlan.id)
+                .where(Server.status == "running")
             )
             servers = result.all()
-            
+
             for server, plan in servers:
                 now = datetime.now(UTC).replace(tzinfo=None)
                 should_stop = False
                 stop_reason = ""
-                
+
                 # Check max runtime
                 if server.expires_at and now >= server.expires_at:
                     should_stop = True
                     stop_reason = "max_runtime_exceeded"
-                
+
                 # Check idle timeout
                 if not should_stop and server.last_activity and plan.idle_timeout:
                     try:
                         idle_timeout_seconds = parse_duration(plan.idle_timeout)
                         if idle_timeout_seconds > 0:
                             idle_duration = (now - server.last_activity).total_seconds()
-                            
+
                             if idle_duration >= idle_timeout_seconds:
                                 should_stop = True
                                 stop_reason = "idle_timeout"
-                            elif idle_duration >= (idle_timeout_seconds - settings.server_warn_before_stop):
+                            elif idle_duration >= (
+                                idle_timeout_seconds - settings.server_warn_before_stop
+                            ):
                                 # Send warning notification
                                 notif_service = NotificationService(db)
                                 await notif_service.server_idle_warning(
                                     user_id=server.user_id,
                                     server_name=server.name,
-                                    idle_minutes=int(idle_duration / 60)
+                                    idle_minutes=int(idle_duration / 60),
                                 )
                                 warned_count += 1
                     except Exception:
                         logger.exception("Error checking idle timeout for server %s", server.id)
-                
+
                 if should_stop:
                     try:
                         await spawner.delete(server.container_id)
@@ -408,15 +425,16 @@ def enforce_auto_stop(self):
                         server.status = "stopped"
                         server.stopped_at = now
                         server.stop_reason = stop_reason
-                        await broadcast_server_status_change(server.user_id, str(server.id), "stopped", {"stop_reason": stop_reason})
-                        
+                        await broadcast_server_status_change(
+                            server.user_id, str(server.id), "stopped", {"stop_reason": stop_reason}
+                        )
+
                         # Decrement quota usage
                         if server.plan_id:
                             await quota_service.decrement_usage(
-                                user_id=str(server.user_id),
-                                plan_id=str(server.plan_id)
+                                user_id=str(server.user_id), plan_id=str(server.plan_id)
                             )
-                        
+
                         # Notify user
                         notif_service = NotificationService(db)
                         reason_messages = {
@@ -426,15 +444,15 @@ def enforce_auto_stop(self):
                         await notif_service.server_stopped(
                             user_id=server.user_id,
                             server_name=server.name,
-                            reason=reason_messages.get(stop_reason, "automatic stop")
+                            reason=reason_messages.get(stop_reason, "automatic stop"),
                         )
                         stopped_count += 1
                     except Exception:
                         logger.exception("Error auto-stopping server %s", server.id)
-            
+
             await db.commit()
             return f"Stopped {stopped_count} servers, warned {warned_count} servers"
-    
+
     try:
         return _run_async(_enforce())
     except Exception as e:
@@ -444,6 +462,7 @@ def enforce_auto_stop(self):
 @celery_app.task(bind=True)
 def process_server_queue(self):
     """Process queued servers - start next in line when resources free up"""
+
     async def _process():
         from sqlalchemy import select
         from app.models.server_queue import ServerQueue
@@ -457,104 +476,101 @@ def process_server_queue(self):
         from app.core.time_utils import parse_duration
         from datetime import datetime, timedelta, UTC
         from app.config import settings
-        
+
         async with AsyncSessionLocal() as db:
             resource_pool = ResourcePoolService(db)
             credit_service = CreditService(db)
             quota_service = QuotaService(db)
-            
+
             started_count = 0
             timeout_count = 0
-            
+
             # Remove timed-out queue entries (older than 1 hour)
             timeout_threshold = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1)
             result = await db.execute(
                 select(ServerQueue).where(
-                    ServerQueue.status == "pending",
-                    ServerQueue.requested_at < timeout_threshold
+                    ServerQueue.status == "pending", ServerQueue.requested_at < timeout_threshold
                 )
             )
             timed_out = result.scalars().all()
-            
+
             for entry in timed_out:
                 entry.status = "cancelled"
                 entry.error_message = "Queue timeout - server was not started within 1 hour"
-                
+
                 notif_service = NotificationService(db)
                 await notif_service.queue_timeout(
-                    user_id=entry.user_id,
-                    server_name=entry.server_name
+                    user_id=entry.user_id, server_name=entry.server_name
                 )
                 timeout_count += 1
-            
+
             # Process queue - try to start next available server
             while True:
                 next_entry = await resource_pool.get_next_in_queue()
                 if not next_entry:
                     break
-                
+
                 # Get plan details
                 plan_result = await db.execute(
                     select(ServerPlan).where(ServerPlan.id == next_entry.plan_id)
                 )
                 plan = plan_result.scalar_one_or_none()
-                
+
                 if not plan or not plan.is_active:
                     next_entry.status = "failed"
                     next_entry.error_message = "Plan no longer available"
                     continue
-                
+
                 # Get user
-                user_result = await db.execute(
-                    select(User).where(User.id == next_entry.user_id)
-                )
+                user_result = await db.execute(select(User).where(User.id == next_entry.user_id))
                 user = user_result.scalar_one_or_none()
-                
+
                 if not user or not user.is_active:
                     next_entry.status = "failed"
                     next_entry.error_message = "User not found or inactive"
                     continue
-                
+
                 # Check quota
                 quota_check = await quota_service.check_spawn_allowed(
-                    user_id=str(next_entry.user_id),
-                    plan_id=str(next_entry.plan_id)
+                    user_id=str(next_entry.user_id), plan_id=str(next_entry.plan_id)
                 )
-                
+
                 if not quota_check["allowed"]:
                     next_entry.status = "failed"
                     next_entry.error_message = quota_check["reason"]
                     continue
-                
+
                 # Check credits
                 if settings.credits_enabled and plan.cost_per_hour > 0:
                     has_credits = await credit_service.check_sufficient_credits(
-                        user_id=str(next_entry.user_id),
-                        required=plan.cost_per_hour
+                        user_id=str(next_entry.user_id), required=plan.cost_per_hour
                     )
                     if not has_credits:
                         next_entry.status = "failed"
                         next_entry.error_message = "Insufficient NUKE credits"
                         continue
-                
+
                 try:
                     # Look up environment details
                     from app.models.environment_template import EnvironmentTemplate
+
                     env_result = await db.execute(
-                        select(EnvironmentTemplate).where(EnvironmentTemplate.id == next_entry.environment_id)
+                        select(EnvironmentTemplate).where(
+                            EnvironmentTemplate.id == next_entry.environment_id
+                        )
                     )
                     environment = env_result.scalar_one_or_none()
                     env_slug = environment.slug if environment else "dev"
                     env_image = environment.image if environment else None
-                    
+
                     # Deduct credits
                     if settings.credits_enabled and plan.cost_per_hour > 0:
                         await credit_service.consume_credits(
                             user_id=str(next_entry.user_id),
                             amount=plan.cost_per_hour,
-                            description=f"Initial spawn cost for queued server '{next_entry.server_name}'"
+                            description=f"Initial spawn cost for queued server '{next_entry.server_name}'",
                         )
-                    
+
                     # Spawn the server
                     server = await spawner.spawn(
                         user_id=str(next_entry.user_id),
@@ -567,53 +583,51 @@ def process_server_queue(self):
                         memory=next_entry.requested_memory or plan.memory_limit,
                         disk=next_entry.requested_disk or plan.disk_limit,
                     )
-                    
+
                     server.plan_id = next_entry.plan_id
                     server.last_activity = datetime.now(UTC).replace(tzinfo=None)
-                    
+
                     # Set expiration
                     max_runtime_seconds = parse_duration(plan.max_runtime)
                     if max_runtime_seconds > 0:
-                        server.expires_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(seconds=max_runtime_seconds)
-                    
+                        server.expires_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(
+                            seconds=max_runtime_seconds
+                        )
+
                     db.add(server)
                     await db.commit()
                     await db.refresh(server)
-                    
+
                     # Increment quota
                     await quota_service.increment_usage(
-                        user_id=str(next_entry.user_id),
-                        plan_id=str(next_entry.plan_id)
+                        user_id=str(next_entry.user_id), plan_id=str(next_entry.plan_id)
                     )
-                    
+
                     # Update queue entry
                     next_entry.status = "started"
                     next_entry.started_at = datetime.now(UTC).replace(tzinfo=None)
-                    
+
                     # Notify user
                     notif_service = NotificationService(db)
                     await notif_service.server_started(
-                        user_id=next_entry.user_id,
-                        server_name=next_entry.server_name
+                        user_id=next_entry.user_id, server_name=next_entry.server_name
                     )
                     started_count += 1
-                    
+
                 except Exception as e:
                     next_entry.status = "failed"
                     next_entry.error_message = str(e)
                     next_entry.retry_count += 1
-                    
+
                     # Notify user of failure
                     notif_service = NotificationService(db)
                     await notif_service.server_failed(
-                        user_id=next_entry.user_id,
-                        server_name=next_entry.server_name,
-                        error=str(e)
+                        user_id=next_entry.user_id, server_name=next_entry.server_name, error=str(e)
                     )
-            
+
             await db.commit()
             return f"Started {started_count} queued servers, timed out {timeout_count} entries"
-    
+
     try:
         return _run_async(_process())
     except Exception as e:
@@ -623,17 +637,18 @@ def process_server_queue(self):
 @celery_app.task(bind=True)
 def evaluate_schedules(self):
     """Evaluate and execute due server schedules"""
+
     async def _evaluate():
         from app.services.schedule_service import ScheduleService
         from app.db.session import AsyncSessionLocal
-        
+
         async with AsyncSessionLocal() as db:
             service = ScheduleService(db)
             due_schedules = await service.get_due_schedules()
-            
+
             executed_count = 0
             failed_count = 0
-            
+
             for schedule in due_schedules:
                 try:
                     result = await service.execute_schedule(schedule)
@@ -641,13 +656,13 @@ def evaluate_schedules(self):
                         executed_count += 1
                     else:
                         failed_count += 1
-                        logger.error("Schedule %s failed: %s", schedule.id, result.get('error'))
+                        logger.error("Schedule %s failed: %s", schedule.id, result.get("error"))
                 except Exception:
                     failed_count += 1
                     logger.exception("Error executing schedule %s", schedule.id)
-            
+
             return f"Executed {executed_count} schedules, {failed_count} failed"
-    
+
     try:
         return _run_async(_evaluate())
     except Exception as e:
@@ -657,6 +672,7 @@ def evaluate_schedules(self):
 @celery_app.task(bind=True)
 def rollup_server_metrics(self):
     """Aggregate raw ServerMetric rows into DailyServerMetric every night."""
+
     async def _rollup():
         from sqlalchemy import select, func, and_, insert, update
         from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -671,17 +687,19 @@ def rollup_server_metrics(self):
             start_date = end_date - timedelta(days=7)
 
             # Find all distinct (server_id, date) pairs in the raw metrics
-            day_trunc = func.date_trunc('day', ServerMetric.collected_at)
+            day_trunc = func.date_trunc("day", ServerMetric.collected_at)
             result = await db.execute(
                 select(
                     ServerMetric.server_id,
-                    func.date(ServerMetric.collected_at).label('metric_date')
-                ).where(
+                    func.date(ServerMetric.collected_at).label("metric_date"),
+                )
+                .where(
                     and_(
                         func.date(ServerMetric.collected_at) >= start_date,
                         func.date(ServerMetric.collected_at) <= end_date,
                     )
-                ).distinct()
+                )
+                .distinct()
             )
             pairs = result.all()
 
@@ -690,17 +708,17 @@ def rollup_server_metrics(self):
                 # Compute aggregates for this server/day
                 agg_result = await db.execute(
                     select(
-                        func.avg(ServerMetric.cpu_percent).label('avg_cpu'),
-                        func.max(ServerMetric.cpu_percent).label('peak_cpu'),
-                        func.avg(ServerMetric.memory_percent).label('avg_memory'),
-                        func.max(ServerMetric.memory_percent).label('peak_memory'),
-                        func.avg(ServerMetric.network_rx_bytes).label('avg_network_rx'),
-                        func.avg(ServerMetric.network_tx_bytes).label('avg_network_tx'),
-                        func.avg(ServerMetric.disk_read_bytes).label('avg_disk_read'),
-                        func.avg(ServerMetric.disk_write_bytes).label('avg_disk_write'),
-                        func.avg(ServerMetric.gpu_percent).label('avg_gpu'),
-                        func.max(ServerMetric.gpu_percent).label('peak_gpu'),
-                        func.count().label('data_points')
+                        func.avg(ServerMetric.cpu_percent).label("avg_cpu"),
+                        func.max(ServerMetric.cpu_percent).label("peak_cpu"),
+                        func.avg(ServerMetric.memory_percent).label("avg_memory"),
+                        func.max(ServerMetric.memory_percent).label("peak_memory"),
+                        func.avg(ServerMetric.network_rx_bytes).label("avg_network_rx"),
+                        func.avg(ServerMetric.network_tx_bytes).label("avg_network_tx"),
+                        func.avg(ServerMetric.disk_read_bytes).label("avg_disk_read"),
+                        func.avg(ServerMetric.disk_write_bytes).label("avg_disk_write"),
+                        func.avg(ServerMetric.gpu_percent).label("avg_gpu"),
+                        func.max(ServerMetric.gpu_percent).label("peak_gpu"),
+                        func.count().label("data_points"),
                     ).where(
                         and_(
                             ServerMetric.server_id == server_id,
@@ -711,35 +729,39 @@ def rollup_server_metrics(self):
                 row = agg_result.one()
 
                 # Upsert into daily_server_metrics
-                stmt = pg_insert(DailyServerMetric).values(
-                    server_id=server_id,
-                    date=metric_date,
-                    avg_cpu=row.avg_cpu,
-                    peak_cpu=row.peak_cpu,
-                    avg_memory=row.avg_memory,
-                    peak_memory=row.peak_memory,
-                    avg_network_rx=row.avg_network_rx,
-                    avg_network_tx=row.avg_network_tx,
-                    avg_disk_read=row.avg_disk_read,
-                    avg_disk_write=row.avg_disk_write,
-                    avg_gpu=row.avg_gpu,
-                    peak_gpu=row.peak_gpu,
-                    data_points=row.data_points,
-                ).on_conflict_do_update(
-                    index_elements=['server_id', 'date'],
-                    set_={
-                        'avg_cpu': row.avg_cpu,
-                        'peak_cpu': row.peak_cpu,
-                        'avg_memory': row.avg_memory,
-                        'peak_memory': row.peak_memory,
-                        'avg_network_rx': row.avg_network_rx,
-                        'avg_network_tx': row.avg_network_tx,
-                        'avg_disk_read': row.avg_disk_read,
-                        'avg_disk_write': row.avg_disk_write,
-                        'avg_gpu': row.avg_gpu,
-                        'peak_gpu': row.peak_gpu,
-                        'data_points': row.data_points,
-                    }
+                stmt = (
+                    pg_insert(DailyServerMetric)
+                    .values(
+                        server_id=server_id,
+                        date=metric_date,
+                        avg_cpu=row.avg_cpu,
+                        peak_cpu=row.peak_cpu,
+                        avg_memory=row.avg_memory,
+                        peak_memory=row.peak_memory,
+                        avg_network_rx=row.avg_network_rx,
+                        avg_network_tx=row.avg_network_tx,
+                        avg_disk_read=row.avg_disk_read,
+                        avg_disk_write=row.avg_disk_write,
+                        avg_gpu=row.avg_gpu,
+                        peak_gpu=row.peak_gpu,
+                        data_points=row.data_points,
+                    )
+                    .on_conflict_do_update(
+                        index_elements=["server_id", "date"],
+                        set_={
+                            "avg_cpu": row.avg_cpu,
+                            "peak_cpu": row.peak_cpu,
+                            "avg_memory": row.avg_memory,
+                            "peak_memory": row.peak_memory,
+                            "avg_network_rx": row.avg_network_rx,
+                            "avg_network_tx": row.avg_network_tx,
+                            "avg_disk_read": row.avg_disk_read,
+                            "avg_disk_write": row.avg_disk_write,
+                            "avg_gpu": row.avg_gpu,
+                            "peak_gpu": row.peak_gpu,
+                            "data_points": row.data_points,
+                        },
+                    )
                 )
                 await db.execute(stmt)
                 upserted += 1
@@ -756,6 +778,7 @@ def rollup_server_metrics(self):
 @celery_app.task(bind=True)
 def cleanup_expired_data(self):
     """Delete expired raw data based on retention settings."""
+
     async def _cleanup():
         from sqlalchemy import delete, text, select
         from app.models.server_metric import ServerMetric
@@ -805,56 +828,48 @@ def cleanup_expired_data(self):
             result = await db.execute(
                 delete(ServerMetric).where(ServerMetric.collected_at < cutoff)
             )
-            deleted['server_metrics'] = result.rowcount
+            deleted["server_metrics"] = result.rowcount
 
             # System metrics
             cutoff = now - timedelta(days=system_metrics_days)
             result = await db.execute(
                 delete(SystemMetric).where(SystemMetric.collected_at < cutoff)
             )
-            deleted['system_metrics'] = result.rowcount
+            deleted["system_metrics"] = result.rowcount
 
             # Health checks
             cutoff = now - timedelta(days=health_check_days)
-            result = await db.execute(
-                delete(HealthCheck).where(HealthCheck.checked_at < cutoff)
-            )
-            deleted['health_checks'] = result.rowcount
+            result = await db.execute(delete(HealthCheck).where(HealthCheck.checked_at < cutoff))
+            deleted["health_checks"] = result.rowcount
 
             # Alert history
             cutoff = now - timedelta(days=alert_history_days)
-            result = await db.execute(
-                delete(AlertHistory).where(AlertHistory.created_at < cutoff)
-            )
-            deleted['alert_history'] = result.rowcount
+            result = await db.execute(delete(AlertHistory).where(AlertHistory.created_at < cutoff))
+            deleted["alert_history"] = result.rowcount
 
             # Activity logs
             cutoff = now - timedelta(days=activity_log_days)
-            result = await db.execute(
-                delete(ActivityLog).where(ActivityLog.created_at < cutoff)
-            )
-            deleted['activity_logs'] = result.rowcount
+            result = await db.execute(delete(ActivityLog).where(ActivityLog.created_at < cutoff))
+            deleted["activity_logs"] = result.rowcount
 
             # Notifications
             cutoff = now - timedelta(days=notification_days)
-            result = await db.execute(
-                delete(Notification).where(Notification.created_at < cutoff)
-            )
-            deleted['notifications'] = result.rowcount
+            result = await db.execute(delete(Notification).where(Notification.created_at < cutoff))
+            deleted["notifications"] = result.rowcount
 
             # Daily rollups
             cutoff = now - timedelta(days=daily_rollup_days)
             result = await db.execute(
                 delete(DailyServerMetric).where(DailyServerMetric.date < cutoff.date())
             )
-            deleted['daily_rollups'] = result.rowcount
+            deleted["daily_rollups"] = result.rowcount
 
             # Request metrics
             cutoff = now - timedelta(days=request_metrics_days)
             result = await db.execute(
                 delete(RequestMetric).where(RequestMetric.created_at < cutoff)
             )
-            deleted['request_metrics'] = result.rowcount
+            deleted["request_metrics"] = result.rowcount
 
             await db.commit()
             total = sum(deleted.values())
@@ -871,6 +886,7 @@ def ensure_partitions(self):
     """Create upcoming monthly partitions for time-series tables.
     Runs daily via Celery Beat to ensure partitions exist before data arrives.
     """
+
     async def _ensure():
         from app.db.partitioning import PartitionManager
 
@@ -903,6 +919,7 @@ def enforce_volume_quotas(self):
     unbounded data to a named Docker volume (Docker StorageOpt only limits
     rootfs, not named volumes).
     """
+
     async def _enforce():
         from sqlalchemy import select
         from sqlalchemy.orm import selectinload
@@ -913,7 +930,10 @@ def enforce_volume_quotas(self):
         from app.models.server_volume import ServerVolume
         from app.services.volume_service import VolumeService
         from app.services.xfs_quota_service import xfs_quota_service
-        from app.services.notification_service import NotificationService, broadcast_server_status_change
+        from app.services.notification_service import (
+            NotificationService,
+            broadcast_server_status_change,
+        )
         from app.services.credit_service import CreditService
         from app.services.quota_service import QuotaService
         from app.container.spawner import spawner
@@ -934,9 +954,7 @@ def enforce_volume_quotas(self):
                 .join(ServerPlan, Server.plan_id == ServerPlan.id)
                 .join(User, Server.user_id == User.id)
                 .where(Server.status.in_(["running", "healthy"]))
-                .options(
-                    selectinload(Server.volume_mounts).selectinload(ServerVolume.volume)
-                )
+                .options(selectinload(Server.volume_mounts).selectinload(ServerVolume.volume))
             )
             servers = result.all()
 
@@ -945,10 +963,7 @@ def enforce_volume_quotas(self):
                 over_limit_volumes = []
 
                 # Parse plan disk limit once (0 = unlimited if not set)
-                plan_bytes = (
-                    volume_service._parse_memory(plan.disk_limit)
-                    if plan.disk_limit else 0
-                )
+                plan_bytes = volume_service._parse_memory(plan.disk_limit) if plan.disk_limit else 0
 
                 for sv in server.volume_mounts:
                     volume = sv.volume
@@ -971,7 +986,7 @@ def enforce_volume_quotas(self):
                     if size_bytes is None:
                         logger.warning(
                             "Could not measure volume size",
-                            extra={"volume": volume.name, "server": server.id}
+                            extra={"volume": volume.name, "server": server.id},
                         )
                         continue
 
@@ -1010,7 +1025,7 @@ def enforce_volume_quotas(self):
                             await notif_service.volume_near_limit(
                                 user_id=volume.owner_id,
                                 volume_name=volume.display_name or volume.name,
-                                usage_pct=usage_pct
+                                usage_pct=usage_pct,
                             )
                             warned_count += 1
 
@@ -1038,8 +1053,7 @@ def enforce_volume_quotas(self):
                         if server.plan_id:
                             quota_service = QuotaService(db)
                             await quota_service.decrement_usage(
-                                user_id=str(user.id),
-                                plan_id=str(server.plan_id)
+                                user_id=str(user.id), plan_id=str(server.plan_id)
                             )
 
                         await db.commit()
@@ -1049,23 +1063,26 @@ def enforce_volume_quotas(self):
                         await notif_service.server_stopped(
                             user_id=user.id,
                             server_name=server.name,
-                            reason=f"volume quota exceeded: {', '.join(over_limit_volumes)}"
+                            reason=f"volume quota exceeded: {', '.join(over_limit_volumes)}",
                         )
                         await broadcast_server_status_change(
-                            user.id, str(server.id), "stopped",
-                            {"stop_reason": "volume_quota_exceeded"}
+                            user.id,
+                            str(server.id),
+                            "stopped",
+                            {"stop_reason": "volume_quota_exceeded"},
                         )
                         stopped_count += 1
 
                     except Exception:
                         logger.exception(
-                            "Error stopping server %s for volume quota violation",
-                            server.id
+                            "Error stopping server %s for volume quota violation", server.id
                         )
 
             await db.commit()
             method_summary = f"XFS={xfs_used} du={du_used}" if xfs_available else f"du={du_used}"
-            return f"Stopped {stopped_count} servers, warned {warned_count} volumes ({method_summary})"
+            return (
+                f"Stopped {stopped_count} servers, warned {warned_count} volumes ({method_summary})"
+            )
 
     try:
         return _run_async(_enforce())
@@ -1077,11 +1094,13 @@ def enforce_volume_quotas(self):
 def check_autovacuum_health(self):
     """Log tables with high dead-tuple ratios for operational awareness.
     Run weekly via Celery Beat. Actual tuning is manual (see docs)."""
+
     async def _check():
         from sqlalchemy import text
 
         async with AsyncSessionLocal() as db:
-            result = await db.execute(text("""
+            result = await db.execute(
+                text("""
                 SELECT
                     relname AS table_name,
                     n_live_tup,
@@ -1091,7 +1110,8 @@ def check_autovacuum_health(self):
                 WHERE schemaname = 'public'
                   AND n_dead_tup > 100
                 ORDER BY dead_pct DESC NULLS LAST
-            """))
+            """)
+            )
             rows = result.mappings().all()
             warnings = [r for r in rows if (r["dead_pct"] or 0) > 20]
             if warnings:
@@ -1141,10 +1161,7 @@ def update_prometheus_business_metrics(self):
             nuke_total = result.scalar() or 0
 
             # Servers by status
-            result = await db.execute(
-                select(Server.status, func.count())
-                .group_by(Server.status)
-            )
+            result = await db.execute(select(Server.status, func.count()).group_by(Server.status))
             server_counts = {status: count for status, count in result.all()}
 
         from app.core.prometheus_metrics import (

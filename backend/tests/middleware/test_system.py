@@ -12,6 +12,7 @@ from app.services.setting_service import SettingService
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def reset_maintenance_state():
     """Reset global maintenance state before and after each test."""
@@ -26,6 +27,7 @@ def reset_maintenance_state():
 # SettingService Tests
 # ---------------------------------------------------------------------------
 
+
 class TestMaintenanceMiddleware:
     """Tests for the maintenance mode middleware blocking behavior."""
 
@@ -35,13 +37,12 @@ class TestMaintenanceMiddleware:
         # Enable maintenance
         await client.post(
             "/api/system/maintenance?enabled=true&message=Back soon",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            headers={"Authorization": f"Bearer {admin_token}"},
         )
 
         # Non-admin tries to access servers
         response = await client.get(
-            "/api/servers/",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/servers/", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 503
         data = response.json()
@@ -54,13 +55,12 @@ class TestMaintenanceMiddleware:
         # Enable maintenance
         await client.post(
             "/api/system/maintenance?enabled=true",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            headers={"Authorization": f"Bearer {admin_token}"},
         )
 
         # Admin can still access servers
         response = await client.get(
-            "/api/servers/",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/servers/", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
 
@@ -70,13 +70,12 @@ class TestMaintenanceMiddleware:
         # Enable maintenance
         await client.post(
             "/api/system/maintenance?enabled=true",
-            headers={"Authorization": f"Bearer {superadmin_token}"}
+            headers={"Authorization": f"Bearer {superadmin_token}"},
         )
 
         # Super admin can still access servers
         response = await client.get(
-            "/api/servers/",
-            headers={"Authorization": f"Bearer {superadmin_token}"}
+            "/api/servers/", headers={"Authorization": f"Bearer {superadmin_token}"}
         )
         assert response.status_code == 200
 
@@ -86,13 +85,12 @@ class TestMaintenanceMiddleware:
         # Enable maintenance
         await client.post(
             "/api/system/maintenance?enabled=true",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            headers={"Authorization": f"Bearer {admin_token}"},
         )
 
         # Moderator tries to access servers
         response = await client.get(
-            "/api/servers/",
-            headers={"Authorization": f"Bearer {moderator_token}"}
+            "/api/servers/", headers={"Authorization": f"Bearer {moderator_token}"}
         )
         assert response.status_code == 503
         data = response.json()
@@ -104,7 +102,7 @@ class TestMaintenanceMiddleware:
         # Enable maintenance
         await client.post(
             "/api/system/maintenance?enabled=true",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            headers={"Authorization": f"Bearer {admin_token}"},
         )
 
         # Public auth methods endpoint should work
@@ -117,13 +115,12 @@ class TestMaintenanceMiddleware:
         # Enable maintenance
         await client.post(
             "/api/system/maintenance?enabled=true",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            headers={"Authorization": f"Bearer {admin_token}"},
         )
 
         # Admin can still access system config to turn it off
         response = await client.get(
-            "/api/system/config",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/system/config", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
 
@@ -135,11 +132,11 @@ class TestMaintenanceMiddleware:
         from app.middleware.maintenance import MaintenanceMiddleware
 
         # Completely isolate the request log so prior tests cannot pollute state.
-        with mock.patch.object(MaintenanceMiddleware, '_request_log', {}):
+        with mock.patch.object(MaintenanceMiddleware, "_request_log", {}):
             # Enable maintenance
             response = await client.post(
                 "/api/system/maintenance?enabled=true",
-                headers={"Authorization": f"Bearer {admin_token}"}
+                headers={"Authorization": f"Bearer {admin_token}"},
             )
             assert response.status_code == 200
             assert settings.maintenance_mode is True
@@ -148,8 +145,7 @@ class TestMaintenanceMiddleware:
             rate_limited = False
             for _ in range(35):
                 response = await client.get(
-                    "/api/servers/",
-                    headers={"Authorization": f"Bearer {user_token}"}
+                    "/api/servers/", headers={"Authorization": f"Bearer {user_token}"}
                 )
                 if response.status_code == 429:
                     rate_limited = True
@@ -166,8 +162,7 @@ class TestMaintenanceMiddleware:
         settings.maintenance_mode = False
 
         response = await client.get(
-            "/api/servers/",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/servers/", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 200
 
@@ -175,5 +170,3 @@ class TestMaintenanceMiddleware:
 # ---------------------------------------------------------------------------
 # System Stats Tests
 # ---------------------------------------------------------------------------
-
-

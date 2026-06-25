@@ -1,31 +1,27 @@
-import { motion } from 'framer-motion';
-import { cn } from '../../lib/utils';
+import { motion } from 'framer-motion'
+import { cn } from '../../lib/utils'
 
 export interface SimpleBarData {
-  label: string;
-  value: number;
-  color?: string;
+  label: string
+  value: number
+  color?: string
 }
 
 export interface SimpleBarChartProps {
-  data: SimpleBarData[];
-  height?: number;
-  name?: string;
-  className?: string;
+  data: SimpleBarData[]
+  height?: number
+  name?: string
+  className?: string
 }
 
-export function SimpleBarChart({
-  data,
-  height = 240,
-  className,
-}: SimpleBarChartProps) {
-  const maxValue = Math.max(...data.map((d) => d.value), 1);
+export function SimpleBarChart({ data, height = 240, className }: SimpleBarChartProps) {
+  const maxValue = Math.max(...data.map((d) => d.value), 1)
 
   return (
     <div className={cn('w-full', className)} style={{ height }}>
       <div className="flex flex-col justify-center h-full gap-4">
         {data.map((item, index) => {
-          const pct = (item.value / maxValue) * 100;
+          const pct = (item.value / maxValue) * 100
           return (
             <div key={item.label} className="flex items-center gap-3">
               {/* Label */}
@@ -58,7 +54,7 @@ export function SimpleBarChart({
                 )}
               </div>
             </div>
-          );
+          )
         })}
 
         {data.length === 0 && (
@@ -68,5 +64,5 @@ export function SimpleBarChart({
         )}
       </div>
     </div>
-  );
+  )
 }

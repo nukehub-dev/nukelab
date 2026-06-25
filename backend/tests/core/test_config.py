@@ -130,6 +130,7 @@ class TestDatabasePoolSettings:
     def test_pool_settings_exist_and_have_correct_types(self):
         """Pool settings must exist on the settings object with expected types."""
         from app.config import settings
+
         assert isinstance(settings.database_pool_size, int)
         assert isinstance(settings.database_pool_max_overflow, int)
         assert isinstance(settings.database_pool_timeout, int)

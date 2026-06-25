@@ -20,10 +20,10 @@ class TestNotificationCreate:
                 "title": "Server Started",
                 "message": "Your server has been started successfully",
                 "severity": "success",
-                "action_url": "/dashboard/servers"
-            }
+                "action_url": "/dashboard/servers",
+            },
         )
-        
+
         assert response.status_code == 201
         data = response.json()
         assert data["type"] == "server"
@@ -44,16 +44,15 @@ class TestNotificationList:
             type="system",
             title="Test Notification",
             message="This is a test",
-            severity="info"
+            severity="info",
         )
         db_session.add(notification)
         await db_session.commit()
-        
+
         response = await client.get(
-            "/api/notifications/",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/notifications/", headers={"Authorization": f"Bearer {user_token}"}
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "notifications" in data
@@ -64,10 +63,9 @@ class TestNotificationList:
     async def test_unread_count_endpoint(self, client, user_token):
         """Unread count endpoint should return integer."""
         response = await client.get(
-            "/api/notifications/unread-count",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/notifications/unread-count", headers={"Authorization": f"Bearer {user_token}"}
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "unread_count" in data
@@ -81,25 +79,22 @@ class TestNotificationActions:
     async def test_mark_notification_as_read(self, client, test_user, user_token, db_session):
         """User should be able to mark a notification as read."""
         notification = Notification(
-            user_id=test_user.id,
-            type="test",
-            title="Read Test",
-            message="Please mark me as read"
+            user_id=test_user.id, type="test", title="Read Test", message="Please mark me as read"
         )
         db_session.add(notification)
         await db_session.commit()
         await db_session.refresh(notification)
         notif_id = str(notification.id)
-        
+
         response = await client.put(
-            f"/api/notifications/{notif_id}/read",
-            headers={"Authorization": f"Bearer {user_token}"}
+            f"/api/notifications/{notif_id}/read", headers={"Authorization": f"Bearer {user_token}"}
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["read"] is True
         assert data["read_at"] is not None
+
 
 """Extended tests for Environments, Notifications, and Health API endpoints."""
 
@@ -111,6 +106,7 @@ from app.models.notification import Notification
 from app.models.health_check import HealthCheck
 from app.models.server import Server
 
+
 class TestNotificationsAPI:
     """Tests for notification endpoints."""
 
@@ -118,8 +114,7 @@ class TestNotificationsAPI:
     async def test_list_notifications(self, client, user_token):
         """Should list user notifications."""
         response = await client.get(
-            "/api/notifications/",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/notifications/", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -130,8 +125,7 @@ class TestNotificationsAPI:
     async def test_unread_count(self, client, user_token):
         """Should get unread notification count."""
         response = await client.get(
-            "/api/notifications/unread-count",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/notifications/unread-count", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -142,7 +136,7 @@ class TestNotificationsAPI:
         """Marking non-existent notification as read should 404."""
         response = await client.put(
             "/api/notifications/00000000-0000-0000-0000-000000000000/read",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 404
 
@@ -150,11 +144,9 @@ class TestNotificationsAPI:
     async def test_mark_all_read(self, client, user_token):
         """Should mark all notifications as read."""
         response = await client.put(
-            "/api/notifications/read-all",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/notifications/read-all", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 200
-
 
 
 """Extended tests for small API modules — coverage gap closure."""
@@ -186,6 +178,7 @@ def reset_maintenance_state():
 # ─────────────────────────────────────────────────────────────
 # Schedules API
 # ─────────────────────────────────────────────────────────────
+
 
 class TestNotificationsExtended:
     """Tests for notifications endpoint coverage gaps."""
@@ -304,8 +297,7 @@ class TestNotificationUnreadCount:
         await db_session.commit()
 
         response = await client.get(
-            "/api/notifications/unread-count",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/notifications/unread-count", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 200
         assert response.json()["unread_count"] == 2
@@ -321,7 +313,7 @@ class TestNotificationFilters:
 
         response = await client.get(
             "/api/notifications/?unread_only=true",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 200
         data = response.json()
@@ -336,8 +328,7 @@ class TestNotificationFilters:
         await db_session.commit()
 
         response = await client.get(
-            "/api/notifications/?type=server",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/notifications/?type=server", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -354,8 +345,7 @@ class TestMarkAllAsRead:
         await db_session.commit()
 
         response = await client.put(
-            "/api/notifications/read-all",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/notifications/read-all", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 200
         assert "2" in response.json()["message"]
@@ -370,16 +360,14 @@ class TestDeleteNotification:
         await db_session.refresh(n)
 
         response = await client.delete(
-            f"/api/notifications/{n.id}",
-            headers={"Authorization": f"Bearer {user_token}"}
+            f"/api/notifications/{n.id}", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 204
 
     @pytest.mark.asyncio
     async def test_delete_notification_not_found(self, client, user_token):
         response = await client.delete(
-            f"/api/notifications/{uuid.uuid4()}",
-            headers={"Authorization": f"Bearer {user_token}"}
+            f"/api/notifications/{uuid.uuid4()}", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 404
 
@@ -395,8 +383,8 @@ class TestAdminCreateNotification:
                 "type": "system",
                 "title": "Admin Alert",
                 "message": "Hello",
-                "severity": "info"
-            }
+                "severity": "info",
+            },
         )
         assert response.status_code == 201
 
@@ -410,7 +398,7 @@ class TestAdminCreateNotification:
                 "type": "system",
                 "title": "Hack",
                 "message": "Bad",
-            }
+            },
         )
         assert response.status_code == 403
 
@@ -418,6 +406,6 @@ class TestAdminCreateNotification:
     async def test_mark_read_not_found(self, client, user_token):
         response = await client.put(
             f"/api/notifications/{uuid.uuid4()}/read",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 404

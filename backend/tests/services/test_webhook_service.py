@@ -57,8 +57,8 @@ class TestWebhookServiceSign:
 
         expected = hmac.new(
             secret.encode(),
-            json.dumps(payload, sort_keys=True, separators=(',', ':')).encode(),
-            hashlib.sha256
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(),
+            hashlib.sha256,
         ).hexdigest()
         assert signature == expected
 
@@ -71,7 +71,7 @@ class TestWebhookServiceDispatch:
         """dispatch should return a dict result."""
         service = WebhookService(secret="test")
         # Patch the internal ClientSession usage to avoid real network calls
-        with patch('aiohttp.ClientSession') as mock_cls:
+        with patch("aiohttp.ClientSession") as mock_cls:
             mock_response = AsyncMock()
             mock_response.status = 200
             mock_response.__aenter__ = AsyncMock(return_value=mock_response)
@@ -113,9 +113,13 @@ class TestWebhookServiceDispatchToUser:
         """Should fail when user not found."""
         service = WebhookService(secret="test")
         import uuid as uuid_mod
-        result = await service.dispatch_to_user(str(uuid_mod.uuid4()), "test.event", {}, db=db_session)
+
+        result = await service.dispatch_to_user(
+            str(uuid_mod.uuid4()), "test.event", {}, db=db_session
+        )
         assert result["success"] is False
         assert "not found" in result["error"].lower()
+
 
 """Extended coverage tests for WebhookService error/retry branches."""
 
@@ -154,7 +158,7 @@ class TestWebhookServiceDispatchRetry:
 
         mock_session, mock_post = _make_awaitable_context_manager(response_status=500)
 
-        with patch('aiohttp.ClientSession') as mock_cls:
+        with patch("aiohttp.ClientSession") as mock_cls:
             mock_cls.return_value = mock_session
             result = await service.dispatch("https://example.com/hook", "test.event", {"id": 1})
 
@@ -171,7 +175,7 @@ class TestWebhookServiceDispatchRetry:
             side_effect=Exception("connection refused")
         )
 
-        with patch('aiohttp.ClientSession') as mock_cls:
+        with patch("aiohttp.ClientSession") as mock_cls:
             mock_cls.return_value = mock_session
             result = await service.dispatch("https://example.com/hook", "test.event", {"id": 1})
 
@@ -201,9 +205,11 @@ class TestWebhookServiceDispatchRetry:
         mock_session.__aexit__ = AsyncMock(return_value=False)
         mock_session.post = mock_post
 
-        with patch('aiohttp.ClientSession') as mock_cls:
+        with patch("aiohttp.ClientSession") as mock_cls:
             mock_cls.return_value = mock_session
-            result = await service.dispatch("https://example.com/hook", "test.event", {"id": 1}, max_retries=2)
+            result = await service.dispatch(
+                "https://example.com/hook", "test.event", {"id": 1}, max_retries=2
+            )
 
         assert result["success"] is True
         assert result["attempt"] == 2
@@ -221,9 +227,11 @@ class TestWebhookServiceDispatchToUserExtended:
         service = WebhookService(secret="test")
         mock_session, _ = _make_awaitable_context_manager(response_status=200)
 
-        with patch('aiohttp.ClientSession') as mock_cls:
+        with patch("aiohttp.ClientSession") as mock_cls:
             mock_cls.return_value = mock_session
-            result = await service.dispatch_to_user(str(test_user.id), "test.event", {"id": 1}, db=db_session)
+            result = await service.dispatch_to_user(
+                str(test_user.id), "test.event", {"id": 1}, db=db_session
+            )
 
         assert result["success"] is True
 
@@ -248,6 +256,9 @@ class TestWebhookServiceDispatchToUserExtended:
         """Should fail when user not found."""
         service = WebhookService(secret="test")
         import uuid as uuid_mod
-        result = await service.dispatch_to_user(str(uuid_mod.uuid4()), "test.event", {}, db=db_session)
+
+        result = await service.dispatch_to_user(
+            str(uuid_mod.uuid4()), "test.event", {}, db=db_session
+        )
         assert result["success"] is False
         assert "not found" in result["error"].lower()

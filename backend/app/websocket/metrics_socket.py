@@ -56,54 +56,46 @@ def _update_active_websocket_connections() -> None:
     set_active_websocket_connections(total)
 
 
-async def stream_logs_to_websocket(websocket: WebSocket, server_id: str, container_id: str, tail: int = 100):
+async def stream_logs_to_websocket(
+    websocket: WebSocket, server_id: str, container_id: str, tail: int = 100
+):
     """Stream container logs to a WebSocket connection"""
     from app.container.client import get_container_client
-    
+
     try:
         container_client = await get_container_client()
         container = await container_client.client.containers.get(container_id)
-        
+
         # Send initial message
-        await websocket.send_json({
-            "event": "logs:started",
-            "server_id": server_id,
-            "message": "Log streaming started"
-        })
-        
+        await websocket.send_json(
+            {"event": "logs:started", "server_id": server_id, "message": "Log streaming started"}
+        )
+
         # Stream logs
         logs = await container.log(
-            stdout=True,
-            stderr=True,
-            tail=tail,
-            follow=True,
-            timestamps=True
+            stdout=True, stderr=True, tail=tail, follow=True, timestamps=True
         )
-        
+
         async for line in logs:
             if websocket not in connection_users:
                 break
-            
+
             room = f"logs:{server_id}"
             if room not in connections or websocket not in connections.get(room, set()):
                 break
-            
+
             try:
-                await websocket.send_json({
-                    "event": "logs:data",
-                    "server_id": server_id,
-                    "data": line
-                })
+                await websocket.send_json(
+                    {"event": "logs:data", "server_id": server_id, "data": line}
+                )
             except Exception:
                 break
-                
+
     except Exception as e:
         try:
-            await websocket.send_json({
-                "event": "logs:error",
-                "server_id": server_id,
-                "error": str(e)
-            })
+            await websocket.send_json(
+                {"event": "logs:error", "server_id": server_id, "error": str(e)}
+            )
         except Exception:
             pass
     finally:
@@ -113,7 +105,7 @@ async def stream_logs_to_websocket(websocket: WebSocket, server_id: str, contain
             connections[room].discard(websocket)
             if not connections[room]:
                 connections.pop(room, None)
-        
+
         task_key = f"{id(websocket)}:{server_id}"
         if task_key in log_streams:
             log_streams.pop(task_key, None)
@@ -137,7 +129,7 @@ async def validate_token(token: str) -> Optional[User]:
 
 async def validate_websocket_token(websocket: WebSocket) -> Optional[User]:
     """Validate JWT token from WebSocket query parameters"""
-    return await validate_token(websocket.query_params.get('token') or '')
+    return await validate_token(websocket.query_params.get("token") or "")
 
 
 def has_permission(user: User, permission: str) -> bool:
@@ -149,16 +141,18 @@ def has_permission(user: User, permission: str) -> bool:
 async def check_server_access(user: User, server_id: str, db: AsyncSession) -> bool:
     """Check if user can access a specific server"""
     # Admin/moderator/support with read_all can access any server
-    if has_permission(user, Permission.SERVERS_READ_ALL) or has_permission(user, Permission.SERVERS_WRITE_ALL):
+    if has_permission(user, Permission.SERVERS_READ_ALL) or has_permission(
+        user, Permission.SERVERS_WRITE_ALL
+    ):
         return True
-    
+
     # Check if user owns the server
     result = await db.execute(select(Server).where(Server.id == server_id))
     server = result.scalar_one_or_none()
-    
+
     if server and str(server.user_id) == str(user.id):
         return True
-    
+
     return False
 
 
@@ -192,14 +186,18 @@ class MetricsWebSocketManager:
             async for message in pubsub.listen():
                 if not self._running:
                     break
-                if message['type'] in ('message', 'pmessage'):
+                if message["type"] in ("message", "pmessage"):
                     try:
-                        data = json.loads(message['data'])
-                        channel = message.get('channel', '').decode() if isinstance(message.get('channel'), bytes) else message.get('channel', '')
+                        data = json.loads(message["data"])
+                        channel = (
+                            message.get("channel", "").decode()
+                            if isinstance(message.get("channel"), bytes)
+                            else message.get("channel", "")
+                        )
                         channel_str = str(channel)
-                        if channel_str.startswith('user:'):
+                        if channel_str.startswith("user:"):
                             await self._broadcast_user_event(data)
-                        elif channel == 'metrics:system' or 'metrics:system' in channel_str:
+                        elif channel == "metrics:system" or "metrics:system" in channel_str:
                             await self._broadcast_system_metric(data)
                         else:
                             await self._broadcast_metric(data)
@@ -259,7 +257,7 @@ class MetricsWebSocketManager:
 
     async def _broadcast_metric(self, metric: dict):
         """Broadcast metric to subscribed clients"""
-        server_id = metric.get('server_id')
+        server_id = metric.get("server_id")
         disconnected = []
 
         # Broadcast to server-specific subscribers
@@ -268,10 +266,7 @@ class MetricsWebSocketManager:
             if room in connections:
                 for ws in connections[room]:
                     try:
-                        await ws.send_json({
-                            "event": "metrics:server",
-                            "data": metric
-                        })
+                        await ws.send_json({"event": "metrics:server", "data": metric})
                     except Exception:
                         disconnected.append((room, ws))
 
@@ -279,10 +274,7 @@ class MetricsWebSocketManager:
         if "global" in connections:
             for ws in connections["global"]:
                 try:
-                    await ws.send_json({
-                        "event": "metrics:all",
-                        "data": metric
-                    })
+                    await ws.send_json({"event": "metrics:all", "data": metric})
                 except Exception:
                     disconnected.append(("global", ws))
 
@@ -298,7 +290,7 @@ class MetricsWebSocketManager:
 
     async def _broadcast_user_event(self, payload: dict):
         """Broadcast user-specific events (e.g. notifications) to their room."""
-        user_id = payload.get('user_id')
+        user_id = payload.get("user_id")
         if not user_id:
             return
         room = f"user:{user_id}"
@@ -307,10 +299,9 @@ class MetricsWebSocketManager:
         disconnected = []
         for ws in connections[room]:
             try:
-                await ws.send_json({
-                    "event": payload.get('event', 'user:event'),
-                    "data": payload.get('data', {})
-                })
+                await ws.send_json(
+                    {"event": payload.get("event", "user:event"), "data": payload.get("data", {})}
+                )
             except Exception:
                 disconnected.append((room, ws))
         self._cleanup_disconnected(disconnected)
@@ -318,23 +309,20 @@ class MetricsWebSocketManager:
     async def _broadcast_system_metric(self, metric: dict):
         """Broadcast system metric to global subscribers only"""
         disconnected = []
-        
+
         # Only broadcast to global room (admin-only)
         if "global" in connections:
             for ws in connections["global"]:
                 try:
-                    await ws.send_json({
-                        "event": "metrics:system",
-                        "data": metric
-                    })
+                    await ws.send_json({"event": "metrics:system", "data": metric})
                 except Exception:
                     disconnected.append(("global", ws))
-        
+
         self._cleanup_disconnected(disconnected)
 
     async def _authenticate(self, websocket: WebSocket) -> Optional[User]:
         """Authenticate a WebSocket connection.
-        
+
         First tries query parameter (backward compat), then waits for
         an 'auth' message post-connection. Returns None if auth fails.
         """
@@ -347,8 +335,8 @@ class MetricsWebSocketManager:
         try:
             message = await asyncio.wait_for(websocket.receive_text(), timeout=5.0)
             data = json.loads(message)
-            if data.get('type') == 'auth':
-                return await validate_token(data.get('token') or '')
+            if data.get("type") == "auth":
+                return await validate_token(data.get("token") or "")
         except asyncio.TimeoutError:
             pass
         except Exception:
@@ -362,7 +350,9 @@ class MetricsWebSocketManager:
         user = await self._authenticate(websocket)
         if not user:
             try:
-                await websocket.send_json({"event": "auth:error", "message": "Authentication required"})
+                await websocket.send_json(
+                    {"event": "auth:error", "message": "Authentication required"}
+                )
                 await websocket.close(code=4001, reason="Authentication required")
             except Exception:
                 pass
@@ -382,9 +372,9 @@ class MetricsWebSocketManager:
 
         # Store user data for this connection
         connection_users[websocket] = {
-            'user_id': str(user.id),
-            'username': user.username,
-            'role': user.role,
+            "user_id": str(user.id),
+            "username": user.username,
+            "role": user.role,
         }
 
         try:
@@ -405,44 +395,45 @@ class MetricsWebSocketManager:
 
                 # ─── WebSocket message-level rate limiting ───
                 if ws_redis and settings.rate_limit_enabled:
-                    user_id = connection_users[websocket]['user_id']
-                    role = connection_users[websocket]['role']
+                    user_id = connection_users[websocket]["user_id"]
+                    role = connection_users[websocket]["role"]
                     is_limited, limit, remaining = await _check_ws_message_rate_limit(
                         ws_redis, user_id, role
                     )
                     if is_limited:
-                        await websocket.send_json({
-                            "event": "rate_limited",
-                            "message": "Too many messages. Please slow down.",
-                            "retry_after": settings.rate_limit_window_seconds,
-                        })
+                        await websocket.send_json(
+                            {
+                                "event": "rate_limited",
+                                "message": "Too many messages. Please slow down.",
+                                "retry_after": settings.rate_limit_window_seconds,
+                            }
+                        )
                         continue
 
                 try:
                     data = json.loads(message)
-                    msg_type = data.get('type')
+                    msg_type = data.get("type")
 
-                    if msg_type == 'subscribe':
-                        scope = data.get('scope', 'global')
-                        target_id = data.get('target_id')
+                    if msg_type == "subscribe":
+                        scope = data.get("scope", "global")
+                        target_id = data.get("target_id")
 
                         # Check permissions based on scope
                         allowed = False
                         room = "global"
 
-                        if scope == 'server' and target_id:
+                        if scope == "server" and target_id:
                             room = f"server:{target_id}"
                             # Check server access
                             async with AsyncSessionLocal() as db:
                                 allowed = await check_server_access(user, target_id, db)
                             if not allowed:
-                                await websocket.send_json({
-                                    "event": "error",
-                                    "message": "Access denied to this server"
-                                })
+                                await websocket.send_json(
+                                    {"event": "error", "message": "Access denied to this server"}
+                                )
                                 continue
 
-                        elif scope == 'user' and target_id:
+                        elif scope == "user" and target_id:
                             room = f"user:{target_id}"
                             # Users can only subscribe to their own user channel
                             # Admins/moderators can subscribe to any
@@ -451,126 +442,126 @@ class MetricsWebSocketManager:
                             elif has_permission(user, Permission.USERS_READ):
                                 allowed = True
                             else:
-                                await websocket.send_json({
-                                    "event": "error",
-                                    "message": "Access denied to this user channel"
-                                })
+                                await websocket.send_json(
+                                    {
+                                        "event": "error",
+                                        "message": "Access denied to this user channel",
+                                    }
+                                )
                                 continue
 
-                        elif scope == 'global':
+                        elif scope == "global":
                             room = "global"
                             # Only admins can subscribe to global system metrics
                             if has_permission(user, Permission.ADMIN_ACCESS):
                                 allowed = True
                             else:
-                                await websocket.send_json({
-                                    "event": "error",
-                                    "message": "Admin access required for global metrics"
-                                })
+                                await websocket.send_json(
+                                    {
+                                        "event": "error",
+                                        "message": "Admin access required for global metrics",
+                                    }
+                                )
                                 continue
                         else:
                             # Unknown scope
-                            await websocket.send_json({
-                                "event": "error",
-                                "message": f"Unknown scope: {scope}"
-                            })
+                            await websocket.send_json(
+                                {"event": "error", "message": f"Unknown scope: {scope}"}
+                            )
                             continue
 
                         if room not in connections:
                             connections[room] = set()
                         connections[room].add(websocket)
 
-                        await websocket.send_json({
-                            "event": "subscribed",
-                            "scope": scope,
-                            "target_id": target_id
-                        })
+                        await websocket.send_json(
+                            {"event": "subscribed", "scope": scope, "target_id": target_id}
+                        )
 
-                    elif msg_type == 'subscribe_logs':
-                        server_id = data.get('server_id')
-                        tail = data.get('tail', 100)
-                        
+                    elif msg_type == "subscribe_logs":
+                        server_id = data.get("server_id")
+                        tail = data.get("tail", 100)
+
                         if not server_id:
-                            await websocket.send_json({
-                                "event": "error",
-                                "message": "server_id is required for log streaming"
-                            })
+                            await websocket.send_json(
+                                {
+                                    "event": "error",
+                                    "message": "server_id is required for log streaming",
+                                }
+                            )
                             continue
-                        
+
                         # Check server access
                         async with AsyncSessionLocal() as db:
                             allowed = await check_server_access(user, server_id, db)
-                        
+
                         if not allowed:
-                            await websocket.send_json({
-                                "event": "error",
-                                "message": "Access denied to this server"
-                            })
+                            await websocket.send_json(
+                                {"event": "error", "message": "Access denied to this server"}
+                            )
                             continue
-                        
+
                         # Get container ID
                         async with AsyncSessionLocal() as db:
-                            result = await db.execute(
-                                select(Server).where(Server.id == server_id)
-                            )
+                            result = await db.execute(select(Server).where(Server.id == server_id))
                             server = result.scalar_one_or_none()
-                        
+
                         if not server or not server.container_id:
-                            await websocket.send_json({
-                                "event": "error",
-                                "message": "Server not found or no container running"
-                            })
+                            await websocket.send_json(
+                                {
+                                    "event": "error",
+                                    "message": "Server not found or no container running",
+                                }
+                            )
                             continue
-                        
+
                         room = f"logs:{server_id}"
                         if room not in connections:
                             connections[room] = set()
                         connections[room].add(websocket)
-                        
+
                         # Start log streaming task
                         task_key = f"{id(websocket)}:{server_id}"
                         if task_key in log_streams:
                             log_streams[task_key].cancel()
-                        
+
                         task = asyncio.create_task(
                             stream_logs_to_websocket(
                                 websocket, server_id, server.container_id, tail
                             )
                         )
                         log_streams[task_key] = task
-                        
-                        await websocket.send_json({
-                            "event": "logs:subscribed",
-                            "server_id": server_id
-                        })
 
-                    elif msg_type == 'unsubscribe_logs':
-                        server_id = data.get('server_id')
-                        
+                        await websocket.send_json(
+                            {"event": "logs:subscribed", "server_id": server_id}
+                        )
+
+                    elif msg_type == "unsubscribe_logs":
+                        server_id = data.get("server_id")
+
                         if server_id:
                             room = f"logs:{server_id}"
                             if room in connections:
                                 connections[room].discard(websocket)
                                 if not connections[room]:
                                     connections.pop(room, None)
-                            
+
                             task_key = f"{id(websocket)}:{server_id}"
                             if task_key in log_streams:
                                 log_streams[task_key].cancel()
                                 log_streams.pop(task_key, None)
-                        
-                        await websocket.send_json({
-                            "event": "logs:unsubscribed",
-                            "server_id": server_id
-                        })
 
-                    elif msg_type == 'unsubscribe':
-                        scope = data.get('scope', 'global')
-                        target_id = data.get('target_id')
+                        await websocket.send_json(
+                            {"event": "logs:unsubscribed", "server_id": server_id}
+                        )
 
-                        if scope == 'server' and target_id:
+                    elif msg_type == "unsubscribe":
+                        scope = data.get("scope", "global")
+                        target_id = data.get("target_id")
+
+                        if scope == "server" and target_id:
                             room = f"server:{target_id}"
-                        elif scope == 'user' and target_id:
+                        elif scope == "user" and target_id:
                             room = f"user:{target_id}"
                         else:
                             room = "global"
@@ -580,17 +571,12 @@ class MetricsWebSocketManager:
                             if not connections[room]:
                                 connections.pop(room, None)
 
-                        await websocket.send_json({
-                            "event": "unsubscribed",
-                            "scope": scope,
-                            "target_id": target_id
-                        })
+                        await websocket.send_json(
+                            {"event": "unsubscribed", "scope": scope, "target_id": target_id}
+                        )
 
                 except json.JSONDecodeError:
-                    await websocket.send_json({
-                        "event": "error",
-                        "message": "Invalid JSON"
-                    })
+                    await websocket.send_json({"event": "error", "message": "Invalid JSON"})
 
         except WebSocketDisconnect:
             pass
@@ -610,13 +596,12 @@ class MetricsWebSocketManager:
                 connections[room].discard(websocket)
                 if not connections[room]:
                     connections.pop(room, None)
-            
+
             _update_active_websocket_connections()
 
             # Cancel any active log streaming tasks for this connection
             tasks_to_cancel = [
-                task for key, task in log_streams.items()
-                if key.startswith(f"{id(websocket)}:")
+                task for key, task in log_streams.items() if key.startswith(f"{id(websocket)}:")
             ]
             for task in tasks_to_cancel:
                 task.cancel()

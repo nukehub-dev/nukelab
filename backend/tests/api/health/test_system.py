@@ -12,6 +12,7 @@ from app.services.setting_service import SettingService
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def reset_maintenance_state():
     """Reset global maintenance state before and after each test."""
@@ -25,6 +26,7 @@ def reset_maintenance_state():
 # ---------------------------------------------------------------------------
 # SettingService Tests
 # ---------------------------------------------------------------------------
+
 
 class TestHealthEndpoint:
     """Public health check tests."""
@@ -43,7 +45,7 @@ class TestHealthEndpoint:
         # Enable maintenance
         await client.post(
             "/api/system/maintenance?enabled=true&message=Planned downtime",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            headers={"Authorization": f"Bearer {admin_token}"},
         )
 
         response = await client.get("/health")
@@ -56,5 +58,3 @@ class TestHealthEndpoint:
 # ---------------------------------------------------------------------------
 # Maintenance Middleware Tests
 # ---------------------------------------------------------------------------
-
-

@@ -2,6 +2,7 @@
 
 import pytest
 
+
 class TestMetricsAPI:
     """Tests for metrics endpoints."""
 
@@ -10,7 +11,7 @@ class TestMetricsAPI:
         """Getting metrics for non-existent server should 404."""
         response = await client.get(
             "/api/metrics/servers/00000000-0000-0000-0000-000000000000",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert response.status_code == 404
 
@@ -19,7 +20,7 @@ class TestMetricsAPI:
         """Getting latest metrics for non-existent server should 404."""
         response = await client.get(
             "/api/metrics/servers/00000000-0000-0000-0000-000000000000/latest",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert response.status_code == 404
 
@@ -27,8 +28,7 @@ class TestMetricsAPI:
     async def test_get_system_metrics(self, client, admin_token):
         """Should get system metrics."""
         response = await client.get(
-            "/api/metrics/system",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/metrics/system", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
 
@@ -36,8 +36,7 @@ class TestMetricsAPI:
     async def test_get_latest_system_metrics(self, client, admin_token):
         """Should get latest system metrics."""
         response = await client.get(
-            "/api/metrics/system/latest",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/metrics/system/latest", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
 
@@ -45,8 +44,7 @@ class TestMetricsAPI:
     async def test_list_alert_rules(self, client, admin_token):
         """Should list alert rules."""
         response = await client.get(
-            "/api/metrics/alerts/rules",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/metrics/alerts/rules", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
 
@@ -55,7 +53,7 @@ class TestMetricsAPI:
         """Getting non-existent alert rule should 404."""
         response = await client.get(
             "/api/metrics/alerts/rules/00000000-0000-0000-0000-000000000000",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert response.status_code == 404
 
@@ -65,7 +63,7 @@ class TestMetricsAPI:
         response = await client.put(
             "/api/metrics/alerts/rules/00000000-0000-0000-0000-000000000000",
             headers={"Authorization": f"Bearer {admin_token}"},
-            json={"name": "Updated"}
+            json={"name": "Updated"},
         )
         assert response.status_code == 404
 
@@ -74,7 +72,7 @@ class TestMetricsAPI:
         """Deleting non-existent alert rule should 404."""
         response = await client.delete(
             "/api/metrics/alerts/rules/00000000-0000-0000-0000-000000000000",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert response.status_code == 404
 
@@ -82,8 +80,7 @@ class TestMetricsAPI:
     async def test_list_alert_history(self, client, admin_token):
         """Should list alert history."""
         response = await client.get(
-            "/api/metrics/alerts/history",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/metrics/alerts/history", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
 
@@ -92,7 +89,7 @@ class TestMetricsAPI:
         """Acknowledging non-existent alert."""
         response = await client.post(
             "/api/metrics/alerts/history/00000000-0000-0000-0000-000000000000/acknowledge",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            headers={"Authorization": f"Bearer {admin_token}"},
         )
         # May 404 or 422 depending on body requirements
         assert response.status_code in [404, 422]
@@ -102,7 +99,7 @@ class TestMetricsAPI:
         """Resolving non-existent alert should 404."""
         response = await client.post(
             "/api/metrics/alerts/history/00000000-0000-0000-0000-000000000000/resolve",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert response.status_code == 404
 
@@ -111,7 +108,7 @@ class TestMetricsAPI:
         """Getting health for non-existent server should 404."""
         response = await client.get(
             "/api/metrics/health/servers/00000000-0000-0000-0000-000000000000",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert response.status_code == 404
 
@@ -119,8 +116,6 @@ class TestMetricsAPI:
     async def test_get_health_summary(self, client, admin_token):
         """Should get health summary."""
         response = await client.get(
-            "/api/metrics/health/summary",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/metrics/health/summary", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
-

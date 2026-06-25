@@ -9,10 +9,27 @@ from app.core.tracing import init_tracing, is_tracing_enabled
 
 logger = get_logger(__name__)
 from app.api import (
-    auth, users, servers, tokens, credits, admin,
-    preferences, environments, plans, quotas, metrics,
-    notifications, dashboard, bulk, health, system, schedules, volumes, analytics, workspaces,
-    ip_restriction
+    auth,
+    users,
+    servers,
+    tokens,
+    credits,
+    admin,
+    preferences,
+    environments,
+    plans,
+    quotas,
+    metrics,
+    notifications,
+    dashboard,
+    bulk,
+    health,
+    system,
+    schedules,
+    volumes,
+    analytics,
+    workspaces,
+    ip_restriction,
 )
 from app.db.base import Base
 from app.db.session import engine, AsyncSessionLocal
@@ -34,6 +51,7 @@ async def startup():
     # Ensure partitions exist for time-series tables (safety net if Celery Beat is down)
     try:
         from app.db.partitioning import PartitionManager
+
         async with AsyncSessionLocal() as db:
             pm = PartitionManager(db)
             for table in pm.PARTITION_CONFIG:
@@ -45,6 +63,7 @@ async def startup():
     # Seed default data
     try:
         from app.db.seed import seed_all
+
         await seed_all()
     except Exception as e:
         logger.warning(f"Failed to seed data: {e}")
@@ -52,6 +71,7 @@ async def startup():
     # Load dynamic system settings from database
     try:
         from app.services.setting_service import SettingService
+
         async with AsyncSessionLocal() as db:
             service = SettingService(db)
             await service.load_into_config()
@@ -61,6 +81,7 @@ async def startup():
     # Load custom role permissions from database
     try:
         from app.core.roles import load_role_permissions_from_db
+
         await load_role_permissions_from_db()
     except Exception as e:
         logger.warning(f"Failed to load role permissions from DB: {e}")
@@ -70,6 +91,7 @@ async def startup():
     # Start Redis listener for metrics broadcasting
     try:
         import asyncio
+
         redis_task = asyncio.create_task(manager.start_redis_listener())
         coordinator.register_background_task(redis_task)
     except Exception as e:
@@ -79,6 +101,7 @@ async def startup():
     try:
         import asyncio
         from app.api.auth import run_periodic_refresh_token_cleanup
+
         cleanup_task = asyncio.create_task(run_periodic_refresh_token_cleanup())
         coordinator.register_background_task(cleanup_task)
     except Exception as e:
@@ -92,6 +115,7 @@ async def lifespan(app: FastAPI):
     yield
     # Graceful shutdown
     from app.core.redis_client import get_redis_client
+
     coordinator = get_shutdown_coordinator()
     await coordinator.shutdown(
         websocket_manager=manager,
@@ -112,14 +136,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
 @app.exception_handler(429)
 async def rate_limit_exceeded_handler(request: Request, exc):
     # Preserve the original error detail (quota reasons, rate limit info, etc.)
-    detail = getattr(exc, 'detail', 'Rate limit exceeded')
-    return JSONResponse(
-        status_code=429,
-        content={"detail": detail}
-    )
+    detail = getattr(exc, "detail", "Rate limit exceeded")
+    return JSONResponse(status_code=429, content={"detail": detail})
 
 
 from app.middleware.request_size_limit import RequestBodyTooLarge
@@ -137,36 +159,45 @@ async def request_body_too_large_handler(request: Request, exc: RequestBodyTooLa
         },
     )
 
+
 # IP restriction middleware (runs first — blocks bad IPs at the edge)
 from app.middleware.ip_restriction import IPRestrictionMiddleware
+
 app.add_middleware(IPRestrictionMiddleware)
 
 # Security headers middleware (exception-safe ASGI — runs early)
 from app.core.security_headers_asgi import SecurityHeadersMiddleware
+
 app.add_middleware(SecurityHeadersMiddleware)
 
 # CSRF protection middleware (runs before auth-dependent middleware)
 from app.middleware.csrf import CSRFProtectMiddleware
+
 app.add_middleware(CSRFProtectMiddleware)
 
 # Maintenance middleware (must be before auth-dependent middleware)
 from app.middleware.maintenance import MaintenanceMiddleware
+
 app.add_middleware(MaintenanceMiddleware)
 
 # Rate limit middleware (per-user, JWT-based — runs before expensive ops)
 from app.middleware.rate_limit import RateLimitMiddleware
+
 app.add_middleware(RateLimitMiddleware)
 
 # Request metrics middleware (captures total latency after rate limit)
 from app.middleware.request_metrics import RequestMetricsMiddleware
+
 app.add_middleware(RequestMetricsMiddleware)
 
 # Audit middleware
 from app.middleware.audit import AuditMiddleware
+
 app.add_middleware(AuditMiddleware)
 
 # Request body size limit (runs first — rejects oversized payloads before any processing)
 from app.middleware.request_size_limit import RequestSizeLimitMiddleware
+
 app.add_middleware(RequestSizeLimitMiddleware, max_size=settings.max_request_body_size)
 
 # CORS — strict in production, permissive but safe in development
@@ -252,16 +283,13 @@ async def health():
     if is_shutting_down():
         return JSONResponse(
             status_code=503,
-            content={"status": "shutting_down", "message": "Server is shutting down"}
+            content={"status": "shutting_down", "message": "Server is shutting down"},
         )
 
     if settings.maintenance_mode:
         return JSONResponse(
             status_code=503,
-            content={
-                "status": "maintenance",
-                "message": settings.maintenance_message
-            }
+            content={"status": "maintenance", "message": settings.maintenance_message},
         )
     return {"status": "healthy"}
 

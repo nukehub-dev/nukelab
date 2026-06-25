@@ -51,8 +51,7 @@ def check_permission(user: User, permission: str):
     """Check permission and raise 403 if not allowed"""
     if not has_permission(user, permission):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient permissions"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
         )
 
 
@@ -60,6 +59,5 @@ def check_any_permission(user: User, permissions: List[str]):
     """Check any permission and raise 403 if none allowed"""
     if not has_any_permission(user, permissions):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient permissions"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
         )

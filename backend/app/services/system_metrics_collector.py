@@ -31,7 +31,7 @@ class SystemMetricsCollector:
         memory = psutil.virtual_memory()
 
         # Disk
-        disk = psutil.disk_usage('/')
+        disk = psutil.disk_usage("/")
         try:
             disk_io = psutil.disk_io_counters()
         except Exception:
@@ -53,15 +53,13 @@ class SystemMetricsCollector:
             container_client = await get_fresh_container_client()
             containers = await container_client.list_containers()
             docker_containers_total = len(containers)
-            docker_containers_running = sum(
-                1 for c in containers if c.get('State') == 'running'
-            )
+            docker_containers_running = sum(1 for c in containers if c.get("State") == "running")
             # Count actual nukelab servers (containers with nukelab.server.id label)
             for container in containers:
                 try:
                     container_info = await container.show()
-                    labels = container_info.get('Config', {}).get('Labels', {}) or {}
-                    if labels.get('nukelab.server.id'):
+                    labels = container_info.get("Config", {}).get("Labels", {}) or {}
+                    if labels.get("nukelab.server.id"):
                         active_servers_count += 1
                 except Exception:
                     pass
@@ -81,20 +79,24 @@ class SystemMetricsCollector:
         disk_write_rate = 0
         try:
             import os
-            disk_cache_file = '/tmp/nukelab_disk_cache.json'
+
+            disk_cache_file = "/tmp/nukelab_disk_cache.json"
             disk_prev_data = None
             if os.path.exists(disk_cache_file):
                 try:
-                    with open(disk_cache_file, 'r') as f:
+                    with open(disk_cache_file, "r") as f:
                         disk_prev_data = json.load(f)
                 except Exception:
                     pass
 
             if disk_prev_data and disk_io:
-                time_diff = (datetime.now(UTC).replace(tzinfo=None) - datetime.fromisoformat(disk_prev_data['timestamp'])).total_seconds()
+                time_diff = (
+                    datetime.now(UTC).replace(tzinfo=None)
+                    - datetime.fromisoformat(disk_prev_data["timestamp"])
+                ).total_seconds()
                 if time_diff > 0:
-                    read_diff = disk_io.read_bytes - disk_prev_data.get('read_bytes', 0)
-                    write_diff = disk_io.write_bytes - disk_prev_data.get('write_bytes', 0)
+                    read_diff = disk_io.read_bytes - disk_prev_data.get("read_bytes", 0)
+                    write_diff = disk_io.write_bytes - disk_prev_data.get("write_bytes", 0)
                     # Handle counter reset (if system rebooted)
                     if read_diff >= 0:
                         disk_read_rate = max(0, read_diff / time_diff)
@@ -103,12 +105,15 @@ class SystemMetricsCollector:
 
             # Save current values
             if disk_io:
-                with open(disk_cache_file, 'w') as f:
-                    json.dump({
-                        'timestamp': datetime.now(UTC).replace(tzinfo=None).isoformat(),
-                        'read_bytes': disk_io.read_bytes,
-                        'write_bytes': disk_io.write_bytes,
-                    }, f)
+                with open(disk_cache_file, "w") as f:
+                    json.dump(
+                        {
+                            "timestamp": datetime.now(UTC).replace(tzinfo=None).isoformat(),
+                            "read_bytes": disk_io.read_bytes,
+                            "write_bytes": disk_io.write_bytes,
+                        },
+                        f,
+                    )
         except Exception:
             pass
 
@@ -118,20 +123,24 @@ class SystemMetricsCollector:
         try:
             # Try to get previous values from a simple cache file
             import os
-            cache_file = '/tmp/nukelab_network_cache.json'
+
+            cache_file = "/tmp/nukelab_network_cache.json"
             prev_data = None
             if os.path.exists(cache_file):
                 try:
-                    with open(cache_file, 'r') as f:
+                    with open(cache_file, "r") as f:
                         prev_data = json.load(f)
                 except Exception:
                     pass
 
             if prev_data and net_io:
-                time_diff = (datetime.now(UTC).replace(tzinfo=None) - datetime.fromisoformat(prev_data['timestamp'])).total_seconds()
+                time_diff = (
+                    datetime.now(UTC).replace(tzinfo=None)
+                    - datetime.fromisoformat(prev_data["timestamp"])
+                ).total_seconds()
                 if time_diff > 0:
-                    rx_diff = net_io.bytes_recv - prev_data.get('rx_bytes', 0)
-                    tx_diff = net_io.bytes_sent - prev_data.get('tx_bytes', 0)
+                    rx_diff = net_io.bytes_recv - prev_data.get("rx_bytes", 0)
+                    tx_diff = net_io.bytes_sent - prev_data.get("tx_bytes", 0)
                     # Handle counter reset (if system rebooted)
                     if rx_diff >= 0:
                         network_rx_rate = max(0, rx_diff / time_diff)
@@ -140,40 +149,43 @@ class SystemMetricsCollector:
 
             # Save current values
             if net_io:
-                with open(cache_file, 'w') as f:
-                    json.dump({
-                        'timestamp': datetime.now(UTC).replace(tzinfo=None).isoformat(),
-                        'rx_bytes': net_io.bytes_recv,
-                        'tx_bytes': net_io.bytes_sent,
-                    }, f)
+                with open(cache_file, "w") as f:
+                    json.dump(
+                        {
+                            "timestamp": datetime.now(UTC).replace(tzinfo=None).isoformat(),
+                            "rx_bytes": net_io.bytes_recv,
+                            "tx_bytes": net_io.bytes_sent,
+                        },
+                        f,
+                    )
         except Exception:
             pass
 
         data = {
-            'host': 'localhost',
-            'cpu_percent': cpu_percent,
-            'cpu_count': cpu_count,
-            'cpu_load_1m': load_avg[0],
-            'cpu_load_5m': load_avg[1],
-            'cpu_load_15m': load_avg[2],
-            'memory_used': memory.used,
-            'memory_total': memory.total,
-            'memory_percent': memory.percent,
-            'memory_available': memory.available,
-            'disk_used': disk.used,
-            'disk_total': disk.total,
-            'disk_percent': (disk.used / disk.total) * 100 if disk.total else 0,
+            "host": "localhost",
+            "cpu_percent": cpu_percent,
+            "cpu_count": cpu_count,
+            "cpu_load_1m": load_avg[0],
+            "cpu_load_5m": load_avg[1],
+            "cpu_load_15m": load_avg[2],
+            "memory_used": memory.used,
+            "memory_total": memory.total,
+            "memory_percent": memory.percent,
+            "memory_available": memory.available,
+            "disk_used": disk.used,
+            "disk_total": disk.total,
+            "disk_percent": (disk.used / disk.total) * 100 if disk.total else 0,
             # Disk I/O rates (bytes/sec)
-            'disk_read_bytes': int(disk_read_rate),
-            'disk_write_bytes': int(disk_write_rate),
+            "disk_read_bytes": int(disk_read_rate),
+            "disk_write_bytes": int(disk_write_rate),
             # Network throughput rates (bytes/sec)
-            'network_rx_bytes': int(network_rx_rate),
-            'network_tx_bytes': int(network_tx_rate),
+            "network_rx_bytes": int(network_rx_rate),
+            "network_tx_bytes": int(network_tx_rate),
             # Server counts
-            'docker_containers_running': docker_containers_running,
-            'docker_containers_total': docker_containers_total,
-            'docker_images_total': docker_images_total,
-            'collected_at': datetime.now(UTC).replace(tzinfo=None),
+            "docker_containers_running": docker_containers_running,
+            "docker_containers_total": docker_containers_total,
+            "docker_images_total": docker_images_total,
+            "collected_at": datetime.now(UTC).replace(tzinfo=None),
         }
 
         # Persist to DB using a fresh engine to avoid asyncpg conflicts in Celery threads
@@ -234,10 +246,7 @@ class SystemMetricsCollector:
         # Broadcast via Redis
         try:
             redis_client = redis.from_url(settings.redis_url)
-            await redis_client.publish(
-                "metrics:system",
-                json.dumps(data, default=str)
-            )
+            await redis_client.publish("metrics:system", json.dumps(data, default=str))
             await redis_client.aclose()
         except Exception:
             pass

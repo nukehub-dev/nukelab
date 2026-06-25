@@ -58,10 +58,12 @@ class TestOAuthServiceDiscovery:
         with mock.patch("app.services.oauth_service.settings") as mock_settings:
             mock_settings.oauth_discovery_url = "http://discovery/.well-known"
             mock_response = mock.AsyncMock()
-            mock_response.json = mock.AsyncMock(return_value={
-                "authorization_endpoint": "http://auth",
-                "token_endpoint": "http://token",
-            })
+            mock_response.json = mock.AsyncMock(
+                return_value={
+                    "authorization_endpoint": "http://auth",
+                    "token_endpoint": "http://token",
+                }
+            )
             mock_response.raise_for_status = mock.Mock()
 
             get_ctx = _make_async_context_manager(mock_response)
@@ -311,12 +313,14 @@ class TestOAuthServiceHelpers:
             mock_settings.oauth_email_claim = "email"
             mock_settings.oauth_name_claim = "name"
 
-            result = svc.extract_user_data({
-                "sub": "oauth-123",
-                "preferred_username": "john",
-                "email": "john@example.com",
-                "name": "John Doe",
-            })
+            result = svc.extract_user_data(
+                {
+                    "sub": "oauth-123",
+                    "preferred_username": "john",
+                    "email": "john@example.com",
+                    "name": "John Doe",
+                }
+            )
 
         assert result["username"] == "john"
         assert result["email"] == "john@example.com"
@@ -332,9 +336,11 @@ class TestOAuthServiceHelpers:
             mock_settings.oauth_email_claim = "email"
             mock_settings.oauth_name_claim = "name"
 
-            result = svc.extract_user_data({
-                "email": "jane@example.com",
-            })
+            result = svc.extract_user_data(
+                {
+                    "email": "jane@example.com",
+                }
+            )
 
         assert result["username"] == "jane"
         assert result["email"] == "jane@example.com"
@@ -347,13 +353,15 @@ class TestOAuthServiceHelpers:
             mock_settings.oauth_email_claim = "email"
             mock_settings.oauth_name_claim = "name"
 
-            result = svc.extract_user_data({
-                "sub": "1",
-                "preferred_username": "user",
-                "email": "u@e.com",
-                "organization": "Org",
-                "department": "Eng",
-            })
+            result = svc.extract_user_data(
+                {
+                    "sub": "1",
+                    "preferred_username": "user",
+                    "email": "u@e.com",
+                    "organization": "Org",
+                    "department": "Eng",
+                }
+            )
 
         assert result["extra_profile"]["organization"] == "Org"
         assert result["extra_profile"]["department"] == "Eng"

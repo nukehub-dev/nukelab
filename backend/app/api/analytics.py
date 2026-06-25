@@ -30,8 +30,7 @@ def _parse_date_params(
             raise HTTPException(status_code=422, detail="to_date must be after from_date")
         if (to_date - from_date).days > MAX_DATE_RANGE_DAYS:
             raise HTTPException(
-                status_code=422,
-                detail=f"Date range cannot exceed {MAX_DATE_RANGE_DAYS} days"
+                status_code=422, detail=f"Date range cannot exceed {MAX_DATE_RANGE_DAYS} days"
             )
         return days, from_date, to_date
     return days, None, None
@@ -44,15 +43,15 @@ async def get_user_usage(
     from_date: Optional[datetime] = Query(None, alias="from"),
     to_date: Optional[datetime] = Query(None, alias="to"),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.ANALYTICS_READ_OWN)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.ANALYTICS_READ_OWN)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get usage trends for a user."""
     # Users can only view their own, admins can view any
     if str(current_user.id) != user_id:
         checker = PermissionChecker(current_user)
         checker.require(Permission.ADMIN_ACCESS)
-    
+
     _, from_date, to_date = _parse_date_params(days, from_date, to_date)
     service = AnalyticsService(db)
     return await service.get_user_usage(user_id, days, from_date, to_date)
@@ -64,13 +63,13 @@ async def get_global_usage(
     from_date: Optional[datetime] = Query(None, alias="from"),
     to_date: Optional[datetime] = Query(None, alias="to"),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.ANALYTICS_READ)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get platform-wide usage statistics. Admin only."""
     checker = PermissionChecker(current_user)
     checker.require(Permission.ADMIN_ACCESS)
-    
+
     _, from_date, to_date = _parse_date_params(days, from_date, to_date)
     service = AnalyticsService(db)
     return await service.get_global_usage(days, from_date, to_date)
@@ -83,13 +82,13 @@ async def get_top_consumers(
     from_date: Optional[datetime] = Query(None, alias="from"),
     to_date: Optional[datetime] = Query(None, alias="to"),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.ANALYTICS_READ)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get top credit consumers. Admin only."""
     checker = PermissionChecker(current_user)
     checker.require(Permission.ADMIN_ACCESS)
-    
+
     _, from_date, to_date = _parse_date_params(days, from_date, to_date)
     service = AnalyticsService(db)
     consumers = await service.get_top_consumers(days, limit, from_date, to_date)
@@ -102,13 +101,13 @@ async def get_credit_flow(
     from_date: Optional[datetime] = Query(None, alias="from"),
     to_date: Optional[datetime] = Query(None, alias="to"),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.ANALYTICS_READ)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get daily credit flow (consumed vs granted). Admin only."""
     checker = PermissionChecker(current_user)
     checker.require(Permission.ADMIN_ACCESS)
-    
+
     _, from_date, to_date = _parse_date_params(days, from_date, to_date)
     service = AnalyticsService(db)
     flow = await service.get_credit_flow(days, from_date, to_date)
@@ -121,13 +120,13 @@ async def get_login_events(
     from_date: Optional[datetime] = Query(None, alias="from"),
     to_date: Optional[datetime] = Query(None, alias="to"),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.ANALYTICS_READ)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get daily login counts. Admin only."""
     checker = PermissionChecker(current_user)
     checker.require(Permission.ADMIN_ACCESS)
-    
+
     _, from_date, to_date = _parse_date_params(days, from_date, to_date)
     service = AnalyticsService(db)
     logins = await service.get_daily_logins(days, from_date, to_date)
@@ -140,13 +139,13 @@ async def get_user_growth(
     from_date: Optional[datetime] = Query(None, alias="from"),
     to_date: Optional[datetime] = Query(None, alias="to"),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.ANALYTICS_READ)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get daily new user signups. Admin only."""
     checker = PermissionChecker(current_user)
     checker.require(Permission.ADMIN_ACCESS)
-    
+
     _, from_date, to_date = _parse_date_params(days, from_date, to_date)
     service = AnalyticsService(db)
     growth = await service.get_user_growth(days, from_date, to_date)
@@ -159,13 +158,13 @@ async def get_platform_metrics(
     from_date: Optional[datetime] = Query(None, alias="from"),
     to_date: Optional[datetime] = Query(None, alias="to"),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.ANALYTICS_READ)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get platform-wide resource metrics over time. Admin only."""
     checker = PermissionChecker(current_user)
     checker.require(Permission.ADMIN_ACCESS)
-    
+
     _, from_date, to_date = _parse_date_params(days, from_date, to_date)
     service = AnalyticsService(db)
     metrics = await service.get_platform_metrics(days, from_date, to_date)
@@ -175,13 +174,13 @@ async def get_platform_metrics(
 @router.get("/volumes")
 async def get_volume_analytics(
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.ANALYTICS_READ)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get storage/volume analytics. Admin only."""
     checker = PermissionChecker(current_user)
     checker.require(Permission.ADMIN_ACCESS)
-    
+
     service = AnalyticsService(db)
     return await service.get_volume_analytics()
 
@@ -189,13 +188,13 @@ async def get_volume_analytics(
 @router.get("/workspaces")
 async def get_workspace_analytics(
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.ANALYTICS_READ)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get workspace collaboration analytics. Admin only."""
     checker = PermissionChecker(current_user)
     checker.require(Permission.ADMIN_ACCESS)
-    
+
     service = AnalyticsService(db)
     return await service.get_workspace_analytics()
 
@@ -203,13 +202,13 @@ async def get_workspace_analytics(
 @router.get("/environments")
 async def get_environment_usage(
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.ANALYTICS_READ)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get usage by environment. Admin only."""
     checker = PermissionChecker(current_user)
     checker.require(Permission.ADMIN_ACCESS)
-    
+
     service = AnalyticsService(db)
     environments = await service.get_environment_usage()
     return {"environments": environments}
@@ -218,13 +217,13 @@ async def get_environment_usage(
 @router.get("/plans")
 async def get_plan_usage(
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.ANALYTICS_READ)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get usage by plan. Admin only."""
     checker = PermissionChecker(current_user)
     checker.require(Permission.ADMIN_ACCESS)
-    
+
     service = AnalyticsService(db)
     plans = await service.get_plan_usage()
     return {"plans": plans}
@@ -234,8 +233,8 @@ async def get_plan_usage(
 async def export_analytics(
     request: dict,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.ANALYTICS_READ)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Export analytics data in CSV or JSON format. Admin only."""
     checker = PermissionChecker(current_user)
@@ -275,7 +274,7 @@ async def export_analytics(
         return StreamingResponse(
             iter([output.getvalue()]),
             media_type="text/csv",
-            headers={"Content-Disposition": f"attachment; filename={metric}.csv"}
+            headers={"Content-Disposition": f"attachment; filename={metric}.csv"},
         )
 
     return {"data": data}

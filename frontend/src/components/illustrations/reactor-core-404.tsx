@@ -141,7 +141,13 @@ export function ReactorCore404({ className }: { className?: string }) {
         className="rc-breach-ring"
       />
 
-      <circle cx="180" cy="180" r="48" fill="url(#rc-plasma-gradient)" className="rc-plasma-bloom" />
+      <circle
+        cx="180"
+        cy="180"
+        r="48"
+        fill="url(#rc-plasma-gradient)"
+        className="rc-plasma-bloom"
+      />
 
       <circle
         cx="180"
@@ -154,7 +160,14 @@ export function ReactorCore404({ className }: { className?: string }) {
         className="rc-core-shell"
       />
 
-      <circle cx="180" cy="180" r="14" fill="var(--primary)" className="rc-core-pulse" filter="url(#rc-glow)" />
+      <circle
+        cx="180"
+        cy="180"
+        r="14"
+        fill="var(--primary)"
+        className="rc-core-pulse"
+        filter="url(#rc-glow)"
+      />
 
       <g fill="var(--primary)">
         <circle cx="110" cy="110" r="2.5" className="rc-spark rc-spark--1" />
@@ -163,5 +176,5 @@ export function ReactorCore404({ className }: { className?: string }) {
         <circle cx="94" cy="98" r="1.5" className="rc-spark rc-spark--4" />
       </g>
     </svg>
-  );
+  )
 }

@@ -111,6 +111,7 @@ NUKE_BALANCE_TOTAL = Gauge(
 # Recording helpers (settings-gated)
 # ---------------------------------------------------------------------------
 
+
 def record_http_request(method: str, path: str, status_code: int, duration_seconds: float) -> None:
     """Record a completed HTTP request in Prometheus."""
     if not settings.prometheus_enabled:
@@ -164,18 +165,14 @@ async def refresh_business_metrics() -> None:
     from app.models.server import Server
 
     async with AsyncSessionLocal() as db:
-        user_count = (
-            await db.execute(select(func.count(User.id)))
-        ).scalar() or 0
+        user_count = (await db.execute(select(func.count(User.id)))).scalar() or 0
 
         nuke_sum = (
             await db.execute(select(func.coalesce(func.sum(User.nuke_balance), 0)))
         ).scalar() or 0
 
         server_rows = (
-            await db.execute(
-                select(Server.status, func.count()).group_by(Server.status)
-            )
+            await db.execute(select(Server.status, func.count()).group_by(Server.status))
         ).all()
 
     set_users_total(user_count)

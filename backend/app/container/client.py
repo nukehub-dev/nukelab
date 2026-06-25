@@ -9,6 +9,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class ContainerClient:
     VOLUME_CPU_LIB = "nukelab-cpu-lib"
     CPU_LIB_TARGET = "/usr/local/lib/nukelab"
@@ -43,13 +44,13 @@ class ContainerClient:
             # Root cgroup controllers
             cgroup_path = "/sys/fs/cgroup/cgroup.controllers"
             if os.path.exists(cgroup_path):
-                with open(cgroup_path, 'r') as f:
+                with open(cgroup_path, "r") as f:
                     controllers.update(f.read().strip().split())
 
             # Current user's subtree controllers
             subtree_path = "/sys/fs/cgroup/cgroup.subtree_control"
             if os.path.exists(subtree_path):
-                with open(subtree_path, 'r') as f:
+                with open(subtree_path, "r") as f:
                     controllers.update(f.read().strip().split())
         except Exception as e:
             logger.warning(f"Could not detect cgroup controllers: {e}")
@@ -67,7 +68,7 @@ class ContainerClient:
             "/var/lib/lxcfs/proc/cpuinfo",
             "/var/lib/lxcfs/proc/uptime",
         ]
-        
+
         # Check if lxcfs proc files exist on the host
         for proc_file in lxcfs_procs:
             if not os.path.exists(proc_file):
@@ -80,7 +81,7 @@ class ContainerClient:
                 )
                 self._lxcfs_support = False
                 return False
-        
+
         logger.info("lxcfs detected. Cgroup-aware /proc will be mounted into containers.")
         self._lxcfs_support = True
         return True
@@ -89,19 +90,16 @@ class ContainerClient:
         """Get lxcfs bind mounts for cgroup-aware /proc files"""
         if not self._lxcfs_support:
             return []
-        
+
         mounts = []
         lxcfs_base = "/var/lib/lxcfs"
-        proc_files = [
-            "meminfo", "cpuinfo", "diskstats", "loadavg",
-            "stat", "swaps", "uptime"
-        ]
-        
+        proc_files = ["meminfo", "cpuinfo", "diskstats", "loadavg", "stat", "swaps", "uptime"]
+
         for proc_file in proc_files:
             host_path = f"{lxcfs_base}/proc/{proc_file}"
             if os.path.exists(host_path):
                 mounts.append(f"{host_path}:/proc/{proc_file}:rw")
-        
+
         return mounts
 
     def _get_cpu_env(self, cpu_limit: Optional[float]) -> dict:
@@ -210,12 +208,10 @@ class ContainerClient:
                     self._storage_support = False
                     return False
 
-            test_container = await self.client.containers.create({
-                "Image": "busybox:latest",
-                "HostConfig": {
-                    "StorageOpt": {"size": "10m"}
-                }
-            }, name=f"test-storage-{uuid.uuid4().hex[:8]}")
+            test_container = await self.client.containers.create(
+                {"Image": "busybox:latest", "HostConfig": {"StorageOpt": {"size": "10m"}}},
+                name=f"test-storage-{uuid.uuid4().hex[:8]}",
+            )
             await test_container.delete(force=True)
             logger.info("Storage limits are supported by the current driver.")
             self._storage_support = True
@@ -248,11 +244,12 @@ class ContainerClient:
             "Image": image,
             "Cmd": command.split() if command else None,
             "Labels": labels or {},
-            "Env": [f"{k}={v}" for k, v in (env or {}).items()] + [f"{k}={v}" for k, v in self._get_cpu_env(cpu_limit).items()],
+            "Env": [f"{k}={v}" for k, v in (env or {}).items()]
+            + [f"{k}={v}" for k, v in self._get_cpu_env(cpu_limit).items()],
             "HostConfig": {
                 "NetworkMode": network or settings.docker_network,
                 "PublishAllPorts": False,
-            }
+            },
         }
 
         if ports:
@@ -267,7 +264,7 @@ class ContainerClient:
                 if isinstance(container, dict):
                     # New format: {host: {"bind": path, "mode": "rw"}}
                     bind_str = f"{host}:{container['bind']}"
-                    if 'mode' in container:
+                    if "mode" in container:
                         bind_str += f":{container['mode']}"
                     binds.append(bind_str)
                 else:
@@ -283,7 +280,7 @@ class ContainerClient:
                 config["HostConfig"]["Binds"] = []
             config["HostConfig"]["Binds"].extend(lxcfs_mounts)
             logger.info(f"Mounted lxcfs /proc files: {len(lxcfs_mounts)} files")
-        
+
         # --- CPU limits with graceful fallback ---
         if cpu_limit:
             controllers = await self._get_available_controllers()
@@ -312,7 +309,9 @@ class ContainerClient:
                 pinned_cores = min(int(cpu_limit), available_cores)
                 cpus = ",".join(str(i) for i in range(pinned_cores))
                 config["HostConfig"]["CpusetCpus"] = cpus
-                logger.info(f"Applied CPU affinity: cores {cpus} (requested {cpu_limit}, host has {available_cores})")
+                logger.info(
+                    f"Applied CPU affinity: cores {cpus} (requested {cpu_limit}, host has {available_cores})"
+                )
             else:
                 logger.warning(
                     f"CPU affinity requested but 'cpuset' cgroup controller "
@@ -357,12 +356,14 @@ class ContainerClient:
         await self._ensure_cpu_lib_volume()
         if self._cpu_lib_volume_ready:
             config["HostConfig"].setdefault("Mounts", [])
-            config["HostConfig"]["Mounts"].append({
-                "Type": "volume",
-                "Source": self.VOLUME_CPU_LIB,
-                "Target": self.CPU_LIB_TARGET,
-                "ReadOnly": True,
-            })
+            config["HostConfig"]["Mounts"].append(
+                {
+                    "Type": "volume",
+                    "Source": self.VOLUME_CPU_LIB,
+                    "Target": self.CPU_LIB_TARGET,
+                    "ReadOnly": True,
+                }
+            )
 
         container = await self.client.containers.create(config, name=name)
         await self._inject_cpu_files(container, cpu_limit)
@@ -409,7 +410,7 @@ class ContainerClient:
         since: Optional[int] = None,
         timestamps: bool = True,
         stdout: bool = True,
-        stderr: bool = True
+        stderr: bool = True,
     ) -> str:
         """Get container logs"""
         container = await self.client.containers.get(container_id)
@@ -425,24 +426,16 @@ class ContainerClient:
         logs = await container.log(**kwargs)
         # aiodocker returns list of lines; join into single string
         if isinstance(logs, list):
-            return ''.join(logs)
+            return "".join(logs)
         return logs
 
     async def stream_container_logs(
-        self,
-        container_id: str,
-        tail: int = 100,
-        stdout: bool = True,
-        stderr: bool = True
+        self, container_id: str, tail: int = 100, stdout: bool = True, stderr: bool = True
     ):
         """Stream container logs as async generator"""
         container = await self.client.containers.get(container_id)
         logs = await container.log(
-            stdout=stdout,
-            stderr=stderr,
-            tail=tail,
-            follow=True,
-            timestamps=True
+            stdout=stdout, stderr=stderr, tail=tail, follow=True, timestamps=True
         )
         return logs
 
@@ -450,10 +443,10 @@ class ContainerClient:
         """Parse memory string to bytes"""
         memory_str = memory_str.lower()
         multipliers = {
-            'b': 1,
-            'k': 1024,
-            'm': 1024**2,
-            'g': 1024**3,
+            "b": 1,
+            "k": 1024,
+            "m": 1024**2,
+            "g": 1024**3,
         }
 
         for suffix, multiplier in multipliers.items():
@@ -462,8 +455,10 @@ class ContainerClient:
 
         return int(memory_str)
 
+
 # Singleton instance
 container_client = ContainerClient()
+
 
 async def get_container_client():
     """Get initialized Docker client"""

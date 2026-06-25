@@ -60,8 +60,7 @@ class TestVerifyAuth:
     @pytest.mark.asyncio
     async def test_verify_auth_jwt_valid(self, client, admin_token):
         response = await client.get(
-            "/api/auth/verify",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/auth/verify", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
         assert "X-User-Id" in response.headers
@@ -74,26 +73,19 @@ class TestVerifyAuth:
     @pytest.mark.asyncio
     async def test_verify_auth_invalid_scheme(self, client):
         response = await client.get(
-            "/api/auth/verify",
-            headers={"Authorization": "Basic dXNlcjpwYXNz"}
+            "/api/auth/verify", headers={"Authorization": "Basic dXNlcjpwYXNz"}
         )
         assert response.status_code == 401
 
     @pytest.mark.asyncio
     async def test_verify_auth_cookie_token(self, client, admin_token):
-        response = await client.get(
-            "/api/auth/verify",
-            cookies={"nukelab_token": admin_token}
-        )
+        response = await client.get("/api/auth/verify", cookies={"nukelab_token": admin_token})
         assert response.status_code == 200
         assert "X-User-Id" in response.headers
 
     @pytest.mark.asyncio
     async def test_verify_auth_bearer_no_space(self, client, admin_token):
-        response = await client.get(
-            "/api/auth/verify",
-            headers={"Authorization": admin_token}
-        )
+        response = await client.get("/api/auth/verify", headers={"Authorization": admin_token})
         # No space - treated as bare token
         assert response.status_code in (200, 401)
 
@@ -105,8 +97,7 @@ class TestLogin:
     async def test_login_oauth_mode_disabled(self, client):
         with mock.patch("app.api.auth.settings.auth_mode", "oauth"):
             response = await client.post(
-                "/api/auth/login",
-                data={"username": "test", "password": "test"}
+                "/api/auth/login", data={"username": "test", "password": "test"}
             )
             assert response.status_code == 403
 
@@ -115,7 +106,7 @@ class TestLogin:
         with mock.patch("app.api.auth.settings.auth_mode", "local"):
             response = await client.post(
                 "/api/auth/login",
-                data={"username": "nonexistent_user_xyz", "password": "wrongpass"}
+                data={"username": "nonexistent_user_xyz", "password": "wrongpass"},
             )
             assert response.status_code == 401
 
@@ -126,8 +117,7 @@ class TestRefreshToken:
     @pytest.mark.asyncio
     async def test_refresh_invalid_token(self, client):
         response = await client.post(
-            "/api/auth/refresh",
-            json={"refresh_token": "invalid-token-12345"}
+            "/api/auth/refresh", json={"refresh_token": "invalid-token-12345"}
         )
         assert response.status_code == 401
 
@@ -138,8 +128,7 @@ class TestLogout:
     @pytest.mark.asyncio
     async def test_logout_without_body(self, client, admin_token):
         response = await client.post(
-            "/api/auth/logout",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/auth/logout", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
         assert "message" in response.json()
@@ -147,8 +136,7 @@ class TestLogout:
     @pytest.mark.asyncio
     async def test_logout_clears_cookie(self, client, admin_token):
         response = await client.post(
-            "/api/auth/logout",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/auth/logout", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
         # Check Clear-Site-Data header
@@ -157,12 +145,13 @@ class TestLogout:
     @pytest.mark.asyncio
     async def test_logout_with_refresh_token(self, client, test_user, db_session):
         from app.api.auth import create_refresh_token_for_user
+
         rt = await create_refresh_token_for_user(str(test_user.id), db_session)
 
         response = await client.post(
             "/api/auth/logout",
             headers={"Authorization": f"Bearer dummy"},
-            json={"refresh_token": rt}
+            json={"refresh_token": rt},
         )
         assert response.status_code == 200
 
@@ -174,11 +163,24 @@ class TestLogout:
 
         test_user.preferences = {"stop_on_logout": True}
 
-        plan = ServerPlan(name="logout-plan", slug="logout-plan", cpu_limit=1.0, memory_limit="512m", disk_limit="10g", is_active=True)
+        plan = ServerPlan(
+            name="logout-plan",
+            slug="logout-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+        )
         db_session.add(plan)
         await db_session.flush()
 
-        server = Server(name="srv-logout", user_id=test_user.id, status="running", container_id="c1", plan_id=plan.id)
+        server = Server(
+            name="srv-logout",
+            user_id=test_user.id,
+            status="running",
+            container_id="c1",
+            plan_id=plan.id,
+        )
         db_session.add(server)
         await db_session.flush()
 
@@ -196,11 +198,13 @@ class TestLogout:
                         with mock.patch("app.api.auth.NotificationService") as MockNS:
                             ns_inst = MockNS.return_value
                             ns_inst.server_stopped = mock.AsyncMock()
-                            with mock.patch("app.api.auth.broadcast_server_status_change", mock.AsyncMock()):
+                            with mock.patch(
+                                "app.api.auth.broadcast_server_status_change", mock.AsyncMock()
+                            ):
                                 response = await client.post(
                                     "/api/auth/logout",
                                     headers={"Authorization": f"Bearer dummy"},
-                                    json={"refresh_token": rt}
+                                    json={"refresh_token": rt},
                                 )
 
         assert response.status_code == 200
@@ -216,6 +220,7 @@ class TestCustomHTTPBearer:
     async def test_bearer_no_authorization_header(self):
         from app.api.auth import CustomHTTPBearer
         from unittest.mock import AsyncMock
+
         request = AsyncMock()
         request.headers = {}
         bearer = CustomHTTPBearer(auto_error=True)
@@ -227,6 +232,7 @@ class TestCustomHTTPBearer:
     async def test_bearer_invalid_scheme(self):
         from app.api.auth import CustomHTTPBearer
         from unittest.mock import AsyncMock
+
         request = AsyncMock()
         request.headers = {"Authorization": "Basic abc123"}
         bearer = CustomHTTPBearer(auto_error=True)
@@ -238,6 +244,7 @@ class TestCustomHTTPBearer:
     async def test_bearer_auto_error_false_returns_none(self):
         from app.api.auth import CustomHTTPBearer
         from unittest.mock import AsyncMock
+
         request = AsyncMock()
         request.headers = {}
         bearer = CustomHTTPBearer(auto_error=False)
@@ -248,6 +255,7 @@ class TestCustomHTTPBearer:
     async def test_bearer_valid_token(self):
         from app.api.auth import CustomHTTPBearer
         from unittest.mock import AsyncMock
+
         request = AsyncMock()
         request.headers = {"Authorization": "Bearer validtoken123"}
         bearer = CustomHTTPBearer(auto_error=True)
@@ -258,6 +266,7 @@ class TestCustomHTTPBearer:
     async def test_bearer_token_scheme(self):
         from app.api.auth import CustomHTTPBearer
         from unittest.mock import AsyncMock
+
         request = AsyncMock()
         request.headers = {"Authorization": "Token validtoken123"}
         bearer = CustomHTTPBearer(auto_error=True)
@@ -272,11 +281,10 @@ class TestRequireScopes:
     async def test_require_scopes_jwt_bypasses(self):
         from app.api.auth import require_scopes, AuthContext
         from unittest.mock import AsyncMock
+
         request = AsyncMock()
         user = AsyncMock()
-        request.state.auth_context = AuthContext(
-            user=user, auth_method="jwt", token_scopes=[]
-        )
+        request.state.auth_context = AuthContext(user=user, auth_method="jwt", token_scopes=[])
         checker = require_scopes("servers:read")
         result = await checker(request, user)
         assert result is None
@@ -285,6 +293,7 @@ class TestRequireScopes:
     async def test_require_scopes_api_token_matching(self):
         from app.api.auth import require_scopes, AuthContext
         from unittest.mock import AsyncMock
+
         request = AsyncMock()
         user = AsyncMock()
         request.state.auth_context = AuthContext(
@@ -298,6 +307,7 @@ class TestRequireScopes:
     async def test_require_scopes_api_token_wildcard(self):
         from app.api.auth import require_scopes, AuthContext
         from unittest.mock import AsyncMock
+
         request = AsyncMock()
         user = AsyncMock()
         request.state.auth_context = AuthContext(
@@ -312,6 +322,7 @@ class TestRequireScopes:
         from app.api.auth import require_scopes, AuthContext
         from fastapi import HTTPException
         from unittest.mock import AsyncMock
+
         request = AsyncMock()
         user = AsyncMock()
         request.state.auth_context = AuthContext(
@@ -327,6 +338,7 @@ class TestRequireScopes:
         from app.api.auth import require_scopes
         from fastapi import HTTPException
         from unittest.mock import AsyncMock
+
         request = AsyncMock()
         request.state.auth_context = None
         user = AsyncMock()
@@ -343,11 +355,10 @@ class TestRequireJwtAuth:
     async def test_require_jwt_auth_passes(self):
         from app.api.auth import require_jwt_auth, AuthContext
         from unittest.mock import AsyncMock
+
         request = AsyncMock()
         user = AsyncMock()
-        request.state.auth_context = AuthContext(
-            user=user, auth_method="jwt", token_scopes=[]
-        )
+        request.state.auth_context = AuthContext(user=user, auth_method="jwt", token_scopes=[])
         checker = require_jwt_auth()
         result = await checker(request, user)
         assert result is None
@@ -357,6 +368,7 @@ class TestRequireJwtAuth:
         from app.api.auth import require_jwt_auth, AuthContext
         from fastapi import HTTPException
         from unittest.mock import AsyncMock
+
         request = AsyncMock()
         user = AsyncMock()
         request.state.auth_context = AuthContext(
@@ -372,6 +384,7 @@ class TestRequireJwtAuth:
         from app.api.auth import require_jwt_auth
         from fastapi import HTTPException
         from unittest.mock import AsyncMock
+
         request = AsyncMock()
         request.state.auth_context = None
         user = AsyncMock()
@@ -387,9 +400,9 @@ class TestCreateRefreshTokenForUser:
     @pytest.mark.asyncio
     async def test_create_refresh_token(self, db_session, test_user):
         from app.api.auth import create_refresh_token_for_user
+
         token = await create_refresh_token_for_user(
-            str(test_user.id), db_session,
-            user_agent="test-agent", ip_address="127.0.0.1"
+            str(test_user.id), db_session, user_agent="test-agent", ip_address="127.0.0.1"
         )
         assert token is not None
         assert len(token) > 0
@@ -397,16 +410,17 @@ class TestCreateRefreshTokenForUser:
     @pytest.mark.asyncio
     async def test_create_refresh_token_enforces_limit(self, db_session, test_user):
         from app.api.auth import create_refresh_token_for_user, MAX_REFRESH_TOKENS_PER_USER
+
         # Create max + 1 tokens
         for i in range(MAX_REFRESH_TOKENS_PER_USER + 1):
             await create_refresh_token_for_user(str(test_user.id), db_session)
         # Count active tokens
         from sqlalchemy import select
         from app.models.refresh_token import RefreshToken
+
         result = await db_session.execute(
             select(RefreshToken).where(
-                RefreshToken.user_id == test_user.id,
-                RefreshToken.revoked_at == None
+                RefreshToken.user_id == test_user.id, RefreshToken.revoked_at == None
             )
         )
         tokens = result.scalars().all()
@@ -419,6 +433,7 @@ class TestCleanupExpiredRefreshTokens:
     @pytest.mark.asyncio
     async def test_cleanup_no_expired_tokens(self, db_session):
         from app.api.auth import cleanup_expired_refresh_tokens
+
         deleted = await cleanup_expired_refresh_tokens(db_session)
         assert deleted >= 0
 
@@ -460,8 +475,7 @@ class TestLoginHappyPath:
     async def test_login_success(self, client, test_user):
         with mock.patch("app.api.auth.settings.auth_mode", "local"):
             response = await client.post(
-                "/api/auth/login",
-                data={"username": "testuser", "password": "testpass123"}
+                "/api/auth/login", data={"username": "testuser", "password": "testpass123"}
             )
             assert response.status_code == 200
             data = response.json()
@@ -473,8 +487,7 @@ class TestLoginHappyPath:
     async def test_login_sets_cookie(self, client, test_user):
         with mock.patch("app.api.auth.settings.auth_mode", "local"):
             response = await client.post(
-                "/api/auth/login",
-                data={"username": "testuser", "password": "testpass123"}
+                "/api/auth/login", data={"username": "testuser", "password": "testpass123"}
             )
             assert response.status_code == 200
             assert "set-cookie" in response.headers
@@ -486,11 +499,9 @@ class TestRefreshHappyPath:
     @pytest.mark.asyncio
     async def test_refresh_success(self, client, test_user, db_session):
         from app.api.auth import create_refresh_token_for_user
+
         rt = await create_refresh_token_for_user(str(test_user.id), db_session)
-        response = await client.post(
-            "/api/auth/refresh",
-            json={"refresh_token": rt}
-        )
+        response = await client.post("/api/auth/refresh", json={"refresh_token": rt})
         assert response.status_code == 200
         data = response.json()
         assert "access_token" in data
@@ -503,8 +514,7 @@ class TestMeEndpoint:
     @pytest.mark.asyncio
     async def test_get_me(self, client, user_token):
         response = await client.get(
-            "/api/auth/me",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/auth/me", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -522,6 +532,7 @@ class TestVerifyAuthEndpoint:
         from app.api.auth import get_password_hash
         import secrets
         import uuid
+
         # Create an active API token with matching hash
         token_str = "nl_" + secrets.token_urlsafe(32)
         api_token = ApiToken(
@@ -535,8 +546,7 @@ class TestVerifyAuthEndpoint:
         db_session.add(api_token)
         await db_session.commit()
         response = await client.get(
-            "/api/auth/verify",
-            headers={"Authorization": f"Bearer {token_str}"}
+            "/api/auth/verify", headers={"Authorization": f"Bearer {token_str}"}
         )
         assert response.status_code == 200
         assert "X-User-Id" in response.headers
@@ -544,7 +554,6 @@ class TestVerifyAuthEndpoint:
     @pytest.mark.asyncio
     async def test_verify_auth_invalid_bearer(self, client):
         response = await client.get(
-            "/api/auth/verify",
-            headers={"Authorization": "Bearer invalidtoken"}
+            "/api/auth/verify", headers={"Authorization": "Bearer invalidtoken"}
         )
         assert response.status_code == 401

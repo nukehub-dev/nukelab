@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { useThemeStore } from '../stores/theme-store';
+import { useEffect } from 'react'
+import { useThemeStore } from '../stores/theme-store'
 
 // NukeLab logo SVG paths (same as logo.tsx)
 const LOGO_PATHS = `
@@ -20,12 +20,10 @@ const LOGO_PATHS = `
       </g>
     </g>
   </g>
-`;
+`
 
 function getCssVar(name: string, fallback: string): string {
-  return (
-    getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback
-  );
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback
 }
 
 function generateFaviconDataUrl(color: string, background: string): string {
@@ -36,47 +34,47 @@ function generateFaviconDataUrl(color: string, background: string): string {
         ${LOGO_PATHS}
       </g>
     </svg>
-  `.trim();
+  `.trim()
 
-  const encoded = encodeURIComponent(svg).replace(/'/g, '%27').replace(/"/g, '%22');
+  const encoded = encodeURIComponent(svg).replace(/'/g, '%27').replace(/"/g, '%22')
 
-  return `data:image/svg+xml,${encoded}`;
+  return `data:image/svg+xml,${encoded}`
 }
 
 export function updateFavicon(): void {
-  const color = getCssVar('--primary', 'oklch(0.541 0.281 293.009)');
-  const background = getCssVar('--background', '#0a0a0a');
-  const dataUrl = generateFaviconDataUrl(color, background);
+  const color = getCssVar('--primary', 'oklch(0.541 0.281 293.009)')
+  const background = getCssVar('--background', '#0a0a0a')
+  const dataUrl = generateFaviconDataUrl(color, background)
 
-  let link: HTMLLinkElement | null = document.querySelector("link[rel*='icon']");
+  let link: HTMLLinkElement | null = document.querySelector("link[rel*='icon']")
   if (!link) {
-    link = document.createElement('link');
-    link.rel = 'icon';
-    link.type = 'image/svg+xml';
-    document.head.appendChild(link);
+    link = document.createElement('link')
+    link.rel = 'icon'
+    link.type = 'image/svg+xml'
+    document.head.appendChild(link)
   }
 
-  link.href = dataUrl;
+  link.href = dataUrl
 }
 
 export function updateThemeColor(): void {
-  const color = getCssVar('--primary', 'oklch(0.541 0.281 293.009)');
+  const color = getCssVar('--primary', 'oklch(0.541 0.281 293.009)')
 
-  let meta: HTMLMetaElement | null = document.querySelector('meta[name="theme-color"]');
+  let meta: HTMLMetaElement | null = document.querySelector('meta[name="theme-color"]')
   if (!meta) {
-    meta = document.createElement('meta');
-    meta.name = 'theme-color';
-    document.head.appendChild(meta);
+    meta = document.createElement('meta')
+    meta.name = 'theme-color'
+    document.head.appendChild(meta)
   }
 
-  meta.content = color;
+  meta.content = color
 }
 
 export function useFavicon(): void {
-  const { theme, isDark, isOled, accentColor } = useThemeStore();
+  const { theme, isDark, isOled, accentColor } = useThemeStore()
 
   useEffect(() => {
-    updateFavicon();
-    updateThemeColor();
-  }, [theme, isDark, isOled, accentColor]);
+    updateFavicon()
+    updateThemeColor()
+  }, [theme, isDark, isOled, accentColor])
 }

@@ -1,19 +1,19 @@
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-import type { ApplicationTheme, AccentColor } from '../types/theme';
-import { applyTheme, applyDarkMode, applyOledMode, applyAccentColor } from '../lib/theme';
+import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
+import type { ApplicationTheme, AccentColor } from '../types/theme'
+import { applyTheme, applyDarkMode, applyOledMode, applyAccentColor } from '../lib/theme'
 
 interface ThemeState {
-  theme: ApplicationTheme;
-  isDark: boolean;
-  isOled: boolean;
-  accentColor: AccentColor;
-  density: 'compact' | 'comfortable';
-  setTheme: (theme: ApplicationTheme) => void;
-  setDarkMode: (isDark: boolean) => void;
-  setOledMode: (isOled: boolean) => void;
-  setAccentColor: (color: AccentColor) => void;
-  setDensity: (density: 'compact' | 'comfortable') => void;
+  theme: ApplicationTheme
+  isDark: boolean
+  isOled: boolean
+  accentColor: AccentColor
+  density: 'compact' | 'comfortable'
+  setTheme: (theme: ApplicationTheme) => void
+  setDarkMode: (isDark: boolean) => void
+  setOledMode: (isOled: boolean) => void
+  setAccentColor: (color: AccentColor) => void
+  setDensity: (density: 'compact' | 'comfortable') => void
 }
 
 export const useThemeStore = create<ThemeState>()(
@@ -25,35 +25,35 @@ export const useThemeStore = create<ThemeState>()(
       accentColor: 'default',
       density: 'comfortable',
       setTheme: (theme) => {
-        set({ theme });
-        applyTheme(theme);
+        set({ theme })
+        applyTheme(theme)
       },
       setDarkMode: (isDark) => {
-        set({ isDark });
-        applyDarkMode(isDark);
+        set({ isDark })
+        applyDarkMode(isDark)
       },
       setOledMode: (isOled) => {
-        set({ isOled });
-        applyOledMode(isOled);
+        set({ isOled })
+        applyOledMode(isOled)
       },
       setAccentColor: (color) => {
-        set({ accentColor: color });
-        applyAccentColor(color);
+        set({ accentColor: color })
+        applyAccentColor(color)
       },
       setDensity: (density) => {
-        set({ density });
+        set({ density })
       },
     }),
     {
       name: 'nukelab-theme',
       onRehydrateStorage: () => (state) => {
         if (state) {
-          applyTheme(state.theme);
-          applyDarkMode(state.isDark);
-          applyOledMode(state.isOled);
-          applyAccentColor(state.accentColor);
+          applyTheme(state.theme)
+          applyDarkMode(state.isDark)
+          applyOledMode(state.isOled)
+          applyAccentColor(state.accentColor)
         }
       },
     }
   )
-);
+)

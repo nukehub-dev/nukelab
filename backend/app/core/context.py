@@ -11,6 +11,4 @@ base class to propagate correlation IDs across thread boundaries.
 import contextvars
 
 # Correlation ID for tracing a single request through all layers
-correlation_id: contextvars.ContextVar[str] = contextvars.ContextVar(
-    "correlation_id", default=""
-)
+correlation_id: contextvars.ContextVar[str] = contextvars.ContextVar("correlation_id", default="")

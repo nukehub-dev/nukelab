@@ -1,34 +1,24 @@
-import { cn } from '../../lib/utils';
-import { motion } from 'framer-motion';
-import { useState } from 'react';
+import { cn } from '../../lib/utils'
+import { motion } from 'framer-motion'
+import { useState } from 'react'
 
 interface SkeletonProps extends React.HTMLAttributes<HTMLDivElement> {
-  className?: string;
+  className?: string
 }
 
 export function Skeleton({ className, ...props }: SkeletonProps) {
-  return (
-    <div
-      className={cn(
-        'animate-pulse rounded-md bg-muted',
-        className
-      )}
-      {...props}
-    />
-  );
+  return <div className={cn('animate-pulse rounded-md bg-muted', className)} {...props} />
 }
 
 interface SkeletonCardProps {
-  className?: string;
-  rows?: number;
+  className?: string
+  rows?: number
 }
 
 export function SkeletonCard({ className, rows = 3 }: SkeletonCardProps) {
   const [widths] = useState(() =>
-    Array.from({ length: rows }, () =>
-      `${85 + Math.floor(Math.random() * 15)}%`
-    )
-  );
+    Array.from({ length: rows }, () => `${85 + Math.floor(Math.random() * 15)}%`)
+  )
 
   return (
     <motion.div
@@ -50,13 +40,13 @@ export function SkeletonCard({ className, rows = 3 }: SkeletonCardProps) {
         </div>
       )}
     </motion.div>
-  );
+  )
 }
 
 interface SkeletonTableProps {
-  rows?: number;
-  columns?: number;
-  className?: string;
+  rows?: number
+  columns?: number
+  className?: string
 }
 
 export function SkeletonTable({ rows = 5, columns = 4, className }: SkeletonTableProps) {
@@ -87,11 +77,11 @@ export function SkeletonTable({ rows = 5, columns = 4, className }: SkeletonTabl
         </motion.div>
       ))}
     </div>
-  );
+  )
 }
 
 interface SkeletonStatCardProps {
-  className?: string;
+  className?: string
 }
 
 export function SkeletonStatCard({ className }: SkeletonStatCardProps) {
@@ -111,5 +101,5 @@ export function SkeletonStatCard({ className }: SkeletonStatCardProps) {
         <Skeleton className="h-10 w-10 rounded-xl" />
       </div>
     </motion.div>
-  );
+  )
 }

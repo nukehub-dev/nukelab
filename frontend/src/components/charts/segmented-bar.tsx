@@ -1,17 +1,17 @@
-import { cn } from '../../lib/utils';
+import { cn } from '../../lib/utils'
 
 export interface Segment {
-  label: string;
-  value: number;
-  color: string;
+  label: string
+  value: number
+  color: string
 }
 
 export interface SegmentedBarProps {
-  segments: Segment[];
-  total?: number;
-  height?: number;
-  showLegend?: boolean;
-  className?: string;
+  segments: Segment[]
+  total?: number
+  height?: number
+  showLegend?: boolean
+  className?: string
 }
 
 export function SegmentedBar({
@@ -21,16 +21,13 @@ export function SegmentedBar({
   showLegend = true,
   className,
 }: SegmentedBarProps) {
-  const computedTotal = total ?? segments.reduce((sum, s) => sum + s.value, 0);
+  const computedTotal = total ?? segments.reduce((sum, s) => sum + s.value, 0)
 
   return (
     <div className={cn('space-y-3', className)}>
-      <div
-        className="flex w-full rounded-full overflow-hidden"
-        style={{ height }}
-      >
+      <div className="flex w-full rounded-full overflow-hidden" style={{ height }}>
         {segments.map((segment) => {
-          const pct = computedTotal > 0 ? (segment.value / computedTotal) * 100 : 0;
+          const pct = computedTotal > 0 ? (segment.value / computedTotal) * 100 : 0
           return (
             <div
               key={segment.label}
@@ -48,7 +45,7 @@ export function SegmentedBar({
                 </span>
               )}
             </div>
-          );
+          )
         })}
       </div>
 
@@ -62,14 +59,12 @@ export function SegmentedBar({
               />
               <span className="text-xs text-muted-foreground">
                 {segment.label}
-                <span className="ml-1 font-medium text-foreground">
-                  {segment.value}
-                </span>
+                <span className="ml-1 font-medium text-foreground">{segment.value}</span>
               </span>
             </div>
           ))}
         </div>
       )}
     </div>
-  );
+  )
 }

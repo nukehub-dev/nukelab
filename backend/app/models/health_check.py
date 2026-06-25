@@ -8,12 +8,14 @@ from app.db.base import Base
 class HealthCheck(Base):
     __tablename__ = "health_checks"
     __table_args__ = (
-        Index('ix_health_checks_checked_at', 'checked_at'),
-        Index('ix_health_checks_server_checked_at', 'server_id', 'checked_at'),
+        Index("ix_health_checks_checked_at", "checked_at"),
+        Index("ix_health_checks_server_checked_at", "server_id", "checked_at"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    server_id = Column(UUID(as_uuid=True), ForeignKey("servers.id", ondelete="CASCADE"), nullable=False)
+    server_id = Column(
+        UUID(as_uuid=True), ForeignKey("servers.id", ondelete="CASCADE"), nullable=False
+    )
     container_id = Column(String(255), nullable=False)
 
     status = Column(String(50), nullable=False)

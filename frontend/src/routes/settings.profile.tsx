@@ -1,11 +1,11 @@
-import { createFileRoute, Link } from '@tanstack/react-router';
-import { ArrowLeft, UserCircle } from 'lucide-react';
-import { motion } from 'framer-motion';
-import { ProfilePage } from '../components/settings/profile-page';
+import { createFileRoute, Link } from '@tanstack/react-router'
+import { ArrowLeft, UserCircle } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { ProfilePage } from '../components/settings/profile-page'
 
 export const Route = createFileRoute('/settings/profile')({
   component: ProfileSettingsPage,
-});
+})
 
 function ProfileSettingsPage() {
   return (
@@ -26,12 +26,14 @@ function ProfileSettingsPage() {
         </div>
         <div>
           <h1 className="text-xl font-bold">Profile</h1>
-          <p className="text-sm text-muted-foreground">Manage your account information and avatar</p>
+          <p className="text-sm text-muted-foreground">
+            Manage your account information and avatar
+          </p>
         </div>
       </motion.div>
       <div className="px-6 lg:px-10 pb-10">
         <ProfilePage />
       </div>
     </div>
-  );
+  )
 }

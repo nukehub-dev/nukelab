@@ -1,35 +1,52 @@
-import { motion } from 'framer-motion';
-import {
-  ArrowDownLeft,
-  Server,
-  Gift,
-  Clock,
-  User,
-  ChevronLeft,
-  ChevronRight,
-} from 'lucide-react';
-import { cn } from '../../lib/utils';
-import { formatDate } from '../../lib/utils';
-import type { CreditTransaction } from '../../types/api';
-import { Button } from '../ui/button';
+import { motion } from 'framer-motion'
+import { ArrowDownLeft, Server, Gift, Clock, User, ChevronLeft, ChevronRight } from 'lucide-react'
+import { cn } from '../../lib/utils'
+import { formatDate } from '../../lib/utils'
+import type { CreditTransaction } from '../../types/api'
+import { Button } from '../ui/button'
 
 interface CreditTransactionTableProps {
-  transactions: CreditTransaction[];
-  page: number;
-  totalPages: number;
-  onPageChange: (page: number) => void;
-  isLoading?: boolean;
+  transactions: CreditTransaction[]
+  page: number
+  totalPages: number
+  onPageChange: (page: number) => void
+  isLoading?: boolean
 }
 
-const TYPE_CONFIG: Record<string, { label: string; icon: React.ElementType; color: string; bg: string }> = {
+const TYPE_CONFIG: Record<
+  string,
+  { label: string; icon: React.ElementType; color: string; bg: string }
+> = {
   admin_grant: { label: 'Grant', icon: Gift, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
-  admin_deduct: { label: 'Deduct', icon: ArrowDownLeft, color: 'text-red-400', bg: 'bg-red-500/10' },
-  server_usage: { label: 'Server Usage', icon: Server, color: 'text-blue-400', bg: 'bg-blue-500/10' },
-  daily_allowance: { label: 'Daily Allowance', icon: Gift, color: 'text-violet-400', bg: 'bg-violet-500/10' },
-};
+  admin_deduct: {
+    label: 'Deduct',
+    icon: ArrowDownLeft,
+    color: 'text-red-400',
+    bg: 'bg-red-500/10',
+  },
+  server_usage: {
+    label: 'Server Usage',
+    icon: Server,
+    color: 'text-blue-400',
+    bg: 'bg-blue-500/10',
+  },
+  daily_allowance: {
+    label: 'Daily Allowance',
+    icon: Gift,
+    color: 'text-violet-400',
+    bg: 'bg-violet-500/10',
+  },
+}
 
 function getTypeConfig(type: string) {
-  return TYPE_CONFIG[type] || { label: type, icon: Clock, color: 'text-muted-foreground', bg: 'bg-muted' };
+  return (
+    TYPE_CONFIG[type] || {
+      label: type,
+      icon: Clock,
+      color: 'text-muted-foreground',
+      bg: 'bg-muted',
+    }
+  )
 }
 
 export function CreditTransactionTable({
@@ -40,7 +57,7 @@ export function CreditTransactionTable({
   isLoading,
 }: CreditTransactionTableProps) {
   if (isLoading) {
-    return <TransactionSkeleton />;
+    return <TransactionSkeleton />
   }
 
   if (transactions.length === 0) {
@@ -51,16 +68,16 @@ export function CreditTransactionTable({
         </div>
         <p className="text-sm font-medium text-muted-foreground">No transactions found</p>
       </div>
-    );
+    )
   }
 
   return (
     <div className="space-y-3">
       <div className="space-y-2">
         {transactions.map((tx, i) => {
-          const config = getTypeConfig(tx.type);
-          const Icon = config.icon;
-          const isPositive = tx.amount > 0;
+          const config = getTypeConfig(tx.type)
+          const Icon = config.icon
+          const isPositive = tx.amount > 0
 
           return (
             <motion.div
@@ -70,7 +87,12 @@ export function CreditTransactionTable({
               transition={{ delay: i * 0.03 }}
               className="flex items-start gap-3 p-3 rounded-xl bg-card/30 border border-border/30 hover:bg-card/50 transition-colors"
             >
-              <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center shrink-0', config.bg)}>
+              <div
+                className={cn(
+                  'w-9 h-9 rounded-lg flex items-center justify-center shrink-0',
+                  config.bg
+                )}
+              >
                 <Icon className={cn('w-4 h-4', config.color)} />
               </div>
 
@@ -78,12 +100,24 @@ export function CreditTransactionTable({
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="text-sm font-medium truncate">{tx.description}</span>
-                    <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0', config.bg, config.color)}>
+                    <span
+                      className={cn(
+                        'text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0',
+                        config.bg,
+                        config.color
+                      )}
+                    >
                       {config.label}
                     </span>
                   </div>
-                  <span className={cn('font-mono font-semibold text-sm shrink-0', isPositive ? 'text-emerald-400' : 'text-red-400')}>
-                    {isPositive ? '+' : ''}{tx.amount.toLocaleString()}
+                  <span
+                    className={cn(
+                      'font-mono font-semibold text-sm shrink-0',
+                      isPositive ? 'text-emerald-400' : 'text-red-400'
+                    )}
+                  >
+                    {isPositive ? '+' : ''}
+                    {tx.amount.toLocaleString()}
                   </span>
                 </div>
 
@@ -105,7 +139,7 @@ export function CreditTransactionTable({
                 </div>
               </div>
             </motion.div>
-          );
+          )
         })}
       </div>
 
@@ -138,14 +172,17 @@ export function CreditTransactionTable({
         </div>
       )}
     </div>
-  );
+  )
 }
 
 function TransactionSkeleton() {
   return (
     <div className="space-y-2">
       {[1, 2, 3, 4].map((i) => (
-        <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-card/30 border border-border/30 animate-pulse">
+        <div
+          key={i}
+          className="flex items-start gap-3 p-3 rounded-xl bg-card/30 border border-border/30 animate-pulse"
+        >
           <div className="w-9 h-9 rounded-lg bg-muted shrink-0" />
           <div className="flex-1 space-y-2">
             <div className="flex items-center justify-between">
@@ -157,5 +194,5 @@ function TransactionSkeleton() {
         </div>
       ))}
     </div>
-  );
+  )
 }

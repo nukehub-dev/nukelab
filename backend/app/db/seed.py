@@ -21,16 +21,14 @@ async def seed_admin_user(db: AsyncSession):
     """Seed dev admin user if in dev mode"""
     if not settings.dev_mode:
         return
-    
-    result = await db.execute(
-        select(User).where(User.username == settings.dev_admin_user)
-    )
+
+    result = await db.execute(select(User).where(User.username == settings.dev_admin_user))
     existing = result.scalar_one_or_none()
-    
+
     if existing:
         logger.info("Admin user exists: %s", settings.dev_admin_user)
         return
-    
+
     admin = User(
         username=settings.dev_admin_user,
         email=f"{settings.dev_admin_user}@nukelab.local",
@@ -49,7 +47,7 @@ async def seed_admin_user(db: AsyncSession):
 async def seed_plans(db: AsyncSession):
     """Seed default server plans"""
     service = PlanService(db)
-    
+
     plans = [
         {
             "name": "Small",
@@ -101,17 +99,17 @@ async def seed_plans(db: AsyncSession):
             "visible_to_roles": [],
         },
     ]
-    
+
     for plan_data in plans:
         try:
             existing = await service.get_by_slug(plan_data["slug"])
             if not existing:
                 await service.create_plan(**plan_data)
-                logger.info("Created plan: %s", plan_data['name'])
+                logger.info("Created plan: %s", plan_data["name"])
             else:
-                logger.info("Plan exists: %s", plan_data['name'])
+                logger.info("Plan exists: %s", plan_data["name"])
         except Exception as e:
-            logger.error("Failed to create %s: %s", plan_data['name'], e)
+            logger.error("Failed to create %s: %s", plan_data["name"], e)
 
 
 async def seed_all():
@@ -124,7 +122,7 @@ async def seed_all():
         await seed_plans(db)
 
         logger.info("Seeding complete!")
-    
+
 
 if __name__ == "__main__":
     asyncio.run(seed_all())

@@ -179,6 +179,7 @@ class TestTokenAuthentication:
         # Refresh from DB
         from sqlalchemy import select
         from app.models.api_token import ApiToken
+
         result = await db_session.execute(
             select(ApiToken).where(ApiToken.id == api_token.db_token.id)
         )
@@ -216,7 +217,9 @@ class TestTokenManagement:
     """Token CRUD and lifecycle tests."""
 
     @pytest.mark.asyncio
-    async def test_list_tokens_user_isolation(self, client, test_user, user_token, admin_user, admin_token):
+    async def test_list_tokens_user_isolation(
+        self, client, test_user, user_token, admin_user, admin_token
+    ):
         """Users should only see their own tokens."""
         # Create token as test_user
         await client.post(
@@ -254,6 +257,7 @@ class TestTokenManagement:
         # Verify token is inactive
         from sqlalchemy import select
         from app.models.api_token import ApiToken
+
         result = await db_session.execute(select(ApiToken).where(ApiToken.id == token_id))
         token = result.scalar_one()
         assert token.is_active is False
@@ -278,6 +282,7 @@ class TestTokenManagement:
         # Verify token is gone
         from sqlalchemy import select
         from app.models.api_token import ApiToken
+
         result = await db_session.execute(select(ApiToken).where(ApiToken.id == token_id))
         assert result.scalar_one_or_none() is None
 
@@ -323,7 +328,9 @@ class TestTokenManagement:
         assert "usage_count" in data
 
     @pytest.mark.asyncio
-    async def test_cannot_access_other_users_token(self, client, test_user, user_token, admin_user, admin_token):
+    async def test_cannot_access_other_users_token(
+        self, client, test_user, user_token, admin_user, admin_token
+    ):
         """User should not be able to access another user's token."""
         # Create token as test_user
         create_resp = await client.post(
@@ -528,7 +535,9 @@ class TestAdminEndpointScopeAccess:
         assert "JWT" in response.json()["detail"]
 
     @pytest.mark.asyncio
-    async def test_api_token_without_admin_read_blocked_from_admin_stats(self, client, db_session, admin_user):
+    async def test_api_token_without_admin_read_blocked_from_admin_stats(
+        self, client, db_session, admin_user
+    ):
         """Admin API token without admin:read should be blocked from /admin/stats."""
         from app.models.api_token import ApiToken
         from app.api.auth import get_password_hash
@@ -558,7 +567,9 @@ class TestAdminEndpointScopeAccess:
         assert "JWT" in response.json()["detail"]
 
     @pytest.mark.asyncio
-    async def test_api_token_with_admin_read_blocked_from_admin_write(self, client, db_session, admin_user):
+    async def test_api_token_with_admin_read_blocked_from_admin_write(
+        self, client, db_session, admin_user
+    ):
         """Admin API token with only admin:read should be blocked from write endpoints."""
         from app.models.api_token import ApiToken
         from app.api.auth import get_password_hash
@@ -589,7 +600,9 @@ class TestAdminEndpointScopeAccess:
         assert "JWT" in response.json()["detail"]
 
     @pytest.mark.asyncio
-    async def test_api_token_blocked_from_admin_write_endpoints(self, client, db_session, admin_user):
+    async def test_api_token_blocked_from_admin_write_endpoints(
+        self, client, db_session, admin_user
+    ):
         """Admin API tokens should be blocked from admin write endpoints (JWT-only)."""
         from app.models.api_token import ApiToken
         from app.api.auth import get_password_hash
@@ -629,7 +642,9 @@ class TestAdminEndpointScopeAccess:
         assert response.status_code == 200
 
     @pytest.mark.asyncio
-    async def test_regular_user_api_token_blocked_by_role_not_scope(self, client, db_session, test_user):
+    async def test_regular_user_api_token_blocked_by_role_not_scope(
+        self, client, db_session, test_user
+    ):
         """Regular user with admin:read scope should still be blocked by require_permissions."""
         from app.models.api_token import ApiToken
         from app.api.auth import get_password_hash
@@ -658,6 +673,7 @@ class TestAdminEndpointScopeAccess:
         # Should be blocked by require_permissions (role check) before scope check
         assert response.status_code == 403
 
+
 """Extended tests for smaller API endpoints (tokens, plans, quotas, schedules)."""
 
 import pytest
@@ -667,6 +683,7 @@ from app.models.server_plan import ServerPlan
 from app.models.server_schedule import ServerSchedule
 from app.models.server import Server
 
+
 class TestTokensAPI:
     """Tests for API token endpoints."""
 
@@ -675,7 +692,7 @@ class TestTokensAPI:
         """Getting non-existent token should 404."""
         response = await client.get(
             "/api/tokens/00000000-0000-0000-0000-000000000000",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 404
 
@@ -684,7 +701,7 @@ class TestTokensAPI:
         """Revoking non-existent token should 404."""
         response = await client.delete(
             "/api/tokens/00000000-0000-0000-0000-000000000000",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 404
 
@@ -693,7 +710,7 @@ class TestTokensAPI:
         """Permanently deleting non-existent token should 404."""
         response = await client.delete(
             "/api/tokens/00000000-0000-0000-0000-000000000000/permanent",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 404
 
@@ -702,7 +719,7 @@ class TestTokensAPI:
         """Regenerating non-existent token should 404."""
         response = await client.post(
             "/api/tokens/00000000-0000-0000-0000-000000000000/regenerate",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 404
 
@@ -711,7 +728,7 @@ class TestTokensAPI:
         """Getting usage for non-existent token should 404."""
         response = await client.get(
             "/api/tokens/00000000-0000-0000-0000-000000000000/usage",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 404
 
@@ -721,7 +738,7 @@ class TestTokensAPI:
         response = await client.post(
             "/api/tokens",
             headers={"Authorization": f"Bearer {user_token}"},
-            json={"name": "test", "scopes": ["invalid:scope"]}
+            json={"name": "test", "scopes": ["invalid:scope"]},
         )
         assert response.status_code == 422
 
@@ -729,11 +746,7 @@ class TestTokensAPI:
     async def test_list_tokens(self, client, user_token):
         """Should list user's tokens."""
         response = await client.get(
-            "/api/tokens",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/tokens", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 200
         assert isinstance(response.json(), list)
-
-
-

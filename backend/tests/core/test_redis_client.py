@@ -13,6 +13,7 @@ class TestGetRedisClient:
 
         # Clear any existing singleton
         from app.core import redis_client as rc_module
+
         original = rc_module._redis_client
         rc_module._redis_client = None
 
@@ -33,6 +34,7 @@ class TestGetRedisClient:
 
             # Clear singleton to force creation
             from app.core import redis_client as rc_module
+
             original = rc_module._redis_client
             rc_module._redis_client = None
 

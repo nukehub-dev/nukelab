@@ -147,7 +147,7 @@ class TestUserServiceCreate:
             role="user",
             first_name="New",
             last_name="User",
-            credits=1000
+            credits=1000,
         )
         assert user.username == "newuser"
         assert user.nuke_balance == 1000
@@ -159,10 +159,7 @@ class TestUserServiceCreate:
         service = UserService(db_session)
         with pytest.raises(Exception) as exc_info:
             await service.create_user(
-                username="badrole",
-                email="bad@example.com",
-                password="password123",
-                role="hacker"
+                username="badrole", email="bad@example.com", password="password123", role="hacker"
             )
         assert "Invalid role" in str(exc_info.value)
 
@@ -172,9 +169,7 @@ class TestUserServiceCreate:
         service = UserService(db_session)
         with pytest.raises(Exception) as exc_info:
             await service.create_user(
-                username=test_user.username,
-                email="unique@example.com",
-                password="password123"
+                username=test_user.username, email="unique@example.com", password="password123"
             )
         assert "Username already exists" in str(exc_info.value)
 
@@ -184,9 +179,7 @@ class TestUserServiceCreate:
         service = UserService(db_session)
         with pytest.raises(Exception) as exc_info:
             await service.create_user(
-                username="uniqueuser",
-                email=test_user.email,
-                password="password123"
+                username="uniqueuser", email=test_user.email, password="password123"
             )
         assert "Email already exists" in str(exc_info.value)
 
@@ -200,7 +193,7 @@ class TestUserServiceUpdate:
         service = UserService(db_session)
         updated = await service.update_user(
             str(test_user.id),
-            {"first_name": "Updated", "last_name": "Name", "email": "updated@example.com"}
+            {"first_name": "Updated", "last_name": "Name", "email": "updated@example.com"},
         )
         assert updated.first_name == "Updated"
         assert updated.last_name == "Name"
@@ -219,9 +212,7 @@ class TestUserServiceUpdate:
         """Admin should be able to update role."""
         service = UserService(db_session)
         updated = await service.update_user(
-            str(test_user.id),
-            {"role": "moderator"},
-            updated_by=admin_user
+            str(test_user.id), {"role": "moderator"}, updated_by=admin_user
         )
         assert updated.role == "moderator"
 
@@ -230,11 +221,7 @@ class TestUserServiceUpdate:
         """Regular user should not update role."""
         service = UserService(db_session)
         with pytest.raises(Exception) as exc_info:
-            await service.update_user(
-                str(test_user.id),
-                {"role": "admin"},
-                updated_by=test_user
-            )
+            await service.update_user(str(test_user.id), {"role": "admin"}, updated_by=test_user)
         assert "Insufficient permissions" in str(exc_info.value)
 
     @pytest.mark.asyncio
@@ -242,9 +229,7 @@ class TestUserServiceUpdate:
         """Admin should be able to update credits."""
         service = UserService(db_session)
         updated = await service.update_user(
-            str(test_user.id),
-            {"nuke_balance": 9999},
-            updated_by=admin_user
+            str(test_user.id), {"nuke_balance": 9999}, updated_by=admin_user
         )
         assert updated.nuke_balance == 9999
 
@@ -316,9 +301,7 @@ class TestUserServiceChangePassword:
         """change_password should update password."""
         service = UserService(db_session)
         result = await service.change_password(
-            str(test_user.id),
-            current_password="testpass123",
-            new_password="newpassword456"
+            str(test_user.id), current_password="testpass123", new_password="newpassword456"
         )
         assert result is True
 
@@ -328,9 +311,7 @@ class TestUserServiceChangePassword:
         service = UserService(db_session)
         with pytest.raises(Exception) as exc_info:
             await service.change_password(
-                str(test_user.id),
-                current_password="wrongpassword",
-                new_password="newpassword456"
+                str(test_user.id), current_password="wrongpassword", new_password="newpassword456"
             )
         assert "incorrect" in str(exc_info.value)
 
@@ -340,9 +321,7 @@ class TestUserServiceChangePassword:
         service = UserService(db_session)
         with pytest.raises(Exception) as exc_info:
             await service.change_password(
-                str(uuid_mod.uuid4()),
-                current_password="old",
-                new_password="new"
+                str(uuid_mod.uuid4()), current_password="old", new_password="new"
             )
         assert "not found" in str(exc_info.value)
 

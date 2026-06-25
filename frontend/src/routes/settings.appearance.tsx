@@ -1,15 +1,25 @@
-import { createFileRoute, Link } from '@tanstack/react-router';
-import { motion } from 'framer-motion';
-import { Palette, Moon, Sun, Monitor, Check, Sidebar, ArrowLeft, MonitorSmartphone, Maximize2 } from 'lucide-react';
-import { useThemeStore } from '../stores/theme-store';
-import { useSidebarStore } from '../stores/sidebar-store';
-import { THEME_VALUES, THEME_PREVIEWS, ACCENT_COLORS } from '../types/theme';
-import { cn } from '../lib/utils';
-import { Tooltip } from '../components/ui/tooltip';
+import { createFileRoute, Link } from '@tanstack/react-router'
+import { motion } from 'framer-motion'
+import {
+  Palette,
+  Moon,
+  Sun,
+  Monitor,
+  Check,
+  Sidebar,
+  ArrowLeft,
+  MonitorSmartphone,
+  Maximize2,
+} from 'lucide-react'
+import { useThemeStore } from '../stores/theme-store'
+import { useSidebarStore } from '../stores/sidebar-store'
+import { THEME_VALUES, THEME_PREVIEWS, ACCENT_COLORS } from '../types/theme'
+import { cn } from '../lib/utils'
+import { Tooltip } from '../components/ui/tooltip'
 
 export const Route = createFileRoute('/settings/appearance')({
   component: AppearanceSettingsPage,
-});
+})
 
 function AppearanceSettingsPage() {
   const {
@@ -22,10 +32,10 @@ function AppearanceSettingsPage() {
     setDarkMode,
     setOledMode,
     setAccentColor,
-    setDensity
-  } = useThemeStore();
+    setDensity,
+  } = useThemeStore()
 
-  const { mode, setMode } = useSidebarStore();
+  const { mode, setMode } = useSidebarStore()
 
   return (
     <div className="min-h-screen p-6 lg:p-10 space-y-10">
@@ -52,7 +62,10 @@ function AppearanceSettingsPage() {
 
       <div className="space-y-8">
         {/* Application Theme */}
-        <SettingsSection title="Application Theme" description="Choose the overall visual theme for NukeLab.">
+        <SettingsSection
+          title="Application Theme"
+          description="Choose the overall visual theme for NukeLab."
+        >
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {THEME_VALUES.map((t) => (
               <motion.button
@@ -61,27 +74,39 @@ function AppearanceSettingsPage() {
                 whileTap={{ scale: 0.98 }}
                 onClick={() => setTheme(t)}
                 className={cn(
-                  "relative p-4 rounded-xl border-2 transition-all text-left",
+                  'relative p-4 rounded-xl border-2 transition-all text-left',
                   theme === t
-                    ? "border-primary bg-primary/5"
-                    : "border-border/50 bg-card/30 hover:border-border hover:bg-card/50"
+                    ? 'border-primary bg-primary/5'
+                    : 'border-border/50 bg-card/30 hover:border-border hover:bg-card/50'
                 )}
               >
                 <div className="space-y-3">
                   <div
                     className="w-full h-12 rounded-lg border border-border/20 overflow-hidden relative flex items-end p-1 gap-1"
                     style={{
-                      backgroundColor: isDark ? THEME_PREVIEWS[t].dark.background : THEME_PREVIEWS[t].light.background,
-                      borderColor: isDark ? THEME_PREVIEWS[t].dark.border : THEME_PREVIEWS[t].light.border,
+                      backgroundColor: isDark
+                        ? THEME_PREVIEWS[t].dark.background
+                        : THEME_PREVIEWS[t].light.background,
+                      borderColor: isDark
+                        ? THEME_PREVIEWS[t].dark.border
+                        : THEME_PREVIEWS[t].light.border,
                     }}
                   >
                     <div
                       className="h-6 rounded flex-1"
-                      style={{ backgroundColor: isDark ? THEME_PREVIEWS[t].dark.card : THEME_PREVIEWS[t].light.card }}
+                      style={{
+                        backgroundColor: isDark
+                          ? THEME_PREVIEWS[t].dark.card
+                          : THEME_PREVIEWS[t].light.card,
+                      }}
                     />
                     <div
                       className="w-4 h-4 rounded-full shrink-0"
-                      style={{ backgroundColor: isDark ? THEME_PREVIEWS[t].dark.primary : THEME_PREVIEWS[t].light.primary }}
+                      style={{
+                        backgroundColor: isDark
+                          ? THEME_PREVIEWS[t].dark.primary
+                          : THEME_PREVIEWS[t].light.primary,
+                      }}
                     />
                   </div>
                   <div className="flex items-center justify-between">
@@ -99,7 +124,10 @@ function AppearanceSettingsPage() {
         </SettingsSection>
 
         {/* Accent Color */}
-        <SettingsSection title="Accent Color" description="Select an accent color to customize the appearance.">
+        <SettingsSection
+          title="Accent Color"
+          description="Select an accent color to customize the appearance."
+        >
           <div className="flex items-center gap-4">
             {ACCENT_COLORS.map((c) => (
               <Tooltip key={c.value} content={c.label}>
@@ -108,10 +136,8 @@ function AppearanceSettingsPage() {
                   whileTap={{ scale: 0.95 }}
                   onClick={() => setAccentColor(c.value)}
                   className={cn(
-                    "relative w-12 h-12 rounded-full transition-all ring-2 ring-offset-2 ring-offset-background",
-                    accentColor === c.value
-                      ? "ring-primary"
-                      : "ring-transparent hover:ring-border"
+                    'relative w-12 h-12 rounded-full transition-all ring-2 ring-offset-2 ring-offset-background',
+                    accentColor === c.value ? 'ring-primary' : 'ring-transparent hover:ring-border'
                   )}
                   style={{ backgroundColor: c.color }}
                 >
@@ -143,10 +169,10 @@ function AppearanceSettingsPage() {
                 <button
                   onClick={() => setDarkMode(false)}
                   className={cn(
-                    "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+                    'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all',
                     !isDark
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
                   )}
                 >
                   <Sun className="w-4 h-4" />
@@ -155,22 +181,25 @@ function AppearanceSettingsPage() {
                 <button
                   onClick={() => setDarkMode(true)}
                   className={cn(
-                    "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+                    'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all',
                     isDark && !isOled
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
                   )}
                 >
                   <Moon className="w-4 h-4" />
                   Dark
                 </button>
                 <button
-                  onClick={() => { setDarkMode(true); setOledMode(!isOled); }}
+                  onClick={() => {
+                    setDarkMode(true)
+                    setOledMode(!isOled)
+                  }}
                   className={cn(
-                    "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+                    'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all',
                     isOled
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
                   )}
                 >
                   <Monitor className="w-4 h-4" />
@@ -192,10 +221,10 @@ function AppearanceSettingsPage() {
                 <button
                   onClick={() => setDensity('comfortable')}
                   className={cn(
-                    "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+                    'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all',
                     density === 'comfortable'
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
                   )}
                 >
                   <Maximize2 className="w-4 h-4" />
@@ -204,10 +233,10 @@ function AppearanceSettingsPage() {
                 <button
                   onClick={() => setDensity('compact')}
                   className={cn(
-                    "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
+                    'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all',
                     density === 'compact'
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
                   )}
                 >
                   <MonitorSmartphone className="w-4 h-4" />
@@ -215,8 +244,6 @@ function AppearanceSettingsPage() {
                 </button>
               </div>
             </div>
-
-
           </div>
         </SettingsSection>
 
@@ -235,10 +262,10 @@ function AppearanceSettingsPage() {
                 <button
                   onClick={() => setMode('collapsed')}
                   className={cn(
-                    "px-4 py-2 rounded-lg text-sm font-medium transition-all",
+                    'px-4 py-2 rounded-lg text-sm font-medium transition-all',
                     mode === 'collapsed'
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
                   )}
                 >
                   Collapsed
@@ -246,10 +273,10 @@ function AppearanceSettingsPage() {
                 <button
                   onClick={() => setMode('auto')}
                   className={cn(
-                    "px-4 py-2 rounded-lg text-sm font-medium transition-all",
+                    'px-4 py-2 rounded-lg text-sm font-medium transition-all',
                     mode === 'auto'
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
                   )}
                 >
                   Auto
@@ -257,10 +284,10 @@ function AppearanceSettingsPage() {
                 <button
                   onClick={() => setMode('expanded')}
                   className={cn(
-                    "px-4 py-2 rounded-lg text-sm font-medium transition-all",
+                    'px-4 py-2 rounded-lg text-sm font-medium transition-all',
                     mode === 'expanded'
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
                   )}
                 >
                   Expanded
@@ -271,17 +298,17 @@ function AppearanceSettingsPage() {
         </SettingsSection>
       </div>
     </div>
-  );
+  )
 }
 
 function SettingsSection({
   title,
   description,
-  children
+  children,
 }: {
-  title?: string;
-  description?: string;
-  children: React.ReactNode;
+  title?: string
+  description?: string
+  children: React.ReactNode
 }) {
   return (
     <motion.div
@@ -293,12 +320,10 @@ function SettingsSection({
       {(title || description) && (
         <div className="mb-6">
           {title && <h3 className="text-lg font-semibold">{title}</h3>}
-          {description && (
-            <p className="text-sm text-muted-foreground mt-1">{description}</p>
-          )}
+          {description && <p className="text-sm text-muted-foreground mt-1">{description}</p>}
         </div>
       )}
       <div>{children}</div>
     </motion.div>
-  );
+  )
 }

@@ -36,8 +36,7 @@ class TestCSRFProtection:
     async def test_bearer_auth_exempt_from_csrf(self, client, user_token):
         """Requests with Authorization: Bearer should bypass CSRF check."""
         response = await client.get(
-            "/api/auth/me",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/auth/me", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 200
 
@@ -46,8 +45,7 @@ class TestCSRFProtection:
         """Cookie-only auth on state-changing endpoint requires CSRF token."""
         # Login to establish cookie (but don't send Bearer header)
         login_resp = await client.post(
-            "/api/auth/login",
-            data={"username": test_user.username, "password": "testpass123"}
+            "/api/auth/login", data={"username": test_user.username, "password": "testpass123"}
         )
         # Allow 429 from rate limiting in full-suite runs
         if login_resp.status_code == 429:
@@ -58,7 +56,7 @@ class TestCSRFProtection:
         # Use a cookie-only request (no Authorization header)
         response = await client.post(
             "/api/auth/logout",
-            cookies={"nukelab_token": login_resp.cookies.get("nukelab_token", "")}
+            cookies={"nukelab_token": login_resp.cookies.get("nukelab_token", "")},
         )
         # The client fixture doesn't persist cookies across requests the same way
         # a browser does; this test verifies the middleware logic directly
@@ -108,8 +106,7 @@ class TestCSRFProtection:
     async def test_login_exempt_from_csrf(self, client):
         """Login endpoint should not require CSRF token."""
         response = await client.post(
-            "/api/auth/login",
-            data={"username": "testuser", "password": "wrongpass"}
+            "/api/auth/login", data={"username": "testuser", "password": "wrongpass"}
         )
         # Allow 429 from rate limiting in full-suite runs
         assert response.status_code in (401, 422, 429)

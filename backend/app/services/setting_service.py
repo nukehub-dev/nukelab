@@ -18,17 +18,13 @@ class SettingService:
 
     async def get(self, key: str, default: Optional[str] = None) -> Optional[str]:
         """Get a setting value by key."""
-        result = await self.db.execute(
-            select(SystemSetting).where(SystemSetting.key == key)
-        )
+        result = await self.db.execute(select(SystemSetting).where(SystemSetting.key == key))
         row = result.scalar_one_or_none()
         return row.value if row else default
 
     async def set(self, key: str, value: str) -> SystemSetting:
         """Set a setting value, creating the row if it doesn't exist."""
-        result = await self.db.execute(
-            select(SystemSetting).where(SystemSetting.key == key)
-        )
+        result = await self.db.execute(select(SystemSetting).where(SystemSetting.key == key))
         row = result.scalar_one_or_none()
 
         if row:
@@ -75,6 +71,8 @@ class SettingService:
         msg = await self.get("maintenance_message")
 
         return {
-            "maintenance_mode": (mode_str.lower() == "true") if mode_str is not None else settings.maintenance_mode,
+            "maintenance_mode": (mode_str.lower() == "true")
+            if mode_str is not None
+            else settings.maintenance_mode,
             "maintenance_message": msg if msg is not None else settings.maintenance_message,
         }

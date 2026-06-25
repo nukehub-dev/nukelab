@@ -1,61 +1,61 @@
-import { useEffect } from 'react';
-import { Outlet, useNavigate, useLocation } from '@tanstack/react-router';
-import { AlertTriangle } from 'lucide-react';
-import { useThemeStore } from '../../stores/theme-store';
-import { useSidebarStore } from '../../stores/sidebar-store';
-import { useCurrentUser } from '../../hooks/use-current-user';
-import { useGlobalShortcuts } from '../../hooks/use-keyboard-shortcuts';
-import { useFavicon } from '../../lib/favicon';
-import { useNotificationToasts } from '../notifications/notification-toast-provider';
-import { useHealth } from '../../hooks/use-health';
-import { Sidebar } from './sidebar';
-import { ToastProvider } from '../feedback/toast';
-import { ShortcutsModal } from '../feedback/shortcuts-modal';
-import { AmbientBackground } from '../animations/ambient-background';
-import { ErrorBoundary } from '../error-boundary';
-import { AnimatePresence, motion } from 'framer-motion';
-import { cn } from '../../lib/utils';
+import { useEffect } from 'react'
+import { Outlet, useNavigate, useLocation } from '@tanstack/react-router'
+import { AlertTriangle } from 'lucide-react'
+import { useThemeStore } from '../../stores/theme-store'
+import { useSidebarStore } from '../../stores/sidebar-store'
+import { useCurrentUser } from '../../hooks/use-current-user'
+import { useGlobalShortcuts } from '../../hooks/use-keyboard-shortcuts'
+import { useFavicon } from '../../lib/favicon'
+import { useNotificationToasts } from '../notifications/notification-toast-provider'
+import { useHealth } from '../../hooks/use-health'
+import { Sidebar } from './sidebar'
+import { ToastProvider } from '../feedback/toast'
+import { ShortcutsModal } from '../feedback/shortcuts-modal'
+import { AmbientBackground } from '../animations/ambient-background'
+import { ErrorBoundary } from '../error-boundary'
+import { AnimatePresence, motion } from 'framer-motion'
+import { cn } from '../../lib/utils'
 
 export function AppShell() {
-  const { isDark, isOled } = useThemeStore();
-  const { isOpen } = useSidebarStore();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const isLoginPage = location.pathname === '/login';
-  const isGatewayPage = location.pathname.startsWith('/user/');
-  const isDashboard = location.pathname === '/';
-  const { data: health } = useHealth();
-  const isMaintenance = health?.status === 'maintenance';
+  const { isDark, isOled } = useThemeStore()
+  const { isOpen } = useSidebarStore()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const isLoginPage = location.pathname === '/login'
+  const isGatewayPage = location.pathname.startsWith('/user/')
+  const isDashboard = location.pathname === '/'
+  const { data: health } = useHealth()
+  const isMaintenance = health?.status === 'maintenance'
 
   // Dynamic favicon with theme color
-  useFavicon();
+  useFavicon()
 
   // Global keyboard shortcuts
-  useGlobalShortcuts();
+  useGlobalShortcuts()
 
   // Fetch current user when authenticated (skip on login page)
-  const hasToken = !!localStorage.getItem('nukelab-token');
-  useCurrentUser({ enabled: hasToken && !isLoginPage });
+  const hasToken = !!localStorage.getItem('nukelab-token')
+  useCurrentUser({ enabled: hasToken && !isLoginPage })
 
   // Global notification toast watcher
-  useNotificationToasts();
+  useNotificationToasts()
 
   useEffect(() => {
     // Initialize theme on mount
-    document.documentElement.classList.toggle('dark', isDark);
-    if (!isDark) document.documentElement.classList.add('light');
-    document.documentElement.classList.toggle('oled', isOled);
-  }, [isDark, isOled]);
+    document.documentElement.classList.toggle('dark', isDark)
+    if (!isDark) document.documentElement.classList.add('light')
+    document.documentElement.classList.toggle('oled', isOled)
+  }, [isDark, isOled])
 
   useEffect(() => {
     // Check auth — skip on login page
-    if (isLoginPage) return;
+    if (isLoginPage) return
 
-    const token = localStorage.getItem('nukelab-token');
+    const token = localStorage.getItem('nukelab-token')
     if (!token) {
-      navigate({ to: '/login' });
+      navigate({ to: '/login' })
     }
-  }, [isLoginPage, navigate]);
+  }, [isLoginPage, navigate])
 
   // Login and gateway pages render without sidebar/layout
   if (isLoginPage || isGatewayPage) {
@@ -76,7 +76,7 @@ export function AppShell() {
           </motion.div>
         </AnimatePresence>
       </>
-    );
+    )
   }
 
   return (
@@ -101,17 +101,17 @@ export function AppShell() {
         >
           <div className="flex items-center justify-center gap-2 px-4 py-2 text-amber-800 dark:text-amber-400 text-sm">
             <AlertTriangle className="w-4 h-4" />
-            <span className="font-medium">
-              {health?.message || 'System under maintenance'}
-            </span>
+            <span className="font-medium">{health?.message || 'System under maintenance'}</span>
           </div>
         </motion.div>
       )}
 
-      <div className={cn(
-        "flex min-h-screen bg-background text-foreground relative z-10",
-        isMaintenance && "pt-9"
-      )}>
+      <div
+        className={cn(
+          'flex min-h-screen bg-background text-foreground relative z-10',
+          isMaintenance && 'pt-9'
+        )}
+      >
         <Sidebar />
 
         <motion.main
@@ -137,5 +137,5 @@ export function AppShell() {
         </motion.main>
       </div>
     </>
-  );
+  )
 }

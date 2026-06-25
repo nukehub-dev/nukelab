@@ -13,6 +13,7 @@ class TestInitSentry:
             mock_settings.sentry_dsn = ""
             with mock.patch("sentry_sdk.init") as mock_init:
                 from app.core.sentry import init_sentry
+
                 init_sentry()
                 mock_init.assert_not_called()
 
@@ -24,6 +25,7 @@ class TestInitSentry:
             mock_settings.sentry_release = "nukelab@abc123"
             with mock.patch("sentry_sdk.init") as mock_init:
                 from app.core.sentry import init_sentry
+
                 init_sentry()
                 mock_init.assert_called_once()
                 call_kwargs = mock_init.call_args.kwargs
@@ -42,6 +44,7 @@ class TestInitSentry:
             mock_settings.sentry_release = ""
             with mock.patch("sentry_sdk.init") as mock_init:
                 from app.core.sentry import init_sentry
+
                 init_sentry()
                 call_kwargs = mock_init.call_args.kwargs
                 assert call_kwargs["release"] == "nukelab@dev"
@@ -53,6 +56,7 @@ class TestBeforeSend:
     def test_filters_health_check_events(self):
         """Should drop events from health check paths."""
         from app.core.sentry import _before_send
+
         event = {"request": {"url": "http://localhost:8080/api/health"}}
         result = _before_send(event, {})
         assert result is None
@@ -60,6 +64,7 @@ class TestBeforeSend:
     def test_allows_regular_events(self):
         """Should allow events from regular API paths."""
         from app.core.sentry import _before_send
+
         event = {"request": {"url": "http://localhost:8080/api/users"}}
         result = _before_send(event, {})
         assert result is event
@@ -67,6 +72,7 @@ class TestBeforeSend:
     def test_handles_missing_request(self):
         """Should allow events with no request data."""
         from app.core.sentry import _before_send
+
         event = {"exception": {"values": []}}
         result = _before_send(event, {})
         assert result is event
@@ -78,6 +84,7 @@ class TestBeforeSendTransaction:
     def test_filters_health_check_transactions(self):
         """Should drop transactions from health check paths."""
         from app.core.sentry import _before_send_transaction
+
         event = {"request": {"url": "http://localhost:8080/api/health"}}
         result = _before_send_transaction(event, {})
         assert result is None
@@ -85,6 +92,7 @@ class TestBeforeSendTransaction:
     def test_allows_regular_transactions(self):
         """Should allow transactions from regular API paths."""
         from app.core.sentry import _before_send_transaction
+
         event = {"request": {"url": "http://localhost:8080/api/users"}}
         result = _before_send_transaction(event, {})
         assert result is event
@@ -99,11 +107,14 @@ class TestSetSentryUser:
             mock_settings.sentry_dsn = "https://key@o1.ingest.sentry.io/1"
             with mock.patch("sentry_sdk.set_user") as mock_set_user:
                 from app.core.sentry import set_sentry_user
+
                 set_sentry_user("user-123", "admin")
-                mock_set_user.assert_called_once_with({
-                    "id": "user-123",
-                    "role": "admin",
-                })
+                mock_set_user.assert_called_once_with(
+                    {
+                        "id": "user-123",
+                        "role": "admin",
+                    }
+                )
 
     def test_skips_when_dsn_empty(self):
         """Should not call set_user when DSN is empty."""
@@ -111,6 +122,7 @@ class TestSetSentryUser:
             mock_settings.sentry_dsn = ""
             with mock.patch("sentry_sdk.set_user") as mock_set_user:
                 from app.core.sentry import set_sentry_user
+
                 set_sentry_user("user-123")
                 mock_set_user.assert_not_called()
 
@@ -121,6 +133,7 @@ class TestScrubSensitiveData:
     def test_scrubs_password_in_dict(self):
         """Should redact password values."""
         from app.core.sentry import _scrub_sensitive_data
+
         data = {"username": "alice", "password": "secret123"}
         result = _scrub_sensitive_data(data)
         assert result["username"] == "alice"
@@ -129,6 +142,7 @@ class TestScrubSensitiveData:
     def test_scrubs_nested_sensitive_data(self):
         """Should redact sensitive keys in nested structures."""
         from app.core.sentry import _scrub_sensitive_data
+
         data = {"user": {"id": "1", "token": "abc123"}, "items": [1, 2]}
         result = _scrub_sensitive_data(data)
         assert result["user"]["id"] == "1"
@@ -137,6 +151,7 @@ class TestScrubSensitiveData:
     def test_leaves_non_sensitive_data_intact(self):
         """Should not modify non-sensitive data."""
         from app.core.sentry import _scrub_sensitive_data
+
         data = {"name": "test", "count": 42, "active": True}
         result = _scrub_sensitive_data(data)
         assert result == data
@@ -148,6 +163,7 @@ class TestBeforeSendScrubbing:
     def test_scrubs_sensitive_request_body(self):
         """Should redact passwords in request body."""
         from app.core.sentry import _before_send
+
         event = {
             "request": {
                 "url": "http://localhost/api/auth/login",
@@ -162,6 +178,7 @@ class TestBeforeSendScrubbing:
     def test_scrubs_user_context_pii(self):
         """Should strip username/email from user context."""
         from app.core.sentry import _before_send
+
         event = {
             "request": {"url": "http://localhost/api/users"},
             "user": {"id": "123", "username": "alice", "email": "a@b.com", "role": "admin"},
@@ -173,6 +190,7 @@ class TestBeforeSendScrubbing:
     def test_scrubs_query_string(self):
         """Should redact sensitive query params."""
         from app.core.sentry import _before_send
+
         event = {
             "request": {
                 "url": "http://localhost/api/test",
@@ -193,6 +211,7 @@ class TestSetSentryTag:
             mock_settings.sentry_dsn = "https://key@o1.ingest.sentry.io/1"
             with mock.patch("sentry_sdk.set_tag") as mock_set_tag:
                 from app.core.sentry import set_sentry_tag
+
                 set_sentry_tag("feature", "test")
                 mock_set_tag.assert_called_once_with("feature", "test")
 
@@ -202,5 +221,6 @@ class TestSetSentryTag:
             mock_settings.sentry_dsn = ""
             with mock.patch("sentry_sdk.set_tag") as mock_set_tag:
                 from app.core.sentry import set_sentry_tag
+
                 set_sentry_tag("feature", "test")
                 mock_set_tag.assert_not_called()

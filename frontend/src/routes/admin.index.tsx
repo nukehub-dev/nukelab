@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from '@tanstack/react-router';
+import { createFileRoute, Link } from '@tanstack/react-router'
 import {
   Users,
   Server,
@@ -21,43 +21,44 @@ import {
   Bell,
   ExternalLink,
   Activity,
-} from 'lucide-react';
-import { motion } from 'framer-motion';
-import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
-import { cn } from '../lib/utils';
-import { refreshAccessToken } from '../lib/api';
+} from 'lucide-react'
+import { motion } from 'framer-motion'
+import { useAuthStore, PERMISSIONS } from '../stores/auth-store'
+import { cn } from '../lib/utils'
+import { refreshAccessToken } from '../lib/api'
 
 function getMonitoringUrl(redirect = '/grafana', token?: string | null): string {
-  const accessToken = token ?? (typeof window !== 'undefined' ? localStorage.getItem('nukelab-token') : null);
-  const base = import.meta.env.VITE_MONITORING_BASE_URL || import.meta.env.VITE_API_URL || '/api';
-  return `${base.replace(/\/$/, '')}/auth/monitoring?redirect=${encodeURIComponent(redirect)}&token=${encodeURIComponent(accessToken || '')}`;
+  const accessToken =
+    token ?? (typeof window !== 'undefined' ? localStorage.getItem('nukelab-token') : null)
+  const base = import.meta.env.VITE_MONITORING_BASE_URL || import.meta.env.VITE_API_URL || '/api'
+  return `${base.replace(/\/$/, '')}/auth/monitoring?redirect=${encodeURIComponent(redirect)}&token=${encodeURIComponent(accessToken || '')}`
 }
 
 async function openMonitoringTool(redirect: string) {
-  const refreshed = await refreshAccessToken();
+  const refreshed = await refreshAccessToken()
   if (!refreshed) {
-    window.location.href = '/login';
-    return;
+    window.location.href = '/login'
+    return
   }
-  const token = localStorage.getItem('nukelab-token');
-  const url = getMonitoringUrl(redirect, token);
-  const a = document.createElement('a');
-  a.href = url;
-  a.target = '_blank';
-  a.rel = 'noopener noreferrer';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+  const token = localStorage.getItem('nukelab-token')
+  const url = getMonitoringUrl(redirect, token)
+  const a = document.createElement('a')
+  a.href = url
+  a.target = '_blank'
+  a.rel = 'noopener noreferrer'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
 }
 
 interface AdminCategory {
-  label: string;
-  description: string;
-  icon: React.ElementType;
-  href: string;
-  requiredPermission?: string;
-  color: string;
-  external?: boolean;
+  label: string
+  description: string
+  icon: React.ElementType
+  href: string
+  requiredPermission?: string
+  color: string
+  external?: boolean
 }
 
 const categories: AdminCategory[] = [
@@ -217,18 +218,18 @@ const categories: AdminCategory[] = [
     color: 'bg-purple-500/10 text-purple-400',
     external: true,
   },
-];
+]
 
 export const Route = createFileRoute('/admin/')({
   component: AdminIndexPage,
-});
+})
 
 function AdminIndexPage() {
-  const hasPermission = useAuthStore((state) => state.hasPermission);
+  const hasPermission = useAuthStore((state) => state.hasPermission)
 
   const visibleCategories = categories.filter(
     (c) => !c.requiredPermission || hasPermission(c.requiredPermission)
-  );
+  )
 
   return (
     <div className="min-h-screen p-6 lg:p-10 space-y-8">
@@ -243,9 +244,7 @@ function AdminIndexPage() {
         </div>
         <div>
           <h1 className="text-2xl font-bold">Administration</h1>
-          <p className="text-sm text-muted-foreground">
-            Platform management and configuration
-          </p>
+          <p className="text-sm text-muted-foreground">Platform management and configuration</p>
         </div>
       </motion.div>
 
@@ -256,7 +255,7 @@ function AdminIndexPage() {
         ))}
       </div>
     </div>
-  );
+  )
 }
 
 function AdminCard({ category, index }: { category: AdminCategory; index: number }) {
@@ -274,9 +273,7 @@ function AdminCard({ category, index }: { category: AdminCategory; index: number
         <h3 className="font-semibold text-base group-hover:text-primary transition-colors">
           {category.label}
         </h3>
-        <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-          {category.description}
-        </p>
+        <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{category.description}</p>
       </div>
       {category.external ? (
         <ExternalLink className="w-5 h-5 text-muted-foreground/50 group-hover:text-muted-foreground transition-all shrink-0 mt-1" />
@@ -284,7 +281,7 @@ function AdminCard({ category, index }: { category: AdminCategory; index: number
         <ChevronRight className="w-5 h-5 text-muted-foreground/50 group-hover:text-muted-foreground group-hover:translate-x-0.5 transition-all shrink-0 mt-1" />
       )}
     </>
-  );
+  )
 
   return (
     <motion.div
@@ -309,5 +306,5 @@ function AdminCard({ category, index }: { category: AdminCategory; index: number
         </Link>
       )}
     </motion.div>
-  );
+  )
 }

@@ -1,53 +1,59 @@
-import { createFileRoute, Link } from '@tanstack/react-router';
-import { Bell, Check, CheckCheck, Trash2, Settings, Info, AlertTriangle, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { motion } from 'framer-motion';
-import { useState } from 'react';
-import { PageHeader } from '../components/layout/page-header';
+import { createFileRoute, Link } from '@tanstack/react-router'
+import {
+  Bell,
+  Check,
+  CheckCheck,
+  Trash2,
+  Settings,
+  Info,
+  AlertTriangle,
+  AlertCircle,
+  CheckCircle2,
+} from 'lucide-react'
+import { motion } from 'framer-motion'
+import { useState } from 'react'
+import { PageHeader } from '../components/layout/page-header'
 import {
   useNotifications,
   useMarkAsRead,
   useMarkAllAsRead,
   useDeleteNotification,
-} from '../hooks/use-notifications';
-import { cn } from '../lib/utils';
-import { springs } from '../lib/animations';
-import { Tooltip } from '../components/ui/tooltip';
+} from '../hooks/use-notifications'
+import { cn } from '../lib/utils'
+import { springs } from '../lib/animations'
+import { Tooltip } from '../components/ui/tooltip'
 
 const severityIcons = {
   info: Info,
   success: CheckCircle2,
   warning: AlertTriangle,
   error: AlertCircle,
-};
+}
 
 const severityColors = {
   info: 'text-blue-400 bg-blue-400/10 border-blue-400/20',
   success: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20',
   warning: 'text-amber-400 bg-amber-400/10 border-amber-400/20',
   error: 'text-destructive bg-destructive/10 border-destructive/20',
-};
+}
 
 export const Route = createFileRoute('/notifications')({
   component: NotificationsPage,
-});
+})
 
 function NotificationsPage() {
-  const [filter, setFilter] = useState<'all' | 'unread'>('all');
-  const { data, isLoading } = useNotifications(filter === 'unread', 1, 50);
-  const markAsRead = useMarkAsRead();
-  const markAllAsRead = useMarkAllAsRead();
-  const deleteNotification = useDeleteNotification();
+  const [filter, setFilter] = useState<'all' | 'unread'>('all')
+  const { data, isLoading } = useNotifications(filter === 'unread', 1, 50)
+  const markAsRead = useMarkAsRead()
+  const markAllAsRead = useMarkAllAsRead()
+  const deleteNotification = useDeleteNotification()
 
-  const notifications = data?.notifications || [];
-  const unreadCount = data?.unread_count || 0;
+  const notifications = data?.notifications || []
+  const unreadCount = data?.unread_count || 0
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Notifications"
-        subtitle="View and manage your notifications"
-        icon={Bell}
-      />
+      <PageHeader title="Notifications" subtitle="View and manage your notifications" icon={Bell} />
 
       {/* Controls */}
       <motion.div
@@ -135,14 +141,14 @@ function NotificationsPage() {
             </h3>
             <p className="text-sm text-muted-foreground">
               {filter === 'unread'
-                ? 'You\'re all caught up!'
+                ? "You're all caught up!"
                 : 'When you receive notifications, they will appear here.'}
             </p>
           </motion.div>
         ) : (
           <motion.div className="space-y-2" initial="hidden" animate="visible">
             {notifications.map((notification, index) => {
-              const Icon = severityIcons[notification.severity] || Info;
+              const Icon = severityIcons[notification.severity] || Info
               return (
                 <motion.div
                   key={notification.id}
@@ -223,11 +229,11 @@ function NotificationsPage() {
                     </div>
                   </div>
                 </motion.div>
-              );
+              )
             })}
           </motion.div>
         )}
       </div>
     </div>
-  );
+  )
 }

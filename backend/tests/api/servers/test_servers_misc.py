@@ -24,7 +24,7 @@ class TestServerQueueStatus:
 
         response = await client.get(
             f"/api/servers/{server.id}/queue-status",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 200
         data = response.json()
@@ -71,7 +71,7 @@ class TestServerQueueStatus:
             mock_pool.get_queue_position = mock.AsyncMock(return_value=1)
             response = await client.get(
                 f"/api/servers/{server.id}/queue-status",
-                headers={"Authorization": f"Bearer {user_token}"}
+                headers={"Authorization": f"Bearer {user_token}"},
             )
 
         assert response.status_code == 200
@@ -92,8 +92,7 @@ class TestServerLogs:
         await db_session.commit()
 
         response = await client.get(
-            f"/api/servers/{server.id}/logs",
-            headers={"Authorization": f"Bearer {user_token}"}
+            f"/api/servers/{server.id}/logs", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -103,7 +102,9 @@ class TestServerLogs:
     @pytest.mark.asyncio
     async def test_logs_running_server(self, client, user_token, test_user, db_session):
         """Running server should return logs."""
-        server = Server(name="log-srv", user_id=test_user.id, status="running", container_id="cid-logs")
+        server = Server(
+            name="log-srv", user_id=test_user.id, status="running", container_id="cid-logs"
+        )
         db_session.add(server)
         await db_session.commit()
 
@@ -113,8 +114,7 @@ class TestServerLogs:
         spawner.container_client = mock_client
         try:
             response = await client.get(
-                f"/api/servers/{server.id}/logs",
-                headers={"Authorization": f"Bearer {user_token}"}
+                f"/api/servers/{server.id}/logs", headers={"Authorization": f"Bearer {user_token}"}
             )
         finally:
             spawner.container_client = original
@@ -127,7 +127,9 @@ class TestServerLogs:
     @pytest.mark.asyncio
     async def test_logs_docker_error(self, client, user_token, test_user, db_session):
         """DockerError should return empty logs with error status."""
-        server = Server(name="log-docker-err", user_id=test_user.id, status="running", container_id="cid-err")
+        server = Server(
+            name="log-docker-err", user_id=test_user.id, status="running", container_id="cid-err"
+        )
         db_session.add(server)
         await db_session.commit()
 
@@ -139,8 +141,7 @@ class TestServerLogs:
         spawner.container_client = mock_client
         try:
             response = await client.get(
-                f"/api/servers/{server.id}/logs",
-                headers={"Authorization": f"Bearer {user_token}"}
+                f"/api/servers/{server.id}/logs", headers={"Authorization": f"Bearer {user_token}"}
             )
         finally:
             spawner.container_client = original
@@ -157,14 +158,16 @@ class TestServerActivity:
     @pytest.mark.asyncio
     async def test_ping_server_activity_success(self, client, user_token, test_user, db_session):
         """Activity ping on running server should succeed."""
-        server = Server(name="act-srv", user_id=test_user.id, status="running", container_id="cid-act")
+        server = Server(
+            name="act-srv", user_id=test_user.id, status="running", container_id="cid-act"
+        )
         db_session.add(server)
         await db_session.commit()
 
         response = await client.post(
             f"/api/servers/{server.id}/activity",
             headers={"Authorization": f"Bearer {user_token}"},
-            json={}
+            json={},
         )
         assert response.status_code == 200
         data = response.json()
@@ -172,7 +175,9 @@ class TestServerActivity:
         assert "last_activity" in data
 
     @pytest.mark.asyncio
-    async def test_ping_server_activity_not_running(self, client, user_token, test_user, db_session):
+    async def test_ping_server_activity_not_running(
+        self, client, user_token, test_user, db_session
+    ):
         """Activity ping on non-running server should return 400."""
         server = Server(name="act-stopped", user_id=test_user.id, status="stopped")
         db_session.add(server)
@@ -181,7 +186,7 @@ class TestServerActivity:
         response = await client.post(
             f"/api/servers/{server.id}/activity",
             headers={"Authorization": f"Bearer {user_token}"},
-            json={}
+            json={},
         )
         assert response.status_code == 400
         assert "not running" in response.json()["detail"].lower()
@@ -203,7 +208,7 @@ class TestServerTestMetric:
 
             response = await client.post(
                 f"/api/servers/{server.id}/test-metric",
-                headers={"Authorization": f"Bearer {user_token}"}
+                headers={"Authorization": f"Bearer {user_token}"},
             )
 
         assert response.status_code == 200
@@ -227,7 +232,7 @@ class TestServerAccessToken:
         response = await client.post(
             f"/api/servers/{server.id}/access-token",
             headers={"Authorization": f"Bearer {user_token}"},
-            json={}
+            json={},
         )
         assert response.status_code == 400
 
@@ -244,7 +249,7 @@ class TestServerAccessToken:
                 response = await client.post(
                     f"/api/servers/{server.id}/access-token",
                     headers={"Authorization": f"Bearer {user_token}"},
-                    json={}
+                    json={},
                 )
 
         assert response.status_code == 503
@@ -262,7 +267,7 @@ class TestServerAccessToken:
             response = await client.post(
                 f"/api/servers/{server.id}/access-token",
                 headers={"Authorization": f"Bearer {user_token}"},
-                json={}
+                json={},
             )
 
         assert response.status_code == 200
@@ -277,11 +282,13 @@ class TestServerAccessToken:
         with mock.patch("app.config.settings.rate_limit_enabled", False):
             with mock.patch("app.services.server_auth_service.server_auth_service") as mock_svc:
                 mock_svc.is_enabled = True
-                mock_svc.generate_access_token = mock.AsyncMock(side_effect=ValueError("rate limit"))
+                mock_svc.generate_access_token = mock.AsyncMock(
+                    side_effect=ValueError("rate limit")
+                )
                 response = await client.post(
                     f"/api/servers/{server.id}/access-token",
                     headers={"Authorization": f"Bearer {user_token}"},
-                    json={}
+                    json={},
                 )
 
         assert response.status_code == 429
@@ -298,7 +305,7 @@ class TestServerAccessToken:
             mock_svc.get_server_access_stats = mock.AsyncMock(return_value={"total_requests": 10})
             response = await client.get(
                 f"/api/servers/{server.id}/access-stats",
-                headers={"Authorization": f"Bearer {user_token}"}
+                headers={"Authorization": f"Bearer {user_token}"},
             )
 
         assert response.status_code == 200

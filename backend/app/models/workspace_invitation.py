@@ -15,18 +15,13 @@ class WorkspaceInvitation(Base):
         UUID(as_uuid=True),
         ForeignKey("shared_workspaces.id", ondelete="CASCADE"),
         nullable=False,
-        index=True
+        index=True,
     )
     user_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     invited_by = Column(
-        UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="SET NULL"),
-        nullable=True
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     role = Column(String(20), default="read_write", nullable=False)
     status = Column(String(20), default="pending", nullable=False)
@@ -34,13 +29,15 @@ class WorkspaceInvitation(Base):
     created_at = Column(DateTime, default=utc_now)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
-    __table_args__ = (
-        UniqueConstraint("workspace_id", "user_id", name="uq_workspace_invitation"),
-    )
+    __table_args__ = (UniqueConstraint("workspace_id", "user_id", name="uq_workspace_invitation"),)
 
     workspace = relationship("SharedWorkspace", back_populates="invitations")
-    user = relationship("User", foreign_keys=[user_id], back_populates="workspace_invitations_received")
-    inviter = relationship("User", foreign_keys=[invited_by], back_populates="workspace_invitations_sent")
+    user = relationship(
+        "User", foreign_keys=[user_id], back_populates="workspace_invitations_received"
+    )
+    inviter = relationship(
+        "User", foreign_keys=[invited_by], back_populates="workspace_invitations_sent"
+    )
 
     def to_dict(self):
         return {

@@ -1,19 +1,19 @@
-import { useNavigate } from '@tanstack/react-router';
-import { useEffect, type ReactNode } from 'react';
-import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
+import { useNavigate } from '@tanstack/react-router'
+import { useEffect, type ReactNode } from 'react'
+import { useAuthStore, PERMISSIONS } from '../stores/auth-store'
 
 interface PermissionGuardProps {
   /** Single permission required */
-  permission?: string;
+  permission?: string
   /** Multiple permissions - any by default, all if requireAll=true */
-  permissions?: string[];
+  permissions?: string[]
   /** If true, user must have ALL permissions in the list. If false, any. */
-  requireAll?: boolean;
+  requireAll?: boolean
   /** Where to redirect if permission check fails */
-  redirectTo?: string;
+  redirectTo?: string
   /** Content to show while checking or if denied (default: null) */
-  fallback?: ReactNode;
-  children: ReactNode;
+  fallback?: ReactNode
+  children: ReactNode
 }
 
 /**
@@ -38,31 +38,31 @@ export function PermissionGuard({
   fallback = null,
   children,
 }: PermissionGuardProps) {
-  const navigate = useNavigate();
-  const hasPermission = useAuthStore((state) => state.hasPermission);
-  const hasAnyPermission = useAuthStore((state) => state.hasAnyPermission);
-  const hasAllPermissions = useAuthStore((state) => state.hasAllPermissions);
+  const navigate = useNavigate()
+  const hasPermission = useAuthStore((state) => state.hasPermission)
+  const hasAnyPermission = useAuthStore((state) => state.hasAnyPermission)
+  const hasAllPermissions = useAuthStore((state) => state.hasAllPermissions)
 
-  let allowed = true;
+  let allowed = true
 
   if (permission) {
-    allowed = hasPermission(permission);
+    allowed = hasPermission(permission)
   } else if (permissions && permissions.length > 0) {
-    allowed = requireAll ? hasAllPermissions(permissions) : hasAnyPermission(permissions);
+    allowed = requireAll ? hasAllPermissions(permissions) : hasAnyPermission(permissions)
   }
 
   useEffect(() => {
     if (!allowed) {
-      navigate({ to: redirectTo });
+      navigate({ to: redirectTo })
     }
-  }, [allowed, navigate, redirectTo]);
+  }, [allowed, navigate, redirectTo])
 
   if (!allowed) {
-    return fallback;
+    return fallback
   }
 
-  return children;
+  return children
 }
 
 // Re-export PERMISSIONS for convenience
-export { PERMISSIONS };
+export { PERMISSIONS }

@@ -1,1 +1,8 @@
-export { FadeIn, SlideUp, ScaleIn, StaggerContainer, StaggerItem, ScrollReveal } from './animation-wrappers';
+export {
+  FadeIn,
+  SlideUp,
+  ScaleIn,
+  StaggerContainer,
+  StaggerItem,
+  ScrollReveal,
+} from './animation-wrappers'

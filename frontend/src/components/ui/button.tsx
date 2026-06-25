@@ -1,12 +1,11 @@
-import * as React from 'react';
-import { type VariantProps } from 'class-variance-authority';
-import { cn } from '../../lib/utils';
-import { buttonVariants } from './button-variants';
+import * as React from 'react'
+import { type VariantProps } from 'class-variance-authority'
+import { cn } from '../../lib/utils'
+import { buttonVariants } from './button-variants'
 
 export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {
-  loading?: boolean;
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {
+  loading?: boolean
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
@@ -42,11 +41,13 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
             </svg>
           </span>
         )}
-        <span className={cn('inline-flex items-center gap-2', loading && 'opacity-0')}>{children}</span>
+        <span className={cn('inline-flex items-center gap-2', loading && 'opacity-0')}>
+          {children}
+        </span>
       </button>
-    );
+    )
   }
-);
-Button.displayName = 'Button';
+)
+Button.displayName = 'Button'
 
-export { Button };
+export { Button }

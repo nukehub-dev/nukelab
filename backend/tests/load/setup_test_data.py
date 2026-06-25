@@ -16,6 +16,7 @@ import asyncio
 import sys
 
 from sqlalchemy import select
+
 # Ensure backend is on path
 sys.path.insert(0, ".")
 
@@ -30,9 +31,7 @@ async def create_test_users(count: int) -> list[str]:
     from app.db.session import AsyncSessionLocal
 
     async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(User).where(User.username.like("loadtest_%"))
-        )
+        result = await db.execute(select(User).where(User.username.like("loadtest_%")))
         existing = result.scalars().all()
         existing_usernames = {u.username for u in existing}
         print(f"Found {len(existing)} existing test users.")
@@ -62,9 +61,7 @@ async def create_test_users(count: int) -> list[str]:
 
 
 async def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Pre-seed test users for load testing"
-    )
+    parser = argparse.ArgumentParser(description="Pre-seed test users for load testing")
     parser.add_argument(
         "--users",
         type=int,

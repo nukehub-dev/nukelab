@@ -18,7 +18,10 @@ router = APIRouter()
 
 
 class PreferencesUpdateRequest(BaseModel):
-    theme: Optional[str] = Field(None, description="Theme: default, graphite, ocean, amber, github, nord, everforest, rosepine")
+    theme: Optional[str] = Field(
+        None,
+        description="Theme: default, graphite, ocean, amber, github, nord, everforest, rosepine",
+    )
     accent_color: Optional[str] = Field(None, description="Custom accent color (OKLCH value)")
     oled_mode: Optional[bool] = Field(None, description="OLED dark mode")
     use_gravatar: Optional[bool] = Field(None, description="Use Gravatar for profile image")
@@ -33,7 +36,9 @@ class PreferencesUpdateRequest(BaseModel):
     density: Optional[str] = Field(None, description="UI density: compact, comfortable")
     pinned_workspace_ids: Optional[list] = Field(None, description="List of pinned workspace IDs")
     idle_shutdown_enabled: Optional[bool] = Field(None, description="Auto-stop idle servers")
-    idle_shutdown_timeout: Optional[int] = Field(None, description="Minutes of inactivity before shutdown (5-240)")
+    idle_shutdown_timeout: Optional[int] = Field(
+        None, description="Minutes of inactivity before shutdown (5-240)"
+    )
     stop_on_logout: Optional[bool] = Field(None, description="Stop all servers on explicit logout")
 
 
@@ -82,14 +87,14 @@ def get_default_preferences() -> dict:
                 "server_events": True,
                 "credit_low": True,
                 "security_alerts": True,
-                "system_updates": True
-            }
+                "system_updates": True,
+            },
         },
         "dashboard": {
             "default_view": "grid",
             "show_inactive_servers": False,
             "auto_refresh_interval": 30,
-            "metrics_time_range": "1h"
+            "metrics_time_range": "1h",
         },
         "idle_shutdown_enabled": True,
         "idle_shutdown_timeout": 15,
@@ -99,16 +104,15 @@ def get_default_preferences() -> dict:
 
 @router.get("/")
 async def get_preferences(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
     """Get current user's preferences"""
     prefs = current_user.preferences or {}
-    
+
     # Merge with defaults
     defaults = get_default_preferences()
     merged = {**defaults, **prefs}
-    
+
     return merged
 
 
@@ -116,14 +120,14 @@ async def get_preferences(
 async def update_preferences(
     request: PreferencesUpdateRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Update current user's preferences"""
     service = UserService(db)
-    
+
     # Get current preferences
     current_prefs = current_user.preferences or {}
-    
+
     # Update with new values (only provided fields)
     update_data = {}
     if request.theme is not None:
@@ -161,13 +165,13 @@ async def update_preferences(
         update_data["idle_shutdown_timeout"] = max(5, min(request.idle_shutdown_timeout, 240))
     if request.stop_on_logout is not None:
         update_data["stop_on_logout"] = request.stop_on_logout
-    
+
     # Merge with existing preferences
     new_prefs = {**current_prefs, **update_data}
-    
+
     # Build user update payload
     user_update: dict = {"preferences": new_prefs}
-    
+
     # If enabling Gravatar, remove custom avatar file and clear avatar_url
     if request.use_gravatar:
         avatars_dir = os.path.join(settings.upload_dir, "avatars")
@@ -176,13 +180,10 @@ async def update_preferences(
                 if old_file.startswith(str(current_user.id)):
                     os.remove(os.path.join(avatars_dir, old_file))
         user_update["avatar_url"] = ""
-    
+
     # Update user
-    await service.update_user(
-        str(current_user.id),
-        user_update
-    )
-    
+    await service.update_user(str(current_user.id), user_update)
+
     # Return merged preferences with defaults
     defaults = get_default_preferences()
     return {**defaults, **new_prefs}
@@ -190,17 +191,13 @@ async def update_preferences(
 
 @router.delete("/")
 async def reset_preferences(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
     """Reset preferences to defaults"""
     service = UserService(db)
-    
-    await service.update_user(
-        str(current_user.id),
-        {"preferences": get_default_preferences()}
-    )
-    
+
+    await service.update_user(str(current_user.id), {"preferences": get_default_preferences()})
+
     return get_default_preferences()
 
 

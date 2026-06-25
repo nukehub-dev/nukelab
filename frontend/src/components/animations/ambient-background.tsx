@@ -1,13 +1,13 @@
-import { motion } from 'framer-motion';
-import { cn } from '../../lib/utils';
+import { motion } from 'framer-motion'
+import { cn } from '../../lib/utils'
 
 interface AmbientBackgroundProps {
-  variant?: 'default' | 'dashboard' | 'subtle';
-  className?: string;
+  variant?: 'default' | 'dashboard' | 'subtle'
+  className?: string
 }
 
 export function AmbientBackground({ variant = 'default', className }: AmbientBackgroundProps) {
-  if (variant === 'subtle') return null;
+  if (variant === 'subtle') return null
 
   return (
     <div className={cn('fixed inset-0 overflow-hidden pointer-events-none z-0', className)}>
@@ -111,5 +111,5 @@ export function AmbientBackground({ variant = 'default', className }: AmbientBac
         }}
       />
     </div>
-  );
+  )
 }

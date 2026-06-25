@@ -67,7 +67,8 @@ class TestAlertServiceGetMetrics:
         await db_session.commit()
 
         rule = AlertRule(
-            name="CPU Alert", operator="gt",
+            name="CPU Alert",
+            operator="gt",
             metric_type="cpu",
             scope="server",
             target_id=str(server.id),
@@ -96,7 +97,8 @@ class TestAlertServiceGetMetrics:
         await db_session.commit()
 
         rule = AlertRule(
-            name="CPU Alert", operator="gt",
+            name="CPU Alert",
+            operator="gt",
             metric_type="cpu",
             scope="user",
             target_id=str(test_user.id),
@@ -124,7 +126,8 @@ class TestAlertServiceGetMetrics:
         await db_session.commit()
 
         rule = AlertRule(
-            name="CPU Alert", operator="gt",
+            name="CPU Alert",
+            operator="gt",
             metric_type="cpu",
             scope="global",
             threshold=80.0,
@@ -146,13 +149,21 @@ class TestAlertServiceAcknowledge:
         db_session.add(server)
         await db_session.flush()
 
-        rule = AlertRule(name="Test", metric_type="cpu", operator="gt", threshold=80.0, scope="global", is_active=True)
+        rule = AlertRule(
+            name="Test",
+            metric_type="cpu",
+            operator="gt",
+            threshold=80.0,
+            scope="global",
+            is_active=True,
+        )
         db_session.add(rule)
         await db_session.flush()
 
         alert = AlertHistory(
             rule_id=rule.id,
-            server_id=server.id,            status="fired",
+            server_id=server.id,
+            status="fired",
             metric_value=90.0,
             threshold=80.0,
         )
@@ -160,7 +171,9 @@ class TestAlertServiceAcknowledge:
         await db_session.commit()
 
         service = AlertService(db_session)
-        result = await service.acknowledge_alert(str(alert.id), str(test_user.id), notes="Looking into it")
+        result = await service.acknowledge_alert(
+            str(alert.id), str(test_user.id), notes="Looking into it"
+        )
         assert result is not None
         assert result.status == "acknowledged"
         assert result.acknowledged_by == test_user.id
@@ -184,13 +197,21 @@ class TestAlertServiceResolve:
         db_session.add(server)
         await db_session.flush()
 
-        rule = AlertRule(name="Test", metric_type="cpu", operator="gt", threshold=80.0, scope="global", is_active=True)
+        rule = AlertRule(
+            name="Test",
+            metric_type="cpu",
+            operator="gt",
+            threshold=80.0,
+            scope="global",
+            is_active=True,
+        )
         db_session.add(rule)
         await db_session.flush()
 
         alert = AlertHistory(
             rule_id=rule.id,
-            server_id=server.id,            status="fired",
+            server_id=server.id,
+            status="fired",
             metric_value=90.0,
             threshold=80.0,
         )
@@ -229,7 +250,8 @@ class TestAlertServiceEvaluate:
         await db_session.flush()
 
         rule = AlertRule(
-            name="CPU Alert", operator="gt",
+            name="CPU Alert",
+            operator="gt",
             metric_type="cpu",
             scope="server",
             target_id=str(server.id),
@@ -250,7 +272,9 @@ class TestAlertServiceEvaluate:
         await service._handle_breach(rule, metric, 75.0)
 
         alerts = await db_session.execute(
-            __import__('sqlalchemy', fromlist=['select']).select(AlertHistory).where(AlertHistory.rule_id == rule.id)
+            __import__("sqlalchemy", fromlist=["select"])
+            .select(AlertHistory)
+            .where(AlertHistory.rule_id == rule.id)
         )
         alert = alerts.scalar_one_or_none()
         assert alert is not None
@@ -264,7 +288,8 @@ class TestAlertServiceEvaluate:
         await db_session.flush()
 
         rule = AlertRule(
-            name="CPU Alert", operator="gt",
+            name="CPU Alert",
+            operator="gt",
             metric_type="cpu",
             scope="server",
             target_id=str(server.id),
@@ -276,7 +301,8 @@ class TestAlertServiceEvaluate:
 
         alert = AlertHistory(
             rule_id=rule.id,
-            server_id=server.id,            status="fired",
+            server_id=server.id,
+            status="fired",
             metric_value=75.0,
             threshold=50.0,
         )
@@ -299,7 +325,8 @@ class TestAlertServiceEvaluate:
         await db_session.flush()
 
         rule = AlertRule(
-            name="CPU Alert", operator="gt",
+            name="CPU Alert",
+            operator="gt",
             metric_type="cpu",
             scope="server",
             target_id=str(server.id),
@@ -312,7 +339,8 @@ class TestAlertServiceEvaluate:
 
         alert = AlertHistory(
             rule_id=rule.id,
-            server_id=server.id,            status="fired",
+            server_id=server.id,
+            status="fired",
             metric_value=75.0,
             threshold=50.0,
             fired_at=datetime.now(UTC).replace(tzinfo=None),
@@ -327,6 +355,9 @@ class TestAlertServiceEvaluate:
 
         # Should still only have 1 alert
         alerts = await db_session.execute(
-            __import__('sqlalchemy', fromlist=['select', 'func']).select(__import__('sqlalchemy', fromlist=['func']).func.count()).select_from(AlertHistory).where(AlertHistory.rule_id == rule.id)
+            __import__("sqlalchemy", fromlist=["select", "func"])
+            .select(__import__("sqlalchemy", fromlist=["func"]).func.count())
+            .select_from(AlertHistory)
+            .where(AlertHistory.rule_id == rule.id)
         )
         assert alerts.scalar() == 1

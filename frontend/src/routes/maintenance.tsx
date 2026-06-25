@@ -1,16 +1,16 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { motion } from 'framer-motion';
-import { Construction, Clock, ArrowLeft } from 'lucide-react';
-import { Link } from '@tanstack/react-router';
-import { useHealth } from '../hooks/use-health';
-import { formatDate } from '../lib/utils';
+import { createFileRoute } from '@tanstack/react-router'
+import { motion } from 'framer-motion'
+import { Construction, Clock, ArrowLeft } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
+import { useHealth } from '../hooks/use-health'
+import { formatDate } from '../lib/utils'
 
 export const Route = createFileRoute('/maintenance')({
   component: MaintenancePage,
-});
+})
 
 function MaintenancePage() {
-  const { data: health } = useHealth();
+  const { data: health } = useHealth()
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
@@ -30,9 +30,7 @@ function MaintenancePage() {
         </motion.div>
 
         <div className="space-y-3">
-          <h1 className="text-3xl font-bold tracking-tight">
-            Under Maintenance
-          </h1>
+          <h1 className="text-3xl font-bold tracking-tight">Under Maintenance</h1>
           <p className="text-muted-foreground text-lg leading-relaxed">
             {health?.message || 'We are performing scheduled maintenance. Please check back soon.'}
           </p>
@@ -61,5 +59,5 @@ function MaintenancePage() {
         </Link>
       </motion.div>
     </div>
-  );
+  )
 }

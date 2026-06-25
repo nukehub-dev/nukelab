@@ -10,10 +10,9 @@ class TestPreferencesDefaults:
     async def test_get_default_preferences(self, client, test_user, user_token):
         """Fresh user should have sensible default preferences."""
         response = await client.get(
-            "/api/preferences/",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/preferences/", headers={"Authorization": f"Bearer {user_token}"}
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["theme"] == "default"
@@ -36,10 +35,10 @@ class TestPreferencesUpdate:
                 "theme": "ocean",
                 "accent_color": "oklch(0.6 0.15 233.7)",
                 "oled_mode": True,
-                "sidebar_collapsed": True
-            }
+                "sidebar_collapsed": True,
+            },
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["theme"] == "ocean"
@@ -51,15 +50,21 @@ class TestPreferencesUpdate:
     async def test_all_valid_themes_accepted(self, client, user_token):
         """All 8 curated themes should be valid."""
         valid_themes = [
-            "default", "graphite", "ocean", "amber",
-            "github", "nord", "everforest", "rosepine"
+            "default",
+            "graphite",
+            "ocean",
+            "amber",
+            "github",
+            "nord",
+            "everforest",
+            "rosepine",
         ]
-        
+
         for theme in valid_themes:
             response = await client.put(
                 "/api/preferences/",
                 headers={"Authorization": f"Bearer {user_token}"},
-                json={"theme": theme}
+                json={"theme": theme},
             )
             assert response.status_code == 200, f"Theme '{theme}' should be valid"
 
@@ -69,7 +74,7 @@ class TestPreferencesUpdate:
         response = await client.put(
             "/api/preferences/",
             headers={"Authorization": f"Bearer {user_token}"},
-            json={"idle_shutdown_timeout": 1}
+            json={"idle_shutdown_timeout": 1},
         )
         assert response.status_code == 200
         assert response.json()["idle_shutdown_timeout"] == 5
@@ -77,7 +82,7 @@ class TestPreferencesUpdate:
         response = await client.put(
             "/api/preferences/",
             headers={"Authorization": f"Bearer {user_token}"},
-            json={"idle_shutdown_timeout": 300}
+            json={"idle_shutdown_timeout": 300},
         )
         assert response.status_code == 200
         assert response.json()["idle_shutdown_timeout"] == 240
@@ -88,7 +93,7 @@ class TestPreferencesUpdate:
         response = await client.put(
             "/api/preferences/",
             headers={"Authorization": f"Bearer {user_token}"},
-            json={"theme": "github"}
+            json={"theme": "github"},
         )
         assert response.status_code == 200
         data = response.json()
@@ -105,12 +110,11 @@ class TestPreferencesReset:
         await client.put(
             "/api/preferences/",
             headers={"Authorization": f"Bearer {user_token}"},
-            json={"theme": "ocean", "sidebar_collapsed": True}
+            json={"theme": "ocean", "sidebar_collapsed": True},
         )
 
         response = await client.delete(
-            "/api/preferences/",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/preferences/", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 200
         data = response.json()

@@ -27,9 +27,7 @@ TOKEN_EXPIRY = timedelta(hours=2)
 
 async def main():
     async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(User).where(User.username.like("loadtest_%"))
-        )
+        result = await db.execute(select(User).where(User.username.like("loadtest_%")))
         users = result.scalars().all()
 
         if not users:

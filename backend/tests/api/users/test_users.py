@@ -26,13 +26,13 @@ class TestUserModel:
         """Gravatar URL should be generated from email hash."""
         expected_hash = hashlib.md5("test@example.com".lower().strip().encode()).hexdigest()
         expected_url = f"https://www.gravatar.com/avatar/{expected_hash}?s=200&d=identicon&r=pg"
-        
+
         # Direct gravatar generation always works
         assert test_user.get_gravatar_url() == expected_url
-        
+
         # Gravatar is disabled by default for privacy
         assert test_user.get_avatar_url() == ""
-        
+
         # When explicitly enabled, should return Gravatar URL
         test_user.preferences = {"use_gravatar": True}
         assert test_user.get_avatar_url() == expected_url
@@ -42,14 +42,14 @@ class TestUserModel:
         """get_avatar_url should return custom URL when use_gravatar is false."""
         test_user.avatar_url = "https://example.com/avatar.png"
         test_user.preferences = {"use_gravatar": False}
-        
+
         assert test_user.get_avatar_url() == "https://example.com/avatar.png"
 
     @pytest.mark.asyncio
     async def test_to_dict_includes_new_fields(self, test_user):
         """User serialization should include first_name, last_name, display_name, avatar_url."""
         user_dict = test_user.to_dict()
-        
+
         assert "first_name" in user_dict
         assert "last_name" in user_dict
         assert "display_name" in user_dict
@@ -72,10 +72,10 @@ class TestUserCreateAPI:
                 "password": "newpass123",
                 "first_name": "New",
                 "last_name": "Person",
-                "role": "user"
-            }
+                "role": "user",
+            },
         )
-        
+
         assert response.status_code == 201
         data = response.json()
         assert data["first_name"] == "New"
@@ -91,10 +91,9 @@ class TestUserProfileAPI:
     async def test_get_my_profile(self, client, user_token, test_user):
         """User should be able to fetch their own profile."""
         response = await client.get(
-            "/api/users/me/profile",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/users/me/profile", headers={"Authorization": f"Bearer {user_token}"}
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["username"] == test_user.username
@@ -110,10 +109,10 @@ class TestUserProfileAPI:
                 "first_name": "Updated",
                 "last_name": "Name",
                 "avatar_url": "https://example.com/new-avatar.png",
-                "preferences": {"use_gravatar": False}
-            }
+                "preferences": {"use_gravatar": False},
+            },
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["first_name"] == "Updated"
@@ -129,10 +128,9 @@ class TestUserSearchAPI:
     async def test_search_users_by_name(self, client, admin_user, admin_token):
         """Admin should be able to search users by first_name."""
         response = await client.get(
-            "/api/users/?search=Admin",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/users/?search=Admin", headers={"Authorization": f"Bearer {admin_token}"}
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert len(data["users"]) > 0
@@ -145,14 +143,14 @@ class TestPublicProfileAPI:
     async def test_get_public_profile_of_public_user(self, client, user_token, admin_user):
         """Should return public profile for a user with public visibility."""
         from app.db.session import get_db
+
         async for db in get_db():
             admin_user.profile_visibility = "public"
             await db.commit()
             break
 
         response = await client.get(
-            f"/api/users/{admin_user.id}/profile",
-            headers={"Authorization": f"Bearer {user_token}"}
+            f"/api/users/{admin_user.id}/profile", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -164,17 +162,16 @@ class TestPublicProfileAPI:
     async def test_get_private_profile_returns_404(self, client, user_token, admin_user):
         """Should return 404 for private user with no shared workspace."""
         from app.db.session import get_db
+
         async for db in get_db():
             admin_user.profile_visibility = "private"
             await db.commit()
             break
 
         response = await client.get(
-            f"/api/users/{admin_user.id}/profile",
-            headers={"Authorization": f"Bearer {user_token}"}
+            f"/api/users/{admin_user.id}/profile", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 404
-
 
 
 class TestAvatarPathTraversal:
@@ -195,10 +192,9 @@ class TestAvatarPathTraversal:
     @pytest.mark.asyncio
     async def test_avatar_missing_file_returns_404(self, client):
         """Valid-format but non-existent avatar should return 404."""
-        response = await client.get(
-            "/api/users/avatar/550e8400-e29b-41d4-a716-446655440000.png"
-        )
+        response = await client.get("/api/users/avatar/550e8400-e29b-41d4-a716-446655440000.png")
         assert response.status_code == 404
+
 
 """Coverage-focused tests for users.py gaps."""
 
@@ -220,8 +216,7 @@ class TestGetUser:
     @pytest.mark.asyncio
     async def test_get_own_user(self, client, user_token, test_user):
         response = await client.get(
-            f"/api/users/{test_user.id}",
-            headers={"Authorization": f"Bearer {user_token}"}
+            f"/api/users/{test_user.id}", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -230,8 +225,7 @@ class TestGetUser:
     @pytest.mark.asyncio
     async def test_get_other_user_as_admin(self, client, admin_token, test_user):
         response = await client.get(
-            f"/api/users/{test_user.id}",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            f"/api/users/{test_user.id}", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -240,9 +234,9 @@ class TestGetUser:
     @pytest.mark.asyncio
     async def test_get_user_not_found(self, client, admin_token):
         import uuid
+
         response = await client.get(
-            f"/api/users/{uuid.uuid4()}",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            f"/api/users/{uuid.uuid4()}", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 404
 
@@ -255,7 +249,7 @@ class TestUpdateUser:
         response = await client.put(
             f"/api/users/{test_user.id}",
             headers={"Authorization": f"Bearer {user_token}"},
-            json={"first_name": "SelfUpdated"}
+            json={"first_name": "SelfUpdated"},
         )
         assert response.status_code == 200
         assert response.json()["first_name"] == "SelfUpdated"
@@ -265,17 +259,20 @@ class TestUpdateUser:
         response = await client.put(
             f"/api/users/{test_user.id}",
             headers={"Authorization": f"Bearer {user_token}"},
-            json={"role": "admin"}
+            json={"role": "admin"},
         )
         assert response.status_code == 403
-        assert "role" in response.json()["detail"].lower() or "credit" in response.json()["detail"].lower()
+        assert (
+            "role" in response.json()["detail"].lower()
+            or "credit" in response.json()["detail"].lower()
+        )
 
     @pytest.mark.asyncio
     async def test_self_update_credits_rejected(self, client, user_token, test_user):
         response = await client.put(
             f"/api/users/{test_user.id}",
             headers={"Authorization": f"Bearer {user_token}"},
-            json={"nuke_balance": 9999}
+            json={"nuke_balance": 9999},
         )
         assert response.status_code == 403
 
@@ -284,7 +281,7 @@ class TestUpdateUser:
         response = await client.put(
             f"/api/users/{test_user.id}",
             headers={"Authorization": f"Bearer {admin_token}"},
-            json={"role": "moderator", "nuke_balance": 999}
+            json={"role": "moderator", "nuke_balance": 999},
         )
         assert response.status_code == 200
         data = response.json()
@@ -294,10 +291,11 @@ class TestUpdateUser:
     @pytest.mark.asyncio
     async def test_update_user_not_found(self, client, admin_token):
         import uuid
+
         response = await client.put(
             f"/api/users/{uuid.uuid4()}",
             headers={"Authorization": f"Bearer {admin_token}"},
-            json={"first_name": "X"}
+            json={"first_name": "X"},
         )
         assert response.status_code == 404
 
@@ -308,16 +306,14 @@ class TestDeleteUser:
     @pytest.mark.asyncio
     async def test_delete_user(self, client, admin_token, test_user):
         response = await client.delete(
-            f"/api/users/{test_user.id}",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            f"/api/users/{test_user.id}", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 204
 
     @pytest.mark.asyncio
     async def test_self_delete_rejected(self, client, admin_token, admin_user):
         response = await client.delete(
-            f"/api/users/{admin_user.id}",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            f"/api/users/{admin_user.id}", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 400
         assert "own" in response.json()["detail"].lower()
@@ -330,7 +326,7 @@ class TestUserResources:
     async def test_get_user_resources(self, client, user_token, test_user):
         response = await client.get(
             f"/api/users/{test_user.id}/resources",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 200
         # UserService.get_user_stats returns a dict
@@ -345,7 +341,7 @@ class TestAvatarUpload:
         response = await client.post(
             "/api/users/me/avatar",
             headers={"Authorization": f"Bearer {user_token}"},
-            files={"file": ("test.txt", BytesIO(b"not an image"), "text/plain")}
+            files={"file": ("test.txt", BytesIO(b"not an image"), "text/plain")},
         )
         assert response.status_code == 400
         assert "invalid file type" in response.json()["detail"].lower()
@@ -356,7 +352,7 @@ class TestAvatarUpload:
             response = await client.post(
                 "/api/users/me/avatar",
                 headers={"Authorization": f"Bearer {user_token}"},
-                files={"file": ("test.png", BytesIO(b"x" * 2048), "image/png")}
+                files={"file": ("test.png", BytesIO(b"x" * 2048), "image/png")},
             )
         assert response.status_code == 400
         assert "too large" in response.json()["detail"].lower()
@@ -368,13 +364,15 @@ class TestAvatarUpload:
                 response = await client.post(
                     "/api/users/me/avatar",
                     headers={"Authorization": f"Bearer {user_token}"},
-                    files={"file": ("test.png", BytesIO(b"fake-png-data"), "image/png")}
+                    files={"file": ("test.png", BytesIO(b"fake-png-data"), "image/png")},
                 )
         assert response.status_code == 200
         data = response.json()
         assert data["avatar_url"] is not None
         # Gravatar should be disabled
-        assert test_user.preferences is None or test_user.preferences.get("use_gravatar") is not True
+        assert (
+            test_user.preferences is None or test_user.preferences.get("use_gravatar") is not True
+        )
 
 
 class TestGetAvatarSuccess:
@@ -419,9 +417,9 @@ class TestPublicProfile:
     @pytest.mark.asyncio
     async def test_get_public_profile_not_found(self, client, user_token):
         import uuid
+
         response = await client.get(
-            f"/api/users/{uuid.uuid4()}/profile",
-            headers={"Authorization": f"Bearer {user_token}"}
+            f"/api/users/{uuid.uuid4()}/profile", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 404
 
@@ -429,14 +427,15 @@ class TestPublicProfile:
     async def test_get_public_profile_self_view(self, client, user_token, test_user):
         test_user.profile_visibility = "private"
         response = await client.get(
-            f"/api/users/{test_user.id}/profile",
-            headers={"Authorization": f"Bearer {user_token}"}
+            f"/api/users/{test_user.id}/profile", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 200
         assert response.json()["username"] == test_user.username
 
     @pytest.mark.asyncio
-    async def test_get_public_profile_shared_workspace(self, client, user_token, test_user, admin_user, db_session):
+    async def test_get_public_profile_shared_workspace(
+        self, client, user_token, test_user, admin_user, db_session
+    ):
         """User can view admin's private profile if they share a workspace."""
         admin_user.profile_visibility = "private"
         ws = SharedWorkspace(name="shared-ws", owner_id=admin_user.id)
@@ -448,8 +447,7 @@ class TestPublicProfile:
         await db_session.commit()
 
         response = await client.get(
-            f"/api/users/{admin_user.id}/profile",
-            headers={"Authorization": f"Bearer {user_token}"}
+            f"/api/users/{admin_user.id}/profile", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 200
         assert response.json()["username"] == admin_user.username
@@ -461,8 +459,7 @@ class TestListUsersFilters:
     @pytest.mark.asyncio
     async def test_list_users_default(self, client, admin_token):
         response = await client.get(
-            "/api/users/",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/users/", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -472,8 +469,7 @@ class TestListUsersFilters:
     @pytest.mark.asyncio
     async def test_list_users_role_filter(self, client, admin_token):
         response = await client.get(
-            "/api/users/?role=admin",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/users/?role=admin", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -485,8 +481,7 @@ class TestListUsersFilters:
         await db_session.commit()
 
         response = await client.get(
-            "/api/users/?status=disabled",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/users/?status=disabled", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -496,15 +491,14 @@ class TestListUsersFilters:
     async def test_list_users_sort(self, client, admin_token):
         response = await client.get(
             "/api/users/?sort_by=username&sort_order=asc",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert response.status_code == 200
 
     @pytest.mark.asyncio
     async def test_list_users_pagination(self, client, admin_token):
         response = await client.get(
-            "/api/users/?page=1&limit=5",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/users/?page=1&limit=5", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -513,8 +507,7 @@ class TestListUsersFilters:
     @pytest.mark.asyncio
     async def test_list_users_unauthorized(self, client, user_token):
         response = await client.get(
-            "/api/users/",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/users/", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 403
 
@@ -527,7 +520,7 @@ class TestCreateUserUnauthorized:
         response = await client.post(
             "/api/users/",
             headers={"Authorization": f"Bearer {user_token}"},
-            json={"username": "x", "email": "x@x.com", "password": "123456"}
+            json={"username": "x", "email": "x@x.com", "password": "123456"},
         )
         assert response.status_code == 403
 
@@ -540,7 +533,7 @@ class TestMyProfileVisibility:
         response = await client.put(
             "/api/users/me/profile",
             headers={"Authorization": f"Bearer {user_token}"},
-            json={"profile_visibility": "public"}
+            json={"profile_visibility": "public"},
         )
         assert response.status_code == 200
         assert response.json()["profile_visibility"] == "public"
@@ -550,53 +543,66 @@ class TestMyActivityExtended:
     """GET /me/activity additional coverage."""
 
     @pytest.mark.asyncio
-    async def test_get_my_activity_target_type_filter(self, client, user_token, test_user, db_session):
-        log = ActivityLog(actor_id=test_user.id, action="login", target_type="server", target_id=test_user.id)
+    async def test_get_my_activity_target_type_filter(
+        self, client, user_token, test_user, db_session
+    ):
+        log = ActivityLog(
+            actor_id=test_user.id, action="login", target_type="server", target_id=test_user.id
+        )
         db_session.add(log)
         await db_session.commit()
 
         response = await client.get(
             "/api/users/me/activity?target_type=server",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 200
         assert len(response.json()["activities"]) == 1
 
     @pytest.mark.asyncio
     async def test_get_my_activity_date_filter(self, client, user_token, test_user, db_session):
-        log = ActivityLog(actor_id=test_user.id, action="login", target_type="user", target_id=test_user.id)
+        log = ActivityLog(
+            actor_id=test_user.id, action="login", target_type="user", target_id=test_user.id
+        )
         db_session.add(log)
         await db_session.commit()
 
         response = await client.get(
             "/api/users/me/activity?from_date=2000-01-01T00:00:00&to_date=2099-12-31T23:59:59",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 200
         assert len(response.json()["activities"]) == 1
 
     @pytest.mark.asyncio
     async def test_get_my_activity_invalid_date(self, client, user_token, test_user, db_session):
-        log = ActivityLog(actor_id=test_user.id, action="login", target_type="user", target_id=test_user.id)
+        log = ActivityLog(
+            actor_id=test_user.id, action="login", target_type="user", target_id=test_user.id
+        )
         db_session.add(log)
         await db_session.commit()
 
         response = await client.get(
             "/api/users/me/activity?from_date=not-a-date",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 200
 
     @pytest.mark.asyncio
     async def test_get_my_activity_pagination(self, client, user_token, test_user, db_session):
         for i in range(3):
-            log = ActivityLog(actor_id=test_user.id, action=f"action{i}", target_type="user", target_id=test_user.id)
+            log = ActivityLog(
+                actor_id=test_user.id,
+                action=f"action{i}",
+                target_type="user",
+                target_id=test_user.id,
+            )
             db_session.add(log)
         await db_session.commit()
 
         response = await client.get(
             "/api/users/me/activity?page=1&limit=2",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 200
         data = response.json()
@@ -613,13 +619,13 @@ class TestDisableUserExtended:
         await client.post(
             f"/api/users/{test_user.id}/disable",
             headers={"Authorization": f"Bearer {admin_token}"},
-            json={"disabled": True}
+            json={"disabled": True},
         )
         # Then re-enable
         response = await client.post(
             f"/api/users/{test_user.id}/disable",
             headers={"Authorization": f"Bearer {admin_token}"},
-            json={"disabled": False}
+            json={"disabled": False},
         )
         assert response.status_code == 200
         assert response.json()["is_active"] is True
@@ -629,7 +635,7 @@ class TestDisableUserExtended:
         response = await client.post(
             f"/api/users/{test_user.id}/disable",
             headers={"Authorization": f"Bearer {admin_token}"},
-            json={"disabled": True, "reason": "Violation of terms"}
+            json={"disabled": True, "reason": "Violation of terms"},
         )
         assert response.status_code == 200
         assert response.json()["is_active"] is False
@@ -642,7 +648,7 @@ class TestImpersonatePermissions:
     async def test_impersonate_forbidden_for_user(self, client, user_token, test_user):
         response = await client.post(
             f"/api/users/{test_user.id}/impersonate",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 403
 
@@ -651,14 +657,15 @@ class TestUserServersAdmin:
     """GET /{user_id}/servers admin coverage."""
 
     @pytest.mark.asyncio
-    async def test_get_other_user_servers_as_admin(self, client, admin_token, test_user, db_session):
+    async def test_get_other_user_servers_as_admin(
+        self, client, admin_token, test_user, db_session
+    ):
         server = Server(name="srv-admin", user_id=test_user.id, status="running")
         db_session.add(server)
         await db_session.commit()
 
         response = await client.get(
-            f"/api/users/{test_user.id}/servers",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            f"/api/users/{test_user.id}/servers", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -672,6 +679,7 @@ class TestSerializeUserEdgeCases:
     @pytest.mark.asyncio
     async def test_serialize_user_none_dates(self, test_user):
         from app.api.users import serialize_user
+
         test_user.last_login = None
         test_user.created_at = None
         test_user.updated_at = None
@@ -683,6 +691,7 @@ class TestSerializeUserEdgeCases:
         assert result["updated_at"] is None
         assert result["profile"] == {}
         assert result["preferences"] == {}
+
 
 """Extended tests for Users API endpoints."""
 
@@ -701,8 +710,7 @@ class TestDiscoverUsers:
         await db_session.commit()
 
         response = await client.get(
-            "/api/users/discover",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/users/discover", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -715,8 +723,7 @@ class TestDiscoverUsers:
         await db_session.commit()
 
         response = await client.get(
-            "/api/users/discover?search=admin",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/users/discover?search=admin", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -731,14 +738,13 @@ class TestMyActivity:
             action="login",
             target_type="user",
             target_id=test_user.id,
-            details={"ip": "127.0.0.1"}
+            details={"ip": "127.0.0.1"},
         )
         db_session.add(log)
         await db_session.commit()
 
         response = await client.get(
-            "/api/users/me/activity",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/users/me/activity", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -758,7 +764,7 @@ class TestMyActivity:
 
         response = await client.get(
             "/api/users/me/activity?action=logout",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 200
         data = response.json()
@@ -770,13 +776,14 @@ class TestChangePassword:
     @pytest.mark.asyncio
     async def test_change_password_success(self, client, user_token, test_user, db_session):
         from app.api.auth import get_password_hash
+
         test_user.password_hash = get_password_hash("oldpassword")
         await db_session.commit()
 
         response = await client.post(
             "/api/users/me/change-password",
             headers={"Authorization": f"Bearer {user_token}"},
-            json={"current_password": "oldpassword", "new_password": "newpassword123"}
+            json={"current_password": "oldpassword", "new_password": "newpassword123"},
         )
         assert response.status_code == 200
         assert "changed" in response.json()["message"].lower()
@@ -784,13 +791,14 @@ class TestChangePassword:
     @pytest.mark.asyncio
     async def test_change_password_wrong_current(self, client, user_token, test_user, db_session):
         from app.api.auth import get_password_hash
+
         test_user.password_hash = get_password_hash("oldpassword")
         await db_session.commit()
 
         response = await client.post(
             "/api/users/me/change-password",
             headers={"Authorization": f"Bearer {user_token}"},
-            json={"current_password": "wrong", "new_password": "newpassword123"}
+            json={"current_password": "wrong", "new_password": "newpassword123"},
         )
         assert response.status_code == 400
 
@@ -801,7 +809,7 @@ class TestDisableUser:
         response = await client.post(
             f"/api/users/{test_user.id}/disable",
             headers={"Authorization": f"Bearer {admin_token}"},
-            json={"disabled": True, "reason": "Test disable"}
+            json={"disabled": True, "reason": "Test disable"},
         )
         assert response.status_code == 200
         assert response.json()["is_active"] is False
@@ -811,7 +819,7 @@ class TestDisableUser:
         response = await client.post(
             f"/api/users/{admin_user.id}/disable",
             headers={"Authorization": f"Bearer {admin_token}"},
-            json={"disabled": True}
+            json={"disabled": True},
         )
         assert response.status_code == 400
         assert "own" in response.json()["detail"].lower()
@@ -822,7 +830,7 @@ class TestImpersonateUser:
     async def test_impersonate_user(self, client, superadmin_token, test_user):
         response = await client.post(
             f"/api/users/{test_user.id}/impersonate",
-            headers={"Authorization": f"Bearer {superadmin_token}"}
+            headers={"Authorization": f"Bearer {superadmin_token}"},
         )
         assert response.status_code == 200
         data = response.json()
@@ -832,18 +840,20 @@ class TestImpersonateUser:
     @pytest.mark.asyncio
     async def test_impersonate_not_found(self, client, admin_token):
         import uuid
+
         response = await client.post(
             f"/api/users/{uuid.uuid4()}/impersonate",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert response.status_code == 404
 
     @pytest.mark.asyncio
     async def test_impersonate_not_found(self, client, superadmin_token):
         import uuid
+
         response = await client.post(
             f"/api/users/{uuid.uuid4()}/impersonate",
-            headers={"Authorization": f"Bearer {superadmin_token}"}
+            headers={"Authorization": f"Bearer {superadmin_token}"},
         )
         assert response.status_code == 404
 
@@ -856,8 +866,7 @@ class TestUserServers:
         await db_session.commit()
 
         response = await client.get(
-            f"/api/users/{test_user.id}/servers",
-            headers={"Authorization": f"Bearer {user_token}"}
+            f"/api/users/{test_user.id}/servers", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -866,13 +875,14 @@ class TestUserServers:
         assert data["servers"][0]["name"] == "srv1"
 
     @pytest.mark.asyncio
-    async def test_get_other_user_servers_forbidden(self, client, user_token, admin_user, db_session):
+    async def test_get_other_user_servers_forbidden(
+        self, client, user_token, admin_user, db_session
+    ):
         server = Server(name="srv2", user_id=admin_user.id, status="running")
         db_session.add(server)
         await db_session.commit()
 
         response = await client.get(
-            f"/api/users/{admin_user.id}/servers",
-            headers={"Authorization": f"Bearer {user_token}"}
+            f"/api/users/{admin_user.id}/servers", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 403

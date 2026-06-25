@@ -1,4 +1,4 @@
-import type { LucideIcon } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react'
 import {
   Play,
   Square,
@@ -11,17 +11,17 @@ import {
   Download,
   RefreshCw,
   Plus,
-} from 'lucide-react';
+} from 'lucide-react'
 
-export type ActionVariant = 'default' | 'outline' | 'ghost' | 'destructive';
-export type ActionTone = 'default' | 'primary' | 'success' | 'warning' | 'destructive';
+export type ActionVariant = 'default' | 'outline' | 'ghost' | 'destructive'
+export type ActionTone = 'default' | 'primary' | 'success' | 'warning' | 'destructive'
 
 export interface ActionConfig {
-  label: string;
-  icon: LucideIcon;
-  variant: ActionVariant;
-  tone: ActionTone;
-  loadingLabel?: string;
+  label: string
+  icon: LucideIcon
+  variant: ActionVariant
+  tone: ActionTone
+  loadingLabel?: string
 }
 
 export const ACTION_CONFIGS: Record<string, ActionConfig> = {
@@ -107,9 +107,9 @@ export const ACTION_CONFIGS: Record<string, ActionConfig> = {
     tone: 'primary',
     loadingLabel: 'Exporting...',
   },
-};
+}
 
-export type ActionType = keyof typeof ACTION_CONFIGS;
+export type ActionType = keyof typeof ACTION_CONFIGS
 
 export const toneColorMap: Record<ActionTone, string> = {
   default: 'text-foreground',
@@ -117,7 +117,7 @@ export const toneColorMap: Record<ActionTone, string> = {
   success: 'text-emerald-400',
   warning: 'text-amber-400',
   destructive: 'text-red-400',
-};
+}
 
 export const toneBgMap: Record<ActionTone, string> = {
   default: 'bg-muted',
@@ -125,4 +125,4 @@ export const toneBgMap: Record<ActionTone, string> = {
   success: 'bg-emerald-500/10',
   warning: 'bg-amber-500/10',
   destructive: 'bg-red-500/10',
-};
+}

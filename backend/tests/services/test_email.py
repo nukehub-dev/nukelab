@@ -11,10 +11,7 @@ class TestEmailTemplates:
         from app.services.email_service import EmailService
 
         service = EmailService()
-        html = service.render_template("welcome", {
-            "username": "testuser",
-            "credits": 100
-        })
+        html = service.render_template("welcome", {"username": "testuser", "credits": 100})
 
         assert "Welcome to NukeLab" in html
         assert "testuser" in html
@@ -24,14 +21,13 @@ class TestEmailTemplates:
         from app.services.email_service import EmailService
 
         service = EmailService()
-        html = service.render_template("credit_low", {
-            "username": "testuser",
-            "balance": 10,
-            "server_name": "test-server"
-        })
+        html = service.render_template(
+            "credit_low", {"username": "testuser", "balance": 10, "server_name": "test-server"}
+        )
 
         assert "Low NUKE Credits" in html
         assert "10 credits" in html
+
 
 """Extended tests for EmailService (all templates, disabled state)."""
 
@@ -59,32 +55,28 @@ class TestEmailServiceTemplates:
 
     def test_server_ready_template(self):
         service = EmailService()
-        html = service.render_template("server_ready", {
-            "username": "alice",
-            "server_name": "srv1",
-            "url": "https://example.com/srv1"
-        })
+        html = service.render_template(
+            "server_ready",
+            {"username": "alice", "server_name": "srv1", "url": "https://example.com/srv1"},
+        )
         assert "Server Ready" in html
         assert "srv1" in html
         assert "https://example.com/srv1" in html
 
     def test_server_stopped_template(self):
         service = EmailService()
-        html = service.render_template("server_stopped", {
-            "username": "bob",
-            "server_name": "srv2",
-            "reason": "maintenance"
-        })
+        html = service.render_template(
+            "server_stopped", {"username": "bob", "server_name": "srv2", "reason": "maintenance"}
+        )
         assert "Server Stopped" in html
         assert "srv2" in html
         assert "maintenance" in html
 
     def test_maintenance_template(self):
         service = EmailService()
-        html = service.render_template("maintenance", {
-            "username": "charlie",
-            "message": "Scheduled maintenance at midnight"
-        })
+        html = service.render_template(
+            "maintenance", {"username": "charlie", "message": "Scheduled maintenance at midnight"}
+        )
         assert "Maintenance Notice" in html
         assert "Scheduled maintenance" in html
 
@@ -97,6 +89,7 @@ class TestEmailServiceTemplates:
         service = EmailService()
         html = service.render_template("nonexistent", {})
         assert "<html>" in html
+
 
 """Extended tests for EmailService send method."""
 
@@ -134,7 +127,7 @@ class TestEmailServiceSendEnabled:
                 to_email="to@test.com",
                 subject="Test Subject",
                 html_body="<p>Hello</p>",
-                text_body="Hello"
+                text_body="Hello",
             )
 
         assert result["success"] is True
@@ -154,9 +147,7 @@ class TestEmailServiceSendEnabled:
             mock_smtp_cls.return_value = mock_smtp
 
             result = await email_service.send_email(
-                to_email="to@test.com",
-                subject="Test Subject",
-                html_body="<p>Hello</p>"
+                to_email="to@test.com", subject="Test Subject", html_body="<p>Hello</p>"
             )
 
         assert result["success"] is True
@@ -173,9 +164,7 @@ class TestEmailServiceSendEnabled:
             mock_smtp_cls.return_value = mock_smtp
 
             result = await email_service.send_email(
-                to_email="to@test.com",
-                subject="Test Subject",
-                html_body="<p>Hello</p>"
+                to_email="to@test.com", subject="Test Subject", html_body="<p>Hello</p>"
             )
 
         assert result["success"] is True
@@ -190,9 +179,7 @@ class TestEmailServiceSendEnabled:
             mock_smtp_cls.return_value = mock_smtp
 
             result = await email_service.send_email(
-                to_email="to@test.com",
-                subject="Test Subject",
-                html_body="<p>Hello</p>"
+                to_email="to@test.com", subject="Test Subject", html_body="<p>Hello</p>"
             )
 
         assert result["success"] is False

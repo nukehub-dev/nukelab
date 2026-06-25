@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState } from 'react'
 import {
   useReactTable,
   getCoreRowModel,
@@ -10,56 +10,58 @@ import {
   type RowSelectionState,
   type ColumnFiltersState,
   type VisibilityState,
-} from '@tanstack/react-table';
-import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, ChevronUp, GripVertical } from 'lucide-react';
-import { cn } from '../../lib/utils';
-import { DataTablePagination } from './data-table-pagination';
-import { DataTableToolbar } from './data-table-toolbar';
-import { DataTableMobile } from './data-table-mobile';
-import { SkeletonTable } from '../feedback/skeleton';
+} from '@tanstack/react-table'
+import { motion, AnimatePresence } from 'framer-motion'
+import { ChevronDown, ChevronUp, GripVertical } from 'lucide-react'
+import { cn } from '../../lib/utils'
+import { DataTablePagination } from './data-table-pagination'
+import { DataTableToolbar } from './data-table-toolbar'
+import { DataTableMobile } from './data-table-mobile'
+import { SkeletonTable } from '../feedback/skeleton'
 
 interface DataTableProps<TData> {
-  columns: ColumnDef<TData, unknown>[];
-  data: TData[];
-  totalCount: number;
-  pageCount: number;
-  page: number;
-  limit: number;
-  sorting: SortingState;
-  rowSelection: RowSelectionState;
-  columnFilters: ColumnFiltersState;
-  columnVisibility: VisibilityState;
-  globalFilter: string;
-  isLoading?: boolean;
-  isError?: boolean;
-  errorMessage?: string;
-  onPageChange: (page: number) => void;
-  onLimitChange: (limit: number) => void;
-  onSortingChange: (sorting: SortingState) => void;
-  onRowSelectionChange: (selection: RowSelectionState) => void;
-  onColumnFiltersChange: (filters: ColumnFiltersState) => void;
-  onColumnVisibilityChange: (updater: VisibilityState | ((old: VisibilityState) => VisibilityState)) => void;
-  onGlobalFilterChange: (filter: string) => void;
-  getRowId?: (row: TData) => string;
+  columns: ColumnDef<TData, unknown>[]
+  data: TData[]
+  totalCount: number
+  pageCount: number
+  page: number
+  limit: number
+  sorting: SortingState
+  rowSelection: RowSelectionState
+  columnFilters: ColumnFiltersState
+  columnVisibility: VisibilityState
+  globalFilter: string
+  isLoading?: boolean
+  isError?: boolean
+  errorMessage?: string
+  onPageChange: (page: number) => void
+  onLimitChange: (limit: number) => void
+  onSortingChange: (sorting: SortingState) => void
+  onRowSelectionChange: (selection: RowSelectionState) => void
+  onColumnFiltersChange: (filters: ColumnFiltersState) => void
+  onColumnVisibilityChange: (
+    updater: VisibilityState | ((old: VisibilityState) => VisibilityState)
+  ) => void
+  onGlobalFilterChange: (filter: string) => void
+  getRowId?: (row: TData) => string
   bulkActions?: Array<{
-    label: string;
-    icon: React.ReactNode;
-    onClick: (selectedIds: string[]) => void;
-    variant?: 'default' | 'destructive';
-  }>;
+    label: string
+    icon: React.ReactNode
+    onClick: (selectedIds: string[]) => void
+    variant?: 'default' | 'destructive'
+  }>
   filters?: Array<{
-    key: string;
-    label: string;
-    options: Array<{ label: string; value: string }>;
-  }>;
-  searchable?: boolean;
-  searchPlaceholder?: string;
-  emptyState?: React.ReactNode;
-  mobileCardRenderer?: (row: TData) => React.ReactNode;
-  enableRowSelection?: boolean;
-  defaultMobileView?: boolean;
-  density?: 'compact' | 'comfortable';
+    key: string
+    label: string
+    options: Array<{ label: string; value: string }>
+  }>
+  searchable?: boolean
+  searchPlaceholder?: string
+  emptyState?: React.ReactNode
+  mobileCardRenderer?: (row: TData) => React.ReactNode
+  enableRowSelection?: boolean
+  defaultMobileView?: boolean
+  density?: 'compact' | 'comfortable'
 }
 
 export function DataTable<TData>({
@@ -95,48 +97,48 @@ export function DataTable<TData>({
   defaultMobileView = true,
   density = 'comfortable',
 }: DataTableProps<TData>) {
-  const [showMobile, setShowMobile] = useState(defaultMobileView);
+  const [showMobile, setShowMobile] = useState(defaultMobileView)
 
   const table =
     // eslint-disable-next-line react-hooks/incompatible-library
     useReactTable({
-    data,
-    columns,
-    pageCount,
-    state: {
-      sorting,
-      rowSelection,
-      columnFilters,
-      columnVisibility,
-      globalFilter,
-      pagination: { pageIndex: page - 1, pageSize: limit },
-    },
-    manualPagination: true,
-    manualSorting: true,
-    manualFiltering: true,
-    enableRowSelection,
-    getRowId,
-    onSortingChange: (updater) => {
-      const newSorting = typeof updater === 'function' ? updater(sorting) : updater;
-      onSortingChange(newSorting);
-    },
-    onRowSelectionChange: (updater) => {
-      const newSelection = typeof updater === 'function' ? updater(rowSelection) : updater;
-      onRowSelectionChange(newSelection);
-    },
-    onColumnFiltersChange: (updater) => {
-      const newFilters = typeof updater === 'function' ? updater(columnFilters) : updater;
-      onColumnFiltersChange(newFilters);
-    },
-    onColumnVisibilityChange: onColumnVisibilityChange,
-    onGlobalFilterChange: onGlobalFilterChange,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-  });
+      data,
+      columns,
+      pageCount,
+      state: {
+        sorting,
+        rowSelection,
+        columnFilters,
+        columnVisibility,
+        globalFilter,
+        pagination: { pageIndex: page - 1, pageSize: limit },
+      },
+      manualPagination: true,
+      manualSorting: true,
+      manualFiltering: true,
+      enableRowSelection,
+      getRowId,
+      onSortingChange: (updater) => {
+        const newSorting = typeof updater === 'function' ? updater(sorting) : updater
+        onSortingChange(newSorting)
+      },
+      onRowSelectionChange: (updater) => {
+        const newSelection = typeof updater === 'function' ? updater(rowSelection) : updater
+        onRowSelectionChange(newSelection)
+      },
+      onColumnFiltersChange: (updater) => {
+        const newFilters = typeof updater === 'function' ? updater(columnFilters) : updater
+        onColumnFiltersChange(newFilters)
+      },
+      onColumnVisibilityChange: onColumnVisibilityChange,
+      onGlobalFilterChange: onGlobalFilterChange,
+      getCoreRowModel: getCoreRowModel(),
+      getSortedRowModel: getSortedRowModel(),
+      getFilteredRowModel: getFilteredRowModel(),
+    })
 
-  const selectedRows = table.getSelectedRowModel().rows;
-  const selectedIds = selectedRows.map((row) => getRowId?.(row.original) || String(row.id));
+  const selectedRows = table.getSelectedRowModel().rows
+  const selectedIds = selectedRows.map((row) => getRowId?.(row.original) || String(row.id))
 
   return (
     <div className="space-y-4">
@@ -176,14 +178,20 @@ export function DataTable<TData>({
         <>
           {/* Desktop Table */}
           <div className={cn(showMobile && 'hidden')}>
-            <div 
+            <div
               className="rounded-xl border border-border/50 bg-card overflow-x-auto relative"
               style={{ WebkitOverflowScrolling: 'touch' }}
             >
-              <table className="w-full caption-bottom text-sm whitespace-nowrap" style={{ minWidth: 'max-content' }}>
+              <table
+                className="w-full caption-bottom text-sm whitespace-nowrap"
+                style={{ minWidth: 'max-content' }}
+              >
                 <thead className="bg-muted/50 sticky top-0 z-10">
                   {table.getHeaderGroups().map((headerGroup) => (
-                    <tr key={headerGroup.id} className="border-b border-border/50 transition-colors">
+                    <tr
+                      key={headerGroup.id}
+                      className="border-b border-border/50 transition-colors"
+                    >
                       {headerGroup.headers.map((header) => (
                         <th
                           key={header.id}
@@ -192,7 +200,8 @@ export function DataTable<TData>({
                               ? 'h-7 px-2 py-1 text-[11px]'
                               : 'h-10 px-2 sm:px-4 text-sm',
                             'text-left align-middle font-medium text-muted-foreground',
-                            header.column.getCanSort() && 'cursor-pointer select-none hover:text-foreground'
+                            header.column.getCanSort() &&
+                              'cursor-pointer select-none hover:text-foreground'
                           )}
                           style={{ width: header.getSize() }}
                           onClick={header.column.getToggleSortingHandler()}
@@ -238,9 +247,7 @@ export function DataTable<TData>({
                           <td
                             key={cell.id}
                             className={cn(
-                              density === 'compact'
-                                ? 'px-2 py-1 text-xs'
-                                : 'p-2 sm:p-4 text-sm',
+                              density === 'compact' ? 'px-2 py-1 text-xs' : 'p-2 sm:p-4 text-sm',
                               'align-middle whitespace-nowrap'
                             )}
                           >
@@ -252,13 +259,13 @@ export function DataTable<TData>({
                   </AnimatePresence>
                 </tbody>
               </table>
-            {/* Scroll indicator for mobile */}
-            <div className="md:hidden absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background/80 to-transparent pointer-events-none" />
+              {/* Scroll indicator for mobile */}
+              <div className="md:hidden absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background/80 to-transparent pointer-events-none" />
             </div>
           </div>
 
           {/* Mobile Cards */}
-          <div className={cn(!showMobile && 'hidden')} >
+          <div className={cn(!showMobile && 'hidden')}>
             <DataTableMobile
               rows={table.getRowModel().rows}
               cardRenderer={mobileCardRenderer}
@@ -282,5 +289,5 @@ export function DataTable<TData>({
         </>
       )}
     </div>
-  );
+  )
 }

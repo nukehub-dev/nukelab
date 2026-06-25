@@ -21,18 +21,18 @@ class MaintenanceMiddleware(BaseHTTPMiddleware):
     """
 
     EXEMPT_PATHS = [
-        '/api/health',
-        '/health',
-        '/api/docs',
-        '/api/openapi.json',
-        '/api/ws',
-        '/ws',
+        "/api/health",
+        "/health",
+        "/api/docs",
+        "/api/openapi.json",
+        "/api/ws",
+        "/ws",
     ]
 
     EXEMPT_PREFIXES = [
-        '/api/auth',
-        '/api/system',
-        '/api/admin',
+        "/api/auth",
+        "/api/system",
+        "/api/admin",
     ]
 
     # Rate limit config: max requests per window (seconds)
@@ -83,6 +83,7 @@ class MaintenanceMiddleware(BaseHTTPMiddleware):
         client_ip = request.client.host if request.client else "unknown"
         if self._is_rate_limited(client_ip):
             from fastapi.responses import JSONResponse
+
             return JSONResponse(
                 status_code=429,
                 content={
@@ -93,6 +94,7 @@ class MaintenanceMiddleware(BaseHTTPMiddleware):
 
         # Block the request
         from fastapi.responses import JSONResponse
+
         return JSONResponse(
             status_code=503,
             content={

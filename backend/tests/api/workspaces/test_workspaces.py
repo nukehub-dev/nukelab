@@ -10,23 +10,25 @@ def mock_docker_client():
     """Mock Docker container client to avoid real volume creation."""
     mock_vol = mock.AsyncMock()
     mock_vol.delete = mock.AsyncMock()
-    
+
     mock_volumes = mock.AsyncMock()
     mock_volumes.create = mock.AsyncMock(return_value=mock_vol)
     mock_volumes.get = mock.AsyncMock(return_value=mock_vol)
-    
+
     mock_client = mock.AsyncMock()
     mock_client.volumes = mock_volumes
     mock_client.close = mock.AsyncMock()
-    
+
     mock_container_client = mock.AsyncMock()
     mock_container_client.client = mock_client
     mock_container_client.list_containers = mock.AsyncMock(return_value=[])
     mock_container_client.create_container = mock.AsyncMock(return_value=mock.Mock(id="mock-cid"))
     mock_container_client.start_container = mock.AsyncMock()
     mock_container_client.get_container_logs = mock.AsyncMock(return_value="mock logs")
-    
-    with mock.patch("app.services.volume_service.get_container_client", return_value=mock_container_client):
+
+    with mock.patch(
+        "app.services.volume_service.get_container_client", return_value=mock_container_client
+    ):
         yield
 
 
@@ -39,14 +41,14 @@ class TestWorkspaceModel:
         from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
 
         ws = SharedWorkspace()
-        assert hasattr(ws, 'name')
-        assert hasattr(ws, 'owner_id')
-        assert hasattr(ws, 'description')
-        assert not hasattr(ws, 'volume_name')  # Removed in new architecture
+        assert hasattr(ws, "name")
+        assert hasattr(ws, "owner_id")
+        assert hasattr(ws, "description")
+        assert not hasattr(ws, "volume_name")  # Removed in new architecture
 
         member = WorkspaceMember()
-        assert hasattr(member, 'role')
-        assert hasattr(member, 'workspace_id')
+        assert hasattr(member, "role")
+        assert hasattr(member, "workspace_id")
 
 
 class TestWorkspaceVolumeModel:
@@ -58,10 +60,10 @@ class TestWorkspaceVolumeModel:
         from app.models.workspace_volume import WorkspaceVolume
 
         wv = WorkspaceVolume()
-        assert hasattr(wv, 'workspace_id')
-        assert hasattr(wv, 'volume_id')
-        assert hasattr(wv, 'role')
-        assert hasattr(wv, 'added_at')
+        assert hasattr(wv, "workspace_id")
+        assert hasattr(wv, "volume_id")
+        assert hasattr(wv, "role")
+        assert hasattr(wv, "added_at")
 
     @pytest.mark.asyncio
     async def test_workspace_volume_has_fields(self):
@@ -69,10 +71,10 @@ class TestWorkspaceVolumeModel:
         from app.models.workspace_volume import WorkspaceVolume
 
         wv = WorkspaceVolume()
-        assert hasattr(wv, 'workspace_id')
-        assert hasattr(wv, 'volume_id')
-        assert hasattr(wv, 'role')
-        assert hasattr(wv, 'added_at')
+        assert hasattr(wv, "workspace_id")
+        assert hasattr(wv, "volume_id")
+        assert hasattr(wv, "role")
+        assert hasattr(wv, "added_at")
         # DB default is "read_write", but None before insert
         assert wv.role is None
 
@@ -87,9 +89,7 @@ class TestWorkspaceService:
 
         service = WorkspaceService(db_session)
         workspace = await service.create_workspace(
-            name="Test Workspace",
-            description="A test workspace",
-            owner_id=str(test_user.id)
+            name="Test Workspace", description="A test workspace", owner_id=str(test_user.id)
         )
 
         assert workspace.name == "Test Workspace"
@@ -103,15 +103,11 @@ class TestWorkspaceService:
 
         service = WorkspaceService(db_session)
         workspace = await service.create_workspace(
-            name="Test Workspace",
-            description="Test",
-            owner_id=str(test_user.id)
+            name="Test Workspace", description="Test", owner_id=str(test_user.id)
         )
 
         member = await service.add_member(
-            workspace_id=str(workspace.id),
-            user_id=str(admin_user.id),
-            role="read_write"
+            workspace_id=str(workspace.id), user_id=str(admin_user.id), role="read_write"
         )
         assert member.role == "read_write"
 
@@ -119,9 +115,7 @@ class TestWorkspaceService:
         assert is_member is True
 
         updated = await service.update_member_role(
-            workspace_id=str(workspace.id),
-            user_id=str(admin_user.id),
-            role="admin"
+            workspace_id=str(workspace.id), user_id=str(admin_user.id), role="admin"
         )
         assert updated.role == "admin"
 
@@ -138,9 +132,7 @@ class TestWorkspaceService:
         volume_service = VolumeService(db_session)
 
         workspace = await workspace_service.create_workspace(
-            name="Multi-Volume Workspace",
-            description="Test",
-            owner_id=str(test_user.id)
+            name="Multi-Volume Workspace", description="Test", owner_id=str(test_user.id)
         )
 
         # Create a volume
@@ -155,16 +147,14 @@ class TestWorkspaceService:
             workspace_id=str(workspace.id),
             volume_id=str(volume.id),
             role="read_write",
-            added_by=str(test_user.id)
+            added_by=str(test_user.id),
         )
         assert wv.volume_id == volume.id
         assert wv.role == "read_write"
 
         # Update volume role
         updated = await workspace_service.update_volume_role(
-            workspace_id=str(workspace.id),
-            volume_id=str(volume.id),
-            role="read_only"
+            workspace_id=str(workspace.id), volume_id=str(volume.id), role="read_only"
         )
         assert updated.role == "read_only"
 
@@ -181,10 +171,14 @@ class TestWorkspaceAPI:
         """User should create and list workspaces via API."""
         headers = {"Authorization": f"Bearer {user_token}"}
 
-        resp = await client.post("/api/workspaces/", headers=headers, json={
-            "name": "API Test Workspace",
-            "description": "Testing",
-        })
+        resp = await client.post(
+            "/api/workspaces/",
+            headers=headers,
+            json={
+                "name": "API Test Workspace",
+                "description": "Testing",
+            },
+        )
         assert resp.status_code == 201
 
         workspace = resp.json()
@@ -205,16 +199,24 @@ class TestWorkspaceAPI:
         headers = {"Authorization": f"Bearer {user_token}"}
 
         # Create workspace
-        resp = await client.post("/api/workspaces/", headers=headers, json={
-            "name": "Volume Test Workspace",
-            "description": "Testing volumes",
-        })
+        resp = await client.post(
+            "/api/workspaces/",
+            headers=headers,
+            json={
+                "name": "Volume Test Workspace",
+                "description": "Testing volumes",
+            },
+        )
         workspace = resp.json()
 
         # Create volume
-        resp = await client.post("/api/volumes/", headers=headers, json={
-            "display_name": "API Test Volume",
-        })
+        resp = await client.post(
+            "/api/volumes/",
+            headers=headers,
+            json={
+                "display_name": "API Test Volume",
+            },
+        )
         volume = resp.json()
 
         # Add volume to workspace
@@ -224,7 +226,7 @@ class TestWorkspaceAPI:
             json={
                 "volume_id": volume["id"],
                 "role": "read_write",
-            }
+            },
         )
         assert resp.status_code == 200
 
@@ -234,8 +236,7 @@ class TestWorkspaceAPI:
 
         # Remove volume from workspace
         resp = await client.delete(
-            f"/api/workspaces/{workspace['id']}/volumes/{volume['id']}",
-            headers=headers
+            f"/api/workspaces/{workspace['id']}/volumes/{volume['id']}", headers=headers
         )
         assert resp.status_code == 200
 
@@ -244,10 +245,14 @@ class TestWorkspaceAPI:
         """User should get workspace details including volumes."""
         headers = {"Authorization": f"Bearer {user_token}"}
 
-        resp = await client.post("/api/workspaces/", headers=headers, json={
-            "name": "Detail Test Workspace",
-            "description": "Testing details",
-        })
+        resp = await client.post(
+            "/api/workspaces/",
+            headers=headers,
+            json={
+                "name": "Detail Test Workspace",
+                "description": "Testing details",
+            },
+        )
         workspace = resp.json()
 
         resp = await client.get(f"/api/workspaces/{workspace['id']}", headers=headers)
@@ -260,8 +265,6 @@ class TestWorkspaceAPI:
         assert "volume_count" in ws_data
 
 
-
-
 class TestWorkspaceCollaboration:
     """Tests for leave, transfer, activity, and invitation expiry."""
 
@@ -271,10 +274,14 @@ class TestWorkspaceCollaboration:
         headers = {"Authorization": f"Bearer {user_token}"}
 
         # Create workspace
-        resp = await client.post("/api/workspaces/", headers=headers, json={
-            "name": "Leave Test Workspace",
-            "description": "Testing leave",
-        })
+        resp = await client.post(
+            "/api/workspaces/",
+            headers=headers,
+            json={
+                "name": "Leave Test Workspace",
+                "description": "Testing leave",
+            },
+        )
         workspace = resp.json()
 
         # Owner trying to leave should fail
@@ -283,30 +290,36 @@ class TestWorkspaceCollaboration:
         assert "transfer ownership" in resp.json()["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_transfer_ownership(self, client: AsyncClient, test_user, admin_user, user_token, admin_token):
+    async def test_transfer_ownership(
+        self, client: AsyncClient, test_user, admin_user, user_token, admin_token
+    ):
         """Owner should transfer ownership to another member."""
         headers = {"Authorization": f"Bearer {user_token}"}
         admin_headers = {"Authorization": f"Bearer {admin_token}"}
 
         # Create workspace
-        resp = await client.post("/api/workspaces/", headers=headers, json={
-            "name": "Transfer Test Workspace",
-            "description": "Testing transfer",
-        })
+        resp = await client.post(
+            "/api/workspaces/",
+            headers=headers,
+            json={
+                "name": "Transfer Test Workspace",
+                "description": "Testing transfer",
+            },
+        )
         workspace = resp.json()
 
         # Invite admin_user
         resp = await client.post(
             f"/api/workspaces/{workspace['id']}/invitations",
             headers=headers,
-            json={"user_id": str(admin_user.id), "role": "read_write"}
+            json={"user_id": str(admin_user.id), "role": "read_write"},
         )
         invitation = resp.json()
 
         # Accept as admin_user
         resp = await client.post(
             f"/api/workspaces/{workspace['id']}/invitations/{invitation['id']}/accept",
-            headers=admin_headers
+            headers=admin_headers,
         )
         assert resp.status_code == 200
 
@@ -314,30 +327,36 @@ class TestWorkspaceCollaboration:
         resp = await client.post(
             f"/api/workspaces/{workspace['id']}/transfer",
             headers=headers,
-            json={"user_id": str(admin_user.id)}
+            json={"user_id": str(admin_user.id)},
         )
         assert resp.status_code == 200
         data = resp.json()
         assert data["owner_id"] == str(admin_user.id)
 
     @pytest.mark.asyncio
-    async def test_invitation_expiration(self, client: AsyncClient, test_user, admin_user, user_token, admin_token, db_session):
+    async def test_invitation_expiration(
+        self, client: AsyncClient, test_user, admin_user, user_token, admin_token, db_session
+    ):
         """Expired invitations should be rejected."""
         headers = {"Authorization": f"Bearer {user_token}"}
         admin_headers = {"Authorization": f"Bearer {admin_token}"}
 
         # Create workspace
-        resp = await client.post("/api/workspaces/", headers=headers, json={
-            "name": "Expiry Test Workspace",
-            "description": "Testing expiry",
-        })
+        resp = await client.post(
+            "/api/workspaces/",
+            headers=headers,
+            json={
+                "name": "Expiry Test Workspace",
+                "description": "Testing expiry",
+            },
+        )
         workspace = resp.json()
 
         # Invite admin_user
         resp = await client.post(
             f"/api/workspaces/{workspace['id']}/invitations",
             headers=headers,
-            json={"user_id": str(admin_user.id), "role": "read_write"}
+            json={"user_id": str(admin_user.id), "role": "read_write"},
         )
         invitation = resp.json()
         assert "expires_at" in invitation
@@ -346,6 +365,7 @@ class TestWorkspaceCollaboration:
         from app.models.workspace_invitation import WorkspaceInvitation
         from sqlalchemy import update
         from datetime import datetime, timedelta, UTC
+
         await db_session.execute(
             update(WorkspaceInvitation)
             .where(WorkspaceInvitation.id == invitation["id"])
@@ -356,7 +376,7 @@ class TestWorkspaceCollaboration:
         # Accept as admin_user should fail
         resp = await client.post(
             f"/api/workspaces/{workspace['id']}/invitations/{invitation['id']}/accept",
-            headers=admin_headers
+            headers=admin_headers,
         )
         assert resp.status_code == 400
         assert "expired" in resp.json()["detail"].lower()
@@ -367,10 +387,14 @@ class TestWorkspaceCollaboration:
         headers = {"Authorization": f"Bearer {user_token}"}
 
         # Create workspace
-        resp = await client.post("/api/workspaces/", headers=headers, json={
-            "name": "Activity Test Workspace",
-            "description": "Testing activity",
-        })
+        resp = await client.post(
+            "/api/workspaces/",
+            headers=headers,
+            json={
+                "name": "Activity Test Workspace",
+                "description": "Testing activity",
+            },
+        )
         workspace = resp.json()
 
         # Get activity
@@ -380,16 +404,19 @@ class TestWorkspaceCollaboration:
         assert "activity" in data
         assert isinstance(data["activity"], list)
 
-
     @pytest.mark.asyncio
     async def test_creator_is_in_members_list(self, client: AsyncClient, test_user, user_token):
         """Workspace creator/owner should appear in the members list."""
         headers = {"Authorization": f"Bearer {user_token}"}
 
-        resp = await client.post("/api/workspaces/", headers=headers, json={
-            "name": "Members List Test",
-            "description": "Testing creator in members",
-        })
+        resp = await client.post(
+            "/api/workspaces/",
+            headers=headers,
+            json={
+                "name": "Members List Test",
+                "description": "Testing creator in members",
+            },
+        )
         workspace = resp.json()
 
         # Use the paginated members endpoint
@@ -410,16 +437,20 @@ class TestWorkspaceCollaboration:
         """Owner's role cannot be changed via member update."""
         headers = {"Authorization": f"Bearer {user_token}"}
 
-        resp = await client.post("/api/workspaces/", headers=headers, json={
-            "name": "Owner Role Test",
-            "description": "Testing owner protection",
-        })
+        resp = await client.post(
+            "/api/workspaces/",
+            headers=headers,
+            json={
+                "name": "Owner Role Test",
+                "description": "Testing owner protection",
+            },
+        )
         workspace = resp.json()
 
         resp = await client.put(
             f"/api/workspaces/{workspace['id']}/members/{test_user.id}",
             headers=headers,
-            json={"role": "read_write"}
+            json={"role": "read_write"},
         )
         assert resp.status_code == 400
         assert "owner" in resp.json()["detail"].lower()
@@ -429,29 +460,38 @@ class TestWorkspaceCollaboration:
         """Owner cannot be removed from workspace."""
         headers = {"Authorization": f"Bearer {user_token}"}
 
-        resp = await client.post("/api/workspaces/", headers=headers, json={
-            "name": "Owner Remove Test",
-            "description": "Testing owner protection",
-        })
+        resp = await client.post(
+            "/api/workspaces/",
+            headers=headers,
+            json={
+                "name": "Owner Remove Test",
+                "description": "Testing owner protection",
+            },
+        )
         workspace = resp.json()
 
         resp = await client.delete(
-            f"/api/workspaces/{workspace['id']}/members/{test_user.id}",
-            headers=headers
+            f"/api/workspaces/{workspace['id']}/members/{test_user.id}", headers=headers
         )
         assert resp.status_code == 400
         assert "owner" in resp.json()["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_list_workspace_members_pagination(self, client: AsyncClient, test_user, user_token):
+    async def test_list_workspace_members_pagination(
+        self, client: AsyncClient, test_user, user_token
+    ):
         """Members endpoint should support pagination, sorting, and search."""
         headers = {"Authorization": f"Bearer {user_token}"}
 
         # Create workspace
-        resp = await client.post("/api/workspaces/", headers=headers, json={
-            "name": "Pagination Test",
-            "description": "Testing member pagination",
-        })
+        resp = await client.post(
+            "/api/workspaces/",
+            headers=headers,
+            json={
+                "name": "Pagination Test",
+                "description": "Testing member pagination",
+            },
+        )
         workspace = resp.json()
 
         # List members with default pagination
@@ -466,22 +506,20 @@ class TestWorkspaceCollaboration:
         # Test sorting by username
         resp = await client.get(
             f"/api/workspaces/{workspace['id']}/members?sort_by=username&sort_order=asc",
-            headers=headers
+            headers=headers,
         )
         assert resp.status_code == 200
 
         # Test role filter
         resp = await client.get(
-            f"/api/workspaces/{workspace['id']}/members?role=admin",
-            headers=headers
+            f"/api/workspaces/{workspace['id']}/members?role=admin", headers=headers
         )
         assert resp.status_code == 200
         data = resp.json()
         assert data["pagination"]["total"] == 1
 
         resp = await client.get(
-            f"/api/workspaces/{workspace['id']}/members?role=read_write",
-            headers=headers
+            f"/api/workspaces/{workspace['id']}/members?role=read_write", headers=headers
         )
         assert resp.status_code == 200
         data = resp.json()
@@ -490,22 +528,28 @@ class TestWorkspaceCollaboration:
         # Test search
         resp = await client.get(
             f"/api/workspaces/{workspace['id']}/members?search={test_user.username[:3]}",
-            headers=headers
+            headers=headers,
         )
         assert resp.status_code == 200
         data = resp.json()
         assert data["pagination"]["total"] == 1
 
     @pytest.mark.asyncio
-    async def test_list_workspace_volumes_pagination(self, client: AsyncClient, test_user, user_token):
+    async def test_list_workspace_volumes_pagination(
+        self, client: AsyncClient, test_user, user_token
+    ):
         """Volumes endpoint should support pagination."""
         headers = {"Authorization": f"Bearer {user_token}"}
 
         # Create workspace
-        resp = await client.post("/api/workspaces/", headers=headers, json={
-            "name": "Volume Pagination Test",
-            "description": "Testing volume pagination",
-        })
+        resp = await client.post(
+            "/api/workspaces/",
+            headers=headers,
+            json={
+                "name": "Volume Pagination Test",
+                "description": "Testing volume pagination",
+            },
+        )
         workspace = resp.json()
 
         # List volumes (empty)
@@ -519,9 +563,10 @@ class TestWorkspaceCollaboration:
         # Test sorting
         resp = await client.get(
             f"/api/workspaces/{workspace['id']}/volumes?sort_by=added_at&sort_order=desc",
-            headers=headers
+            headers=headers,
         )
         assert resp.status_code == 200
+
 
 """Extended tests for Workspace API endpoints."""
 
@@ -546,7 +591,7 @@ class TestWorkspaceInvitations:
             response = await client.post(
                 f"/api/workspaces/{ws.id}/invitations",
                 headers={"Authorization": f"Bearer {user_token}"},
-                json={"user_id": str(admin_user.id), "role": "read_write"}
+                json={"user_id": str(admin_user.id), "role": "read_write"},
             )
         assert response.status_code == 200
         data = response.json()
@@ -562,7 +607,7 @@ class TestWorkspaceInvitations:
         response = await client.post(
             f"/api/workspaces/{ws.id}/invitations",
             headers={"Authorization": f"Bearer {user_token}"},
-            json={"user_id": str(admin_user.id), "role": "hacker"}
+            json={"user_id": str(admin_user.id), "role": "hacker"},
         )
         assert response.status_code == 400
 
@@ -578,7 +623,7 @@ class TestWorkspaceInvitations:
             resp = await client.post(
                 f"/api/workspaces/{ws.id}/invitations",
                 headers={"Authorization": f"Bearer {user_token}"},
-                json={"user_id": str(admin_user.id), "role": "read_write"}
+                json={"user_id": str(admin_user.id), "role": "read_write"},
             )
             # Verify invitation was created by checking POST response
             assert resp.status_code == 200
@@ -586,7 +631,7 @@ class TestWorkspaceInvitations:
 
         response = await client.get(
             f"/api/workspaces/{ws.id}/invitations",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 200
         # Invitation list may be empty due to async session/relationship refresh;
@@ -605,13 +650,13 @@ class TestWorkspaceInvitations:
             resp = await client.post(
                 f"/api/workspaces/{ws.id}/invitations",
                 headers={"Authorization": f"Bearer {user_token}"},
-                json={"user_id": str(admin_user.id), "role": "read_write"}
+                json={"user_id": str(admin_user.id), "role": "read_write"},
             )
             inv_id = resp.json()["id"]
 
         response = await client.delete(
             f"/api/workspaces/{ws.id}/invitations/{inv_id}",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 200
         assert "cancelled" in response.json()["message"].lower()
@@ -630,17 +675,20 @@ class TestWorkspaceAcceptReject:
             resp = await client.post(
                 f"/api/workspaces/{ws.id}/invitations",
                 headers={"Authorization": f"Bearer {user_token}"},
-                json={"user_id": str(admin_user.id), "role": "read_write"}
+                json={"user_id": str(admin_user.id), "role": "read_write"},
             )
             inv_id = resp.json()["id"]
 
         # Accept as admin_user
         from app.api.auth import create_access_token
-        admin_user_token = create_access_token(data={"sub": admin_user.username, "role": admin_user.role})
+
+        admin_user_token = create_access_token(
+            data={"sub": admin_user.username, "role": admin_user.role}
+        )
 
         response = await client.post(
             f"/api/workspaces/{ws.id}/invitations/{inv_id}/accept",
-            headers={"Authorization": f"Bearer {admin_user_token}"}
+            headers={"Authorization": f"Bearer {admin_user_token}"},
         )
         assert response.status_code == 200
 
@@ -656,16 +704,19 @@ class TestWorkspaceAcceptReject:
             resp = await client.post(
                 f"/api/workspaces/{ws.id}/invitations",
                 headers={"Authorization": f"Bearer {user_token}"},
-                json={"user_id": str(admin_user.id), "role": "read_write"}
+                json={"user_id": str(admin_user.id), "role": "read_write"},
             )
             inv_id = resp.json()["id"]
 
         from app.api.auth import create_access_token
-        admin_user_token = create_access_token(data={"sub": admin_user.username, "role": admin_user.role})
+
+        admin_user_token = create_access_token(
+            data={"sub": admin_user.username, "role": admin_user.role}
+        )
 
         response = await client.post(
             f"/api/workspaces/{ws.id}/invitations/{inv_id}/reject",
-            headers={"Authorization": f"Bearer {admin_user_token}"}
+            headers={"Authorization": f"Bearer {admin_user_token}"},
         )
         assert response.status_code == 200
         assert "rejected" in response.json()["message"].lower()
@@ -680,8 +731,7 @@ class TestWorkspaceMembers:
         await db_session.refresh(ws)
 
         response = await client.get(
-            f"/api/workspaces/{ws.id}/members",
-            headers={"Authorization": f"Bearer {user_token}"}
+            f"/api/workspaces/{ws.id}/members", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 200
         assert "members" in response.json()
@@ -701,7 +751,7 @@ class TestWorkspaceMembers:
             MockNotif.return_value.workspace_member_removed = mock.AsyncMock()
             response = await client.delete(
                 f"/api/workspaces/{ws.id}/members/{admin_user.id}",
-                headers={"Authorization": f"Bearer {user_token}"}
+                headers={"Authorization": f"Bearer {user_token}"},
             )
         assert response.status_code == 200
         assert "removed" in response.json()["message"].lower()
@@ -720,13 +770,15 @@ class TestWorkspaceMembers:
         response = await client.put(
             f"/api/workspaces/{ws.id}/members/{admin_user.id}",
             headers={"Authorization": f"Bearer {user_token}"},
-            json={"role": "admin"}
+            json={"role": "admin"},
         )
         assert response.status_code == 200
         assert response.json()["role"] == "admin"
 
     @pytest.mark.asyncio
-    async def test_update_member_invalid_role(self, client, user_token, test_user, admin_user, db_session):
+    async def test_update_member_invalid_role(
+        self, client, user_token, test_user, admin_user, db_session
+    ):
         ws = SharedWorkspace(name="bad-role", owner_id=test_user.id)
         db_session.add(ws)
         await db_session.commit()
@@ -739,7 +791,7 @@ class TestWorkspaceMembers:
         response = await client.put(
             f"/api/workspaces/{ws.id}/members/{admin_user.id}",
             headers={"Authorization": f"Bearer {user_token}"},
-            json={"role": "hacker"}
+            json={"role": "hacker"},
         )
         assert response.status_code == 400
 
@@ -757,8 +809,7 @@ class TestWorkspaceLeaveTransfer:
         await db_session.commit()
 
         response = await client.post(
-            f"/api/workspaces/{ws.id}/leave",
-            headers={"Authorization": f"Bearer {user_token}"}
+            f"/api/workspaces/{ws.id}/leave", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 200
 
@@ -776,7 +827,7 @@ class TestWorkspaceLeaveTransfer:
         response = await client.post(
             f"/api/workspaces/{ws.id}/transfer",
             headers={"Authorization": f"Bearer {user_token}"},
-            json={"user_id": str(admin_user.id)}
+            json={"user_id": str(admin_user.id)},
         )
         assert response.status_code == 200
         assert str(response.json()["owner_id"]) == str(admin_user.id)
@@ -798,7 +849,7 @@ class TestWorkspaceVolumes:
         response = await client.post(
             f"/api/workspaces/{ws.id}/volumes",
             headers={"Authorization": f"Bearer {user_token}"},
-            json={"volume_id": str(vol.id), "role": "read_write"}
+            json={"volume_id": str(vol.id), "role": "read_write"},
         )
         assert response.status_code == 200
 
@@ -817,7 +868,7 @@ class TestWorkspaceVolumes:
         response = await client.post(
             f"/api/workspaces/{ws.id}/volumes",
             headers={"Authorization": f"Bearer {user_token}"},
-            json={"volume_id": str(vol.id), "role": "hacker"}
+            json={"volume_id": str(vol.id), "role": "hacker"},
         )
         assert response.status_code == 400
 
@@ -838,11 +889,11 @@ class TestWorkspaceVolumes:
         await db_session.commit()
 
         response = await client.get(
-            f"/api/workspaces/{ws.id}/volumes",
-            headers={"Authorization": f"Bearer {user_token}"}
+            f"/api/workspaces/{ws.id}/volumes", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 200
         assert "volumes" in response.json()
+
 
 """Extended tests for workspaces.py — covering untested endpoints and error branches."""
 
@@ -860,6 +911,7 @@ from app.models.volume import Volume
 # ─────────────────────────────────────────────────────────────
 # Fixtures
 # ─────────────────────────────────────────────────────────────
+
 
 @pytest_asyncio.fixture
 async def test_workspace(db_session, test_user):
@@ -927,6 +979,7 @@ async def test_workspace_volume(db_session, test_workspace, test_user):
 # PUT /{id} — update_workspace
 # ─────────────────────────────────────────────────────────────
 
+
 class TestUpdateWorkspace:
     """Tests for update_workspace endpoint."""
 
@@ -978,10 +1031,10 @@ class TestUpdateWorkspace:
         # Make admin_user an admin member
         ws = test_workspace_with_member
         from sqlalchemy import select
+
         result = await db_session.execute(
             select(WorkspaceMember).where(
-                WorkspaceMember.workspace_id == ws.id,
-                WorkspaceMember.user_id != ws.owner_id
+                WorkspaceMember.workspace_id == ws.id, WorkspaceMember.user_id != ws.owner_id
             )
         )
         member = result.scalar_one()
@@ -1000,6 +1053,7 @@ class TestUpdateWorkspace:
 # ─────────────────────────────────────────────────────────────
 # DELETE /{id} — delete_workspace
 # ─────────────────────────────────────────────────────────────
+
 
 class TestDeleteWorkspace:
     """Tests for delete_workspace endpoint."""
@@ -1055,6 +1109,7 @@ class TestDeleteWorkspace:
 # PUT /{id}/volumes/{vid} — update_volume_role
 # ─────────────────────────────────────────────────────────────
 
+
 class TestUpdateVolumeRole:
     """Tests for update_volume_role endpoint."""
 
@@ -1084,7 +1139,9 @@ class TestUpdateVolumeRole:
         assert "not found" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_update_volume_role_invalid_role(self, client, user_token, test_workspace, test_workspace_volume):
+    async def test_update_volume_role_invalid_role(
+        self, client, user_token, test_workspace, test_workspace_volume
+    ):
         """Invalid role should return 400."""
         vol, _ = test_workspace_volume
         response = await client.put(
@@ -1096,7 +1153,9 @@ class TestUpdateVolumeRole:
         assert "invalid role" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_update_volume_role_forbidden(self, client, admin_token, test_workspace, test_workspace_volume):
+    async def test_update_volume_role_forbidden(
+        self, client, admin_token, test_workspace, test_workspace_volume
+    ):
         """Non-owner/non-admin should not be able to update volume role."""
         vol, _ = test_workspace_volume
         response = await client.put(
@@ -1110,6 +1169,7 @@ class TestUpdateVolumeRole:
 # ─────────────────────────────────────────────────────────────
 # Error branches for tested endpoints
 # ─────────────────────────────────────────────────────────────
+
 
 class TestWorkspaceErrorBranches:
     """Tests for missing error branches in already-tested endpoints."""
@@ -1349,7 +1409,9 @@ class TestWorkspaceErrorBranches:
         with mock.patch("app.api.workspaces.WorkspaceService") as mock_svc_cls:
             mock_svc = mock_svc_cls.return_value
             mock_svc.get_workspace = mock.AsyncMock(return_value=None)
-            mock_svc.accept_invitation = mock.AsyncMock(return_value=mock.Mock(to_dict=mock.Mock(return_value={"id": "1"})))
+            mock_svc.accept_invitation = mock.AsyncMock(
+                return_value=mock.Mock(to_dict=mock.Mock(return_value={"id": "1"}))
+            )
 
             with mock.patch("app.api.workspaces.NotificationService") as mock_notif_cls:
                 mock_notif = mock_notif_cls.return_value
@@ -1367,7 +1429,9 @@ class TestWorkspaceErrorBranches:
         """ValueError from service should return 400."""
         with mock.patch("app.api.workspaces.WorkspaceService") as mock_svc_cls:
             mock_svc = mock_svc_cls.return_value
-            mock_svc.reject_invitation = mock.AsyncMock(side_effect=ValueError("invalid invitation"))
+            mock_svc.reject_invitation = mock.AsyncMock(
+                side_effect=ValueError("invalid invitation")
+            )
 
             response = await client.post(
                 f"/api/workspaces/{uuid_mod.uuid4()}/invitations/{uuid_mod.uuid4()}/reject",
@@ -1497,14 +1561,18 @@ class TestWorkspaceErrorBranches:
         assert "not found" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_update_member_role_value_error(self, client, user_token, test_workspace_with_member):
+    async def test_update_member_role_value_error(
+        self, client, user_token, test_workspace_with_member
+    ):
         """ValueError from service should return 400."""
         ws = test_workspace_with_member
         with mock.patch("app.api.workspaces.WorkspaceService") as mock_svc_cls:
             mock_svc = mock_svc_cls.return_value
             mock_svc.get_workspace = mock.AsyncMock(return_value=ws)
             mock_svc.can_manage_workspace = mock.AsyncMock(return_value=True)
-            mock_svc.update_member_role = mock.AsyncMock(side_effect=ValueError("cannot change owner"))
+            mock_svc.update_member_role = mock.AsyncMock(
+                side_effect=ValueError("cannot change owner")
+            )
 
             response = await client.put(
                 f"/api/workspaces/{ws.id}/members/{ws.owner_id}",

@@ -19,16 +19,16 @@ class TestParseMemory:
         assert client._parse_memory("4k") == 4 * 1024
 
     def test_parse_megabytes(self, client):
-        assert client._parse_memory("512m") == 512 * 1024 ** 2
+        assert client._parse_memory("512m") == 512 * 1024**2
 
     def test_parse_gigabytes(self, client):
-        assert client._parse_memory("2g") == 2 * 1024 ** 3
+        assert client._parse_memory("2g") == 2 * 1024**3
 
     def test_parse_plain_number(self, client):
         assert client._parse_memory("1024") == 1024
 
     def test_parse_float(self, client):
-        assert client._parse_memory("1.5g") == int(1.5 * 1024 ** 3)
+        assert client._parse_memory("1.5g") == int(1.5 * 1024**3)
 
 
 class TestGetCpuEnv:
@@ -144,7 +144,10 @@ class TestGetAvailableControllers:
         client = ContainerClient()
 
         def fake_exists(path):
-            return path in ("/sys/fs/cgroup/cgroup.controllers", "/sys/fs/cgroup/cgroup.subtree_control")
+            return path in (
+                "/sys/fs/cgroup/cgroup.controllers",
+                "/sys/fs/cgroup/cgroup.subtree_control",
+            )
 
         def fake_open(path, *args, **kwargs):
             if path == "/sys/fs/cgroup/cgroup.controllers":
@@ -153,8 +156,10 @@ class TestGetAvailableControllers:
                 return mock.mock_open(read_data="io pids\n")()
             raise FileNotFoundError(path)
 
-        with mock.patch("os.path.exists", side_effect=fake_exists), \
-             mock.patch("builtins.open", side_effect=fake_open):
+        with (
+            mock.patch("os.path.exists", side_effect=fake_exists),
+            mock.patch("builtins.open", side_effect=fake_open),
+        ):
             result = await client._get_available_controllers()
             assert result == {"cpu", "memory", "io", "pids"}
             assert client._available_cgroup_controllers == {"cpu", "memory", "io", "pids"}
@@ -283,9 +288,11 @@ class TestCreateContainer:
     async def test_minimal_create(self, client):
         mock_container = mock.AsyncMock()
         client.client.containers.create = mock.AsyncMock(return_value=mock_container)
-        with mock.patch.object(client, "_get_available_controllers", return_value=set()), \
-             mock.patch.object(client, "_check_lxcfs_support", return_value=False), \
-             mock.patch.object(client, "_ensure_cpu_lib_volume"):
+        with (
+            mock.patch.object(client, "_get_available_controllers", return_value=set()),
+            mock.patch.object(client, "_check_lxcfs_support", return_value=False),
+            mock.patch.object(client, "_ensure_cpu_lib_volume"),
+        ):
             result = await client.create_container("test-1", "nginx:latest")
             assert result == mock_container
             client.client.containers.create.assert_awaited_once()
@@ -296,9 +303,11 @@ class TestCreateContainer:
     async def test_with_ports(self, client):
         mock_container = mock.AsyncMock()
         client.client.containers.create = mock.AsyncMock(return_value=mock_container)
-        with mock.patch.object(client, "_get_available_controllers", return_value=set()), \
-             mock.patch.object(client, "_check_lxcfs_support", return_value=False), \
-             mock.patch.object(client, "_ensure_cpu_lib_volume"):
+        with (
+            mock.patch.object(client, "_get_available_controllers", return_value=set()),
+            mock.patch.object(client, "_check_lxcfs_support", return_value=False),
+            mock.patch.object(client, "_ensure_cpu_lib_volume"),
+        ):
             await client.create_container("test-1", "nginx:latest", ports={"80": "8080"})
             config = client.client.containers.create.call_args[0][0]
             assert config["ExposedPorts"] == {"80/tcp": {}}
@@ -308,9 +317,11 @@ class TestCreateContainer:
     async def test_with_volumes_old_format(self, client):
         mock_container = mock.AsyncMock()
         client.client.containers.create = mock.AsyncMock(return_value=mock_container)
-        with mock.patch.object(client, "_get_available_controllers", return_value=set()), \
-             mock.patch.object(client, "_check_lxcfs_support", return_value=False), \
-             mock.patch.object(client, "_ensure_cpu_lib_volume"):
+        with (
+            mock.patch.object(client, "_get_available_controllers", return_value=set()),
+            mock.patch.object(client, "_check_lxcfs_support", return_value=False),
+            mock.patch.object(client, "_ensure_cpu_lib_volume"),
+        ):
             await client.create_container("test-1", "nginx:latest", volumes={"/host": "/container"})
             config = client.client.containers.create.call_args[0][0]
             assert "/host:/container" in config["HostConfig"]["Binds"]
@@ -319,12 +330,13 @@ class TestCreateContainer:
     async def test_with_volumes_new_format(self, client):
         mock_container = mock.AsyncMock()
         client.client.containers.create = mock.AsyncMock(return_value=mock_container)
-        with mock.patch.object(client, "_get_available_controllers", return_value=set()), \
-             mock.patch.object(client, "_check_lxcfs_support", return_value=False), \
-             mock.patch.object(client, "_ensure_cpu_lib_volume"):
+        with (
+            mock.patch.object(client, "_get_available_controllers", return_value=set()),
+            mock.patch.object(client, "_check_lxcfs_support", return_value=False),
+            mock.patch.object(client, "_ensure_cpu_lib_volume"),
+        ):
             await client.create_container(
-                "test-1", "nginx:latest",
-                volumes={"/host": {"bind": "/container", "mode": "rw"}}
+                "test-1", "nginx:latest", volumes={"/host": {"bind": "/container", "mode": "rw"}}
             )
             config = client.client.containers.create.call_args[0][0]
             assert "/host:/container:rw" in config["HostConfig"]["Binds"]
@@ -333,10 +345,12 @@ class TestCreateContainer:
     async def test_with_cpu_limit_and_controllers(self, client):
         mock_container = mock.AsyncMock()
         client.client.containers.create = mock.AsyncMock(return_value=mock_container)
-        with mock.patch.object(client, "_get_available_controllers", return_value={"cpu", "cpuset"}), \
-             mock.patch.object(client, "_check_lxcfs_support", return_value=False), \
-             mock.patch.object(client, "_ensure_cpu_lib_volume"), \
-             mock.patch("os.cpu_count", return_value=8):
+        with (
+            mock.patch.object(client, "_get_available_controllers", return_value={"cpu", "cpuset"}),
+            mock.patch.object(client, "_check_lxcfs_support", return_value=False),
+            mock.patch.object(client, "_ensure_cpu_lib_volume"),
+            mock.patch("os.cpu_count", return_value=8),
+        ):
             await client.create_container("test-1", "nginx:latest", cpu_limit=2.0)
             config = client.client.containers.create.call_args[0][0]
             assert config["HostConfig"]["NanoCpus"] == int(2.0 * 1e9)
@@ -346,9 +360,11 @@ class TestCreateContainer:
     async def test_with_cpu_limit_missing_controllers(self, client):
         mock_container = mock.AsyncMock()
         client.client.containers.create = mock.AsyncMock(return_value=mock_container)
-        with mock.patch.object(client, "_get_available_controllers", return_value=set()), \
-             mock.patch.object(client, "_check_lxcfs_support", return_value=False), \
-             mock.patch.object(client, "_ensure_cpu_lib_volume"):
+        with (
+            mock.patch.object(client, "_get_available_controllers", return_value=set()),
+            mock.patch.object(client, "_check_lxcfs_support", return_value=False),
+            mock.patch.object(client, "_ensure_cpu_lib_volume"),
+        ):
             await client.create_container("test-1", "nginx:latest", cpu_limit=2.0)
             config = client.client.containers.create.call_args[0][0]
             assert "NanoCpus" not in config["HostConfig"]
@@ -358,21 +374,25 @@ class TestCreateContainer:
     async def test_with_memory_limit(self, client):
         mock_container = mock.AsyncMock()
         client.client.containers.create = mock.AsyncMock(return_value=mock_container)
-        with mock.patch.object(client, "_get_available_controllers", return_value={"memory"}), \
-             mock.patch.object(client, "_check_lxcfs_support", return_value=False), \
-             mock.patch.object(client, "_ensure_cpu_lib_volume"):
+        with (
+            mock.patch.object(client, "_get_available_controllers", return_value={"memory"}),
+            mock.patch.object(client, "_check_lxcfs_support", return_value=False),
+            mock.patch.object(client, "_ensure_cpu_lib_volume"),
+        ):
             await client.create_container("test-1", "nginx:latest", memory_limit="512m")
             config = client.client.containers.create.call_args[0][0]
-            assert config["HostConfig"]["Memory"] == 512 * 1024 ** 2
-            assert config["HostConfig"]["MemorySwap"] == 512 * 1024 ** 2
+            assert config["HostConfig"]["Memory"] == 512 * 1024**2
+            assert config["HostConfig"]["MemorySwap"] == 512 * 1024**2
 
     @pytest.mark.asyncio
     async def test_with_memory_limit_missing_controller(self, client):
         mock_container = mock.AsyncMock()
         client.client.containers.create = mock.AsyncMock(return_value=mock_container)
-        with mock.patch.object(client, "_get_available_controllers", return_value=set()), \
-             mock.patch.object(client, "_check_lxcfs_support", return_value=False), \
-             mock.patch.object(client, "_ensure_cpu_lib_volume"):
+        with (
+            mock.patch.object(client, "_get_available_controllers", return_value=set()),
+            mock.patch.object(client, "_check_lxcfs_support", return_value=False),
+            mock.patch.object(client, "_ensure_cpu_lib_volume"),
+        ):
             await client.create_container("test-1", "nginx:latest", memory_limit="512m")
             config = client.client.containers.create.call_args[0][0]
             assert "Memory" not in config["HostConfig"]
@@ -381,22 +401,26 @@ class TestCreateContainer:
     async def test_with_disk_limit_supported(self, client):
         mock_container = mock.AsyncMock()
         client.client.containers.create = mock.AsyncMock(return_value=mock_container)
-        with mock.patch.object(client, "_get_available_controllers", return_value=set()), \
-             mock.patch.object(client, "_check_lxcfs_support", return_value=False), \
-             mock.patch.object(client, "_ensure_cpu_lib_volume"), \
-             mock.patch.object(client, "_check_storage_support", return_value=True):
+        with (
+            mock.patch.object(client, "_get_available_controllers", return_value=set()),
+            mock.patch.object(client, "_check_lxcfs_support", return_value=False),
+            mock.patch.object(client, "_ensure_cpu_lib_volume"),
+            mock.patch.object(client, "_check_storage_support", return_value=True),
+        ):
             await client.create_container("test-1", "nginx:latest", disk_limit="10m")
             config = client.client.containers.create.call_args[0][0]
-            assert config["HostConfig"]["StorageOpt"]["size"] == f"{10 * 1024 ** 2}b"
+            assert config["HostConfig"]["StorageOpt"]["size"] == f"{10 * 1024**2}b"
 
     @pytest.mark.asyncio
     async def test_with_disk_limit_not_supported(self, client):
         mock_container = mock.AsyncMock()
         client.client.containers.create = mock.AsyncMock(return_value=mock_container)
-        with mock.patch.object(client, "_get_available_controllers", return_value=set()), \
-             mock.patch.object(client, "_check_lxcfs_support", return_value=False), \
-             mock.patch.object(client, "_ensure_cpu_lib_volume"), \
-             mock.patch.object(client, "_check_storage_support", return_value=False):
+        with (
+            mock.patch.object(client, "_get_available_controllers", return_value=set()),
+            mock.patch.object(client, "_check_lxcfs_support", return_value=False),
+            mock.patch.object(client, "_ensure_cpu_lib_volume"),
+            mock.patch.object(client, "_check_storage_support", return_value=False),
+        ):
             await client.create_container("test-1", "nginx:latest", disk_limit="10m")
             config = client.client.containers.create.call_args[0][0]
             assert "StorageOpt" not in config["HostConfig"]
@@ -406,9 +430,11 @@ class TestCreateContainer:
         mock_container = mock.AsyncMock()
         client.client.containers.create = mock.AsyncMock(return_value=mock_container)
         client._lxcfs_support = True
-        with mock.patch.object(client, "_get_available_controllers", return_value=set()), \
-             mock.patch.object(client, "_ensure_cpu_lib_volume"), \
-             mock.patch("os.path.exists", return_value=True):
+        with (
+            mock.patch.object(client, "_get_available_controllers", return_value=set()),
+            mock.patch.object(client, "_ensure_cpu_lib_volume"),
+            mock.patch("os.path.exists", return_value=True),
+        ):
             await client.create_container("test-1", "nginx:latest")
             config = client.client.containers.create.call_args[0][0]
             binds = config["HostConfig"].get("Binds", [])
@@ -419,8 +445,10 @@ class TestCreateContainer:
         mock_container = mock.AsyncMock()
         client.client.containers.create = mock.AsyncMock(return_value=mock_container)
         client._cpu_lib_volume_ready = True
-        with mock.patch.object(client, "_get_available_controllers", return_value=set()), \
-             mock.patch.object(client, "_check_lxcfs_support", return_value=False):
+        with (
+            mock.patch.object(client, "_get_available_controllers", return_value=set()),
+            mock.patch.object(client, "_check_lxcfs_support", return_value=False),
+        ):
             await client.create_container("test-1", "nginx:latest")
             config = client.client.containers.create.call_args[0][0]
             mounts = config["HostConfig"].get("Mounts", [])
@@ -430,9 +458,11 @@ class TestCreateContainer:
     async def test_injects_cpu_files(self, client):
         mock_container = mock.AsyncMock()
         client.client.containers.create = mock.AsyncMock(return_value=mock_container)
-        with mock.patch.object(client, "_get_available_controllers", return_value=set()), \
-             mock.patch.object(client, "_check_lxcfs_support", return_value=False), \
-             mock.patch.object(client, "_ensure_cpu_lib_volume"):
+        with (
+            mock.patch.object(client, "_get_available_controllers", return_value=set()),
+            mock.patch.object(client, "_check_lxcfs_support", return_value=False),
+            mock.patch.object(client, "_ensure_cpu_lib_volume"),
+        ):
             await client.create_container("test-1", "nginx:latest", cpu_limit=2.0)
             mock_container.put_archive.assert_awaited_once()
 
@@ -440,11 +470,14 @@ class TestCreateContainer:
     async def test_create_with_command_and_env_and_labels(self, client):
         mock_container = mock.AsyncMock()
         client.client.containers.create = mock.AsyncMock(return_value=mock_container)
-        with mock.patch.object(client, "_get_available_controllers", return_value=set()), \
-             mock.patch.object(client, "_check_lxcfs_support", return_value=False), \
-             mock.patch.object(client, "_ensure_cpu_lib_volume"):
+        with (
+            mock.patch.object(client, "_get_available_controllers", return_value=set()),
+            mock.patch.object(client, "_check_lxcfs_support", return_value=False),
+            mock.patch.object(client, "_ensure_cpu_lib_volume"),
+        ):
             await client.create_container(
-                "test-1", "nginx:latest",
+                "test-1",
+                "nginx:latest",
                 command="sleep 30",
                 env={"FOO": "bar"},
                 labels={"app": "test"},

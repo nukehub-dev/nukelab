@@ -68,9 +68,7 @@ class RetentionService:
 
         # Persist to DB
         for key, value in validated.items():
-            result = await self.db.execute(
-                select(SystemSetting).where(SystemSetting.key == key)
-            )
+            result = await self.db.execute(select(SystemSetting).where(SystemSetting.key == key))
             row = result.scalar_one_or_none()
 
             str_value = str(value)

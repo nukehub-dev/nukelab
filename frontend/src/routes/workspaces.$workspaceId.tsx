@@ -1,6 +1,6 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { useState, useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { createFileRoute } from '@tanstack/react-router'
+import { useState, useEffect, useRef } from 'react'
+import { motion } from 'framer-motion'
 import {
   FolderOpen,
   Users,
@@ -20,7 +20,7 @@ import {
   Crown,
   Activity,
   AlertCircle,
-} from 'lucide-react';
+} from 'lucide-react'
 import {
   useWorkspace,
   useUpdateWorkspace,
@@ -39,111 +39,126 @@ import {
   useWorkspaceMembers,
   useWorkspaceVolumes,
   useWorkspaceInvitations,
-} from '../hooks/use-workspaces';
-import { useVolumes } from '../hooks/use-volumes';
-import { useDiscoverUsers, usePublicProfile } from '../hooks/use-users';
-import { useAuthStore } from '../stores/auth-store';
-import { springs } from '../lib/animations';
-import { cn, formatBytes } from '../lib/utils';
-import { Button } from '../components/ui/button';
-import { StatCard } from '../components/data/stat-card';
-import { Input } from '../components/ui/input';
-import { Textarea } from '../components/ui/textarea';
-import { Select, SelectItem } from '../components/ui/select';
-import { Combobox } from '../components/ui/combobox';
-import { useConfirmDialog } from '../components/ui/confirm-dialog';
-import { Tooltip } from '../components/ui/tooltip';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '../components/ui/dialog';
-import { DataTable } from '../components/data/data-table';
-import { useDataTable } from '../hooks/use-data-table';
-import { Link } from '@tanstack/react-router';
-import type { ColumnDef, SortingState, ColumnFiltersState, VisibilityState } from '@tanstack/react-table';
-import type { WorkspaceMember, WorkspaceVolume } from '../hooks/use-workspaces';
-import type { WorkspaceActivity } from '../types/api';
+} from '../hooks/use-workspaces'
+import { useVolumes } from '../hooks/use-volumes'
+import { useDiscoverUsers, usePublicProfile } from '../hooks/use-users'
+import { useAuthStore } from '../stores/auth-store'
+import { springs } from '../lib/animations'
+import { cn, formatBytes } from '../lib/utils'
+import { Button } from '../components/ui/button'
+import { StatCard } from '../components/data/stat-card'
+import { Input } from '../components/ui/input'
+import { Textarea } from '../components/ui/textarea'
+import { Select, SelectItem } from '../components/ui/select'
+import { Combobox } from '../components/ui/combobox'
+import { useConfirmDialog } from '../components/ui/confirm-dialog'
+import { Tooltip } from '../components/ui/tooltip'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from '../components/ui/dialog'
+import { DataTable } from '../components/data/data-table'
+import { useDataTable } from '../hooks/use-data-table'
+import { Link } from '@tanstack/react-router'
+import type {
+  ColumnDef,
+  SortingState,
+  ColumnFiltersState,
+  VisibilityState,
+} from '@tanstack/react-table'
+import type { WorkspaceMember, WorkspaceVolume } from '../hooks/use-workspaces'
+import type { WorkspaceActivity } from '../types/api'
 
 export const Route = createFileRoute('/workspaces/$workspaceId')({
   component: WorkspaceDetailPage,
-});
+})
 
 const roleIcons = {
   admin: Shield,
   read_write: User,
   read_only: Eye,
-};
+}
 
 const roleLabels = {
   admin: 'Admin',
   read_write: 'Editor',
   read_only: 'Viewer',
-};
+}
 
 const volumeRoleLabels = {
   read_write: 'Read-Write',
   read_only: 'Read-Only',
-};
+}
 
 const roleColors = {
   admin: 'text-purple-400 bg-purple-400/10',
   read_write: 'text-blue-400 bg-blue-400/10',
   read_only: 'text-gray-400 bg-gray-400/10',
-};
+}
 
 function WorkspaceDetailPage() {
-  const { workspaceId } = Route.useParams();
-  const { data: workspace, isLoading } = useWorkspace(workspaceId);
-  const { data: discoverableUsers } = useDiscoverUsers();
-  const { data: volumesData } = useVolumes();
-  const updateWorkspace = useUpdateWorkspace();
-  const removeMember = useRemoveWorkspaceMember();
-  const updateRole = useUpdateMemberRole();
-  const addVolume = useAddWorkspaceVolume();
-  const removeVolume = useRemoveWorkspaceVolume();
-  const updateVolumeRole = useUpdateVolumeRole();
-  const inviteMember = useInviteWorkspaceMember();
-  const acceptInvitation = useAcceptInvitation();
-  const rejectInvitation = useRejectInvitation();
-  const cancelInvitation = useCancelInvitation();
-  const leaveWorkspace = useLeaveWorkspace();
-  const transferOwnership = useTransferOwnership();
-  const { confirm, dialog } = useConfirmDialog();
-  const currentUser = useAuthStore((state) => state.user);
-  const navigate = Route.useNavigate();
+  const { workspaceId } = Route.useParams()
+  const { data: workspace, isLoading } = useWorkspace(workspaceId)
+  const { data: discoverableUsers } = useDiscoverUsers()
+  const { data: volumesData } = useVolumes()
+  const updateWorkspace = useUpdateWorkspace()
+  const removeMember = useRemoveWorkspaceMember()
+  const updateRole = useUpdateMemberRole()
+  const addVolume = useAddWorkspaceVolume()
+  const removeVolume = useRemoveWorkspaceVolume()
+  const updateVolumeRole = useUpdateVolumeRole()
+  const inviteMember = useInviteWorkspaceMember()
+  const acceptInvitation = useAcceptInvitation()
+  const rejectInvitation = useRejectInvitation()
+  const cancelInvitation = useCancelInvitation()
+  const leaveWorkspace = useLeaveWorkspace()
+  const transferOwnership = useTransferOwnership()
+  const { confirm, dialog } = useConfirmDialog()
+  const currentUser = useAuthStore((state) => state.user)
+  const navigate = Route.useNavigate()
 
-  const [showInviteMember, setShowInviteMember] = useState(false);
-  const [showAddVolume, setShowAddVolume] = useState(false);
-  const [showEditWorkspace, setShowEditWorkspace] = useState(false);
-  const [showTransferOwnership, setShowTransferOwnership] = useState(false);
-  const [selectedMember, setSelectedMember] = useState<WorkspaceMember | null>(null);
-  const [selectedVolume, setSelectedVolume] = useState<WorkspaceVolume | null>(null);
-  const [selectedUserId, setSelectedUserId] = useState('');
-  const [selectedRole, setSelectedRole] = useState('read_write');
-  const [selectedVolumeId, setSelectedVolumeId] = useState('');
-  const [selectedVolumeRole, setSelectedVolumeRole] = useState('read_write');
-  const [editForm, setEditForm] = useState({ name: '', description: '' });
-  const [transferTargetId, setTransferTargetId] = useState('');
+  const [showInviteMember, setShowInviteMember] = useState(false)
+  const [showAddVolume, setShowAddVolume] = useState(false)
+  const [showEditWorkspace, setShowEditWorkspace] = useState(false)
+  const [showTransferOwnership, setShowTransferOwnership] = useState(false)
+  const [selectedMember, setSelectedMember] = useState<WorkspaceMember | null>(null)
+  const [selectedVolume, setSelectedVolume] = useState<WorkspaceVolume | null>(null)
+  const [selectedUserId, setSelectedUserId] = useState('')
+  const [selectedRole, setSelectedRole] = useState('read_write')
+  const [selectedVolumeId, setSelectedVolumeId] = useState('')
+  const [selectedVolumeRole, setSelectedVolumeRole] = useState('read_write')
+  const [editForm, setEditForm] = useState({ name: '', description: '' })
+  const [transferTargetId, setTransferTargetId] = useState('')
 
   // ─── Members DataTable State ───
-  const membersTable = useDataTable({ defaultLimit: 20, defaultSortBy: 'joined_at' });
-  const [membersSorting, setMembersSorting] = useState<SortingState>([{ id: 'joined_at', desc: true }]);
-  const [membersRowSelection, setMembersRowSelection] = useState<Record<string, boolean>>({});
-  const [membersColumnFilters, setMembersColumnFilters] = useState<ColumnFiltersState>([]);
-  const [membersColumnVisibility, setMembersColumnVisibility] = useState<VisibilityState>({});
+  const membersTable = useDataTable({ defaultLimit: 20, defaultSortBy: 'joined_at' })
+  const [membersSorting, setMembersSorting] = useState<SortingState>([
+    { id: 'joined_at', desc: true },
+  ])
+  const [membersRowSelection, setMembersRowSelection] = useState<Record<string, boolean>>({})
+  const [membersColumnFilters, setMembersColumnFilters] = useState<ColumnFiltersState>([])
+  const [membersColumnVisibility, setMembersColumnVisibility] = useState<VisibilityState>({})
 
-  const prevMembersColumnFilters = useRef<ColumnFiltersState>([]);
+  const prevMembersColumnFilters = useRef<ColumnFiltersState>([])
   useEffect(() => {
-    const currentIds = new Set(membersColumnFilters.map((f) => f.id));
+    const currentIds = new Set(membersColumnFilters.map((f) => f.id))
     membersColumnFilters.forEach((filter) => {
       if (filter.value !== undefined && filter.value !== null) {
-        membersTable.setFilter(filter.id, String(filter.value));
+        membersTable.setFilter(filter.id, String(filter.value))
       }
-    });
+    })
     prevMembersColumnFilters.current.forEach((filter) => {
       if (!currentIds.has(filter.id)) {
-        membersTable.setFilter(filter.id, null);
+        membersTable.setFilter(filter.id, null)
       }
-    });
-    prevMembersColumnFilters.current = membersColumnFilters;
-  }, [membersColumnFilters, membersTable]);
+    })
+    prevMembersColumnFilters.current = membersColumnFilters
+  }, [membersColumnFilters, membersTable])
 
   const { data: membersData, isLoading: membersLoading } = useWorkspaceMembers(workspaceId, {
     page: membersTable.state.page,
@@ -152,18 +167,20 @@ function WorkspaceDetailPage() {
     sort_order: membersSorting[0]?.desc ? 'desc' : 'asc',
     search: membersTable.state.search,
     role: membersTable.state.filters.role as string,
-  });
+  })
 
   // Fetch all members for forms (high limit)
-  const { data: allMembersData } = useWorkspaceMembers(workspaceId, { limit: 1000 });
-  const { data: invitationsData } = useWorkspaceInvitations(workspaceId);
+  const { data: allMembersData } = useWorkspaceMembers(workspaceId, { limit: 1000 })
+  const { data: invitationsData } = useWorkspaceInvitations(workspaceId)
 
   // ─── Volumes DataTable State ───
-  const volumesTable = useDataTable({ defaultLimit: 20, defaultSortBy: 'added_at' });
-  const [volumesSorting, setVolumesSorting] = useState<SortingState>([{ id: 'added_at', desc: true }]);
-  const [volumesRowSelection, setVolumesRowSelection] = useState<Record<string, boolean>>({});
-  const [volumesColumnFilters, setVolumesColumnFilters] = useState<ColumnFiltersState>([]);
-  const [volumesColumnVisibility, setVolumesColumnVisibility] = useState<VisibilityState>({});
+  const volumesTable = useDataTable({ defaultLimit: 20, defaultSortBy: 'added_at' })
+  const [volumesSorting, setVolumesSorting] = useState<SortingState>([
+    { id: 'added_at', desc: true },
+  ])
+  const [volumesRowSelection, setVolumesRowSelection] = useState<Record<string, boolean>>({})
+  const [volumesColumnFilters, setVolumesColumnFilters] = useState<ColumnFiltersState>([])
+  const [volumesColumnVisibility, setVolumesColumnVisibility] = useState<VisibilityState>({})
 
   const { data: volumesDataTable, isLoading: volumesLoading } = useWorkspaceVolumes(workspaceId, {
     page: volumesTable.state.page,
@@ -171,34 +188,34 @@ function WorkspaceDetailPage() {
     sort_by: volumesSorting[0]?.id,
     sort_order: volumesSorting[0]?.desc ? 'desc' : 'asc',
     search: volumesTable.state.search,
-  });
+  })
 
   // Fetch all workspace volumes for forms
-  const { data: allWorkspaceVolumes } = useWorkspaceVolumes(workspaceId, { limit: 1000 });
+  const { data: allWorkspaceVolumes } = useWorkspaceVolumes(workspaceId, { limit: 1000 })
 
   const handleInviteMember = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedUserId) return;
+    e.preventDefault()
+    if (!selectedUserId) return
 
     inviteMember.mutate(
       { workspaceId, userId: selectedUserId, role: selectedRole },
       {
         onSuccess: () => {
-          setShowInviteMember(false);
-          setSelectedUserId('');
-          setSelectedRole('read_write');
+          setShowInviteMember(false)
+          setSelectedUserId('')
+          setSelectedRole('read_write')
         },
       }
-    );
-  };
+    )
+  }
 
   const handleAddVolume = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedVolumeId) return;
+    e.preventDefault()
+    if (!selectedVolumeId) return
 
-    const selectedVolume = availableVolumes.find((v) => v.id === selectedVolumeId);
-    const isHomeVolume = selectedVolume && selectedVolume.is_home_volume;
-    const isMountedOnServer = selectedVolume && selectedVolume.server_count > 0;
+    const selectedVolume = availableVolumes.find((v) => v.id === selectedVolumeId)
+    const isHomeVolume = selectedVolume && selectedVolume.is_home_volume
+    const isMountedOnServer = selectedVolume && selectedVolume.server_count > 0
 
     if (isHomeVolume) {
       const confirmed = await confirm({
@@ -211,7 +228,9 @@ function WorkspaceDetailPage() {
         customContent: (
           <div className="space-y-3">
             <div className="rounded-md bg-amber-500/5 border border-amber-500/20 p-3">
-              <p className="text-xs font-medium text-amber-400 uppercase tracking-wider mb-2">Exposed data</p>
+              <p className="text-xs font-medium text-amber-400 uppercase tracking-wider mb-2">
+                Exposed data
+              </p>
               <ul className="text-sm text-amber-200/80 list-disc list-inside space-y-0.5">
                 <li>Personal files, dotfiles, shell configuration</li>
                 <li>SSH keys and credentials</li>
@@ -219,7 +238,9 @@ function WorkspaceDetailPage() {
               </ul>
             </div>
             <div className="rounded-md bg-blue-500/5 border border-blue-500/20 p-3">
-              <p className="text-xs font-medium text-blue-400 uppercase tracking-wider mb-2">Recommended alternatives</p>
+              <p className="text-xs font-medium text-blue-400 uppercase tracking-wider mb-2">
+                Recommended alternatives
+              </p>
               <ul className="text-sm text-blue-200/80 list-disc list-inside space-y-0.5">
                 <li>Create a new volume mounted at /data or /project for shared work</li>
                 <li>Deploy a new server with a separate data volume</li>
@@ -234,8 +255,8 @@ function WorkspaceDetailPage() {
             </div>
           </div>
         ),
-      });
-      if (!confirmed) return;
+      })
+      if (!confirmed) return
     } else if (isMountedOnServer) {
       const confirmed = await confirm({
         title: 'Share Active Volume?',
@@ -243,21 +264,21 @@ function WorkspaceDetailPage() {
         confirmLabel: 'Share Anyway',
         cancelLabel: 'Cancel',
         variant: 'warning',
-      });
-      if (!confirmed) return;
+      })
+      if (!confirmed) return
     }
 
     addVolume.mutate(
       { workspaceId, volumeId: selectedVolumeId, role: selectedVolumeRole },
       {
         onSuccess: () => {
-          setShowAddVolume(false);
-          setSelectedVolumeId('');
-          setSelectedVolumeRole('read_write');
+          setShowAddVolume(false)
+          setSelectedVolumeId('')
+          setSelectedVolumeRole('read_write')
         },
       }
-    );
-  };
+    )
+  }
 
   const handleLeaveWorkspace = async () => {
     const confirmed = await confirm({
@@ -266,30 +287,30 @@ function WorkspaceDetailPage() {
       confirmLabel: 'Leave',
       cancelLabel: 'Cancel',
       variant: 'warning',
-    });
+    })
     if (confirmed) {
       leaveWorkspace.mutate(workspaceId, {
         onSuccess: () => {
-          navigate({ to: '/workspaces' });
+          navigate({ to: '/workspaces' })
         },
-      });
+      })
     }
-  };
+  }
 
   const handleTransferOwnership = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!transferTargetId) return;
+    e.preventDefault()
+    if (!transferTargetId) return
 
     transferOwnership.mutate(
       { workspaceId, userId: transferTargetId },
       {
         onSuccess: () => {
-          setShowTransferOwnership(false);
-          setTransferTargetId('');
+          setShowTransferOwnership(false)
+          setTransferTargetId('')
         },
       }
-    );
-  };
+    )
+  }
 
   if (isLoading) {
     return (
@@ -300,7 +321,7 @@ function WorkspaceDetailPage() {
           <div className="h-32 bg-muted rounded"></div>
         </div>
       </div>
-    );
+    )
   }
 
   if (!workspace) {
@@ -314,23 +335,32 @@ function WorkspaceDetailPage() {
           </Link>
         </div>
       </div>
-    );
+    )
   }
 
-  const isOwner = workspace.owner_id === currentUser?.id;
-  const myMembership = workspace.my_membership;
-  const isAdmin = isOwner || myMembership?.role === 'admin';
-  const isMember = isOwner || !!myMembership;
-  const hasPendingInvite = workspace.my_invitation?.status === 'pending';
+  const isOwner = workspace.owner_id === currentUser?.id
+  const myMembership = workspace.my_membership
+  const isAdmin = isOwner || myMembership?.role === 'admin'
+  const isMember = isOwner || !!myMembership
+  const hasPendingInvite = workspace.my_invitation?.status === 'pending'
 
   // If user has a pending invitation, show accept/reject UI
   if (hasPendingInvite) {
-    const inviterName = workspace.my_invitation?.inviter_display_name || workspace.my_invitation?.inviter_username || 'Someone';
-    const inviterAvatar = workspace.my_invitation?.inviter_avatar_url;
-    const roleLabel = roleLabels[workspace.my_invitation?.role as keyof typeof roleLabels] || workspace.my_invitation?.role;
+    const inviterName =
+      workspace.my_invitation?.inviter_display_name ||
+      workspace.my_invitation?.inviter_username ||
+      'Someone'
+    const inviterAvatar = workspace.my_invitation?.inviter_avatar_url
+    const roleLabel =
+      roleLabels[workspace.my_invitation?.role as keyof typeof roleLabels] ||
+      workspace.my_invitation?.role
     const invitedAt = workspace.my_invitation?.created_at
-      ? new Date(workspace.my_invitation.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-      : '';
+      ? new Date(workspace.my_invitation.created_at).toLocaleDateString('en-US', {
+          month: 'long',
+          day: 'numeric',
+          year: 'numeric',
+        })
+      : ''
 
     return (
       <div className="min-h-screen p-6 lg:p-10 flex items-start justify-center pt-20">
@@ -357,7 +387,9 @@ function WorkspaceDetailPage() {
                 <p className="text-sm text-muted-foreground">Invitation from</p>
                 <p className="text-base font-semibold">{inviterName}</p>
                 {workspace.my_invitation?.inviter_username && (
-                  <p className="text-xs text-muted-foreground">@{workspace.my_invitation.inviter_username}</p>
+                  <p className="text-xs text-muted-foreground">
+                    @{workspace.my_invitation.inviter_username}
+                  </p>
                 )}
               </div>
             </div>
@@ -384,7 +416,12 @@ function WorkspaceDetailPage() {
             <div className="grid grid-cols-3 gap-3">
               <div className="p-3 rounded-xl bg-surface/50 border border-border/50 text-center">
                 <p className="text-xs text-muted-foreground mb-1">Role</p>
-                <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", roleColors[workspace.my_invitation?.role as keyof typeof roleColors])}>
+                <span
+                  className={cn(
+                    'text-xs px-2 py-0.5 rounded-full font-medium',
+                    roleColors[workspace.my_invitation?.role as keyof typeof roleColors]
+                  )}
+                >
                   {roleLabel}
                 </span>
               </div>
@@ -411,7 +448,7 @@ function WorkspaceDetailPage() {
                     },
                     {
                       onSuccess: () => {
-                        navigate({ to: '/workspaces' });
+                        navigate({ to: '/workspaces' })
                       },
                     }
                   )
@@ -438,7 +475,7 @@ function WorkspaceDetailPage() {
           </div>
         </motion.div>
       </div>
-    );
+    )
   }
 
   // Only members (owner + accepted members) see the full workspace
@@ -448,40 +485,40 @@ function WorkspaceDetailPage() {
         <div className="bubble p-8 text-center">
           <FolderOpen className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
           <h2 className="text-lg font-semibold mb-2">No access</h2>
-          <p className="text-muted-foreground mb-4">
-            You don't have access to this workspace.
-          </p>
+          <p className="text-muted-foreground mb-4">You don't have access to this workspace.</p>
           <Link to="/workspaces" className="text-primary hover:underline">
             Back to workspaces
           </Link>
         </div>
       </div>
-    );
+    )
   }
 
-  const availableUsers = discoverableUsers?.filter(
-    (u) =>
-      u.id !== currentUser?.id &&
-      !allMembersData?.members?.some((m) => m.user_id === u.id) &&
-      !invitationsData?.some((i) => i.user_id === u.id)
-  ) || [];
+  const availableUsers =
+    discoverableUsers?.filter(
+      (u) =>
+        u.id !== currentUser?.id &&
+        !allMembersData?.members?.some((m) => m.user_id === u.id) &&
+        !invitationsData?.some((i) => i.user_id === u.id)
+    ) || []
 
   const userOptions = availableUsers.map((user) => ({
     value: user.id,
     label: `${user.display_name || user.username} (@${user.username})`,
     image: user.avatar_url,
-  }));
+  }))
 
-  const availableVolumes = volumesData?.filter(
-    (v) =>
-      v.owner_id === currentUser?.id &&
-      !allWorkspaceVolumes?.volumes?.some((wv) => wv.volume_id === v.id)
-  ) || [];
+  const availableVolumes =
+    volumesData?.filter(
+      (v) =>
+        v.owner_id === currentUser?.id &&
+        !allWorkspaceVolumes?.volumes?.some((wv) => wv.volume_id === v.id)
+    ) || []
 
   const volumeOptions = availableVolumes.map((vol) => ({
     value: vol.id,
     label: `${vol.display_name} (${vol.server_count} servers)`,
-  }));
+  }))
 
   // ─── Members Table Columns ───
   const memberColumns: ColumnDef<WorkspaceMember>[] = [
@@ -489,13 +526,16 @@ function WorkspaceDetailPage() {
       accessorKey: 'username',
       header: 'Member',
       cell: ({ row }) => {
-        const member = row.original;
-        const RoleIcon = roleIcons[member.role as keyof typeof roleIcons] || User;
+        const member = row.original
+        const RoleIcon = roleIcons[member.role as keyof typeof roleIcons] || User
         return (
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSelectedMember(member)}
-              className={cn("p-1.5 rounded flex-shrink-0", roleColors[member.role as keyof typeof roleColors])}
+              className={cn(
+                'p-1.5 rounded flex-shrink-0',
+                roleColors[member.role as keyof typeof roleColors]
+              )}
             >
               <RoleIcon className="w-3.5 h-3.5" />
             </button>
@@ -509,27 +549,36 @@ function WorkspaceDetailPage() {
               <p className="text-xs text-muted-foreground">{member.email}</p>
             </div>
           </div>
-        );
+        )
       },
     },
     {
       accessorKey: 'role',
       header: 'Role',
       cell: ({ row }) => {
-        const member = row.original;
-        const isOwnerMember = workspace.owner_id === member.user_id;
-        const isSelf = currentUser?.id === member.user_id;
-        const canManage = isAdmin && !isOwnerMember && !isSelf;
+        const member = row.original
+        const isOwnerMember = workspace.owner_id === member.user_id
+        const isSelf = currentUser?.id === member.user_id
+        const canManage = isAdmin && !isOwnerMember && !isSelf
         return (
           <div className="flex items-center gap-2">
-            <span className={cn("text-xs px-2 py-0.5 rounded-full", roleColors[member.role as keyof typeof roleColors])}>
-              {isOwnerMember ? 'Owner' : (roleLabels[member.role as keyof typeof roleLabels] || member.role)}
+            <span
+              className={cn(
+                'text-xs px-2 py-0.5 rounded-full',
+                roleColors[member.role as keyof typeof roleColors]
+              )}
+            >
+              {isOwnerMember
+                ? 'Owner'
+                : roleLabels[member.role as keyof typeof roleLabels] || member.role}
             </span>
             {canManage && (
               <>
                 <RoleEditor
                   currentRole={member.role}
-                  onChange={(role) => updateRole.mutate({ workspaceId, userId: member.user_id, role })}
+                  onChange={(role) =>
+                    updateRole.mutate({ workspaceId, userId: member.user_id, role })
+                  }
                 />
                 <Tooltip content="Remove member">
                   <button
@@ -540,9 +589,9 @@ function WorkspaceDetailPage() {
                         confirmLabel: 'Remove',
                         cancelLabel: 'Cancel',
                         variant: 'warning',
-                      });
+                      })
                       if (confirmed) {
-                        removeMember.mutate({ workspaceId, userId: member.user_id });
+                        removeMember.mutate({ workspaceId, userId: member.user_id })
                       }
                     }}
                     className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors inline-flex"
@@ -553,23 +602,26 @@ function WorkspaceDetailPage() {
               </>
             )}
           </div>
-        );
+        )
       },
     },
-  ];
+  ]
 
   const memberMobileCardRenderer = (member: WorkspaceMember) => {
-    const RoleIcon = roleIcons[member.role as keyof typeof roleIcons] || User;
-    const isOwnerMember = workspace.owner_id === member.user_id;
-    const isSelf = currentUser?.id === member.user_id;
-    const canManage = isAdmin && !isOwnerMember && !isSelf;
+    const RoleIcon = roleIcons[member.role as keyof typeof roleIcons] || User
+    const isOwnerMember = workspace.owner_id === member.user_id
+    const isSelf = currentUser?.id === member.user_id
+    const canManage = isAdmin && !isOwnerMember && !isSelf
     return (
       <div className="p-3">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <button
               onClick={() => setSelectedMember(member)}
-              className={cn("p-1 rounded flex-shrink-0", roleColors[member.role as keyof typeof roleColors])}
+              className={cn(
+                'p-1 rounded flex-shrink-0',
+                roleColors[member.role as keyof typeof roleColors]
+              )}
             >
               <RoleIcon className="w-3 h-3" />
             </button>
@@ -584,14 +636,23 @@ function WorkspaceDetailPage() {
             </div>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
-            <span className={cn("text-xs px-1.5 py-0.5 rounded-full", roleColors[member.role as keyof typeof roleColors])}>
-              {isOwnerMember ? 'Owner' : (roleLabels[member.role as keyof typeof roleLabels] || member.role)}
+            <span
+              className={cn(
+                'text-xs px-1.5 py-0.5 rounded-full',
+                roleColors[member.role as keyof typeof roleColors]
+              )}
+            >
+              {isOwnerMember
+                ? 'Owner'
+                : roleLabels[member.role as keyof typeof roleLabels] || member.role}
             </span>
             {canManage && (
               <>
                 <RoleEditor
                   currentRole={member.role}
-                  onChange={(role) => updateRole.mutate({ workspaceId, userId: member.user_id, role })}
+                  onChange={(role) =>
+                    updateRole.mutate({ workspaceId, userId: member.user_id, role })
+                  }
                 />
                 <Tooltip content="Remove member">
                   <button
@@ -602,9 +663,9 @@ function WorkspaceDetailPage() {
                         confirmLabel: 'Remove',
                         cancelLabel: 'Cancel',
                         variant: 'warning',
-                      });
+                      })
                       if (confirmed) {
-                        removeMember.mutate({ workspaceId, userId: member.user_id });
+                        removeMember.mutate({ workspaceId, userId: member.user_id })
                       }
                     }}
                     className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors inline-flex"
@@ -617,8 +678,8 @@ function WorkspaceDetailPage() {
           </div>
         </div>
       </div>
-    );
-  };
+    )
+  }
 
   // ─── Volumes Table Columns ───
   const volumeColumns: ColumnDef<WorkspaceVolume>[] = [
@@ -626,7 +687,7 @@ function WorkspaceDetailPage() {
       accessorKey: 'display_name',
       header: 'Volume',
       cell: ({ row }) => {
-        const wv = row.original;
+        const wv = row.original
         return (
           <div className="flex items-center gap-3 min-w-0">
             <div className="p-1.5 rounded flex-shrink-0 bg-primary/10">
@@ -644,37 +705,40 @@ function WorkspaceDetailPage() {
               </p>
             </div>
           </div>
-        );
+        )
       },
     },
     {
       accessorKey: 'owner',
       header: 'Owner',
       cell: ({ row }) => {
-        const wv = row.original;
-        const owner = wv.volume?.owner;
-        return (
-          <span className="text-xs text-muted-foreground">
-            {owner?.username || 'Unknown'}
-          </span>
-        );
+        const wv = row.original
+        const owner = wv.volume?.owner
+        return <span className="text-xs text-muted-foreground">{owner?.username || 'Unknown'}</span>
       },
     },
     {
       accessorKey: 'role',
       header: 'Access',
       cell: ({ row }) => {
-        const wv = row.original;
+        const wv = row.original
         return (
           <div className="flex items-center gap-2">
-            <span className={cn("text-xs px-2 py-0.5 rounded-full", roleColors[wv.role as keyof typeof roleColors])}>
+            <span
+              className={cn(
+                'text-xs px-2 py-0.5 rounded-full',
+                roleColors[wv.role as keyof typeof roleColors]
+              )}
+            >
               {volumeRoleLabels[wv.role as keyof typeof volumeRoleLabels] || wv.role}
             </span>
             {isAdmin && (
               <>
                 <VolumeRoleEditor
                   currentRole={wv.role}
-                  onChange={(role) => updateVolumeRole.mutate({ workspaceId, volumeId: wv.volume_id, role })}
+                  onChange={(role) =>
+                    updateVolumeRole.mutate({ workspaceId, volumeId: wv.volume_id, role })
+                  }
                 />
                 <Tooltip content="Remove volume">
                   <button
@@ -685,9 +749,9 @@ function WorkspaceDetailPage() {
                         confirmLabel: 'Remove',
                         cancelLabel: 'Cancel',
                         variant: 'warning',
-                      });
+                      })
                       if (confirmed) {
-                        removeVolume.mutate({ workspaceId, volumeId: wv.volume_id });
+                        removeVolume.mutate({ workspaceId, volumeId: wv.volume_id })
                       }
                     }}
                     className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors inline-flex"
@@ -698,71 +762,76 @@ function WorkspaceDetailPage() {
               </>
             )}
           </div>
-        );
+        )
       },
     },
-  ];
+  ]
 
   const volumeMobileCardRenderer = (wv: WorkspaceVolume) => {
-    const owner = wv.volume?.owner;
+    const owner = wv.volume?.owner
     return (
-    <div className="p-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="p-1 rounded flex-shrink-0 bg-primary/10">
-            <HardDrive className="w-3 h-3 text-primary" />
+      <div className="p-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="p-1 rounded flex-shrink-0 bg-primary/10">
+              <HardDrive className="w-3 h-3 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <button
+                onClick={() => setSelectedVolume(wv)}
+                className="text-sm font-medium truncate hover:underline text-left block"
+              >
+                {wv.volume?.display_name || 'Unnamed Volume'}
+              </button>
+              <p className="text-xs text-muted-foreground">
+                {wv.volume?.size_bytes != null ? formatBytes(wv.volume.size_bytes) : 'Size unknown'}
+                {owner && <span>{` · ${owner.username}`}</span>}
+              </p>
+            </div>
           </div>
-          <div className="min-w-0">
-            <button
-              onClick={() => setSelectedVolume(wv)}
-              className="text-sm font-medium truncate hover:underline text-left block"
-            >
-              {wv.volume?.display_name || 'Unnamed Volume'}
-            </button>
-            <p className="text-xs text-muted-foreground">
-              {wv.volume?.size_bytes != null ? formatBytes(wv.volume.size_bytes) : 'Size unknown'}
-              {owner && (
-                <span>{` · ${owner.username}`}</span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span
+              className={cn(
+                'text-xs px-1.5 py-0.5 rounded-full',
+                roleColors[wv.role as keyof typeof roleColors]
               )}
-            </p>
+            >
+              {volumeRoleLabels[wv.role as keyof typeof volumeRoleLabels] || wv.role}
+            </span>
+            {isAdmin && (
+              <>
+                <VolumeRoleEditor
+                  currentRole={wv.role}
+                  onChange={(role) =>
+                    updateVolumeRole.mutate({ workspaceId, volumeId: wv.volume_id, role })
+                  }
+                />
+                <Tooltip content="Remove volume">
+                  <button
+                    onClick={async () => {
+                      const confirmed = await confirm({
+                        title: 'Remove Volume',
+                        description: `Remove this volume from the workspace?`,
+                        confirmLabel: 'Remove',
+                        cancelLabel: 'Cancel',
+                        variant: 'warning',
+                      })
+                      if (confirmed) {
+                        removeVolume.mutate({ workspaceId, volumeId: wv.volume_id })
+                      }
+                    }}
+                    className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors inline-flex"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </Tooltip>
+              </>
+            )}
           </div>
-        </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <span className={cn("text-xs px-1.5 py-0.5 rounded-full", roleColors[wv.role as keyof typeof roleColors])}>
-            {volumeRoleLabels[wv.role as keyof typeof volumeRoleLabels] || wv.role}
-          </span>
-          {isAdmin && (
-            <>
-              <VolumeRoleEditor
-                currentRole={wv.role}
-                onChange={(role) => updateVolumeRole.mutate({ workspaceId, volumeId: wv.volume_id, role })}
-              />
-              <Tooltip content="Remove volume">
-                <button
-                  onClick={async () => {
-                    const confirmed = await confirm({
-                      title: 'Remove Volume',
-                      description: `Remove this volume from the workspace?`,
-                      confirmLabel: 'Remove',
-                      cancelLabel: 'Cancel',
-                      variant: 'warning',
-                    });
-                    if (confirmed) {
-                      removeVolume.mutate({ workspaceId, volumeId: wv.volume_id });
-                    }
-                  }}
-                  className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors inline-flex"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </Tooltip>
-            </>
-          )}
         </div>
       </div>
-    </div>
-  );
-};
+    )
+  }
 
   const memberFilters = [
     {
@@ -774,7 +843,7 @@ function WorkspaceDetailPage() {
         { label: 'Viewer', value: 'read_only' },
       ],
     },
-  ];
+  ]
 
   return (
     <div className="min-h-screen p-6 lg:p-10 space-y-6">
@@ -807,8 +876,8 @@ function WorkspaceDetailPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    setTransferTargetId('');
-                    setShowTransferOwnership(true);
+                    setTransferTargetId('')
+                    setShowTransferOwnership(true)
                   }}
                   className="gap-1.5"
                 >
@@ -823,8 +892,8 @@ function WorkspaceDetailPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    setEditForm({ name: workspace.name, description: workspace.description || '' });
-                    setShowEditWorkspace(true);
+                    setEditForm({ name: workspace.name, description: workspace.description || '' })
+                    setShowEditWorkspace(true)
                   }}
                   className="gap-1.5"
                 >
@@ -904,9 +973,9 @@ function WorkspaceDetailPage() {
             <Button
               size="sm"
               onClick={() => {
-                setSelectedVolumeId('');
-                setSelectedVolumeRole('read_write');
-                setShowAddVolume(true);
+                setSelectedVolumeId('')
+                setSelectedVolumeRole('read_write')
+                setShowAddVolume(true)
               }}
               className="gap-1"
             >
@@ -932,9 +1001,9 @@ function WorkspaceDetailPage() {
           onPageChange={volumesTable.setPage}
           onLimitChange={volumesTable.setLimit}
           onSortingChange={(newSorting) => {
-            setVolumesSorting(newSorting);
+            setVolumesSorting(newSorting)
             if (newSorting.length > 0) {
-              volumesTable.setSort(newSorting[0].id, newSorting[0].desc ? 'desc' : 'asc');
+              volumesTable.setSort(newSorting[0].id, newSorting[0].desc ? 'desc' : 'asc')
             }
           }}
           onRowSelectionChange={setVolumesRowSelection}
@@ -972,9 +1041,9 @@ function WorkspaceDetailPage() {
             <Button
               size="sm"
               onClick={() => {
-                setSelectedUserId('');
-                setSelectedRole('read_write');
-                setShowInviteMember(true);
+                setSelectedUserId('')
+                setSelectedRole('read_write')
+                setShowInviteMember(true)
               }}
               className="gap-1"
             >
@@ -1000,9 +1069,9 @@ function WorkspaceDetailPage() {
           onPageChange={membersTable.setPage}
           onLimitChange={membersTable.setLimit}
           onSortingChange={(newSorting) => {
-            setMembersSorting(newSorting);
+            setMembersSorting(newSorting)
             if (newSorting.length > 0) {
-              membersTable.setSort(newSorting[0].id, newSorting[0].desc ? 'desc' : 'asc');
+              membersTable.setSort(newSorting[0].id, newSorting[0].desc ? 'desc' : 'asc')
             }
           }}
           onRowSelectionChange={setMembersRowSelection}
@@ -1052,7 +1121,9 @@ function WorkspaceDetailPage() {
                     />
                   ) : (
                     <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
-                      {(invitation.display_name || invitation.username || '?').charAt(0).toUpperCase()}
+                      {(invitation.display_name || invitation.username || '?')
+                        .charAt(0)
+                        .toUpperCase()}
                     </div>
                   )}
                   <div className="min-w-0">
@@ -1060,7 +1131,8 @@ function WorkspaceDetailPage() {
                       {invitation.display_name || invitation.username || 'Unknown'}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      @{invitation.username} · {roleLabels[invitation.role as keyof typeof roleLabels] || invitation.role}
+                      @{invitation.username} ·{' '}
+                      {roleLabels[invitation.role as keyof typeof roleLabels] || invitation.role}
                     </p>
                   </div>
                 </div>
@@ -1068,15 +1140,22 @@ function WorkspaceDetailPage() {
                   <span className="text-xs text-muted-foreground">
                     {invitation.expires_at
                       ? (() => {
-                          const expires = new Date(invitation.expires_at);
-                          const now = new Date();
-                          const diffDays = Math.ceil((expires.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-                          if (diffDays < 0) return <span className="text-destructive flex items-center gap-1"><AlertCircle className="w-3 h-3" /> Expired</span>;
-                          if (diffDays === 0) return <span className="text-amber-400">Expires today</span>;
-                          return `Expires in ${diffDays} day${diffDays > 1 ? 's' : ''}`;
+                          const expires = new Date(invitation.expires_at)
+                          const now = new Date()
+                          const diffDays = Math.ceil(
+                            (expires.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+                          )
+                          if (diffDays < 0)
+                            return (
+                              <span className="text-destructive flex items-center gap-1">
+                                <AlertCircle className="w-3 h-3" /> Expired
+                              </span>
+                            )
+                          if (diffDays === 0)
+                            return <span className="text-amber-400">Expires today</span>
+                          return `Expires in ${diffDays} day${diffDays > 1 ? 's' : ''}`
                         })()
-                      : `Sent ${invitation.created_at ? new Date(invitation.created_at).toLocaleDateString() : ''}`
-                    }
+                      : `Sent ${invitation.created_at ? new Date(invitation.created_at).toLocaleDateString() : ''}`}
                   </span>
                   <Tooltip content="Cancel invitation">
                     <button
@@ -1087,12 +1166,12 @@ function WorkspaceDetailPage() {
                           confirmLabel: 'Cancel Invite',
                           cancelLabel: 'Keep',
                           variant: 'warning',
-                        });
+                        })
                         if (confirmed) {
                           cancelInvitation.mutate({
                             workspaceId,
                             invitationId: invitation.id,
-                          });
+                          })
                         }
                       }}
                       className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors inline-flex"
@@ -1149,17 +1228,19 @@ function WorkspaceDetailPage() {
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setShowEditWorkspace(false)}>Cancel</Button>
+              <Button variant="outline" onClick={() => setShowEditWorkspace(false)}>
+                Cancel
+              </Button>
               <Button
                 onClick={() => {
                   updateWorkspace.mutate(
                     { workspaceId, data: editForm },
                     {
                       onSuccess: () => {
-                        setShowEditWorkspace(false);
+                        setShowEditWorkspace(false)
                       },
                     }
-                  );
+                  )
                 }}
                 loading={updateWorkspace.isPending}
               >
@@ -1187,21 +1268,31 @@ function WorkspaceDetailPage() {
                 <Combobox
                   value={transferTargetId}
                   onChange={setTransferTargetId}
-                  options={allMembersData?.members
-                    ?.filter((m) => m.user_id !== currentUser?.id)
-                    .map((m) => ({
-                      value: m.user_id,
-                      label: `${m.username || 'Unknown'}`,
-                    })) || []}
+                  options={
+                    allMembersData?.members
+                      ?.filter((m) => m.user_id !== currentUser?.id)
+                      .map((m) => ({
+                        value: m.user_id,
+                        label: `${m.username || 'Unknown'}`,
+                      })) || []
+                  }
                   placeholder="Select member..."
                   searchPlaceholder="Search members..."
                 />
               </div>
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setShowTransferOwnership(false)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowTransferOwnership(false)}
+                >
                   Cancel
                 </Button>
-                <Button type="submit" loading={transferOwnership.isPending} disabled={!transferTargetId}>
+                <Button
+                  type="submit"
+                  loading={transferOwnership.isPending}
+                  disabled={!transferTargetId}
+                >
                   Transfer
                 </Button>
               </DialogFooter>
@@ -1301,47 +1392,46 @@ function WorkspaceDetailPage() {
       )}
 
       {/* User Profile Dialog */}
-      <UserProfileDialog
-        member={selectedMember}
-        onClose={() => setSelectedMember(null)}
-      />
+      <UserProfileDialog member={selectedMember} onClose={() => setSelectedMember(null)} />
 
       {/* Volume Detail Dialog */}
-      <VolumeDetailDialog
-        volume={selectedVolume}
-        onClose={() => setSelectedVolume(null)}
-      />
+      <VolumeDetailDialog volume={selectedVolume} onClose={() => setSelectedVolume(null)} />
 
       {/* Confirmation Dialog */}
       {dialog}
     </div>
-  );
+  )
 }
-
 
 // ─── Sub-components ─────────────────────────────────────────────────────────
 
-function RoleEditor({ currentRole, onChange }: { currentRole: string; onChange: (role: string) => void }) {
-  const [editing, setEditing] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+function RoleEditor({
+  currentRole,
+  onChange,
+}: {
+  currentRole: string
+  onChange: (role: string) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (ref.current && !ref.current.contains(event.target as Node)) {
-        setEditing(false);
+        setEditing(false)
       }
-    };
-    if (editing) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
     }
-  }, [editing]);
+    if (editing) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [editing])
 
   const options = [
     { value: 'admin', label: 'Admin', color: roleColors.admin },
     { value: 'read_write', label: 'Editor', color: roleColors.read_write },
     { value: 'read_only', label: 'Viewer', color: roleColors.read_only },
-  ];
+  ]
 
   if (editing) {
     return (
@@ -1351,9 +1441,9 @@ function RoleEditor({ currentRole, onChange }: { currentRole: string; onChange: 
             key={opt.value}
             onClick={() => {
               if (opt.value !== currentRole) {
-                onChange(opt.value);
+                onChange(opt.value)
               }
-              setEditing(false);
+              setEditing(false)
             }}
             className={cn(
               'text-xs px-2 py-0.5 rounded-full font-medium transition-colors',
@@ -1365,7 +1455,7 @@ function RoleEditor({ currentRole, onChange }: { currentRole: string; onChange: 
           </button>
         ))}
       </div>
-    );
+    )
   }
 
   return (
@@ -1377,29 +1467,35 @@ function RoleEditor({ currentRole, onChange }: { currentRole: string; onChange: 
         <Pencil className="w-3 h-3" />
       </button>
     </Tooltip>
-  );
+  )
 }
 
-function VolumeRoleEditor({ currentRole, onChange }: { currentRole: string; onChange: (role: string) => void }) {
-  const [editing, setEditing] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+function VolumeRoleEditor({
+  currentRole,
+  onChange,
+}: {
+  currentRole: string
+  onChange: (role: string) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (ref.current && !ref.current.contains(event.target as Node)) {
-        setEditing(false);
+        setEditing(false)
       }
-    };
-    if (editing) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
     }
-  }, [editing]);
+    if (editing) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [editing])
 
   const options = [
     { value: 'read_write', label: 'RW', title: 'Read-Write', color: roleColors.read_write },
     { value: 'read_only', label: 'RO', title: 'Read-Only', color: roleColors.read_only },
-  ];
+  ]
 
   if (editing) {
     return (
@@ -1409,9 +1505,9 @@ function VolumeRoleEditor({ currentRole, onChange }: { currentRole: string; onCh
             <button
               onClick={() => {
                 if (opt.value !== currentRole) {
-                  onChange(opt.value);
+                  onChange(opt.value)
                 }
-                setEditing(false);
+                setEditing(false)
               }}
               className={cn(
                 'text-xs px-2 py-0.5 rounded-full font-medium transition-colors',
@@ -1424,7 +1520,7 @@ function VolumeRoleEditor({ currentRole, onChange }: { currentRole: string; onCh
           </Tooltip>
         ))}
       </div>
-    );
+    )
   }
 
   return (
@@ -1436,79 +1532,83 @@ function VolumeRoleEditor({ currentRole, onChange }: { currentRole: string; onCh
         <Pencil className="w-3 h-3" />
       </button>
     </Tooltip>
-  );
+  )
 }
 
 function formatActivityLabel(item: WorkspaceActivity): string {
-  const changed = item.details?.changed_fields as string[] | undefined;
+  const changed = item.details?.changed_fields as string[] | undefined
 
   switch (item.action) {
     case 'workspace_updated':
-      if (!changed?.length) return 'updated workspace';
+      if (!changed?.length) return 'updated workspace'
       if (changed.length === 1 && changed[0] === 'name') {
-        return `renamed workspace to "${item.details?.name}"`;
+        return `renamed workspace to "${item.details?.name}"`
       }
       if (changed.length === 1 && changed[0] === 'description') {
-        return 'updated workspace description';
+        return 'updated workspace description'
       }
       if (changed.length === 1 && changed[0] === 'is_active') {
-        return item.details?.is_active ? 'activated workspace' : 'deactivated workspace';
+        return item.details?.is_active ? 'activated workspace' : 'deactivated workspace'
       }
-      return `updated workspace ${changed.join(', ')}`;
+      return `updated workspace ${changed.join(', ')}`
     case 'member_left':
-      return 'left the workspace';
+      return 'left the workspace'
     case 'ownership_transferred':
-      return 'transferred ownership';
+      return 'transferred ownership'
     case 'invitation_sent':
-      return 'sent an invitation';
+      return 'sent an invitation'
     case 'invitation_accepted':
-      return 'accepted an invitation';
+      return 'accepted an invitation'
     case 'invitation_rejected':
-      return 'rejected an invitation';
+      return 'rejected an invitation'
     case 'invitation_expired':
-      return 'invitation expired';
+      return 'invitation expired'
     case 'member_added':
-      return 'was added';
+      return 'was added'
     case 'member_removed':
-      return 'was removed';
+      return 'was removed'
     case 'role_updated':
-      return 'role was updated';
+      return 'role was updated'
     case 'volume_added':
-      return 'added a volume';
+      return 'added a volume'
     case 'volume_removed':
-      return 'removed a volume';
+      return 'removed a volume'
     case 'workspace_created':
-      return 'created workspace';
+      return 'created workspace'
     default:
-      return item.action;
+      return item.action
   }
 }
 
 function WorkspaceActivityTable({ workspaceId }: { workspaceId: string }) {
-  const table = useDataTable({ defaultLimit: 20, defaultSortBy: 'created_at' });
-  const [sorting, setSorting] = useState<SortingState>([{ id: 'created_at', desc: true }]);
-  const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+  const table = useDataTable({ defaultLimit: 20, defaultSortBy: 'created_at' })
+  const [sorting, setSorting] = useState<SortingState>([{ id: 'created_at', desc: true }])
+  const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({})
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
 
   const { data, isLoading } = useWorkspaceActivity(workspaceId, {
     page: table.state.page,
     limit: table.state.limit,
-  });
+  })
 
-  const activity = data?.activity || [];
+  const activity = data?.activity || []
 
   const columns: ColumnDef<WorkspaceActivity>[] = [
     {
       accessorKey: 'actor',
       header: 'Actor',
       cell: ({ row }) => {
-        const item = row.original;
-        const actorName = item.actor?.display_name || item.actor?.username || 'Someone';
+        const item = row.original
+        const actorName = item.actor?.display_name || item.actor?.username || 'Someone'
         return (
           <div className="flex items-center gap-2">
             {item.actor?.avatar_url ? (
-              <img src={item.actor.avatar_url} alt="" className="w-6 h-6 rounded-full object-cover" />
+              <img
+                src={item.actor.avatar_url}
+                alt=""
+                className="w-6 h-6 rounded-full object-cover"
+              />
             ) : (
               <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
                 {actorName.charAt(0).toUpperCase()}
@@ -1516,26 +1616,22 @@ function WorkspaceActivityTable({ workspaceId }: { workspaceId: string }) {
             )}
             <span className="text-sm font-medium">{actorName}</span>
           </div>
-        );
+        )
       },
     },
     {
       accessorKey: 'action',
       header: 'Action',
       cell: ({ row }) => {
-        const item = row.original;
-        return (
-          <span className="text-sm text-muted-foreground">
-            {formatActivityLabel(item)}
-          </span>
-        );
+        const item = row.original
+        return <span className="text-sm text-muted-foreground">{formatActivityLabel(item)}</span>
       },
     },
     {
       accessorKey: 'created_at',
       header: 'Time',
       cell: ({ row }) => {
-        const item = row.original;
+        const item = row.original
         return (
           <span className="text-xs text-muted-foreground">
             {item.created_at
@@ -1547,18 +1643,22 @@ function WorkspaceActivityTable({ workspaceId }: { workspaceId: string }) {
                 })
               : ''}
           </span>
-        );
+        )
       },
     },
-  ];
+  ]
 
   const mobileCardRenderer = (item: WorkspaceActivity) => {
-    const actorName = item.actor?.display_name || item.actor?.username || 'Someone';
+    const actorName = item.actor?.display_name || item.actor?.username || 'Someone'
     return (
       <div className="p-3">
         <div className="flex items-start gap-2">
           {item.actor?.avatar_url ? (
-            <img src={item.actor.avatar_url} alt="" className="w-6 h-6 rounded-full object-cover flex-shrink-0" />
+            <img
+              src={item.actor.avatar_url}
+              alt=""
+              className="w-6 h-6 rounded-full object-cover flex-shrink-0"
+            />
           ) : (
             <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary flex-shrink-0">
               {actorName.charAt(0).toUpperCase()}
@@ -1582,8 +1682,8 @@ function WorkspaceActivityTable({ workspaceId }: { workspaceId: string }) {
           </div>
         </div>
       </div>
-    );
-  };
+    )
+  }
 
   return (
     <DataTable
@@ -1602,9 +1702,9 @@ function WorkspaceActivityTable({ workspaceId }: { workspaceId: string }) {
       onPageChange={table.setPage}
       onLimitChange={table.setLimit}
       onSortingChange={(newSorting) => {
-        setSorting(newSorting);
+        setSorting(newSorting)
         if (newSorting.length > 0) {
-          table.setSort(newSorting[0].id, newSorting[0].desc ? 'desc' : 'asc');
+          table.setSort(newSorting[0].id, newSorting[0].desc ? 'desc' : 'asc')
         }
       }}
       onRowSelectionChange={setRowSelection}
@@ -1623,11 +1723,17 @@ function WorkspaceActivityTable({ workspaceId }: { workspaceId: string }) {
         </div>
       }
     />
-  );
+  )
 }
 
-function UserProfileDialog({ member, onClose }: { member: WorkspaceMember | null; onClose: () => void }) {
-  const { data: profile, isLoading } = usePublicProfile(member?.user_id || undefined);
+function UserProfileDialog({
+  member,
+  onClose,
+}: {
+  member: WorkspaceMember | null
+  onClose: () => void
+}) {
+  const { data: profile, isLoading } = usePublicProfile(member?.user_id || undefined)
 
   const formatDateTime = (date: string) =>
     new Date(date).toLocaleString('en-US', {
@@ -1637,14 +1743,16 @@ function UserProfileDialog({ member, onClose }: { member: WorkspaceMember | null
       hour: 'numeric',
       minute: '2-digit',
       hour12: true,
-    });
+    })
 
   return (
     <Dialog open={!!member} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="relative overflow-hidden">
         <div className="absolute bottom-0 left-0 w-48 h-48 bg-chart-2/5 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2 pointer-events-none" />
         <DialogHeader>
-          <DialogTitle className="text-base text-muted-foreground font-medium">Member Profile</DialogTitle>
+          <DialogTitle className="text-base text-muted-foreground font-medium">
+            Member Profile
+          </DialogTitle>
         </DialogHeader>
         {isLoading ? (
           <div className="py-8 space-y-4">
@@ -1666,19 +1774,25 @@ function UserProfileDialog({ member, onClose }: { member: WorkspaceMember | null
                 </div>
               )}
               <div className="min-w-0">
-                <p className="text-lg font-semibold truncate">{profile?.display_name || member.username || 'Unknown'}</p>
+                <p className="text-lg font-semibold truncate">
+                  {profile?.display_name || member.username || 'Unknown'}
+                </p>
                 <p className="text-sm text-muted-foreground">@{member.username || 'unknown'}</p>
-                <span className={cn(
-                  "text-xs px-2 py-0.5 rounded-full mt-1 inline-block",
-                  roleColors[member.role as keyof typeof roleColors]
-                )}>
+                <span
+                  className={cn(
+                    'text-xs px-2 py-0.5 rounded-full mt-1 inline-block',
+                    roleColors[member.role as keyof typeof roleColors]
+                  )}
+                >
                   {roleLabels[member.role as keyof typeof roleLabels] || member.role}
                 </span>
               </div>
             </div>
 
             {(profile?.profile?.bio as string | undefined) && (
-              <p className="text-sm text-muted-foreground">{profile?.profile?.bio as string | undefined}</p>
+              <p className="text-sm text-muted-foreground">
+                {profile?.profile?.bio as string | undefined}
+              </p>
             )}
 
             <div className="divide-y divide-border/50">
@@ -1708,12 +1822,18 @@ function UserProfileDialog({ member, onClose }: { member: WorkspaceMember | null
         <DialogClose onClick={onClose} />
       </DialogContent>
     </Dialog>
-  );
+  )
 }
 
-function VolumeDetailDialog({ volume, onClose }: { volume: WorkspaceVolume | null; onClose: () => void }) {
-  const vol = volume?.volume;
-  const owner = vol?.owner;
+function VolumeDetailDialog({
+  volume,
+  onClose,
+}: {
+  volume: WorkspaceVolume | null
+  onClose: () => void
+}) {
+  const vol = volume?.volume
+  const owner = vol?.owner
 
   const formatDateTime = (date: string) =>
     new Date(date).toLocaleString('en-US', {
@@ -1723,14 +1843,16 @@ function VolumeDetailDialog({ volume, onClose }: { volume: WorkspaceVolume | nul
       hour: 'numeric',
       minute: '2-digit',
       hour12: true,
-    });
+    })
 
   return (
     <Dialog open={!!volume} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="relative overflow-hidden">
         <div className="absolute bottom-0 left-0 w-48 h-48 bg-chart-2/5 rounded-full blur-3xl translate-y-1/2 -translate-x-1/2 pointer-events-none" />
         <DialogHeader>
-          <DialogTitle className="text-base text-muted-foreground font-medium">Volume Details</DialogTitle>
+          <DialogTitle className="text-base text-muted-foreground font-medium">
+            Volume Details
+          </DialogTitle>
         </DialogHeader>
         {volume ? (
           <div className="py-4 space-y-4 relative">
@@ -1739,27 +1861,33 @@ function VolumeDetailDialog({ volume, onClose }: { volume: WorkspaceVolume | nul
                 <HardDrive className="w-6 h-6 text-primary" />
               </div>
               <div className="min-w-0">
-                <p className="text-lg font-semibold truncate">{vol?.display_name || 'Unnamed Volume'}</p>
+                <p className="text-lg font-semibold truncate">
+                  {vol?.display_name || 'Unnamed Volume'}
+                </p>
                 <p className="text-sm text-muted-foreground">{vol?.name || 'unknown'}</p>
-                <span className={cn(
-                  "text-xs px-2 py-0.5 rounded-full mt-1 inline-block",
-                  roleColors[volume.role as keyof typeof roleColors]
-                )}>
+                <span
+                  className={cn(
+                    'text-xs px-2 py-0.5 rounded-full mt-1 inline-block',
+                    roleColors[volume.role as keyof typeof roleColors]
+                  )}
+                >
                   {volumeRoleLabels[volume.role as keyof typeof volumeRoleLabels] || volume.role}
                 </span>
               </div>
             </div>
 
-            {vol?.description && (
-              <p className="text-sm text-muted-foreground">{vol.description}</p>
-            )}
+            {vol?.description && <p className="text-sm text-muted-foreground">{vol.description}</p>}
 
             <div className="grid grid-cols-2 gap-3">
               <div className="p-3 rounded-xl bg-surface/50 border border-border/50 text-center">
                 <p className="text-xs text-muted-foreground mb-1">Size</p>
-                <p className="text-sm font-semibold">{vol?.size_bytes != null ? formatBytes(vol.size_bytes) : 'Unknown'}</p>
+                <p className="text-sm font-semibold">
+                  {vol?.size_bytes != null ? formatBytes(vol.size_bytes) : 'Unknown'}
+                </p>
                 {vol?.max_size_bytes != null && (
-                  <p className="text-[10px] text-muted-foreground mt-0.5">of {formatBytes(vol.max_size_bytes)}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    of {formatBytes(vol.max_size_bytes)}
+                  </p>
                 )}
               </div>
               <div className="p-3 rounded-xl bg-surface/50 border border-border/50 text-center">
@@ -1812,8 +1940,12 @@ function VolumeDetailDialog({ volume, onClose }: { volume: WorkspaceVolume | nul
                   <span className="text-xs text-muted-foreground">Labels</span>
                   <div className="flex gap-1 flex-wrap justify-end">
                     {Object.entries(vol.labels).map(([k, v]) => (
-                      <span key={k} className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
-                        {k}{v ? `:${v}` : ''}
+                      <span
+                        key={k}
+                        className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground"
+                      >
+                        {k}
+                        {v ? `:${v}` : ''}
                       </span>
                     ))}
                   </div>
@@ -1829,5 +1961,5 @@ function VolumeDetailDialog({ volume, onClose }: { volume: WorkspaceVolume | nul
         <DialogClose onClick={onClose} />
       </DialogContent>
     </Dialog>
-  );
+  )
 }

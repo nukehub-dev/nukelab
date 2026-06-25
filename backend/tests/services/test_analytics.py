@@ -16,6 +16,7 @@ from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
 from app.services.analytics_service import AnalyticsService
 from app.services.retention_service import RetentionService
 
+
 class TestAnalyticsService:
     """Analytics service tests."""
 
@@ -30,7 +31,7 @@ class TestAnalyticsService:
         """get_user_usage should return empty data when no metrics exist."""
         service = AnalyticsService(db_session)
         result = await service.get_user_usage(str(test_user.id), days=7)
-        
+
         assert result["user_id"] == str(test_user.id)
         assert result["period_days"] == 7
         assert result["daily_usage"] == []
@@ -49,7 +50,7 @@ class TestAnalyticsService:
             cost_per_hour=10,
         )
         db_session.add(plan)
-        
+
         # Create a server
         server = Server(
             id=uuid_mod.uuid4(),
@@ -62,7 +63,7 @@ class TestAnalyticsService:
         )
         db_session.add(server)
         await db_session.flush()
-        
+
         # Create metrics for 2 days
         for day_offset in range(2):
             for hour in range(24):
@@ -76,10 +77,11 @@ class TestAnalyticsService:
                     network_tx_bytes=500000,
                     disk_read_bytes=100000,
                     disk_write_bytes=50000,
-                    collected_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=day_offset, hours=hour),
+                    collected_at=datetime.now(UTC).replace(tzinfo=None)
+                    - timedelta(days=day_offset, hours=hour),
                 )
                 db_session.add(metric)
-        
+
         # Create a credit transaction
         tx = CreditTransaction(
             id=uuid_mod.uuid4(),
@@ -93,10 +95,10 @@ class TestAnalyticsService:
         )
         db_session.add(tx)
         await db_session.commit()
-        
+
         service = AnalyticsService(db_session)
         result = await service.get_user_usage(str(test_user.id), days=7)
-        
+
         assert result["user_id"] == str(test_user.id)
         assert result["total_cost"] == 50
         assert result["active_days"] >= 1
@@ -104,11 +106,11 @@ class TestAnalyticsService:
         assert len(result["server_breakdown"]) == 1
         assert result["server_breakdown"][0]["server_name"] == "test-server"
         assert result["server_breakdown"][0]["cost"] == 50
-        
+
         # Check peak stats
         assert result["peak_stats"]["peak_cpu"] > 0
         assert result["peak_stats"]["peak_memory"] > 0
-        
+
         # Check first day has correct aggregation
         first_day = result["daily_usage"][0]
         assert "avg_cpu" in first_day
@@ -131,7 +133,7 @@ class TestAnalyticsService:
         )
         db_session.add(server)
         await db_session.flush()
-        
+
         # Create metric from 10 days ago (outside 7-day window)
         old_metric = ServerMetric(
             id=uuid_mod.uuid4(),
@@ -142,7 +144,7 @@ class TestAnalyticsService:
             collected_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=10),
         )
         db_session.add(old_metric)
-        
+
         # Create metric from 1 day ago (inside 7-day window)
         new_metric = ServerMetric(
             id=uuid_mod.uuid4(),
@@ -154,10 +156,10 @@ class TestAnalyticsService:
         )
         db_session.add(new_metric)
         await db_session.commit()
-        
+
         service = AnalyticsService(db_session)
         result = await service.get_user_usage(str(test_user.id), days=7)
-        
+
         # Should only have the recent metric
         assert len(result["daily_usage"]) == 1
         # The old metric should be excluded
@@ -176,7 +178,7 @@ class TestAnalyticsService:
         )
         db_session.add(server)
         await db_session.flush()
-        
+
         # Transaction in previous period (8-14 days ago)
         tx_prev = CreditTransaction(
             id=uuid_mod.uuid4(),
@@ -188,7 +190,7 @@ class TestAnalyticsService:
             created_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=10),
         )
         db_session.add(tx_prev)
-        
+
         # Transaction in current period (last 7 days)
         tx_curr = CreditTransaction(
             id=uuid_mod.uuid4(),
@@ -201,10 +203,10 @@ class TestAnalyticsService:
         )
         db_session.add(tx_curr)
         await db_session.commit()
-        
+
         service = AnalyticsService(db_session)
         result = await service.get_user_usage(str(test_user.id), days=7)
-        
+
         assert result["total_cost"] == 150
         assert result["prev_cost"] == 100
         assert result["cost_trend"] == 50.0
@@ -223,10 +225,10 @@ class TestAnalyticsService:
         )
         db_session.add(server)
         await db_session.commit()
-        
+
         service = AnalyticsService(db_session)
         result = await service.get_global_usage(days=7)
-        
+
         assert result["period_days"] == 7
         assert result["active_users"] >= 1
         assert len(result["server_creation_by_day"]) >= 1
@@ -254,7 +256,7 @@ class TestAnalyticsService:
         )
         db_session.add(server)
         await db_session.flush()
-        
+
         tx = CreditTransaction(
             id=uuid_mod.uuid4(),
             user_id=test_user.id,
@@ -266,10 +268,10 @@ class TestAnalyticsService:
         )
         db_session.add(tx)
         await db_session.commit()
-        
+
         service = AnalyticsService(db_session)
         result = await service.get_top_consumers(days=7, limit=10)
-        
+
         assert len(result) >= 1
         assert result[0]["user_id"] == str(test_user.id)
         assert result[0]["username"] == test_user.username
@@ -288,7 +290,7 @@ class TestAnalyticsService:
             created_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1),
         )
         db_session.add(tx1)
-        
+
         # Granted transaction
         tx2 = CreditTransaction(
             id=uuid_mod.uuid4(),
@@ -300,10 +302,10 @@ class TestAnalyticsService:
         )
         db_session.add(tx2)
         await db_session.commit()
-        
+
         service = AnalyticsService(db_session)
         result = await service.get_credit_flow(days=7)
-        
+
         assert len(result) >= 1
         day_data = result[-1]
         assert "date" in day_data
@@ -317,7 +319,7 @@ class TestAnalyticsService:
         """get_user_growth should return daily new signups."""
         service = AnalyticsService(db_session)
         result = await service.get_user_growth(days=7)
-        
+
         # test_user was created recently so should appear
         assert len(result) >= 1
         day_data = result[-1]
@@ -338,7 +340,7 @@ class TestAnalyticsService:
         )
         db_session.add(server)
         await db_session.flush()
-        
+
         metric = ServerMetric(
             id=uuid_mod.uuid4(),
             server_id=server.id,
@@ -353,10 +355,10 @@ class TestAnalyticsService:
         )
         db_session.add(metric)
         await db_session.commit()
-        
+
         service = AnalyticsService(db_session)
         result = await service.get_platform_metrics(days=7)
-        
+
         assert len(result) >= 1
         day_data = result[-1]
         assert "date" in day_data
@@ -382,10 +384,10 @@ class TestAnalyticsService:
         )
         db_session.add(volume)
         await db_session.commit()
-        
+
         service = AnalyticsService(db_session)
         result = await service.get_volume_analytics()
-        
+
         assert result["total_volumes"] == 1
         assert result["total_storage_used_gb"] == 1.0
         assert result["total_storage_capacity_gb"] == 2.0
@@ -404,7 +406,7 @@ class TestAnalyticsService:
         )
         db_session.add(workspace)
         await db_session.flush()
-        
+
         member = WorkspaceMember(
             workspace_id=workspace.id,
             user_id=admin_user.id,
@@ -412,17 +414,16 @@ class TestAnalyticsService:
         )
         db_session.add(member)
         await db_session.commit()
-        
+
         service = AnalyticsService(db_session)
         result = await service.get_workspace_analytics()
-        
+
         assert result["total_workspaces"] == 1
         assert result["total_members"] == 1
         assert result["avg_members_per_workspace"] == 1.0
         assert result["unique_workspace_users"] >= 1
         assert result["total_users"] >= 2
         assert result["workspace_adoption_rate"] > 0
-
 
 
 class TestDailyServerMetricRollups:
@@ -499,7 +500,6 @@ class TestDailyServerMetricRollups:
         assert len(day_result) >= 1
 
 
-
 class TestRetentionService:
     """Tests for RetentionService."""
 
@@ -527,4 +527,3 @@ class TestRetentionService:
         service = RetentionService(db_session)
         with pytest.raises(ValueError):
             await service.set_policy({"metrics_retention_days": 3})  # Below minimum
-

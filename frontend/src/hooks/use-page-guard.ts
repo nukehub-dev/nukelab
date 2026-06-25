@@ -1,12 +1,12 @@
-import { useEffect } from 'react';
-import { useNavigate } from '@tanstack/react-router';
-import { useAuthStore } from '../stores/auth-store';
+import { useEffect } from 'react'
+import { useNavigate } from '@tanstack/react-router'
+import { useAuthStore } from '../stores/auth-store'
 
 interface PageGuardOptions {
-  permission?: string;
-  permissions?: string[];
-  requireAll?: boolean;
-  redirectTo?: string;
+  permission?: string
+  permissions?: string[]
+  requireAll?: boolean
+  redirectTo?: string
 }
 
 /**
@@ -21,26 +21,26 @@ interface PageGuardOptions {
  * }
  */
 export function usePageGuard(options: PageGuardOptions): boolean {
-  const navigate = useNavigate();
-  const { permission, permissions, requireAll = false, redirectTo = '/' } = options;
+  const navigate = useNavigate()
+  const { permission, permissions, requireAll = false, redirectTo = '/' } = options
 
-  const hasPermission = useAuthStore((state) => state.hasPermission);
-  const hasAnyPermission = useAuthStore((state) => state.hasAnyPermission);
-  const hasAllPermissions = useAuthStore((state) => state.hasAllPermissions);
+  const hasPermission = useAuthStore((state) => state.hasPermission)
+  const hasAnyPermission = useAuthStore((state) => state.hasAnyPermission)
+  const hasAllPermissions = useAuthStore((state) => state.hasAllPermissions)
 
-  let allowed = true;
+  let allowed = true
 
   if (permission) {
-    allowed = hasPermission(permission);
+    allowed = hasPermission(permission)
   } else if (permissions && permissions.length > 0) {
-    allowed = requireAll ? hasAllPermissions(permissions) : hasAnyPermission(permissions);
+    allowed = requireAll ? hasAllPermissions(permissions) : hasAnyPermission(permissions)
   }
 
   useEffect(() => {
     if (!allowed) {
-      navigate({ to: redirectTo });
+      navigate({ to: redirectTo })
     }
-  }, [allowed, navigate, redirectTo]);
+  }, [allowed, navigate, redirectTo])
 
-  return allowed;
+  return allowed
 }

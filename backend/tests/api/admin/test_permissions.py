@@ -45,9 +45,7 @@ class TestPermissionMatrixUpdates:
         new_perms = ["users:read", "servers:read_all"]
 
         resp = await client.put(
-            "/api/admin/permissions/moderator",
-            headers=headers,
-            json={"permissions": new_perms}
+            "/api/admin/permissions/moderator", headers=headers, json={"permissions": new_perms}
         )
         assert resp.status_code == 200
 
@@ -61,8 +59,6 @@ class TestPermissionMatrixUpdates:
         headers = {"Authorization": f"Bearer {admin_token}"}
 
         resp = await client.put(
-            "/api/admin/permissions/super_admin",
-            headers=headers,
-            json={"permissions": []}
+            "/api/admin/permissions/super_admin", headers=headers, json={"permissions": []}
         )
         assert resp.status_code == 403

@@ -15,6 +15,7 @@ class TestRequestSizeLimitMiddleware:
         async def app(scope, receive, send):
             await send({"type": "http.response.start", "status": 200, "headers": []})
             await send({"type": "http.response.body", "body": b"OK"})
+
         return app
 
     @pytest.mark.asyncio
@@ -172,6 +173,7 @@ class TestRequestSizeLimitMiddleware:
     async def test_chunked_transfer_raises_when_limit_exceeded(self):
         """When no Content-Length is present, the wrapped receive raises
         RequestBodyTooLarge once the cumulative body exceeds the limit."""
+
         async def body_reading_app(scope, receive, send):
             # Read both chunks — the second one should trigger the exception
             await receive()

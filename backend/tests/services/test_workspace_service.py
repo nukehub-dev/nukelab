@@ -22,9 +22,7 @@ class TestWorkspaceServiceCreate:
         """Should create workspace and add owner as admin."""
         service = WorkspaceService(db_session)
         ws = await service.create_workspace(
-            name="Test Workspace",
-            description="A test workspace",
-            owner_id=str(test_user.id)
+            name="Test Workspace", description="A test workspace", owner_id=str(test_user.id)
         )
         assert ws.name == "Test Workspace"
         assert ws.owner_id == test_user.id
@@ -34,9 +32,7 @@ class TestWorkspaceServiceCreate:
         """Owner should be added as admin member."""
         service = WorkspaceService(db_session)
         ws = await service.create_workspace(
-            name="Test Workspace",
-            description="A test workspace",
-            owner_id=str(test_user.id)
+            name="Test Workspace", description="A test workspace", owner_id=str(test_user.id)
         )
 
         members = await db_session.execute(
@@ -83,9 +79,7 @@ class TestWorkspaceServiceUpdate:
 
         service = WorkspaceService(db_session)
         updated = await service.update_workspace(
-            str(ws.id),
-            name="New",
-            description="Updated description"
+            str(ws.id), name="New", description="Updated description"
         )
         assert updated.name == "New"
         assert updated.description == "Updated description"
@@ -115,7 +109,9 @@ class TestWorkspaceServiceDelete:
         service = WorkspaceService(db_session)
         await service.delete_workspace(str(ws.id))
 
-        result = await db_session.execute(select(SharedWorkspace).where(SharedWorkspace.id == ws.id))
+        result = await db_session.execute(
+            select(SharedWorkspace).where(SharedWorkspace.id == ws.id)
+        )
         assert result.scalar_one_or_none() is None
 
     @pytest.mark.asyncio
@@ -172,7 +168,9 @@ class TestWorkspaceServiceMembers:
 
         result = await db_session.execute(
             select(WorkspaceMember).where(
-                and_(WorkspaceMember.workspace_id == ws.id, WorkspaceMember.user_id == admin_user.id)
+                and_(
+                    WorkspaceMember.workspace_id == ws.id, WorkspaceMember.user_id == admin_user.id
+                )
             )
         )
         assert result.scalar_one_or_none() is None
@@ -281,7 +279,9 @@ class TestWorkspaceServiceInvitations:
 
         member = await db_session.execute(
             select(WorkspaceMember).where(
-                and_(WorkspaceMember.workspace_id == ws.id, WorkspaceMember.user_id == admin_user.id)
+                and_(
+                    WorkspaceMember.workspace_id == ws.id, WorkspaceMember.user_id == admin_user.id
+                )
             )
         )
         assert member.scalar_one_or_none() is not None
@@ -306,7 +306,9 @@ class TestWorkspaceServiceInvitations:
         service = WorkspaceService(db_session)
         await service.reject_invitation(str(inv.id), str(admin_user.id))
 
-        refreshed = await db_session.execute(select(WorkspaceInvitation).where(WorkspaceInvitation.id == inv.id))
+        refreshed = await db_session.execute(
+            select(WorkspaceInvitation).where(WorkspaceInvitation.id == inv.id)
+        )
         inv_refreshed = refreshed.scalar_one()
         assert inv_refreshed.status == "rejected"
 
@@ -331,7 +333,9 @@ class TestWorkspaceServiceInvitations:
         result = await service.cancel_invitation(str(inv.id), str(test_user.id))
         assert result is True
 
-        refreshed = await db_session.execute(select(WorkspaceInvitation).where(WorkspaceInvitation.id == inv.id))
+        refreshed = await db_session.execute(
+            select(WorkspaceInvitation).where(WorkspaceInvitation.id == inv.id)
+        )
         assert refreshed.scalar_one_or_none() is None
 
 
@@ -345,12 +349,16 @@ class TestWorkspaceServiceVolumes:
         db_session.add(ws)
         await db_session.flush()
 
-        vol = Volume(name="test-vol", display_name="Test Vol", owner_id=test_user.id, max_size_bytes=1024**3)
+        vol = Volume(
+            name="test-vol", display_name="Test Vol", owner_id=test_user.id, max_size_bytes=1024**3
+        )
         db_session.add(vol)
         await db_session.commit()
 
         service = WorkspaceService(db_session)
-        ws_vol = await service.add_volume(str(ws.id), str(vol.id), role="rw", added_by=str(test_user.id))
+        ws_vol = await service.add_volume(
+            str(ws.id), str(vol.id), role="rw", added_by=str(test_user.id)
+        )
         assert ws_vol.workspace_id == ws.id
         assert ws_vol.volume_id == vol.id
         assert ws_vol.role == "rw"
@@ -362,11 +370,15 @@ class TestWorkspaceServiceVolumes:
         db_session.add(ws)
         await db_session.flush()
 
-        vol = Volume(name="test-vol", display_name="Test Vol", owner_id=test_user.id, max_size_bytes=1024**3)
+        vol = Volume(
+            name="test-vol", display_name="Test Vol", owner_id=test_user.id, max_size_bytes=1024**3
+        )
         db_session.add(vol)
         await db_session.flush()
 
-        ws_vol = WorkspaceVolume(workspace_id=ws.id, volume_id=vol.id, added_by=test_user.id, role="rw")
+        ws_vol = WorkspaceVolume(
+            workspace_id=ws.id, volume_id=vol.id, added_by=test_user.id, role="rw"
+        )
         db_session.add(ws_vol)
         await db_session.commit()
 
@@ -387,11 +399,15 @@ class TestWorkspaceServiceVolumes:
         db_session.add(ws)
         await db_session.flush()
 
-        vol = Volume(name="test-vol", display_name="Test Vol", owner_id=test_user.id, max_size_bytes=1024**3)
+        vol = Volume(
+            name="test-vol", display_name="Test Vol", owner_id=test_user.id, max_size_bytes=1024**3
+        )
         db_session.add(vol)
         await db_session.flush()
 
-        ws_vol = WorkspaceVolume(workspace_id=ws.id, volume_id=vol.id, added_by=test_user.id, role="rw")
+        ws_vol = WorkspaceVolume(
+            workspace_id=ws.id, volume_id=vol.id, added_by=test_user.id, role="rw"
+        )
         db_session.add(ws_vol)
         await db_session.commit()
 
@@ -416,7 +432,9 @@ class TestWorkspaceServiceTransferOwnership:
         await db_session.commit()
 
         service = WorkspaceService(db_session)
-        updated = await service.transfer_ownership(str(ws.id), str(test_user.id), str(admin_user.id))
+        updated = await service.transfer_ownership(
+            str(ws.id), str(test_user.id), str(admin_user.id)
+        )
         assert updated.owner_id == admin_user.id
 
     @pytest.mark.asyncio
@@ -451,7 +469,9 @@ class TestWorkspaceServiceLeave:
 
         result = await db_session.execute(
             select(WorkspaceMember).where(
-                and_(WorkspaceMember.workspace_id == ws.id, WorkspaceMember.user_id == admin_user.id)
+                and_(
+                    WorkspaceMember.workspace_id == ws.id, WorkspaceMember.user_id == admin_user.id
+                )
             )
         )
         assert result.scalar_one_or_none() is None

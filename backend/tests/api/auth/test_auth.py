@@ -11,10 +11,9 @@ class TestRefreshToken:
     async def test_login_returns_refresh_token(self, client, test_user):
         """Login should return both access_token and refresh_token."""
         response = await client.post(
-            "/api/auth/login",
-            data={"username": "testuser", "password": "testpass123"}
+            "/api/auth/login", data={"username": "testuser", "password": "testpass123"}
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "access_token" in data
@@ -27,18 +26,14 @@ class TestRefreshToken:
         """Refresh endpoint should exchange refresh token for new pair."""
         # Login to get tokens
         login_resp = await client.post(
-            "/api/auth/login",
-            data={"username": "testuser", "password": "testpass123"}
+            "/api/auth/login", data={"username": "testuser", "password": "testpass123"}
         )
         login_data = login_resp.json()
         refresh_token = login_data["refresh_token"]
-        
+
         # Exchange refresh token
-        response = await client.post(
-            "/api/auth/refresh",
-            json={"refresh_token": refresh_token}
-        )
-        
+        response = await client.post("/api/auth/refresh", json={"refresh_token": refresh_token})
+
         assert response.status_code == 200
         data = response.json()
         assert "access_token" in data
@@ -52,20 +47,16 @@ class TestRefreshToken:
         """Old refresh token should be revoked after rotation."""
         # Login to get tokens
         login_resp = await client.post(
-            "/api/auth/login",
-            data={"username": "testuser", "password": "testpass123"}
+            "/api/auth/login", data={"username": "testuser", "password": "testpass123"}
         )
         old_refresh = login_resp.json()["refresh_token"]
-        
+
         # Exchange once
         await client.post("/api/auth/refresh", json={"refresh_token": old_refresh})
-        
+
         # Try to reuse old refresh token
-        response = await client.post(
-            "/api/auth/refresh",
-            json={"refresh_token": old_refresh}
-        )
-        
+        response = await client.post("/api/auth/refresh", json={"refresh_token": old_refresh})
+
         assert response.status_code == 401
         assert "Invalid or expired" in response.json()["detail"]
 
@@ -73,10 +64,9 @@ class TestRefreshToken:
     async def test_refresh_with_invalid_token(self, client):
         """Invalid refresh token should be rejected."""
         response = await client.post(
-            "/api/auth/refresh",
-            json={"refresh_token": "invalid-token-123"}
+            "/api/auth/refresh", json={"refresh_token": "invalid-token-123"}
         )
-        
+
         assert response.status_code == 401
         assert "Invalid or expired" in response.json()["detail"]
 
@@ -86,7 +76,7 @@ class TestRefreshToken:
         from app.models.refresh_token import RefreshToken
         from app.api.auth import pwd_context
         import secrets
-        
+
         # Create an expired refresh token directly
         plaintext = secrets.token_urlsafe(32)
         token_hash = pwd_context.hash(plaintext)
@@ -97,12 +87,9 @@ class TestRefreshToken:
         )
         db_session.add(expired_rt)
         await db_session.commit()
-        
-        response = await client.post(
-            "/api/auth/refresh",
-            json={"refresh_token": plaintext}
-        )
-        
+
+        response = await client.post("/api/auth/refresh", json={"refresh_token": plaintext})
+
         assert response.status_code == 401
         assert "Invalid or expired" in response.json()["detail"]
 
@@ -111,31 +98,24 @@ class TestRefreshToken:
         """Logout should revoke the refresh token."""
         # Login to get tokens
         login_resp = await client.post(
-            "/api/auth/login",
-            data={"username": "testuser", "password": "testpass123"}
+            "/api/auth/login", data={"username": "testuser", "password": "testpass123"}
         )
         refresh_token = login_resp.json()["refresh_token"]
-        
+
         # Logout
-        logout_resp = await client.post(
-            "/api/auth/logout",
-            json={"refresh_token": refresh_token}
-        )
+        logout_resp = await client.post("/api/auth/logout", json={"refresh_token": refresh_token})
         assert logout_resp.status_code == 200
-        
+
         # Try to refresh with revoked token
-        response = await client.post(
-            "/api/auth/refresh",
-            json={"refresh_token": refresh_token}
-        )
-        
+        response = await client.post("/api/auth/refresh", json={"refresh_token": refresh_token})
+
         assert response.status_code == 401
 
     @pytest.mark.asyncio
     async def test_logout_without_refresh_token(self, client):
         """Logout without refresh token should still succeed."""
         response = await client.post("/api/auth/logout")
-        
+
         assert response.status_code == 200
         assert "Logged out" in response.json()["message"]
 
@@ -144,24 +124,19 @@ class TestRefreshToken:
         """New access token from refresh should authenticate requests."""
         # Login
         login_resp = await client.post(
-            "/api/auth/login",
-            data={"username": "testuser", "password": "testpass123"}
+            "/api/auth/login", data={"username": "testuser", "password": "testpass123"}
         )
         refresh_token = login_resp.json()["refresh_token"]
-        
+
         # Refresh
-        refresh_resp = await client.post(
-            "/api/auth/refresh",
-            json={"refresh_token": refresh_token}
-        )
+        refresh_resp = await client.post("/api/auth/refresh", json={"refresh_token": refresh_token})
         new_access = refresh_resp.json()["access_token"]
-        
+
         # Use new access token
         me_resp = await client.get(
-            "/api/auth/me",
-            headers={"Authorization": f"Bearer {new_access}"}
+            "/api/auth/me", headers={"Authorization": f"Bearer {new_access}"}
         )
-        
+
         assert me_resp.status_code == 200
         assert me_resp.json()["username"] == "testuser"
 
@@ -173,10 +148,9 @@ class TestLogin:
     async def test_login_with_valid_credentials(self, client, test_user):
         """User should login with valid credentials."""
         response = await client.post(
-            "/api/auth/login",
-            data={"username": "testuser", "password": "testpass123"}
+            "/api/auth/login", data={"username": "testuser", "password": "testpass123"}
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "access_token" in data
@@ -187,20 +161,18 @@ class TestLogin:
     async def test_login_with_invalid_credentials(self, client, test_user):
         """Login should fail with wrong password."""
         response = await client.post(
-            "/api/auth/login",
-            data={"username": "testuser", "password": "wrongpassword"}
+            "/api/auth/login", data={"username": "testuser", "password": "wrongpassword"}
         )
-        
+
         assert response.status_code == 401
 
     @pytest.mark.asyncio
     async def test_login_with_nonexistent_user(self, client):
         """Login should fail with non-existent user."""
         response = await client.post(
-            "/api/auth/login",
-            data={"username": "nonexistent", "password": "password"}
+            "/api/auth/login", data={"username": "nonexistent", "password": "password"}
         )
-        
+
         assert response.status_code == 401
 
 
@@ -211,10 +183,9 @@ class TestCurrentUser:
     async def test_get_current_user(self, client, user_token, test_user):
         """User should get their profile."""
         response = await client.get(
-            "/api/auth/me",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/auth/me", headers={"Authorization": f"Bearer {user_token}"}
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["username"] == "testuser"
@@ -223,7 +194,7 @@ class TestCurrentUser:
     async def test_get_current_user_unauthenticated(self, client):
         """Unauthenticated request should be rejected."""
         response = await client.get("/api/auth/me")
-        
+
         assert response.status_code == 401
 
 
@@ -235,10 +206,9 @@ class TestRateLimiting:
         """Login should be rate limited after multiple attempts."""
         # First try should work or fail with auth error (not ratelimit)
         response = await client.post(
-            "/api/auth/login",
-            data={"username": "testuser", "password": "wrongpassword"}
+            "/api/auth/login", data={"username": "testuser", "password": "wrongpassword"}
         )
-        
+
         # Either succeeds (if not rate limited) or fails with 401 (wrong password)
         # We're testing that the endpoint works, rate limiting is per-IP
         assert response.status_code in [200, 401, 429]
@@ -251,18 +221,16 @@ class TestVerification:
     async def test_verify_valid_token(self, client, user_token):
         """Verify endpoint should work with valid token."""
         response = await client.get(
-            "/api/auth/verify",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/auth/verify", headers={"Authorization": f"Bearer {user_token}"}
         )
-        
+
         assert response.status_code in [200, 401]
 
     @pytest.mark.asyncio
     async def test_verify_invalid_token(self, client):
         """Verify endpoint should reject invalid token."""
         response = await client.get(
-            "/api/auth/verify",
-            headers={"Authorization": "Bearer invalidtoken123"}
+            "/api/auth/verify", headers={"Authorization": "Bearer invalidtoken123"}
         )
-        
+
         assert response.status_code == 401

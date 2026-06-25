@@ -1,11 +1,11 @@
-import { Link, useRouter } from '@tanstack/react-router';
-import { ArrowLeft, Home } from 'lucide-react';
-import { Button } from '../ui/button';
-import { ReactorCore404 } from '../illustrations/reactor-core-404';
-import { cn } from '../../lib/utils';
+import { Link, useRouter } from '@tanstack/react-router'
+import { ArrowLeft, Home } from 'lucide-react'
+import { Button } from '../ui/button'
+import { ReactorCore404 } from '../illustrations/reactor-core-404'
+import { cn } from '../../lib/utils'
 
 export function NotFound({ className }: { className?: string }) {
-  const router = useRouter();
+  const router = useRouter()
 
   return (
     <div
@@ -38,8 +38,8 @@ export function NotFound({ className }: { className?: string }) {
           Lost in the reactor
         </h2>
         <p className="mt-2 max-w-md text-sm text-muted-foreground sm:text-base">
-          The magnetic containment field couldn't locate this page. It may have
-          drifted into an unstable orbit.
+          The magnetic containment field couldn't locate this page. It may have drifted into an
+          unstable orbit.
         </p>
 
         {/* Actions */}
@@ -58,5 +58,5 @@ export function NotFound({ className }: { className?: string }) {
         </div>
       </div>
     </div>
-  );
+  )
 }

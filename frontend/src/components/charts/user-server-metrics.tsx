@@ -1,29 +1,27 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { motion } from 'framer-motion';
-import { Cpu, HardDrive, Network, Server, Activity } from 'lucide-react';
-import { useSharedWebSocket } from '../../hooks/use-shared-websocket';
-import { GaugeChart } from './gauge-chart';
-import { formatBytes } from '../../lib/utils';
-import { springs } from '../../lib/animations';
-import type { Server as ServerType } from '../../types/api';
-
-
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { motion } from 'framer-motion'
+import { Cpu, HardDrive, Network, Server, Activity } from 'lucide-react'
+import { useSharedWebSocket } from '../../hooks/use-shared-websocket'
+import { GaugeChart } from './gauge-chart'
+import { formatBytes } from '../../lib/utils'
+import { springs } from '../../lib/animations'
+import type { Server as ServerType } from '../../types/api'
 
 interface ServerMetricData {
-  cpu_percent: number;
-  memory_percent: number;
-  memory_used: number;
-  memory_total: number;
-  network_rx: number;
-  network_tx: number;
-  disk_read: number;
-  disk_write: number;
-  timestamp: number;
+  cpu_percent: number
+  memory_percent: number
+  memory_used: number
+  memory_total: number
+  network_rx: number
+  network_tx: number
+  disk_read: number
+  disk_write: number
+  timestamp: number
 }
 
 interface ServerMetricCardProps {
-  server: ServerType;
-  metric: ServerMetricData;
+  server: ServerType
+  metric: ServerMetricData
 }
 
 function ServerMetricCard({ server, metric }: ServerMetricCardProps) {
@@ -41,9 +39,7 @@ function ServerMetricCard({ server, metric }: ServerMetricCardProps) {
           </div>
           <div>
             <h3 className="font-medium text-sm">{server.name}</h3>
-            <p className="text-xs text-muted-foreground">
-              {server.external_url || 'No URL'}
-            </p>
+            <p className="text-xs text-muted-foreground">{server.external_url || 'No URL'}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -65,7 +61,13 @@ function ServerMetricCard({ server, metric }: ServerMetricCardProps) {
             </div>
             <span className="text-sm font-bold">{metric.cpu_percent.toFixed(1)}%</span>
           </div>
-          <GaugeChart value={metric.cpu_percent} max={100} size={60} strokeWidth={5} showValue={false} />
+          <GaugeChart
+            value={metric.cpu_percent}
+            max={100}
+            size={60}
+            strokeWidth={5}
+            showValue={false}
+          />
         </div>
 
         {/* Memory */}
@@ -77,7 +79,13 @@ function ServerMetricCard({ server, metric }: ServerMetricCardProps) {
             </div>
             <span className="text-sm font-bold">{metric.memory_percent.toFixed(1)}%</span>
           </div>
-          <GaugeChart value={metric.memory_percent} max={100} size={60} strokeWidth={5} showValue={false} />
+          <GaugeChart
+            value={metric.memory_percent}
+            max={100}
+            size={60}
+            strokeWidth={5}
+            showValue={false}
+          />
           <p className="text-[10px] text-muted-foreground text-center">
             {formatBytes(metric.memory_used)} / {formatBytes(metric.memory_total)}
           </p>
@@ -124,76 +132,76 @@ function ServerMetricCard({ server, metric }: ServerMetricCardProps) {
         </div>
       </div>
     </motion.div>
-  );
+  )
 }
 
 interface UserServerMetricsProps {
-  servers: ServerType[];
+  servers: ServerType[]
 }
 
 export function UserServerMetrics({ servers }: UserServerMetricsProps) {
-  const runningServers = useMemo(() =>
-    servers.filter((s) => s.status === 'running' && s.container_id),
+  const runningServers = useMemo(
+    () => servers.filter((s) => s.status === 'running' && s.container_id),
     [servers]
-  );
+  )
 
-  const { isConnected, subscribe, unsubscribe, onMessage } = useSharedWebSocket();
-  const subscribedRef = useRef<Set<string>>(new Set());
+  const { isConnected, subscribe, unsubscribe, onMessage } = useSharedWebSocket()
+  const subscribedRef = useRef<Set<string>>(new Set())
 
-  const [serverMetrics, setServerMetrics] = useState<Record<string, ServerMetricData>>({});
+  const [serverMetrics, setServerMetrics] = useState<Record<string, ServerMetricData>>({})
 
   // Subscribe to each running server
   useEffect(() => {
-    if (!isConnected) return;
+    if (!isConnected) return
 
     runningServers.forEach((server) => {
       if (!subscribedRef.current.has(server.id)) {
-        subscribe('server', server.id);
-        subscribedRef.current.add(server.id);
+        subscribe('server', server.id)
+        subscribedRef.current.add(server.id)
       }
-    });
+    })
 
     // Unsubscribe from stopped servers
-    const currentIds = new Set(runningServers.map((s) => s.id));
+    const currentIds = new Set(runningServers.map((s) => s.id))
     subscribedRef.current.forEach((id) => {
       if (!currentIds.has(id)) {
-        unsubscribe('server', id);
-        subscribedRef.current.delete(id);
+        unsubscribe('server', id)
+        subscribedRef.current.delete(id)
         setServerMetrics((prev) => {
-          const next = { ...prev };
-          delete next[id];
-          return next;
-        });
+          const next = { ...prev }
+          delete next[id]
+          return next
+        })
       }
-    });
+    })
 
-    const subscribedIds = Array.from(subscribedRef.current);
+    const subscribedIds = Array.from(subscribedRef.current)
 
     return () => {
       subscribedIds.forEach((id) => {
-        unsubscribe('server', id);
-      });
-    };
-  }, [isConnected, runningServers, subscribe, unsubscribe]);
+        unsubscribe('server', id)
+      })
+    }
+  }, [isConnected, runningServers, subscribe, unsubscribe])
 
   // Handle incoming metrics
   useEffect(() => {
     const unsubscribeHandler = onMessage((message) => {
       if (message.event === 'metrics:server' || message.event === 'metrics:all') {
         const raw = message.data as Partial<{
-          server_id: string;
-          cpu_percent?: number;
-          memory_percent?: number;
-          memory_used?: number;
-          memory_total?: number;
-          network_rx_bytes?: number;
-          network_tx_bytes?: number;
-          disk_read_bytes?: number;
-          disk_write_bytes?: number;
-        }>;
+          server_id: string
+          cpu_percent?: number
+          memory_percent?: number
+          memory_used?: number
+          memory_total?: number
+          network_rx_bytes?: number
+          network_tx_bytes?: number
+          disk_read_bytes?: number
+          disk_write_bytes?: number
+        }>
 
-              const serverId = raw.server_id;
-        if (!serverId) return;
+        const serverId = raw.server_id
+        if (!serverId) return
 
         setServerMetrics((prev) => ({
           ...prev,
@@ -208,12 +216,12 @@ export function UserServerMetrics({ servers }: UserServerMetricsProps) {
             disk_write: Number(raw.disk_write_bytes) || 0,
             timestamp: Date.now(),
           },
-        }));
+        }))
       }
-    });
+    })
 
-    return unsubscribeHandler;
-  }, [onMessage]);
+    return unsubscribeHandler
+  }, [onMessage])
 
   if (runningServers.length === 0) {
     return (
@@ -229,13 +237,14 @@ export function UserServerMetrics({ servers }: UserServerMetricsProps) {
           You don&apos;t have any running servers. Deploy a server to see live metrics.
         </p>
       </motion.div>
-    );
+    )
   }
 
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <div className={`w-2 h-2 rounded-full transition-colors ${isConnected ? 'bg-emerald-400 live-pulse' : 'bg-muted-foreground'}`}
+        <div
+          className={`w-2 h-2 rounded-full transition-colors ${isConnected ? 'bg-emerald-400 live-pulse' : 'bg-muted-foreground'}`}
         />
         <span className="text-xs text-muted-foreground">
           {isConnected ? 'Live metrics' : 'Connecting...'}
@@ -247,20 +256,22 @@ export function UserServerMetrics({ servers }: UserServerMetricsProps) {
           <ServerMetricCard
             key={server.id}
             server={server}
-            metric={serverMetrics[server.id] || {
-              cpu_percent: 0,
-              memory_percent: 0,
-              memory_used: 0,
-              memory_total: 0,
-              network_rx: 0,
-              network_tx: 0,
-              disk_read: 0,
-              disk_write: 0,
-              timestamp: 0,
-            }}
+            metric={
+              serverMetrics[server.id] || {
+                cpu_percent: 0,
+                memory_percent: 0,
+                memory_used: 0,
+                memory_total: 0,
+                network_rx: 0,
+                network_tx: 0,
+                disk_read: 0,
+                disk_write: 0,
+                timestamp: 0,
+              }
+            }
           />
         ))}
       </div>
     </div>
-  );
+  )
 }

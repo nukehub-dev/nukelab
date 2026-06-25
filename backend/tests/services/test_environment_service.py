@@ -79,10 +79,7 @@ class TestEnvironmentServiceCreate:
         """Should create a new environment."""
         service = EnvironmentService(db_session)
         env = await service.create_environment(
-            name="New Env",
-            slug="new-env",
-            image="new:latest",
-            description="A new environment"
+            name="New Env", slug="new-env", image="new:latest", description="A new environment"
         )
         assert env.name == "New Env"
         assert env.slug == "new-env"
@@ -137,7 +134,9 @@ class TestEnvironmentServiceDelete:
         service = EnvironmentService(db_session)
         await service.delete_environment(str(env.id))
 
-        result = await db_session.execute(select(EnvironmentTemplate).where(EnvironmentTemplate.id == env.id))
+        result = await db_session.execute(
+            select(EnvironmentTemplate).where(EnvironmentTemplate.id == env.id)
+        )
         assert result.scalar_one_or_none() is None
 
     @pytest.mark.asyncio
@@ -156,14 +155,15 @@ class TestEnvironmentServiceClone:
     async def test_clone_environment(self, db_session):
         """Should create a copy with new slug."""
         env = EnvironmentTemplate(
-            name="Original", slug="orig-env", image="img",
-            description="Desc", packages=["pkg1"]
+            name="Original", slug="orig-env", image="img", description="Desc", packages=["pkg1"]
         )
         db_session.add(env)
         await db_session.commit()
 
         service = EnvironmentService(db_session)
-        cloned = await service.clone_environment(str(env.id), new_name="Cloned", new_slug="cloned-env")
+        cloned = await service.clone_environment(
+            str(env.id), new_name="Cloned", new_slug="cloned-env"
+        )
         assert cloned.name == "Cloned"
         assert cloned.slug == "cloned-env"
         assert cloned.image == "img"

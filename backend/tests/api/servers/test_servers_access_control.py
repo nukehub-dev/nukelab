@@ -21,6 +21,7 @@ from app.models.server import Server
 # Fixtures specific to cross-user tests
 # ---------------------------------------------------------------------------
 
+
 @pytest_asyncio.fixture
 async def other_user_server(db_session, test_user):
     """Create a running server owned by test_user for cross-user access tests."""
@@ -54,7 +55,13 @@ async def admin_api_token(db_session, admin_user):
         name="Admin API Token",
         token_hash=token_hash,
         token_prefix=token_prefix,
-        scopes=["servers:read", "servers:start", "servers:stop", "servers:delete", "servers:manage"],
+        scopes=[
+            "servers:read",
+            "servers:start",
+            "servers:stop",
+            "servers:delete",
+            "servers:manage",
+        ],
         is_active=True,
     )
     db_session.add(token)
@@ -62,6 +69,7 @@ async def admin_api_token(db_session, admin_user):
     await db_session.refresh(token)
 
     from types import SimpleNamespace
+
     return SimpleNamespace(db_token=token, raw_token=raw_token)
 
 
@@ -69,11 +77,14 @@ async def admin_api_token(db_session, admin_user):
 # JWT-only enforcement for cross-user access
 # ---------------------------------------------------------------------------
 
+
 class TestCrossUserJwtOnly:
     """Cross-user server access must use JWT, not API tokens."""
 
     @pytest.mark.asyncio
-    async def test_api_token_blocked_from_viewing_other_user_server(self, client: AsyncClient, admin_api_token, other_user_server):
+    async def test_api_token_blocked_from_viewing_other_user_server(
+        self, client: AsyncClient, admin_api_token, other_user_server
+    ):
         """Admin API token should be blocked from GET /servers/{id} on another user's server."""
         response = await client.get(
             f"/api/servers/{other_user_server.id}",
@@ -83,7 +94,9 @@ class TestCrossUserJwtOnly:
         assert "requires jwt authentication" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_api_token_blocked_from_starting_other_user_server(self, client: AsyncClient, admin_api_token, other_user_server):
+    async def test_api_token_blocked_from_starting_other_user_server(
+        self, client: AsyncClient, admin_api_token, other_user_server
+    ):
         """Admin API token should be blocked from POST /servers/{id}/start on another user's server."""
         response = await client.post(
             f"/api/servers/{other_user_server.id}/start",
@@ -93,7 +106,9 @@ class TestCrossUserJwtOnly:
         assert "requires jwt authentication" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_api_token_blocked_from_stopping_other_user_server(self, client: AsyncClient, admin_api_token, other_user_server):
+    async def test_api_token_blocked_from_stopping_other_user_server(
+        self, client: AsyncClient, admin_api_token, other_user_server
+    ):
         """Admin API token should be blocked from POST /servers/{id}/stop on another user's server."""
         response = await client.post(
             f"/api/servers/{other_user_server.id}/stop",
@@ -103,7 +118,9 @@ class TestCrossUserJwtOnly:
         assert "requires jwt authentication" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_api_token_blocked_from_restarting_other_user_server(self, client: AsyncClient, admin_api_token, other_user_server):
+    async def test_api_token_blocked_from_restarting_other_user_server(
+        self, client: AsyncClient, admin_api_token, other_user_server
+    ):
         """Admin API token should be blocked from POST /servers/{id}/restart on another user's server."""
         response = await client.post(
             f"/api/servers/{other_user_server.id}/restart",
@@ -113,7 +130,9 @@ class TestCrossUserJwtOnly:
         assert "requires jwt authentication" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_api_token_blocked_from_deleting_other_user_server(self, client: AsyncClient, admin_api_token, other_user_server):
+    async def test_api_token_blocked_from_deleting_other_user_server(
+        self, client: AsyncClient, admin_api_token, other_user_server
+    ):
         """Admin API token should be blocked from DELETE /servers/{id} on another user's server."""
         response = await client.delete(
             f"/api/servers/{other_user_server.id}",
@@ -123,7 +142,9 @@ class TestCrossUserJwtOnly:
         assert "requires jwt authentication" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_api_token_blocked_from_access_token_on_other_user_server(self, client: AsyncClient, admin_api_token, other_user_server):
+    async def test_api_token_blocked_from_access_token_on_other_user_server(
+        self, client: AsyncClient, admin_api_token, other_user_server
+    ):
         """Admin API token should be blocked from POST /servers/{id}/access-token on another user's server."""
         response = await client.post(
             f"/api/servers/{other_user_server.id}/access-token",
@@ -134,7 +155,9 @@ class TestCrossUserJwtOnly:
         assert "requires jwt authentication" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_api_token_can_access_own_server(self, client: AsyncClient, api_token, other_user_server):
+    async def test_api_token_can_access_own_server(
+        self, client: AsyncClient, api_token, other_user_server
+    ):
         """API token should still work for GET on the token owner's own server."""
         response = await client.get(
             f"/api/servers/{other_user_server.id}",
@@ -145,7 +168,9 @@ class TestCrossUserJwtOnly:
         assert data["id"] == str(other_user_server.id)
 
     @pytest.mark.asyncio
-    async def test_jwt_admin_can_view_other_user_server(self, client: AsyncClient, admin_token, other_user_server):
+    async def test_jwt_admin_can_view_other_user_server(
+        self, client: AsyncClient, admin_token, other_user_server
+    ):
         """Admin JWT should be allowed to view another user's server."""
         response = await client.get(
             f"/api/servers/{other_user_server.id}",
@@ -160,11 +185,14 @@ class TestCrossUserJwtOnly:
 # Reason requirement for cross-user actions
 # ---------------------------------------------------------------------------
 
+
 class TestCrossUserReasonRequired:
     """Cross-user server actions require a reason."""
 
     @pytest.mark.asyncio
-    async def test_start_other_user_server_without_reason_fails(self, client: AsyncClient, admin_token, other_user_server):
+    async def test_start_other_user_server_without_reason_fails(
+        self, client: AsyncClient, admin_token, other_user_server
+    ):
         """Admin JWT starting another user's server without reason should 400."""
         response = await client.post(
             f"/api/servers/{other_user_server.id}/start",
@@ -174,7 +202,9 @@ class TestCrossUserReasonRequired:
         assert "reason is required" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_stop_other_user_server_without_reason_fails(self, client: AsyncClient, admin_token, other_user_server):
+    async def test_stop_other_user_server_without_reason_fails(
+        self, client: AsyncClient, admin_token, other_user_server
+    ):
         """Admin JWT stopping another user's server without reason should 400."""
         response = await client.post(
             f"/api/servers/{other_user_server.id}/stop",
@@ -184,7 +214,9 @@ class TestCrossUserReasonRequired:
         assert "reason is required" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_restart_other_user_server_without_reason_fails(self, client: AsyncClient, admin_token, other_user_server):
+    async def test_restart_other_user_server_without_reason_fails(
+        self, client: AsyncClient, admin_token, other_user_server
+    ):
         """Admin JWT restarting another user's server without reason should 400."""
         response = await client.post(
             f"/api/servers/{other_user_server.id}/restart",
@@ -194,7 +226,9 @@ class TestCrossUserReasonRequired:
         assert "reason is required" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_delete_other_user_server_without_reason_fails(self, client: AsyncClient, admin_token, other_user_server):
+    async def test_delete_other_user_server_without_reason_fails(
+        self, client: AsyncClient, admin_token, other_user_server
+    ):
         """Admin JWT deleting another user's server without reason should 400."""
         response = await client.delete(
             f"/api/servers/{other_user_server.id}",
@@ -204,7 +238,9 @@ class TestCrossUserReasonRequired:
         assert "reason is required" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_access_token_blocked_without_access_others(self, client: AsyncClient, admin_token, other_user_server):
+    async def test_access_token_blocked_without_access_others(
+        self, client: AsyncClient, admin_token, other_user_server
+    ):
         """Admin without SERVERS_ACCESS_OTHERS cannot request access-token for another user's server."""
         response = await client.post(
             f"/api/servers/{other_user_server.id}/access-token",
@@ -214,7 +250,9 @@ class TestCrossUserReasonRequired:
         assert response.status_code == 403
 
     @pytest.mark.asyncio
-    async def test_start_own_server_without_reason_succeeds(self, client: AsyncClient, user_token, test_user, db_session):
+    async def test_start_own_server_without_reason_succeeds(
+        self, client: AsyncClient, user_token, test_user, db_session
+    ):
         """User starting their OWN server should NOT require a reason."""
         server = Server(
             id=uuid.uuid4(),
@@ -233,10 +271,14 @@ class TestCrossUserReasonRequired:
                 headers={"Authorization": f"Bearer {user_token}"},
             )
         # Should NOT be blocked by reason check (may fail on other things, but not 400 for reason)
-        assert response.status_code != 400 or "reason" not in response.json().get("detail", "").lower()
+        assert (
+            response.status_code != 400 or "reason" not in response.json().get("detail", "").lower()
+        )
 
     @pytest.mark.asyncio
-    async def test_stop_own_server_without_reason_succeeds(self, client: AsyncClient, user_token, test_user, db_session):
+    async def test_stop_own_server_without_reason_succeeds(
+        self, client: AsyncClient, user_token, test_user, db_session
+    ):
         """User stopping their OWN server should NOT require a reason."""
         server = Server(
             id=uuid.uuid4(),
@@ -254,18 +296,23 @@ class TestCrossUserReasonRequired:
                 f"/api/servers/{server.id}/stop",
                 headers={"Authorization": f"Bearer {user_token}"},
             )
-        assert response.status_code != 400 or "reason" not in response.json().get("detail", "").lower()
+        assert (
+            response.status_code != 400 or "reason" not in response.json().get("detail", "").lower()
+        )
 
 
 # ---------------------------------------------------------------------------
 # SERVERS_ACCESS_OTHERS permission enforcement
 # ---------------------------------------------------------------------------
 
+
 class TestServersAccessOthersPermission:
     """Support and user roles lack SERVERS_ACCESS_OTHERS and should be blocked."""
 
     @pytest.mark.asyncio
-    async def test_support_user_can_view_other_user_server(self, client: AsyncClient, support_token, other_user_server):
+    async def test_support_user_can_view_other_user_server(
+        self, client: AsyncClient, support_token, other_user_server
+    ):
         """Support user with READ_ALL can view another user's server."""
         response = await client.get(
             f"/api/servers/{other_user_server.id}",
@@ -276,7 +323,9 @@ class TestServersAccessOthersPermission:
         assert data["id"] == str(other_user_server.id)
 
     @pytest.mark.asyncio
-    async def test_support_user_blocked_from_starting_other_user_server(self, client: AsyncClient, support_token, other_user_server):
+    async def test_support_user_blocked_from_starting_other_user_server(
+        self, client: AsyncClient, support_token, other_user_server
+    ):
         """Support user JWT should be blocked from starting another user's server."""
         response = await client.post(
             f"/api/servers/{other_user_server.id}/start",
@@ -286,7 +335,9 @@ class TestServersAccessOthersPermission:
         assert response.status_code == 403
 
     @pytest.mark.asyncio
-    async def test_moderator_can_view_other_user_server(self, client: AsyncClient, moderator_token, other_user_server):
+    async def test_moderator_can_view_other_user_server(
+        self, client: AsyncClient, moderator_token, other_user_server
+    ):
         """Moderator JWT should be allowed to view another user's server."""
         response = await client.get(
             f"/api/servers/{other_user_server.id}",
@@ -295,7 +346,9 @@ class TestServersAccessOthersPermission:
         assert response.status_code == 200
 
     @pytest.mark.asyncio
-    async def test_superadmin_can_view_other_user_server(self, client: AsyncClient, superadmin_token, other_user_server):
+    async def test_superadmin_can_view_other_user_server(
+        self, client: AsyncClient, superadmin_token, other_user_server
+    ):
         """Super admin JWT should be allowed to view another user's server."""
         response = await client.get(
             f"/api/servers/{other_user_server.id}",
@@ -308,11 +361,14 @@ class TestServersAccessOthersPermission:
 # Audit logging for cross-user access
 # ---------------------------------------------------------------------------
 
+
 class TestCrossUserAuditLogging:
     """Cross-user actions should create activity logs and notifications."""
 
     @pytest.mark.asyncio
-    async def test_stop_other_user_server_creates_audit_log(self, client: AsyncClient, admin_token, other_user_server, db_session):
+    async def test_stop_other_user_server_creates_audit_log(
+        self, client: AsyncClient, admin_token, other_user_server, db_session
+    ):
         """Stopping another user's server with reason should log an audit entry."""
         from sqlalchemy import select
         from app.models.activity_log import ActivityLog
@@ -339,7 +395,9 @@ class TestCrossUserAuditLogging:
         assert "Maintenance window" in str(log.details)
 
     @pytest.mark.asyncio
-    async def test_cross_user_access_token_blocked_without_access_others(self, client: AsyncClient, admin_token, other_user_server):
+    async def test_cross_user_access_token_blocked_without_access_others(
+        self, client: AsyncClient, admin_token, other_user_server
+    ):
         """Admin without SERVERS_ACCESS_OTHERS cannot get access token for another user's server."""
         response = await client.post(
             f"/api/servers/{other_user_server.id}/access-token",

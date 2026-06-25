@@ -14,7 +14,9 @@ class MaintenanceWindow(Base):
     start_at = Column(DateTime, nullable=False)
     end_at = Column(DateTime, nullable=False)
     is_active = Column(Boolean, default=True)
-    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_by = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     created_at = Column(DateTime, default=utc_now)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
     notify_offsets = Column(JSON, default=list)

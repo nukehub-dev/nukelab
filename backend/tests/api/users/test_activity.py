@@ -150,7 +150,9 @@ class TestUserActivityAPI:
         assert len(data["activities"]) == 1
 
     @pytest.mark.asyncio
-    async def test_does_not_show_other_users_activity(self, client, test_user, user_token, admin_user, db_session):
+    async def test_does_not_show_other_users_activity(
+        self, client, test_user, user_token, admin_user, db_session
+    ):
         """Should only return activity for the authenticated user."""
         own_log = ActivityLog(
             actor_id=test_user.id,

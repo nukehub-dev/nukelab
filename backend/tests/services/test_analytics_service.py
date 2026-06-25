@@ -160,7 +160,13 @@ class TestGetGlobalUsage:
 
     @pytest.mark.asyncio
     async def test_global_usage_with_transactions(self, db_session, analytics_service, test_user):
-        tx = CreditTransaction(user_id=test_user.id, amount=-50, balance_after=950, type="server_usage", created_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1))
+        tx = CreditTransaction(
+            user_id=test_user.id,
+            amount=-50,
+            balance_after=950,
+            type="server_usage",
+            created_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1),
+        )
         db_session.add(tx)
         await db_session.commit()
 
@@ -199,8 +205,20 @@ class TestGetCreditFlow:
 
     @pytest.mark.asyncio
     async def test_credit_flow(self, db_session, analytics_service, test_user):
-        tx1 = CreditTransaction(user_id=test_user.id, amount=-50, balance_after=950, type="server_usage", created_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1))
-        tx2 = CreditTransaction(user_id=test_user.id, amount=100, balance_after=1050, type="grant", created_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1))
+        tx1 = CreditTransaction(
+            user_id=test_user.id,
+            amount=-50,
+            balance_after=950,
+            type="server_usage",
+            created_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1),
+        )
+        tx2 = CreditTransaction(
+            user_id=test_user.id,
+            amount=100,
+            balance_after=1050,
+            type="grant",
+            created_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1),
+        )
         db_session.add_all([tx1, tx2])
         await db_session.commit()
 
@@ -240,7 +258,10 @@ class TestGetDailyLogins:
 
     @pytest.mark.asyncio
     async def test_daily_logins(self, db_session, analytics_service, test_user):
-        event = LoginEvent(user_id=test_user.id, timestamp=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1))
+        event = LoginEvent(
+            user_id=test_user.id,
+            timestamp=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1),
+        )
         db_session.add(event)
         await db_session.commit()
 
@@ -310,7 +331,15 @@ class TestGetVolumeAnalytics:
 
     @pytest.mark.asyncio
     async def test_volume_analytics(self, db_session, analytics_service, test_user):
-        vol = Volume(name="vol1", display_name="Volume 1", owner_id=test_user.id, size_bytes=1024**3, max_size_bytes=10 * 1024**3, visibility="private", status="active")
+        vol = Volume(
+            name="vol1",
+            display_name="Volume 1",
+            owner_id=test_user.id,
+            size_bytes=1024**3,
+            max_size_bytes=10 * 1024**3,
+            visibility="private",
+            status="active",
+        )
         db_session.add(vol)
         await db_session.commit()
 
@@ -387,7 +416,15 @@ class TestGetPlanUsage:
 
     @pytest.mark.asyncio
     async def test_plan_usage(self, db_session, analytics_service, test_user):
-        plan = ServerPlan(name="test-plan", slug="test-plan", cpu_limit=1.0, memory_limit="1g", disk_limit="10g", cost_per_hour=0, max_runtime="1h")
+        plan = ServerPlan(
+            name="test-plan",
+            slug="test-plan",
+            cpu_limit=1.0,
+            memory_limit="1g",
+            disk_limit="10g",
+            cost_per_hour=0,
+            max_runtime="1h",
+        )
         db_session.add(plan)
         await db_session.commit()
         await db_session.refresh(plan)

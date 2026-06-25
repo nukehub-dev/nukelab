@@ -1,18 +1,25 @@
-import { motion, AnimatePresence } from 'framer-motion';
-import { X } from 'lucide-react';
-import { modalOverlayVariants, modalContentVariants } from '../../lib/animations';
-import { cn } from '../../lib/utils';
+import { motion, AnimatePresence } from 'framer-motion'
+import { X } from 'lucide-react'
+import { modalOverlayVariants, modalContentVariants } from '../../lib/animations'
+import { cn } from '../../lib/utils'
 
 interface ModalProps {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  title?: string;
-  children: React.ReactNode;
-  className?: string;
-  showClose?: boolean;
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  title?: string
+  children: React.ReactNode
+  className?: string
+  showClose?: boolean
 }
 
-export function Modal({ open, onOpenChange, title, children, className, showClose = true }: ModalProps) {
+export function Modal({
+  open,
+  onOpenChange,
+  title,
+  children,
+  className,
+  showClose = true,
+}: ModalProps) {
   return (
     <AnimatePresence>
       {open && (
@@ -53,5 +60,5 @@ export function Modal({ open, onOpenChange, title, children, className, showClos
         </motion.div>
       )}
     </AnimatePresence>
-  );
+  )
 }

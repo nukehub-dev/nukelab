@@ -1,7 +1,18 @@
 import uuid
 from app.core.time_utils import utc_now
 from datetime import date
-from sqlalchemy import Column, String, Float, Integer, BigInteger, DateTime, Date, ForeignKey, Index, UniqueConstraint
+from sqlalchemy import (
+    Column,
+    String,
+    Float,
+    Integer,
+    BigInteger,
+    DateTime,
+    Date,
+    ForeignKey,
+    Index,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.base import Base
 
@@ -9,12 +20,14 @@ from app.db.base import Base
 class DailyServerMetric(Base):
     __tablename__ = "daily_server_metrics"
     __table_args__ = (
-        UniqueConstraint('server_id', 'date', name='uq_daily_server_metrics_server_id_date'),
-        Index('ix_daily_server_metrics_server_id_date', 'server_id', 'date'),
+        UniqueConstraint("server_id", "date", name="uq_daily_server_metrics_server_id_date"),
+        Index("ix_daily_server_metrics_server_id_date", "server_id", "date"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    server_id = Column(UUID(as_uuid=True), ForeignKey("servers.id", ondelete="CASCADE"), nullable=False)
+    server_id = Column(
+        UUID(as_uuid=True), ForeignKey("servers.id", ondelete="CASCADE"), nullable=False
+    )
     date = Column(Date, nullable=False)
 
     avg_cpu = Column(Float)

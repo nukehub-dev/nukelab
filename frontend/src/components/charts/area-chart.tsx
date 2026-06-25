@@ -1,4 +1,4 @@
-import { useMemo, useId } from 'react';
+import { useMemo, useId } from 'react'
 import {
   AreaChart,
   Area,
@@ -8,50 +8,57 @@ import {
   Tooltip,
   ResponsiveContainer,
   type TooltipProps,
-} from 'recharts';
+} from 'recharts'
 
 export interface AreaChartDataPoint {
-  timestamp: string;
-  [key: string]: string | number;
+  timestamp: string
+  [key: string]: string | number
 }
 
 export interface ChartSeries {
-  key: string;
-  name: string;
-  color: string;
+  key: string
+  name: string
+  color: string
 }
 
 export interface TooltipItem {
-  label: string;
-  value: string | number;
-  color?: string;
+  label: string
+  value: string | number
+  color?: string
 }
 
 export interface AreaChartProps {
-  data: AreaChartDataPoint[];
-  series: ChartSeries[];
-  height?: number;
-  showGrid?: boolean;
-  showTooltip?: boolean;
-  fillOpacity?: number;
-  className?: string;
-  yTickFormatter?: (value: number) => string;
-  xTickFormatter?: (value: string) => string;
-  tooltipFormatter?: (data: AreaChartDataPoint) => TooltipItem[];
+  data: AreaChartDataPoint[]
+  series: ChartSeries[]
+  height?: number
+  showGrid?: boolean
+  showTooltip?: boolean
+  fillOpacity?: number
+  className?: string
+  yTickFormatter?: (value: number) => string
+  xTickFormatter?: (value: string) => string
+  tooltipFormatter?: (data: AreaChartDataPoint) => TooltipItem[]
 }
 
 interface CustomTooltipProps extends TooltipProps<number, string> {
-  series: ChartSeries[];
-  tooltipFormatter?: (data: AreaChartDataPoint) => TooltipItem[];
-  yTickFormatter?: (value: number) => string;
+  series: ChartSeries[]
+  tooltipFormatter?: (data: AreaChartDataPoint) => TooltipItem[]
+  yTickFormatter?: (value: number) => string
 }
 
-function CustomTooltip({ active, payload, label, series, tooltipFormatter, yTickFormatter }: CustomTooltipProps) {
-  if (!active || !payload || !payload.length) return null;
+function CustomTooltip({
+  active,
+  payload,
+  label,
+  series,
+  tooltipFormatter,
+  yTickFormatter,
+}: CustomTooltipProps) {
+  if (!active || !payload || !payload.length) return null
 
   // Get the full data point for custom tooltip
-  const dataPoint = payload[0]?.payload as AreaChartDataPoint | undefined;
-  const customItems = tooltipFormatter && dataPoint ? tooltipFormatter(dataPoint) : null;
+  const dataPoint = payload[0]?.payload as AreaChartDataPoint | undefined
+  const customItems = tooltipFormatter && dataPoint ? tooltipFormatter(dataPoint) : null
 
   return (
     <div
@@ -64,7 +71,11 @@ function CustomTooltip({ active, payload, label, series, tooltipFormatter, yTick
     >
       <p className="font-medium text-muted-foreground mb-2">
         {typeof label === 'string' && label.includes('T')
-          ? new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+          ? new Date(label).toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+            })
           : label}
       </p>
       <div className="space-y-1">
@@ -79,10 +90,7 @@ function CustomTooltip({ active, payload, label, series, tooltipFormatter, yTick
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex items-center gap-2">
                     {item.color && (
-                      <div
-                        className="w-1 h-3 rounded-sm"
-                        style={{ backgroundColor: item.color }}
-                      />
+                      <div className="w-1 h-3 rounded-sm" style={{ backgroundColor: item.color }} />
                     )}
                     <span className="text-xs">{item.label}</span>
                   </div>
@@ -94,27 +102,27 @@ function CustomTooltip({ active, payload, label, series, tooltipFormatter, yTick
         ) : (
           // Default tooltip items - use yTickFormatter for value formatting
           payload.map((entry, index) => {
-            const seriesName = series.find(s => s.key === entry.dataKey)?.name || entry.dataKey;
-            const value = typeof entry.value === 'number' 
-              ? (yTickFormatter ? yTickFormatter(entry.value) : entry.value.toFixed(2))
-              : entry.value;
+            const seriesName = series.find((s) => s.key === entry.dataKey)?.name || entry.dataKey
+            const value =
+              typeof entry.value === 'number'
+                ? yTickFormatter
+                  ? yTickFormatter(entry.value)
+                  : entry.value.toFixed(2)
+                : entry.value
             return (
               <div key={index} className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-2">
-                  <div
-                    className="w-1 h-3 rounded-sm"
-                    style={{ backgroundColor: entry.color }}
-                  />
+                  <div className="w-1 h-3 rounded-sm" style={{ backgroundColor: entry.color }} />
                   <span className="text-xs">{seriesName}</span>
                 </div>
                 <span className="font-semibold text-xs">{value}</span>
               </div>
-            );
+            )
           })
         )}
       </div>
     </div>
-  );
+  )
 }
 
 export function MetricsAreaChart({
@@ -129,50 +137,43 @@ export function MetricsAreaChart({
   xTickFormatter,
   tooltipFormatter,
 }: AreaChartProps) {
-  const chartColors = useMemo(() => ({
-    grid: 'var(--border)',
-    axis: 'var(--muted-foreground)',
-  }), []);
+  const chartColors = useMemo(
+    () => ({
+      grid: 'var(--border)',
+      axis: 'var(--muted-foreground)',
+    }),
+    []
+  )
 
-  const idPrefix = useId();
+  const idPrefix = useId()
 
-  const gradientIds = useMemo(() =>
-    series.map((_, i) => `area-gradient-${idPrefix}-${i}`),
+  const gradientIds = useMemo(
+    () => series.map((_, i) => `area-gradient-${idPrefix}-${i}`),
     [series, idPrefix]
-  );
+  )
 
   // Calculate nice Y-axis ticks
-  const allValues = data.flatMap(d => series.map(s => Number(d[s.key]) || 0));
-  const maxValue = Math.max(...allValues, 1);
-  const minValue = Math.min(...allValues, 0);
-  const range = maxValue - minValue;
-  const tickCount = 5;
-  const step = range / (tickCount - 1) || 1;
-  const domainMax = maxValue + step * 0.1;
+  const allValues = data.flatMap((d) => series.map((s) => Number(d[s.key]) || 0))
+  const maxValue = Math.max(...allValues, 1)
+  const minValue = Math.min(...allValues, 0)
+  const range = maxValue - minValue
+  const tickCount = 5
+  const step = range / (tickCount - 1) || 1
+  const domainMax = maxValue + step * 0.1
 
   return (
     <div className={className} style={{ width: '100%', height }}>
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart
-          data={data}
-          margin={{ top: 10, right: 10, bottom: 10, left: 10 }}
-        >
+        <AreaChart data={data} margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
           <defs>
             {series.map((s, i) => (
-              <linearGradient
-                key={gradientIds[i]}
-                id={gradientIds[i]}
-                x1="0"
-                y1="0"
-                x2="0"
-                y2="1"
-              >
+              <linearGradient key={gradientIds[i]} id={gradientIds[i]} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor={s.color} stopOpacity={fillOpacity * 2} />
                 <stop offset="100%" stopColor={s.color} stopOpacity={0} />
               </linearGradient>
             ))}
           </defs>
-          
+
           {showGrid && (
             <CartesianGrid
               strokeDasharray="3 3"
@@ -181,7 +182,7 @@ export function MetricsAreaChart({
               vertical={false}
             />
           )}
-          
+
           <XAxis
             dataKey="timestamp"
             stroke={chartColors.axis}
@@ -191,7 +192,7 @@ export function MetricsAreaChart({
             minTickGap={40}
             tickFormatter={xTickFormatter}
           />
-          
+
           <YAxis
             stroke={chartColors.axis}
             tick={{ fill: chartColors.axis, fontSize: 11 }}
@@ -202,14 +203,20 @@ export function MetricsAreaChart({
             tickFormatter={yTickFormatter}
             tickCount={tickCount}
           />
-          
+
           {showTooltip && (
             <Tooltip
-              content={<CustomTooltip series={series} tooltipFormatter={tooltipFormatter} yTickFormatter={yTickFormatter} />}
+              content={
+                <CustomTooltip
+                  series={series}
+                  tooltipFormatter={tooltipFormatter}
+                  yTickFormatter={yTickFormatter}
+                />
+              }
               wrapperStyle={{ outline: 'none' }}
             />
           )}
-          
+
           {series.map((s, i) => (
             <Area
               key={s.key}
@@ -227,5 +234,5 @@ export function MetricsAreaChart({
         </AreaChart>
       </ResponsiveContainer>
     </div>
-  );
+  )
 }

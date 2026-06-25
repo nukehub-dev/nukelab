@@ -1,172 +1,186 @@
-import { useState, useMemo, useRef, useCallback } from 'react';
-import { useToastStore } from '../stores/toast-store';
-import { 
-  Folder, 
-  File, 
-  ArrowUp, 
-  Trash2, 
-  Download, 
-  X, 
-  HardDrive, 
-  Search, 
+import { useState, useMemo, useRef, useCallback } from 'react'
+import { useToastStore } from '../stores/toast-store'
+import {
+  Folder,
+  File,
+  ArrowUp,
+  Trash2,
+  Download,
+  X,
+  HardDrive,
+  Search,
   ChevronLeft,
   ChevronRight,
   ArrowUpDown,
   ArrowUp as ArrowUpIcon,
   ArrowDown,
-  Loader2
-} from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useVolumeFiles, useDeleteVolumeFile } from '../hooks/use-volumes';
-import { api } from '../lib/api';
-import { formatBytes } from '../lib/utils';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Tooltip } from './ui/tooltip';
-import { Modal } from './ui/modal';
-import { useConfirmDialog } from './ui/confirm-dialog';
-import { useToast } from '../stores/toast-store';
+  Loader2,
+} from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { useVolumeFiles, useDeleteVolumeFile } from '../hooks/use-volumes'
+import { api } from '../lib/api'
+import { formatBytes } from '../lib/utils'
+import { Button } from './ui/button'
+import { Input } from './ui/input'
+import { Tooltip } from './ui/tooltip'
+import { Modal } from './ui/modal'
+import { useConfirmDialog } from './ui/confirm-dialog'
+import { useToast } from '../stores/toast-store'
 
 interface FileBrowserProps {
-  open: boolean;
-  volumeId: string;
-  volumeName: string;
-  onClose: () => void;
+  open: boolean
+  volumeId: string
+  volumeName: string
+  onClose: () => void
 }
 
-const PAGE_SIZE = 100;
+const PAGE_SIZE = 100
 
 export function FileBrowser({ open, volumeId, volumeName, onClose }: FileBrowserProps) {
-  const [currentPath, setCurrentPath] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [sortBy, setSortBy] = useState<'name' | 'size' | 'modified'>('name');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
-  const [page, setPage] = useState(1);
-  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [currentPath, setCurrentPath] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [sortBy, setSortBy] = useState<'name' | 'size' | 'modified'>('name')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
+  const [page, setPage] = useState(1)
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
-  const params = useMemo(() => ({
-    path: currentPath,
-    search: debouncedSearch || undefined,
-    sort_by: sortBy,
-    sort_order: sortOrder,
-    page,
-    page_size: PAGE_SIZE,
-  }), [currentPath, debouncedSearch, sortBy, sortOrder, page]);
+  const params = useMemo(
+    () => ({
+      path: currentPath,
+      search: debouncedSearch || undefined,
+      sort_by: sortBy,
+      sort_order: sortOrder,
+      page,
+      page_size: PAGE_SIZE,
+    }),
+    [currentPath, debouncedSearch, sortBy, sortOrder, page]
+  )
 
-  const { data, isLoading, error } = useVolumeFiles(volumeId, params);
-  const deleteFile = useDeleteVolumeFile();
-  const { confirm, dialog } = useConfirmDialog();
-  const { error: toastError } = useToast();
-  const [deleting, setDeleting] = useState<string | null>(null);
-  const [scrolledItems, setScrolledItems] = useState(50); // Virtual scrolling window
+  const { data, isLoading, error } = useVolumeFiles(volumeId, params)
+  const deleteFile = useDeleteVolumeFile()
+  const { confirm, dialog } = useConfirmDialog()
+  const { error: toastError } = useToast()
+  const [deleting, setDeleting] = useState<string | null>(null)
+  const [scrolledItems, setScrolledItems] = useState(50) // Virtual scrolling window
 
   // Handle search with debounce
   const handleSearchChange = (value: string) => {
-    setSearchQuery(value);
-    setPage(1); // Reset to first page on search
-    
+    setSearchQuery(value)
+    setPage(1) // Reset to first page on search
+
     if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
+      clearTimeout(searchTimeoutRef.current)
     }
     searchTimeoutRef.current = setTimeout(() => {
-      setDebouncedSearch(value);
-    }, 300);
-  };
+      setDebouncedSearch(value)
+    }, 300)
+  }
 
   const handleNavigate = (itemName: string) => {
-    const newPath = currentPath ? `${currentPath}/${itemName}` : itemName;
-    setCurrentPath(newPath);
-    setPage(1);
-    setSearchQuery('');
-    setDebouncedSearch('');
-    setScrolledItems(50);
-  };
+    const newPath = currentPath ? `${currentPath}/${itemName}` : itemName
+    setCurrentPath(newPath)
+    setPage(1)
+    setSearchQuery('')
+    setDebouncedSearch('')
+    setScrolledItems(50)
+  }
 
   const handleGoUp = () => {
-    const parts = currentPath.split('/').filter(Boolean);
-    parts.pop();
-    setCurrentPath(parts.join('/'));
-    setPage(1);
-    setScrolledItems(50);
-  };
+    const parts = currentPath.split('/').filter(Boolean)
+    parts.pop()
+    setCurrentPath(parts.join('/'))
+    setPage(1)
+    setScrolledItems(50)
+  }
 
   const handlePathClick = (pathIndex: number) => {
-    const parts = currentPath.split('/').filter(Boolean);
-    const newPath = parts.slice(0, pathIndex + 1).join('/');
-    setCurrentPath(newPath);
-    setPage(1);
-    setScrolledItems(50);
-  };
+    const parts = currentPath.split('/').filter(Boolean)
+    const newPath = parts.slice(0, pathIndex + 1).join('/')
+    setCurrentPath(newPath)
+    setPage(1)
+    setScrolledItems(50)
+  }
 
   const handleDelete = async (itemName: string, itemType: string) => {
-    const path = currentPath ? `${currentPath}/${itemName}` : itemName;
+    const path = currentPath ? `${currentPath}/${itemName}` : itemName
     const confirmed = await confirm({
       title: `Delete ${itemType === 'directory' ? 'Folder' : 'File'}`,
       description: `Are you sure you want to delete "${itemName}"? This action cannot be undone.`,
       confirmLabel: 'Delete',
       cancelLabel: 'Cancel',
       variant: 'danger',
-    });
-    if (!confirmed) return;
+    })
+    if (!confirmed) return
 
-    setDeleting(itemName);
+    setDeleting(itemName)
     try {
-      await deleteFile.mutateAsync({ volumeId, path });
+      await deleteFile.mutateAsync({ volumeId, path })
     } catch (err) {
       const message =
-        (err as { response?: { data?: { detail?: string } }; message?: string })?.response?.data?.detail ||
+        (err as { response?: { data?: { detail?: string } }; message?: string })?.response?.data
+          ?.detail ||
         (err as Error).message ||
-        'Failed to delete';
-      toastError('Delete Failed', message);
+        'Failed to delete'
+      toastError('Delete Failed', message)
     } finally {
-      setDeleting(null);
+      setDeleting(null)
     }
-  };
+  }
 
   const handleDownload = async (itemName: string) => {
-    const path = currentPath ? `${currentPath}/${itemName}` : itemName;
+    const path = currentPath ? `${currentPath}/${itemName}` : itemName
     try {
-      await api.download(`/volumes/${volumeId}/download?path=${encodeURIComponent(path)}`, itemName);
+      await api.download(`/volumes/${volumeId}/download?path=${encodeURIComponent(path)}`, itemName)
     } catch (e) {
-      useToastStore.getState().addToast({ type: 'error', title: 'Download failed', message: e instanceof Error ? e.message : 'Unknown error', duration: 8000 });
+      useToastStore.getState().addToast({
+        type: 'error',
+        title: 'Download failed',
+        message: e instanceof Error ? e.message : 'Unknown error',
+        duration: 8000,
+      })
     }
-  };
+  }
 
   const handleSort = (column: 'name' | 'size' | 'modified') => {
     if (sortBy === column) {
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
     } else {
-      setSortBy(column);
-      setSortOrder('asc');
+      setSortBy(column)
+      setSortOrder('asc')
     }
-    setPage(1);
-  };
+    setPage(1)
+  }
 
   // Breadcrumb parts
   const breadcrumbParts = useMemo(() => {
-    if (!currentPath) return [];
-    return currentPath.split('/').filter(Boolean);
-  }, [currentPath]);
+    if (!currentPath) return []
+    return currentPath.split('/').filter(Boolean)
+  }, [currentPath])
 
   // Virtual scroll handler
-  const listRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null)
   const handleScroll = useCallback(() => {
-    if (!listRef.current) return;
-    const { scrollTop, scrollHeight, clientHeight } = listRef.current;
+    if (!listRef.current) return
+    const { scrollTop, scrollHeight, clientHeight } = listRef.current
     if (scrollTop + clientHeight >= scrollHeight - 200) {
-      setScrolledItems(prev => Math.min(prev + 50, data?.items.length || 0));
+      setScrolledItems((prev) => Math.min(prev + 50, data?.items.length || 0))
     }
-  }, [data?.items.length]);
+  }, [data?.items.length])
 
-  const visibleItems = data?.items.slice(0, scrolledItems) || [];
-  const hasMore = scrolledItems < (data?.items.length || 0);
+  const visibleItems = data?.items.slice(0, scrolledItems) || []
+  const hasMore = scrolledItems < (data?.items.length || 0)
 
-  if (!open) return null;
+  if (!open) return null
 
   return (
     <>
-      <Modal open={open} onOpenChange={onClose} showClose={false} className="max-w-4xl max-h-[85vh] flex flex-col">
+      <Modal
+        open={open}
+        onOpenChange={onClose}
+        showClose={false}
+        className="max-w-4xl max-h-[85vh] flex flex-col"
+      >
         {/* Header */}
         <div className="h-1 bg-primary" />
         <div className="p-4 border-b border-border/50 space-y-3">
@@ -186,7 +200,10 @@ export function FileBrowser({ open, volumeId, volumeName, onClose }: FileBrowser
           {/* Breadcrumb */}
           <div className="flex items-center gap-1 text-sm flex-wrap">
             <button
-              onClick={() => { setCurrentPath(''); setPage(1); }}
+              onClick={() => {
+                setCurrentPath('')
+                setPage(1)
+              }}
               className="text-muted-foreground hover:text-primary transition-colors"
             >
               root
@@ -227,39 +244,50 @@ export function FileBrowser({ open, volumeId, volumeName, onClose }: FileBrowser
 
         {/* Column Headers */}
         <div className="grid grid-cols-[1fr_100px_120px_80px] gap-2 px-4 py-2 text-xs font-medium text-muted-foreground border-b border-border/30 bg-muted/20">
-          <button 
+          <button
             onClick={() => handleSort('name')}
             className="flex items-center gap-1 hover:text-primary text-left"
           >
             Name
-            {sortBy === 'name' && (sortOrder === 'asc' ? <ArrowUpIcon className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />)}
+            {sortBy === 'name' &&
+              (sortOrder === 'asc' ? (
+                <ArrowUpIcon className="w-3 h-3" />
+              ) : (
+                <ArrowDown className="w-3 h-3" />
+              ))}
             {sortBy !== 'name' && <ArrowUpDown className="w-3 h-3 opacity-30" />}
           </button>
-          <button 
+          <button
             onClick={() => handleSort('size')}
             className="flex items-center gap-1 hover:text-primary text-right justify-end"
           >
             Size
-            {sortBy === 'size' && (sortOrder === 'asc' ? <ArrowUpIcon className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />)}
+            {sortBy === 'size' &&
+              (sortOrder === 'asc' ? (
+                <ArrowUpIcon className="w-3 h-3" />
+              ) : (
+                <ArrowDown className="w-3 h-3" />
+              ))}
             {sortBy !== 'size' && <ArrowUpDown className="w-3 h-3 opacity-30" />}
           </button>
-          <button 
+          <button
             onClick={() => handleSort('modified')}
             className="flex items-center gap-1 hover:text-primary text-right justify-end"
           >
             Modified
-            {sortBy === 'modified' && (sortOrder === 'asc' ? <ArrowUpIcon className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />)}
+            {sortBy === 'modified' &&
+              (sortOrder === 'asc' ? (
+                <ArrowUpIcon className="w-3 h-3" />
+              ) : (
+                <ArrowDown className="w-3 h-3" />
+              ))}
             {sortBy !== 'modified' && <ArrowUpDown className="w-3 h-3 opacity-30" />}
           </button>
           <span className="text-right">Actions</span>
         </div>
 
         {/* File List */}
-        <div 
-          ref={listRef}
-          onScroll={handleScroll}
-          className="flex-1 overflow-auto"
-        >
+        <div ref={listRef} onScroll={handleScroll} className="flex-1 overflow-auto">
           {isLoading ? (
             <div className="flex items-center justify-center h-32">
               <Loader2 className="w-5 h-5 animate-spin text-primary" />
@@ -270,7 +298,9 @@ export function FileBrowser({ open, volumeId, volumeName, onClose }: FileBrowser
             </div>
           ) : data?.items.length === 0 ? (
             <div className="flex items-center justify-center h-32">
-              <span className="text-sm text-muted-foreground">{searchQuery ? 'No matching files' : 'Empty directory'}</span>
+              <span className="text-sm text-muted-foreground">
+                {searchQuery ? 'No matching files' : 'Empty directory'}
+              </span>
             </div>
           ) : (
             <div className="divide-y divide-border/30">
@@ -283,8 +313,8 @@ export function FileBrowser({ open, volumeId, volumeName, onClose }: FileBrowser
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     className="grid grid-cols-[1fr_100px_120px_80px] gap-2 px-4 py-2 items-center hover:bg-muted/30 group"
-                    style={{ 
-                      backgroundColor: index % 2 === 0 ? 'transparent' : 'rgba(128,128,128,0.03)' 
+                    style={{
+                      backgroundColor: index % 2 === 0 ? 'transparent' : 'rgba(128,128,128,0.03)',
                     }}
                   >
                     {/* Name */}
@@ -307,7 +337,11 @@ export function FileBrowser({ open, volumeId, volumeName, onClose }: FileBrowser
 
                     {/* Size */}
                     <span className="text-xs text-muted-foreground text-right">
-                      {item.size !== null ? formatBytes(item.size) : <span className="italic">dir</span>}
+                      {item.size !== null ? (
+                        formatBytes(item.size)
+                      ) : (
+                        <span className="italic">dir</span>
+                      )}
                     </span>
 
                     {/* Modified */}
@@ -344,7 +378,7 @@ export function FileBrowser({ open, volumeId, volumeName, onClose }: FileBrowser
                   </motion.div>
                 ))}
               </AnimatePresence>
-              
+
               {hasMore && (
                 <div className="flex items-center justify-center py-4">
                   <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
@@ -358,15 +392,17 @@ export function FileBrowser({ open, volumeId, volumeName, onClose }: FileBrowser
         <div className="p-3 border-t border-border/50 flex items-center justify-between text-xs text-muted-foreground">
           <span>
             {data?.total || 0} items
-            {data?.total_pages && data.total_pages > 1 && ` (showing ${((data.page - 1) * PAGE_SIZE) + 1}-${Math.min(data.page * PAGE_SIZE, data.total)} of ${data.total})`}
+            {data?.total_pages &&
+              data.total_pages > 1 &&
+              ` (showing ${(data.page - 1) * PAGE_SIZE + 1}-${Math.min(data.page * PAGE_SIZE, data.total)} of ${data.total})`}
           </span>
-          
+
           {data?.total_pages && data.total_pages > 1 && (
             <div className="flex items-center gap-1">
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setPage(p => Math.max(1, p - 1))}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1}
                 className="h-7 w-7 p-0"
               >
@@ -378,7 +414,7 @@ export function FileBrowser({ open, volumeId, volumeName, onClose }: FileBrowser
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setPage(p => Math.min(data.total_pages, p + 1))}
+                onClick={() => setPage((p) => Math.min(data.total_pages, p + 1))}
                 disabled={page >= data.total_pages}
                 className="h-7 w-7 p-0"
               >
@@ -390,5 +426,5 @@ export function FileBrowser({ open, volumeId, volumeName, onClose }: FileBrowser
       </Modal>
       {dialog}
     </>
-  );
+  )
 }

@@ -42,7 +42,9 @@ class TestHealthCheckServiceAutoRestart:
 
         # No health check should be created
         result = await db_session.execute(
-            __import__('sqlalchemy', fromlist=['select']).select(HealthCheck).where(HealthCheck.server_id == server.id)
+            __import__("sqlalchemy", fromlist=["select"])
+            .select(HealthCheck)
+            .where(HealthCheck.server_id == server.id)
         )
         assert result.scalar_one_or_none() is None
 
@@ -78,7 +80,10 @@ class TestHealthCheckServiceAutoRestart:
 
         # Should not create additional restart entries
         result = await db_session.execute(
-            __import__('sqlalchemy', fromlist=['select', 'func']).select(__import__('sqlalchemy', fromlist=['func']).func.count()).select_from(HealthCheck).where(HealthCheck.server_id == server.id)
+            __import__("sqlalchemy", fromlist=["select", "func"])
+            .select(__import__("sqlalchemy", fromlist=["func"]).func.count())
+            .select_from(HealthCheck)
+            .where(HealthCheck.server_id == server.id)
         )
         assert result.scalar() == 5
 
@@ -102,7 +107,9 @@ class TestHealthCheckServiceCheckContainer:
         await service._check_container(server)
 
         result = await db_session.execute(
-            __import__('sqlalchemy', fromlist=['select']).select(HealthCheck).where(HealthCheck.server_id == server.id)
+            __import__("sqlalchemy", fromlist=["select"])
+            .select(HealthCheck)
+            .where(HealthCheck.server_id == server.id)
         )
         hc = result.scalar_one_or_none()
         assert hc is not None
@@ -133,6 +140,7 @@ class TestHealthCheckServiceCheckAll:
         service = HealthCheckService(db_session)
         await service.check_all_containers()  # Should not raise
 
+
 """Extended tests for HealthCheckService (container health checks, auto-restart)."""
 
 import pytest
@@ -158,7 +166,9 @@ class TestCheckAllContainers:
     @pytest.mark.asyncio
     async def test_running_server_without_container_id(self, db_session, test_user):
         """Running server without container_id should be skipped."""
-        server = Server(name="no-container", user_id=test_user.id, status="running", container_id=None)
+        server = Server(
+            name="no-container", user_id=test_user.id, status="running", container_id=None
+        )
         db_session.add(server)
         await db_session.commit()
 
@@ -168,7 +178,9 @@ class TestCheckAllContainers:
     @pytest.mark.asyncio
     async def test_check_container_healthy(self, db_session, test_user):
         """Healthy container should create health check record."""
-        server = Server(name="healthy-srv", user_id=test_user.id, status="running", container_id="container123")
+        server = Server(
+            name="healthy-srv", user_id=test_user.id, status="running", container_id="container123"
+        )
         db_session.add(server)
         await db_session.commit()
         await db_session.refresh(server)
@@ -180,15 +192,14 @@ class TestCheckAllContainers:
         mock_container.show.return_value = {
             "State": {
                 "Running": True,
-                "Health": {
-                    "Status": "healthy",
-                    "Log": [{"ExitCode": 0, "Output": "OK"}]
-                }
+                "Health": {"Status": "healthy", "Log": [{"ExitCode": 0, "Output": "OK"}]},
             }
         }
         mock_client.client.containers.get.return_value = mock_container
 
-        with mock.patch("app.services.health_check_service.get_fresh_container_client", return_value=mock_client):
+        with mock.patch(
+            "app.services.health_check_service.get_fresh_container_client", return_value=mock_client
+        ):
             await service._check_container(server)
 
         result = await db_session.execute(
@@ -201,7 +212,12 @@ class TestCheckAllContainers:
     @pytest.mark.asyncio
     async def test_check_container_unhealthy(self, db_session, test_user):
         """Unhealthy container should create health check with consecutive failures."""
-        server = Server(name="unhealthy-srv", user_id=test_user.id, status="running", container_id="container456")
+        server = Server(
+            name="unhealthy-srv",
+            user_id=test_user.id,
+            status="running",
+            container_id="container456",
+        )
         db_session.add(server)
         await db_session.commit()
         await db_session.refresh(server)
@@ -213,15 +229,14 @@ class TestCheckAllContainers:
         mock_container.show.return_value = {
             "State": {
                 "Running": True,
-                "Health": {
-                    "Status": "unhealthy",
-                    "Log": [{"ExitCode": 1, "Output": "FAIL"}]
-                }
+                "Health": {"Status": "unhealthy", "Log": [{"ExitCode": 1, "Output": "FAIL"}]},
             }
         }
         mock_client.client.containers.get.return_value = mock_container
 
-        with mock.patch("app.services.health_check_service.get_fresh_container_client", return_value=mock_client):
+        with mock.patch(
+            "app.services.health_check_service.get_fresh_container_client", return_value=mock_client
+        ):
             await service._check_container(server)
 
         result = await db_session.execute(
@@ -234,14 +249,19 @@ class TestCheckAllContainers:
     @pytest.mark.asyncio
     async def test_check_container_exception(self, db_session, test_user):
         """Container check exception should create unknown status record."""
-        server = Server(name="error-srv", user_id=test_user.id, status="running", container_id="container789")
+        server = Server(
+            name="error-srv", user_id=test_user.id, status="running", container_id="container789"
+        )
         db_session.add(server)
         await db_session.commit()
         await db_session.refresh(server)
 
         service = HealthCheckService(db_session)
 
-        with mock.patch("app.services.health_check_service.get_fresh_container_client", side_effect=Exception("Docker down")):
+        with mock.patch(
+            "app.services.health_check_service.get_fresh_container_client",
+            side_effect=Exception("Docker down"),
+        ):
             await service._check_container(server)
 
         result = await db_session.execute(
@@ -253,7 +273,9 @@ class TestCheckAllContainers:
     @pytest.mark.asyncio
     async def test_check_container_no_health_info(self, db_session, test_user):
         """Container without health info but running should be healthy."""
-        server = Server(name="no-health", user_id=test_user.id, status="running", container_id="container000")
+        server = Server(
+            name="no-health", user_id=test_user.id, status="running", container_id="container000"
+        )
         db_session.add(server)
         await db_session.commit()
         await db_session.refresh(server)
@@ -262,12 +284,12 @@ class TestCheckAllContainers:
 
         mock_client = mock.AsyncMock()
         mock_container = mock.AsyncMock()
-        mock_container.show.return_value = {
-            "State": {"Running": True}
-        }
+        mock_container.show.return_value = {"State": {"Running": True}}
         mock_client.client.containers.get.return_value = mock_container
 
-        with mock.patch("app.services.health_check_service.get_fresh_container_client", return_value=mock_client):
+        with mock.patch(
+            "app.services.health_check_service.get_fresh_container_client", return_value=mock_client
+        ):
             await service._check_container(server)
 
         result = await db_session.execute(
@@ -288,7 +310,9 @@ class TestAutoRestart:
         await db_session.commit()
 
         service = HealthCheckService(db_session)
-        with mock.patch("app.services.health_check_service.settings.server_auto_restart_enabled", False):
+        with mock.patch(
+            "app.services.health_check_service.settings.server_auto_restart_enabled", False
+        ):
             await service._auto_restart(server)
 
     @pytest.mark.asyncio
@@ -302,16 +326,24 @@ class TestAutoRestart:
         # Create multiple recent restarting entries
         for _ in range(5):
             hc = HealthCheck(
-                server_id=server.id, container_id="c2",
-                status="restarting", checked_at=datetime.now(UTC).replace(tzinfo=None)
+                server_id=server.id,
+                container_id="c2",
+                status="restarting",
+                checked_at=datetime.now(UTC).replace(tzinfo=None),
             )
             db_session.add(hc)
         await db_session.commit()
 
         service = HealthCheckService(db_session)
-        with mock.patch("app.services.health_check_service.settings.server_auto_restart_enabled", True):
-            with mock.patch("app.services.health_check_service.settings.server_auto_restart_max_attempts", 3):
-                with mock.patch("app.services.health_check_service.settings.server_auto_restart_window", 3600):
+        with mock.patch(
+            "app.services.health_check_service.settings.server_auto_restart_enabled", True
+        ):
+            with mock.patch(
+                "app.services.health_check_service.settings.server_auto_restart_max_attempts", 3
+            ):
+                with mock.patch(
+                    "app.services.health_check_service.settings.server_auto_restart_window", 3600
+                ):
                     await service._auto_restart(server)
 
     @pytest.mark.asyncio
@@ -323,23 +355,37 @@ class TestAutoRestart:
         await db_session.refresh(server)
 
         service = HealthCheckService(db_session)
-        with mock.patch("app.services.health_check_service.settings.server_auto_restart_enabled", True):
+        with mock.patch(
+            "app.services.health_check_service.settings.server_auto_restart_enabled", True
+        ):
             await service._auto_restart(server)
 
     @pytest.mark.asyncio
     async def test_auto_restart_success(self, db_session, test_user):
         """Successful auto-restart should log and notify."""
-        server = Server(name="restart-ok", user_id=test_user.id, status="running", container_id="c3")
+        server = Server(
+            name="restart-ok", user_id=test_user.id, status="running", container_id="c3"
+        )
         db_session.add(server)
         await db_session.commit()
         await db_session.refresh(server)
 
         service = HealthCheckService(db_session)
-        with mock.patch("app.services.health_check_service.settings.server_auto_restart_enabled", True):
-            with mock.patch("app.services.health_check_service.settings.server_auto_restart_max_attempts", 10):
-                with mock.patch("app.services.health_check_service.settings.server_auto_restart_window", 3600):
-                    with mock.patch("app.container.spawner.spawner.stop", mock.AsyncMock()) as mock_stop:
-                        with mock.patch("app.container.spawner.spawner.start", mock.AsyncMock()) as mock_start:
+        with mock.patch(
+            "app.services.health_check_service.settings.server_auto_restart_enabled", True
+        ):
+            with mock.patch(
+                "app.services.health_check_service.settings.server_auto_restart_max_attempts", 10
+            ):
+                with mock.patch(
+                    "app.services.health_check_service.settings.server_auto_restart_window", 3600
+                ):
+                    with mock.patch(
+                        "app.container.spawner.spawner.stop", mock.AsyncMock()
+                    ) as mock_stop:
+                        with mock.patch(
+                            "app.container.spawner.spawner.start", mock.AsyncMock()
+                        ) as mock_start:
                             await service._auto_restart(server)
                             mock_stop.assert_called_once_with("c3")
                             mock_start.assert_called_once_with("c3")
@@ -347,22 +393,31 @@ class TestAutoRestart:
     @pytest.mark.asyncio
     async def test_auto_restart_failure(self, db_session, test_user):
         """Failed auto-restart should log failure."""
-        server = Server(name="restart-fail", user_id=test_user.id, status="running", container_id="c4")
+        server = Server(
+            name="restart-fail", user_id=test_user.id, status="running", container_id="c4"
+        )
         db_session.add(server)
         await db_session.commit()
         await db_session.refresh(server)
 
         service = HealthCheckService(db_session)
-        with mock.patch("app.services.health_check_service.settings.server_auto_restart_enabled", True):
-            with mock.patch("app.services.health_check_service.settings.server_auto_restart_max_attempts", 10):
-                with mock.patch("app.services.health_check_service.settings.server_auto_restart_window", 3600):
-                    with mock.patch("app.container.spawner.spawner.stop", side_effect=Exception("Stop failed")):
+        with mock.patch(
+            "app.services.health_check_service.settings.server_auto_restart_enabled", True
+        ):
+            with mock.patch(
+                "app.services.health_check_service.settings.server_auto_restart_max_attempts", 10
+            ):
+                with mock.patch(
+                    "app.services.health_check_service.settings.server_auto_restart_window", 3600
+                ):
+                    with mock.patch(
+                        "app.container.spawner.spawner.stop", side_effect=Exception("Stop failed")
+                    ):
                         await service._auto_restart(server)
 
         result = await db_session.execute(
             select(HealthCheck).where(
-                HealthCheck.server_id == server.id,
-                HealthCheck.status == "restart_failed"
+                HealthCheck.server_id == server.id, HealthCheck.status == "restart_failed"
             )
         )
         hc = result.scalar_one()

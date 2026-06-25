@@ -104,10 +104,7 @@ class TestQuotaServiceUpdate:
         """update_user_quota should create quota if missing."""
         service = QuotaService(db_session)
         result = await service.update_user_quota(
-            str(test_user.id),
-            max_cpu_total=16,
-            max_memory_total="32g",
-            max_servers_total=10
+            str(test_user.id), max_cpu_total=16, max_memory_total="32g", max_servers_total=10
         )
         assert result.max_cpu_total == 16
         assert result.max_memory_total == "32g"
@@ -195,7 +192,9 @@ class TestQuotaServiceRecalculate:
     @pytest.mark.asyncio
     async def test_recalculate_usage_with_servers(self, db_session, test_user):
         """Should sum running server resources."""
-        plan = ServerPlan(name="Test", slug="test", cpu_limit=2, memory_limit="4g", disk_limit="20g")
+        plan = ServerPlan(
+            name="Test", slug="test", cpu_limit=2, memory_limit="4g", disk_limit="20g"
+        )
         db_session.add(plan)
         await db_session.flush()
 
@@ -257,7 +256,16 @@ class TestQuotaServiceCheckSpawn:
     @pytest.mark.asyncio
     async def test_check_spawn_allowed(self, db_session, test_user):
         """Should allow spawn when under limits."""
-        plan = ServerPlan(name="Test", slug="spawn-test", cpu_limit=1, memory_limit="1g", disk_limit="10g", gpu_limit=0, max_servers_per_user=5, cost_per_hour=1)
+        plan = ServerPlan(
+            name="Test",
+            slug="spawn-test",
+            cpu_limit=1,
+            memory_limit="1g",
+            disk_limit="10g",
+            gpu_limit=0,
+            max_servers_per_user=5,
+            cost_per_hour=1,
+        )
         db_session.add(plan)
         await db_session.commit()
 
@@ -277,11 +285,21 @@ class TestQuotaServiceCheckSpawn:
     @pytest.mark.asyncio
     async def test_check_spawn_server_limit_reached(self, db_session, test_user):
         """Should reject when server limit reached."""
-        plan = ServerPlan(name="Test", slug="limit-test", cpu_limit=1, memory_limit="1g", disk_limit="10g", max_servers_per_user=1, cost_per_hour=1)
+        plan = ServerPlan(
+            name="Test",
+            slug="limit-test",
+            cpu_limit=1,
+            memory_limit="1g",
+            disk_limit="10g",
+            max_servers_per_user=1,
+            cost_per_hour=1,
+        )
         db_session.add(plan)
         await db_session.flush()
 
-        server = Server(name="srv1", user_id=test_user.id, plan_id=plan.id, status="running", allocated_cpu=1)
+        server = Server(
+            name="srv1", user_id=test_user.id, plan_id=plan.id, status="running", allocated_cpu=1
+        )
         db_session.add(server)
         await db_session.commit()
 
@@ -293,11 +311,26 @@ class TestQuotaServiceCheckSpawn:
     @pytest.mark.asyncio
     async def test_check_spawn_cpu_limit(self, db_session, test_user):
         """Should reject when CPU limit exceeded."""
-        quota = ResourceQuota(user_id=test_user.id, max_cpu_total=1, max_memory_total="16g", max_disk_total="100g", max_gpu_total=0, max_servers_total=5)
+        quota = ResourceQuota(
+            user_id=test_user.id,
+            max_cpu_total=1,
+            max_memory_total="16g",
+            max_disk_total="100g",
+            max_gpu_total=0,
+            max_servers_total=5,
+        )
         db_session.add(quota)
         await db_session.flush()
 
-        plan = ServerPlan(name="Test", slug="cpu-test", cpu_limit=4, memory_limit="1g", disk_limit="10g", max_servers_per_user=5, cost_per_hour=1)
+        plan = ServerPlan(
+            name="Test",
+            slug="cpu-test",
+            cpu_limit=4,
+            memory_limit="1g",
+            disk_limit="10g",
+            max_servers_per_user=5,
+            cost_per_hour=1,
+        )
         db_session.add(plan)
         await db_session.commit()
 
@@ -309,11 +342,26 @@ class TestQuotaServiceCheckSpawn:
     @pytest.mark.asyncio
     async def test_check_spawn_memory_limit(self, db_session, test_user):
         """Should reject when memory limit exceeded."""
-        quota = ResourceQuota(user_id=test_user.id, max_cpu_total=16, max_memory_total="1g", max_disk_total="100g", max_gpu_total=0, max_servers_total=5)
+        quota = ResourceQuota(
+            user_id=test_user.id,
+            max_cpu_total=16,
+            max_memory_total="1g",
+            max_disk_total="100g",
+            max_gpu_total=0,
+            max_servers_total=5,
+        )
         db_session.add(quota)
         await db_session.flush()
 
-        plan = ServerPlan(name="Test", slug="mem-test", cpu_limit=1, memory_limit="4g", disk_limit="10g", max_servers_per_user=5, cost_per_hour=1)
+        plan = ServerPlan(
+            name="Test",
+            slug="mem-test",
+            cpu_limit=1,
+            memory_limit="4g",
+            disk_limit="10g",
+            max_servers_per_user=5,
+            cost_per_hour=1,
+        )
         db_session.add(plan)
         await db_session.commit()
 
@@ -325,11 +373,26 @@ class TestQuotaServiceCheckSpawn:
     @pytest.mark.asyncio
     async def test_check_spawn_disk_limit(self, db_session, test_user):
         """Should reject when disk limit exceeded."""
-        quota = ResourceQuota(user_id=test_user.id, max_cpu_total=16, max_memory_total="16g", max_disk_total="1g", max_gpu_total=0, max_servers_total=5)
+        quota = ResourceQuota(
+            user_id=test_user.id,
+            max_cpu_total=16,
+            max_memory_total="16g",
+            max_disk_total="1g",
+            max_gpu_total=0,
+            max_servers_total=5,
+        )
         db_session.add(quota)
         await db_session.flush()
 
-        plan = ServerPlan(name="Test", slug="disk-test", cpu_limit=1, memory_limit="1g", disk_limit="10g", max_servers_per_user=5, cost_per_hour=1)
+        plan = ServerPlan(
+            name="Test",
+            slug="disk-test",
+            cpu_limit=1,
+            memory_limit="1g",
+            disk_limit="10g",
+            max_servers_per_user=5,
+            cost_per_hour=1,
+        )
         db_session.add(plan)
         await db_session.commit()
 
@@ -341,11 +404,27 @@ class TestQuotaServiceCheckSpawn:
     @pytest.mark.asyncio
     async def test_check_spawn_gpu_limit(self, db_session, test_user):
         """Should reject when GPU limit exceeded."""
-        quota = ResourceQuota(user_id=test_user.id, max_cpu_total=16, max_memory_total="16g", max_disk_total="100g", max_gpu_total=0, max_servers_total=5)
+        quota = ResourceQuota(
+            user_id=test_user.id,
+            max_cpu_total=16,
+            max_memory_total="16g",
+            max_disk_total="100g",
+            max_gpu_total=0,
+            max_servers_total=5,
+        )
         db_session.add(quota)
         await db_session.flush()
 
-        plan = ServerPlan(name="Test", slug="gpu-test", cpu_limit=1, memory_limit="1g", disk_limit="10g", gpu_limit=1, max_servers_per_user=5, cost_per_hour=1)
+        plan = ServerPlan(
+            name="Test",
+            slug="gpu-test",
+            cpu_limit=1,
+            memory_limit="1g",
+            disk_limit="10g",
+            gpu_limit=1,
+            max_servers_per_user=5,
+            cost_per_hour=1,
+        )
         db_session.add(plan)
         await db_session.commit()
 
@@ -362,7 +441,9 @@ class TestQuotaServiceVolumeCheck:
     async def test_check_volume_allowed(self, db_session, test_user):
         """Should allow volume creation when under quota."""
         service = QuotaService(db_session)
-        result = await service.check_volume_creation_allowed(str(test_user.id), requested_size_bytes=1024 * 1024 * 1024)
+        result = await service.check_volume_creation_allowed(
+            str(test_user.id), requested_size_bytes=1024 * 1024 * 1024
+        )
         assert result["allowed"] is True
 
     @pytest.mark.asyncio
@@ -373,7 +454,9 @@ class TestQuotaServiceVolumeCheck:
         await db_session.commit()
 
         service = QuotaService(db_session)
-        result = await service.check_volume_creation_allowed(str(test_user.id), requested_size_bytes=1024 * 1024 * 1024 * 2)
+        result = await service.check_volume_creation_allowed(
+            str(test_user.id), requested_size_bytes=1024 * 1024 * 1024 * 2
+        )
         assert result["allowed"] is False
         assert "Disk quota exceeded" in result["reason"]
 
@@ -391,7 +474,14 @@ class TestQuotaServiceIncrementDecrement:
     @pytest.mark.asyncio
     async def test_increment_usage(self, db_session, test_user):
         """increment_usage should add plan resources."""
-        plan = ServerPlan(name="Test", slug="inc-test", cpu_limit=2, memory_limit="4g", disk_limit="20g", gpu_limit=1)
+        plan = ServerPlan(
+            name="Test",
+            slug="inc-test",
+            cpu_limit=2,
+            memory_limit="4g",
+            disk_limit="20g",
+            gpu_limit=1,
+        )
         db_session.add(plan)
         await db_session.commit()
 
@@ -406,7 +496,14 @@ class TestQuotaServiceIncrementDecrement:
     @pytest.mark.asyncio
     async def test_decrement_usage(self, db_session, test_user):
         """decrement_usage should subtract plan resources."""
-        plan = ServerPlan(name="Test", slug="dec-test", cpu_limit=2, memory_limit="4g", disk_limit="20g", gpu_limit=1)
+        plan = ServerPlan(
+            name="Test",
+            slug="dec-test",
+            cpu_limit=2,
+            memory_limit="4g",
+            disk_limit="20g",
+            gpu_limit=1,
+        )
         db_session.add(plan)
         await db_session.flush()
 
@@ -416,7 +513,7 @@ class TestQuotaServiceIncrementDecrement:
             usage_memory_mb=4096,
             usage_disk_mb=20480,
             usage_gpu=1,
-            usage_servers=1
+            usage_servers=1,
         )
         db_session.add(quota)
         await db_session.commit()
@@ -432,7 +529,14 @@ class TestQuotaServiceIncrementDecrement:
     @pytest.mark.asyncio
     async def test_decrement_usage_never_negative(self, db_session, test_user):
         """decrement_usage should not go below zero."""
-        plan = ServerPlan(name="Test", slug="dec-zero", cpu_limit=2, memory_limit="4g", disk_limit="20g", gpu_limit=1)
+        plan = ServerPlan(
+            name="Test",
+            slug="dec-zero",
+            cpu_limit=2,
+            memory_limit="4g",
+            disk_limit="20g",
+            gpu_limit=1,
+        )
         db_session.add(plan)
         await db_session.commit()
 

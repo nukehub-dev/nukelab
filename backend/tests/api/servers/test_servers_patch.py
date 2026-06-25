@@ -127,17 +127,11 @@ class TestPatchPlanChange:
 
             with mock.patch("app.services.quota_service.QuotaService") as mock_quota_cls:
                 mock_quota = mock_quota_cls.return_value
-                mock_quota.check_spawn_allowed = mock.AsyncMock(
-                    return_value={"allowed": True}
-                )
+                mock_quota.check_spawn_allowed = mock.AsyncMock(return_value={"allowed": True})
 
-                with mock.patch(
-                    "app.api.servers.spawner.get_status", return_value="running"
-                ):
+                with mock.patch("app.api.servers.spawner.get_status", return_value="running"):
                     with mock.patch("app.api.servers.spawner.stop", return_value=True):
-                        with mock.patch(
-                            "app.api.servers.spawner.delete", return_value=True
-                        ):
+                        with mock.patch("app.api.servers.spawner.delete", return_value=True):
                             with mock.patch(
                                 "app.api.servers.spawner.spawn",
                                 return_value=_mock_spawn_return(),
@@ -170,9 +164,7 @@ class TestPatchPlanChange:
         assert "Plan not found" in response.json()["detail"]
 
     @pytest.mark.asyncio
-    async def test_patch_plan_not_available_for_role(
-        self, client, admin_token, patch_server
-    ):
+    async def test_patch_plan_not_available_for_role(self, client, admin_token, patch_server):
         """Plan not available for role should return 403."""
         fake_plan = mock.Mock()
         fake_plan.id = uuid_mod.uuid4()
@@ -264,9 +256,7 @@ class TestPatchEnvironmentChange:
             mock_env = mock_env_cls.return_value
             mock_env.get_by_id = mock.AsyncMock(return_value=new_env)
 
-            with mock.patch(
-                "app.api.servers.spawner.get_status", return_value="running"
-            ):
+            with mock.patch("app.api.servers.spawner.get_status", return_value="running"):
                 with mock.patch("app.api.servers.spawner.stop", return_value=True):
                     with mock.patch("app.api.servers.spawner.delete", return_value=True):
                         with mock.patch(
@@ -326,13 +316,9 @@ class TestPatchVolumeMounts:
                 mock_access = mock_access_cls.return_value
                 mock_access.can_access_volume = mock.AsyncMock(return_value=True)
 
-                with mock.patch(
-                    "app.api.servers.spawner.get_status", return_value="running"
-                ):
+                with mock.patch("app.api.servers.spawner.get_status", return_value="running"):
                     with mock.patch("app.api.servers.spawner.stop", return_value=True):
-                        with mock.patch(
-                            "app.api.servers.spawner.delete", return_value=True
-                        ):
+                        with mock.patch("app.api.servers.spawner.delete", return_value=True):
                             with mock.patch(
                                 "app.api.servers.spawner.spawn",
                                 return_value=_mock_spawn_return(),
@@ -349,7 +335,7 @@ class TestPatchVolumeMounts:
                                                 "mount_path": "/data",
                                                 "mode": "read_write",
                                             }
-                                        ]
+                                        ],
                                     },
                                 )
 
@@ -384,9 +370,7 @@ class TestPatchVolumeMounts:
             mock_vol.check_volumes_quota = mock.AsyncMock(return_value={"allowed": True})
             mock_vol.mark_home_volume = mock.AsyncMock()
 
-            with mock.patch(
-                "app.api.servers.spawner.get_status", return_value="running"
-            ):
+            with mock.patch("app.api.servers.spawner.get_status", return_value="running"):
                 with mock.patch("app.api.servers.spawner.stop", return_value=True):
                     with mock.patch("app.api.servers.spawner.delete", return_value=True):
                         with mock.patch(
@@ -406,7 +390,7 @@ class TestPatchVolumeMounts:
                                             "mode": "read_write",
                                             "max_size_bytes": 1073741824,
                                         }
-                                    ]
+                                    ],
                                 },
                             )
 
@@ -439,7 +423,7 @@ class TestPatchVolumeMounts:
                                 "mount_path": "/data",
                                 "mode": "read_write",
                             }
-                        ]
+                        ],
                     },
                 )
 
@@ -474,7 +458,7 @@ class TestPatchVolumeMounts:
                                 "mount_path": "/data",
                                 "mode": "read_write",
                             }
-                        ]
+                        ],
                     },
                 )
 
@@ -509,7 +493,7 @@ class TestPatchVolumeMounts:
                                 "mount_path": "/data",
                                 "mode": "read_write",
                             }
-                        ]
+                        ],
                     },
                 )
 
@@ -540,12 +524,8 @@ class TestPatchRecreate:
             mock_env = mock_env_cls.return_value
             mock_env.get_by_id = mock.AsyncMock(return_value=new_env)
 
-            with mock.patch(
-                "app.api.servers.spawner.get_status", return_value="running"
-            ):
-                with mock.patch(
-                    "app.api.servers.spawner.stop", return_value=True
-                ) as mock_stop2:
+            with mock.patch("app.api.servers.spawner.get_status", return_value="running"):
+                with mock.patch("app.api.servers.spawner.stop", return_value=True) as mock_stop2:
                     with mock.patch(
                         "app.api.servers.spawner.delete", return_value=True
                     ) as mock_delete2:
@@ -587,13 +567,9 @@ class TestPatchRecreate:
             mock_env = mock_env_cls.return_value
             mock_env.get_by_id = mock.AsyncMock(return_value=new_env)
 
-            with mock.patch(
-                "app.api.servers.spawner.get_status", return_value="running"
-            ):
+            with mock.patch("app.api.servers.spawner.get_status", return_value="running"):
                 with mock.patch("app.api.servers.spawner.stop", return_value=True):
-                    with mock.patch(
-                        "app.api.servers.spawner.delete", return_value=True
-                    ):
+                    with mock.patch("app.api.servers.spawner.delete", return_value=True):
                         with mock.patch(
                             "app.api.servers.spawner.spawn",
                             return_value=mock_spawn_result,
@@ -615,9 +591,7 @@ class TestPatchRecreate:
         self, client, admin_token, patch_server, db_session
     ):
         """Recreate spawn failure should return 500 with proper error message."""
-        new_env = EnvironmentTemplate(
-            name="fail-env", slug="fail-env", image="fail:latest"
-        )
+        new_env = EnvironmentTemplate(name="fail-env", slug="fail-env", image="fail:latest")
         db_session.add(new_env)
         await db_session.commit()
         await db_session.refresh(new_env)
@@ -630,13 +604,9 @@ class TestPatchRecreate:
             mock_env = mock_env_cls.return_value
             mock_env.get_by_id = mock.AsyncMock(return_value=new_env)
 
-            with mock.patch(
-                "app.api.servers.spawner.get_status", return_value="running"
-            ):
+            with mock.patch("app.api.servers.spawner.get_status", return_value="running"):
                 with mock.patch("app.api.servers.spawner.stop", return_value=True):
-                    with mock.patch(
-                        "app.api.servers.spawner.delete", return_value=True
-                    ):
+                    with mock.patch("app.api.servers.spawner.delete", return_value=True):
                         with mock.patch(
                             "app.api.servers.spawner.spawn",
                             side_effect=Exception("spawn failed"),
@@ -656,9 +626,7 @@ class TestPatchCrossUser:
     """Tests for cross-user server updates."""
 
     @pytest.mark.asyncio
-    async def test_patch_cross_user_with_reason(
-        self, client, admin_token, patch_server
-    ):
+    async def test_patch_cross_user_with_reason(self, client, admin_token, patch_server):
         """Admin updating another user's server with a reason should succeed."""
         response = await client.patch(
             f"/api/servers/{patch_server.id}",

@@ -10,7 +10,7 @@ class TestBasicHealth:
     async def test_health_returns_healthy(self, client):
         """Basic health check should return healthy status."""
         response = await client.get("/api/health")
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "healthy"
@@ -23,10 +23,9 @@ class TestDetailedHealth:
     async def test_detailed_health_requires_admin(self, client, admin_token):
         """Detailed health should be accessible to admins only."""
         response = await client.get(
-            "/api/health/detailed",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/health/detailed", headers={"Authorization": f"Bearer {admin_token}"}
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "services" in data
@@ -38,10 +37,9 @@ class TestDetailedHealth:
     async def test_detailed_health_services_have_status(self, client, admin_token):
         """Each service in detailed health should have a status field."""
         response = await client.get(
-            "/api/health/detailed",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/health/detailed", headers={"Authorization": f"Bearer {admin_token}"}
         )
-        
+
         assert response.status_code == 200
         services = response.json()["services"]
         for service_name, service_data in services.items():
@@ -55,7 +53,7 @@ class TestPlatformStatus:
     async def test_status_has_version_and_features(self, client):
         """Platform status should expose version and feature flags."""
         response = await client.get("/api/health/status")
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "version" in data
@@ -68,18 +66,20 @@ class TestPlatformStatus:
     async def test_status_has_limits(self, client):
         """Platform status should expose rate limits and quotas."""
         response = await client.get("/api/health/status")
-        
+
         assert response.status_code == 200
         data = response.json()
         assert "limits" in data
         assert "max_servers_per_user" in data["limits"]
         assert "api_rate_limit" in data["limits"]
 
+
 """Coverage tests for smaller API modules: health, system, quotas, ip_restriction."""
 
 import pytest
 from unittest import mock
 from datetime import datetime, timedelta, UTC
+
 
 class TestHealthEndpoints:
     """app/api/health.py coverage."""
@@ -95,8 +95,7 @@ class TestHealthEndpoints:
     @pytest.mark.asyncio
     async def test_health_check_detailed(self, client, admin_token):
         response = await client.get(
-            "/api/health/detailed",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/health/detailed", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -115,7 +114,6 @@ class TestHealthEndpoints:
         assert "auth_mode" in data["features"]
 
 
-
 """Extended tests for Environments, Notifications, and Health API endpoints."""
 
 import pytest
@@ -125,6 +123,7 @@ from app.models.environment_template import EnvironmentTemplate
 from app.models.notification import Notification
 from app.models.health_check import HealthCheck
 from app.models.server import Server
+
 
 class TestHealthAPI:
     """Tests for health endpoints."""
@@ -147,12 +146,12 @@ class TestHealthAPI:
     async def test_health_detailed(self, client, admin_token):
         """Detailed health check may require admin."""
         response = await client.get(
-            "/api/health/detailed",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/health/detailed", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
         data = response.json()
         assert "resources" in data
+
 
 """Extended tests for Health API failure paths."""
 
@@ -180,8 +179,7 @@ class TestDetailedHealthFailures:
         db_session.execute = failing_execute
         try:
             response = await client.get(
-                "/api/health/detailed",
-                headers={"Authorization": f"Bearer {admin_token}"}
+                "/api/health/detailed", headers={"Authorization": f"Bearer {admin_token}"}
             )
         finally:
             db_session.execute = original_execute
@@ -196,8 +194,7 @@ class TestDetailedHealthFailures:
         """Redis failure should show degraded status."""
         with mock.patch("app.api.health.redis.from_url", side_effect=Exception("Redis down")):
             response = await client.get(
-                "/api/health/detailed",
-                headers={"Authorization": f"Bearer {admin_token}"}
+                "/api/health/detailed", headers={"Authorization": f"Bearer {admin_token}"}
             )
         assert response.status_code == 200
         data = response.json()
@@ -212,8 +209,7 @@ class TestDetailedHealthFailures:
 
         with mock.patch("app.container.client.container_client", mock_client):
             response = await client.get(
-                "/api/health/detailed",
-                headers={"Authorization": f"Bearer {admin_token}"}
+                "/api/health/detailed", headers={"Authorization": f"Bearer {admin_token}"}
             )
         assert response.status_code == 200
         data = response.json()
@@ -234,8 +230,7 @@ class TestDetailedHealthFailures:
         with mock.patch("app.services.email_service.EmailService", mock_email_cls):
             with mock.patch("aiosmtplib.SMTP", side_effect=Exception("SMTP down")):
                 response = await client.get(
-                    "/api/health/detailed",
-                    headers={"Authorization": f"Bearer {admin_token}"}
+                    "/api/health/detailed", headers={"Authorization": f"Bearer {admin_token}"}
                 )
         assert response.status_code == 200
         data = response.json()
@@ -251,8 +246,7 @@ class TestDetailedHealthFailures:
 
         with mock.patch("app.services.email_service.EmailService", mock_email_cls):
             response = await client.get(
-                "/api/health/detailed",
-                headers={"Authorization": f"Bearer {admin_token}"}
+                "/api/health/detailed", headers={"Authorization": f"Bearer {admin_token}"}
             )
         assert response.status_code == 200
         data = response.json()
@@ -268,8 +262,7 @@ class TestDetailedHealthFailures:
 
         with mock.patch("app.api.health.psutil", mock_psutil):
             response = await client.get(
-                "/api/health/detailed",
-                headers={"Authorization": f"Bearer {admin_token}"}
+                "/api/health/detailed", headers={"Authorization": f"Bearer {admin_token}"}
             )
         assert response.status_code == 200
         data = response.json()
@@ -279,8 +272,7 @@ class TestDetailedHealthFailures:
     async def test_detailed_health_requires_admin(self, client, user_token):
         """Non-admin should be forbidden from detailed health."""
         response = await client.get(
-            "/api/health/detailed",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/health/detailed", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 403
 

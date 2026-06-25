@@ -103,6 +103,7 @@ def _normalize_path(path: str) -> str:
     if _route_normalizer is None:
         # Lazy import to avoid circular dependency at module load time
         from app.main import app as fastapi_app
+
         _route_normalizer = _RouteAwareNormalizer(fastapi_app)
     return _route_normalizer.normalize(path)
 
@@ -201,7 +202,7 @@ class RequestMetricsMiddleware(BaseHTTPMiddleware):
         "/api/openapi.json",
         "/api/ws",
         "/api/metrics",  # skip self to avoid recursion (production path)
-        "/metrics",      # same endpoint when root_path is not present (tests/local)
+        "/metrics",  # same endpoint when root_path is not present (tests/local)
     ]
 
     def __init__(self, app: ASGIApp):

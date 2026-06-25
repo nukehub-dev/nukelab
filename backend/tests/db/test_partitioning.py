@@ -13,8 +13,12 @@ class TestPartitionManagerStaticMethods:
     """Tests for static helpers."""
 
     def test_partition_name(self):
-        assert PartitionManager._partition_name("activity_logs", 2024, 1) == "activity_logs_y2024m01"
-        assert PartitionManager._partition_name("activity_logs", 2024, 12) == "activity_logs_y2024m12"
+        assert (
+            PartitionManager._partition_name("activity_logs", 2024, 1) == "activity_logs_y2024m01"
+        )
+        assert (
+            PartitionManager._partition_name("activity_logs", 2024, 12) == "activity_logs_y2024m12"
+        )
 
     def test_month_bounds(self):
         start, end = PartitionManager._month_bounds(2024, 1)
@@ -52,9 +56,11 @@ class TestPartitionManagerWithDB:
     @pytest.mark.asyncio
     async def test_ensure_partitions_creates_partitions(self, db_session, partition_table):
         pm = PartitionManager(db_session)
-        with mock.patch.object(PartitionManager, "PARTITION_CONFIG", {
-            partition_table: {"column": "created_at", "granularity": "month"}
-        }):
+        with mock.patch.object(
+            PartitionManager,
+            "PARTITION_CONFIG",
+            {partition_table: {"column": "created_at", "granularity": "month"}},
+        ):
             created = await pm.ensure_partitions(partition_table, months_ahead=2)
 
         assert len(created) == 3  # current month + 2 ahead
@@ -68,9 +74,11 @@ class TestPartitionManagerWithDB:
     @pytest.mark.asyncio
     async def test_ensure_partitions_idempotent(self, db_session, partition_table):
         pm = PartitionManager(db_session)
-        with mock.patch.object(PartitionManager, "PARTITION_CONFIG", {
-            partition_table: {"column": "created_at", "granularity": "month"}
-        }):
+        with mock.patch.object(
+            PartitionManager,
+            "PARTITION_CONFIG",
+            {partition_table: {"column": "created_at", "granularity": "month"}},
+        ):
             first = await pm.ensure_partitions(partition_table, months_ahead=1)
             second = await pm.ensure_partitions(partition_table, months_ahead=1)
             assert first == second
@@ -84,9 +92,11 @@ class TestPartitionManagerWithDB:
     @pytest.mark.asyncio
     async def test_list_partitions(self, db_session, partition_table):
         pm = PartitionManager(db_session)
-        with mock.patch.object(PartitionManager, "PARTITION_CONFIG", {
-            partition_table: {"column": "created_at", "granularity": "month"}
-        }):
+        with mock.patch.object(
+            PartitionManager,
+            "PARTITION_CONFIG",
+            {partition_table: {"column": "created_at", "granularity": "month"}},
+        ):
             await pm.ensure_partitions(partition_table, months_ahead=1)
             partitions = await pm.list_partitions(partition_table)
             assert len(partitions) >= 2  # month partitions + default
@@ -97,9 +107,11 @@ class TestPartitionManagerWithDB:
     @pytest.mark.asyncio
     async def test_drop_old_partitions(self, db_session, partition_table):
         pm = PartitionManager(db_session)
-        with mock.patch.object(PartitionManager, "PARTITION_CONFIG", {
-            partition_table: {"column": "created_at", "granularity": "month"}
-        }):
+        with mock.patch.object(
+            PartitionManager,
+            "PARTITION_CONFIG",
+            {partition_table: {"column": "created_at", "granularity": "month"}},
+        ):
             now = datetime.now(timezone.utc)
             # Create a partition for 2 years ago (should be dropped)
             old_year = now.year - 2
@@ -116,9 +128,11 @@ class TestPartitionManagerWithDB:
     @pytest.mark.asyncio
     async def test_create_partition(self, db_session, partition_table):
         pm = PartitionManager(db_session)
-        with mock.patch.object(PartitionManager, "PARTITION_CONFIG", {
-            partition_table: {"column": "created_at", "granularity": "month"}
-        }):
+        with mock.patch.object(
+            PartitionManager,
+            "PARTITION_CONFIG",
+            {partition_table: {"column": "created_at", "granularity": "month"}},
+        ):
             name = await pm.create_partition(partition_table, 2030, 6)
             assert name == f"{partition_table}_y2030m06"
             # Idempotent second call

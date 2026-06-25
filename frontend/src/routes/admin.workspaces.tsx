@@ -1,36 +1,53 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { FolderOpen, Pencil, Trash2, Users, HardDrive, Play, Square } from 'lucide-react';
-import { useState, useRef, useEffect } from 'react';
-import { ResourcePageLayout } from '../components/layout/resource-page-layout';
-import { DataTable } from '../components/data/data-table';
-import { StatusBadge } from '../components/data/status-badge';
-import { useAdminWorkspaces, useAdminWorkspaceActions, type AdminWorkspace } from '../hooks/use-admin-workspaces';
-import { useDataTable } from '../hooks/use-data-table';
-import { useThemeStore } from '../stores/theme-store';
-import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
-import { usePageGuard } from '../hooks/use-page-guard';
-import { useConfirmDialog } from '../components/ui/confirm-dialog';
-import { formatDate } from '../lib/utils';
-import type { ColumnDef, ColumnFiltersState, VisibilityState, SortingState } from '@tanstack/react-table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '../components/ui/dialog';
-import { Input } from '../components/ui/input';
-import { Textarea } from '../components/ui/textarea';
-import { Button } from '../components/ui/button';
-import { Tooltip } from '../components/ui/tooltip';
-import { Checkbox } from '../components/ui/checkbox';
-import { motion } from 'framer-motion';
+import { createFileRoute } from '@tanstack/react-router'
+import { FolderOpen, Pencil, Trash2, Users, HardDrive, Play, Square } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { ResourcePageLayout } from '../components/layout/resource-page-layout'
+import { DataTable } from '../components/data/data-table'
+import { StatusBadge } from '../components/data/status-badge'
+import {
+  useAdminWorkspaces,
+  useAdminWorkspaceActions,
+  type AdminWorkspace,
+} from '../hooks/use-admin-workspaces'
+import { useDataTable } from '../hooks/use-data-table'
+import { useThemeStore } from '../stores/theme-store'
+import { useAuthStore, PERMISSIONS } from '../stores/auth-store'
+import { usePageGuard } from '../hooks/use-page-guard'
+import { useConfirmDialog } from '../components/ui/confirm-dialog'
+import { formatDate } from '../lib/utils'
+import type {
+  ColumnDef,
+  ColumnFiltersState,
+  VisibilityState,
+  SortingState,
+} from '@tanstack/react-table'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from '../components/ui/dialog'
+import { Input } from '../components/ui/input'
+import { Textarea } from '../components/ui/textarea'
+import { Button } from '../components/ui/button'
+import { Tooltip } from '../components/ui/tooltip'
+import { Checkbox } from '../components/ui/checkbox'
+import { motion } from 'framer-motion'
 
 export const Route = createFileRoute('/admin/workspaces')({
   component: WorkspacesAdminPage,
-});
+})
 
 function WorkspacesAdminPage() {
-  const allowed = usePageGuard({ permission: PERMISSIONS.ADMIN_ACCESS });
-  const density = useThemeStore((state) => state.density);
-  const hasPermission = useAuthStore((state) => state.hasPermission);
-  const canManageWorkspaces = hasPermission(PERMISSIONS.WORKSPACES_WRITE_ALL);
+  const allowed = usePageGuard({ permission: PERMISSIONS.ADMIN_ACCESS })
+  const density = useThemeStore((state) => state.density)
+  const hasPermission = useAuthStore((state) => state.hasPermission)
+  const canManageWorkspaces = hasPermission(PERMISSIONS.WORKSPACES_WRITE_ALL)
 
-  const { confirm, dialog } = useConfirmDialog();
+  const { confirm, dialog } = useConfirmDialog()
 
   const {
     state: tableState,
@@ -39,34 +56,34 @@ function WorkspacesAdminPage() {
     setSort,
     setSearch,
     setFilter,
-  } = useDataTable({ defaultLimit: 20, defaultSortBy: 'created_at' });
+  } = useDataTable({ defaultLimit: 20, defaultSortBy: 'created_at' })
 
   const [sorting, setSorting] = useState<SortingState>([
-    { id: tableState.sortBy, desc: tableState.sortOrder === 'desc' }
-  ]);
-  const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+    { id: tableState.sortBy, desc: tableState.sortOrder === 'desc' },
+  ])
+  const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({})
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
 
   // Sync React Table column filters with API filter state
-  const prevColumnFiltersRef = useRef<ColumnFiltersState>([]);
+  const prevColumnFiltersRef = useRef<ColumnFiltersState>([])
   useEffect(() => {
-    const currentIds = new Set(columnFilters.map(f => f.id));
+    const currentIds = new Set(columnFilters.map((f) => f.id))
 
     columnFilters.forEach((filter) => {
       if (filter.value !== undefined && filter.value !== null) {
-        setFilter(filter.id, String(filter.value));
+        setFilter(filter.id, String(filter.value))
       }
-    });
+    })
 
     prevColumnFiltersRef.current.forEach((filter) => {
       if (!currentIds.has(filter.id)) {
-        setFilter(filter.id, null);
+        setFilter(filter.id, null)
       }
-    });
+    })
 
-    prevColumnFiltersRef.current = columnFilters;
-  }, [columnFilters, setFilter]);
+    prevColumnFiltersRef.current = columnFilters
+  }, [columnFilters, setFilter])
 
   const { data, isLoading, isError, error } = useAdminWorkspaces({
     search: tableState.search,
@@ -75,45 +92,52 @@ function WorkspacesAdminPage() {
     limit: tableState.limit,
     sort_by: tableState.sortBy,
     sort_order: tableState.sortOrder,
-  });
+  })
 
-  const workspaces = data?.workspaces || [];
-  const pagination = data?.pagination;
+  const workspaces = data?.workspaces || []
+  const pagination = data?.pagination
 
   // Edit dialog state
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingWorkspace, setEditingWorkspace] = useState<AdminWorkspace | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [editingWorkspace, setEditingWorkspace] = useState<AdminWorkspace | null>(null)
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     is_active: true,
-  });
+  })
 
-  const { updateWorkspace, deleteWorkspace, bulkAction: bulkWorkspaceAction } = useAdminWorkspaceActions();
+  const {
+    updateWorkspace,
+    deleteWorkspace,
+    bulkAction: bulkWorkspaceAction,
+  } = useAdminWorkspaceActions()
 
   const openEditDialog = (workspace: AdminWorkspace) => {
-    setEditingWorkspace(workspace);
+    setEditingWorkspace(workspace)
     setFormData({
       name: workspace.name,
       description: workspace.description || '',
       is_active: workspace.is_active,
-    });
-    setDialogOpen(true);
-  };
+    })
+    setDialogOpen(true)
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingWorkspace) return;
+    e.preventDefault()
+    if (!editingWorkspace) return
 
-    updateWorkspace.mutate({
-      workspaceId: editingWorkspace.id,
-      name: formData.name,
-      description: formData.description || undefined,
-      is_active: formData.is_active,
-    }, {
-      onSuccess: () => setDialogOpen(false),
-    });
-  };
+    updateWorkspace.mutate(
+      {
+        workspaceId: editingWorkspace.id,
+        name: formData.name,
+        description: formData.description || undefined,
+        is_active: formData.is_active,
+      },
+      {
+        onSuccess: () => setDialogOpen(false),
+      }
+    )
+  }
 
   const handleDelete = async (workspace: AdminWorkspace) => {
     const confirmed = await confirm({
@@ -122,11 +146,11 @@ function WorkspacesAdminPage() {
       variant: 'danger',
       confirmLabel: 'Delete',
       cancelLabel: 'Cancel',
-    });
+    })
     if (confirmed) {
-      deleteWorkspace.mutate(workspace.id);
+      deleteWorkspace.mutate(workspace.id)
     }
-  };
+  }
 
   const handleBulkDelete = async (ids: string[]) => {
     const confirmed = await confirm({
@@ -135,60 +159,95 @@ function WorkspacesAdminPage() {
       variant: 'danger',
       confirmLabel: 'Delete',
       cancelLabel: 'Cancel',
-    });
+    })
     if (confirmed) {
-      bulkWorkspaceAction.mutate({ action: 'delete', workspace_ids: ids }, {
-        onSuccess: () => setRowSelection({}),
-      });
+      bulkWorkspaceAction.mutate(
+        { action: 'delete', workspace_ids: ids },
+        {
+          onSuccess: () => setRowSelection({}),
+        }
+      )
     }
-  };
+  }
 
-  const bulkActions = canManageWorkspaces ? [
-    {
-      label: 'Activate',
-      icon: <Play className="w-4 h-4" />,
-      onClick: (ids: string[]) => {
-        bulkWorkspaceAction.mutate({ action: 'activate', workspace_ids: ids }, {
-          onSuccess: () => setRowSelection({}),
-        });
-      },
-    },
-    {
-      label: 'Deactivate',
-      icon: <Square className="w-4 h-4" />,
-      onClick: (ids: string[]) => {
-        bulkWorkspaceAction.mutate({ action: 'deactivate', workspace_ids: ids }, {
-          onSuccess: () => setRowSelection({}),
-        });
-      },
-    },
-    {
-      label: 'Delete',
-      icon: <Trash2 className="w-4 h-4" />,
-      onClick: handleBulkDelete,
-      variant: 'destructive' as const,
-    },
-  ] : [];
+  const bulkActions = canManageWorkspaces
+    ? [
+        {
+          label: 'Activate',
+          icon: <Play className="w-4 h-4" />,
+          onClick: (ids: string[]) => {
+            bulkWorkspaceAction.mutate(
+              { action: 'activate', workspace_ids: ids },
+              {
+                onSuccess: () => setRowSelection({}),
+              }
+            )
+          },
+        },
+        {
+          label: 'Deactivate',
+          icon: <Square className="w-4 h-4" />,
+          onClick: (ids: string[]) => {
+            bulkWorkspaceAction.mutate(
+              { action: 'deactivate', workspace_ids: ids },
+              {
+                onSuccess: () => setRowSelection({}),
+              }
+            )
+          },
+        },
+        {
+          label: 'Delete',
+          icon: <Trash2 className="w-4 h-4" />,
+          onClick: handleBulkDelete,
+          variant: 'destructive' as const,
+        },
+      ]
+    : []
 
   // Stats
-  const totalWorkspaces = pagination?.total || 0;
-  const activeWorkspaces = workspaces.filter(w => w.is_active).length;
-  const totalMembers = workspaces.reduce((sum, w) => sum + (w.member_count || 0), 0);
-  const totalVolumes = workspaces.reduce((sum, w) => sum + (w.volume_count || 0), 0);
+  const totalWorkspaces = pagination?.total || 0
+  const activeWorkspaces = workspaces.filter((w) => w.is_active).length
+  const totalMembers = workspaces.reduce((sum, w) => sum + (w.member_count || 0), 0)
+  const totalVolumes = workspaces.reduce((sum, w) => sum + (w.volume_count || 0), 0)
 
   const stats = [
-    { title: 'Workspaces', value: totalWorkspaces, icon: FolderOpen, iconColor: 'text-blue-400', bgColor: 'bg-blue-500/10' },
-    { title: 'Active', value: activeWorkspaces, icon: FolderOpen, iconColor: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
-    { title: 'Members', value: totalMembers, icon: Users, iconColor: 'text-violet-400', bgColor: 'bg-violet-500/10' },
-    { title: 'Volumes', value: totalVolumes, icon: HardDrive, iconColor: 'text-amber-400', bgColor: 'bg-amber-500/10' },
-  ];
+    {
+      title: 'Workspaces',
+      value: totalWorkspaces,
+      icon: FolderOpen,
+      iconColor: 'text-blue-400',
+      bgColor: 'bg-blue-500/10',
+    },
+    {
+      title: 'Active',
+      value: activeWorkspaces,
+      icon: FolderOpen,
+      iconColor: 'text-emerald-400',
+      bgColor: 'bg-emerald-500/10',
+    },
+    {
+      title: 'Members',
+      value: totalMembers,
+      icon: Users,
+      iconColor: 'text-violet-400',
+      bgColor: 'bg-violet-500/10',
+    },
+    {
+      title: 'Volumes',
+      value: totalVolumes,
+      icon: HardDrive,
+      iconColor: 'text-amber-400',
+      bgColor: 'bg-amber-500/10',
+    },
+  ]
 
   const columns: ColumnDef<AdminWorkspace>[] = [
     {
       accessorKey: 'name',
       header: 'Workspace',
       cell: ({ row }) => {
-        const w = row.original;
+        const w = row.original
         return (
           <div className="flex items-center gap-3">
             <div className="p-1.5 rounded flex-shrink-0 bg-primary/10">
@@ -198,18 +257,20 @@ function WorkspacesAdminPage() {
               <div className="font-medium">{w.name}</div>
               <code className="text-[10px] text-muted-foreground">{w.id}</code>
               {w.description && (
-                <div className="text-xs text-muted-foreground line-clamp-1 max-w-[200px]">{w.description}</div>
+                <div className="text-xs text-muted-foreground line-clamp-1 max-w-[200px]">
+                  {w.description}
+                </div>
               )}
             </div>
           </div>
-        );
+        )
       },
     },
     {
       accessorKey: 'owner_username',
       header: 'Owner',
       cell: ({ row }) => {
-        const w = row.original;
+        const w = row.original
         return (
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
@@ -224,7 +285,7 @@ function WorkspacesAdminPage() {
               )}
             </div>
           </div>
-        );
+        )
       },
     },
     {
@@ -251,49 +312,52 @@ function WorkspacesAdminPage() {
       accessorKey: 'is_active',
       header: 'Status',
       cell: ({ row }) => {
-        const isActive = row.getValue('is_active');
+        const isActive = row.getValue('is_active')
         return (
           <StatusBadge
             status={isActive ? 'running' : 'stopped'}
             label={isActive ? 'Active' : 'Inactive'}
           />
-        );
+        )
       },
-
     },
     {
       accessorKey: 'created_at',
       header: 'Created',
       cell: ({ row }) => formatDate(row.getValue('created_at') as string),
     },
-    ...(canManageWorkspaces ? [{
-      id: 'actions' as const,
-      header: 'Actions',
-      cell: ({ row }: { row: { original: AdminWorkspace } }) => (
-        <div className="flex items-center gap-1">
-          <Tooltip content="Edit">
-            <motion.button
-              onClick={() => openEditDialog(row.original)}
-              className="inline-flex p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
-            >
-              <Pencil className="w-4 h-4" />
-            </motion.button>
-          </Tooltip>
-          <Tooltip content="Delete">
-            <motion.button
-              onClick={() => handleDelete(row.original)}
-              disabled={deleteWorkspace.isPending}
-              className="inline-flex p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
-            >
-              <Trash2 className="w-4 h-4" />
-            </motion.button>
-          </Tooltip>
-        </div>
-      ),
-      enableSorting: false,
-      size: 80,
-    } satisfies ColumnDef<AdminWorkspace>] : []),
-  ];
+    ...(canManageWorkspaces
+      ? [
+          {
+            id: 'actions' as const,
+            header: 'Actions',
+            cell: ({ row }: { row: { original: AdminWorkspace } }) => (
+              <div className="flex items-center gap-1">
+                <Tooltip content="Edit">
+                  <motion.button
+                    onClick={() => openEditDialog(row.original)}
+                    className="inline-flex p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </motion.button>
+                </Tooltip>
+                <Tooltip content="Delete">
+                  <motion.button
+                    onClick={() => handleDelete(row.original)}
+                    disabled={deleteWorkspace.isPending}
+                    className="inline-flex p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </motion.button>
+                </Tooltip>
+              </div>
+            ),
+            enableSorting: false,
+            size: 80,
+          } satisfies ColumnDef<AdminWorkspace>,
+        ]
+      : []),
+  ]
 
   const filters = [
     {
@@ -305,7 +369,7 @@ function WorkspacesAdminPage() {
         { label: 'Inactive', value: 'inactive' },
       ],
     },
-  ];
+  ]
 
   const mobileCardRenderer = (w: AdminWorkspace) => (
     <div className="p-4 space-y-3">
@@ -324,9 +388,7 @@ function WorkspacesAdminPage() {
         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
           {w.member_count || 0} members
         </span>
-        <span className="text-muted-foreground">
-          {w.volume_count || 0} volumes
-        </span>
+        <span className="text-muted-foreground">{w.volume_count || 0} volumes</span>
       </div>
       {canManageWorkspaces && (
         <div className="flex items-center justify-between pt-1">
@@ -350,9 +412,9 @@ function WorkspacesAdminPage() {
         </div>
       )}
     </div>
-  );
+  )
 
-  if (!allowed) return null;
+  if (!allowed) return null
 
   return (
     <>
@@ -381,9 +443,9 @@ function WorkspacesAdminPage() {
           onPageChange={setPage}
           onLimitChange={setLimit}
           onSortingChange={(newSorting) => {
-            setSorting(newSorting);
+            setSorting(newSorting)
             if (newSorting.length > 0) {
-              setSort(newSorting[0].id, newSorting[0].desc ? 'desc' : 'asc');
+              setSort(newSorting[0].id, newSorting[0].desc ? 'desc' : 'asc')
             }
           }}
           onRowSelectionChange={setRowSelection}
@@ -406,9 +468,7 @@ function WorkspacesAdminPage() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Edit Workspace: {editingWorkspace?.name}</DialogTitle>
-              <DialogDescription>
-                Update workspace details.
-              </DialogDescription>
+              <DialogDescription>Update workspace details.</DialogDescription>
             </DialogHeader>
             <form id="workspace-form" onSubmit={handleSubmit} className="space-y-4 mt-4">
               <div className="space-y-2">
@@ -452,5 +512,5 @@ function WorkspacesAdminPage() {
 
       {dialog}
     </>
-  );
+  )
 }

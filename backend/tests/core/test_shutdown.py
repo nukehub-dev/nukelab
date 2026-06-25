@@ -133,10 +133,10 @@ class TestShutdownCoordinator:
 
         assert coord._shutdown_complete
 
-
     @pytest.mark.asyncio
     async def test_shutdown_sets_shutting_down_flag(self):
         from app.core import shutdown as _shutdown_mod
+
         _shutdown_mod._is_shutting_down = False
         coord = ShutdownCoordinator()
         await coord.shutdown()
@@ -144,6 +144,7 @@ class TestShutdownCoordinator:
 
     def test_is_shutting_down_default_false(self):
         from app.core import shutdown as _shutdown_mod
+
         _shutdown_mod._is_shutting_down = False
         assert is_shutting_down() is False
 

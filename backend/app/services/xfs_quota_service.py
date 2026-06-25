@@ -193,9 +193,12 @@ class XfsQuotaService:
     def _run_xfs_quota(self, *commands: str, mountpoint: str) -> subprocess.CompletedProcess:
         """Run xfs_quota with -D pointing to our custom projects file."""
         cmd = [
-            "xfs_quota", "-x",
-            "-D", self.projects_file,
-            "-c", " ".join(commands),
+            "xfs_quota",
+            "-x",
+            "-D",
+            self.projects_file,
+            "-c",
+            " ".join(commands),
             mountpoint,
         ]
         return subprocess.run(cmd, capture_output=True, text=True, timeout=30)

@@ -20,8 +20,8 @@ class TestCreateServerErrors:
             json={
                 "name": "test-srv",
                 "plan_id": "00000000-0000-0000-0000-000000000000",
-                "environment_id": "00000000-0000-0000-0000-000000000000"
-            }
+                "environment_id": "00000000-0000-0000-0000-000000000000",
+            },
         )
         assert response.status_code == 404
         assert "Plan not found" in response.json()["detail"]
@@ -29,7 +29,14 @@ class TestCreateServerErrors:
     @pytest.mark.asyncio
     async def test_create_server_environment_not_found(self, client, user_token, db_session):
         """Creating server with non-existent environment should 404."""
-        plan = ServerPlan(name="test-plan", slug="test-plan", cpu_limit=1, memory_limit="1g", is_public=True, is_active=True)
+        plan = ServerPlan(
+            name="test-plan",
+            slug="test-plan",
+            cpu_limit=1,
+            memory_limit="1g",
+            is_public=True,
+            is_active=True,
+        )
         db_session.add(plan)
         await db_session.commit()
         await db_session.refresh(plan)
@@ -40,8 +47,8 @@ class TestCreateServerErrors:
             json={
                 "name": "test-srv",
                 "plan_id": str(plan.id),
-                "environment_id": "00000000-0000-0000-0000-000000000000"
-            }
+                "environment_id": "00000000-0000-0000-0000-000000000000",
+            },
         )
         assert response.status_code == 404
         assert "Environment not found" in response.json()["detail"]
@@ -50,8 +57,16 @@ class TestCreateServerErrors:
     async def test_create_server_inactive_plan(self, client, user_token, db_session):
         """Creating server with inactive plan should 400."""
         import uuid as uuid_mod
+
         slug = f"inactive-plan-{uuid_mod.uuid4().hex[:8]}"
-        plan = ServerPlan(name="inactive-plan", slug=slug, cpu_limit=1, memory_limit="1g", is_public=True, is_active=False)
+        plan = ServerPlan(
+            name="inactive-plan",
+            slug=slug,
+            cpu_limit=1,
+            memory_limit="1g",
+            is_public=True,
+            is_active=False,
+        )
         env_name = f"test-env-{uuid_mod.uuid4().hex[:8]}"
         env = EnvironmentTemplate(name=env_name, slug=env_name, image="test:latest")
         db_session.add_all([plan, env])
@@ -62,11 +77,7 @@ class TestCreateServerErrors:
         response = await client.post(
             "/api/servers/",
             headers={"Authorization": f"Bearer {user_token}"},
-            json={
-                "name": "test-srv",
-                "plan_id": str(plan.id),
-                "environment_id": str(env.id)
-            }
+            json={"name": "test-srv", "plan_id": str(plan.id), "environment_id": str(env.id)},
         )
         assert response.status_code in [400, 403]
 
@@ -79,7 +90,7 @@ class TestServerActionErrors:
         """Getting non-existent server should 404."""
         response = await client.get(
             "/api/servers/00000000-0000-0000-0000-000000000000",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 404
 
@@ -88,7 +99,7 @@ class TestServerActionErrors:
         """Starting non-existent server should 404."""
         response = await client.post(
             "/api/servers/00000000-0000-0000-0000-000000000000/start",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 404
 
@@ -97,7 +108,7 @@ class TestServerActionErrors:
         """Stopping non-existent server should 404."""
         response = await client.post(
             "/api/servers/00000000-0000-0000-0000-000000000000/stop",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 404
 
@@ -106,7 +117,7 @@ class TestServerActionErrors:
         """Restarting non-existent server should 404."""
         response = await client.post(
             "/api/servers/00000000-0000-0000-0000-000000000000/restart",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 404
 
@@ -115,7 +126,7 @@ class TestServerActionErrors:
         """Deleting non-existent server should 404."""
         response = await client.delete(
             "/api/servers/00000000-0000-0000-0000-000000000000",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 404
 
@@ -125,7 +136,7 @@ class TestServerActionErrors:
         response = await client.patch(
             "/api/servers/00000000-0000-0000-0000-000000000000",
             headers={"Authorization": f"Bearer {user_token}"},
-            json={"name": "new-name"}
+            json={"name": "new-name"},
         )
         assert response.status_code in [403, 404]
 
@@ -134,7 +145,7 @@ class TestServerActionErrors:
         """Getting volumes for non-existent server should 404."""
         response = await client.get(
             "/api/servers/00000000-0000-0000-0000-000000000000/volumes",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 404
 
@@ -143,7 +154,7 @@ class TestServerActionErrors:
         """Getting logs for non-existent server should 404."""
         response = await client.get(
             "/api/servers/00000000-0000-0000-0000-000000000000/logs",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 404
 
@@ -152,7 +163,7 @@ class TestServerActionErrors:
         """Getting queue status for non-existent server."""
         response = await client.get(
             "/api/servers/00000000-0000-0000-0000-000000000000/queue-status",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         # Endpoint may return 200 with not_queued or 404
         assert response.status_code in [200, 404]
@@ -162,7 +173,7 @@ class TestServerActionErrors:
         """Getting access token for non-existent server."""
         response = await client.post(
             "/api/servers/00000000-0000-0000-0000-000000000000/access-token",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         # May 404 or 422 depending on body validation
         assert response.status_code in [404, 422]
@@ -172,7 +183,7 @@ class TestServerActionErrors:
         """Getting access stats for non-existent server should 404."""
         response = await client.get(
             "/api/servers/00000000-0000-0000-0000-000000000000/access-stats",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 404
 
@@ -182,12 +193,14 @@ class TestServerActionErrors:
         response = await client.post(
             "/api/servers/00000000-0000-0000-0000-000000000000/activity",
             headers={"Authorization": f"Bearer {user_token}"},
-            json={"action": "keepalive"}
+            json={"action": "keepalive"},
         )
         assert response.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_user_cannot_access_others_server(self, client, user_token, admin_user, db_session):
+    async def test_user_cannot_access_others_server(
+        self, client, user_token, admin_user, db_session
+    ):
         """User should not access another user's server."""
         server = Server(name="admin-srv", user_id=admin_user.id, status="stopped")
         db_session.add(server)
@@ -195,8 +208,7 @@ class TestServerActionErrors:
         await db_session.refresh(server)
 
         response = await client.get(
-            f"/api/servers/{server.id}",
-            headers={"Authorization": f"Bearer {user_token}"}
+            f"/api/servers/{server.id}", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code in [403, 404]
 
@@ -209,6 +221,6 @@ class TestServerByPath:
         """Looking up non-existent server by path should 404."""
         response = await client.get(
             "/api/servers/by-path/nonexistent/nonexistent-server",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 404

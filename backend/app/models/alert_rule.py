@@ -17,7 +17,9 @@ class AlertRule(Base):
     threshold = Column(Float, nullable=False)
 
     scope = Column(String(50), nullable=False, default="global")
-    target_id = Column(UUID(as_uuid=True), ForeignKey("servers.id", ondelete="CASCADE"), nullable=True)
+    target_id = Column(
+        UUID(as_uuid=True), ForeignKey("servers.id", ondelete="CASCADE"), nullable=True
+    )
 
     duration_seconds = Column(Integer, nullable=False, default=60)
     cooldown_seconds = Column(Integer, nullable=False, default=300)
@@ -28,7 +30,9 @@ class AlertRule(Base):
     webhook_url = Column(Text)
 
     is_active = Column(Boolean, default=True)
-    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_by = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     created_at = Column(DateTime, default=utc_now)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 

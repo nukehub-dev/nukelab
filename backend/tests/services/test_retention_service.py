@@ -51,7 +51,9 @@ class TestRetentionServiceGetPolicy:
 
         service = RetentionService(db_session)
         policy = await service.get_policy()
-        assert policy["metrics_retention_days"] == DEFAULT_RETENTION_POLICIES["metrics_retention_days"]
+        assert (
+            policy["metrics_retention_days"] == DEFAULT_RETENTION_POLICIES["metrics_retention_days"]
+        )
 
 
 class TestRetentionServiceSetPolicy:

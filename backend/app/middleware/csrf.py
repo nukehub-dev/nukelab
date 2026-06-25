@@ -75,13 +75,17 @@ class CSRFProtectMiddleware(BaseHTTPMiddleware):
 
         if not csrf_cookie or not csrf_header:
             from fastapi.responses import JSONResponse
+
             return JSONResponse(
                 status_code=403,
-                content={"detail": "CSRF token required. Include X-CSRF-Token header matching the csrf_token cookie."},
+                content={
+                    "detail": "CSRF token required. Include X-CSRF-Token header matching the csrf_token cookie."
+                },
             )
 
         if csrf_cookie != csrf_header:
             from fastapi.responses import JSONResponse
+
             return JSONResponse(
                 status_code=403,
                 content={"detail": "CSRF token mismatch."},

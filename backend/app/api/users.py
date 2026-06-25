@@ -127,21 +127,22 @@ class DiscoverUserListResponse(BaseModel):
 
 # ========== Public Discovery Endpoints ==========
 
+
 @router.get("/discover", response_model=DiscoverUserListResponse)
 async def discover_users(
     search: Optional[str] = Query(None, description="Search username/display name"),
     limit: int = Query(50, ge=1, le=100, description="Max results"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """Discover public users for collaboration. Any authenticated user can access.
-    
+
     Returns only users who have set their profile_visibility to 'public'.
     Excludes sensitive fields like email, role, and balance.
     """
     service = UserService(db)
     users = await service.discover_users(search=search, limit=limit)
-    
+
     return {
         "users": [
             {
@@ -159,6 +160,7 @@ async def discover_users(
 
 # ========== Profile Endpoints (Current User) ==========
 
+
 @router.get("/me/profile", response_model=UserResponse)
 async def get_my_profile(
     current_user: User = Depends(get_current_user),
@@ -175,7 +177,7 @@ async def update_my_profile(
 ):
     """Update current user's profile"""
     service = UserService(db)
-    
+
     update_data = {}
     if request.first_name is not None:
         update_data["first_name"] = request.first_name
@@ -191,7 +193,7 @@ async def update_my_profile(
         update_data["preferences"] = request.preferences
     if request.profile_visibility is not None:
         update_data["profile_visibility"] = request.profile_visibility
-    
+
     user = await service.update_user(str(current_user.id), update_data)
     return serialize_user(user)
 
@@ -208,7 +210,7 @@ async def upload_avatar(
     if file.content_type not in allowed_types:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid file type. Allowed: JPEG, PNG, WebP, GIF"
+            detail=f"Invalid file type. Allowed: JPEG, PNG, WebP, GIF",
         )
 
     # Validate file size via chunked read to avoid memory exhaustion
@@ -224,7 +226,7 @@ async def upload_avatar(
         if total_size > max_size:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"File too large. Max size: {settings.max_avatar_size_mb}MB"
+                detail=f"File too large. Max size: {settings.max_avatar_size_mb}MB",
             )
         chunks.append(chunk)
 
@@ -254,10 +256,13 @@ async def upload_avatar(
     prefs["use_gravatar"] = False
 
     service = UserService(db)
-    user = await service.update_user(str(current_user.id), {
-        "avatar_url": avatar_url,
-        "preferences": prefs,
-    })
+    user = await service.update_user(
+        str(current_user.id),
+        {
+            "avatar_url": avatar_url,
+            "preferences": prefs,
+        },
+    )
     return serialize_user(user)
 
 
@@ -274,6 +279,7 @@ async def get_avatar(filename: str):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Avatar not found")
 
     from fastapi.responses import FileResponse
+
     media_types = {
         ".jpg": "image/jpeg",
         ".jpeg": "image/jpeg",
@@ -295,12 +301,11 @@ async def change_my_password(
     """Change current user's password"""
     service = UserService(db)
     await service.change_password(
-        str(current_user.id),
-        request.current_password,
-        request.new_password
+        str(current_user.id), request.current_password, request.new_password
     )
 
     return {"message": "Password changed successfully"}
+
 
 @router.get("/{user_id}/profile")
 async def get_public_profile(
@@ -309,7 +314,7 @@ async def get_public_profile(
     current_user: User = Depends(get_current_user),
 ):
     """Get a user's public profile.
-    
+
     Accessible if:
     - The target user has profile_visibility='public'
     - The viewer is the target user themselves
@@ -318,23 +323,23 @@ async def get_public_profile(
     """
     from sqlalchemy import select, and_, or_
     from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
-    
+
     service = UserService(db)
     target_user = await service.get_by_id(user_id)
-    
+
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     viewer_id = str(current_user.id)
     target_id = str(target_user.id)
-    
+
     # Always allow self-view
     can_view = viewer_id == target_id
-    
+
     # Allow if profile is public
     if not can_view and target_user.profile_visibility == "public":
         can_view = True
-    
+
     # Allow if they share a workspace
     if not can_view:
         result = await db.execute(
@@ -345,12 +350,12 @@ async def get_public_profile(
                         select(WorkspaceMember.workspace_id).where(
                             WorkspaceMember.user_id == target_id
                         )
-                    )
+                    ),
                 )
             )
         )
         can_view = result.scalar_one_or_none() is not None
-        
+
         # Also check if one owns a workspace the other is member of
         if not can_view:
             result = await db.execute(
@@ -358,20 +363,20 @@ async def get_public_profile(
                     or_(
                         and_(
                             SharedWorkspace.owner_id == viewer_id,
-                            SharedWorkspace.members.any(WorkspaceMember.user_id == target_id)
+                            SharedWorkspace.members.any(WorkspaceMember.user_id == target_id),
                         ),
                         and_(
                             SharedWorkspace.owner_id == target_id,
-                            SharedWorkspace.members.any(WorkspaceMember.user_id == viewer_id)
-                        )
+                            SharedWorkspace.members.any(WorkspaceMember.user_id == viewer_id),
+                        ),
                     )
                 )
             )
             can_view = result.scalar_one_or_none() is not None
-    
+
     if not can_view:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     return {
         "id": str(target_user.id),
         "username": target_user.username,
@@ -393,9 +398,9 @@ async def list_users(
     sort_order: str = Query("desc", description="Sort order: asc, desc"),
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(20, ge=1, le=100, description="Items per page"),
-    _jwt = Depends(require_jwt_auth()),
+    _jwt=Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permissions(Permission.USERS_READ))
+    current_user: User = Depends(require_permissions(Permission.USERS_READ)),
 ):
     """List users with filtering and pagination (Admin/Moderator only)"""
     service = UserService(db)
@@ -406,21 +411,21 @@ async def list_users(
         sort_by=sort_by,
         sort_order=sort_order,
         page=page,
-        limit=limit
+        limit=limit,
     )
-    
+
     return {
         "users": [serialize_user(u) for u in result["users"]],
-        "pagination": result["pagination"]
+        "pagination": result["pagination"],
     }
 
 
 @router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def create_user(
     request: UserCreateRequest,
-    _jwt = Depends(require_jwt_auth()),
+    _jwt=Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permissions(Permission.USERS_CREATE))
+    current_user: User = Depends(require_permissions(Permission.USERS_CREATE)),
 ):
     """Create a new user (Admin/Moderator only)"""
     service = UserService(db)
@@ -433,33 +438,31 @@ async def create_user(
         last_name=request.last_name,
         avatar_url=request.avatar_url,
         credits=request.credits,
-        created_by=current_user
+        created_by=current_user,
     )
-    
+
     return serialize_user(user)
 
 
 @router.get("/{user_id}", response_model=UserResponse)
 async def get_user(
-    user_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    user_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
     """Get user by ID. Users can view own profile, admins can view any."""
     # Check permissions
     checker = PermissionChecker(current_user)
-    
+
     # Users can view their own profile
     if str(current_user.id) != user_id:
         # Otherwise need read permission
         checker.require(Permission.USERS_READ)
-    
+
     service = UserService(db)
     user = await service.get_by_id(user_id)
-    
+
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     return serialize_user(user)
 
 
@@ -468,11 +471,11 @@ async def update_user(
     user_id: str,
     request: UserUpdateRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """Update user. Users can update own profile, admins can update any."""
     checker = PermissionChecker(current_user)
-    
+
     # Users can update their own profile (except role and credits)
     if str(current_user.id) != user_id:
         checker.require(Permission.USERS_UPDATE)
@@ -480,12 +483,11 @@ async def update_user(
         # Regular users can't update their own role or credits
         if request.role is not None or request.nuke_balance is not None:
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Cannot update role or credit balance"
+                status_code=status.HTTP_403_FORBIDDEN, detail="Cannot update role or credit balance"
             )
-    
+
     service = UserService(db)
-    
+
     # Build update data
     update_data = {}
     if request.first_name is not None:
@@ -504,7 +506,7 @@ async def update_user(
         update_data["role"] = request.role
     if request.nuke_balance is not None:
         update_data["nuke_balance"] = request.nuke_balance
-    
+
     user = await service.update_user(user_id, update_data, updated_by=current_user)
     return serialize_user(user)
 
@@ -512,18 +514,17 @@ async def update_user(
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(
     user_id: str,
-    _jwt = Depends(require_jwt_auth()),
+    _jwt=Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permissions(Permission.USERS_DELETE))
+    current_user: User = Depends(require_permissions(Permission.USERS_DELETE)),
 ):
     """Delete user (Admin only)"""
     # Prevent self-deletion
     if str(current_user.id) == user_id:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot delete your own account"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot delete your own account"
         )
-    
+
     service = UserService(db)
     await service.delete_user(user_id)
     return None
@@ -533,18 +534,17 @@ async def delete_user(
 async def disable_user(
     user_id: str,
     request: DisableUserRequest,
-    _jwt = Depends(require_jwt_auth()),
+    _jwt=Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permissions(Permission.USERS_UPDATE))
+    current_user: User = Depends(require_permissions(Permission.USERS_UPDATE)),
 ):
     """Disable or enable user (Admin/Moderator only)"""
     # Prevent self-disabling
     if str(current_user.id) == user_id:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot disable your own account"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot disable your own account"
         )
-    
+
     service = UserService(db)
     user = await service.disable_user(user_id, disabled=request.disabled, reason=request.reason)
     return serialize_user(user)
@@ -553,54 +553,51 @@ async def disable_user(
 @router.post("/{user_id}/impersonate")
 async def impersonate_user(
     user_id: str,
-    _jwt = Depends(require_jwt_auth()),
+    _jwt=Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_permissions(Permission.USERS_IMPERSONATE))
+    current_user: User = Depends(require_permissions(Permission.USERS_IMPERSONATE)),
 ):
     """Impersonate a user (Super Admin only). Returns temporary JWT."""
     from app.api.auth import create_access_token
-    
+
     service = UserService(db)
     user = await service.get_by_id(user_id)
-    
+
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     # Create short-lived token for impersonation
     token = create_access_token(
         data={"sub": user.username, "impersonated_by": str(current_user.id)},
-        expires_delta=__import__('datetime').timedelta(minutes=30)
+        expires_delta=__import__("datetime").timedelta(minutes=30),
     )
-    
+
     return {
         "access_token": token,
         "token_type": "bearer",
-        "impersonated_user": serialize_user(user)
+        "impersonated_user": serialize_user(user),
     }
 
 
 # ========== User Profile Endpoints ==========
 
+
 @router.get("/{user_id}/servers")
 async def get_user_servers(
-    user_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    user_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
     """Get user's servers"""
     from app.models.server import Server
     from sqlalchemy import select
-    
+
     # Check access
     checker = PermissionChecker(current_user)
     if str(current_user.id) != user_id:
         checker.require_any([Permission.SERVERS_READ_ALL, Permission.SERVERS_WRITE_ALL])
-    
-    result = await db.execute(
-        select(Server).where(Server.user_id == user_id)
-    )
+
+    result = await db.execute(select(Server).where(Server.user_id == user_id))
     servers = result.scalars().all()
-    
+
     return {
         "servers": [
             {
@@ -617,14 +614,12 @@ async def get_user_servers(
 
 @router.get("/{user_id}/resources")
 async def get_user_resources(
-    user_id: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    user_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
     """Get user's resource usage statistics"""
     service = UserService(db)
     stats = await service.get_user_stats(user_id)
-    
+
     return stats
 
 
@@ -637,7 +632,7 @@ async def get_my_activity(
     from_date: str = Query(None),
     to_date: str = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """Get paginated activity feed for the current user"""
     from sqlalchemy import select, func, desc, and_
@@ -652,13 +647,13 @@ async def get_my_activity(
         query = query.where(ActivityLog.target_type.ilike(f"%{target_type}%"))
     if from_date:
         try:
-            dt = datetime.fromisoformat(from_date.replace('Z', '+00:00'))
+            dt = datetime.fromisoformat(from_date.replace("Z", "+00:00"))
             query = query.where(ActivityLog.created_at >= dt)
         except ValueError:
             pass
     if to_date:
         try:
-            dt = datetime.fromisoformat(to_date.replace('Z', '+00:00'))
+            dt = datetime.fromisoformat(to_date.replace("Z", "+00:00"))
             query = query.where(ActivityLog.created_at <= dt)
         except ValueError:
             pass
@@ -682,7 +677,7 @@ async def get_my_activity(
                 "target_type": a.target_type,
                 "target_id": str(a.target_id) if a.target_id else None,
                 "timestamp": a.created_at.isoformat() if a.created_at else None,
-                "details": a.details or {}
+                "details": a.details or {},
             }
             for a in activities
         ],
@@ -690,7 +685,6 @@ async def get_my_activity(
             "page": page,
             "limit": limit,
             "total": total,
-            "total_pages": (total + limit - 1) // limit
-        }
+            "total_pages": (total + limit - 1) // limit,
+        },
     }
-

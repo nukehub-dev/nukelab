@@ -92,7 +92,10 @@ class TestGetRoleRateLimit:
 class TestLoadRolePermissionsFromDb:
     @pytest.mark.asyncio
     async def test_loads_valid_permissions(self):
-        with mock.patch("app.core.roles.ROLE_PERMISSIONS", {k: list(v) for k, v in _DEFAULT_ROLE_PERMISSIONS.items()}):
+        with mock.patch(
+            "app.core.roles.ROLE_PERMISSIONS",
+            {k: list(v) for k, v in _DEFAULT_ROLE_PERMISSIONS.items()},
+        ):
             stored_json = '{"user": ["servers:read_own", "servers:write_own"]}'
             with mock.patch("app.services.setting_service.SettingService") as MockService:
                 mock_service = MockService.return_value
@@ -102,7 +105,10 @@ class TestLoadRolePermissionsFromDb:
 
     @pytest.mark.asyncio
     async def test_ignores_invalid_permissions(self):
-        with mock.patch("app.core.roles.ROLE_PERMISSIONS", {k: list(v) for k, v in _DEFAULT_ROLE_PERMISSIONS.items()}):
+        with mock.patch(
+            "app.core.roles.ROLE_PERMISSIONS",
+            {k: list(v) for k, v in _DEFAULT_ROLE_PERMISSIONS.items()},
+        ):
             stored_json = '{"user": ["invalid:permission", "servers:read_own"]}'
             with mock.patch("app.services.setting_service.SettingService") as MockService:
                 mock_service = MockService.return_value
@@ -121,7 +127,9 @@ class TestLoadRolePermissionsFromDb:
 
     @pytest.mark.asyncio
     async def test_error_keeps_defaults(self):
-        with mock.patch("app.services.setting_service.SettingService", side_effect=Exception("DB down")):
+        with mock.patch(
+            "app.services.setting_service.SettingService", side_effect=Exception("DB down")
+        ):
             await load_role_permissions_from_db()
 
 
@@ -136,5 +144,7 @@ class TestSaveRolePermissionsToDb:
 
     @pytest.mark.asyncio
     async def test_error_handled(self):
-        with mock.patch("app.services.setting_service.SettingService", side_effect=Exception("DB down")):
+        with mock.patch(
+            "app.services.setting_service.SettingService", side_effect=Exception("DB down")
+        ):
             await save_role_permissions_to_db()

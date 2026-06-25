@@ -18,6 +18,7 @@ class TestEngineConfiguration:
 
             # Ensure session.py is not already imported in this process
             import sys
+
             for mod in list(sys.modules.keys()):
                 if mod.startswith("app.db.session"):
                     del sys.modules[mod]
@@ -50,6 +51,7 @@ class TestEngineConfiguration:
             mock_create.return_value = mock.Mock()
 
             import sys
+
             for mod in list(sys.modules.keys()):
                 if mod.startswith("app.db.session"):
                     del sys.modules[mod]

@@ -34,8 +34,11 @@ from app.core.cache import cache_get_or_set, cache_track_key, cache_delete_track
 _ADMIN_SERVER_LIST_CACHE_TTL = 30
 
 
-def _admin_server_list_cache_key(page: int, limit: int, status: Optional[str], user_id: Optional[str]) -> str:
+def _admin_server_list_cache_key(
+    page: int, limit: int, status: Optional[str], user_id: Optional[str]
+) -> str:
     return f"servers:list:admin:{page}:{limit}:{status or 'all'}:{user_id or 'all'}"
+
 
 router = APIRouter()
 
@@ -59,99 +62,84 @@ class BulkCreditGrantRequest(BaseModel):
 
 # ========== Admin Statistics ==========
 
+
 @router.get("/stats")
 async def get_admin_stats(
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get admin dashboard statistics"""
-    
+
     # User stats
     total_users_result = await db.execute(select(func.count()).select_from(User))
     total_users = total_users_result.scalar()
-    
-    active_users_result = await db.execute(
-        select(func.count()).where(User.is_active == True)
-    )
+
+    active_users_result = await db.execute(select(func.count()).where(User.is_active == True))
     active_users = active_users_result.scalar()
-    
+
     disabled_users = total_users - active_users
-    
+
     # Users by role
-    result = await db.execute(
-        select(User.role, func.count()).group_by(User.role)
-    )
+    result = await db.execute(select(User.role, func.count()).group_by(User.role))
     role_stats = dict(result.all())
     for role in ["super_admin", "admin", "moderator", "support", "user", "guest"]:
         role_stats.setdefault(role, 0)
-    
+
     # Server stats
     total_servers_result = await db.execute(select(func.count()).select_from(Server))
     total_servers = total_servers_result.scalar()
-    
+
     running_servers_result = await db.execute(
         select(func.count()).where(Server.status == "running")
     )
     running_servers = running_servers_result.scalar()
-    
+
     stopped_servers = total_servers - running_servers
-    
+
     # Credit stats (today)
-    today_start = datetime.now(UTC).replace(tzinfo=None).replace(hour=0, minute=0, second=0, microsecond=0)
-    
+    today_start = (
+        datetime.now(UTC).replace(tzinfo=None).replace(hour=0, minute=0, second=0, microsecond=0)
+    )
+
     credits_granted_result = await db.execute(
         select(func.sum(CreditTransaction.amount)).where(
-            and_(
-                CreditTransaction.amount > 0,
-                CreditTransaction.created_at >= today_start
-            )
+            and_(CreditTransaction.amount > 0, CreditTransaction.created_at >= today_start)
         )
     )
     credits_granted_today = credits_granted_result.scalar() or 0
-    
+
     credits_consumed_result = await db.execute(
         select(func.sum(CreditTransaction.amount)).where(
-            and_(
-                CreditTransaction.amount < 0,
-                CreditTransaction.created_at >= today_start
-            )
+            and_(CreditTransaction.amount < 0, CreditTransaction.created_at >= today_start)
         )
     )
     credits_consumed_today = abs(credits_consumed_result.scalar() or 0)
-    
+
     # Low credit users
     low_credit_result = await db.execute(
-        select(func.count()).where(
-            and_(
-                User.is_active == True,
-                User.nuke_balance <= 100
-            )
-        )
+        select(func.count()).where(and_(User.is_active == True, User.nuke_balance <= 100))
     )
     low_credit_users = low_credit_result.scalar()
-    
+
     return {
         "users": {
             "total": total_users,
             "active": active_users,
             "disabled": disabled_users,
-            "by_role": role_stats
+            "by_role": role_stats,
         },
-        "servers": {
-            "total": total_servers,
-            "running": running_servers,
-            "stopped": stopped_servers
-        },
+        "servers": {"total": total_servers, "running": running_servers, "stopped": stopped_servers},
         "credits": {
             "granted_today": credits_granted_today,
             "consumed_today": credits_consumed_today,
-            "low_credit_users": low_credit_users
-        }
+            "low_credit_users": low_credit_users,
+        },
     }
 
 
 # ========== User Management (Admin) ==========
+
 
 @router.get("/users")
 async def admin_list_users(
@@ -161,19 +149,15 @@ async def admin_list_users(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """List all users with admin view"""
     service = UserService(db)
     result = await service.list_users(
-        role=role,
-        status=status,
-        search=search,
-        page=page,
-        limit=limit
+        role=role, status=status, search=search, page=page, limit=limit
     )
-    
+
     return {
         "users": [
             {
@@ -188,7 +172,7 @@ async def admin_list_users(
             }
             for u in result["users"]
         ],
-        "pagination": result["pagination"]
+        "pagination": result["pagination"],
     }
 
 
@@ -198,36 +182,33 @@ async def bulk_user_action(
     request: Request,
     body: BulkActionRequest,
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Perform bulk action on users (atomic batch operation)."""
     import os
     from uuid import UUID
     from app.config import settings
-    
+
     results = {"success": [], "failed": []}
-    
+
     # Convert and validate UUIDs
     try:
         user_uuids = [UUID(uid) for uid in body.user_ids]
     except ValueError as e:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid user ID format: {e}"
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid user ID format: {e}"
         )
-    
+
     # Batch fetch all users
-    result = await db.execute(
-        select(User).where(User.id.in_(user_uuids))
-    )
+    result = await db.execute(select(User).where(User.id.in_(user_uuids)))
     users = {str(u.id): u for u in result.scalars().all()}
-    
+
     # Track missing users
     missing = set(body.user_ids) - set(users)
     for uid in missing:
         results["failed"].append({"user_id": uid, "error": "User not found"})
-    
+
     deleted_users: list[User] = []
 
     if body.action == "delete":
@@ -260,13 +241,12 @@ async def bulk_user_action(
                 results["failed"].append({"user_id": uid, "error": str(e)})
     else:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unknown action: {body.action}"
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unknown action: {body.action}"
         )
-    
+
     # Single atomic commit for all successful changes
     await db.commit()
-    
+
     # Clean up avatar files only after successful DB commit
     if body.action == "delete" and deleted_users:
         avatars_dir = os.path.join(settings.upload_dir, "avatars")
@@ -278,15 +258,16 @@ async def bulk_user_action(
                             os.remove(os.path.join(avatars_dir, old_file))
                 except Exception:
                     pass
-    
+
     return {
         "message": f"Processed {len(body.user_ids)} users",
         "action": body.action,
-        "results": results
+        "results": results,
     }
 
 
 # ========== Server Management (Admin) ==========
+
 
 @router.get("/servers")
 async def admin_list_servers(
@@ -295,8 +276,8 @@ async def admin_list_servers(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """List all servers (admin view).
 
@@ -344,8 +325,8 @@ async def admin_list_servers(
                 "page": page,
                 "limit": limit,
                 "total": total,
-                "total_pages": (total + limit - 1) // limit
-            }
+                "total_pages": (total + limit - 1) // limit,
+            },
         }
 
     response = await cache_get_or_set(cache_key, _build_response, _ADMIN_SERVER_LIST_CACHE_TTL)
@@ -360,49 +341,45 @@ async def bulk_server_action(
     request: Request,
     body: BulkServerActionRequest,
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Perform bulk action on servers (batch fetch, single commit)."""
     from app.container.spawner import spawner
     from uuid import UUID
-    
+
     # Validate action up front
     if body.action not in ("start", "stop", "delete"):
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unknown action: {body.action}"
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unknown action: {body.action}"
         )
-    
+
     results = {"success": [], "failed": []}
     affected_user_ids: set[str] = set()
     status_changes: list[tuple[str, str, str]] = []  # (user_id, server_id, status)
-    
+
     # Validate UUIDs
     try:
         server_uuids = [UUID(sid) for sid in body.server_ids]
     except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid server ID format"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid server ID format"
         )
-    
+
     # Batch fetch all servers
-    result = await db.execute(
-        select(Server).where(Server.id.in_(server_uuids))
-    )
+    result = await db.execute(select(Server).where(Server.id.in_(server_uuids)))
     servers = {str(s.id): s for s in result.scalars().all()}
-    
+
     # Track missing servers
     missing = set(body.server_ids) - set(servers)
     for sid in missing:
         results["failed"].append({"server_id": sid, "error": "Server not found"})
-    
+
     # Process actions
     for server_id in body.server_ids:
         if server_id in missing:
             continue
-        
+
         server = servers[server_id]
         try:
             if body.action == "start":
@@ -421,89 +398,81 @@ async def bulk_server_action(
                     await spawner.delete(server.container_id)
                 await db.delete(server)
                 affected_user_ids.add(user_id)
-            
+
             if body.action in ("start", "stop"):
                 affected_user_ids.add(str(server.user_id))
             results["success"].append(server_id)
         except Exception as e:
             results["failed"].append({"server_id": server_id, "error": str(e)})
-    
+
     # Single atomic commit for all successful DB changes
     await db.commit()
-    
+
     # Broadcast status changes after successful commit
     for user_id, sid, srv_status in status_changes:
         await broadcast_server_status_change(user_id, sid, srv_status)
-    
+
     # Invalidate caches for all affected users + admin lists
     from app.api.servers import _invalidate_server_list_cache
+
     for uid in affected_user_ids:
         await _invalidate_server_list_cache(uid)
-    
+
     return {
         "message": f"Processed {len(body.server_ids)} servers",
         "action": body.action,
-        "results": results
+        "results": results,
     }
 
 
 # ========== Credit Management (Admin) ==========
 
+
 @router.get("/credits/summary")
 async def admin_credit_summary(
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get credit system summary"""
-    
+
     # Total credits in system
     total_credits_result = await db.execute(
         select(func.sum(User.nuke_balance)).where(User.is_active == True)
     )
     total_credits = total_credits_result.scalar() or 0
-    
+
     # Today's transactions
-    today_start = datetime.now(UTC).replace(tzinfo=None).replace(hour=0, minute=0, second=0, microsecond=0)
-    
+    today_start = (
+        datetime.now(UTC).replace(tzinfo=None).replace(hour=0, minute=0, second=0, microsecond=0)
+    )
+
     today_granted = await db.execute(
         select(func.sum(CreditTransaction.amount)).where(
-            and_(
-                CreditTransaction.amount > 0,
-                CreditTransaction.created_at >= today_start
-            )
+            and_(CreditTransaction.amount > 0, CreditTransaction.created_at >= today_start)
         )
     )
-    
+
     today_consumed = await db.execute(
         select(func.sum(CreditTransaction.amount)).where(
-            and_(
-                CreditTransaction.amount < 0,
-                CreditTransaction.created_at >= today_start
-            )
+            and_(CreditTransaction.amount < 0, CreditTransaction.created_at >= today_start)
         )
     )
-    
+
     # Top users by balance
     top_users_result = await db.execute(
-        select(User).where(User.is_active == True)
-        .order_by(desc(User.nuke_balance))
-        .limit(10)
+        select(User).where(User.is_active == True).order_by(desc(User.nuke_balance)).limit(10)
     )
     top_users = top_users_result.scalars().all()
-    
+
     return {
         "total_credits_in_system": total_credits,
         "today_granted": today_granted.scalar() or 0,
         "today_consumed": abs(today_consumed.scalar() or 0),
         "top_users": [
-            {
-                "id": str(u.id),
-                "username": u.username,
-                "nuke_balance": u.nuke_balance
-            }
+            {"id": str(u.id), "username": u.username, "nuke_balance": u.nuke_balance}
             for u in top_users
-        ]
+        ],
     }
 
 
@@ -511,32 +480,33 @@ async def admin_credit_summary(
 async def bulk_grant_credits(
     request: BulkCreditGrantRequest,
     current_user: User = Depends(require_permissions(Permission.CREDITS_GRANT)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Grant credits to multiple users"""
     service = CreditService(db)
     results = {"success": [], "failed": []}
-    
+
     for user_id in request.user_ids:
         try:
             await service.grant_credits(
                 user_id=user_id,
                 amount=request.amount,
                 actor_id=str(current_user.id),
-                reason=request.reason
+                reason=request.reason,
             )
             results["success"].append(user_id)
         except Exception as e:
             results["failed"].append({"user_id": user_id, "error": str(e)})
-    
+
     return {
         "message": f"Granted {request.amount} credits to {len(request.user_ids)} users",
-        "results": results
+        "results": results,
     }
 
 
 # ========== Activity Logs ==========
+
 
 @router.get("/activity")
 async def get_activity_logs(
@@ -548,74 +518,76 @@ async def get_activity_logs(
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=100),
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get activity logs with filtering"""
     query = select(ActivityLog)
-    
+
     if user_id:
         query = query.where(ActivityLog.actor_id == user_id)
-    
+
     if action:
         query = query.where(ActivityLog.action == action)
-    
+
     if target_type:
         query = query.where(ActivityLog.target_type == target_type)
-    
+
     if from_date:
         query = query.where(ActivityLog.created_at >= from_date)
-    
+
     if to_date:
         query = query.where(ActivityLog.created_at <= to_date)
-    
+
     # Count
     count_result = await db.execute(select(func.count()).select_from(query.subquery()))
     total = count_result.scalar()
-    
+
     # Pagination
     offset = (page - 1) * limit
     query = query.offset(offset).limit(limit).order_by(desc(ActivityLog.created_at))
-    
+
     result = await db.execute(query)
     logs = result.scalars().all()
-    
+
     return {
         "logs": [log.to_dict() for log in logs],
         "pagination": {
             "page": page,
             "limit": limit,
             "total": total,
-            "total_pages": (total + limit - 1) // limit
-        }
+            "total_pages": (total + limit - 1) // limit,
+        },
     }
 
 
 # ========== System Health ==========
 
+
 @router.get("/system/health")
 async def admin_system_health(
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get system health status"""
-    
+
     # Database connection check
     try:
         result = await db.execute(select(func.count()).select_from(User))
         db_status = "healthy"
     except Exception as e:
         db_status = f"error: {str(e)}"
-    
+
     return {
         "status": "healthy",
         "database": db_status,
-        "timestamp": datetime.now(UTC).replace(tzinfo=None).isoformat()
+        "timestamp": datetime.now(UTC).replace(tzinfo=None).isoformat(),
     }
 
 
 # ========== Audit Log Export ==========
+
 
 @router.get("/activity/export")
 async def export_activity_logs(
@@ -627,14 +599,14 @@ async def export_activity_logs(
     to_date: Optional[datetime] = Query(None),
     limit: int = Query(1000, ge=1, le=10000),
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Export activity logs (admin only)"""
     from app.api.auth import get_current_user, require_jwt_auth
-    
+
     query = select(ActivityLog)
-    
+
     if user_id:
         query = query.where(ActivityLog.actor_id == user_id)
     if action:
@@ -645,62 +617,60 @@ async def export_activity_logs(
         query = query.where(ActivityLog.created_at >= from_date)
     if to_date:
         query = query.where(ActivityLog.created_at <= to_date)
-    
+
     query = query.order_by(desc(ActivityLog.created_at)).limit(limit)
-    
+
     result = await db.execute(query)
     logs = result.scalars().all()
-    
+
     if format == "csv":
         import csv
         import io
-        
+
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(["id", "actor_id", "action", "target_type", "target_id", "ip_address", "created_at"])
-        
+        writer.writerow(
+            ["id", "actor_id", "action", "target_type", "target_id", "ip_address", "created_at"]
+        )
+
         for log in logs:
-            writer.writerow([
-                str(log.id),
-                str(log.actor_id) if log.actor_id else "",
-                log.action,
-                log.target_type,
-                str(log.target_id) if log.target_id else "",
-                str(log.ip_address) if log.ip_address else "",
-                log.created_at.isoformat() if log.created_at else ""
-            ])
-        
+            writer.writerow(
+                [
+                    str(log.id),
+                    str(log.actor_id) if log.actor_id else "",
+                    log.action,
+                    log.target_type,
+                    str(log.target_id) if log.target_id else "",
+                    str(log.ip_address) if log.ip_address else "",
+                    log.created_at.isoformat() if log.created_at else "",
+                ]
+            )
+
         from fastapi.responses import StreamingResponse
-        
+
         return StreamingResponse(
             iter([output.getvalue()]),
             media_type="text/csv",
-            headers={"Content-Disposition": "attachment; filename=activity_logs.csv"}
+            headers={"Content-Disposition": "attachment; filename=activity_logs.csv"},
         )
-    
-    return {
-        "logs": [log.to_dict() for log in logs],
-        "count": len(logs)
-    }
+
+    return {"logs": [log.to_dict() for log in logs], "count": len(logs)}
 
 
 # ========== Permission Matrix ==========
 
+
 @router.get("/permissions")
 async def get_permission_matrix(
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
-    _jwt = Depends(require_jwt_auth()),
+    _jwt=Depends(require_jwt_auth()),
 ):
     """Get current role-permission matrix"""
     matrix = {}
     for role in VALID_ROLES:
         matrix[role] = get_role_permissions(role)
-    
-    return {
-        "roles": VALID_ROLES,
-        "permissions": Permission.all_permissions(),
-        "matrix": matrix
-    }
+
+    return {"roles": VALID_ROLES, "permissions": Permission.all_permissions(), "matrix": matrix}
 
 
 class UpdateRolePermissionsRequest(BaseModel):
@@ -712,50 +682,48 @@ async def update_role_permissions(
     role: str,
     request: UpdateRolePermissionsRequest,
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
-    _jwt = Depends(require_jwt_auth()),
+    _jwt=Depends(require_jwt_auth()),
 ):
     """Update permissions for a role (except super_admin which always has ALL)"""
     if role == "super_admin":
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Cannot modify super_admin permissions"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Cannot modify super_admin permissions"
         )
-    
+
     if role not in VALID_ROLES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid role: {role}"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid role: {role}")
+
     # Validate all permissions
     all_perms = set(Permission.all_permissions())
     invalid_perms = [p for p in request.permissions if p not in all_perms and p != Permission.ALL]
     if invalid_perms:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid permissions: {invalid_perms}"
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid permissions: {invalid_perms}"
         )
-    
+
     # Update the role permissions in memory, rebuild the expansion cache, and persist
     ROLE_PERMISSIONS[role] = request.permissions
 
     from app.core.roles import _rebuild_expansion_cache
+
     _rebuild_expansion_cache()
 
     try:
         from app.core.roles import save_role_permissions_to_db
+
         await save_role_permissions_to_db()
     except Exception:
         pass
-    
+
     return {
         "role": role,
         "permissions": request.permissions,
-        "message": f"Permissions updated for role '{role}'"
+        "message": f"Permissions updated for role '{role}'",
     }
 
 
 # ========== Email Configuration ==========
+
 
 class EmailConfigResponse(BaseModel):
     smtp_host: str
@@ -776,12 +744,15 @@ class EmailTestRequest(BaseModel):
 @router.get("/email-config", response_model=EmailConfigResponse)
 async def get_email_config(
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
-    _jwt = Depends(require_jwt_auth()),
+    _jwt=Depends(require_jwt_auth()),
 ):
     """Get current email/SMTP configuration (password hidden)"""
     import logging
+
     logger = logging.getLogger(__name__)
-    logger.info(f"Email config request — host={settings.smtp_host!r}, port={settings.smtp_port}, user={settings.smtp_user!r}, from={settings.smtp_from!r}")
+    logger.info(
+        f"Email config request — host={settings.smtp_host!r}, port={settings.smtp_port}, user={settings.smtp_user!r}, from={settings.smtp_from!r}"
+    )
     return EmailConfigResponse(
         smtp_host=settings.smtp_host,
         smtp_port=settings.smtp_port,
@@ -791,7 +762,7 @@ async def get_email_config(
         smtp_tls=settings.smtp_tls,
         smtp_verify_certs=settings.smtp_verify_certs,
         enabled=bool(settings.smtp_host),
-        password_configured=bool(settings.smtp_password)
+        password_configured=bool(settings.smtp_password),
     )
 
 
@@ -799,7 +770,7 @@ async def get_email_config(
 async def test_email(
     request: EmailTestRequest,
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
-    _jwt = Depends(require_jwt_auth()),
+    _jwt=Depends(require_jwt_auth()),
 ):
     """Send a test email to verify SMTP configuration"""
     from app.services.email_service import EmailService
@@ -808,17 +779,18 @@ async def test_email(
     if not service.enabled:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="SMTP is not configured. Set SMTP_HOST and other SMTP variables in your environment."
+            detail="SMTP is not configured. Set SMTP_HOST and other SMTP variables in your environment.",
         )
 
     to_email = request.to_email or current_user.email
     if not to_email:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No recipient email provided and current user has no email address."
+            detail="No recipient email provided and current user has no email address.",
         )
 
     import logging
+
     logger = logging.getLogger(__name__)
     logger.info(f"Sending test email to {to_email} via {service.smtp_host}:{service.smtp_port}")
 
@@ -834,49 +806,42 @@ async def test_email(
             <div style="background: #f3f4f6; padding: 16px; border-radius: 8px; margin: 16px 0;">
                 <p style="margin: 0;"><strong>SMTP Host:</strong> {service.smtp_host}</p>
                 <p style="margin: 4px 0 0;"><strong>SMTP Port:</strong> {service.smtp_port}</p>
-                <p style="margin: 4px 0 0;"><strong>Sent at:</strong> {datetime.now(UTC).replace(tzinfo=None).strftime('%Y-%m-%d %H:%M:%S UTC')}</p>
+                <p style="margin: 4px 0 0;"><strong>Sent at:</strong> {datetime.now(UTC).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S UTC")}</p>
             </div>
             <p>If you received this email, your email notifications are ready to use.</p>
         </body>
         </html>
         """,
-        text_body=f"SMTP Test from NukeLab\n\nHello {current_user.username},\n\nThis is a test email to verify your SMTP configuration is working.\n\nSMTP Host: {service.smtp_host}\nSMTP Port: {service.smtp_port}\nSent at: {datetime.now(UTC).replace(tzinfo=None).strftime('%Y-%m-%d %H:%M:%S UTC')}"
+        text_body=f"SMTP Test from NukeLab\n\nHello {current_user.username},\n\nThis is a test email to verify your SMTP configuration is working.\n\nSMTP Host: {service.smtp_host}\nSMTP Port: {service.smtp_port}\nSent at: {datetime.now(UTC).replace(tzinfo=None).strftime('%Y-%m-%d %H:%M:%S UTC')}",
     )
 
     if not result["success"]:
         logger.error(f"Test email failed: {result['error']}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to send test email. Please check your SMTP configuration and try again."
+            detail="Failed to send test email. Please check your SMTP configuration and try again.",
         )
 
     logger.info(f"Test email sent successfully to {to_email}")
-    return {
-        "success": True,
-        "message": f"Test email sent to {to_email}",
-        "recipient": to_email
-    }
+    return {"success": True, "message": f"Test email sent to {to_email}", "recipient": to_email}
 
 
 @router.get("/email-status")
 async def get_email_status(
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
-    _jwt = Depends(require_jwt_auth()),
+    _jwt=Depends(require_jwt_auth()),
 ):
     """Check SMTP connectivity status"""
     from app.services.email_service import EmailService
 
     service = EmailService()
     if not service.enabled:
-        return {
-            "status": "disabled",
-            "message": "SMTP is not configured",
-            "configured": False
-        }
+        return {"status": "disabled", "message": "SMTP is not configured", "configured": False}
 
     # Try to connect to SMTP server without sending
     try:
         import aiosmtplib
+
         # Disable auto-TLS so we control it explicitly (avoid "already using TLS" on port 587)
         smtp = aiosmtplib.SMTP(
             hostname=service.smtp_host,
@@ -896,7 +861,7 @@ async def get_email_status(
             "message": f"Successfully connected to {service.smtp_host}:{service.smtp_port}",
             "configured": True,
             "host": service.smtp_host,
-            "port": service.smtp_port
+            "port": service.smtp_port,
         }
     except Exception as e:
         return {
@@ -904,11 +869,12 @@ async def get_email_status(
             "message": f"Could not connect to SMTP server: {str(e)}",
             "configured": True,
             "host": service.smtp_host,
-            "port": service.smtp_port
+            "port": service.smtp_port,
         }
 
 
 # ========== Workspace Management (Admin) ==========
+
 
 class UpdateWorkspaceRequest(BaseModel):
     name: Optional[str] = None
@@ -926,8 +892,8 @@ async def admin_list_workspaces(
     sort_by: str = Query("created_at"),
     sort_order: str = Query("desc"),
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """List all workspaces (admin view)"""
     service = WorkspaceService(db)
@@ -940,15 +906,15 @@ async def admin_list_workspaces(
         status=status,
         owner_id=owner_id,
     )
-    
+
     return {
         "workspaces": result["workspaces"],
         "pagination": {
             "page": result["page"],
             "limit": result["limit"],
             "total": result["total"],
-            "total_pages": (result["total"] + result["limit"] - 1) // result["limit"]
-        }
+            "total_pages": (result["total"] + result["limit"] - 1) // result["limit"],
+        },
     }
 
 
@@ -956,21 +922,25 @@ async def admin_list_workspaces(
 async def admin_get_workspace(
     workspace_id: str,
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get workspace details (admin view)"""
     service = WorkspaceService(db)
     workspace = await service.get_workspace(workspace_id)
-    
+
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found")
-    
+
     return {
         "workspace": workspace.to_dict(),
         "members": [m.to_dict() for m in workspace.members] if workspace.members else [],
-        "volumes": [v.to_dict() for v in workspace.volume_associations] if workspace.volume_associations else [],
-        "invitations": [i.to_dict() for i in workspace.invitations] if workspace.invitations else [],
+        "volumes": [v.to_dict() for v in workspace.volume_associations]
+        if workspace.volume_associations
+        else [],
+        "invitations": [i.to_dict() for i in workspace.invitations]
+        if workspace.invitations
+        else [],
     }
 
 
@@ -979,8 +949,8 @@ async def admin_update_workspace(
     workspace_id: str,
     request: UpdateWorkspaceRequest,
     current_user: User = Depends(require_permissions(Permission.WORKSPACES_WRITE_ALL)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Update workspace (admin)"""
     service = WorkspaceService(db)
@@ -990,14 +960,14 @@ async def admin_update_workspace(
         description=request.description,
         is_active=request.is_active,
     )
-    
+
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found")
-    
+
     return {
         "success": True,
         "workspace": workspace.to_dict(),
-        "message": "Workspace updated successfully"
+        "message": "Workspace updated successfully",
     }
 
 
@@ -1005,22 +975,19 @@ async def admin_update_workspace(
 async def admin_delete_workspace(
     workspace_id: str,
     current_user: User = Depends(require_permissions(Permission.WORKSPACES_WRITE_ALL)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Delete workspace (admin)"""
     service = WorkspaceService(db)
     workspace = await service.get_workspace(workspace_id)
-    
+
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found")
-    
+
     success = await service.delete_workspace(workspace_id)
-    
-    return {
-        "success": success,
-        "message": "Workspace deleted successfully"
-    }
+
+    return {"success": success, "message": "Workspace deleted successfully"}
 
 
 @router.get("/workspaces/{workspace_id}/members")
@@ -1031,8 +998,8 @@ async def admin_list_workspace_members(
     search: Optional[str] = Query(None),
     role: Optional[str] = Query(None),
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """List workspace members (admin view)"""
     service = WorkspaceService(db)
@@ -1043,15 +1010,15 @@ async def admin_list_workspace_members(
         search=search,
         role=role,
     )
-    
+
     return {
         "members": result["members"],
         "pagination": {
             "page": result["page"],
             "limit": result["limit"],
             "total": result["total"],
-            "total_pages": (result["total"] + result["limit"] - 1) // result["limit"]
-        }
+            "total_pages": (result["total"] + result["limit"] - 1) // result["limit"],
+        },
     }
 
 
@@ -1062,8 +1029,8 @@ async def admin_list_workspace_volumes(
     limit: int = Query(20, ge=1, le=100),
     search: Optional[str] = Query(None),
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """List workspace volumes (admin view)"""
     service = WorkspaceService(db)
@@ -1073,19 +1040,20 @@ async def admin_list_workspace_volumes(
         limit=limit,
         search=search,
     )
-    
+
     return {
         "volumes": result["volumes"],
         "pagination": {
             "page": result["page"],
             "limit": result["limit"],
             "total": result["total"],
-            "total_pages": (result["total"] + result["limit"] - 1) // result["limit"]
-        }
+            "total_pages": (result["total"] + result["limit"] - 1) // result["limit"],
+        },
     }
 
 
 # ========== Volume Management (Admin) ==========
+
 
 class UpdateVolumeRequest(BaseModel):
     display_name: Optional[str] = None
@@ -1106,8 +1074,8 @@ async def admin_list_volumes(
     sort_by: str = Query("created_at"),
     sort_order: str = Query("desc"),
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """List all volumes (admin view)"""
     service = VolumeService(db)
@@ -1121,15 +1089,15 @@ async def admin_list_volumes(
         visibility=visibility,
         owner_id=owner_id,
     )
-    
+
     return {
         "volumes": result["volumes"],
         "pagination": {
             "page": result["page"],
             "limit": result["limit"],
             "total": result["total"],
-            "total_pages": (result["total"] + result["limit"] - 1) // result["limit"]
-        }
+            "total_pages": (result["total"] + result["limit"] - 1) // result["limit"],
+        },
     }
 
 
@@ -1137,16 +1105,16 @@ async def admin_list_volumes(
 async def admin_get_volume(
     volume_id: str,
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get volume details (admin view)"""
     service = VolumeService(db)
     volume = await service.get_volume(volume_id)
-    
+
     if not volume:
         raise HTTPException(status_code=404, detail="Volume not found")
-    
+
     return {
         "volume": volume.to_dict(),
     }
@@ -1157,8 +1125,8 @@ async def admin_update_volume(
     volume_id: str,
     request: UpdateVolumeRequest,
     current_user: User = Depends(require_permissions(Permission.VOLUMES_WRITE_ALL)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Update volume (admin)"""
     service = VolumeService(db)
@@ -1180,37 +1148,30 @@ async def admin_update_volume(
         status=request.status,
         max_size_bytes=request.max_size_bytes,
     )
-    
-    return {
-        "success": True,
-        "volume": volume.to_dict(),
-        "message": "Volume updated successfully"
-    }
+
+    return {"success": True, "volume": volume.to_dict(), "message": "Volume updated successfully"}
 
 
 @router.delete("/volumes/{volume_id}")
 async def admin_delete_volume(
     volume_id: str,
     current_user: User = Depends(require_permissions(Permission.VOLUMES_WRITE_ALL)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Delete volume (admin)"""
     service = VolumeService(db)
     volume = await service.get_volume(volume_id)
-    
+
     if not volume:
         raise HTTPException(status_code=404, detail="Volume not found")
-    
+
     try:
         success = await service.delete_volume(volume_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    
-    return {
-        "success": success,
-        "message": "Volume deleted successfully"
-    }
+
+    return {"success": success, "message": "Volume deleted successfully"}
 
 
 # ========== Retention Policy Management ==========
@@ -1221,8 +1182,8 @@ from app.services.retention_service import RetentionService
 @router.get("/retention")
 async def get_retention_policy(
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get current data retention policy."""
     service = RetentionService(db)
@@ -1234,8 +1195,8 @@ async def get_retention_policy(
 async def update_retention_policy(
     request: dict,
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Update data retention policy."""
     service = RetentionService(db)
@@ -1248,6 +1209,7 @@ async def update_retention_policy(
 
 # ========== Workspace Bulk Actions ==========
 
+
 class BulkWorkspaceActionRequest(BaseModel):
     action: str  # delete, activate, deactivate
     workspace_ids: List[str]
@@ -1259,15 +1221,15 @@ async def bulk_workspace_action(
     request: Request,
     body: BulkWorkspaceActionRequest,
     current_user: User = Depends(require_permissions(Permission.WORKSPACES_WRITE_ALL)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Perform bulk action on workspaces."""
     valid_actions = ["delete", "activate", "deactivate"]
     if body.action not in valid_actions:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid action. Must be one of: {', '.join(valid_actions)}"
+            detail=f"Invalid action. Must be one of: {', '.join(valid_actions)}",
         )
 
     workspace_service = WorkspaceService(db)
@@ -1289,11 +1251,12 @@ async def bulk_workspace_action(
     return {
         "message": f"Processed {len(body.workspace_ids)} workspaces",
         "action": body.action,
-        "results": results
+        "results": results,
     }
 
 
 # ========== Volume Bulk Actions ==========
+
 
 class BulkVolumeActionRequest(BaseModel):
     action: str  # delete, archive, activate
@@ -1306,15 +1269,15 @@ async def bulk_volume_action(
     request: Request,
     body: BulkVolumeActionRequest,
     current_user: User = Depends(require_permissions(Permission.VOLUMES_WRITE_ALL)),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Perform bulk action on volumes."""
     valid_actions = ["delete", "archive", "activate"]
     if body.action not in valid_actions:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid action. Must be one of: {', '.join(valid_actions)}"
+            detail=f"Invalid action. Must be one of: {', '.join(valid_actions)}",
         )
 
     volume_service = VolumeService(db)
@@ -1336,11 +1299,12 @@ async def bulk_volume_action(
     return {
         "message": f"Processed {len(body.volume_ids)} volumes",
         "action": body.action,
-        "results": results
+        "results": results,
     }
 
 
 # ========== Health Monitoring ==========
+
 
 class HealthMonitoringResponse(BaseModel):
     system: dict
@@ -1355,8 +1319,8 @@ async def get_health_monitoring(
     status_filter: Optional[str] = Query(None, alias="status"),
     search: Optional[str] = Query(None),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.ADMIN_ACCESS)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get comprehensive health monitoring data for admin dashboard.
 
@@ -1379,12 +1343,7 @@ async def get_health_monitoring(
     # ------------------------------------------------------------------
     # System health (fast, always computed)
     # ------------------------------------------------------------------
-    health_data = {
-        "status": "healthy",
-        "timestamp": time.time(),
-        "services": {},
-        "resources": {}
-    }
+    health_data = {"status": "healthy", "timestamp": time.time(), "services": {}, "resources": {}}
 
     # Database check
     try:
@@ -1393,13 +1352,10 @@ async def get_health_monitoring(
         db_latency = (time.time() - start) * 1000
         health_data["services"]["database"] = {
             "status": "healthy",
-            "latency_ms": round(db_latency, 2)
+            "latency_ms": round(db_latency, 2),
         }
     except Exception as e:
-        health_data["services"]["database"] = {
-            "status": "unhealthy",
-            "error": str(e)
-        }
+        health_data["services"]["database"] = {"status": "unhealthy", "error": str(e)}
         health_data["status"] = "degraded"
 
     # Redis check
@@ -1411,13 +1367,10 @@ async def get_health_monitoring(
         await redis_client.aclose()
         health_data["services"]["redis"] = {
             "status": "healthy",
-            "latency_ms": round(redis_latency, 2)
+            "latency_ms": round(redis_latency, 2),
         }
     except Exception as e:
-        health_data["services"]["redis"] = {
-            "status": "unhealthy",
-            "error": str(e)
-        }
+        health_data["services"]["redis"] = {"status": "unhealthy", "error": str(e)}
         health_data["status"] = "degraded"
 
     # Container runtime check
@@ -1434,10 +1387,7 @@ async def get_health_monitoring(
             "runtime": runtime_name,
         }
     except Exception as e:
-        health_data["services"]["containers"] = {
-            "status": "unhealthy",
-            "error": str(e)
-        }
+        health_data["services"]["containers"] = {"status": "unhealthy", "error": str(e)}
         health_data["status"] = "degraded"
 
     # SMTP check
@@ -1445,6 +1395,7 @@ async def get_health_monitoring(
         email_service = EmailService()
         if email_service.enabled:
             import aiosmtplib
+
             smtp = aiosmtplib.SMTP(
                 hostname=email_service.smtp_host,
                 port=email_service.smtp_port,
@@ -1459,23 +1410,21 @@ async def get_health_monitoring(
             health_data["services"]["smtp"] = {
                 "status": "healthy",
                 "host": email_service.smtp_host,
-                "port": email_service.smtp_port
+                "port": email_service.smtp_port,
             }
         else:
             health_data["services"]["smtp"] = {
                 "status": "disabled",
-                "message": "SMTP not configured"
+                "message": "SMTP not configured",
             }
     except Exception as e:
-        health_data["services"]["smtp"] = {
-            "status": "unhealthy",
-            "error": str(e)
-        }
+        health_data["services"]["smtp"] = {"status": "unhealthy", "error": str(e)}
         health_data["status"] = "degraded"
 
     # Partition check
     try:
         from app.db.partitioning import PartitionManager
+
         pm = PartitionManager(db)
         issues = []
         for table in pm.PARTITION_CONFIG:
@@ -1486,23 +1435,21 @@ async def get_health_monitoring(
         if issues:
             health_data["services"]["partitions"] = {
                 "status": "unhealthy",
-                "error": "; ".join(issues)
+                "error": "; ".join(issues),
             }
             health_data["status"] = "degraded"
         else:
             health_data["services"]["partitions"] = {
                 "status": "healthy",
-                "message": f"{len(pm.PARTITION_CONFIG)} tables OK"
+                "message": f"{len(pm.PARTITION_CONFIG)} tables OK",
             }
     except Exception as e:
-        health_data["services"]["partitions"] = {
-            "status": "unhealthy",
-            "error": str(e)
-        }
+        health_data["services"]["partitions"] = {"status": "unhealthy", "error": str(e)}
         health_data["status"] = "degraded"
 
     # System resources
     try:
+
         def get_disk_info(path: str):
             usage = psutil.disk_usage(path)
             return {
@@ -1552,7 +1499,7 @@ async def get_health_monitoring(
                 "used_bytes": mem.used,
             },
             "disk": {**disk_info, "fstype": fs_type},
-            "load_average": psutil.getloadavg()
+            "load_average": psutil.getloadavg(),
         }
         if container_disk_info:
             container_fs_type = None
@@ -1563,13 +1510,23 @@ async def get_health_monitoring(
                         break
             except Exception:
                 pass
-            health_data["resources"]["container_disk"] = {**container_disk_info, "fstype": container_fs_type}
+            health_data["resources"]["container_disk"] = {
+                **container_disk_info,
+                "fstype": container_fs_type,
+            }
     except Exception:
         health_data["resources"] = {
             "cpu": {"percent": 0, "count": 0, "count_logical": 0, "freq_mhz": None},
             "memory": {"percent": 0, "total_bytes": 0, "available_bytes": 0, "used_bytes": 0},
-            "disk": {"path": "/", "percent": 0, "total_bytes": 0, "used_bytes": 0, "free_bytes": 0, "fstype": None},
-            "load_average": (0, 0, 0)
+            "disk": {
+                "path": "/",
+                "percent": 0,
+                "total_bytes": 0,
+                "used_bytes": 0,
+                "free_bytes": 0,
+                "fstype": None,
+            },
+            "load_average": (0, 0, 0),
         }
 
     # ------------------------------------------------------------------
@@ -1593,9 +1550,7 @@ async def get_health_monitoring(
         )
 
     # Get total count of running servers matching filters
-    total_result = await db.execute(
-        select(func.count()).select_from(server_base.subquery())
-    )
+    total_result = await db.execute(select(func.count()).select_from(server_base.subquery()))
     total_running = total_result.scalar() or 0
 
     # Get paginated server IDs
@@ -1608,10 +1563,7 @@ async def get_health_monitoring(
     latest_checks = []
     if server_ids:
         subq = (
-            select(
-                HealthCheck.server_id,
-                func.max(HealthCheck.checked_at).label("latest_check")
-            )
+            select(HealthCheck.server_id, func.max(HealthCheck.checked_at).label("latest_check"))
             .where(HealthCheck.server_id.in_(server_ids))
             .group_by(HealthCheck.server_id)
             .subquery()
@@ -1621,10 +1573,13 @@ async def get_health_monitoring(
             select(HealthCheck, Server, UserModel)
             .join(Server, HealthCheck.server_id == Server.id)
             .join(UserModel, Server.user_id == UserModel.id)
-            .join(subq, and_(
-                HealthCheck.server_id == subq.c.server_id,
-                HealthCheck.checked_at == subq.c.latest_check
-            ))
+            .join(
+                subq,
+                and_(
+                    HealthCheck.server_id == subq.c.server_id,
+                    HealthCheck.checked_at == subq.c.latest_check,
+                ),
+            )
             .where(Server.id.in_(server_ids))
         )
 
@@ -1636,19 +1591,23 @@ async def get_health_monitoring(
         checks_result = await db.execute(checks_query)
 
         for hc, server, user_obj in checks_result.all():
-            latest_checks.append({
-                "id": str(hc.id),
-                "server_id": str(hc.server_id),
-                "server_name": server.name,
-                "username": user_obj.username if user_obj else "unknown",
-                "container_id": hc.container_id,
-                "status": hc.status,
-                "exit_code": hc.exit_code,
-                "output": hc.output,
-                "consecutive_failures": hc.consecutive_failures,
-                "last_success_at": hc.last_success_at.isoformat() if hc.last_success_at else None,
-                "checked_at": hc.checked_at.isoformat() if hc.checked_at else None,
-            })
+            latest_checks.append(
+                {
+                    "id": str(hc.id),
+                    "server_id": str(hc.server_id),
+                    "server_name": server.name,
+                    "username": user_obj.username if user_obj else "unknown",
+                    "container_id": hc.container_id,
+                    "status": hc.status,
+                    "exit_code": hc.exit_code,
+                    "output": hc.output,
+                    "consecutive_failures": hc.consecutive_failures,
+                    "last_success_at": hc.last_success_at.isoformat()
+                    if hc.last_success_at
+                    else None,
+                    "checked_at": hc.checked_at.isoformat() if hc.checked_at else None,
+                }
+            )
 
     # Summary counts — count ALL running servers by their latest health status
     # Uses a window function to get the latest check per server entirely in SQL
@@ -1663,16 +1622,12 @@ async def get_health_monitoring(
         select(
             HealthCheck.server_id,
             HealthCheck.status,
-            func.row_number().over(
-                partition_by=HealthCheck.server_id,
-                order_by=desc(HealthCheck.checked_at)
-            ).label("rn")
+            func.row_number()
+            .over(partition_by=HealthCheck.server_id, order_by=desc(HealthCheck.checked_at))
+            .label("rn"),
         )
         .join(Server, HealthCheck.server_id == Server.id)
-        .where(
-            Server.status == "running",
-            HealthCheck.checked_at >= recent
-        )
+        .where(Server.status == "running", HealthCheck.checked_at >= recent)
         .subquery()
     )
 
@@ -1682,10 +1637,10 @@ async def get_health_monitoring(
         .group_by(latest_check_subq.c.status)
     )
     status_counts = {status: count for status, count in summary_result.all()}
-    unhealthy_count = status_counts.get('unhealthy', 0)
-    unknown_count = status_counts.get('unknown', 0)
-    restarting_count = status_counts.get('restarting', 0)
-    restart_failed_count = status_counts.get('restart_failed', 0)
+    unhealthy_count = status_counts.get("unhealthy", 0)
+    unknown_count = status_counts.get("unknown", 0)
+    restarting_count = status_counts.get("restarting", 0)
+    restart_failed_count = status_counts.get("restart_failed", 0)
 
     container_data = {
         "status_counts": status_counts,
@@ -1699,7 +1654,7 @@ async def get_health_monitoring(
             "limit": limit,
             "total": total_running,
             "total_pages": (total_running + limit - 1) // limit,
-        }
+        },
     }
 
     # ------------------------------------------------------------------
@@ -1711,8 +1666,8 @@ async def get_health_monitoring(
         .join(Server, HealthCheck.server_id == Server.id)
         .join(UserModel, Server.user_id == UserModel.id)
         .where(
-            HealthCheck.status.in_(['restarting', 'restart_failed']),
-            HealthCheck.checked_at >= restart_window
+            HealthCheck.status.in_(["restarting", "restart_failed"]),
+            HealthCheck.checked_at >= restart_window,
         )
         .order_by(desc(HealthCheck.checked_at))
         .limit(50)
@@ -1721,15 +1676,17 @@ async def get_health_monitoring(
 
     recent_restarts = []
     for hc, server, user_obj in restart_events:
-        recent_restarts.append({
-            "id": str(hc.id),
-            "server_id": str(hc.server_id),
-            "server_name": server.name,
-            "username": user_obj.username if user_obj else "unknown",
-            "status": hc.status,
-            "output": hc.output,
-            "checked_at": hc.checked_at.isoformat() if hc.checked_at else None,
-        })
+        recent_restarts.append(
+            {
+                "id": str(hc.id),
+                "server_id": str(hc.server_id),
+                "server_name": server.name,
+                "username": user_obj.username if user_obj else "unknown",
+                "status": hc.status,
+                "output": hc.output,
+                "checked_at": hc.checked_at.isoformat() if hc.checked_at else None,
+            }
+        )
 
     return {
         "system": health_data,

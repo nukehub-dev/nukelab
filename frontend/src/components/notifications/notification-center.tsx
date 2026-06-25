@@ -1,7 +1,7 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { createPortal } from 'react-dom';
-import { Link } from '@tanstack/react-router';
-import { AnimatePresence, motion } from 'framer-motion';
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
+import { Link } from '@tanstack/react-router'
+import { AnimatePresence, motion } from 'framer-motion'
 import {
   Bell,
   Check,
@@ -14,7 +14,7 @@ import {
   Settings,
   Inbox,
   X,
-} from 'lucide-react';
+} from 'lucide-react'
 import {
   useNotifications,
   useUnreadCount,
@@ -22,48 +22,48 @@ import {
   useMarkAllAsRead,
   useDeleteNotification,
   type Notification,
-} from '../../hooks/use-notifications';
-import { cn } from '../../lib/utils';
-import { Tooltip } from '../ui/tooltip';
+} from '../../hooks/use-notifications'
+import { cn } from '../../lib/utils'
+import { Tooltip } from '../ui/tooltip'
 
 const severityIcons = {
   info: Info,
   success: CheckCircle2,
   warning: AlertTriangle,
   error: AlertCircle,
-};
+}
 
 const severityColors = {
   info: 'text-blue-400 bg-blue-400/10',
   success: 'text-emerald-400 bg-emerald-400/10',
   warning: 'text-amber-400 bg-amber-400/10',
   error: 'text-destructive bg-destructive/10',
-};
+}
 
-const MAX_DROPDOWN_ITEMS = 6;
-const MAX_DROPDOWN_HEIGHT = 480;
+const MAX_DROPDOWN_ITEMS = 6
+const MAX_DROPDOWN_HEIGHT = 480
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth < 1024 : false
-  );
+  )
   useEffect(() => {
-    const onResize = () => setIsMobile(window.innerWidth < 1024);
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
-  return isMobile;
+    const onResize = () => setIsMobile(window.innerWidth < 1024)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  return isMobile
 }
 
 interface NotificationPanelProps {
-  unreadCount: number;
-  notifications: Notification[];
-  totalCount: number;
-  onClose: () => void;
-  markAsRead: ReturnType<typeof useMarkAsRead>;
-  markAllAsRead: ReturnType<typeof useMarkAllAsRead>;
-  deleteNotification: ReturnType<typeof useDeleteNotification>;
-  isMobile?: boolean;
+  unreadCount: number
+  notifications: Notification[]
+  totalCount: number
+  onClose: () => void
+  markAsRead: ReturnType<typeof useMarkAsRead>
+  markAllAsRead: ReturnType<typeof useMarkAllAsRead>
+  deleteNotification: ReturnType<typeof useDeleteNotification>
+  isMobile?: boolean
 }
 
 function NotificationPanel({
@@ -112,10 +112,7 @@ function NotificationPanel({
             </Link>
           </Tooltip>
           {!isMobile && (
-            <button
-              onClick={onClose}
-              className="p-2 rounded-lg hover:bg-accent transition-colors"
-            >
+            <button onClick={onClose} className="p-2 rounded-lg hover:bg-accent transition-colors">
               <X className="w-4 h-4 text-muted-foreground" />
             </button>
           )}
@@ -135,7 +132,8 @@ function NotificationPanel({
         ) : (
           <div className="divide-y divide-border">
             {notifications.map((notification) => {
-              const Icon = severityIcons[notification.severity as keyof typeof severityIcons] || Info;
+              const Icon =
+                severityIcons[notification.severity as keyof typeof severityIcons] || Info
               return (
                 <div
                   key={notification.id}
@@ -145,7 +143,7 @@ function NotificationPanel({
                   )}
                   onClick={() => {
                     if (!notification.read) {
-                      markAsRead.mutate(notification.id);
+                      markAsRead.mutate(notification.id)
                     }
                   }}
                 >
@@ -172,18 +170,25 @@ function NotificationPanel({
                         to={notification.action_url}
                         onClick={() => {
                           if (!notification.read) {
-                            markAsRead.mutate(notification.id);
+                            markAsRead.mutate(notification.id)
                           }
-                          onClose();
+                          onClose()
                         }}
                         className="block hover:underline"
                       >
-                        <p className={cn('text-sm leading-snug', !notification.read && 'font-medium')}>
+                        <p
+                          className={cn(
+                            'text-sm leading-snug',
+                            !notification.read && 'font-medium'
+                          )}
+                        >
                           {notification.title}
                         </p>
                       </Link>
                     ) : (
-                      <p className={cn('text-sm leading-snug', !notification.read && 'font-medium')}>
+                      <p
+                        className={cn('text-sm leading-snug', !notification.read && 'font-medium')}
+                      >
                         {notification.title}
                       </p>
                     )}
@@ -205,8 +210,8 @@ function NotificationPanel({
                       <Tooltip content="Mark as read">
                         <button
                           onClick={(e) => {
-                            e.stopPropagation();
-                            markAsRead.mutate(notification.id);
+                            e.stopPropagation()
+                            markAsRead.mutate(notification.id)
                           }}
                           className="p-1 rounded hover:bg-accent transition-colors"
                         >
@@ -217,8 +222,8 @@ function NotificationPanel({
                     <Tooltip content="Delete">
                       <button
                         onClick={(e) => {
-                          e.stopPropagation();
-                          deleteNotification.mutate(notification.id);
+                          e.stopPropagation()
+                          deleteNotification.mutate(notification.id)
                         }}
                         className="p-1 rounded hover:bg-destructive/10 transition-colors"
                       >
@@ -227,7 +232,7 @@ function NotificationPanel({
                     </Tooltip>
                   </div>
                 </div>
-              );
+              )
             })}
           </div>
         )}
@@ -250,140 +255,144 @@ function NotificationPanel({
         </span>
       </div>
     </>
-  );
+  )
 }
 
 interface NotificationCenterProps {
-  variant?: 'default' | 'dock';
+  variant?: 'default' | 'dock'
 }
 
 export function NotificationCenter({ variant = 'default' }: NotificationCenterProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const bellRef = useRef<HTMLButtonElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const isMobile = useIsMobile();
-  const isDock = variant === 'dock';
+  const [isOpen, setIsOpen] = useState(false)
+  const bellRef = useRef<HTMLButtonElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+  const isMobile = useIsMobile()
+  const isDock = variant === 'dock'
 
-  const { data: unreadCount = 0, refetch: refetchUnread } = useUnreadCount();
-  const { data: notificationsData, refetch: refetchNotifications } = useNotifications(false, 1, MAX_DROPDOWN_ITEMS);
-  const markAsRead = useMarkAsRead();
-  const markAllAsRead = useMarkAllAsRead();
-  const deleteNotification = useDeleteNotification();
+  const { data: unreadCount = 0, refetch: refetchUnread } = useUnreadCount()
+  const { data: notificationsData, refetch: refetchNotifications } = useNotifications(
+    false,
+    1,
+    MAX_DROPDOWN_ITEMS
+  )
+  const markAsRead = useMarkAsRead()
+  const markAllAsRead = useMarkAllAsRead()
+  const deleteNotification = useDeleteNotification()
 
-  const notifications = notificationsData?.notifications || [];
-  const totalCount = notificationsData?.total || 0;
+  const notifications = notificationsData?.notifications || []
+  const totalCount = notificationsData?.total || 0
 
   // Position dropdown when opened (desktop only)
   useEffect(() => {
-    if (!isOpen || isMobile || !bellRef.current || !dropdownRef.current) return;
+    if (!isOpen || isMobile || !bellRef.current || !dropdownRef.current) return
 
     const positionDropdown = () => {
-      if (!bellRef.current || !dropdownRef.current) return;
-      const bell = bellRef.current;
-      const dropdown = dropdownRef.current;
-      const rect = bell.getBoundingClientRect();
+      if (!bellRef.current || !dropdownRef.current) return
+      const bell = bellRef.current
+      const dropdown = dropdownRef.current
+      const rect = bell.getBoundingClientRect()
 
-      const gap = 8;
-      const dropdownWidth = 360;
-      const actualHeight = Math.min(dropdown.offsetHeight, MAX_DROPDOWN_HEIGHT);
+      const gap = 8
+      const dropdownWidth = 360
+      const actualHeight = Math.min(dropdown.offsetHeight, MAX_DROPDOWN_HEIGHT)
 
-      let left = rect.right + gap;
-      let top: number;
-      let originX: 'left' | 'right' = 'left';
-      let originY: 'top' | 'bottom';
+      let left = rect.right + gap
+      let top: number
+      let originX: 'left' | 'right' = 'left'
+      let originY: 'top' | 'bottom'
 
       if (left + dropdownWidth > window.innerWidth - gap) {
-        left = rect.left - dropdownWidth - gap;
-        originX = 'right';
+        left = rect.left - dropdownWidth - gap
+        originX = 'right'
       }
 
-      const spaceBelow = window.innerHeight - rect.bottom - gap;
-      const spaceAbove = rect.top - gap;
+      const spaceBelow = window.innerHeight - rect.bottom - gap
+      const spaceAbove = rect.top - gap
 
       if (actualHeight <= spaceBelow) {
-        top = rect.bottom + gap;
-        originY = 'top';
+        top = rect.bottom + gap
+        originY = 'top'
       } else if (actualHeight <= spaceAbove) {
-        top = rect.top - actualHeight - gap;
-        originY = 'bottom';
+        top = rect.top - actualHeight - gap
+        originY = 'bottom'
       } else {
-        top = rect.bottom + gap;
-        originY = 'top';
+        top = rect.bottom + gap
+        originY = 'top'
         if (top + actualHeight > window.innerHeight - gap) {
-          top = Math.max(gap, window.innerHeight - actualHeight - gap);
+          top = Math.max(gap, window.innerHeight - actualHeight - gap)
         }
       }
 
-      left = Math.max(gap, Math.min(left, window.innerWidth - dropdownWidth - gap));
-      top = Math.max(gap, top);
+      left = Math.max(gap, Math.min(left, window.innerWidth - dropdownWidth - gap))
+      top = Math.max(gap, top)
 
-      dropdown.style.position = 'fixed';
-      dropdown.style.top = `${top}px`;
-      dropdown.style.left = `${left}px`;
-      dropdown.style.zIndex = '9999';
-      dropdown.style.width = `${dropdownWidth}px`;
-      dropdown.style.maxHeight = `${MAX_DROPDOWN_HEIGHT}px`;
-      dropdown.style.transformOrigin = `${originY} ${originX}`;
-    };
+      dropdown.style.position = 'fixed'
+      dropdown.style.top = `${top}px`
+      dropdown.style.left = `${left}px`
+      dropdown.style.zIndex = '9999'
+      dropdown.style.width = `${dropdownWidth}px`
+      dropdown.style.maxHeight = `${MAX_DROPDOWN_HEIGHT}px`
+      dropdown.style.transformOrigin = `${originY} ${originX}`
+    }
 
-    positionDropdown();
-    const raf = requestAnimationFrame(positionDropdown);
+    positionDropdown()
+    const raf = requestAnimationFrame(positionDropdown)
 
-    window.addEventListener('resize', positionDropdown);
-    window.addEventListener('scroll', positionDropdown, true);
+    window.addEventListener('resize', positionDropdown)
+    window.addEventListener('scroll', positionDropdown, true)
 
     return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener('resize', positionDropdown);
-      window.removeEventListener('scroll', positionDropdown, true);
-    };
-  }, [isOpen, isMobile]);
+      cancelAnimationFrame(raf)
+      window.removeEventListener('resize', positionDropdown)
+      window.removeEventListener('scroll', positionDropdown, true)
+    }
+  }, [isOpen, isMobile])
 
   // Close on escape
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setIsOpen(false);
-    };
-    if (isOpen) {
-      document.addEventListener('keydown', handleEscape);
-      return () => document.removeEventListener('keydown', handleEscape);
+      if (e.key === 'Escape') setIsOpen(false)
     }
-  }, [isOpen]);
+    if (isOpen) {
+      document.addEventListener('keydown', handleEscape)
+      return () => document.removeEventListener('keydown', handleEscape)
+    }
+  }, [isOpen])
 
   // Close on click outside (desktop only — mobile uses backdrop)
   useEffect(() => {
-    if (isMobile) return;
+    if (isMobile) return
     const handleClick = (e: MouseEvent) => {
-      const target = e.target as Node;
+      const target = e.target as Node
       if (
         bellRef.current &&
         !bellRef.current.contains(target) &&
         dropdownRef.current &&
         !dropdownRef.current.contains(target)
       ) {
-        setIsOpen(false);
+        setIsOpen(false)
       }
-    };
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClick);
-      return () => document.removeEventListener('mousedown', handleClick);
     }
-  }, [isOpen, isMobile]);
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClick)
+      return () => document.removeEventListener('mousedown', handleClick)
+    }
+  }, [isOpen, isMobile])
 
   const toggleDropdown = useCallback(() => {
     setIsOpen((prev) => {
-      const next = !prev;
+      const next = !prev
       if (next) {
-        refetchUnread();
-        refetchNotifications();
+        refetchUnread()
+        refetchNotifications()
       }
-      return next;
-    });
-  }, [refetchUnread, refetchNotifications]);
+      return next
+    })
+  }, [refetchUnread, refetchNotifications])
 
   const handleClose = useCallback(() => {
-    setIsOpen(false);
-  }, []);
+    setIsOpen(false)
+  }, [])
 
   const panelProps = {
     unreadCount,
@@ -394,7 +403,7 @@ export function NotificationCenter({ variant = 'default' }: NotificationCenterPr
     markAllAsRead,
     deleteNotification,
     isMobile,
-  };
+  }
 
   return (
     <>
@@ -433,8 +442,7 @@ export function NotificationCenter({ variant = 'default' }: NotificationCenterPr
         >
           <Bell className="w-5 h-5" />
           {unreadCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-sidebar"
-            >
+            <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-sidebar">
               {unreadCount > 99 ? '99+' : unreadCount}
             </span>
           )}
@@ -453,8 +461,7 @@ export function NotificationCenter({ variant = 'default' }: NotificationCenterPr
           >
             <Bell className="w-5 h-5" />
             {unreadCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-sidebar"
-              >
+              <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-sidebar">
                 {unreadCount > 99 ? '99+' : unreadCount}
               </span>
             )}
@@ -463,76 +470,84 @@ export function NotificationCenter({ variant = 'default' }: NotificationCenterPr
       )}
 
       {/* Desktop: floating dropdown */}
-      {!isMobile && createPortal(
-        <AnimatePresence>
-          {isOpen && (
-            <motion.div
-              ref={dropdownRef}
-              className="bg-popover/80 backdrop-blur-xl border border-border/50 rounded-2xl shadow-2xl shadow-black/20 overflow-hidden flex flex-col"
-              style={{
-                position: 'fixed',
-                zIndex: 9999,
-                width: '360px',
-                maxWidth: 'calc(100vw - 2rem)',
-                maxHeight: `${MAX_DROPDOWN_HEIGHT}px`,
-              }}
-              initial={{ opacity: 0, scale: 0.82 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              transition={{ type: 'spring', stiffness: 450, damping: 28 }}
-            >
-              <NotificationPanel {...panelProps} />
-            </motion.div>
-          )}
-        </AnimatePresence>,
-        document.body
-      )}
+      {!isMobile &&
+        createPortal(
+          <AnimatePresence>
+            {isOpen && (
+              <motion.div
+                ref={dropdownRef}
+                className="bg-popover/80 backdrop-blur-xl border border-border/50 rounded-2xl shadow-2xl shadow-black/20 overflow-hidden flex flex-col"
+                style={{
+                  position: 'fixed',
+                  zIndex: 9999,
+                  width: '360px',
+                  maxWidth: 'calc(100vw - 2rem)',
+                  maxHeight: `${MAX_DROPDOWN_HEIGHT}px`,
+                }}
+                initial={{ opacity: 0, scale: 0.82 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                transition={{ type: 'spring', stiffness: 450, damping: 28 }}
+              >
+                <NotificationPanel {...panelProps} />
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
+        )}
 
       {/* Mobile: bottom sheet */}
-      {isMobile && createPortal(
-        <AnimatePresence>
-          {isOpen && (
-            <motion.div
-              key="mobile-sheet"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="fixed inset-0 z-50"
-            >
-              {/* Dark overlay */}
-              <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onPointerDown={handleClose} />
-
-              {/* Sheet */}
+      {isMobile &&
+        createPortal(
+          <AnimatePresence>
+            {isOpen && (
               <motion.div
-                initial={{ y: '100%' }}
-                animate={{ y: 0 }}
-                exit={{ y: '100%' }}
-                transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-                drag="y"
-                dragConstraints={{ top: 0, bottom: 0 }}
-                dragElastic={{ top: 0, bottom: 0.35 }}
-                onDragEnd={(_, info) => {
-                  if (info.offset.y > 80 || info.velocity.y > 500) {
-                    handleClose();
-                  }
-                }}
-                onClick={(e) => e.stopPropagation()}
-                className="absolute bottom-0 left-0 right-0 z-[60]"
+                key="mobile-sheet"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="fixed inset-0 z-50"
               >
-                <div data-notification-sheet className="mx-auto w-full max-w-[75vw] max-h-[85vh] bg-popover/95 backdrop-blur-xl rounded-t-3xl border border-border/50 shadow-2xl overflow-hidden flex flex-col">
-                  {/* Drag handle */}
-                  <div className="flex justify-center pt-3 pb-1 shrink-0 cursor-grab active:cursor-grabbing">
-                    <div className="w-12 h-1.5 rounded-full bg-muted-foreground/30" />
+                {/* Dark overlay */}
+                <div
+                  className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                  onPointerDown={handleClose}
+                />
+
+                {/* Sheet */}
+                <motion.div
+                  initial={{ y: '100%' }}
+                  animate={{ y: 0 }}
+                  exit={{ y: '100%' }}
+                  transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                  drag="y"
+                  dragConstraints={{ top: 0, bottom: 0 }}
+                  dragElastic={{ top: 0, bottom: 0.35 }}
+                  onDragEnd={(_, info) => {
+                    if (info.offset.y > 80 || info.velocity.y > 500) {
+                      handleClose()
+                    }
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="absolute bottom-0 left-0 right-0 z-[60]"
+                >
+                  <div
+                    data-notification-sheet
+                    className="mx-auto w-full max-w-[75vw] max-h-[85vh] bg-popover/95 backdrop-blur-xl rounded-t-3xl border border-border/50 shadow-2xl overflow-hidden flex flex-col"
+                  >
+                    {/* Drag handle */}
+                    <div className="flex justify-center pt-3 pb-1 shrink-0 cursor-grab active:cursor-grabbing">
+                      <div className="w-12 h-1.5 rounded-full bg-muted-foreground/30" />
+                    </div>
+                    <NotificationPanel {...panelProps} />
                   </div>
-                  <NotificationPanel {...panelProps} />
-                </div>
+                </motion.div>
               </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>,
-        document.body
-      )}
+            )}
+          </AnimatePresence>,
+          document.body
+        )}
     </>
-  );
+  )
 }

@@ -18,8 +18,7 @@ class TestDashboard:
         await db_session.commit()
 
         response = await client.get(
-            "/api/dashboard/",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/dashboard/", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -32,8 +31,7 @@ class TestDashboard:
     async def test_admin_dashboard(self, client, admin_token):
         """Admin should get dashboard with platform stats."""
         response = await client.get(
-            "/api/dashboard/",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/dashboard/", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -45,8 +43,7 @@ class TestDashboard:
     async def test_admin_activity_feed(self, client, admin_token):
         """Admin should get activity feed."""
         response = await client.get(
-            "/api/dashboard/activity",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/dashboard/activity", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -56,8 +53,7 @@ class TestDashboard:
     async def test_non_admin_activity_feed_denied(self, client, user_token):
         """Regular user should not access admin activity feed."""
         response = await client.get(
-            "/api/dashboard/activity",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/dashboard/activity", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code in [403, 404]
 
@@ -70,7 +66,7 @@ class TestAnalytics:
         """User should get their own usage analytics."""
         response = await client.get(
             f"/api/analytics/users/{test_user.id}/usage",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 200
 
@@ -79,7 +75,7 @@ class TestAnalytics:
         """User should not access another user's usage analytics."""
         response = await client.get(
             f"/api/analytics/users/{admin_user.id}/usage",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code in [403, 404]
 
@@ -87,8 +83,7 @@ class TestAnalytics:
     async def test_admin_global_usage(self, client, admin_token):
         """Admin should get global usage analytics."""
         response = await client.get(
-            "/api/analytics/global",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/analytics/global", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
 
@@ -96,8 +91,7 @@ class TestAnalytics:
     async def test_admin_top_consumers(self, client, admin_token):
         """Admin should get top consumers."""
         response = await client.get(
-            "/api/analytics/top-consumers",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/analytics/top-consumers", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -107,8 +101,7 @@ class TestAnalytics:
     async def test_admin_credit_flow(self, client, admin_token):
         """Admin should get credit flow analytics."""
         response = await client.get(
-            "/api/analytics/credit-flow",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/analytics/credit-flow", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -118,8 +111,7 @@ class TestAnalytics:
     async def test_admin_login_events(self, client, admin_token):
         """Admin should get login event analytics."""
         response = await client.get(
-            "/api/analytics/logins",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/analytics/logins", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -129,8 +121,7 @@ class TestAnalytics:
     async def test_admin_user_growth(self, client, admin_token):
         """Admin should get user growth analytics."""
         response = await client.get(
-            "/api/analytics/user-growth",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/analytics/user-growth", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
 
@@ -141,7 +132,7 @@ class TestAnalytics:
         to_date = (datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1)).isoformat()
         response = await client.get(
             f"/api/analytics/global?from={from_date}&to={to_date}",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert response.status_code == 422
 
@@ -149,7 +140,6 @@ class TestAnalytics:
     async def test_non_admin_cannot_access_global_analytics(self, client, user_token):
         """Regular user should not access global analytics."""
         response = await client.get(
-            "/api/analytics/global",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/analytics/global", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code in [403, 404]

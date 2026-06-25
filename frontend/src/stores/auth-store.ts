@@ -1,19 +1,19 @@
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-import type { User } from '../types/api';
+import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
+import type { User } from '../types/api'
 
 // Match backend roles exactly
-export type UserRole = 'super_admin' | 'admin' | 'moderator' | 'support' | 'user' | 'guest';
+export type UserRole = 'super_admin' | 'admin' | 'moderator' | 'support' | 'user' | 'guest'
 
 // Role hierarchy levels (higher = more privileges)
 const ROLE_LEVELS: Record<UserRole, number> = {
-  'super_admin': 5,
-  'admin': 4,
-  'moderator': 3,
-  'support': 2,
-  'user': 1,
-  'guest': 0,
-};
+  super_admin: 5,
+  admin: 4,
+  moderator: 3,
+  support: 2,
+  user: 1,
+  guest: 0,
+}
 
 // Permission constants (match backend)
 export const PERMISSIONS = {
@@ -55,47 +55,47 @@ export const PERMISSIONS = {
   AUDIT_READ: 'audit:read',
   ADMIN_ACCESS: 'admin:access',
   ALL: '*',
-} as const;
+} as const
 
 interface AuthState {
-  user: User | null;
-  setUser: (user: User | null) => void;
-  getRole: () => UserRole;
-  getRoleLevel: () => number;
+  user: User | null
+  setUser: (user: User | null) => void
+  getRole: () => UserRole
+  getRoleLevel: () => number
 
   // Role checks
-  isSuperAdmin: () => boolean;
-  isAdmin: () => boolean;
-  isModerator: () => boolean;
-  isSupport: () => boolean;
-  isUser: () => boolean;
-  isGuest: () => boolean;
+  isSuperAdmin: () => boolean
+  isAdmin: () => boolean
+  isModerator: () => boolean
+  isSupport: () => boolean
+  isUser: () => boolean
+  isGuest: () => boolean
 
   // Raw permission checks (robust - checks actual permissions first, falls back to roles)
-  hasPermission: (permission: string) => boolean;
-  hasAnyPermission: (permissions: string[]) => boolean;
-  hasAllPermissions: (permissions: string[]) => boolean;
+  hasPermission: (permission: string) => boolean
+  hasAnyPermission: (permissions: string[]) => boolean
+  hasAllPermissions: (permissions: string[]) => boolean
 
   // Semantic permission checks
-  canManageUsers: () => boolean;
-  canCreateUsers: () => boolean;
-  canDeleteUsers: () => boolean;
-  canViewAllServers: () => boolean;
-  canManageServers: () => boolean;
-  canAccessOthersServers: () => boolean;
-  canStartStopServers: () => boolean;
-  canDeleteServers: () => boolean;
-  canManageEnvironments: () => boolean;
-  canManagePlans: () => boolean;
-  canAccessAdmin: () => boolean;
-  canManageCredits: () => boolean;
-  canViewCredits: () => boolean;
-  canViewAudit: () => boolean;
+  canManageUsers: () => boolean
+  canCreateUsers: () => boolean
+  canDeleteUsers: () => boolean
+  canViewAllServers: () => boolean
+  canManageServers: () => boolean
+  canAccessOthersServers: () => boolean
+  canStartStopServers: () => boolean
+  canDeleteServers: () => boolean
+  canManageEnvironments: () => boolean
+  canManagePlans: () => boolean
+  canAccessAdmin: () => boolean
+  canManageCredits: () => boolean
+  canViewCredits: () => boolean
+  canViewAudit: () => boolean
 }
 
 function getRoleLevel(role?: string): number {
-  if (!role) return -1;
-  return ROLE_LEVELS[role as UserRole] ?? -1;
+  if (!role) return -1
+  return ROLE_LEVELS[role as UserRole] ?? -1
 }
 
 /**
@@ -104,74 +104,74 @@ function getRoleLevel(role?: string): number {
  * Falls back to role-based checks for backwards compatibility.
  */
 function checkPermission(user: User | null, permission: string): boolean {
-  if (!user || !user.is_active) return false;
+  if (!user || !user.is_active) return false
 
   // If backend sent permissions, use them (robust, supports dynamic changes)
   if (user.permissions && user.permissions.length > 0) {
     // Super admin wildcard
-    if (user.permissions.includes(PERMISSIONS.ALL)) return true;
-    return user.permissions.includes(permission);
+    if (user.permissions.includes(PERMISSIONS.ALL)) return true
+    return user.permissions.includes(permission)
   }
 
   // Fallback: role-based check (for backwards compatibility or if permissions not loaded yet)
-  const roleLevel = getRoleLevel(user.role);
+  const roleLevel = getRoleLevel(user.role)
 
   switch (permission) {
     case PERMISSIONS.USERS_READ:
     case PERMISSIONS.USERS_CREATE:
     case PERMISSIONS.USERS_UPDATE:
-      return roleLevel >= ROLE_LEVELS.moderator;
+      return roleLevel >= ROLE_LEVELS.moderator
     case PERMISSIONS.USERS_DELETE:
     case PERMISSIONS.USERS_IMPERSONATE:
-      return roleLevel >= ROLE_LEVELS.admin;
+      return roleLevel >= ROLE_LEVELS.admin
     case PERMISSIONS.SERVERS_READ_ALL:
     case PERMISSIONS.SERVERS_WRITE_ALL:
     case PERMISSIONS.SERVERS_ACCESS_OTHERS:
-      return roleLevel >= ROLE_LEVELS.moderator;
+      return roleLevel >= ROLE_LEVELS.moderator
     case PERMISSIONS.SERVERS_WRITE_OWN:
-      return roleLevel >= ROLE_LEVELS.user;
+      return roleLevel >= ROLE_LEVELS.user
     case PERMISSIONS.SERVERS_READ_OWN:
-      return roleLevel >= ROLE_LEVELS.guest;
+      return roleLevel >= ROLE_LEVELS.guest
     case PERMISSIONS.ENVIRONMENT_CREATE:
     case PERMISSIONS.ENVIRONMENT_UPDATE:
     case PERMISSIONS.ENVIRONMENT_DELETE:
-      return roleLevel >= ROLE_LEVELS.admin;
+      return roleLevel >= ROLE_LEVELS.admin
     case PERMISSIONS.ENVIRONMENT_READ:
-      return roleLevel >= ROLE_LEVELS.moderator;
+      return roleLevel >= ROLE_LEVELS.moderator
     case PERMISSIONS.PLAN_CREATE:
     case PERMISSIONS.PLAN_UPDATE:
     case PERMISSIONS.PLAN_DELETE:
-      return roleLevel >= ROLE_LEVELS.admin;
+      return roleLevel >= ROLE_LEVELS.admin
     case PERMISSIONS.PLAN_READ:
-      return roleLevel >= ROLE_LEVELS.moderator;
+      return roleLevel >= ROLE_LEVELS.moderator
     case PERMISSIONS.QUOTA_READ:
     case PERMISSIONS.QUOTA_UPDATE:
-      return roleLevel >= ROLE_LEVELS.admin;
+      return roleLevel >= ROLE_LEVELS.admin
     case PERMISSIONS.CREDITS_READ_OWN:
-      return roleLevel >= ROLE_LEVELS.user;
+      return roleLevel >= ROLE_LEVELS.user
     case PERMISSIONS.CREDITS_READ_ALL:
-      return roleLevel >= ROLE_LEVELS.support;
+      return roleLevel >= ROLE_LEVELS.support
     case PERMISSIONS.CREDITS_GRANT:
     case PERMISSIONS.CREDITS_DEDUCT:
-      return roleLevel >= ROLE_LEVELS.admin;
+      return roleLevel >= ROLE_LEVELS.admin
     case PERMISSIONS.AUDIT_READ:
     case PERMISSIONS.ADMIN_ACCESS:
-      return roleLevel >= ROLE_LEVELS.admin;
+      return roleLevel >= ROLE_LEVELS.admin
     case PERMISSIONS.ANALYTICS_READ:
-      return roleLevel >= ROLE_LEVELS.support;
+      return roleLevel >= ROLE_LEVELS.support
     case PERMISSIONS.WORKSPACES_READ_OWN:
     case PERMISSIONS.VOLUMES_READ_OWN:
     case PERMISSIONS.VOLUMES_WRITE_OWN:
     case PERMISSIONS.WORKSPACES_WRITE_OWN:
-      return roleLevel >= ROLE_LEVELS.user;
+      return roleLevel >= ROLE_LEVELS.user
     case PERMISSIONS.WORKSPACES_READ_ALL:
     case PERMISSIONS.VOLUMES_READ_ALL:
-      return roleLevel >= ROLE_LEVELS.support;
+      return roleLevel >= ROLE_LEVELS.support
     case PERMISSIONS.WORKSPACES_WRITE_ALL:
     case PERMISSIONS.VOLUMES_WRITE_ALL:
-      return roleLevel >= ROLE_LEVELS.moderator;
+      return roleLevel >= ROLE_LEVELS.moderator
     default:
-      return false;
+      return false
   }
 }
 
@@ -187,18 +187,34 @@ export const useAuthStore = create<AuthState>()(
       // Role checks - now permission-based for consistency and robustness
       isSuperAdmin: () => get().hasPermission(PERMISSIONS.ALL),
       isAdmin: () => get().hasPermission(PERMISSIONS.ADMIN_ACCESS),
-      isModerator: () => get().hasPermission(PERMISSIONS.SERVERS_READ_ALL) && !get().hasPermission(PERMISSIONS.ADMIN_ACCESS),
-      isSupport: () => get().hasPermission(PERMISSIONS.VOLUMES_READ_ALL) && !get().hasPermission(PERMISSIONS.SERVERS_READ_ALL),
-      isUser: () => get().hasPermission(PERMISSIONS.SERVERS_WRITE_OWN) && !get().hasPermission(PERMISSIONS.VOLUMES_READ_ALL),
-      isGuest: () => !get().user || (get().hasPermission(PERMISSIONS.SERVERS_READ_OWN) && !get().hasPermission(PERMISSIONS.SERVERS_WRITE_OWN)),
+      isModerator: () =>
+        get().hasPermission(PERMISSIONS.SERVERS_READ_ALL) &&
+        !get().hasPermission(PERMISSIONS.ADMIN_ACCESS),
+      isSupport: () =>
+        get().hasPermission(PERMISSIONS.VOLUMES_READ_ALL) &&
+        !get().hasPermission(PERMISSIONS.SERVERS_READ_ALL),
+      isUser: () =>
+        get().hasPermission(PERMISSIONS.SERVERS_WRITE_OWN) &&
+        !get().hasPermission(PERMISSIONS.VOLUMES_READ_ALL),
+      isGuest: () =>
+        !get().user ||
+        (get().hasPermission(PERMISSIONS.SERVERS_READ_OWN) &&
+          !get().hasPermission(PERMISSIONS.SERVERS_WRITE_OWN)),
 
       // Raw permission checks
       hasPermission: (permission: string) => checkPermission(get().user, permission),
-      hasAnyPermission: (permissions: string[]) => permissions.some((p) => checkPermission(get().user, p)),
-      hasAllPermissions: (permissions: string[]) => permissions.every((p) => checkPermission(get().user, p)),
+      hasAnyPermission: (permissions: string[]) =>
+        permissions.some((p) => checkPermission(get().user, p)),
+      hasAllPermissions: (permissions: string[]) =>
+        permissions.every((p) => checkPermission(get().user, p)),
 
       // Semantic permission checks - now use actual permissions with role fallback
-      canManageUsers: () => get().hasAnyPermission([PERMISSIONS.USERS_CREATE, PERMISSIONS.USERS_UPDATE, PERMISSIONS.USERS_DELETE]),
+      canManageUsers: () =>
+        get().hasAnyPermission([
+          PERMISSIONS.USERS_CREATE,
+          PERMISSIONS.USERS_UPDATE,
+          PERMISSIONS.USERS_DELETE,
+        ]),
       canCreateUsers: () => get().hasPermission(PERMISSIONS.USERS_CREATE),
       canDeleteUsers: () => get().hasPermission(PERMISSIONS.USERS_DELETE),
 
@@ -210,8 +226,18 @@ export const useAuthStore = create<AuthState>()(
 
       canWriteOwnServers: () => get().hasPermission(PERMISSIONS.SERVERS_WRITE_OWN),
 
-      canManageEnvironments: () => get().hasAnyPermission([PERMISSIONS.ENVIRONMENT_CREATE, PERMISSIONS.ENVIRONMENT_UPDATE, PERMISSIONS.ENVIRONMENT_DELETE]),
-      canManagePlans: () => get().hasAnyPermission([PERMISSIONS.PLAN_CREATE, PERMISSIONS.PLAN_UPDATE, PERMISSIONS.PLAN_DELETE]),
+      canManageEnvironments: () =>
+        get().hasAnyPermission([
+          PERMISSIONS.ENVIRONMENT_CREATE,
+          PERMISSIONS.ENVIRONMENT_UPDATE,
+          PERMISSIONS.ENVIRONMENT_DELETE,
+        ]),
+      canManagePlans: () =>
+        get().hasAnyPermission([
+          PERMISSIONS.PLAN_CREATE,
+          PERMISSIONS.PLAN_UPDATE,
+          PERMISSIONS.PLAN_DELETE,
+        ]),
       canAccessAdmin: () =>
         get().hasAnyPermission([
           PERMISSIONS.ADMIN_ACCESS,
@@ -234,7 +260,8 @@ export const useAuthStore = create<AuthState>()(
           PERMISSIONS.ANALYTICS_READ,
           PERMISSIONS.AUDIT_READ,
         ]),
-      canManageCredits: () => get().hasAnyPermission([PERMISSIONS.CREDITS_GRANT, PERMISSIONS.CREDITS_DEDUCT]),
+      canManageCredits: () =>
+        get().hasAnyPermission([PERMISSIONS.CREDITS_GRANT, PERMISSIONS.CREDITS_DEDUCT]),
 
       canViewCredits: () => get().hasPermission(PERMISSIONS.CREDITS_READ_OWN),
       canViewAudit: () => get().hasPermission(PERMISSIONS.AUDIT_READ),
@@ -244,9 +271,9 @@ export const useAuthStore = create<AuthState>()(
       version: 1,
       migrate: (_persistedState: unknown) => {
         // Reset cached user on version bump so fresh data is fetched
-        return { user: null };
+        return { user: null }
       },
       partialize: (state) => ({ user: state.user }),
     }
   )
-);
+)

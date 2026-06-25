@@ -11,6 +11,7 @@ class TestEnforceVolumeQuotas:
     def test_task_imports(self):
         """Task should be importable without errors."""
         from app.tasks import enforce_volume_quotas
+
         assert enforce_volume_quotas is not None
 
     @pytest.mark.asyncio
@@ -44,7 +45,9 @@ class TestEnforceVolumeQuotas:
         # Mock the async inner function
         async_mock = mock.AsyncMock(return_value="Stopped 1 servers, warned 0 volumes")
 
-        with mock.patch.object(enforce_volume_quotas, "run", return_value="Stopped 1 servers, warned 0 volumes"):
+        with mock.patch.object(
+            enforce_volume_quotas, "run", return_value="Stopped 1 servers, warned 0 volumes"
+        ):
             result = enforce_volume_quotas.run()
             assert "Stopped 1" in result
 
@@ -52,7 +55,9 @@ class TestEnforceVolumeQuotas:
         """Should warn users when volumes are near (>=90%) their limit."""
         from app.tasks import enforce_volume_quotas
 
-        with mock.patch.object(enforce_volume_quotas, "run", return_value="Stopped 0 servers, warned 2 volumes"):
+        with mock.patch.object(
+            enforce_volume_quotas, "run", return_value="Stopped 0 servers, warned 2 volumes"
+        ):
             result = enforce_volume_quotas.run()
             assert "warned 2" in result
 
@@ -68,9 +73,9 @@ class TestVolumeQuotaCheckLogic:
         mock_db = mock.MagicMock()
         service = VolumeService(mock_db)
 
-        assert service._parse_memory("10g") == 10 * 1024 ** 3
-        assert service._parse_memory("500m") == 500 * 1024 ** 2
-        assert service._parse_memory("1t") == 1 * 1024 ** 4
+        assert service._parse_memory("10g") == 10 * 1024**3
+        assert service._parse_memory("500m") == 500 * 1024**2
+        assert service._parse_memory("1t") == 1 * 1024**4
         assert service._parse_memory("1024") == 1024
 
     def test_volume_service_human_size(self):
@@ -80,9 +85,9 @@ class TestVolumeQuotaCheckLogic:
         mock_db = mock.MagicMock()
         service = VolumeService(mock_db)
 
-        assert service._human_size(1024 ** 3) == "1.0 GB"
-        assert service._human_size(500 * 1024 ** 2) == "500.0 MB"
-        assert service._human_size(1024 ** 4) == "1.0 TB"
+        assert service._human_size(1024**3) == "1.0 GB"
+        assert service._human_size(500 * 1024**2) == "500.0 MB"
+        assert service._human_size(1024**4) == "1.0 TB"
 
     @pytest.mark.asyncio
     async def test_check_volumes_quota_over_limit(self):
@@ -97,7 +102,7 @@ class TestVolumeQuotaCheckLogic:
         mock_volume.id = "vol-1"
         mock_volume.name = "test-vol"
         mock_volume.display_name = "Test Volume"
-        mock_volume.size_bytes = 20 * 1024 ** 3  # 20 GB
+        mock_volume.size_bytes = 20 * 1024**3  # 20 GB
         mock_volume.max_size_bytes = None
 
         # Mock DB query result
@@ -106,7 +111,7 @@ class TestVolumeQuotaCheckLogic:
         mock_db.execute.return_value = mock_result
 
         # Mock get_volume_size to return current size
-        with mock.patch.object(service, "get_volume_size", return_value=20 * 1024 ** 3):
+        with mock.patch.object(service, "get_volume_size", return_value=20 * 1024**3):
             result = await service.check_volumes_quota(["vol-1"], "10g")
 
         assert result["allowed"] is False
@@ -124,14 +129,14 @@ class TestVolumeQuotaCheckLogic:
         mock_volume.id = "vol-1"
         mock_volume.name = "test-vol"
         mock_volume.display_name = "Test Volume"
-        mock_volume.size_bytes = 5 * 1024 ** 3  # 5 GB
+        mock_volume.size_bytes = 5 * 1024**3  # 5 GB
         mock_volume.max_size_bytes = None
 
         mock_result = mock.MagicMock()
         mock_result.scalars.return_value.all.return_value = [mock_volume]
         mock_db.execute.return_value = mock_result
 
-        with mock.patch.object(service, "get_volume_size", return_value=5 * 1024 ** 3):
+        with mock.patch.object(service, "get_volume_size", return_value=5 * 1024**3):
             result = await service.check_volumes_quota(["vol-1"], "10g")
 
         assert result["allowed"] is True

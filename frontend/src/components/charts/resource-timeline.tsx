@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo } from 'react'
 import {
   BarChart,
   Bar,
@@ -9,23 +9,23 @@ import {
   ResponsiveContainer,
   Cell,
   type TooltipProps,
-} from 'recharts';
+} from 'recharts'
 
 export interface ResourceEvent {
-  start: string;
-  end: string;
-  status: string;
+  start: string
+  end: string
+  status: string
 }
 
 export interface Resource {
-  name: string;
-  events: ResourceEvent[];
+  name: string
+  events: ResourceEvent[]
 }
 
 export interface ResourceTimelineProps {
-  resources: Resource[];
-  height?: number;
-  className?: string;
+  resources: Resource[]
+  height?: number
+  className?: string
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -34,11 +34,17 @@ const STATUS_COLORS: Record<string, string> = {
   pending: 'var(--chart-4)',
   error: 'var(--destructive)',
   warning: 'var(--chart-3)',
-};
+}
 
 function CustomTooltip({ active, payload }: TooltipProps<number, string>) {
-  if (!active || !payload || !payload.length) return null;
-  const data = payload[0].payload as { name: string; status: string; start: string; end: string; duration: string };
+  if (!active || !payload || !payload.length) return null
+  const data = payload[0].payload as {
+    name: string
+    status: string
+    start: string
+    end: string
+    duration: string
+  }
 
   return (
     <div
@@ -51,79 +57,80 @@ function CustomTooltip({ active, payload }: TooltipProps<number, string>) {
     >
       <p className="font-semibold">{data.name}</p>
       <p className="text-xs text-muted-foreground capitalize">{data.status}</p>
-      <p className="text-xs text-muted-foreground mt-1">{data.start} → {data.end}</p>
+      <p className="text-xs text-muted-foreground mt-1">
+        {data.start} → {data.end}
+      </p>
       <p className="text-xs text-muted-foreground">{data.duration}</p>
     </div>
-  );
+  )
 }
 
-export function ResourceTimeline({
-  resources,
-  height = 300,
-  className,
-}: ResourceTimelineProps) {
-    const { data } = useMemo(() => {
-    const allEvents = resources.flatMap((r) => r.events);
-    const allStarts = allEvents.map((e) => new Date(e.start).getTime());
-    const allEnds = allEvents.map((e) => new Date(e.end).getTime());
+export function ResourceTimeline({ resources, height = 300, className }: ResourceTimelineProps) {
+  const { data } = useMemo(() => {
+    const allEvents = resources.flatMap((r) => r.events)
+    const allStarts = allEvents.map((e) => new Date(e.start).getTime())
+    const allEnds = allEvents.map((e) => new Date(e.end).getTime())
 
-    const minTime = Math.min(...allStarts);
-    const maxTime = Math.max(...allEnds);
-    const range = maxTime - minTime || 1;
+    const minTime = Math.min(...allStarts)
+    const maxTime = Math.max(...allEnds)
+    const range = maxTime - minTime || 1
 
-    const chartData = resources.map((resource) => {
-      return resource.events.map((event, index) => {
-        const start = new Date(event.start).getTime();
-        const end = new Date(event.end).getTime();
-        const duration = end - start;
-        const durationStr = duration < 60000
-          ? `${Math.round(duration / 1000)}s`
-          : duration < 3600000
-            ? `${Math.round(duration / 60000)}m`
-            : `${Math.round(duration / 3600000)}h`;
+    const chartData = resources
+      .map((resource) => {
+        return resource.events.map((event, index) => {
+          const start = new Date(event.start).getTime()
+          const end = new Date(event.end).getTime()
+          const duration = end - start
+          const durationStr =
+            duration < 60000
+              ? `${Math.round(duration / 1000)}s`
+              : duration < 3600000
+                ? `${Math.round(duration / 60000)}m`
+                : `${Math.round(duration / 3600000)}h`
 
-        return {
-          name: resource.name,
-          eventIndex: index,
-          status: event.status,
-          start: new Date(event.start).toLocaleTimeString(),
-          end: new Date(event.end).toLocaleTimeString(),
-          duration: durationStr,
-          startOffset: ((start - minTime) / range) * 100,
-          width: (duration / range) * 100,
-          y: resource.name,
-        };
-      });
-    }).flat();
+          return {
+            name: resource.name,
+            eventIndex: index,
+            status: event.status,
+            start: new Date(event.start).toLocaleTimeString(),
+            end: new Date(event.end).toLocaleTimeString(),
+            duration: durationStr,
+            startOffset: ((start - minTime) / range) * 100,
+            width: (duration / range) * 100,
+            y: resource.name,
+          }
+        })
+      })
+      .flat()
 
     return {
       data: chartData,
       timeRange: { min: minTime, max: maxTime, range },
-    };
-  }, [resources]);
+    }
+  }, [resources])
 
-  const uniqueResources = useMemo(() => [...new Set(resources.map((r) => r.name))], [resources]);
+  const uniqueResources = useMemo(() => [...new Set(resources.map((r) => r.name))], [resources])
 
   // Transform for recharts - create stacked bars per resource
   const chartRows = useMemo(() => {
     return uniqueResources.map((name) => {
-      const row: Record<string, string | number> = { name };
-      const resourceEvents = data.filter((d) => d.y === name);
+      const row: Record<string, string | number> = { name }
+      const resourceEvents = data.filter((d) => d.y === name)
       resourceEvents.forEach((event, i) => {
-        row[`gap_${i}`] = event.startOffset;
-        row[`event_${i}`] = event.width;
-        row[`status_${i}`] = event.status;
-        row[`duration_${i}`] = event.duration;
-        row[`start_${i}`] = event.start;
-        row[`end_${i}`] = event.end;
-      });
-      return row;
-    });
-  }, [uniqueResources, data]);
+        row[`gap_${i}`] = event.startOffset
+        row[`event_${i}`] = event.width
+        row[`status_${i}`] = event.status
+        row[`duration_${i}`] = event.duration
+        row[`start_${i}`] = event.start
+        row[`end_${i}`] = event.end
+      })
+      return row
+    })
+  }, [uniqueResources, data])
 
   const maxEvents = useMemo(() => {
-    return Math.max(...resources.map((r) => r.events.length));
-  }, [resources]);
+    return Math.max(...resources.map((r) => r.events.length))
+  }, [resources])
 
   return (
     <div className={className} style={{ width: '100%', height }}>
@@ -140,11 +147,7 @@ export function ResourceTimeline({
             strokeOpacity={0.3}
             horizontal={false}
           />
-          <XAxis
-            type="number"
-            domain={[0, 100]}
-            hide
-          />
+          <XAxis type="number" domain={[0, 100]} hide />
           <YAxis
             type="category"
             dataKey="name"
@@ -176,5 +179,5 @@ export function ResourceTimeline({
         </BarChart>
       </ResponsiveContainer>
     </div>
-  );
+  )
 }

@@ -25,7 +25,9 @@ def mock_docker_client():
     mock_container_client.create_container = AsyncMock(return_value=MagicMock(id="mock-cid"))
     mock_container_client.start_container = AsyncMock()
     mock_container_client.get_container_logs = AsyncMock(return_value="mock logs")
-    with patch("app.services.volume_service.get_container_client", return_value=mock_container_client):
+    with patch(
+        "app.services.volume_service.get_container_client", return_value=mock_container_client
+    ):
         yield
 
 
@@ -35,13 +37,13 @@ class TestServerModelFields:
     def test_server_has_volume_fields(self):
         """Server model should have volume-related fields."""
         server = Server()
-        assert hasattr(server, 'volume_id')
-        assert hasattr(server, 'volume_mode')
-        assert hasattr(server, 'volume_mounts')
-        assert hasattr(server, 'total_cost')
-        assert hasattr(server, 'last_billed_at')
-        assert hasattr(server, 'expires_at')
-        assert hasattr(server, 'last_activity')
+        assert hasattr(server, "volume_id")
+        assert hasattr(server, "volume_mode")
+        assert hasattr(server, "volume_mounts")
+        assert hasattr(server, "total_cost")
+        assert hasattr(server, "last_billed_at")
+        assert hasattr(server, "expires_at")
+        assert hasattr(server, "last_activity")
 
     def test_server_volume_defaults(self):
         """Volume fields should default correctly when loaded from DB."""
@@ -75,7 +77,7 @@ class TestServerVolumeIntegration:
             max_servers_per_user=5,
             cost_per_hour=10,
             is_active=True,
-            visible_to_roles=["user"]
+            visible_to_roles=["user"],
         )
         db_session.add(plan)
         await db_session.commit()
@@ -86,7 +88,7 @@ class TestServerVolumeIntegration:
             slug="test-env-auto-vol",
             image="hello-world",
             is_active=True,
-            is_public=True
+            is_public=True,
         )
         db_session.add(env)
         await db_session.commit()
@@ -145,7 +147,7 @@ class TestServerVolumeIntegration:
         from unittest.mock import AsyncMock, patch
 
         service = VolumeService(db_session)
-        
+
         volume = await service.create_volume(
             name="test-quota-vol",
             display_name="Quota Test Volume",
@@ -153,9 +155,9 @@ class TestServerVolumeIntegration:
         )
 
         # Mock the filesystem size check to return 15GB
-        with patch.object(service, 'get_volume_size', new_callable=AsyncMock) as mock_size:
+        with patch.object(service, "get_volume_size", new_callable=AsyncMock) as mock_size:
             mock_size.return_value = 16106127360  # 15GB
-            
+
             # Should fail with 10GB plan
             result = await service.check_volumes_quota([str(volume.id)], "10g")
             assert result["allowed"] is False
@@ -170,7 +172,9 @@ class TestServerLifecycleE2E:
     """End-to-end tests for full server lifecycle."""
 
     @pytest.mark.asyncio
-    async def test_server_creation_has_billing_fields(self, client: AsyncClient, test_user, user_token, db_session):
+    async def test_server_creation_has_billing_fields(
+        self, client: AsyncClient, test_user, user_token, db_session
+    ):
         """E2E: Create server prerequisites and verify billing fields exist."""
         from app.models.server_plan import ServerPlan
         from app.models.environment_template import EnvironmentTemplate
@@ -188,18 +192,14 @@ class TestServerLifecycleE2E:
             max_servers_per_user=5,
             cost_per_hour=10,
             is_active=True,
-            visible_to_roles=["user"]
+            visible_to_roles=["user"],
         )
         db_session.add(plan)
         await db_session.commit()
         await db_session.refresh(plan)
 
         env = EnvironmentTemplate(
-            name="Test Env",
-            slug="test-env",
-            image="hello-world",
-            is_active=True,
-            is_public=True
+            name="Test Env", slug="test-env", image="hello-world", is_active=True, is_public=True
         )
         db_session.add(env)
         await db_session.commit()
@@ -210,12 +210,12 @@ class TestServerLifecycleE2E:
             user_id=test_user.id,
             plan_id=plan.id,
             environment_id=env.id,
-            status="running"
+            status="running",
         )
-        assert hasattr(server, 'total_cost')
-        assert hasattr(server, 'last_billed_at')
-        assert hasattr(server, 'expires_at')
-        assert hasattr(server, 'last_activity')
+        assert hasattr(server, "total_cost")
+        assert hasattr(server, "last_billed_at")
+        assert hasattr(server, "expires_at")
+        assert hasattr(server, "last_activity")
 
     @pytest.mark.asyncio
     async def test_auto_stop_fields(self, db_session):
@@ -236,7 +236,9 @@ class TestServerWorkspaceVolumeAccess:
     """Tests for server creation with workspace-shared volumes."""
 
     @pytest.mark.asyncio
-    async def test_viewer_cannot_mount_workspace_volume_as_rw(self, client: AsyncClient, test_user, admin_user, user_token, db_session):
+    async def test_viewer_cannot_mount_workspace_volume_as_rw(
+        self, client: AsyncClient, test_user, admin_user, user_token, db_session
+    ):
         """A workspace viewer must be blocked from mounting a shared volume as read-write."""
         from app.models.server_plan import ServerPlan
         from app.models.environment_template import EnvironmentTemplate
@@ -305,23 +307,37 @@ class TestServerWorkspaceVolumeAccess:
 
         # Viewer tries to create server with shared volume as RW
         headers = {"Authorization": f"Bearer {user_token}"}
-        response = await client.post("/api/servers/", headers=headers, json={
-            "name": "viewer-rw-attack",
-            "plan_id": str(plan.id),
-            "environment_id": str(env.id),
-            "volume_mounts": [{
-                "volume_id": str(volume.id),
-                "mount_path": "/data",
-                "mode": "read_write",
-            }],
-        })
+        response = await client.post(
+            "/api/servers/",
+            headers=headers,
+            json={
+                "name": "viewer-rw-attack",
+                "plan_id": str(plan.id),
+                "environment_id": str(env.id),
+                "volume_mounts": [
+                    {
+                        "volume_id": str(volume.id),
+                        "mount_path": "/data",
+                        "mode": "read_write",
+                    }
+                ],
+            },
+        )
 
-        assert response.status_code == 403, f"Expected 403, got {response.status_code}: {response.text}"
+        assert response.status_code == 403, (
+            f"Expected 403, got {response.status_code}: {response.text}"
+        )
         detail = response.json().get("detail", "")
-        assert "read-write" in detail.lower() or "read_only" in detail.lower() or "cannot be mounted" in detail.lower()
+        assert (
+            "read-write" in detail.lower()
+            or "read_only" in detail.lower()
+            or "cannot be mounted" in detail.lower()
+        )
 
     @pytest.mark.asyncio
-    async def test_viewer_can_mount_workspace_volume_as_ro(self, client: AsyncClient, test_user, admin_user, user_token, db_session):
+    async def test_viewer_can_mount_workspace_volume_as_ro(
+        self, client: AsyncClient, test_user, admin_user, user_token, db_session
+    ):
         """A workspace viewer should be allowed to mount a shared volume as read-only."""
         from app.models.server_plan import ServerPlan
         from app.models.environment_template import EnvironmentTemplate
@@ -398,16 +414,22 @@ class TestServerWorkspaceVolumeAccess:
             )
             with patch("app.api.servers.spawner.get_status", new_callable=AsyncMock) as mock_status:
                 mock_status.return_value = "running"
-                response = await client.post("/api/servers/", headers=headers, json={
-                    "name": "viewer-ro-server",
-                    "plan_id": str(plan.id),
-                    "environment_id": str(env.id),
-                    "volume_mounts": [{
-                        "volume_id": str(volume.id),
-                        "mount_path": "/data",
-                        "mode": "read_only",
-                    }],
-                })
+                response = await client.post(
+                    "/api/servers/",
+                    headers=headers,
+                    json={
+                        "name": "viewer-ro-server",
+                        "plan_id": str(plan.id),
+                        "environment_id": str(env.id),
+                        "volume_mounts": [
+                            {
+                                "volume_id": str(volume.id),
+                                "mount_path": "/data",
+                                "mode": "read_only",
+                            }
+                        ],
+                    },
+                )
 
         # Should succeed (201) or get a Docker-related error, NOT a 403
         if response.status_code == 403:
@@ -415,10 +437,14 @@ class TestServerWorkspaceVolumeAccess:
             assert "read-only" not in detail.lower(), f"Viewer should be allowed RO mount: {detail}"
         # We don't strictly assert 201 because Docker mocking is complex,
         # but we absolutely forbid 403 for read-only mount attempts.
-        assert response.status_code != 403, f"Viewer should be allowed to mount as RO: {response.text}"
+        assert response.status_code != 403, (
+            f"Viewer should be allowed to mount as RO: {response.text}"
+        )
 
     @pytest.mark.asyncio
-    async def test_editor_can_mount_workspace_volume_as_rw(self, client: AsyncClient, test_user, admin_user, user_token, db_session):
+    async def test_editor_can_mount_workspace_volume_as_rw(
+        self, client: AsyncClient, test_user, admin_user, user_token, db_session
+    ):
         """A workspace editor (read_write member) should be allowed to mount as read-write."""
         from app.models.server_plan import ServerPlan
         from app.models.environment_template import EnvironmentTemplate
@@ -495,16 +521,22 @@ class TestServerWorkspaceVolumeAccess:
             )
             with patch("app.api.servers.spawner.get_status", new_callable=AsyncMock) as mock_status:
                 mock_status.return_value = "running"
-                response = await client.post("/api/servers/", headers=headers, json={
-                    "name": "editor-rw-server",
-                    "plan_id": str(plan.id),
-                    "environment_id": str(env.id),
-                    "volume_mounts": [{
-                        "volume_id": str(volume.id),
-                        "mount_path": "/data",
-                        "mode": "read_write",
-                    }],
-                })
+                response = await client.post(
+                    "/api/servers/",
+                    headers=headers,
+                    json={
+                        "name": "editor-rw-server",
+                        "plan_id": str(plan.id),
+                        "environment_id": str(env.id),
+                        "volume_mounts": [
+                            {
+                                "volume_id": str(volume.id),
+                                "mount_path": "/data",
+                                "mode": "read_write",
+                            }
+                        ],
+                    },
+                )
 
         # Editor should NOT get a 403 permission denied
         assert response.status_code != 403, f"Editor should be allowed RW mount: {response.text}"
@@ -514,7 +546,9 @@ class TestServerPlanAccessValidation:
     """Tests for plan access validation on start/restart."""
 
     @pytest.mark.asyncio
-    async def test_start_blocked_when_plan_access_revoked(self, client: AsyncClient, test_user, user_token, db_session):
+    async def test_start_blocked_when_plan_access_revoked(
+        self, client: AsyncClient, test_user, user_token, db_session
+    ):
         """User should be blocked from starting a server if their plan access was revoked."""
         from app.models.server_plan import ServerPlan
         from app.models.environment_template import EnvironmentTemplate
@@ -570,7 +604,9 @@ class TestServerPlanAccessValidation:
         assert "no longer available" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_restart_blocked_when_plan_access_revoked(self, client: AsyncClient, test_user, user_token, db_session):
+    async def test_restart_blocked_when_plan_access_revoked(
+        self, client: AsyncClient, test_user, user_token, db_session
+    ):
         """User should be blocked from restarting a server if their plan access was revoked."""
         from app.models.server_plan import ServerPlan
         from app.models.environment_template import EnvironmentTemplate
@@ -626,7 +662,9 @@ class TestServerPlanAccessValidation:
         assert "no longer available" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_start_allowed_when_plan_access_valid(self, client: AsyncClient, test_user, user_token, db_session):
+    async def test_start_allowed_when_plan_access_valid(
+        self, client: AsyncClient, test_user, user_token, db_session
+    ):
         """User should be allowed to start a server when plan access is still valid."""
         from app.models.server_plan import ServerPlan
         from app.models.environment_template import EnvironmentTemplate
@@ -690,6 +728,7 @@ class TestServerPlanAccessValidation:
         # Should NOT be blocked by plan access (may still fail on Docker, but not 403)
         assert response.status_code != 403, f"Should not be blocked by plan access: {response.text}"
 
+
 """Coverage-focused tests for servers.py gaps."""
 
 import pytest
@@ -719,8 +758,7 @@ class TestGetServerVolumes:
         await db_session.commit()
 
         response = await client.get(
-            f"/api/servers/{server.id}/volumes",
-            headers={"Authorization": f"Bearer {user_token}"}
+            f"/api/servers/{server.id}/volumes", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -729,9 +767,10 @@ class TestGetServerVolumes:
     @pytest.mark.asyncio
     async def test_get_server_volumes_not_found(self, client, user_token):
         import uuid
+
         response = await client.get(
             f"/api/servers/{uuid.uuid4()}/volumes",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 404
 
@@ -740,7 +779,9 @@ class TestCrossUserAuditMissingReason:
     """Cross-user access without reason -> 400."""
 
     @pytest.mark.asyncio
-    async def test_start_server_cross_user_no_reason(self, client, admin_token, test_user, db_session):
+    async def test_start_server_cross_user_no_reason(
+        self, client, admin_token, test_user, db_session
+    ):
         server = Server(name="srv-start", user_id=test_user.id, status="stopped", container_id=None)
         db_session.add(server)
         await db_session.commit()
@@ -748,13 +789,15 @@ class TestCrossUserAuditMissingReason:
         response = await client.post(
             f"/api/servers/{server.id}/start",
             headers={"Authorization": f"Bearer {admin_token}"},
-            json={}
+            json={},
         )
         assert response.status_code == 400
         assert "reason" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_stop_server_cross_user_no_reason(self, client, admin_token, test_user, db_session):
+    async def test_stop_server_cross_user_no_reason(
+        self, client, admin_token, test_user, db_session
+    ):
         server = Server(name="srv-stop", user_id=test_user.id, status="running", container_id="c1")
         db_session.add(server)
         await db_session.commit()
@@ -763,20 +806,21 @@ class TestCrossUserAuditMissingReason:
             response = await client.post(
                 f"/api/servers/{server.id}/stop",
                 headers={"Authorization": f"Bearer {admin_token}"},
-                json={}
+                json={},
             )
         assert response.status_code == 400
         assert "reason" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_delete_server_cross_user_no_reason(self, client, admin_token, test_user, db_session):
+    async def test_delete_server_cross_user_no_reason(
+        self, client, admin_token, test_user, db_session
+    ):
         server = Server(name="srv-del", user_id=test_user.id, status="stopped", container_id=None)
         db_session.add(server)
         await db_session.commit()
 
         response = await client.delete(
-            f"/api/servers/{server.id}",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            f"/api/servers/{server.id}", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 400
         assert "reason" in response.json()["detail"].lower()
@@ -786,24 +830,31 @@ class TestCreateServerValidation:
     """create_server validation branches."""
 
     @pytest.mark.asyncio
-    async def test_create_server_plan_not_available_for_role(self, client, user_token, test_user, db_session):
+    async def test_create_server_plan_not_available_for_role(
+        self, client, user_token, test_user, db_session
+    ):
         from app.models.server_plan import ServerPlan
         from app.models.environment_template import EnvironmentTemplate
+
         env = EnvironmentTemplate(name="test-env", slug="test-env", image="python:3.11")
         db_session.add(env)
         await db_session.flush()
-        plan = ServerPlan(name="admin-plan", slug="admin-plan", cpu_limit=1.0, memory_limit="512m", disk_limit="10g", is_active=True, visible_to_roles=["admin"])
+        plan = ServerPlan(
+            name="admin-plan",
+            slug="admin-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["admin"],
+        )
         db_session.add(plan)
         await db_session.commit()
 
         response = await client.post(
             "/api/servers/",
             headers={"Authorization": f"Bearer {user_token}"},
-            json={
-                "name": "srv-plan",
-                "plan_id": str(plan.id),
-                "environment_id": str(env.id)
-            }
+            json={"name": "srv-plan", "plan_id": str(plan.id), "environment_id": str(env.id)},
         )
         assert response.status_code == 403
 
@@ -811,22 +862,30 @@ class TestCreateServerValidation:
     async def test_create_server_quota_exceeded(self, client, user_token, test_user, db_session):
         from app.models.server_plan import ServerPlan
         from app.models.environment_template import EnvironmentTemplate
+
         env = EnvironmentTemplate(name="test-env2", slug="test-env2", image="python:3.11")
         db_session.add(env)
         await db_session.flush()
-        plan = ServerPlan(name="basic-plan", slug="basic-plan", cpu_limit=1.0, memory_limit="512m", disk_limit="10g", is_active=True, visible_to_roles=["user"])
+        plan = ServerPlan(
+            name="basic-plan",
+            slug="basic-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
+        )
         db_session.add(plan)
         await db_session.commit()
 
-        with mock.patch("app.services.quota_service.QuotaService.check_spawn_allowed", return_value={"allowed": False, "reason": "quota exceeded"}):
+        with mock.patch(
+            "app.services.quota_service.QuotaService.check_spawn_allowed",
+            return_value={"allowed": False, "reason": "quota exceeded"},
+        ):
             response = await client.post(
                 "/api/servers/",
                 headers={"Authorization": f"Bearer {user_token}"},
-                json={
-                    "name": "srv-quota",
-                    "plan_id": str(plan.id),
-                    "environment_id": str(env.id)
-                }
+                json={"name": "srv-quota", "plan_id": str(plan.id), "environment_id": str(env.id)},
             )
         assert response.status_code == 429
 
@@ -841,8 +900,7 @@ class TestPerformServerStopNoContainer:
         await db_session.commit()
 
         response = await client.post(
-            f"/api/servers/{server.id}/stop",
-            headers={"Authorization": f"Bearer {user_token}"}
+            f"/api/servers/{server.id}/stop", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 200
         assert response.json()["status"] == "stopped"
@@ -852,7 +910,9 @@ class TestGetServerLogsException:
     """get_server_logs generic exception handler."""
 
     @pytest.mark.asyncio
-    async def test_get_server_logs_generic_exception(self, client, user_token, test_user, db_session):
+    async def test_get_server_logs_generic_exception(
+        self, client, user_token, test_user, db_session
+    ):
         server = Server(name="srv-logs", user_id=test_user.id, status="running", container_id="c1")
         db_session.add(server)
         await db_session.commit()
@@ -861,8 +921,7 @@ class TestGetServerLogsException:
         mock_client.get_container_logs = mock.AsyncMock(side_effect=RuntimeError("boom"))
         with mock.patch("app.api.servers.spawner.container_client", mock_client):
             response = await client.get(
-                f"/api/servers/{server.id}/logs",
-                headers={"Authorization": f"Bearer {user_token}"}
+                f"/api/servers/{server.id}/logs", headers={"Authorization": f"Bearer {user_token}"}
             )
         assert response.status_code == 500
 
@@ -871,7 +930,9 @@ class TestUpdateServerBranches:
     """update_server untested branches."""
 
     @pytest.mark.asyncio
-    async def test_update_server_cross_user_without_reason(self, client, admin_token, test_user, db_session):
+    async def test_update_server_cross_user_without_reason(
+        self, client, admin_token, test_user, db_session
+    ):
         server = Server(name="srv-patch", user_id=test_user.id, status="stopped", container_id=None)
         db_session.add(server)
         await db_session.commit()
@@ -879,7 +940,7 @@ class TestUpdateServerBranches:
         response = await client.patch(
             f"/api/servers/{server.id}",
             headers={"Authorization": f"Bearer {admin_token}"},
-            json={"name": "new-name"}
+            json={"name": "new-name"},
         )
         assert response.status_code == 400
         assert "reason" in response.json()["detail"].lower()
@@ -893,10 +954,11 @@ class TestUpdateServerBranches:
         response = await client.patch(
             f"/api/servers/{server.id}",
             headers={"Authorization": f"Bearer {admin_token}"},
-            json={"name": "srv-new", "reason": "Admin update"}
+            json={"name": "srv-new", "reason": "Admin update"},
         )
         assert response.status_code == 200
         assert response.json()["name"] == "srv-new"
+
 
 """Coverage-focused tests for servers.py endpoints — happy paths and status sync."""
 
@@ -922,14 +984,24 @@ class TestCreateServerHappyPath:
         db_session.add(env)
         await db_session.flush()
         plan = ServerPlan(
-            name="basic-plan", slug="basic-plan",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"], max_runtime="1h",
+            name="basic-plan",
+            slug="basic-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
+            max_runtime="1h",
         )
         db_session.add(plan)
         await db_session.commit()
 
-        real_vol = Volume(name="nukelab-server-testuser-srv1-data", display_name="Srv1 Data", owner_id=test_user.id, size_bytes=0)
+        real_vol = Volume(
+            name="nukelab-server-testuser-srv1-data",
+            display_name="Srv1 Data",
+            owner_id=test_user.id,
+            size_bytes=0,
+        )
         db_session.add(real_vol)
         await db_session.flush()
 
@@ -980,7 +1052,7 @@ class TestCreateServerHappyPath:
                                     "name": "srv1",
                                     "plan_id": str(plan.id),
                                     "environment_id": str(env.id),
-                                }
+                                },
                             )
 
         assert response.status_code == 200
@@ -992,14 +1064,21 @@ class TestCreateServerHappyPath:
         assert data["environment_id"] == str(env.id)
 
     @pytest.mark.asyncio
-    async def test_create_server_with_volume_mounts(self, client, user_token, test_user, db_session):
+    async def test_create_server_with_volume_mounts(
+        self, client, user_token, test_user, db_session
+    ):
         env = EnvironmentTemplate(name="test-env3", slug="test-env3", image="python:3.11")
         db_session.add(env)
         await db_session.flush()
         plan = ServerPlan(
-            name="user-plan2", slug="user-plan2",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"], max_runtime="1h",
+            name="user-plan2",
+            slug="user-plan2",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
+            max_runtime="1h",
         )
         db_session.add(plan)
 
@@ -1065,7 +1144,7 @@ class TestCreateServerHappyPath:
                                             "mode": "read_write",
                                         }
                                     ],
-                                }
+                                },
                             )
 
         assert response.status_code == 200
@@ -1082,9 +1161,13 @@ class TestCreateServerQuotaFail:
         db_session.add(env)
         await db_session.flush()
         plan = ServerPlan(
-            name="qf-plan", slug="qf-plan",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"],
+            name="qf-plan",
+            slug="qf-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
         )
         db_session.add(plan)
         await db_session.commit()
@@ -1095,7 +1178,9 @@ class TestCreateServerQuotaFail:
             ps_inst.get_by_id = mock.AsyncMock(return_value=plan)
             with mock.patch("app.services.quota_service.QuotaService") as MockQS:
                 qs_inst = MockQS.return_value
-                qs_inst.check_spawn_allowed = mock.AsyncMock(return_value={"allowed": False, "reason": "quota exceeded"})
+                qs_inst.check_spawn_allowed = mock.AsyncMock(
+                    return_value={"allowed": False, "reason": "quota exceeded"}
+                )
                 response = await client.post(
                     "/api/servers/",
                     headers={"Authorization": f"Bearer {user_token}"},
@@ -1103,7 +1188,7 @@ class TestCreateServerQuotaFail:
                         "name": "srv-qf",
                         "plan_id": str(plan.id),
                         "environment_id": str(env.id),
-                    }
+                    },
                 )
 
         assert response.status_code == 429
@@ -1114,14 +1199,20 @@ class TestCreateServerCreditsFail:
     """POST / with credits check fail."""
 
     @pytest.mark.asyncio
-    async def test_create_server_insufficient_credits(self, client, user_token, test_user, db_session):
+    async def test_create_server_insufficient_credits(
+        self, client, user_token, test_user, db_session
+    ):
         env = EnvironmentTemplate(name="cred-env", slug="cred-env", image="python:3.11")
         db_session.add(env)
         await db_session.flush()
         plan = ServerPlan(
-            name="cred-plan", slug="cred-plan",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"],
+            name="cred-plan",
+            slug="cred-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
             cost_per_hour=1.0,
         )
         db_session.add(plan)
@@ -1142,7 +1233,7 @@ class TestCreateServerCreditsFail:
                             "name": "srv-cred",
                             "plan_id": str(plan.id),
                             "environment_id": str(env.id),
-                        }
+                        },
                     )
 
         assert response.status_code == 402
@@ -1158,9 +1249,13 @@ class TestCreateServerVolumeQuotaFail:
         db_session.add(env)
         await db_session.flush()
         plan = ServerPlan(
-            name="vq-plan", slug="vq-plan",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"],
+            name="vq-plan",
+            slug="vq-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
         )
         db_session.add(plan)
         await db_session.commit()
@@ -1174,8 +1269,12 @@ class TestCreateServerVolumeQuotaFail:
             va_inst.can_access_volume = mock.AsyncMock(return_value=True)
             with mock.patch("app.services.volume_service.VolumeService") as MockVS:
                 vs_inst = MockVS.return_value
-                vs_inst.check_quota = mock.AsyncMock(return_value={"allowed": False, "reason": "over quota"})
-                vs_inst.check_volumes_quota = mock.AsyncMock(return_value={"allowed": False, "reason": "over quota"})
+                vs_inst.check_quota = mock.AsyncMock(
+                    return_value={"allowed": False, "reason": "over quota"}
+                )
+                vs_inst.check_volumes_quota = mock.AsyncMock(
+                    return_value={"allowed": False, "reason": "over quota"}
+                )
                 with mock.patch("app.services.plan_service.PlanService") as MockPS:
                     ps_inst = MockPS.return_value
                     ps_inst.can_user_use_plan = mock.AsyncMock(return_value=True)
@@ -1191,9 +1290,13 @@ class TestCreateServerVolumeQuotaFail:
                                 "plan_id": str(plan.id),
                                 "environment_id": str(env.id),
                                 "volume_mounts": [
-                                    {"volume_id": str(vol.id), "mount_path": "/data", "mode": "read_write"}
+                                    {
+                                        "volume_id": str(vol.id),
+                                        "mount_path": "/data",
+                                        "mode": "read_write",
+                                    }
                                 ],
-                            }
+                            },
                         )
 
         assert response.status_code == 400
@@ -1209,14 +1312,24 @@ class TestCreateServerException:
         db_session.add(env)
         await db_session.flush()
         plan = ServerPlan(
-            name="exc-plan", slug="exc-plan",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"], max_runtime="1h",
+            name="exc-plan",
+            slug="exc-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
+            max_runtime="1h",
         )
         db_session.add(plan)
         await db_session.commit()
 
-        real_vol = Volume(name="nukelab-server-testuser-srvexc-data", display_name="Exc Data", owner_id=test_user.id, size_bytes=0)
+        real_vol = Volume(
+            name="nukelab-server-testuser-srvexc-data",
+            display_name="Exc Data",
+            owner_id=test_user.id,
+            size_bytes=0,
+        )
         db_session.add(real_vol)
         await db_session.flush()
 
@@ -1241,9 +1354,13 @@ class TestCreateServerException:
                             ps_inst.can_user_use_plan = mock.AsyncMock(return_value=True)
                             ps_inst.get_by_id = mock.AsyncMock(return_value=plan)
 
-                            with mock.patch("app.container.client.get_container_client") as mock_get_client:
+                            with mock.patch(
+                                "app.container.client.get_container_client"
+                            ) as mock_get_client:
                                 mock_cc = mock.AsyncMock()
-                                mock_cc.client.volumes.get = mock.AsyncMock(side_effect=Exception("no vol"))
+                                mock_cc.client.volumes.get = mock.AsyncMock(
+                                    side_effect=Exception("no vol")
+                                )
                                 mock_get_client.return_value = mock_cc
 
                                 response = await client.post(
@@ -1253,7 +1370,7 @@ class TestCreateServerException:
                                         "name": "srvexc",
                                         "plan_id": str(plan.id),
                                         "environment_id": str(env.id),
-                                    }
+                                    },
                                 )
 
         assert response.status_code == 500
@@ -1272,16 +1389,22 @@ class TestCreateServerValidationMore:
                 "name": "-badname",
                 "plan_id": str(uuid.uuid4()),
                 "environment_id": str(uuid.uuid4()),
-            }
+            },
         )
         assert response.status_code == 422
 
     @pytest.mark.asyncio
-    async def test_create_server_environment_not_found(self, client, user_token, test_user, db_session):
+    async def test_create_server_environment_not_found(
+        self, client, user_token, test_user, db_session
+    ):
         plan = ServerPlan(
-            name="envnf-plan", slug="envnf-plan",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"],
+            name="envnf-plan",
+            slug="envnf-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
         )
         db_session.add(plan)
         await db_session.commit()
@@ -1293,20 +1416,26 @@ class TestCreateServerValidationMore:
                 "name": "srv-envnf",
                 "plan_id": str(plan.id),
                 "environment_id": str(uuid.uuid4()),
-            }
+            },
         )
         assert response.status_code == 404
         assert "environment not found" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_create_server_volume_access_denied(self, client, user_token, test_user, db_session):
+    async def test_create_server_volume_access_denied(
+        self, client, user_token, test_user, db_session
+    ):
         env = EnvironmentTemplate(name="deny-env", slug="deny-env", image="python:3.11")
         db_session.add(env)
         await db_session.flush()
         plan = ServerPlan(
-            name="deny-plan", slug="deny-plan",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"],
+            name="deny-plan",
+            slug="deny-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
         )
         db_session.add(plan)
         await db_session.commit()
@@ -1336,23 +1465,33 @@ class TestCreateServerValidationMore:
                                 "plan_id": str(plan.id),
                                 "environment_id": str(env.id),
                                 "volume_mounts": [
-                                    {"volume_id": str(vol.id), "mount_path": "/data", "mode": "read_write"}
+                                    {
+                                        "volume_id": str(vol.id),
+                                        "mount_path": "/data",
+                                        "mode": "read_write",
+                                    }
                                 ],
-                            }
+                            },
                         )
 
         assert response.status_code == 403
         assert "cannot be mounted" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_create_server_aggregate_quota_failed(self, client, user_token, test_user, db_session):
+    async def test_create_server_aggregate_quota_failed(
+        self, client, user_token, test_user, db_session
+    ):
         env = EnvironmentTemplate(name="agg-env", slug="agg-env", image="python:3.11")
         db_session.add(env)
         await db_session.flush()
         plan = ServerPlan(
-            name="agg-plan", slug="agg-plan",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"],
+            name="agg-plan",
+            slug="agg-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
         )
         db_session.add(plan)
         await db_session.commit()
@@ -1367,7 +1506,9 @@ class TestCreateServerValidationMore:
             with mock.patch("app.services.volume_service.VolumeService") as MockVS:
                 vs_inst = MockVS.return_value
                 vs_inst.check_quota = mock.AsyncMock(return_value={"allowed": True})
-                vs_inst.check_volumes_quota = mock.AsyncMock(return_value={"allowed": False, "reason": "aggregate exceeded"})
+                vs_inst.check_volumes_quota = mock.AsyncMock(
+                    return_value={"allowed": False, "reason": "aggregate exceeded"}
+                )
                 with mock.patch("app.services.plan_service.PlanService") as MockPS:
                     ps_inst = MockPS.return_value
                     ps_inst.can_user_use_plan = mock.AsyncMock(return_value=True)
@@ -1383,28 +1524,43 @@ class TestCreateServerValidationMore:
                                 "plan_id": str(plan.id),
                                 "environment_id": str(env.id),
                                 "volume_mounts": [
-                                    {"volume_id": str(vol.id), "mount_path": "/data", "mode": "read_write"}
+                                    {
+                                        "volume_id": str(vol.id),
+                                        "mount_path": "/data",
+                                        "mode": "read_write",
+                                    }
                                 ],
-                            }
+                            },
                         )
 
         assert response.status_code == 400
         assert "aggregate exceeded" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_create_server_auto_volume_in_mounts(self, client, user_token, test_user, db_session):
+    async def test_create_server_auto_volume_in_mounts(
+        self, client, user_token, test_user, db_session
+    ):
         env = EnvironmentTemplate(name="auto-env", slug="auto-env", image="python:3.11")
         db_session.add(env)
         await db_session.flush()
         plan = ServerPlan(
-            name="auto-plan", slug="auto-plan",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"],
+            name="auto-plan",
+            slug="auto-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
         )
         db_session.add(plan)
         await db_session.commit()
 
-        real_vol = Volume(name="nukelab-server-testuser-srvauto-data", display_name="Auto Data", owner_id=test_user.id, size_bytes=0)
+        real_vol = Volume(
+            name="nukelab-server-testuser-srvauto-data",
+            display_name="Auto Data",
+            owner_id=test_user.id,
+            size_bytes=0,
+        )
         db_session.add(real_vol)
         await db_session.flush()
 
@@ -1454,7 +1610,7 @@ class TestCreateServerValidationMore:
                                 "volume_mounts": [
                                     {"volume_id": "", "mount_path": "/data", "mode": "read_write"}
                                 ],
-                            }
+                            },
                         )
 
         assert response.status_code == 200
@@ -1472,8 +1628,7 @@ class TestListServers:
         await db_session.commit()
 
         response = await client.get(
-            "/api/servers/",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/servers/", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -1483,6 +1638,7 @@ class TestListServers:
     @pytest.mark.asyncio
     async def test_list_servers_admin_sees_all(self, client, admin_token, test_user, db_session):
         from app.models.user import User
+
         other = User(username="other", email="other@example.com", password_hash="x")
         db_session.add(other)
         await db_session.flush()
@@ -1493,8 +1649,7 @@ class TestListServers:
         await db_session.commit()
 
         response = await client.get(
-            "/api/servers/",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/servers/", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -1503,30 +1658,32 @@ class TestListServers:
         assert "srv-other" in names
 
     @pytest.mark.asyncio
-    async def test_list_servers_status_sync_running(self, client, user_token, test_user, db_session):
+    async def test_list_servers_status_sync_running(
+        self, client, user_token, test_user, db_session
+    ):
         s1 = Server(name="srv-sync", user_id=test_user.id, status="pending", container_id="c1")
         db_session.add(s1)
         await db_session.commit()
 
         with mock.patch("app.api.servers.spawner.get_status", return_value="running"):
             response = await client.get(
-                "/api/servers/",
-                headers={"Authorization": f"Bearer {user_token}"}
+                "/api/servers/", headers={"Authorization": f"Bearer {user_token}"}
             )
         assert response.status_code == 200
         data = response.json()
         assert data["servers"][0]["status"] == "running"
 
     @pytest.mark.asyncio
-    async def test_list_servers_status_sync_stopped(self, client, user_token, test_user, db_session):
+    async def test_list_servers_status_sync_stopped(
+        self, client, user_token, test_user, db_session
+    ):
         s1 = Server(name="srv-sync2", user_id=test_user.id, status="running", container_id="c1")
         db_session.add(s1)
         await db_session.commit()
 
         with mock.patch("app.api.servers.spawner.get_status", return_value="stopped"):
             response = await client.get(
-                "/api/servers/",
-                headers={"Authorization": f"Bearer {user_token}"}
+                "/api/servers/", headers={"Authorization": f"Bearer {user_token}"}
             )
         assert response.status_code == 200
         data = response.json()
@@ -1543,8 +1700,7 @@ class TestGetServer:
         await db_session.commit()
 
         response = await client.get(
-            f"/api/servers/{s1.id}",
-            headers={"Authorization": f"Bearer {user_token}"}
+            f"/api/servers/{s1.id}", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -1559,8 +1715,7 @@ class TestGetServer:
 
         with mock.patch("app.api.servers.spawner.get_status", return_value="running"):
             response = await client.get(
-                f"/api/servers/{s1.id}",
-                headers={"Authorization": f"Bearer {user_token}"}
+                f"/api/servers/{s1.id}", headers={"Authorization": f"Bearer {user_token}"}
             )
         assert response.status_code == 200
         data = response.json()
@@ -1574,8 +1729,7 @@ class TestGetServer:
 
         with mock.patch("app.api.servers.spawner.get_status", return_value="exited"):
             response = await client.get(
-                f"/api/servers/{s1.id}",
-                headers={"Authorization": f"Bearer {user_token}"}
+                f"/api/servers/{s1.id}", headers={"Authorization": f"Bearer {user_token}"}
             )
         assert response.status_code == 200
         data = response.json()
@@ -1584,8 +1738,7 @@ class TestGetServer:
     @pytest.mark.asyncio
     async def test_get_server_not_found(self, client, user_token):
         response = await client.get(
-            f"/api/servers/{uuid.uuid4()}",
-            headers={"Authorization": f"Bearer {user_token}"}
+            f"/api/servers/{uuid.uuid4()}", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 404
 
@@ -1599,7 +1752,11 @@ class TestGetServerPermissionCheck:
         from app.api.auth import get_password_hash
         import secrets
 
-        other_user = User(username="otherapi", email="otherapi@example.com", password_hash=get_password_hash("pass"))
+        other_user = User(
+            username="otherapi",
+            email="otherapi@example.com",
+            password_hash=get_password_hash("pass"),
+        )
         db_session.add(other_user)
         await db_session.flush()
 
@@ -1618,8 +1775,7 @@ class TestGetServerPermissionCheck:
         await db_session.commit()
 
         response = await client.get(
-            f"/api/servers/{s1.id}",
-            headers={"Authorization": f"Bearer {token_str}"}
+            f"/api/servers/{s1.id}", headers={"Authorization": f"Bearer {token_str}"}
         )
         assert response.status_code == 403
         assert "jwt" in response.json()["detail"].lower()
@@ -1636,7 +1792,7 @@ class TestGetServerByPath:
 
         response = await client.get(
             f"/api/servers/by-path/{test_user.username}/srv-path",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 200
         data = response.json()
@@ -1647,7 +1803,7 @@ class TestGetServerByPath:
     async def test_get_server_by_path_not_found(self, client, user_token, test_user):
         response = await client.get(
             f"/api/servers/by-path/{test_user.username}/nonexistent",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 404
 
@@ -1656,35 +1812,44 @@ class TestCrossUserWithReason:
     """Cross-user server actions with reason provided."""
 
     @pytest.mark.asyncio
-    async def test_start_server_cross_user_with_reason(self, client, admin_token, test_user, db_session):
+    async def test_start_server_cross_user_with_reason(
+        self, client, admin_token, test_user, db_session
+    ):
         s1 = Server(name="srv-cu-start", user_id=test_user.id, status="stopped", container_id="c1")
         db_session.add(s1)
         await db_session.commit()
 
         with mock.patch("app.api.servers.spawner.get_status", return_value="running"):
-            with mock.patch("app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()):
+            with mock.patch(
+                "app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()
+            ):
                 response = await client.post(
                     f"/api/servers/{s1.id}/start",
                     headers={"Authorization": f"Bearer {admin_token}"},
-                    json={"reason": "Helping user"}
+                    json={"reason": "Helping user"},
                 )
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "running"
 
     @pytest.mark.asyncio
-    async def test_stop_server_cross_user_with_reason(self, client, admin_token, test_user, db_session):
+    async def test_stop_server_cross_user_with_reason(
+        self, client, admin_token, test_user, db_session
+    ):
         s1 = Server(name="srv-cu-stop", user_id=test_user.id, status="running", container_id="c1")
         db_session.add(s1)
         await db_session.commit()
 
         with mock.patch("app.api.servers.spawner.delete", return_value=True):
             with mock.patch("app.services.notification_service.NotificationService"):
-                with mock.patch("app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()):
+                with mock.patch(
+                    "app.services.notification_service.broadcast_server_status_change",
+                    mock.AsyncMock(),
+                ):
                     response = await client.post(
                         f"/api/servers/{s1.id}/stop",
                         headers={"Authorization": f"Bearer {admin_token}"},
-                        json={"reason": "Maintenance"}
+                        json={"reason": "Maintenance"},
                     )
         assert response.status_code == 200
         data = response.json()
@@ -1697,18 +1862,22 @@ class TestStartServer:
     @pytest.mark.asyncio
     async def test_start_server_already_running(self, client, user_token, test_user, db_session):
         s1 = Server(
-            name="srv-start-run", user_id=test_user.id,
-            status="stopped", container_id="c1",
-            environment_id=uuid.uuid4(), plan_id=None,
+            name="srv-start-run",
+            user_id=test_user.id,
+            status="stopped",
+            container_id="c1",
+            environment_id=uuid.uuid4(),
+            plan_id=None,
         )
         db_session.add(s1)
         await db_session.commit()
 
         with mock.patch("app.api.servers.spawner.get_status", return_value="running"):
-            with mock.patch("app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()):
+            with mock.patch(
+                "app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()
+            ):
                 response = await client.post(
-                    f"/api/servers/{s1.id}/start",
-                    headers={"Authorization": f"Bearer {user_token}"}
+                    f"/api/servers/{s1.id}/start", headers={"Authorization": f"Bearer {user_token}"}
                 )
         assert response.status_code == 200
         data = response.json()
@@ -1720,33 +1889,50 @@ class TestStartServer:
         env_id = uuid.uuid4()
         plan_id = uuid.uuid4()
         s1 = Server(
-            name="srv-start-stop", user_id=test_user.id,
-            status="stopped", container_id="c1",
-            environment_id=env_id, plan_id=plan_id,
+            name="srv-start-stop",
+            user_id=test_user.id,
+            status="stopped",
+            container_id="c1",
+            environment_id=env_id,
+            plan_id=plan_id,
         )
         db_session.add(s1)
         await db_session.commit()
 
         spawned = Server(
-            id=s1.id, name=s1.name, user_id=test_user.id,
-            container_id="c2", image="img", status="running",
-            external_url="http://x", started_at=datetime.now(UTC).replace(tzinfo=None),
+            id=s1.id,
+            name=s1.name,
+            user_id=test_user.id,
+            container_id="c2",
+            image="img",
+            status="running",
+            external_url="http://x",
+            started_at=datetime.now(UTC).replace(tzinfo=None),
         )
 
         with mock.patch("app.api.servers.spawner.get_status", return_value="stopped"):
             with mock.patch("app.api.servers.spawner.delete", return_value=True):
                 with mock.patch("app.api.servers.spawner.spawn", return_value=spawned):
-                    with mock.patch("app.services.plan_service.PlanService.can_user_use_plan", return_value=True):
-                        with mock.patch("app.services.plan_service.PlanService.get_by_id", return_value=None):
+                    with mock.patch(
+                        "app.services.plan_service.PlanService.can_user_use_plan", return_value=True
+                    ):
+                        with mock.patch(
+                            "app.services.plan_service.PlanService.get_by_id", return_value=None
+                        ):
                             with mock.patch("app.services.volume_service.VolumeService") as MockVS:
                                 vs_inst = MockVS.return_value
                                 vs_inst.record_mount = mock.AsyncMock()
 
-                                with mock.patch("app.services.notification_service.NotificationService"):
-                                    with mock.patch("app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()):
+                                with mock.patch(
+                                    "app.services.notification_service.NotificationService"
+                                ):
+                                    with mock.patch(
+                                        "app.services.notification_service.broadcast_server_status_change",
+                                        mock.AsyncMock(),
+                                    ):
                                         response = await client.post(
                                             f"/api/servers/{s1.id}/start",
-                                            headers={"Authorization": f"Bearer {user_token}"}
+                                            headers={"Authorization": f"Bearer {user_token}"},
                                         )
 
         assert response.status_code == 200
@@ -1758,33 +1944,50 @@ class TestStartServer:
         env_id = uuid.uuid4()
         plan_id = uuid.uuid4()
         s1 = Server(
-            name="srv-start-unk", user_id=test_user.id,
-            status="stopped", container_id="c1",
-            environment_id=env_id, plan_id=plan_id,
+            name="srv-start-unk",
+            user_id=test_user.id,
+            status="stopped",
+            container_id="c1",
+            environment_id=env_id,
+            plan_id=plan_id,
         )
         db_session.add(s1)
         await db_session.commit()
 
         spawned = Server(
-            id=s1.id, name=s1.name, user_id=test_user.id,
-            container_id="c2", image="img", status="running",
-            external_url="http://x", started_at=datetime.now(UTC).replace(tzinfo=None),
+            id=s1.id,
+            name=s1.name,
+            user_id=test_user.id,
+            container_id="c2",
+            image="img",
+            status="running",
+            external_url="http://x",
+            started_at=datetime.now(UTC).replace(tzinfo=None),
         )
 
         with mock.patch("app.api.servers.spawner.get_status", return_value="unknown"):
             with mock.patch("app.api.servers.spawner.delete", return_value=True):
                 with mock.patch("app.api.servers.spawner.spawn", return_value=spawned):
-                    with mock.patch("app.services.plan_service.PlanService.can_user_use_plan", return_value=True):
-                        with mock.patch("app.services.plan_service.PlanService.get_by_id", return_value=None):
+                    with mock.patch(
+                        "app.services.plan_service.PlanService.can_user_use_plan", return_value=True
+                    ):
+                        with mock.patch(
+                            "app.services.plan_service.PlanService.get_by_id", return_value=None
+                        ):
                             with mock.patch("app.services.volume_service.VolumeService") as MockVS:
                                 vs_inst = MockVS.return_value
                                 vs_inst.record_mount = mock.AsyncMock()
 
-                                with mock.patch("app.services.notification_service.NotificationService"):
-                                    with mock.patch("app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()):
+                                with mock.patch(
+                                    "app.services.notification_service.NotificationService"
+                                ):
+                                    with mock.patch(
+                                        "app.services.notification_service.broadcast_server_status_change",
+                                        mock.AsyncMock(),
+                                    ):
                                         response = await client.post(
                                             f"/api/servers/{s1.id}/start",
-                                            headers={"Authorization": f"Bearer {user_token}"}
+                                            headers={"Authorization": f"Bearer {user_token}"},
                                         )
 
         assert response.status_code == 200
@@ -1796,39 +1999,58 @@ class TestStartServer:
         env = EnvironmentTemplate(name="start-env", slug="start-env", image="python:3.11")
         db_session.add(env)
         plan = ServerPlan(
-            name="start-plan", slug="start-plan",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"],
+            name="start-plan",
+            slug="start-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
         )
         db_session.add(plan)
         await db_session.flush()
 
         s1 = Server(
-            name="srv-start-nc", user_id=test_user.id,
-            status="stopped", container_id=None,
-            environment_id=env.id, plan_id=plan.id,
+            name="srv-start-nc",
+            user_id=test_user.id,
+            status="stopped",
+            container_id=None,
+            environment_id=env.id,
+            plan_id=plan.id,
         )
         db_session.add(s1)
         await db_session.commit()
 
         spawned = Server(
-            id=s1.id, name=s1.name, user_id=test_user.id,
-            container_id="c-new", image="python:3.11", status="running",
-            external_url="http://x", started_at=datetime.now(UTC).replace(tzinfo=None),
+            id=s1.id,
+            name=s1.name,
+            user_id=test_user.id,
+            container_id="c-new",
+            image="python:3.11",
+            status="running",
+            external_url="http://x",
+            started_at=datetime.now(UTC).replace(tzinfo=None),
         )
 
         with mock.patch("app.api.servers.spawner.spawn", return_value=spawned):
-            with mock.patch("app.services.plan_service.PlanService.can_user_use_plan", return_value=True):
-                with mock.patch("app.services.plan_service.PlanService.get_by_id", return_value=plan):
+            with mock.patch(
+                "app.services.plan_service.PlanService.can_user_use_plan", return_value=True
+            ):
+                with mock.patch(
+                    "app.services.plan_service.PlanService.get_by_id", return_value=plan
+                ):
                     with mock.patch("app.services.volume_service.VolumeService") as MockVS:
                         vs_inst = MockVS.return_value
                         vs_inst.record_mount = mock.AsyncMock()
 
                         with mock.patch("app.services.notification_service.NotificationService"):
-                            with mock.patch("app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()):
+                            with mock.patch(
+                                "app.services.notification_service.broadcast_server_status_change",
+                                mock.AsyncMock(),
+                            ):
                                 response = await client.post(
                                     f"/api/servers/{s1.id}/start",
-                                    headers={"Authorization": f"Bearer {user_token}"}
+                                    headers={"Authorization": f"Bearer {user_token}"},
                                 )
 
         assert response.status_code == 200
@@ -1837,28 +2059,39 @@ class TestStartServer:
         assert "started" in data["message"].lower()
 
     @pytest.mark.asyncio
-    async def test_start_server_plan_no_longer_available(self, client, user_token, test_user, db_session):
+    async def test_start_server_plan_no_longer_available(
+        self, client, user_token, test_user, db_session
+    ):
         s1 = Server(
-            name="srv-start-plan", user_id=test_user.id,
-            status="stopped", container_id="c1", plan_id=uuid.uuid4(),
+            name="srv-start-plan",
+            user_id=test_user.id,
+            status="stopped",
+            container_id="c1",
+            plan_id=uuid.uuid4(),
         )
         db_session.add(s1)
         await db_session.commit()
 
-        with mock.patch("app.services.plan_service.PlanService.can_user_use_plan", return_value=False):
+        with mock.patch(
+            "app.services.plan_service.PlanService.can_user_use_plan", return_value=False
+        ):
             response = await client.post(
-                f"/api/servers/{s1.id}/start",
-                headers={"Authorization": f"Bearer {user_token}"}
+                f"/api/servers/{s1.id}/start", headers={"Authorization": f"Bearer {user_token}"}
             )
         assert response.status_code == 403
         assert "plan no longer available" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_start_server_container_start_success(self, client, user_token, test_user, db_session):
+    async def test_start_server_container_start_success(
+        self, client, user_token, test_user, db_session
+    ):
         s1 = Server(
-            name="srv-start-ok", user_id=test_user.id,
-            status="stopped", container_id="c1",
-            environment_id=uuid.uuid4(), plan_id=None,
+            name="srv-start-ok",
+            user_id=test_user.id,
+            status="stopped",
+            container_id="c1",
+            environment_id=uuid.uuid4(),
+            plan_id=None,
         )
         db_session.add(s1)
         await db_session.commit()
@@ -1868,10 +2101,13 @@ class TestStartServer:
                 with mock.patch("app.services.notification_service.NotificationService") as MockNS:
                     ns_inst = MockNS.return_value
                     ns_inst.server_started = mock.AsyncMock()
-                    with mock.patch("app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()):
+                    with mock.patch(
+                        "app.services.notification_service.broadcast_server_status_change",
+                        mock.AsyncMock(),
+                    ):
                         response = await client.post(
                             f"/api/servers/{s1.id}/start",
-                            headers={"Authorization": f"Bearer {user_token}"}
+                            headers={"Authorization": f"Bearer {user_token}"},
                         )
 
         assert response.status_code == 200
@@ -1880,14 +2116,26 @@ class TestStartServer:
         assert "server started" in data["message"].lower()
 
     @pytest.mark.asyncio
-    async def test_start_server_insufficient_credits(self, client, user_token, test_user, db_session):
-        plan = ServerPlan(name="cred-plan", slug="cred-plan", cpu_limit=1.0, memory_limit="512m", disk_limit="10g", is_active=True, cost_per_hour=5)
+    async def test_start_server_insufficient_credits(
+        self, client, user_token, test_user, db_session
+    ):
+        plan = ServerPlan(
+            name="cred-plan",
+            slug="cred-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            cost_per_hour=5,
+        )
         db_session.add(plan)
         await db_session.flush()
 
         s1 = Server(
-            name="srv-credits", user_id=test_user.id,
-            status="stopped", container_id="c1",
+            name="srv-credits",
+            user_id=test_user.id,
+            status="stopped",
+            container_id="c1",
             plan_id=plan.id,
         )
         db_session.add(s1)
@@ -1897,10 +2145,12 @@ class TestStartServer:
             with mock.patch("app.services.credit_service.CreditService") as MockCS:
                 cs_inst = MockCS.return_value
                 cs_inst.check_sufficient_credits = mock.AsyncMock(return_value=False)
-                with mock.patch("app.services.plan_service.PlanService.can_user_use_plan", return_value=True):
+                with mock.patch(
+                    "app.services.plan_service.PlanService.can_user_use_plan", return_value=True
+                ):
                     response = await client.post(
                         f"/api/servers/{s1.id}/start",
-                        headers={"Authorization": f"Bearer {user_token}"}
+                        headers={"Authorization": f"Bearer {user_token}"},
                     )
 
         assert response.status_code == 402
@@ -1913,9 +2163,12 @@ class TestRestartServer:
     @pytest.mark.asyncio
     async def test_restart_server_with_container(self, client, user_token, test_user, db_session):
         s1 = Server(
-            name="srv-restart", user_id=test_user.id,
-            status="running", container_id="c1",
-            environment_id=uuid.uuid4(), plan_id=None,
+            name="srv-restart",
+            user_id=test_user.id,
+            status="running",
+            container_id="c1",
+            environment_id=uuid.uuid4(),
+            plan_id=None,
         )
         db_session.add(s1)
         await db_session.commit()
@@ -1924,10 +2177,13 @@ class TestRestartServer:
             with mock.patch("app.api.servers.spawner.stop", return_value=True):
                 with mock.patch("app.api.servers.spawner.start", return_value=True):
                     with mock.patch("app.services.notification_service.NotificationService"):
-                        with mock.patch("app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()):
+                        with mock.patch(
+                            "app.services.notification_service.broadcast_server_status_change",
+                            mock.AsyncMock(),
+                        ):
                             response = await client.post(
                                 f"/api/servers/{s1.id}/restart",
-                                headers={"Authorization": f"Bearer {user_token}"}
+                                headers={"Authorization": f"Bearer {user_token}"},
                             )
 
         assert response.status_code == 200
@@ -1938,50 +2194,73 @@ class TestRestartServer:
     @pytest.mark.asyncio
     async def test_restart_server_no_container(self, client, user_token, test_user, db_session):
         s1 = Server(
-            name="srv-restart-nc", user_id=test_user.id,
-            status="running", container_id=None,
+            name="srv-restart-nc",
+            user_id=test_user.id,
+            status="running",
+            container_id=None,
         )
         db_session.add(s1)
         await db_session.commit()
 
         response = await client.post(
-            f"/api/servers/{s1.id}/restart",
-            headers={"Authorization": f"Bearer {user_token}"}
+            f"/api/servers/{s1.id}/restart", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 400
         assert "no container" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_restart_server_unknown_container(self, client, user_token, test_user, db_session):
+    async def test_restart_server_unknown_container(
+        self, client, user_token, test_user, db_session
+    ):
         env = EnvironmentTemplate(name="restart-env", slug="restart-env", image="python:3.11")
         db_session.add(env)
         await db_session.flush()
-        plan = ServerPlan(name="restart-plan", slug="restart-plan", cpu_limit=1.0, memory_limit="512m", disk_limit="10g", is_active=True)
+        plan = ServerPlan(
+            name="restart-plan",
+            slug="restart-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+        )
         db_session.add(plan)
         await db_session.flush()
 
         s1 = Server(
-            name="srv-restart-unk", user_id=test_user.id,
-            status="running", container_id="c1",
-            environment_id=env.id, plan_id=plan.id,
+            name="srv-restart-unk",
+            user_id=test_user.id,
+            status="running",
+            container_id="c1",
+            environment_id=env.id,
+            plan_id=plan.id,
         )
         db_session.add(s1)
         await db_session.commit()
 
         spawned = Server(
-            id=s1.id, name=s1.name, user_id=test_user.id,
-            container_id="c2", image="python:3.11", status="running",
-            external_url="http://x", started_at=datetime.now(UTC).replace(tzinfo=None),
+            id=s1.id,
+            name=s1.name,
+            user_id=test_user.id,
+            container_id="c2",
+            image="python:3.11",
+            status="running",
+            external_url="http://x",
+            started_at=datetime.now(UTC).replace(tzinfo=None),
         )
 
         with mock.patch("app.api.servers.spawner.get_status", return_value="unknown"):
             with mock.patch("app.api.servers.spawner.spawn", return_value=spawned):
-                with mock.patch("app.services.plan_service.PlanService.can_user_use_plan", return_value=True):
+                with mock.patch(
+                    "app.services.plan_service.PlanService.can_user_use_plan", return_value=True
+                ):
                     with mock.patch("app.services.notification_service.NotificationService"):
-                        with mock.patch("app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()):
+                        with mock.patch(
+                            "app.services.notification_service.broadcast_server_status_change",
+                            mock.AsyncMock(),
+                        ):
                             response = await client.post(
                                 f"/api/servers/{s1.id}/restart",
-                                headers={"Authorization": f"Bearer {user_token}"}
+                                headers={"Authorization": f"Bearer {user_token}"},
                             )
 
         assert response.status_code == 200
@@ -1989,18 +2268,21 @@ class TestRestartServer:
         assert "recreated" in data["message"].lower()
 
     @pytest.mark.asyncio
-    async def test_restart_server_generic_exception(self, client, user_token, test_user, db_session):
+    async def test_restart_server_generic_exception(
+        self, client, user_token, test_user, db_session
+    ):
         s1 = Server(
-            name="srv-restart-exc", user_id=test_user.id,
-            status="running", container_id="c1",
+            name="srv-restart-exc",
+            user_id=test_user.id,
+            status="running",
+            container_id="c1",
         )
         db_session.add(s1)
         await db_session.commit()
 
         with mock.patch("app.api.servers.spawner.get_status", side_effect=RuntimeError("boom")):
             response = await client.post(
-                f"/api/servers/{s1.id}/restart",
-                headers={"Authorization": f"Bearer {user_token}"}
+                f"/api/servers/{s1.id}/restart", headers={"Authorization": f"Bearer {user_token}"}
             )
         assert response.status_code == 500
 
@@ -2017,8 +2299,7 @@ class TestDeleteServer:
         with mock.patch("app.api.servers.spawner.delete", return_value=True):
             with mock.patch("app.services.notification_service.NotificationService"):
                 response = await client.delete(
-                    f"/api/servers/{s1.id}",
-                    headers={"Authorization": f"Bearer {user_token}"}
+                    f"/api/servers/{s1.id}", headers={"Authorization": f"Bearer {user_token}"}
                 )
 
         assert response.status_code == 200
@@ -2032,10 +2313,11 @@ class TestDeleteServer:
         await db_session.commit()
 
         with mock.patch("app.api.servers.spawner.get_status", return_value="stopped"):
-            with mock.patch("app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()):
+            with mock.patch(
+                "app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()
+            ):
                 response = await client.post(
-                    f"/api/servers/{s1.id}/stop",
-                    headers={"Authorization": f"Bearer {user_token}"}
+                    f"/api/servers/{s1.id}/stop", headers={"Authorization": f"Bearer {user_token}"}
                 )
         assert response.status_code == 200
         data = response.json()
@@ -2044,11 +2326,24 @@ class TestDeleteServer:
 
     @pytest.mark.asyncio
     async def test_stop_server_with_billing(self, client, user_token, test_user, db_session):
-        plan = ServerPlan(name="stop-plan", slug="stop-plan", cpu_limit=1.0, memory_limit="512m", disk_limit="10g", is_active=True)
+        plan = ServerPlan(
+            name="stop-plan",
+            slug="stop-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+        )
         db_session.add(plan)
         await db_session.flush()
 
-        s1 = Server(name="srv-stop-bill", user_id=test_user.id, status="running", container_id="c1", plan_id=plan.id)
+        s1 = Server(
+            name="srv-stop-bill",
+            user_id=test_user.id,
+            status="running",
+            container_id="c1",
+            plan_id=plan.id,
+        )
         db_session.add(s1)
         await db_session.commit()
 
@@ -2063,10 +2358,13 @@ class TestDeleteServer:
                         with mock.patch("app.api.servers.NotificationService") as MockNS:
                             ns_inst = MockNS.return_value
                             ns_inst.server_stopped = mock.AsyncMock()
-                            with mock.patch("app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()):
+                            with mock.patch(
+                                "app.services.notification_service.broadcast_server_status_change",
+                                mock.AsyncMock(),
+                            ):
                                 response = await client.post(
                                     f"/api/servers/{s1.id}/stop",
-                                    headers={"Authorization": f"Bearer {user_token}"}
+                                    headers={"Authorization": f"Bearer {user_token}"},
                                 )
 
         assert response.status_code == 200
@@ -2077,8 +2375,7 @@ class TestDeleteServer:
     @pytest.mark.asyncio
     async def test_delete_server_not_found(self, client, user_token):
         response = await client.delete(
-            f"/api/servers/{uuid.uuid4()}",
-            headers={"Authorization": f"Bearer {user_token}"}
+            f"/api/servers/{uuid.uuid4()}", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 404
 
@@ -2089,10 +2386,11 @@ class TestDeleteServer:
         await db_session.commit()
 
         with mock.patch("app.api.servers.spawner.get_status", return_value="unknown"):
-            with mock.patch("app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()):
+            with mock.patch(
+                "app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()
+            ):
                 response = await client.post(
-                    f"/api/servers/{s1.id}/stop",
-                    headers={"Authorization": f"Bearer {user_token}"}
+                    f"/api/servers/{s1.id}/stop", headers={"Authorization": f"Bearer {user_token}"}
                 )
         assert response.status_code == 200
         data = response.json()
@@ -2112,8 +2410,7 @@ class TestStopServerException:
         with mock.patch("app.api.servers.spawner.get_status", return_value="running"):
             with mock.patch("app.api.servers.spawner.delete", side_effect=RuntimeError("boom")):
                 response = await client.post(
-                    f"/api/servers/{s1.id}/stop",
-                    headers={"Authorization": f"Bearer {user_token}"}
+                    f"/api/servers/{s1.id}/stop", headers={"Authorization": f"Bearer {user_token}"}
                 )
         assert response.status_code == 500
         assert "failed to stop" in response.json()["detail"].lower()
@@ -2129,8 +2426,7 @@ class TestServerActivity:
         await db_session.commit()
 
         response = await client.post(
-            f"/api/servers/{s1.id}/activity",
-            headers={"Authorization": f"Bearer {user_token}"}
+            f"/api/servers/{s1.id}/activity", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -2144,8 +2440,7 @@ class TestServerActivity:
         await db_session.commit()
 
         response = await client.post(
-            f"/api/servers/{s1.id}/activity",
-            headers={"Authorization": f"Bearer {user_token}"}
+            f"/api/servers/{s1.id}/activity", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 400
         assert "not running" in response.json()["detail"].lower()
@@ -2158,7 +2453,7 @@ class TestServerQueueStatus:
     async def test_queue_status_empty(self, client, user_token, test_user):
         response = await client.get(
             f"/api/servers/{uuid.uuid4()}/queue-status",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 200
         data = response.json()
@@ -2168,10 +2463,18 @@ class TestServerQueueStatus:
     @pytest.mark.asyncio
     async def test_queue_status_with_entries(self, client, user_token, test_user, db_session):
         from app.models.server_queue import ServerQueue
+
         env = EnvironmentTemplate(name="q-env", slug="q-env", image="python:3.11")
         db_session.add(env)
         await db_session.flush()
-        plan = ServerPlan(name="q-plan", slug="q-plan", cpu_limit=1.0, memory_limit="512m", disk_limit="10g", is_active=True)
+        plan = ServerPlan(
+            name="q-plan",
+            slug="q-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+        )
         db_session.add(plan)
         await db_session.flush()
 
@@ -2186,10 +2489,13 @@ class TestServerQueueStatus:
         db_session.add(sq)
         await db_session.commit()
 
-        with mock.patch("app.services.resource_pool_service.ResourcePoolService.get_queue_position", return_value=1):
+        with mock.patch(
+            "app.services.resource_pool_service.ResourcePoolService.get_queue_position",
+            return_value=1,
+        ):
             response = await client.get(
                 f"/api/servers/{uuid.uuid4()}/queue-status",
-                headers={"Authorization": f"Bearer {user_token}"}
+                headers={"Authorization": f"Bearer {user_token}"},
             )
         assert response.status_code == 200
         data = response.json()
@@ -2299,12 +2605,14 @@ class TestServerAccessStats:
         await db_session.commit()
 
         mock_service = mock.MagicMock()
-        mock_service.get_server_access_stats = mock.AsyncMock(return_value={"total_accesses": 5, "unique_users": 1})
+        mock_service.get_server_access_stats = mock.AsyncMock(
+            return_value={"total_accesses": 5, "unique_users": 1}
+        )
 
         with mock.patch("app.services.server_auth_service.server_auth_service", mock_service):
             response = await client.get(
                 f"/api/servers/{s1.id}/access-stats",
-                headers={"Authorization": f"Bearer {user_token}"}
+                headers={"Authorization": f"Bearer {user_token}"},
             )
         assert response.status_code == 200
         data = response.json()
@@ -2321,7 +2629,7 @@ class TestServerTestMetric:
         with mock.patch("redis.asyncio.from_url", return_value=mock_redis):
             response = await client.post(
                 f"/api/servers/{uuid.uuid4()}/test-metric",
-                headers={"Authorization": f"Bearer {user_token}"}
+                headers={"Authorization": f"Bearer {user_token}"},
             )
         assert response.status_code == 200
         data = response.json()
@@ -2339,8 +2647,7 @@ class TestServerLogsBranches:
         await db_session.commit()
 
         response = await client.get(
-            f"/api/servers/{s1.id}/logs",
-            headers={"Authorization": f"Bearer {user_token}"}
+            f"/api/servers/{s1.id}/logs", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -2354,13 +2661,13 @@ class TestServerLogsBranches:
         await db_session.commit()
 
         from aiodocker.exceptions import DockerError
+
         docker_err = DockerError(404, {"message": "not found"})
         mock_client = mock.MagicMock()
         mock_client.get_container_logs = mock.AsyncMock(side_effect=docker_err)
         with mock.patch("app.api.servers.spawner.container_client", mock_client):
             response = await client.get(
-                f"/api/servers/{s1.id}/logs",
-                headers={"Authorization": f"Bearer {user_token}"}
+                f"/api/servers/{s1.id}/logs", headers={"Authorization": f"Bearer {user_token}"}
             )
         assert response.status_code == 200
         data = response.json()
@@ -2368,7 +2675,9 @@ class TestServerLogsBranches:
 
     @pytest.mark.asyncio
     async def test_get_server_logs_with_since(self, client, user_token, test_user, db_session):
-        s1 = Server(name="srv-logs-since", user_id=test_user.id, status="running", container_id="c1")
+        s1 = Server(
+            name="srv-logs-since", user_id=test_user.id, status="running", container_id="c1"
+        )
         db_session.add(s1)
         await db_session.commit()
 
@@ -2377,7 +2686,7 @@ class TestServerLogsBranches:
         with mock.patch("app.api.servers.spawner.container_client", mock_client):
             response = await client.get(
                 f"/api/servers/{s1.id}/logs?since=2024-01-01T00:00:00Z",
-                headers={"Authorization": f"Bearer {user_token}"}
+                headers={"Authorization": f"Bearer {user_token}"},
             )
         assert response.status_code == 200
         data = response.json()
@@ -2394,7 +2703,7 @@ class TestServerLogsBranches:
         with mock.patch("app.api.servers.spawner.container_client", mock_client):
             response = await client.get(
                 f"/api/servers/{s1.id}/logs?since=invalid",
-                headers={"Authorization": f"Bearer {user_token}"}
+                headers={"Authorization": f"Bearer {user_token}"},
             )
         assert response.status_code == 200
         data = response.json()
@@ -2413,12 +2722,14 @@ class TestUpdateServerAdditionalBranches:
         response = await client.patch(
             f"/api/servers/{s1.id}",
             headers={"Authorization": f"Bearer {admin_token}"},
-            json={"plan_id": str(uuid.uuid4()), "reason": "Admin update"}
+            json={"plan_id": str(uuid.uuid4()), "reason": "Admin update"},
         )
         assert response.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_update_server_environment_not_found(self, client, admin_token, test_user, db_session):
+    async def test_update_server_environment_not_found(
+        self, client, admin_token, test_user, db_session
+    ):
         s1 = Server(name="srv-upd-env", user_id=test_user.id, status="stopped", container_id=None)
         db_session.add(s1)
         await db_session.commit()
@@ -2426,7 +2737,7 @@ class TestUpdateServerAdditionalBranches:
         response = await client.patch(
             f"/api/servers/{s1.id}",
             headers={"Authorization": f"Bearer {admin_token}"},
-            json={"environment_id": str(uuid.uuid4()), "reason": "Admin update"}
+            json={"environment_id": str(uuid.uuid4()), "reason": "Admin update"},
         )
         assert response.status_code == 404
 
@@ -2440,9 +2751,14 @@ class TestUpdateServerAdditionalBranches:
         await db_session.flush()
 
         spawned = Server(
-            id=s1.id, name=s1.name, user_id=test_user.id,
-            container_id="c-new", image="img", status="running",
-            external_url="http://x", started_at=datetime.now(UTC).replace(tzinfo=None),
+            id=s1.id,
+            name=s1.name,
+            user_id=test_user.id,
+            container_id="c-new",
+            image="img",
+            status="running",
+            external_url="http://x",
+            started_at=datetime.now(UTC).replace(tzinfo=None),
         )
 
         with mock.patch("app.api.servers.spawner.spawn", return_value=spawned):
@@ -2455,16 +2771,23 @@ class TestUpdateServerAdditionalBranches:
                     va_inst = MockVA.return_value
                     va_inst.can_access_volume = mock.AsyncMock(return_value=True)
 
-                    with mock.patch("app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()):
+                    with mock.patch(
+                        "app.services.notification_service.broadcast_server_status_change",
+                        mock.AsyncMock(),
+                    ):
                         response = await client.patch(
                             f"/api/servers/{s1.id}",
                             headers={"Authorization": f"Bearer {admin_token}"},
                             json={
                                 "volume_mounts": [
-                                    {"volume_id": str(vol.id), "mount_path": "/data", "mode": "read_write"}
+                                    {
+                                        "volume_id": str(vol.id),
+                                        "mount_path": "/data",
+                                        "mode": "read_write",
+                                    }
                                 ],
-                                "reason": "Admin update"
-                            }
+                                "reason": "Admin update",
+                            },
                         )
 
         assert response.status_code == 200
@@ -2473,22 +2796,48 @@ class TestUpdateServerAdditionalBranches:
 
     @pytest.mark.asyncio
     async def test_update_server_plan_change(self, client, admin_token, test_user, db_session):
-        old_plan = ServerPlan(name="old-plan", slug="old-plan", cpu_limit=1.0, memory_limit="512m", disk_limit="10g", is_active=True)
+        old_plan = ServerPlan(
+            name="old-plan",
+            slug="old-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+        )
         db_session.add(old_plan)
         await db_session.flush()
 
-        s1 = Server(name="srv-upd-plan", user_id=test_user.id, status="stopped", container_id=None, plan_id=old_plan.id)
+        s1 = Server(
+            name="srv-upd-plan",
+            user_id=test_user.id,
+            status="stopped",
+            container_id=None,
+            plan_id=old_plan.id,
+        )
         db_session.add(s1)
         await db_session.flush()
 
-        new_plan = ServerPlan(name="new-plan", slug="new-plan", cpu_limit=2.0, memory_limit="1g", disk_limit="20g", is_active=True, visible_to_roles=["user"])
+        new_plan = ServerPlan(
+            name="new-plan",
+            slug="new-plan",
+            cpu_limit=2.0,
+            memory_limit="1g",
+            disk_limit="20g",
+            is_active=True,
+            visible_to_roles=["user"],
+        )
         db_session.add(new_plan)
         await db_session.commit()
 
         spawned = Server(
-            id=s1.id, name=s1.name, user_id=test_user.id,
-            container_id="c-plan", image="img", status="running",
-            external_url="http://x", started_at=datetime.now(UTC).replace(tzinfo=None),
+            id=s1.id,
+            name=s1.name,
+            user_id=test_user.id,
+            container_id="c-plan",
+            image="img",
+            status="running",
+            external_url="http://x",
+            started_at=datetime.now(UTC).replace(tzinfo=None),
         )
 
         with mock.patch("app.api.servers.spawner.spawn", return_value=spawned):
@@ -2501,11 +2850,14 @@ class TestUpdateServerAdditionalBranches:
                     qs_inst = MockQS.return_value
                     qs_inst.check_spawn_allowed = mock.AsyncMock(return_value={"allowed": True})
 
-                    with mock.patch("app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()):
+                    with mock.patch(
+                        "app.services.notification_service.broadcast_server_status_change",
+                        mock.AsyncMock(),
+                    ):
                         response = await client.patch(
                             f"/api/servers/{s1.id}",
                             headers={"Authorization": f"Bearer {admin_token}"},
-                            json={"plan_id": str(new_plan.id), "reason": "Admin update"}
+                            json={"plan_id": str(new_plan.id), "reason": "Admin update"},
                         )
 
         assert response.status_code == 200
@@ -2514,23 +2866,51 @@ class TestUpdateServerAdditionalBranches:
         assert data["allocated_cpu"] == 2.0
 
     @pytest.mark.asyncio
-    async def test_update_server_running_container_recreate(self, client, admin_token, test_user, db_session):
-        old_plan = ServerPlan(name="run-plan", slug="run-plan", cpu_limit=1.0, memory_limit="512m", disk_limit="10g", is_active=True)
+    async def test_update_server_running_container_recreate(
+        self, client, admin_token, test_user, db_session
+    ):
+        old_plan = ServerPlan(
+            name="run-plan",
+            slug="run-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+        )
         db_session.add(old_plan)
         await db_session.flush()
 
-        s1 = Server(name="srv-upd-run", user_id=test_user.id, status="running", container_id="c1", plan_id=old_plan.id)
+        s1 = Server(
+            name="srv-upd-run",
+            user_id=test_user.id,
+            status="running",
+            container_id="c1",
+            plan_id=old_plan.id,
+        )
         db_session.add(s1)
         await db_session.flush()
 
-        new_plan = ServerPlan(name="run-new-plan", slug="run-new-plan", cpu_limit=2.0, memory_limit="1g", disk_limit="20g", is_active=True, visible_to_roles=["user"])
+        new_plan = ServerPlan(
+            name="run-new-plan",
+            slug="run-new-plan",
+            cpu_limit=2.0,
+            memory_limit="1g",
+            disk_limit="20g",
+            is_active=True,
+            visible_to_roles=["user"],
+        )
         db_session.add(new_plan)
         await db_session.commit()
 
         spawned = Server(
-            id=s1.id, name=s1.name, user_id=test_user.id,
-            container_id="c-new", image="img", status="running",
-            external_url="http://x", started_at=datetime.now(UTC).replace(tzinfo=None),
+            id=s1.id,
+            name=s1.name,
+            user_id=test_user.id,
+            container_id="c-new",
+            image="img",
+            status="running",
+            external_url="http://x",
+            started_at=datetime.now(UTC).replace(tzinfo=None),
         )
 
         with mock.patch("app.api.servers.spawner.get_status", return_value="running"):
@@ -2544,13 +2924,21 @@ class TestUpdateServerAdditionalBranches:
 
                             with mock.patch("app.services.quota_service.QuotaService") as MockQS:
                                 qs_inst = MockQS.return_value
-                                qs_inst.check_spawn_allowed = mock.AsyncMock(return_value={"allowed": True})
+                                qs_inst.check_spawn_allowed = mock.AsyncMock(
+                                    return_value={"allowed": True}
+                                )
 
-                                with mock.patch("app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()):
+                                with mock.patch(
+                                    "app.services.notification_service.broadcast_server_status_change",
+                                    mock.AsyncMock(),
+                                ):
                                     response = await client.patch(
                                         f"/api/servers/{s1.id}",
                                         headers={"Authorization": f"Bearer {admin_token}"},
-                                        json={"plan_id": str(new_plan.id), "reason": "Admin update"}
+                                        json={
+                                            "plan_id": str(new_plan.id),
+                                            "reason": "Admin update",
+                                        },
                                     )
 
         assert response.status_code == 200
@@ -2570,7 +2958,7 @@ class TestGetServerByPathExtended:
 
         response = await client.get(
             f"/api/servers/by-path/{test_user.username}/srv-path",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 200
         data = response.json()
@@ -2580,7 +2968,7 @@ class TestGetServerByPathExtended:
     async def test_get_server_by_path_not_found(self, client, user_token, test_user):
         response = await client.get(
             f"/api/servers/by-path/{test_user.username}/nonexistent",
-            headers={"Authorization": f"Bearer {user_token}"}
+            headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 404
 
@@ -2593,7 +2981,7 @@ class TestGetServerByPathExtended:
         with mock.patch("app.api.servers.spawner.get_status", return_value="running"):
             response = await client.get(
                 f"/api/servers/by-path/{test_user.username}/srv-path-sync",
-                headers={"Authorization": f"Bearer {user_token}"}
+                headers={"Authorization": f"Bearer {user_token}"},
             )
         assert response.status_code == 200
         assert response.json()["status"] == "running"
@@ -2606,7 +2994,7 @@ class TestGetServerByPathExtended:
 
         response = await client.get(
             f"/api/servers/by-path/{test_user.username}/srv-path-x",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert response.status_code == 200
 
@@ -2622,8 +3010,7 @@ class TestGetServerException:
 
         with mock.patch("app.api.servers.spawner.get_status", side_effect=Exception("docker down")):
             response = await client.get(
-                f"/api/servers/{s1.id}",
-                headers={"Authorization": f"Bearer {user_token}"}
+                f"/api/servers/{s1.id}", headers={"Authorization": f"Bearer {user_token}"}
             )
         assert response.status_code == 200
         assert response.json()["status"] == "running"
@@ -2640,8 +3027,7 @@ class TestListServersException:
 
         with mock.patch("app.api.servers.spawner.get_status", side_effect=Exception("docker down")):
             response = await client.get(
-                "/api/servers/",
-                headers={"Authorization": f"Bearer {user_token}"}
+                "/api/servers/", headers={"Authorization": f"Bearer {user_token}"}
             )
         assert response.status_code == 200
         data = response.json()
@@ -2657,32 +3043,49 @@ class TestStartServerNoContainer:
         db_session.add(env)
         await db_session.flush()
         plan = ServerPlan(
-            name="st-plan", slug="st-plan",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"],
+            name="st-plan",
+            slug="st-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
         )
         db_session.add(plan)
         await db_session.commit()
 
         s1 = Server(
-            name="srv-start-nc", user_id=test_user.id, status="stopped",
-            environment_id=env.id, plan_id=plan.id,
-            container_id=None, allocated_cpu=1.0, allocated_memory="512m", allocated_disk="10g",
+            name="srv-start-nc",
+            user_id=test_user.id,
+            status="stopped",
+            environment_id=env.id,
+            plan_id=plan.id,
+            container_id=None,
+            allocated_cpu=1.0,
+            allocated_memory="512m",
+            allocated_disk="10g",
         )
         db_session.add(s1)
         await db_session.commit()
 
         spawned = Server(
-            id=s1.id, name=s1.name, user_id=test_user.id,
-            container_id="c-new", image="python:3.11", status="running",
-            external_url="http://x", allocated_cpu=1.0, allocated_memory="512m",
+            id=s1.id,
+            name=s1.name,
+            user_id=test_user.id,
+            container_id="c-new",
+            image="python:3.11",
+            status="running",
+            external_url="http://x",
+            allocated_cpu=1.0,
+            allocated_memory="512m",
         )
 
         with mock.patch("app.api.servers.spawner.spawn", return_value=spawned):
-            with mock.patch("app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()):
+            with mock.patch(
+                "app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()
+            ):
                 response = await client.post(
-                    f"/api/servers/{s1.id}/start",
-                    headers={"Authorization": f"Bearer {user_token}"}
+                    f"/api/servers/{s1.id}/start", headers={"Authorization": f"Bearer {user_token}"}
                 )
 
         assert response.status_code == 200
@@ -2690,47 +3093,63 @@ class TestStartServerNoContainer:
         assert data["status"] == "running"
 
     @pytest.mark.asyncio
-    async def test_start_server_no_container_missing_plan(self, client, user_token, test_user, db_session):
+    async def test_start_server_no_container_missing_plan(
+        self, client, user_token, test_user, db_session
+    ):
         env = EnvironmentTemplate(name="st-env2", slug="st-env2", image="python:3.11")
         db_session.add(env)
         await db_session.commit()
 
         s1 = Server(
-            name="srv-start-np", user_id=test_user.id, status="stopped",
-            environment_id=env.id, plan_id=None,
-            container_id=None, allocated_cpu=1.0, allocated_memory="512m",
+            name="srv-start-np",
+            user_id=test_user.id,
+            status="stopped",
+            environment_id=env.id,
+            plan_id=None,
+            container_id=None,
+            allocated_cpu=1.0,
+            allocated_memory="512m",
         )
         db_session.add(s1)
         await db_session.commit()
 
         response = await client.post(
-            f"/api/servers/{s1.id}/start",
-            headers={"Authorization": f"Bearer {user_token}"}
+            f"/api/servers/{s1.id}/start", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 400
         assert "incomplete" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_start_server_no_container_missing_env(self, client, user_token, test_user, db_session):
+    async def test_start_server_no_container_missing_env(
+        self, client, user_token, test_user, db_session
+    ):
         plan = ServerPlan(
-            name="st-plan2", slug="st-plan2",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"],
+            name="st-plan2",
+            slug="st-plan2",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
         )
         db_session.add(plan)
         await db_session.commit()
 
         s1 = Server(
-            name="srv-start-ne", user_id=test_user.id, status="stopped",
-            environment_id=None, plan_id=plan.id,
-            container_id=None, allocated_cpu=1.0, allocated_memory="512m",
+            name="srv-start-ne",
+            user_id=test_user.id,
+            status="stopped",
+            environment_id=None,
+            plan_id=plan.id,
+            container_id=None,
+            allocated_cpu=1.0,
+            allocated_memory="512m",
         )
         db_session.add(s1)
         await db_session.commit()
 
         response = await client.post(
-            f"/api/servers/{s1.id}/start",
-            headers={"Authorization": f"Bearer {user_token}"}
+            f"/api/servers/{s1.id}/start", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 400
         assert "incomplete" in response.json()["detail"].lower()
@@ -2745,10 +3164,11 @@ class TestStopServerNoContainer:
         db_session.add(s1)
         await db_session.commit()
 
-        with mock.patch("app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()):
+        with mock.patch(
+            "app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()
+        ):
             response = await client.post(
-                f"/api/servers/{s1.id}/stop",
-                headers={"Authorization": f"Bearer {user_token}"}
+                f"/api/servers/{s1.id}/stop", headers={"Authorization": f"Bearer {user_token}"}
             )
         assert response.status_code == 200
         data = response.json()
@@ -2759,39 +3179,58 @@ class TestUpdateServerEnvironmentChange:
     """PATCH /{server_id} with environment_id change."""
 
     @pytest.mark.asyncio
-    async def test_update_server_environment_change(self, client, admin_token, test_user, db_session):
+    async def test_update_server_environment_change(
+        self, client, admin_token, test_user, db_session
+    ):
         env1 = EnvironmentTemplate(name="upd-env1", slug="upd-env1", image="python:3.11")
         env2 = EnvironmentTemplate(name="upd-env2", slug="upd-env2", image="python:3.12")
         db_session.add_all([env1, env2])
         await db_session.flush()
         plan = ServerPlan(
-            name="upd-plan", slug="upd-plan",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"],
+            name="upd-plan",
+            slug="upd-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
         )
         db_session.add(plan)
         await db_session.commit()
 
         s1 = Server(
-            name="srv-upd-env", user_id=test_user.id, status="stopped",
-            environment_id=env1.id, plan_id=plan.id,
-            container_id=None, allocated_cpu=1.0, allocated_memory="512m",
+            name="srv-upd-env",
+            user_id=test_user.id,
+            status="stopped",
+            environment_id=env1.id,
+            plan_id=plan.id,
+            container_id=None,
+            allocated_cpu=1.0,
+            allocated_memory="512m",
         )
         db_session.add(s1)
         await db_session.commit()
 
         spawned = Server(
-            id=s1.id, name=s1.name, user_id=test_user.id,
-            container_id="c-env", image="python:3.12", status="running",
-            external_url="http://x", allocated_cpu=1.0, allocated_memory="512m",
+            id=s1.id,
+            name=s1.name,
+            user_id=test_user.id,
+            container_id="c-env",
+            image="python:3.12",
+            status="running",
+            external_url="http://x",
+            allocated_cpu=1.0,
+            allocated_memory="512m",
         )
 
         with mock.patch("app.api.servers.spawner.spawn", return_value=spawned):
-            with mock.patch("app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()):
+            with mock.patch(
+                "app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()
+            ):
                 response = await client.patch(
                     f"/api/servers/{s1.id}",
                     headers={"Authorization": f"Bearer {admin_token}"},
-                    json={"environment_id": str(env2.id), "reason": "Admin update"}
+                    json={"environment_id": str(env2.id), "reason": "Admin update"},
                 )
 
         assert response.status_code == 200
@@ -2808,32 +3247,49 @@ class TestUpdateServerVolumeAutoCreate:
         db_session.add(env)
         await db_session.flush()
         plan = ServerPlan(
-            name="vol-plan", slug="vol-plan",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"],
+            name="vol-plan",
+            slug="vol-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
         )
         db_session.add(plan)
         await db_session.commit()
 
         s1 = Server(
-            name="srv-upd-vol", user_id=test_user.id, status="stopped",
-            environment_id=env.id, plan_id=plan.id,
-            container_id=None, allocated_cpu=1.0, allocated_memory="512m",
+            name="srv-upd-vol",
+            user_id=test_user.id,
+            status="stopped",
+            environment_id=env.id,
+            plan_id=plan.id,
+            container_id=None,
+            allocated_cpu=1.0,
+            allocated_memory="512m",
         )
         db_session.add(s1)
         await db_session.commit()
 
         real_vol = Volume(
             name="nukelab-server-testuser-srvupdvol-data",
-            display_name="Auto Data", owner_id=test_user.id, size_bytes=0
+            display_name="Auto Data",
+            owner_id=test_user.id,
+            size_bytes=0,
         )
         db_session.add(real_vol)
         await db_session.flush()
 
         spawned = Server(
-            id=s1.id, name=s1.name, user_id=test_user.id,
-            container_id="c-vol", image="python:3.11", status="running",
-            external_url="http://x", allocated_cpu=1.0, allocated_memory="512m",
+            id=s1.id,
+            name=s1.name,
+            user_id=test_user.id,
+            container_id="c-vol",
+            image="python:3.11",
+            status="running",
+            external_url="http://x",
+            allocated_cpu=1.0,
+            allocated_memory="512m",
         )
 
         with mock.patch("app.services.volume_service.VolumeService") as MockVS:
@@ -2850,7 +3306,10 @@ class TestUpdateServerVolumeAutoCreate:
                 va_inst.can_access_volume = mock.AsyncMock(return_value=True)
 
                 with mock.patch("app.api.servers.spawner.spawn", return_value=spawned):
-                    with mock.patch("app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()):
+                    with mock.patch(
+                        "app.services.notification_service.broadcast_server_status_change",
+                        mock.AsyncMock(),
+                    ):
                         response = await client.patch(
                             f"/api/servers/{s1.id}",
                             headers={"Authorization": f"Bearer {admin_token}"},
@@ -2858,8 +3317,8 @@ class TestUpdateServerVolumeAutoCreate:
                                 "volume_mounts": [
                                     {"volume_id": "", "mount_path": "/data", "mode": "read_write"}
                                 ],
-                                "reason": "Admin update"
-                            }
+                                "reason": "Admin update",
+                            },
                         )
 
         assert response.status_code == 200
@@ -2878,8 +3337,7 @@ class TestLogsGenericException:
         mock_cc.get_container_logs = mock.AsyncMock(side_effect=Exception("boom"))
         with mock.patch("app.api.servers.spawner.container_client", mock_cc):
             response = await client.get(
-                f"/api/servers/{s1.id}/logs",
-                headers={"Authorization": f"Bearer {user_token}"}
+                f"/api/servers/{s1.id}/logs", headers={"Authorization": f"Bearer {user_token}"}
             )
         assert response.status_code == 500
 
@@ -2888,19 +3346,30 @@ class TestCreateServerExceptionCleanup:
     """POST / with exception triggering Docker/DB cleanup."""
 
     @pytest.mark.asyncio
-    async def test_create_server_cleanup_on_exception(self, client, user_token, test_user, db_session):
+    async def test_create_server_cleanup_on_exception(
+        self, client, user_token, test_user, db_session
+    ):
         env = EnvironmentTemplate(name="clean-env", slug="clean-env", image="python:3.11")
         db_session.add(env)
         await db_session.flush()
         plan = ServerPlan(
-            name="clean-plan", slug="clean-plan",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"],
+            name="clean-plan",
+            slug="clean-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
         )
         db_session.add(plan)
         await db_session.commit()
 
-        vol = Volume(name="nukelab-server-testuser-srvclean-data", display_name="Clean Data", owner_id=test_user.id, size_bytes=0)
+        vol = Volume(
+            name="nukelab-server-testuser-srvclean-data",
+            display_name="Clean Data",
+            owner_id=test_user.id,
+            size_bytes=0,
+        )
         db_session.add(vol)
         await db_session.flush()
 
@@ -2928,8 +3397,12 @@ class TestCreateServerExceptionCleanup:
                     ps_inst.can_user_use_plan = mock.AsyncMock(return_value=True)
                     ps_inst.get_by_id = mock.AsyncMock(return_value=plan)
 
-                    with mock.patch("app.api.servers.spawner.spawn", side_effect=Exception("spawn failed")):
-                        with mock.patch("app.container.client.get_container_client", return_value=mock_client):
+                    with mock.patch(
+                        "app.api.servers.spawner.spawn", side_effect=Exception("spawn failed")
+                    ):
+                        with mock.patch(
+                            "app.container.client.get_container_client", return_value=mock_client
+                        ):
                             response = await client.post(
                                 "/api/servers/",
                                 headers={"Authorization": f"Bearer {user_token}"},
@@ -2938,9 +3411,13 @@ class TestCreateServerExceptionCleanup:
                                     "plan_id": str(plan.id),
                                     "environment_id": str(env.id),
                                     "volume_mounts": [
-                                        {"volume_id": "", "mount_path": "/data", "mode": "read_write"}
+                                        {
+                                            "volume_id": "",
+                                            "mount_path": "/data",
+                                            "mode": "read_write",
+                                        }
                                     ],
-                                }
+                                },
                             )
 
         assert response.status_code == 500
@@ -2950,7 +3427,9 @@ class TestGetServerByPathStatusSyncStopped:
     """GET /by-path with container stopped."""
 
     @pytest.mark.asyncio
-    async def test_get_server_by_path_status_sync_stopped(self, client, user_token, test_user, db_session):
+    async def test_get_server_by_path_status_sync_stopped(
+        self, client, user_token, test_user, db_session
+    ):
         s1 = Server(name="srv-path-stop", user_id=test_user.id, status="running", container_id="c1")
         db_session.add(s1)
         await db_session.commit()
@@ -2958,7 +3437,7 @@ class TestGetServerByPathStatusSyncStopped:
         with mock.patch("app.api.servers.spawner.get_status", return_value="stopped"):
             response = await client.get(
                 f"/api/servers/by-path/{test_user.username}/srv-path-stop",
-                headers={"Authorization": f"Bearer {user_token}"}
+                headers={"Authorization": f"Bearer {user_token}"},
             )
         assert response.status_code == 200
         assert response.json()["status"] == "stopped"
@@ -2973,34 +3452,52 @@ class TestStartServerStoppedContainer:
         db_session.add(env)
         await db_session.flush()
         plan = ServerPlan(
-            name="stse-plan", slug="stse-plan",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"],
+            name="stse-plan",
+            slug="stse-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
         )
         db_session.add(plan)
         await db_session.commit()
 
         s1 = Server(
-            name="srv-start-se", user_id=test_user.id, status="stopped",
-            environment_id=env.id, plan_id=plan.id,
-            container_id="c-old", allocated_cpu=1.0, allocated_memory="512m",
+            name="srv-start-se",
+            user_id=test_user.id,
+            status="stopped",
+            environment_id=env.id,
+            plan_id=plan.id,
+            container_id="c-old",
+            allocated_cpu=1.0,
+            allocated_memory="512m",
         )
         db_session.add(s1)
         await db_session.commit()
 
         spawned = Server(
-            id=s1.id, name=s1.name, user_id=test_user.id,
-            container_id="c-new", image="python:3.11", status="running",
-            external_url="http://x", allocated_cpu=1.0, allocated_memory="512m",
+            id=s1.id,
+            name=s1.name,
+            user_id=test_user.id,
+            container_id="c-new",
+            image="python:3.11",
+            status="running",
+            external_url="http://x",
+            allocated_cpu=1.0,
+            allocated_memory="512m",
         )
 
         with mock.patch("app.api.servers.spawner.get_status", return_value="stopped"):
             with mock.patch("app.api.servers.spawner.delete", return_value=True):
                 with mock.patch("app.api.servers.spawner.spawn", return_value=spawned):
-                    with mock.patch("app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()):
+                    with mock.patch(
+                        "app.services.notification_service.broadcast_server_status_change",
+                        mock.AsyncMock(),
+                    ):
                         response = await client.post(
                             f"/api/servers/{s1.id}/start",
-                            headers={"Authorization": f"Bearer {user_token}"}
+                            headers={"Authorization": f"Bearer {user_token}"},
                         )
 
         assert response.status_code == 200
@@ -3021,8 +3518,7 @@ class TestStartServerExceptionHandler:
         with mock.patch("app.api.servers.spawner.get_status", return_value="stopped"):
             with mock.patch("app.api.servers.spawner.start", side_effect=Exception("start failed")):
                 response = await client.post(
-                    f"/api/servers/{s1.id}/start",
-                    headers={"Authorization": f"Bearer {user_token}"}
+                    f"/api/servers/{s1.id}/start", headers={"Authorization": f"Bearer {user_token}"}
                 )
 
         assert response.status_code == 500
@@ -3032,14 +3528,20 @@ class TestRestartServerVolumeQuotaFail:
     """POST /{server_id}/restart with volume quota fail."""
 
     @pytest.mark.asyncio
-    async def test_restart_server_volume_quota_fail(self, client, user_token, test_user, db_session):
+    async def test_restart_server_volume_quota_fail(
+        self, client, user_token, test_user, db_session
+    ):
         env = EnvironmentTemplate(name="rsv-env", slug="rsv-env", image="python:3.11")
         db_session.add(env)
         await db_session.flush()
         plan = ServerPlan(
-            name="rsv-plan", slug="rsv-plan",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"],
+            name="rsv-plan",
+            slug="rsv-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
         )
         db_session.add(plan)
         await db_session.commit()
@@ -3049,9 +3551,14 @@ class TestRestartServerVolumeQuotaFail:
         await db_session.commit()
 
         s1 = Server(
-            name="srv-restart-vq", user_id=test_user.id, status="stopped",
-            environment_id=env.id, plan_id=plan.id,
-            container_id="c1", allocated_cpu=1.0, allocated_memory="512m",
+            name="srv-restart-vq",
+            user_id=test_user.id,
+            status="stopped",
+            environment_id=env.id,
+            plan_id=plan.id,
+            container_id="c1",
+            allocated_cpu=1.0,
+            allocated_memory="512m",
         )
         db_session.add(s1)
         await db_session.commit()
@@ -3065,11 +3572,15 @@ class TestRestartServerVolumeQuotaFail:
                 with mock.patch("app.api.servers.spawner.start", return_value=True):
                     with mock.patch("app.services.volume_service.VolumeService") as MockVS:
                         vs_inst = MockVS.return_value
-                        vs_inst.check_quota = mock.AsyncMock(return_value={"allowed": False, "reason": "quota exceeded"})
-                        vs_inst.check_volumes_quota = mock.AsyncMock(return_value={"allowed": False, "reason": "quota exceeded"})
+                        vs_inst.check_quota = mock.AsyncMock(
+                            return_value={"allowed": False, "reason": "quota exceeded"}
+                        )
+                        vs_inst.check_volumes_quota = mock.AsyncMock(
+                            return_value={"allowed": False, "reason": "quota exceeded"}
+                        )
                         response = await client.post(
                             f"/api/servers/{s1.id}/restart",
-                            headers={"Authorization": f"Bearer {user_token}"}
+                            headers={"Authorization": f"Bearer {user_token}"},
                         )
 
         assert response.status_code == 400
@@ -3085,17 +3596,26 @@ class TestUpdateServerNameChange:
         db_session.add(env)
         await db_session.flush()
         plan = ServerPlan(
-            name="nm-plan", slug="nm-plan",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"],
+            name="nm-plan",
+            slug="nm-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
         )
         db_session.add(plan)
         await db_session.commit()
 
         s1 = Server(
-            name="srv-old-name", user_id=test_user.id, status="stopped",
-            environment_id=env.id, plan_id=plan.id,
-            container_id=None, allocated_cpu=1.0, allocated_memory="512m",
+            name="srv-old-name",
+            user_id=test_user.id,
+            status="stopped",
+            environment_id=env.id,
+            plan_id=plan.id,
+            container_id=None,
+            allocated_cpu=1.0,
+            allocated_memory="512m",
         )
         db_session.add(s1)
         await db_session.commit()
@@ -3103,7 +3623,7 @@ class TestUpdateServerNameChange:
         response = await client.patch(
             f"/api/servers/{s1.id}",
             headers={"Authorization": f"Bearer {admin_token}"},
-            json={"name": "srv-new-name", "reason": "Admin update"}
+            json={"name": "srv-new-name", "reason": "Admin update"},
         )
         assert response.status_code == 200
         assert response.json()["name"] == "srv-new-name"
@@ -3113,32 +3633,45 @@ class TestUpdateServerRespawnException:
     """PATCH /{server_id} with respawn exception."""
 
     @pytest.mark.asyncio
-    async def test_update_server_respawn_exception(self, client, admin_token, test_user, db_session):
+    async def test_update_server_respawn_exception(
+        self, client, admin_token, test_user, db_session
+    ):
         env = EnvironmentTemplate(name="re-env", slug="re-env", image="python:3.11")
         db_session.add(env)
         await db_session.flush()
         plan = ServerPlan(
-            name="re-plan", slug="re-plan",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"],
+            name="re-plan",
+            slug="re-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
         )
         db_session.add(plan)
         await db_session.commit()
 
         s1 = Server(
-            name="srv-respawn-exc", user_id=test_user.id, status="stopped",
-            environment_id=env.id, plan_id=plan.id,
-            container_id=None, allocated_cpu=1.0, allocated_memory="512m",
+            name="srv-respawn-exc",
+            user_id=test_user.id,
+            status="stopped",
+            environment_id=env.id,
+            plan_id=plan.id,
+            container_id=None,
+            allocated_cpu=1.0,
+            allocated_memory="512m",
         )
         db_session.add(s1)
         await db_session.commit()
 
         with mock.patch("app.api.servers.spawner.spawn", side_effect=Exception("spawn failed")):
-            with mock.patch("app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()):
+            with mock.patch(
+                "app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()
+            ):
                 response = await client.patch(
                     f"/api/servers/{s1.id}",
                     headers={"Authorization": f"Bearer {admin_token}"},
-                    json={"environment_id": str(env.id), "reason": "Admin update"}
+                    json={"environment_id": str(env.id), "reason": "Admin update"},
                 )
 
         assert response.status_code == 500
@@ -3153,9 +3686,13 @@ class TestStartServerVolumeQuotaFail:
         db_session.add(env)
         await db_session.flush()
         plan = ServerPlan(
-            name="svq-plan", slug="svq-plan",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"],
+            name="svq-plan",
+            slug="svq-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
         )
         db_session.add(plan)
         await db_session.commit()
@@ -3165,9 +3702,14 @@ class TestStartServerVolumeQuotaFail:
         await db_session.commit()
 
         s1 = Server(
-            name="srv-svq", user_id=test_user.id, status="stopped",
-            environment_id=env.id, plan_id=plan.id,
-            container_id="c1", allocated_cpu=1.0, allocated_memory="512m",
+            name="srv-svq",
+            user_id=test_user.id,
+            status="stopped",
+            environment_id=env.id,
+            plan_id=plan.id,
+            container_id="c1",
+            allocated_cpu=1.0,
+            allocated_memory="512m",
         )
         db_session.add(s1)
         await db_session.commit()
@@ -3179,11 +3721,14 @@ class TestStartServerVolumeQuotaFail:
         with mock.patch("app.api.servers.spawner.get_status", return_value="stopped"):
             with mock.patch("app.services.volume_service.VolumeService") as MockVS:
                 vs_inst = MockVS.return_value
-                vs_inst.check_quota = mock.AsyncMock(return_value={"allowed": False, "reason": "over quota"})
-                vs_inst.check_volumes_quota = mock.AsyncMock(return_value={"allowed": False, "reason": "over quota"})
+                vs_inst.check_quota = mock.AsyncMock(
+                    return_value={"allowed": False, "reason": "over quota"}
+                )
+                vs_inst.check_volumes_quota = mock.AsyncMock(
+                    return_value={"allowed": False, "reason": "over quota"}
+                )
                 response = await client.post(
-                    f"/api/servers/{s1.id}/start",
-                    headers={"Authorization": f"Bearer {user_token}"}
+                    f"/api/servers/{s1.id}/start", headers={"Authorization": f"Bearer {user_token}"}
                 )
 
         print("RESPONSE:", response.status_code, response.json())
@@ -3195,7 +3740,9 @@ class TestStartServerStartFailure:
     """POST /{server_id}/start where spawner.start returns False."""
 
     @pytest.mark.asyncio
-    async def test_start_server_start_returns_false(self, client, user_token, test_user, db_session):
+    async def test_start_server_start_returns_false(
+        self, client, user_token, test_user, db_session
+    ):
         s1 = Server(name="srv-sf", user_id=test_user.id, status="stopped", container_id="c1")
         db_session.add(s1)
         await db_session.commit()
@@ -3203,8 +3750,7 @@ class TestStartServerStartFailure:
         with mock.patch("app.api.servers.spawner.get_status", return_value="stopped"):
             with mock.patch("app.api.servers.spawner.start", return_value=False):
                 response = await client.post(
-                    f"/api/servers/{s1.id}/start",
-                    headers={"Authorization": f"Bearer {user_token}"}
+                    f"/api/servers/{s1.id}/start", headers={"Authorization": f"Bearer {user_token}"}
                 )
 
         assert response.status_code == 500
@@ -3214,14 +3760,20 @@ class TestStartServerVolumeRecording:
     """POST /{server_id}/start with volume mount recording."""
 
     @pytest.mark.asyncio
-    async def test_start_server_volume_mounts_recording(self, client, user_token, test_user, db_session):
+    async def test_start_server_volume_mounts_recording(
+        self, client, user_token, test_user, db_session
+    ):
         env = EnvironmentTemplate(name="svr-env", slug="svr-env", image="python:3.11")
         db_session.add(env)
         await db_session.flush()
         plan = ServerPlan(
-            name="svr-plan", slug="svr-plan",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"],
+            name="svr-plan",
+            slug="svr-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
         )
         db_session.add(plan)
         await db_session.commit()
@@ -3231,9 +3783,14 @@ class TestStartServerVolumeRecording:
         await db_session.commit()
 
         s1 = Server(
-            name="srv-svr", user_id=test_user.id, status="stopped",
-            environment_id=env.id, plan_id=plan.id,
-            container_id="c1", allocated_cpu=1.0, allocated_memory="512m",
+            name="srv-svr",
+            user_id=test_user.id,
+            status="stopped",
+            environment_id=env.id,
+            plan_id=plan.id,
+            container_id="c1",
+            allocated_cpu=1.0,
+            allocated_memory="512m",
         )
         db_session.add(s1)
         await db_session.commit()
@@ -3249,24 +3806,33 @@ class TestStartServerVolumeRecording:
                     vs_inst.check_quota = mock.AsyncMock(return_value={"allowed": True})
                     vs_inst.check_volumes_quota = mock.AsyncMock(return_value={"allowed": True})
                     vs_inst.record_mount = mock.AsyncMock()
-                    with mock.patch("app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()):
+                    with mock.patch(
+                        "app.services.notification_service.broadcast_server_status_change",
+                        mock.AsyncMock(),
+                    ):
                         response = await client.post(
                             f"/api/servers/{s1.id}/start",
-                            headers={"Authorization": f"Bearer {user_token}"}
+                            headers={"Authorization": f"Bearer {user_token}"},
                         )
 
         assert response.status_code == 200
         vs_inst.record_mount.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_start_server_legacy_volume_recording(self, client, user_token, test_user, db_session):
+    async def test_start_server_legacy_volume_recording(
+        self, client, user_token, test_user, db_session
+    ):
         env = EnvironmentTemplate(name="svr2-env", slug="svr2-env", image="python:3.11")
         db_session.add(env)
         await db_session.flush()
         plan = ServerPlan(
-            name="svr2-plan", slug="svr2-plan",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"],
+            name="svr2-plan",
+            slug="svr2-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
         )
         db_session.add(plan)
         await db_session.commit()
@@ -3276,9 +3842,14 @@ class TestStartServerVolumeRecording:
         await db_session.commit()
 
         s1 = Server(
-            name="srv-svr2", user_id=test_user.id, status="stopped",
-            environment_id=env.id, plan_id=plan.id,
-            container_id="c1", allocated_cpu=1.0, allocated_memory="512m",
+            name="srv-svr2",
+            user_id=test_user.id,
+            status="stopped",
+            environment_id=env.id,
+            plan_id=plan.id,
+            container_id="c1",
+            allocated_cpu=1.0,
+            allocated_memory="512m",
             volume_id=vol.id,
         )
         db_session.add(s1)
@@ -3291,13 +3862,18 @@ class TestStartServerVolumeRecording:
                     vs_inst.check_quota = mock.AsyncMock(return_value={"allowed": True})
                     vs_inst.check_volumes_quota = mock.AsyncMock(return_value={"allowed": True})
                     vs_inst.record_mount = mock.AsyncMock()
-                    with mock.patch("app.services.notification_service.NotificationService") as MockNS:
+                    with mock.patch(
+                        "app.services.notification_service.NotificationService"
+                    ) as MockNS:
                         ns_inst = MockNS.return_value
                         ns_inst.server_started = mock.AsyncMock()
-                        with mock.patch("app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()):
+                        with mock.patch(
+                            "app.services.notification_service.broadcast_server_status_change",
+                            mock.AsyncMock(),
+                        ):
                             response = await client.post(
                                 f"/api/servers/{s1.id}/start",
-                                headers={"Authorization": f"Bearer {user_token}"}
+                                headers={"Authorization": f"Bearer {user_token}"},
                             )
 
         assert response.status_code == 200
@@ -3316,8 +3892,7 @@ class TestStopServerExceptionExtended:
         with mock.patch("app.api.servers.spawner.get_status", return_value="running"):
             with mock.patch("app.api.servers.spawner.delete", side_effect=Exception("docker down")):
                 response = await client.post(
-                    f"/api/servers/{s1.id}/stop",
-                    headers={"Authorization": f"Bearer {user_token}"}
+                    f"/api/servers/{s1.id}/stop", headers={"Authorization": f"Bearer {user_token}"}
                 )
 
         assert response.status_code == 500
@@ -3327,7 +3902,9 @@ class TestDeleteServerContainerWarning:
     """DELETE /{server_id} with container delete warning."""
 
     @pytest.mark.asyncio
-    async def test_delete_server_container_delete_warning(self, client, user_token, test_user, db_session):
+    async def test_delete_server_container_delete_warning(
+        self, client, user_token, test_user, db_session
+    ):
         s1 = Server(name="srv-del-warn", user_id=test_user.id, status="stopped", container_id="c1")
         db_session.add(s1)
         await db_session.commit()
@@ -3337,8 +3914,7 @@ class TestDeleteServerContainerWarning:
                 ns_inst = MockNS.return_value
                 ns_inst.server_deleted = mock.AsyncMock()
                 response = await client.delete(
-                    f"/api/servers/{s1.id}",
-                    headers={"Authorization": f"Bearer {user_token}"}
+                    f"/api/servers/{s1.id}", headers={"Authorization": f"Bearer {user_token}"}
                 )
 
         assert response.status_code == 200
@@ -3353,25 +3929,38 @@ class TestUpdateServerQuotaFail:
         db_session.add(env)
         await db_session.flush()
         plan = ServerPlan(
-            name="upq-plan", slug="upq-plan",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"],
+            name="upq-plan",
+            slug="upq-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
         )
         db_session.add(plan)
         await db_session.commit()
 
         s1 = Server(
-            name="srv-upq", user_id=test_user.id, status="stopped",
-            environment_id=env.id, plan_id=plan.id,
-            container_id=None, allocated_cpu=1.0, allocated_memory="512m",
+            name="srv-upq",
+            user_id=test_user.id,
+            status="stopped",
+            environment_id=env.id,
+            plan_id=plan.id,
+            container_id=None,
+            allocated_cpu=1.0,
+            allocated_memory="512m",
         )
         db_session.add(s1)
         await db_session.commit()
 
         new_plan = ServerPlan(
-            name="upq-plan2", slug="upq-plan2",
-            cpu_limit=2.0, memory_limit="1g", disk_limit="20g",
-            is_active=True, visible_to_roles=["user"],
+            name="upq-plan2",
+            slug="upq-plan2",
+            cpu_limit=2.0,
+            memory_limit="1g",
+            disk_limit="20g",
+            is_active=True,
+            visible_to_roles=["user"],
         )
         db_session.add(new_plan)
         await db_session.commit()
@@ -3382,11 +3971,13 @@ class TestUpdateServerQuotaFail:
             ps_inst.can_user_use_plan = mock.AsyncMock(return_value=True)
             with mock.patch("app.services.quota_service.QuotaService") as MockQS:
                 qs_inst = MockQS.return_value
-                qs_inst.check_spawn_allowed = mock.AsyncMock(return_value={"allowed": False, "reason": "quota exceeded"})
+                qs_inst.check_spawn_allowed = mock.AsyncMock(
+                    return_value={"allowed": False, "reason": "quota exceeded"}
+                )
                 response = await client.patch(
                     f"/api/servers/{s1.id}",
                     headers={"Authorization": f"Bearer {admin_token}"},
-                    json={"plan_id": str(new_plan.id), "reason": "Admin update"}
+                    json={"plan_id": str(new_plan.id), "reason": "Admin update"},
                 )
 
         assert response.status_code == 429
@@ -3397,14 +3988,20 @@ class TestUpdateServerVolumeAccessFail:
     """PATCH /{server_id} with volume access check fail."""
 
     @pytest.mark.asyncio
-    async def test_update_server_volume_access_fail(self, client, admin_token, test_user, db_session):
+    async def test_update_server_volume_access_fail(
+        self, client, admin_token, test_user, db_session
+    ):
         env = EnvironmentTemplate(name="upv-env", slug="upv-env", image="python:3.11")
         db_session.add(env)
         await db_session.flush()
         plan = ServerPlan(
-            name="upv-plan", slug="upv-plan",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"],
+            name="upv-plan",
+            slug="upv-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
         )
         db_session.add(plan)
         await db_session.commit()
@@ -3414,9 +4011,14 @@ class TestUpdateServerVolumeAccessFail:
         await db_session.commit()
 
         s1 = Server(
-            name="srv-upv", user_id=test_user.id, status="stopped",
-            environment_id=env.id, plan_id=plan.id,
-            container_id=None, allocated_cpu=1.0, allocated_memory="512m",
+            name="srv-upv",
+            user_id=test_user.id,
+            status="stopped",
+            environment_id=env.id,
+            plan_id=plan.id,
+            container_id=None,
+            allocated_cpu=1.0,
+            allocated_memory="512m",
         )
         db_session.add(s1)
         await db_session.commit()
@@ -3434,8 +4036,8 @@ class TestUpdateServerVolumeAccessFail:
                         "volume_mounts": [
                             {"volume_id": str(vol.id), "mount_path": "/data", "mode": "read_write"}
                         ],
-                        "reason": "Admin update"
-                    }
+                        "reason": "Admin update",
+                    },
                 )
 
         assert response.status_code == 403
@@ -3445,7 +4047,9 @@ class TestGetServerByPathException:
     """GET /by-path with spawner exception."""
 
     @pytest.mark.asyncio
-    async def test_get_server_by_path_spawner_exception(self, client, user_token, test_user, db_session):
+    async def test_get_server_by_path_spawner_exception(
+        self, client, user_token, test_user, db_session
+    ):
         s1 = Server(name="srv-path-exc", user_id=test_user.id, status="running", container_id="c1")
         db_session.add(s1)
         await db_session.commit()
@@ -3453,7 +4057,7 @@ class TestGetServerByPathException:
         with mock.patch("app.api.servers.spawner.get_status", side_effect=Exception("docker down")):
             response = await client.get(
                 f"/api/servers/by-path/{test_user.username}/srv-path-exc",
-                headers={"Authorization": f"Bearer {user_token}"}
+                headers={"Authorization": f"Bearer {user_token}"},
             )
         assert response.status_code == 200
         assert response.json()["status"] == "running"
@@ -3463,14 +4067,20 @@ class TestStartServerAggregateQuotaFail:
     """POST /{server_id}/start with aggregate volume quota fail."""
 
     @pytest.mark.asyncio
-    async def test_start_server_aggregate_quota_fail(self, client, user_token, test_user, db_session):
+    async def test_start_server_aggregate_quota_fail(
+        self, client, user_token, test_user, db_session
+    ):
         env = EnvironmentTemplate(name="sag-env", slug="sag-env", image="python:3.11")
         db_session.add(env)
         await db_session.flush()
         plan = ServerPlan(
-            name="sag-plan", slug="sag-plan",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"],
+            name="sag-plan",
+            slug="sag-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
         )
         db_session.add(plan)
         await db_session.commit()
@@ -3480,9 +4090,14 @@ class TestStartServerAggregateQuotaFail:
         await db_session.commit()
 
         s1 = Server(
-            name="srv-sag", user_id=test_user.id, status="stopped",
-            environment_id=env.id, plan_id=plan.id,
-            container_id="c1", allocated_cpu=1.0, allocated_memory="512m",
+            name="srv-sag",
+            user_id=test_user.id,
+            status="stopped",
+            environment_id=env.id,
+            plan_id=plan.id,
+            container_id="c1",
+            allocated_cpu=1.0,
+            allocated_memory="512m",
         )
         db_session.add(s1)
         await db_session.commit()
@@ -3495,10 +4110,11 @@ class TestStartServerAggregateQuotaFail:
             with mock.patch("app.services.volume_service.VolumeService") as MockVS:
                 vs_inst = MockVS.return_value
                 vs_inst.check_quota = mock.AsyncMock(return_value={"allowed": True})
-                vs_inst.check_volumes_quota = mock.AsyncMock(return_value={"allowed": False, "reason": "aggregate exceeded"})
+                vs_inst.check_volumes_quota = mock.AsyncMock(
+                    return_value={"allowed": False, "reason": "aggregate exceeded"}
+                )
                 response = await client.post(
-                    f"/api/servers/{s1.id}/start",
-                    headers={"Authorization": f"Bearer {user_token}"}
+                    f"/api/servers/{s1.id}/start", headers={"Authorization": f"Bearer {user_token}"}
                 )
 
         assert response.status_code == 400
@@ -3509,14 +4125,20 @@ class TestRestartServerAggregateQuotaFail:
     """POST /{server_id}/restart with aggregate volume quota fail."""
 
     @pytest.mark.asyncio
-    async def test_restart_server_aggregate_quota_fail(self, client, user_token, test_user, db_session):
+    async def test_restart_server_aggregate_quota_fail(
+        self, client, user_token, test_user, db_session
+    ):
         env = EnvironmentTemplate(name="rag-env", slug="rag-env", image="python:3.11")
         db_session.add(env)
         await db_session.flush()
         plan = ServerPlan(
-            name="rag-plan", slug="rag-plan",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"],
+            name="rag-plan",
+            slug="rag-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
         )
         db_session.add(plan)
         await db_session.commit()
@@ -3526,9 +4148,14 @@ class TestRestartServerAggregateQuotaFail:
         await db_session.commit()
 
         s1 = Server(
-            name="srv-rag", user_id=test_user.id, status="stopped",
-            environment_id=env.id, plan_id=plan.id,
-            container_id="c1", allocated_cpu=1.0, allocated_memory="512m",
+            name="srv-rag",
+            user_id=test_user.id,
+            status="stopped",
+            environment_id=env.id,
+            plan_id=plan.id,
+            container_id="c1",
+            allocated_cpu=1.0,
+            allocated_memory="512m",
         )
         db_session.add(s1)
         await db_session.commit()
@@ -3543,10 +4170,12 @@ class TestRestartServerAggregateQuotaFail:
                     with mock.patch("app.services.volume_service.VolumeService") as MockVS:
                         vs_inst = MockVS.return_value
                         vs_inst.check_quota = mock.AsyncMock(return_value={"allowed": True})
-                        vs_inst.check_volumes_quota = mock.AsyncMock(return_value={"allowed": False, "reason": "aggregate exceeded"})
+                        vs_inst.check_volumes_quota = mock.AsyncMock(
+                            return_value={"allowed": False, "reason": "aggregate exceeded"}
+                        )
                         response = await client.post(
                             f"/api/servers/{s1.id}/restart",
-                            headers={"Authorization": f"Bearer {user_token}"}
+                            headers={"Authorization": f"Bearer {user_token}"},
                         )
 
         assert response.status_code == 400
@@ -3557,14 +4186,20 @@ class TestUpdateServerAggregateQuotaFail:
     """PATCH /{server_id} with aggregate volume quota fail."""
 
     @pytest.mark.asyncio
-    async def test_update_server_aggregate_quota_fail(self, client, admin_token, test_user, db_session):
+    async def test_update_server_aggregate_quota_fail(
+        self, client, admin_token, test_user, db_session
+    ):
         env = EnvironmentTemplate(name="uag-env", slug="uag-env", image="python:3.11")
         db_session.add(env)
         await db_session.flush()
         plan = ServerPlan(
-            name="uag-plan", slug="uag-plan",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"],
+            name="uag-plan",
+            slug="uag-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
         )
         db_session.add(plan)
         await db_session.commit()
@@ -3574,9 +4209,14 @@ class TestUpdateServerAggregateQuotaFail:
         await db_session.commit()
 
         s1 = Server(
-            name="srv-uag", user_id=test_user.id, status="stopped",
-            environment_id=env.id, plan_id=plan.id,
-            container_id=None, allocated_cpu=1.0, allocated_memory="512m",
+            name="srv-uag",
+            user_id=test_user.id,
+            status="stopped",
+            environment_id=env.id,
+            plan_id=plan.id,
+            container_id=None,
+            allocated_cpu=1.0,
+            allocated_memory="512m",
         )
         db_session.add(s1)
         await db_session.commit()
@@ -3584,7 +4224,9 @@ class TestUpdateServerAggregateQuotaFail:
         with mock.patch("app.services.volume_service.VolumeService") as MockVS:
             vs_inst = MockVS.return_value
             vs_inst.check_quota = mock.AsyncMock(return_value={"allowed": True})
-            vs_inst.check_volumes_quota = mock.AsyncMock(return_value={"allowed": False, "reason": "aggregate exceeded"})
+            vs_inst.check_volumes_quota = mock.AsyncMock(
+                return_value={"allowed": False, "reason": "aggregate exceeded"}
+            )
             with mock.patch("app.services.volume_access_service.VolumeAccessService") as MockVA:
                 va_inst = MockVA.return_value
                 va_inst.can_access_volume = mock.AsyncMock(return_value=True)
@@ -3595,8 +4237,8 @@ class TestUpdateServerAggregateQuotaFail:
                         "volume_mounts": [
                             {"volume_id": str(vol.id), "mount_path": "/data", "mode": "read_write"}
                         ],
-                        "reason": "Admin update"
-                    }
+                        "reason": "Admin update",
+                    },
                 )
 
         assert response.status_code == 400
@@ -3607,41 +4249,63 @@ class TestUpdateServerContainerStopWarning:
     """PATCH /{server_id} with running container stop/delete warning."""
 
     @pytest.mark.asyncio
-    async def test_update_server_container_stop_warning(self, client, admin_token, test_user, db_session):
+    async def test_update_server_container_stop_warning(
+        self, client, admin_token, test_user, db_session
+    ):
         env = EnvironmentTemplate(name="ucw-env", slug="ucw-env", image="python:3.11")
         db_session.add(env)
         await db_session.flush()
         plan = ServerPlan(
-            name="ucw-plan", slug="ucw-plan",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"],
+            name="ucw-plan",
+            slug="ucw-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
         )
         db_session.add(plan)
         await db_session.commit()
 
         s1 = Server(
-            name="srv-ucw", user_id=test_user.id, status="running",
-            environment_id=env.id, plan_id=plan.id,
-            container_id="c1", allocated_cpu=1.0, allocated_memory="512m",
+            name="srv-ucw",
+            user_id=test_user.id,
+            status="running",
+            environment_id=env.id,
+            plan_id=plan.id,
+            container_id="c1",
+            allocated_cpu=1.0,
+            allocated_memory="512m",
         )
         db_session.add(s1)
         await db_session.commit()
 
         spawned = Server(
-            id=s1.id, name=s1.name, user_id=test_user.id,
-            container_id="c-new", image="python:3.11", status="running",
-            external_url="http://x", allocated_cpu=1.0, allocated_memory="512m",
+            id=s1.id,
+            name=s1.name,
+            user_id=test_user.id,
+            container_id="c-new",
+            image="python:3.11",
+            status="running",
+            external_url="http://x",
+            allocated_cpu=1.0,
+            allocated_memory="512m",
         )
 
         with mock.patch("app.api.servers.spawner.get_status", return_value="running"):
             with mock.patch("app.api.servers.spawner.stop", side_effect=Exception("stop failed")):
-                with mock.patch("app.api.servers.spawner.delete", side_effect=Exception("delete failed")):
+                with mock.patch(
+                    "app.api.servers.spawner.delete", side_effect=Exception("delete failed")
+                ):
                     with mock.patch("app.api.servers.spawner.spawn", return_value=spawned):
-                        with mock.patch("app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()):
+                        with mock.patch(
+                            "app.services.notification_service.broadcast_server_status_change",
+                            mock.AsyncMock(),
+                        ):
                             response = await client.patch(
                                 f"/api/servers/{s1.id}",
                                 headers={"Authorization": f"Bearer {admin_token}"},
-                                json={"environment_id": str(env.id), "reason": "Admin update"}
+                                json={"environment_id": str(env.id), "reason": "Admin update"},
                             )
 
         assert response.status_code == 200
@@ -3656,9 +4320,13 @@ class TestCreateServerResourcePoolQueue:
         db_session.add(env)
         await db_session.flush()
         plan = ServerPlan(
-            name="rp-plan", slug="rp-plan",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"],
+            name="rp-plan",
+            slug="rp-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
             priority=1,
         )
         db_session.add(plan)
@@ -3683,43 +4351,51 @@ class TestCreateServerResourcePoolQueue:
                                 "name": "srv-rp",
                                 "plan_id": str(plan.id),
                                 "environment_id": str(env.id),
-                            }
+                            },
                         )
                     except Exception:
                         pass
-
-
-
 
 
 class TestStartServerNoContainerException:
     """POST /{server_id}/start no-container path with exception."""
 
     @pytest.mark.asyncio
-    async def test_start_server_no_container_exception(self, client, user_token, test_user, db_session):
+    async def test_start_server_no_container_exception(
+        self, client, user_token, test_user, db_session
+    ):
         env = EnvironmentTemplate(name="snce-env", slug="snce-env", image="python:3.11")
         db_session.add(env)
         await db_session.flush()
         plan = ServerPlan(
-            name="snce-plan", slug="snce-plan",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"],
+            name="snce-plan",
+            slug="snce-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
         )
         db_session.add(plan)
         await db_session.commit()
 
         s1 = Server(
-            name="srv-snce", user_id=test_user.id, status="stopped",
-            environment_id=env.id, plan_id=plan.id,
-            container_id=None, allocated_cpu=1.0, allocated_memory="512m", allocated_disk="10g",
+            name="srv-snce",
+            user_id=test_user.id,
+            status="stopped",
+            environment_id=env.id,
+            plan_id=plan.id,
+            container_id=None,
+            allocated_cpu=1.0,
+            allocated_memory="512m",
+            allocated_disk="10g",
         )
         db_session.add(s1)
         await db_session.commit()
 
         with mock.patch("app.api.servers.spawner.spawn", side_effect=Exception("spawn failed")):
             response = await client.post(
-                f"/api/servers/{s1.id}/start",
-                headers={"Authorization": f"Bearer {user_token}"}
+                f"/api/servers/{s1.id}/start", headers={"Authorization": f"Bearer {user_token}"}
             )
 
         assert response.status_code == 500
@@ -3738,7 +4414,7 @@ class TestRestartServerException:
             with mock.patch("app.api.servers.spawner.stop", side_effect=Exception("stop failed")):
                 response = await client.post(
                     f"/api/servers/{s1.id}/restart",
-                    headers={"Authorization": f"Bearer {user_token}"}
+                    headers={"Authorization": f"Bearer {user_token}"},
                 )
 
         assert response.status_code == 500
@@ -3754,8 +4430,7 @@ class TestGetServerVolumesExtended:
         await db_session.commit()
 
         response = await client.get(
-            f"/api/servers/{s1.id}/volumes",
-            headers={"Authorization": f"Bearer {user_token}"}
+            f"/api/servers/{s1.id}/volumes", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 200
         assert "volume_mounts" in response.json()
@@ -3765,22 +4440,33 @@ class TestRestartServerPlanCheck:
     """POST /{server_id}/restart with plan check fail."""
 
     @pytest.mark.asyncio
-    async def test_restart_server_plan_not_available(self, client, user_token, test_user, db_session):
+    async def test_restart_server_plan_not_available(
+        self, client, user_token, test_user, db_session
+    ):
         env = EnvironmentTemplate(name="rpna-env", slug="rpna-env", image="python:3.11")
         db_session.add(env)
         await db_session.flush()
         plan = ServerPlan(
-            name="rpna-plan", slug="rpna-plan",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"],
+            name="rpna-plan",
+            slug="rpna-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
         )
         db_session.add(plan)
         await db_session.commit()
 
         s1 = Server(
-            name="srv-rpna", user_id=test_user.id, status="stopped",
-            environment_id=env.id, plan_id=plan.id,
-            container_id="c1", allocated_cpu=1.0, allocated_memory="512m",
+            name="srv-rpna",
+            user_id=test_user.id,
+            status="stopped",
+            environment_id=env.id,
+            plan_id=plan.id,
+            container_id="c1",
+            allocated_cpu=1.0,
+            allocated_memory="512m",
         )
         db_session.add(s1)
         await db_session.commit()
@@ -3789,30 +4475,40 @@ class TestRestartServerPlanCheck:
             ps_inst = MockPS.return_value
             ps_inst.can_user_use_plan = mock.AsyncMock(return_value=False)
             response = await client.post(
-                f"/api/servers/{s1.id}/restart",
-                headers={"Authorization": f"Bearer {user_token}"}
+                f"/api/servers/{s1.id}/restart", headers={"Authorization": f"Bearer {user_token}"}
             )
 
         assert response.status_code == 403
 
     @pytest.mark.asyncio
-    async def test_restart_server_insufficient_credits(self, client, user_token, test_user, db_session):
+    async def test_restart_server_insufficient_credits(
+        self, client, user_token, test_user, db_session
+    ):
         env = EnvironmentTemplate(name="rpic-env", slug="rpic-env", image="python:3.11")
         db_session.add(env)
         await db_session.flush()
         plan = ServerPlan(
-            name="rpic-plan", slug="rpic-plan",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"],
+            name="rpic-plan",
+            slug="rpic-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
             cost_per_hour=1.0,
         )
         db_session.add(plan)
         await db_session.commit()
 
         s1 = Server(
-            name="srv-rpic", user_id=test_user.id, status="stopped",
-            environment_id=env.id, plan_id=plan.id,
-            container_id="c1", allocated_cpu=1.0, allocated_memory="512m",
+            name="srv-rpic",
+            user_id=test_user.id,
+            status="stopped",
+            environment_id=env.id,
+            plan_id=plan.id,
+            container_id="c1",
+            allocated_cpu=1.0,
+            allocated_memory="512m",
         )
         db_session.add(s1)
         await db_session.commit()
@@ -3823,7 +4519,7 @@ class TestRestartServerPlanCheck:
                 cs_inst.check_sufficient_credits = mock.AsyncMock(return_value=False)
                 response = await client.post(
                     f"/api/servers/{s1.id}/restart",
-                    headers={"Authorization": f"Bearer {user_token}"}
+                    headers={"Authorization": f"Bearer {user_token}"},
                 )
 
         assert response.status_code == 402
@@ -3841,14 +4537,19 @@ class TestRestartServerCrossUser:
         with mock.patch("app.api.servers.spawner.get_status", return_value="running"):
             with mock.patch("app.api.servers.spawner.stop", return_value=True):
                 with mock.patch("app.api.servers.spawner.start", return_value=True):
-                    with mock.patch("app.services.notification_service.NotificationService") as MockNS:
+                    with mock.patch(
+                        "app.services.notification_service.NotificationService"
+                    ) as MockNS:
                         ns_inst = MockNS.return_value
                         ns_inst.server_restarted = mock.AsyncMock()
-                        with mock.patch("app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()):
+                        with mock.patch(
+                            "app.services.notification_service.broadcast_server_status_change",
+                            mock.AsyncMock(),
+                        ):
                             response = await client.post(
                                 f"/api/servers/{s1.id}/restart",
                                 headers={"Authorization": f"Bearer {admin_token}"},
-                                json={"reason": "Admin restart"}
+                                json={"reason": "Admin restart"},
                             )
 
         assert response.status_code == 200
@@ -3869,7 +4570,7 @@ class TestDeleteServerCrossUser:
             response = await client.delete(
                 f"/api/servers/{s1.id}",
                 headers={"Authorization": f"Bearer {admin_token}"},
-                params={"reason": "Admin cleanup"}
+                params={"reason": "Admin cleanup"},
             )
 
         assert response.status_code == 200
@@ -3879,30 +4580,45 @@ class TestUpdateServerPlanNotAvailable:
     """PATCH /{server_id} with plan not available."""
 
     @pytest.mark.asyncio
-    async def test_update_server_plan_not_available(self, client, admin_token, test_user, db_session):
+    async def test_update_server_plan_not_available(
+        self, client, admin_token, test_user, db_session
+    ):
         env = EnvironmentTemplate(name="upna-env", slug="upna-env", image="python:3.11")
         db_session.add(env)
         await db_session.flush()
         plan = ServerPlan(
-            name="upna-plan", slug="upna-plan",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"],
+            name="upna-plan",
+            slug="upna-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
         )
         db_session.add(plan)
         await db_session.commit()
 
         s1 = Server(
-            name="srv-upna", user_id=test_user.id, status="stopped",
-            environment_id=env.id, plan_id=plan.id,
-            container_id=None, allocated_cpu=1.0, allocated_memory="512m",
+            name="srv-upna",
+            user_id=test_user.id,
+            status="stopped",
+            environment_id=env.id,
+            plan_id=plan.id,
+            container_id=None,
+            allocated_cpu=1.0,
+            allocated_memory="512m",
         )
         db_session.add(s1)
         await db_session.commit()
 
         new_plan = ServerPlan(
-            name="upna-plan2", slug="upna-plan2",
-            cpu_limit=2.0, memory_limit="1g", disk_limit="20g",
-            is_active=True, visible_to_roles=["admin"],
+            name="upna-plan2",
+            slug="upna-plan2",
+            cpu_limit=2.0,
+            memory_limit="1g",
+            disk_limit="20g",
+            is_active=True,
+            visible_to_roles=["admin"],
         )
         db_session.add(new_plan)
         await db_session.commit()
@@ -3914,7 +4630,7 @@ class TestUpdateServerPlanNotAvailable:
             response = await client.patch(
                 f"/api/servers/{s1.id}",
                 headers={"Authorization": f"Bearer {admin_token}"},
-                json={"plan_id": str(new_plan.id), "reason": "Admin update"}
+                json={"plan_id": str(new_plan.id), "reason": "Admin update"},
             )
 
         assert response.status_code == 403
@@ -3925,25 +4641,38 @@ class TestUpdateServerPlanNotAvailable:
         db_session.add(env)
         await db_session.flush()
         plan = ServerPlan(
-            name="upni-plan", slug="upni-plan",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"],
+            name="upni-plan",
+            slug="upni-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
         )
         db_session.add(plan)
         await db_session.commit()
 
         s1 = Server(
-            name="srv-upni", user_id=test_user.id, status="stopped",
-            environment_id=env.id, plan_id=plan.id,
-            container_id=None, allocated_cpu=1.0, allocated_memory="512m",
+            name="srv-upni",
+            user_id=test_user.id,
+            status="stopped",
+            environment_id=env.id,
+            plan_id=plan.id,
+            container_id=None,
+            allocated_cpu=1.0,
+            allocated_memory="512m",
         )
         db_session.add(s1)
         await db_session.commit()
 
         new_plan = ServerPlan(
-            name="upni-plan2", slug="upni-plan2",
-            cpu_limit=2.0, memory_limit="1g", disk_limit="20g",
-            is_active=False, visible_to_roles=["user"],
+            name="upni-plan2",
+            slug="upni-plan2",
+            cpu_limit=2.0,
+            memory_limit="1g",
+            disk_limit="20g",
+            is_active=False,
+            visible_to_roles=["user"],
         )
         db_session.add(new_plan)
         await db_session.commit()
@@ -3955,7 +4684,7 @@ class TestUpdateServerPlanNotAvailable:
             response = await client.patch(
                 f"/api/servers/{s1.id}",
                 headers={"Authorization": f"Bearer {admin_token}"},
-                json={"plan_id": str(new_plan.id), "reason": "Admin update"}
+                json={"plan_id": str(new_plan.id), "reason": "Admin update"},
             )
 
         assert response.status_code == 400
@@ -3970,9 +4699,13 @@ class TestUpdateServerHomeVolumeMark:
         db_session.add(env)
         await db_session.flush()
         plan = ServerPlan(
-            name="uhv-plan", slug="uhv-plan",
-            cpu_limit=1.0, memory_limit="512m", disk_limit="10g",
-            is_active=True, visible_to_roles=["user"],
+            name="uhv-plan",
+            slug="uhv-plan",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            is_active=True,
+            visible_to_roles=["user"],
         )
         db_session.add(plan)
         await db_session.commit()
@@ -3982,17 +4715,28 @@ class TestUpdateServerHomeVolumeMark:
         await db_session.commit()
 
         s1 = Server(
-            name="srv-uhv", user_id=test_user.id, status="stopped",
-            environment_id=env.id, plan_id=plan.id,
-            container_id=None, allocated_cpu=1.0, allocated_memory="512m",
+            name="srv-uhv",
+            user_id=test_user.id,
+            status="stopped",
+            environment_id=env.id,
+            plan_id=plan.id,
+            container_id=None,
+            allocated_cpu=1.0,
+            allocated_memory="512m",
         )
         db_session.add(s1)
         await db_session.commit()
 
         spawned = Server(
-            id=s1.id, name=s1.name, user_id=test_user.id,
-            container_id="c-uhv", image="python:3.11", status="running",
-            external_url="http://x", allocated_cpu=1.0, allocated_memory="512m",
+            id=s1.id,
+            name=s1.name,
+            user_id=test_user.id,
+            container_id="c-uhv",
+            image="python:3.11",
+            status="running",
+            external_url="http://x",
+            allocated_cpu=1.0,
+            allocated_memory="512m",
         )
 
         with mock.patch("app.services.volume_service.VolumeService") as MockVS:
@@ -4005,16 +4749,23 @@ class TestUpdateServerHomeVolumeMark:
                 va_inst = MockVA.return_value
                 va_inst.can_access_volume = mock.AsyncMock(return_value=True)
                 with mock.patch("app.api.servers.spawner.spawn", return_value=spawned):
-                    with mock.patch("app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()):
+                    with mock.patch(
+                        "app.services.notification_service.broadcast_server_status_change",
+                        mock.AsyncMock(),
+                    ):
                         response = await client.patch(
                             f"/api/servers/{s1.id}",
                             headers={"Authorization": f"Bearer {admin_token}"},
                             json={
                                 "volume_mounts": [
-                                    {"volume_id": str(vol.id), "mount_path": f"/home/{test_user.username}", "mode": "read_write"}
+                                    {
+                                        "volume_id": str(vol.id),
+                                        "mount_path": f"/home/{test_user.username}",
+                                        "mode": "read_write",
+                                    }
                                 ],
-                                "reason": "Admin update"
-                            }
+                                "reason": "Admin update",
+                            },
                         )
 
         assert response.status_code == 200

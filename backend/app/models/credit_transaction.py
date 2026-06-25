@@ -4,24 +4,29 @@ from sqlalchemy import Column, String, Integer, DateTime, Text, ForeignKey, JSON
 from sqlalchemy.dialects.postgresql import UUID, INET
 from app.db.base import Base
 
+
 class CreditTransaction(Base):
     __tablename__ = "credit_transactions"
-    __table_args__ = (
-        Index('ix_credit_transactions_created_at', 'created_at'),
-    )
-    
+    __table_args__ = (Index("ix_credit_transactions_created_at", "created_at"),)
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     amount = Column(Integer, nullable=False)
     balance_after = Column(Integer, nullable=False)
     type = Column(String(50), nullable=False, index=True)
     description = Column(Text, nullable=True)
-    server_id = Column(UUID(as_uuid=True), ForeignKey("servers.id", ondelete="SET NULL"), nullable=True)
+    server_id = Column(
+        UUID(as_uuid=True), ForeignKey("servers.id", ondelete="SET NULL"), nullable=True
+    )
     plan_id = Column(UUID(as_uuid=True), nullable=True)
-    actor_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    actor_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     meta = Column(JSON, default=dict)
     created_at = Column(DateTime, default=utc_now)
-    
+
     def to_dict(self):
         return {
             "id": str(self.id),

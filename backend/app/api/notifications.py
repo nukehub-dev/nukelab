@@ -67,41 +67,41 @@ async def list_notifications(
     current_user: User = Depends(get_current_user),
 ):
     """Get current user's notifications"""
-    
+
     # Build query
     query = select(Notification).where(Notification.user_id == current_user.id)
-    
+
     if unread_only:
         query = query.where(Notification.read == False)
-    
+
     if type:
         query = query.where(Notification.type == type)
-    
+
     # Get total count
     count_query = select(func.count()).select_from(query.subquery())
     total_result = await db.execute(count_query)
     total = total_result.scalar()
-    
+
     # Get unread count
     unread_query = select(func.count()).where(
         and_(Notification.user_id == current_user.id, Notification.read == False)
     )
     unread_result = await db.execute(unread_query)
     unread_count = unread_result.scalar()
-    
+
     # Apply pagination
     offset = (page - 1) * page_size
     query = query.order_by(Notification.created_at.desc()).offset(offset).limit(page_size)
-    
+
     result = await db.execute(query)
     notifications = result.scalars().all()
-    
+
     return {
         "notifications": [serialize_notification(n) for n in notifications],
         "unread_count": unread_count,
         "total": total,
         "page": page,
-        "page_size": page_size
+        "page_size": page_size,
     }
 
 
@@ -116,7 +116,7 @@ async def get_unread_count(
     )
     result = await db.execute(query)
     count = result.scalar()
-    
+
     return {"unread_count": count}
 
 
@@ -129,21 +129,18 @@ async def mark_as_read(
     """Mark a notification as read"""
     result = await db.execute(
         select(Notification).where(
-            and_(
-                Notification.id == notification_id,
-                Notification.user_id == current_user.id
-            )
+            and_(Notification.id == notification_id, Notification.user_id == current_user.id)
         )
     )
     notification = result.scalar_one_or_none()
-    
+
     if not notification:
         raise HTTPException(status_code=404, detail="Notification not found")
-    
+
     notification.read = True
     notification.read_at = datetime.now(UTC).replace(tzinfo=None)
     await db.commit()
-    
+
     return serialize_notification(notification)
 
 
@@ -155,21 +152,18 @@ async def mark_all_as_read(
     """Mark all notifications as read"""
     result = await db.execute(
         select(Notification).where(
-            and_(
-                Notification.user_id == current_user.id,
-                Notification.read == False
-            )
+            and_(Notification.user_id == current_user.id, Notification.read == False)
         )
     )
     notifications = result.scalars().all()
-    
+
     now = datetime.now(UTC).replace(tzinfo=None)
     for notification in notifications:
         notification.read = True
         notification.read_at = now
-    
+
     await db.commit()
-    
+
     return {"message": f"Marked {len(notifications)} notifications as read"}
 
 
@@ -182,20 +176,17 @@ async def delete_notification(
     """Delete a notification"""
     result = await db.execute(
         select(Notification).where(
-            and_(
-                Notification.id == notification_id,
-                Notification.user_id == current_user.id
-            )
+            and_(Notification.id == notification_id, Notification.user_id == current_user.id)
         )
     )
     notification = result.scalar_one_or_none()
-    
+
     if not notification:
         raise HTTPException(status_code=404, detail="Notification not found")
-    
+
     await db.delete(notification)
     await db.commit()
-    
+
     return None
 
 
@@ -210,16 +201,17 @@ async def create_notification(
     action_url: Optional[str] = None,
     extra_data: Optional[dict] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     """Create a notification for a user (Admin only)"""
     from app.dependencies import PermissionChecker
     from app.core.permissions import Permission
-    
+
     checker = PermissionChecker(current_user)
     checker.require(Permission.ADMIN_ACCESS)
-    
+
     import uuid
+
     notification = Notification(
         user_id=uuid.UUID(user_id),
         type=type,
@@ -227,11 +219,11 @@ async def create_notification(
         message=message,
         severity=severity,
         action_url=action_url,
-        extra_data=extra_data or {}
+        extra_data=extra_data or {},
     )
-    
+
     db.add(notification)
     await db.commit()
     await db.refresh(notification)
-    
+
     return serialize_notification(notification)

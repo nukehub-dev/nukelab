@@ -5,11 +5,14 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.db.base import Base
 
+
 class Notification(Base):
     __tablename__ = "notifications"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     type = Column(String(50), nullable=False)  # server, credit, system, user
     title = Column(String(255), nullable=False)
     message = Column(Text, nullable=False)
@@ -19,13 +22,13 @@ class Notification(Base):
     action_url = Column(String(500), nullable=True)
     extra_data = Column(JSON, default=dict)
     created_at = Column(DateTime, default=utc_now)
-    
+
     # Relationship
     user = relationship("User", back_populates="notifications")
 
     def __repr__(self):
         return f"<Notification {self.id}: {self.title}>"
-    
+
     def to_dict(self):
         return {
             "id": str(self.id),

@@ -1,55 +1,55 @@
-import { Component, type ReactNode } from 'react';
-import { motion } from 'framer-motion';
-import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
-import * as Sentry from '@sentry/react';
-import { Button } from '../ui/button';
+import { Component, type ReactNode } from 'react'
+import { motion } from 'framer-motion'
+import { AlertTriangle, RefreshCw, Home } from 'lucide-react'
+import * as Sentry from '@sentry/react'
+import { Button } from '../ui/button'
 
 interface Props {
-  children: ReactNode;
-  fallback?: ReactNode;
+  children: ReactNode
+  fallback?: ReactNode
 }
 
 interface State {
-  hasError: boolean;
-  error: Error | null;
-  errorInfo: string | null;
+  hasError: boolean
+  error: Error | null
+  errorInfo: string | null
 }
 
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
-    super(props);
-    this.state = { hasError: false, error: null, errorInfo: null };
+    super(props)
+    this.state = { hasError: false, error: null, errorInfo: null }
   }
 
   static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error, errorInfo: null };
+    return { hasError: true, error, errorInfo: null }
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('ErrorBoundary caught:', error, errorInfo);
-    this.setState({ errorInfo: errorInfo.componentStack || null });
+    console.error('ErrorBoundary caught:', error, errorInfo)
+    this.setState({ errorInfo: errorInfo.componentStack || null })
     Sentry.captureException(error, {
       contexts: {
         react: {
           componentStack: errorInfo.componentStack,
         },
       },
-    });
+    })
   }
 
   handleReset = () => {
-    this.setState({ hasError: false, error: null, errorInfo: null });
-    window.location.reload();
-  };
+    this.setState({ hasError: false, error: null, errorInfo: null })
+    window.location.reload()
+  }
 
   handleGoHome = () => {
-    window.location.href = '/';
-  };
+    window.location.href = '/'
+  }
 
   render() {
     if (this.state.hasError) {
       if (this.props.fallback) {
-        return this.props.fallback;
+        return this.props.fallback
       }
 
       return (
@@ -96,10 +96,10 @@ export class ErrorBoundary extends Component<Props, State> {
             </div>
           </div>
         </motion.div>
-      );
+      )
     }
 
-    return this.props.children;
+    return this.props.children
   }
 }
 
@@ -115,5 +115,5 @@ export function RouteErrorBoundary() {
         </p>
       </div>
     </ErrorBoundary>
-  );
+  )
 }

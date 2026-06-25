@@ -1,6 +1,6 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { motion } from 'framer-motion';
-import { useState, useEffect } from 'react';
+import { createFileRoute } from '@tanstack/react-router'
+import { motion } from 'framer-motion'
+import { useState, useEffect } from 'react'
 import {
   HeartPulse,
   Database,
@@ -19,31 +19,31 @@ import {
   Filter,
   AlertTriangle,
   CheckCircle2,
-} from 'lucide-react';
-import { FloatingHeader } from '../components/layout/floating-header';
-import type { StatCardProps } from '../components/data/stat-card';
-import { StatusBadge } from '../components/data/status-badge';
-import { Select, SelectItem } from '../components/ui/select';
-import { useHealthMonitoring } from '../hooks/use-health-monitoring';
-import { useWebSocket } from '../hooks/use-websocket';
-import { useAuthStore, PERMISSIONS } from '../stores/auth-store';
-import { PermissionGuard } from '../components/permission-guard';
-import { cn, formatDate, formatBytes } from '../lib/utils';
-import { Tooltip } from '../components/ui/tooltip';
-import { SkeletonCard, SkeletonStatCard, SkeletonTable } from '../components/feedback/skeleton';
-import { springs } from '../lib/animations';
-import { useQueryClient } from '@tanstack/react-query';
+} from 'lucide-react'
+import { FloatingHeader } from '../components/layout/floating-header'
+import type { StatCardProps } from '../components/data/stat-card'
+import { StatusBadge } from '../components/data/status-badge'
+import { Select, SelectItem } from '../components/ui/select'
+import { useHealthMonitoring } from '../hooks/use-health-monitoring'
+import { useWebSocket } from '../hooks/use-websocket'
+import { useAuthStore, PERMISSIONS } from '../stores/auth-store'
+import { PermissionGuard } from '../components/permission-guard'
+import { cn, formatDate, formatBytes } from '../lib/utils'
+import { Tooltip } from '../components/ui/tooltip'
+import { SkeletonCard, SkeletonStatCard, SkeletonTable } from '../components/feedback/skeleton'
+import { springs } from '../lib/animations'
+import { useQueryClient } from '@tanstack/react-query'
 
 export const Route = createFileRoute('/admin/health')({
   component: AdminHealthPage,
-});
+})
 
 function AdminHealthPage() {
   return (
     <PermissionGuard permission={PERMISSIONS.ADMIN_ACCESS} redirectTo="/admin">
       <AdminHealthContent />
     </PermissionGuard>
-  );
+  )
 }
 
 const STATUS_OPTIONS = [
@@ -53,49 +53,49 @@ const STATUS_OPTIONS = [
   { label: 'Unknown', value: 'unknown' },
   { label: 'Restarting', value: 'restarting' },
   { label: 'Restart Failed', value: 'restart_failed' },
-];
+]
 
 function AdminHealthContent() {
-  const [page, setPage] = useState(1);
-  const [statusFilter, setStatusFilter] = useState<string>('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const queryClient = useQueryClient();
+  const [page, setPage] = useState(1)
+  const [statusFilter, setStatusFilter] = useState<string>('')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const queryClient = useQueryClient()
 
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
 
   useEffect(() => {
-    queueMicrotask(() => setPage(1));
-  }, [statusFilter, debouncedSearch]);
+    queueMicrotask(() => setPage(1))
+  }, [statusFilter, debouncedSearch])
 
   const { data, isLoading, isError, refetch } = useHealthMonitoring({
     page,
     limit: 20,
     status: statusFilter || null,
     search: debouncedSearch || null,
-  });
+  })
 
-  const { isConnected, subscribe, unsubscribe, onMessage } = useWebSocket();
-  const isAdmin = useAuthStore((state) => state.hasPermission(PERMISSIONS.ADMIN_ACCESS));
+  const { isConnected, subscribe, unsubscribe, onMessage } = useWebSocket()
+  const isAdmin = useAuthStore((state) => state.hasPermission(PERMISSIONS.ADMIN_ACCESS))
 
   useEffect(() => {
     if (isConnected && isAdmin) {
-      subscribe('global');
-      return () => unsubscribe('global');
+      subscribe('global')
+      return () => unsubscribe('global')
     }
-  }, [isConnected, isAdmin, subscribe, unsubscribe]);
+  }, [isConnected, isAdmin, subscribe, unsubscribe])
 
   useEffect(() => {
     const cleanup = onMessage((message) => {
       if (message.event === 'health:system') {
-        queryClient.invalidateQueries({ queryKey: ['health-monitoring'] });
+        queryClient.invalidateQueries({ queryKey: ['health-monitoring'] })
       }
-    });
-    return cleanup;
-  }, [onMessage, queryClient]);
+    })
+    return cleanup
+  }, [onMessage, queryClient])
 
   if (isLoading) {
     return (
@@ -140,7 +140,7 @@ function AdminHealthContent() {
           </section>
         </div>
       </div>
-    );
+    )
   }
 
   if (isError || !data) {
@@ -154,17 +154,18 @@ function AdminHealthContent() {
           </button>
         </div>
       </div>
-    );
+    )
   }
 
-  const system = data.system;
-  const containers = data.containers;
-  const recentRestarts = data.recent_restarts;
-  const pagination = containers.pagination;
-  const resources = system.resources;
+  const system = data.system
+  const containers = data.containers
+  const recentRestarts = data.recent_restarts
+  const pagination = containers.pagination
+  const resources = system.resources
 
-  const systemHealthy = system.status === 'healthy';
-  const failingContainers = containers.unhealthy_count + containers.unknown_count + containers.restart_failed_count;
+  const systemHealthy = system.status === 'healthy'
+  const failingContainers =
+    containers.unhealthy_count + containers.unknown_count + containers.restart_failed_count
 
   const headerStats: StatCardProps[] = [
     {
@@ -195,7 +196,7 @@ function AdminHealthContent() {
       iconColor: 'text-violet-400',
       bgColor: 'bg-violet-500/10',
     },
-  ];
+  ]
 
   return (
     <div className="min-h-screen space-y-6">
@@ -246,8 +247,13 @@ function AdminHealthContent() {
               percent={resources.cpu.percent}
               icon={Cpu}
               details={[
-                { label: 'Cores', value: `${resources.cpu.count} (${resources.cpu.count_logical} threads)` },
-                ...(resources.cpu.freq_mhz ? [{ label: 'Frequency', value: `${resources.cpu.freq_mhz} MHz` }] : []),
+                {
+                  label: 'Cores',
+                  value: `${resources.cpu.count} (${resources.cpu.count_logical} threads)`,
+                },
+                ...(resources.cpu.freq_mhz
+                  ? [{ label: 'Frequency', value: `${resources.cpu.freq_mhz} MHz` }]
+                  : []),
               ]}
             />
             {/* Memory Card */}
@@ -322,7 +328,12 @@ function AdminHealthContent() {
           {/* Status summary */}
           <div className="flex flex-wrap gap-2">
             {Object.entries(containers.status_counts).map(([status, count]) => (
-              <StatusBadge key={status} status={mapHealthStatus(status)} label={`${status}: ${count}`} size="sm" />
+              <StatusBadge
+                key={status}
+                status={mapHealthStatus(status)}
+                label={`${status}: ${count}`}
+                size="sm"
+              />
             ))}
             {Object.keys(containers.status_counts).length === 0 && (
               <span className="text-sm text-muted-foreground">No running containers</span>
@@ -365,11 +376,21 @@ function AdminHealthContent() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border/50 bg-card/50">
-                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Server</th>
-                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
-                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Failures</th>
-                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Last Check</th>
-                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Output</th>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">
+                        Server
+                      </th>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">
+                        Status
+                      </th>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">
+                        Failures
+                      </th>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">
+                        Last Check
+                      </th>
+                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">
+                        Output
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -426,7 +447,7 @@ function AdminHealthContent() {
               {pagination.total_pages > 1 && (
                 <div className="flex items-center justify-between">
                   <p className="text-sm text-muted-foreground">
-                    Showing {((page - 1) * pagination.limit) + 1} -{' '}
+                    Showing {(page - 1) * pagination.limit + 1} -{' '}
                     {Math.min(page * pagination.limit, pagination.total)} of {pagination.total}
                   </p>
                   <div className="flex items-center gap-2">
@@ -482,10 +503,16 @@ function AdminHealthContent() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border/50 bg-card/50">
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Server</th>
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">
+                      Server
+                    </th>
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">
+                      Status
+                    </th>
                     <th className="text-left px-4 py-3 font-medium text-muted-foreground">Time</th>
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Details</th>
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">
+                      Details
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -528,7 +555,7 @@ function AdminHealthContent() {
         )}
       </div>
     </div>
-  );
+  )
 }
 
 /* ------------------------------------------------------------------ */
@@ -536,26 +563,28 @@ function AdminHealthContent() {
 /* ------------------------------------------------------------------ */
 
 function shortenPath(path?: string): string {
-  if (!path) return 'Disk';
-  if (path === '/') return 'Root';
-  const base = path.split('/').filter(Boolean).pop();
-  return base ? base.charAt(0).toUpperCase() + base.slice(1) : 'Disk';
+  if (!path) return 'Disk'
+  if (path === '/') return 'Root'
+  const base = path.split('/').filter(Boolean).pop()
+  return base ? base.charAt(0).toUpperCase() + base.slice(1) : 'Disk'
 }
 
-function mapHealthStatus(status: string): 'running' | 'stopped' | 'pending' | 'error' | 'warning' | 'info' {
+function mapHealthStatus(
+  status: string
+): 'running' | 'stopped' | 'pending' | 'error' | 'warning' | 'info' {
   switch (status) {
     case 'healthy':
-      return 'running';
+      return 'running'
     case 'unhealthy':
-      return 'error';
+      return 'error'
     case 'restarting':
-      return 'pending';
+      return 'pending'
     case 'restart_failed':
-      return 'error';
+      return 'error'
     case 'unknown':
-      return 'warning';
+      return 'warning'
     default:
-      return 'info';
+      return 'info'
   }
 }
 
@@ -564,13 +593,19 @@ function ServiceCard({
   health,
   icon: Icon,
 }: {
-  name: string;
-  health?: { status: string; latency_ms?: number; error?: string; version?: string; message?: string };
-  icon: React.ElementType;
+  name: string
+  health?: {
+    status: string
+    latency_ms?: number
+    error?: string
+    version?: string
+    message?: string
+  }
+  icon: React.ElementType
 }) {
-  const status = health?.status || 'unknown';
-  const isHealthy = status === 'healthy';
-  const isDisabled = status === 'disabled';
+  const status = health?.status || 'unknown'
+  const isHealthy = status === 'healthy'
+  const isDisabled = status === 'disabled'
 
   return (
     <div className="bubble p-4 hover-lift cursor-default">
@@ -581,8 +616,8 @@ function ServiceCard({
             isHealthy
               ? 'bg-emerald-500/10 text-emerald-400'
               : isDisabled
-              ? 'bg-gray-500/10 text-gray-400'
-              : 'bg-red-500/10 text-red-400'
+                ? 'bg-gray-500/10 text-gray-400'
+                : 'bg-red-500/10 text-red-400'
           )}
         >
           <Icon className="w-4 h-4" />
@@ -605,14 +640,12 @@ function ServiceCard({
       {health?.version && <p className="text-xs text-muted-foreground">v{health.version}</p>}
       {health?.error && (
         <Tooltip content={health.error}>
-          <p className="text-xs text-red-400/80 truncate cursor-help">
-            {health.error}
-          </p>
+          <p className="text-xs text-red-400/80 truncate cursor-help">{health.error}</p>
         </Tooltip>
       )}
       {health?.message && <p className="text-xs text-muted-foreground">{health.message}</p>}
     </div>
-  );
+  )
 }
 
 function ResourceCard({
@@ -621,18 +654,18 @@ function ResourceCard({
   icon: Icon,
   details,
 }: {
-  label: string;
-  percent: number;
-  icon: React.ElementType;
-  details: { label: string; value: string }[];
+  label: string
+  percent: number
+  icon: React.ElementType
+  details: { label: string; value: string }[]
 }) {
-  const percentage = Math.min(Math.max(percent, 0), 100);
+  const percentage = Math.min(Math.max(percent, 0), 100)
   const colorClass =
-    percentage >= 90 ? 'text-red-400' : percentage >= 70 ? 'text-amber-400' : 'text-emerald-400';
+    percentage >= 90 ? 'text-red-400' : percentage >= 70 ? 'text-amber-400' : 'text-emerald-400'
   const bgClass =
-    percentage >= 90 ? 'bg-red-500/10' : percentage >= 70 ? 'bg-amber-500/10' : 'bg-emerald-500/10';
+    percentage >= 90 ? 'bg-red-500/10' : percentage >= 70 ? 'bg-amber-500/10' : 'bg-emerald-500/10'
   const barColor =
-    percentage >= 90 ? 'bg-red-400' : percentage >= 70 ? 'bg-amber-400' : 'bg-emerald-400';
+    percentage >= 90 ? 'bg-red-400' : percentage >= 70 ? 'bg-amber-400' : 'bg-emerald-400'
 
   return (
     <div className="bubble p-4">
@@ -664,7 +697,7 @@ function ResourceCard({
         ))}
       </div>
     </div>
-  );
+  )
 }
 
 function DiskCard({
@@ -672,17 +705,24 @@ function DiskCard({
   disk,
   icon: Icon,
 }: {
-  label: string;
-  disk: { path: string; percent: number; total_bytes: number; used_bytes: number; free_bytes: number; fstype: string | null };
-  icon: React.ElementType;
+  label: string
+  disk: {
+    path: string
+    percent: number
+    total_bytes: number
+    used_bytes: number
+    free_bytes: number
+    fstype: string | null
+  }
+  icon: React.ElementType
 }) {
-  const percentage = Math.min(Math.max(disk.percent, 0), 100);
+  const percentage = Math.min(Math.max(disk.percent, 0), 100)
   const colorClass =
-    percentage >= 90 ? 'text-red-400' : percentage >= 70 ? 'text-amber-400' : 'text-emerald-400';
+    percentage >= 90 ? 'text-red-400' : percentage >= 70 ? 'text-amber-400' : 'text-emerald-400'
   const bgClass =
-    percentage >= 90 ? 'bg-red-500/10' : percentage >= 70 ? 'bg-amber-500/10' : 'bg-emerald-500/10';
+    percentage >= 90 ? 'bg-red-500/10' : percentage >= 70 ? 'bg-amber-500/10' : 'bg-emerald-500/10'
   const barColor =
-    percentage >= 90 ? 'bg-red-400' : percentage >= 70 ? 'bg-amber-400' : 'bg-emerald-400';
+    percentage >= 90 ? 'bg-red-400' : percentage >= 70 ? 'bg-amber-400' : 'bg-emerald-400'
 
   return (
     <div className="bubble p-4">
@@ -728,5 +768,5 @@ function DiskCard({
         </div>
       </div>
     </div>
-  );
+  )
 }

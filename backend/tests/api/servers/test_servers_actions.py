@@ -13,9 +13,14 @@ from app.models.environment_template import EnvironmentTemplate
 async def action_server(db_session, test_user):
     """Create a server with plan and environment for action tests."""
     plan = ServerPlan(
-        name="action-plan", slug="action-plan",
-        cpu_limit=1, memory_limit="1g", disk_limit="10g",
-        is_public=True, is_active=True, cost_per_hour=0,
+        name="action-plan",
+        slug="action-plan",
+        cpu_limit=1,
+        memory_limit="1g",
+        disk_limit="10g",
+        is_public=True,
+        is_active=True,
+        cost_per_hour=0,
         visible_to_roles=["user"],
     )
     env = EnvironmentTemplate(name="action-env", slug="action-env", image="test:latest")
@@ -25,8 +30,11 @@ async def action_server(db_session, test_user):
     await db_session.refresh(env)
 
     server = Server(
-        name="action-srv", user_id=test_user.id, status="stopped",
-        plan_id=plan.id, environment_id=env.id
+        name="action-srv",
+        user_id=test_user.id,
+        status="stopped",
+        plan_id=plan.id,
+        environment_id=env.id,
     )
     db_session.add(server)
     await db_session.commit()
@@ -52,14 +60,16 @@ class TestServerStart:
             with mock.patch("app.api.servers.spawner.spawn", return_value=mock_spawn):
                 response = await client.post(
                     f"/api/servers/{action_server.id}/start",
-                    headers={"Authorization": f"Bearer {user_token}"}
+                    headers={"Authorization": f"Bearer {user_token}"},
                 )
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "running"
 
     @pytest.mark.asyncio
-    async def test_start_server_already_running(self, client, user_token, action_server, db_session):
+    async def test_start_server_already_running(
+        self, client, user_token, action_server, db_session
+    ):
         """Starting already running server should return already running."""
         action_server.container_id = "existing-cid"
         action_server.status = "running"
@@ -69,7 +79,7 @@ class TestServerStart:
             with mock.patch("app.api.servers.spawner.get_status", return_value="running"):
                 response = await client.post(
                     f"/api/servers/{action_server.id}/start",
-                    headers={"Authorization": f"Bearer {user_token}"}
+                    headers={"Authorization": f"Bearer {user_token}"},
                 )
         assert response.status_code == 200
         data = response.json()
@@ -80,11 +90,16 @@ class TestServerStartNoContainerBranches:
     """Tests for _perform_server_start when no container_id (lines 946-1017)."""
 
     @pytest.mark.asyncio
-    async def test_perform_server_start_missing_config(self, client, user_token, test_user, db_session):
+    async def test_perform_server_start_missing_config(
+        self, client, user_token, test_user, db_session
+    ):
         """Starting server with missing plan_id should return 400."""
         server = Server(
-            name="no-plan-srv", user_id=test_user.id, status="stopped",
-            plan_id=None, environment_id=None
+            name="no-plan-srv",
+            user_id=test_user.id,
+            status="stopped",
+            plan_id=None,
+            environment_id=None,
         )
         db_session.add(server)
         await db_session.commit()
@@ -92,18 +107,24 @@ class TestServerStartNoContainerBranches:
 
         with mock.patch("app.api.servers.settings.credits_enabled", False):
             response = await client.post(
-                f"/api/servers/{server.id}/start",
-                headers={"Authorization": f"Bearer {user_token}"}
+                f"/api/servers/{server.id}/start", headers={"Authorization": f"Bearer {user_token}"}
             )
         assert response.status_code == 400
         assert "incomplete" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_perform_server_start_env_not_found(self, client, user_token, test_user, db_session):
+    async def test_perform_server_start_env_not_found(
+        self, client, user_token, test_user, db_session
+    ):
         """Starting server with non-existent environment should return 404."""
         plan = ServerPlan(
-            name="start-plan", slug="start-plan", cpu_limit=1, memory_limit="1g",
-            is_public=True, is_active=True, cost_per_hour=0,
+            name="start-plan",
+            slug="start-plan",
+            cpu_limit=1,
+            memory_limit="1g",
+            is_public=True,
+            is_active=True,
+            cost_per_hour=0,
             visible_to_roles=["user"],
         )
         db_session.add(plan)
@@ -111,8 +132,11 @@ class TestServerStartNoContainerBranches:
         await db_session.refresh(plan)
 
         server = Server(
-            name="no-env-srv", user_id=test_user.id, status="stopped",
-            plan_id=plan.id, environment_id="00000000-0000-0000-0000-000000000000"
+            name="no-env-srv",
+            user_id=test_user.id,
+            status="stopped",
+            plan_id=plan.id,
+            environment_id="00000000-0000-0000-0000-000000000000",
         )
         db_session.add(server)
         await db_session.commit()
@@ -120,14 +144,15 @@ class TestServerStartNoContainerBranches:
 
         with mock.patch("app.api.servers.settings.credits_enabled", False):
             response = await client.post(
-                f"/api/servers/{server.id}/start",
-                headers={"Authorization": f"Bearer {user_token}"}
+                f"/api/servers/{server.id}/start", headers={"Authorization": f"Bearer {user_token}"}
             )
         assert response.status_code == 404
         assert "Environment not found" in response.json()["detail"]
 
     @pytest.mark.asyncio
-    async def test_perform_server_start_plan_not_found(self, client, user_token, test_user, db_session):
+    async def test_perform_server_start_plan_not_found(
+        self, client, user_token, test_user, db_session
+    ):
         """Starting server with non-existent plan should return 404."""
         env = EnvironmentTemplate(name="start-env", slug="start-env", image="test:latest")
         db_session.add(env)
@@ -135,8 +160,11 @@ class TestServerStartNoContainerBranches:
         await db_session.refresh(env)
 
         server = Server(
-            name="no-plan-srv2", user_id=test_user.id, status="stopped",
-            plan_id="00000000-0000-0000-0000-000000000000", environment_id=env.id
+            name="no-plan-srv2",
+            user_id=test_user.id,
+            status="stopped",
+            plan_id="00000000-0000-0000-0000-000000000000",
+            environment_id=env.id,
         )
         db_session.add(server)
         await db_session.commit()
@@ -149,7 +177,7 @@ class TestServerStartNoContainerBranches:
                 mock_plan.get_by_id = mock.AsyncMock(return_value=None)
                 response = await client.post(
                     f"/api/servers/{server.id}/start",
-                    headers={"Authorization": f"Bearer {user_token}"}
+                    headers={"Authorization": f"Bearer {user_token}"},
                 )
         assert response.status_code == 404
         assert "Plan not found" in response.json()["detail"]
@@ -169,7 +197,7 @@ class TestServerStop:
             with mock.patch("app.api.servers.spawner.delete", return_value=True):
                 response = await client.post(
                     f"/api/servers/{action_server.id}/stop",
-                    headers={"Authorization": f"Bearer {user_token}"}
+                    headers={"Authorization": f"Bearer {user_token}"},
                 )
         assert response.status_code == 200
         data = response.json()
@@ -185,7 +213,7 @@ class TestServerStop:
         with mock.patch("app.api.servers.spawner.get_status", return_value="stopped"):
             response = await client.post(
                 f"/api/servers/{action_server.id}/stop",
-                headers={"Authorization": f"Bearer {user_token}"}
+                headers={"Authorization": f"Bearer {user_token}"},
             )
         assert response.status_code == 200
         data = response.json()
@@ -201,7 +229,7 @@ class TestServerStop:
         with mock.patch("app.api.servers.spawner.get_status", return_value="unknown"):
             response = await client.post(
                 f"/api/servers/{action_server.id}/stop",
-                headers={"Authorization": f"Bearer {user_token}"}
+                headers={"Authorization": f"Bearer {user_token}"},
             )
         assert response.status_code == 200
         data = response.json()
@@ -224,14 +252,16 @@ class TestServerRestart:
                     with mock.patch("app.api.servers.spawner.start", return_value=True):
                         response = await client.post(
                             f"/api/servers/{action_server.id}/restart",
-                            headers={"Authorization": f"Bearer {user_token}"}
+                            headers={"Authorization": f"Bearer {user_token}"},
                         )
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "running"
 
     @pytest.mark.asyncio
-    async def test_restart_server_container_unknown_recreate(self, client, user_token, action_server, db_session):
+    async def test_restart_server_container_unknown_recreate(
+        self, client, user_token, action_server, db_session
+    ):
         """Restarting server with unknown container should recreate (lines 1160-1202)."""
         action_server.container_id = "restart-unknown-cid"
         action_server.status = "running"
@@ -248,7 +278,7 @@ class TestServerRestart:
                 with mock.patch("app.api.servers.spawner.spawn", return_value=mock_spawn):
                     response = await client.post(
                         f"/api/servers/{action_server.id}/restart",
-                        headers={"Authorization": f"Bearer {user_token}"}
+                        headers={"Authorization": f"Bearer {user_token}"},
                     )
         assert response.status_code == 200
         data = response.json()
@@ -260,7 +290,9 @@ class TestServerDelete:
     """Tests for server delete endpoint."""
 
     @pytest.mark.asyncio
-    async def test_delete_server_with_container(self, client, user_token, action_server, db_session):
+    async def test_delete_server_with_container(
+        self, client, user_token, action_server, db_session
+    ):
         """Deleting server with container should delete container first."""
         action_server.container_id = "del-cid"
         action_server.status = "stopped"
@@ -270,6 +302,6 @@ class TestServerDelete:
             with mock.patch("app.api.servers.spawner.delete", return_value=True):
                 response = await client.delete(
                     f"/api/servers/{action_server.id}",
-                    headers={"Authorization": f"Bearer {user_token}"}
+                    headers={"Authorization": f"Bearer {user_token}"},
                 )
         assert response.status_code == 200

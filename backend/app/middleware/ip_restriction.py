@@ -91,9 +91,9 @@ async def _get_restrictions() -> List[dict]:
 
         async with AsyncSessionLocal() as db:
             result = await db.execute(
-                __import__("sqlalchemy", fromlist=["select"]).select(IPRestriction).where(
-                    IPRestriction.is_active == True
-                )
+                __import__("sqlalchemy", fromlist=["select"])
+                .select(IPRestriction)
+                .where(IPRestriction.is_active == True)
             )
             entries = [
                 {

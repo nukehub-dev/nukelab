@@ -20,7 +20,9 @@ router = APIRouter()
 
 
 class IPRestrictionCreate(BaseModel):
-    ip_range: str = Field(..., min_length=1, max_length=50, description="IP or CIDR range, e.g. 192.168.1.0/24")
+    ip_range: str = Field(
+        ..., min_length=1, max_length=50, description="IP or CIDR range, e.g. 192.168.1.0/24"
+    )
     restriction_type: str = Field(..., pattern="^(allow|block)$")
     note: Optional[str] = Field(None, max_length=500)
 
@@ -45,14 +47,14 @@ async def list_ip_restrictions(
     db: AsyncSession = Depends(get_db),
 ):
     """List all IP restrictions (allowlist + blocklist)."""
-    result = await db.execute(
-        select(IPRestriction).order_by(desc(IPRestriction.created_at))
-    )
+    result = await db.execute(select(IPRestriction).order_by(desc(IPRestriction.created_at)))
     entries = result.scalars().all()
     return [entry.to_dict() for entry in entries]
 
 
-@router.post("/ip-restrictions", response_model=IPRestrictionResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/ip-restrictions", response_model=IPRestrictionResponse, status_code=status.HTTP_201_CREATED
+)
 async def create_ip_restriction(
     req: IPRestrictionCreate,
     request: Request,
@@ -64,6 +66,7 @@ async def create_ip_restriction(
     # Validate IP/CIDR syntax
     try:
         import ipaddress
+
         ipaddress.ip_network(req.ip_range, strict=False)
     except ValueError:
         raise HTTPException(

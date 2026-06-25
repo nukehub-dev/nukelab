@@ -27,19 +27,14 @@ async def health_check():
 
 @router.get("/detailed")
 async def detailed_health_check(
-    _jwt = Depends(require_jwt_auth()),
+    _jwt=Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(require_permissions(Permission.ADMIN_ACCESS))
+    current_user=Depends(require_permissions(Permission.ADMIN_ACCESS)),
 ):
     """Detailed health check with service status"""
-    
-    health_data = {
-        "status": "healthy",
-        "timestamp": time.time(),
-        "services": {},
-        "resources": {}
-    }
-    
+
+    health_data = {"status": "healthy", "timestamp": time.time(), "services": {}, "resources": {}}
+
     # Database check
     try:
         start = time.time()
@@ -47,15 +42,12 @@ async def detailed_health_check(
         db_latency = (time.time() - start) * 1000
         health_data["services"]["database"] = {
             "status": "healthy",
-            "latency_ms": round(db_latency, 2)
+            "latency_ms": round(db_latency, 2),
         }
     except Exception as e:
-        health_data["services"]["database"] = {
-            "status": "unhealthy",
-            "error": str(e)
-        }
+        health_data["services"]["database"] = {"status": "unhealthy", "error": str(e)}
         health_data["status"] = "degraded"
-    
+
     # Redis check
     try:
         start = time.time()
@@ -65,18 +57,16 @@ async def detailed_health_check(
         await redis_client.aclose()
         health_data["services"]["redis"] = {
             "status": "healthy",
-            "latency_ms": round(redis_latency, 2)
+            "latency_ms": round(redis_latency, 2),
         }
     except Exception as e:
-        health_data["services"]["redis"] = {
-            "status": "unhealthy",
-            "error": str(e)
-        }
+        health_data["services"]["redis"] = {"status": "unhealthy", "error": str(e)}
         health_data["status"] = "degraded"
-    
+
     # Container runtime check
     try:
         from app.container.client import container_client
+
         await container_client.connect()
         version = await container_client.version()
         runtime_name = "Containers"
@@ -89,18 +79,17 @@ async def detailed_health_check(
             "runtime": runtime_name,
         }
     except Exception as e:
-        health_data["services"]["containers"] = {
-            "status": "unhealthy",
-            "error": str(e)
-        }
+        health_data["services"]["containers"] = {"status": "unhealthy", "error": str(e)}
         health_data["status"] = "degraded"
-    
+
     # SMTP check
     try:
         from app.services.email_service import EmailService
+
         email_service = EmailService()
         if email_service.enabled:
             import aiosmtplib
+
             smtp = aiosmtplib.SMTP(
                 hostname=email_service.smtp_host,
                 port=email_service.smtp_port,
@@ -115,22 +104,20 @@ async def detailed_health_check(
             health_data["services"]["smtp"] = {
                 "status": "healthy",
                 "host": email_service.smtp_host,
-                "port": email_service.smtp_port
+                "port": email_service.smtp_port,
             }
         else:
             health_data["services"]["smtp"] = {
                 "status": "disabled",
-                "message": "SMTP not configured"
+                "message": "SMTP not configured",
             }
     except Exception as e:
-        health_data["services"]["smtp"] = {
-            "status": "unhealthy",
-            "error": str(e)
-        }
+        health_data["services"]["smtp"] = {"status": "unhealthy", "error": str(e)}
         health_data["status"] = "degraded"
-    
+
     # System resources
     try:
+
         def get_disk_info(path: str):
             usage = psutil.disk_usage(path)
             return {
@@ -162,7 +149,7 @@ async def detailed_health_check(
             "cpu_percent": psutil.cpu_percent(interval=0.1),
             "memory_percent": psutil.virtual_memory().percent,
             "disk": {**disk_info, "fstype": fs_type},
-            "load_average": psutil.getloadavg()
+            "load_average": psutil.getloadavg(),
         }
         if container_disk_info:
             container_fs_type = None
@@ -173,15 +160,25 @@ async def detailed_health_check(
                         break
             except Exception:
                 pass
-            health_data["resources"]["container_disk"] = {**container_disk_info, "fstype": container_fs_type}
+            health_data["resources"]["container_disk"] = {
+                **container_disk_info,
+                "fstype": container_fs_type,
+            }
     except Exception:
         health_data["resources"] = {
             "cpu_percent": 0,
             "memory_percent": 0,
-            "disk": {"path": "/", "percent": 0, "total_bytes": 0, "used_bytes": 0, "free_bytes": 0, "fstype": None},
-            "load_average": (0, 0, 0)
+            "disk": {
+                "path": "/",
+                "percent": 0,
+                "total_bytes": 0,
+                "used_bytes": 0,
+                "free_bytes": 0,
+                "fstype": None,
+            },
+            "load_average": (0, 0, 0),
         }
-    
+
     return health_data
 
 
@@ -189,23 +186,26 @@ async def detailed_health_check(
 async def platform_status():
     """Get platform status and feature flags"""
     from app.services.oauth_service import oauth_service
-    
+
     return {
         "version": "2.0.0",
         "features": {
             "auth_mode": settings.auth_mode,
-            "oauth_enabled": oauth_service.is_configured and settings.auth_mode in ("oauth", "both"),
-            "oauth_provider_name": settings.oauth_provider_name if oauth_service.is_configured else None,
+            "oauth_enabled": oauth_service.is_configured
+            and settings.auth_mode in ("oauth", "both"),
+            "oauth_provider_name": settings.oauth_provider_name
+            if oauth_service.is_configured
+            else None,
             "registration_enabled": settings.registration_enabled,
             "credit_system_enabled": True,
             "websocket_enabled": True,
             "gravatar_enabled": True,
             "themes_enabled": True,
-            "notifications_enabled": True
+            "notifications_enabled": True,
         },
         "limits": {
             "max_servers_per_user": settings.max_servers_per_user,
             "max_file_upload_size": 10485760,  # 10MB
-            "api_rate_limit": 1000  # requests per hour
-        }
+            "api_rate_limit": 1000,  # requests per hour
+        },
     }

@@ -7,9 +7,7 @@ from app.db.base import Base
 
 class SystemMetric(Base):
     __tablename__ = "system_metrics"
-    __table_args__ = (
-        Index('ix_system_metrics_collected_at', 'collected_at'),
-    )
+    __table_args__ = (Index("ix_system_metrics_collected_at", "collected_at"),)
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     host = Column(String(255), nullable=False, default="localhost")

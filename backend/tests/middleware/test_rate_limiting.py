@@ -18,6 +18,7 @@ from app.websocket.metrics_socket import _check_ws_message_rate_limit
 
 # ─── Fixtures ──────────────────────────────────────────────────────────────
 
+
 @pytest.fixture(autouse=True)
 def reset_maintenance_mode():
     """Ensure maintenance mode is off before each rate limit test.
@@ -31,6 +32,7 @@ def reset_maintenance_mode():
 
 
 # ─── Mock Redis ────────────────────────────────────────────────────────────
+
 
 class MockRedis:
     """Simple async Redis mock supporting INCR, EXPIRE, EVALSHA, script_load."""
@@ -74,6 +76,7 @@ def mock_redis():
 
 # ─── HTTP Middleware Tests ─────────────────────────────────────────────────
 
+
 class TestRateLimitMiddleware:
     """Tests for the HTTP per-user rate limiting middleware."""
 
@@ -99,9 +102,7 @@ class TestRateLimitMiddleware:
         settings.rate_limit_enabled = True
         user_limit = ROLE_LIMITS["user"]
 
-        with patch.object(
-            RateLimitMiddleware, '_get_redis', return_value=mock_redis
-        ):
+        with patch.object(RateLimitMiddleware, "_get_redis", return_value=mock_redis):
             # Fire requests up to the limit
             for i in range(user_limit + 2):
                 response = await client.get(
@@ -127,9 +128,7 @@ class TestRateLimitMiddleware:
 
         assert admin_limit > user_limit
 
-        with patch.object(
-            RateLimitMiddleware, '_get_redis', return_value=mock_redis
-        ):
+        with patch.object(RateLimitMiddleware, "_get_redis", return_value=mock_redis):
             # Fire requests up to the user limit — admin should NOT be limited yet
             for _ in range(user_limit + 2):
                 response = await client.get(
@@ -145,9 +144,7 @@ class TestRateLimitMiddleware:
         """Super admins use the highest tier (3000/min) but are still rate-limited."""
         settings.rate_limit_enabled = True
 
-        with patch.object(
-            RateLimitMiddleware, '_get_redis', return_value=mock_redis
-        ):
+        with patch.object(RateLimitMiddleware, "_get_redis", return_value=mock_redis):
             # Fire requests — super admin gets high limit but still has headers
             for _ in range(50):
                 response = await client.get(
@@ -168,14 +165,16 @@ class TestRateLimitMiddleware:
 
         # Create an expired token
         expired_token = jose_jwt.encode(
-            {"sub": test_user.username, "role": test_user.role, "exp": datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1)},
+            {
+                "sub": test_user.username,
+                "role": test_user.role,
+                "exp": datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1),
+            },
             settings.jwt_secret,
             algorithm=settings.jwt_algorithm,
         )
 
-        with patch.object(
-            RateLimitMiddleware, '_get_redis', return_value=mock_redis
-        ):
+        with patch.object(RateLimitMiddleware, "_get_redis", return_value=mock_redis):
             # Fire many requests with expired token
             for _ in range(50):
                 response = await client.get(
@@ -189,6 +188,7 @@ class TestRateLimitMiddleware:
             # Now use a valid token — should NOT be rate limited because
             # the expired token requests didn't count against the user's quota
             from app.api.auth import create_access_token
+
             valid_token = create_access_token(
                 data={"sub": test_user.username, "role": test_user.role}
             )
@@ -203,9 +203,7 @@ class TestRateLimitMiddleware:
         """Successful responses should include rate limit headers."""
         settings.rate_limit_enabled = True
 
-        with patch.object(
-            RateLimitMiddleware, '_get_redis', return_value=mock_redis
-        ):
+        with patch.object(RateLimitMiddleware, "_get_redis", return_value=mock_redis):
             response = await client.get(
                 "/api/servers/",
                 headers={"Authorization": f"Bearer {user_token}"},
@@ -223,9 +221,7 @@ class TestRateLimitMiddleware:
         """If Redis is unavailable, traffic should continue (fail-open)."""
         settings.rate_limit_enabled = True
 
-        with patch.object(
-            RateLimitMiddleware, '_get_redis', side_effect=Exception("Redis down")
-        ):
+        with patch.object(RateLimitMiddleware, "_get_redis", side_effect=Exception("Redis down")):
             response = await client.get(
                 "/api/servers/",
                 headers={"Authorization": f"Bearer {user_token}"},
@@ -240,9 +236,7 @@ class TestRateLimitMiddleware:
         settings.rate_limit_enabled = True
         strict_limit = int(ROLE_LIMITS["user"] * settings.rate_limit_strict_multiplier)
 
-        with patch.object(
-            RateLimitMiddleware, '_get_redis', return_value=mock_redis
-        ):
+        with patch.object(RateLimitMiddleware, "_get_redis", return_value=mock_redis):
             # Fire requests to an admin endpoint up to strict limit
             for i in range(strict_limit + 2):
                 response = await client.get(
@@ -259,9 +253,7 @@ class TestRateLimitMiddleware:
         """Unauthenticated requests should fall back to IP-based limiting."""
         settings.rate_limit_enabled = True
 
-        with patch.object(
-            RateLimitMiddleware, '_get_redis', return_value=mock_redis
-        ):
+        with patch.object(RateLimitMiddleware, "_get_redis", return_value=mock_redis):
             # Make many unauthenticated requests
             for _ in range(ROLE_LIMITS["user"] + 2):
                 response = await client.get("/api/servers/")
@@ -271,6 +263,7 @@ class TestRateLimitMiddleware:
 
 
 # ─── WebSocket Message Throttling Tests ────────────────────────────────────
+
 
 class TestWebSocketRateLimiting:
     """Tests for WebSocket message-level rate throttling."""
@@ -327,9 +320,7 @@ class TestWebSocketRateLimiting:
         # Guest should hit limit first
         guest_exceeded_at = None
         for i in range(ROLE_LIMITS["admin"] + 5):
-            is_limited, _, _ = await _check_ws_message_rate_limit(
-                mock_redis, "guest_user", "guest"
-            )
+            is_limited, _, _ = await _check_ws_message_rate_limit(mock_redis, "guest_user", "guest")
             if is_limited and guest_exceeded_at is None:
                 guest_exceeded_at = i + 1
                 break
@@ -338,9 +329,7 @@ class TestWebSocketRateLimiting:
         mock_redis._data.clear()
         admin_exceeded_at = None
         for i in range(ROLE_LIMITS["admin"] + 5):
-            is_limited, _, _ = await _check_ws_message_rate_limit(
-                mock_redis, "admin_user", "admin"
-            )
+            is_limited, _, _ = await _check_ws_message_rate_limit(mock_redis, "admin_user", "admin")
             if is_limited and admin_exceeded_at is None:
                 admin_exceeded_at = i + 1
                 break
@@ -355,9 +344,7 @@ class TestWebSocketRateLimiting:
         settings.rate_limit_enabled = False
 
         for _ in range(500):
-            is_limited, _, _ = await _check_ws_message_rate_limit(
-                mock_redis, "testuser", "user"
-            )
+            is_limited, _, _ = await _check_ws_message_rate_limit(mock_redis, "testuser", "user")
             assert not is_limited
 
         # Restore

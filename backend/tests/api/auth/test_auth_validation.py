@@ -14,6 +14,7 @@ from app.models.environment_template import EnvironmentTemplate
 # POST /logout — stop_on_logout branches
 # ─────────────────────────────────────────────────────────────
 
+
 class TestLogoutStopOnLogout:
     """Tests for logout with stop_on_logout preference."""
 
@@ -24,9 +25,14 @@ class TestLogoutStopOnLogout:
         """Logout should stop running servers when stop_on_logout is True."""
         # Create a running server
         plan = ServerPlan(
-            name="stop-plan", slug="stop-plan",
-            cpu_limit=1, memory_limit="1g", disk_limit="10g",
-            is_public=True, is_active=True, cost_per_hour=0,
+            name="stop-plan",
+            slug="stop-plan",
+            cpu_limit=1,
+            memory_limit="1g",
+            disk_limit="10g",
+            is_public=True,
+            is_active=True,
+            cost_per_hour=0,
             visible_to_roles=["user"],
         )
         env = EnvironmentTemplate(name="stop-env", slug="stop-env", image="test:latest")
@@ -36,8 +42,12 @@ class TestLogoutStopOnLogout:
         await db_session.refresh(env)
 
         server = Server(
-            name="stop-srv", user_id=test_user.id, status="running",
-            container_id="stop-cid", plan_id=plan.id, environment_id=env.id,
+            name="stop-srv",
+            user_id=test_user.id,
+            status="running",
+            container_id="stop-cid",
+            plan_id=plan.id,
+            environment_id=env.id,
         )
         db_session.add(server)
         test_user.preferences = {"stop_on_logout": True}
@@ -50,9 +60,13 @@ class TestLogoutStopOnLogout:
                     mock_credit_cls.return_value.reconcile_server_billing = mock.AsyncMock()
                     with mock.patch("app.services.quota_service.QuotaService") as mock_quota_cls:
                         mock_quota_cls.return_value.decrement_usage = mock.AsyncMock()
-                        with mock.patch("app.services.notification_service.NotificationService") as mock_notif_cls:
+                        with mock.patch(
+                            "app.services.notification_service.NotificationService"
+                        ) as mock_notif_cls:
                             mock_notif_cls.return_value.server_stopped = mock.AsyncMock()
-                            with mock.patch("app.api.auth.broadcast_server_status_change") as mock_bc:
+                            with mock.patch(
+                                "app.api.auth.broadcast_server_status_change"
+                            ) as mock_bc:
                                 response = await client.post(
                                     "/api/auth/logout",
                                     headers={"Authorization": f"Bearer {user_token}"},
@@ -69,7 +83,9 @@ class TestLogoutStopOnLogout:
     ):
         """Logout should skip servers already stopped by spawner."""
         server = Server(
-            name="stopped-srv", user_id=test_user.id, status="running",
+            name="stopped-srv",
+            user_id=test_user.id,
+            status="running",
             container_id="stopped-cid",
         )
         db_session.add(server)
@@ -92,7 +108,9 @@ class TestLogoutStopOnLogout:
     ):
         """Logout should clear container_id when status is unknown."""
         server = Server(
-            name="unknown-srv", user_id=test_user.id, status="running",
+            name="unknown-srv",
+            user_id=test_user.id,
+            status="running",
             container_id="unknown-cid",
         )
         db_session.add(server)
@@ -115,7 +133,9 @@ class TestLogoutStopOnLogout:
     ):
         """Logout should continue even if spawner raises exception."""
         server = Server(
-            name="fail-srv", user_id=test_user.id, status="running",
+            name="fail-srv",
+            user_id=test_user.id,
+            status="running",
             container_id="fail-cid",
         )
         db_session.add(server)
@@ -135,7 +155,9 @@ class TestLogoutStopOnLogout:
     async def test_logout_no_stop_on_logout(self, client, user_token, test_user, db_session):
         """Logout should not stop servers when stop_on_logout is False."""
         server = Server(
-            name="keep-srv", user_id=test_user.id, status="running",
+            name="keep-srv",
+            user_id=test_user.id,
+            status="running",
             container_id="keep-cid",
         )
         db_session.add(server)
@@ -155,6 +177,7 @@ class TestLogoutStopOnLogout:
 # ─────────────────────────────────────────────────────────────
 # GET /verify — missing branches
 # ─────────────────────────────────────────────────────────────
+
 
 class TestVerifyBranches:
     """Tests for GET /verify missing branches."""
@@ -189,6 +212,7 @@ class TestVerifyBranches:
 # ─────────────────────────────────────────────────────────────
 # require_scopes — wildcard + missing context
 # ─────────────────────────────────────────────────────────────
+
 
 class TestRequireScopes:
     """Tests for require_scopes dependency."""
@@ -269,6 +293,7 @@ class TestRequireScopes:
 # ─────────────────────────────────────────────────────────────
 # require_jwt_auth — missing context
 # ─────────────────────────────────────────────────────────────
+
 
 class TestRequireJwtAuth:
     """Tests for require_jwt_auth dependency."""

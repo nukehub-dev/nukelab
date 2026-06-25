@@ -57,6 +57,7 @@ class TestCacheInvalidation:
     def test_invalidate_clears_cache(self):
         # Set cache directly
         from app.middleware import ip_restriction as mod
+
         mod._cache = ([{"id": "1", "ip_range": "1.1.1.1", "restriction_type": "block"}], 0)
         _invalidate_cache()
         assert mod._cache is None
@@ -73,7 +74,9 @@ class TestForbiddenResponse:
 class TestGetRestrictions:
     @pytest.mark.asyncio
     async def test_db_error_fails_open(self):
-        with mock.patch("app.middleware.ip_restriction.AsyncSessionLocal", side_effect=Exception("DB fail")):
+        with mock.patch(
+            "app.middleware.ip_restriction.AsyncSessionLocal", side_effect=Exception("DB fail")
+        ):
             result = await _get_restrictions()
             assert result == []
 
@@ -107,7 +110,9 @@ class TestMiddlewareDispatch:
 
     def test_allowlist_blocks_non_match(self, app):
         restrictions = [{"id": "1", "ip_range": "10.0.0.0/8", "restriction_type": "allow"}]
-        with mock.patch("app.middleware.ip_restriction._get_restrictions", return_value=restrictions):
+        with mock.patch(
+            "app.middleware.ip_restriction._get_restrictions", return_value=restrictions
+        ):
             client = TestClient(app)
             response = client.get("/api/test", headers={"X-Forwarded-For": "1.2.3.4"})
             assert response.status_code == 403
@@ -115,14 +120,18 @@ class TestMiddlewareDispatch:
 
     def test_allowlist_allows_match(self, app):
         restrictions = [{"id": "1", "ip_range": "10.0.0.0/8", "restriction_type": "allow"}]
-        with mock.patch("app.middleware.ip_restriction._get_restrictions", return_value=restrictions):
+        with mock.patch(
+            "app.middleware.ip_restriction._get_restrictions", return_value=restrictions
+        ):
             client = TestClient(app)
             response = client.get("/api/test", headers={"X-Forwarded-For": "10.0.0.5"})
             assert response.status_code == 200
 
     def test_blocklist_blocks_match(self, app):
         restrictions = [{"id": "1", "ip_range": "1.2.3.4", "restriction_type": "block"}]
-        with mock.patch("app.middleware.ip_restriction._get_restrictions", return_value=restrictions):
+        with mock.patch(
+            "app.middleware.ip_restriction._get_restrictions", return_value=restrictions
+        ):
             client = TestClient(app)
             response = client.get("/api/test", headers={"X-Forwarded-For": "1.2.3.4"})
             assert response.status_code == 403
@@ -130,14 +139,18 @@ class TestMiddlewareDispatch:
 
     def test_blocklist_allows_non_match(self, app):
         restrictions = [{"id": "1", "ip_range": "1.2.3.4", "restriction_type": "block"}]
-        with mock.patch("app.middleware.ip_restriction._get_restrictions", return_value=restrictions):
+        with mock.patch(
+            "app.middleware.ip_restriction._get_restrictions", return_value=restrictions
+        ):
             client = TestClient(app)
             response = client.get("/api/test", headers={"X-Forwarded-For": "5.6.7.8"})
             assert response.status_code == 200
 
     def test_auth_prefix_exempt(self, app):
         restrictions = [{"id": "1", "ip_range": "1.2.3.4", "restriction_type": "block"}]
-        with mock.patch("app.middleware.ip_restriction._get_restrictions", return_value=restrictions):
+        with mock.patch(
+            "app.middleware.ip_restriction._get_restrictions", return_value=restrictions
+        ):
             client = TestClient(app)
             response = client.get("/api/auth/login", headers={"X-Forwarded-For": "1.2.3.4"})
             assert response.status_code == 404  # no route, but middleware allowed it through

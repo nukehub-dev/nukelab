@@ -55,6 +55,7 @@ PATHS = {
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
+
 def rand_user_id() -> str:
     """Generate a random test username."""
     suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=8))

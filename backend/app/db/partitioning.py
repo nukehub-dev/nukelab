@@ -51,9 +51,7 @@ class PartitionManager:
 
     async def _partition_exists(self, table: str, partition_name: str) -> bool:
         result = await self.db.execute(
-            text(
-                "SELECT 1 FROM pg_class WHERE relname = :name AND relkind = 'r'"
-            ),
+            text("SELECT 1 FROM pg_class WHERE relname = :name AND relkind = 'r'"),
             {"name": partition_name},
         )
         return result.scalar() is not None
@@ -63,9 +61,7 @@ class PartitionManager:
         if await self._partition_exists(table, default_name):
             return
         await self.db.execute(
-            text(
-                f'CREATE TABLE IF NOT EXISTS "{default_name}" PARTITION OF "{table}" DEFAULT'
-            )
+            text(f'CREATE TABLE IF NOT EXISTS "{default_name}" PARTITION OF "{table}" DEFAULT')
         )
 
     async def create_partition(self, table: str, year: int, month: int) -> str:
@@ -103,9 +99,7 @@ class PartitionManager:
             created.append(name)
         return created
 
-    async def drop_old_partitions(
-        self, table: str, months_to_keep: int = 12
-    ) -> list[str]:
+    async def drop_old_partitions(self, table: str, months_to_keep: int = 12) -> list[str]:
         """
         Detach and drop partitions older than N months.
         Returns the list of dropped partition names.

@@ -5,7 +5,13 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
-from app.api.auth import get_current_user, get_password_hash, verify_password, limiter, require_jwt_auth
+from app.api.auth import (
+    get_current_user,
+    get_password_hash,
+    verify_password,
+    limiter,
+    require_jwt_auth,
+)
 from app.db.session import get_db
 from app.models.user import User
 from app.models.api_token import ApiToken
@@ -19,31 +25,52 @@ VALID_TOKEN_SCOPES = {
     "dashboard:read",
     "environments:read",
     "metrics:read",
-    "notifications:read", "notifications:write",
+    "notifications:read",
+    "notifications:write",
     "plans:read",
-    "preferences:read", "preferences:write",
+    "preferences:read",
+    "preferences:write",
     "quotas:read",
-    "schedules:read", "schedules:write",
-    "servers:read", "servers:start", "servers:stop", "servers:delete", "servers:manage",
-    "user:read", "user:update",
-    "volumes:read", "volumes:manage",
-    "workspaces:read", "workspaces:manage",
+    "schedules:read",
+    "schedules:write",
+    "servers:read",
+    "servers:start",
+    "servers:stop",
+    "servers:delete",
+    "servers:manage",
+    "user:read",
+    "user:update",
+    "volumes:read",
+    "volumes:manage",
+    "workspaces:read",
+    "workspaces:manage",
 }
 
 
 class TokenCreate(BaseModel):
-    name: str = Field(..., min_length=1, max_length=255, description="Token name (e.g., 'VS Code', 'GitHub Actions')")
-    scopes: List[str] = Field(default=["servers:read", "servers:start"], description="Permission scopes")
-    expires_days: Optional[int] = Field(default=30, ge=1, le=365, description="Token expiration in days")
+    name: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="Token name (e.g., 'VS Code', 'GitHub Actions')",
+    )
+    scopes: List[str] = Field(
+        default=["servers:read", "servers:start"], description="Permission scopes"
+    )
+    expires_days: Optional[int] = Field(
+        default=30, ge=1, le=365, description="Token expiration in days"
+    )
 
-    @field_validator('scopes', mode='before')
+    @field_validator("scopes", mode="before")
     @classmethod
     def validate_scope(cls, v):
         if not isinstance(v, list):
             raise ValueError("scopes must be a list")
         for scope in v:
             if scope not in VALID_TOKEN_SCOPES:
-                raise ValueError(f"Invalid scope: {scope}. Valid scopes: {', '.join(sorted(VALID_TOKEN_SCOPES))}")
+                raise ValueError(
+                    f"Invalid scope: {scope}. Valid scopes: {', '.join(sorted(VALID_TOKEN_SCOPES))}"
+                )
         return v
 
 
@@ -65,13 +92,11 @@ class TokenCreateResponse(TokenResponse):
 @router.get("", response_model=List[TokenResponse])
 async def list_tokens(
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """List all API tokens for the current user"""
-    result = await db.execute(
-        select(ApiToken).where(ApiToken.user_id == current_user.id)
-    )
+    result = await db.execute(select(ApiToken).where(ApiToken.user_id == current_user.id))
     tokens = result.scalars().all()
     return [token.to_dict() for token in tokens]
 
@@ -82,8 +107,8 @@ async def create_token(
     request: Request,
     token_data: TokenCreate,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Create a new API token. The token value is only returned once!"""
     # Generate a secure random token
@@ -94,7 +119,9 @@ async def create_token(
     # Calculate expiration
     expires_at = None
     if token_data.expires_days:
-        expires_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(days=token_data.expires_days)
+        expires_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(
+            days=token_data.expires_days
+        )
 
     # Create token record
     api_token = ApiToken(
@@ -112,11 +139,9 @@ async def create_token(
 
     # Notify user
     from app.services.notification_service import NotificationService
+
     notif_service = NotificationService(db)
-    await notif_service.api_key_created(
-        user_id=current_user.id,
-        key_name=token_data.name
-    )
+    await notif_service.api_key_created(user_id=current_user.id, key_name=token_data.name)
 
     # Return token with the raw token (only time it's shown)
     response = api_token.to_dict()
@@ -128,25 +153,17 @@ async def create_token(
 async def get_token(
     token_id: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get a specific token by ID"""
     result = await db.execute(
-        select(ApiToken).where(
-            and_(
-                ApiToken.id == token_id,
-                ApiToken.user_id == current_user.id
-            )
-        )
+        select(ApiToken).where(and_(ApiToken.id == token_id, ApiToken.user_id == current_user.id))
     )
     token = result.scalar_one_or_none()
 
     if not token:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Token not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token not found")
 
     return token.to_dict()
 
@@ -157,25 +174,17 @@ async def revoke_token(
     request: Request,
     token_id: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Revoke (soft-delete) an API token"""
     result = await db.execute(
-        select(ApiToken).where(
-            and_(
-                ApiToken.id == token_id,
-                ApiToken.user_id == current_user.id
-            )
-        )
+        select(ApiToken).where(and_(ApiToken.id == token_id, ApiToken.user_id == current_user.id))
     )
     token = result.scalar_one_or_none()
 
     if not token:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Token not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token not found")
 
     token.is_active = False
     token.revoked_at = datetime.now(UTC).replace(tzinfo=None)
@@ -190,25 +199,17 @@ async def permanently_delete_token(
     request: Request,
     token_id: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Permanently delete an API token from the database"""
     result = await db.execute(
-        select(ApiToken).where(
-            and_(
-                ApiToken.id == token_id,
-                ApiToken.user_id == current_user.id
-            )
-        )
+        select(ApiToken).where(and_(ApiToken.id == token_id, ApiToken.user_id == current_user.id))
     )
     token = result.scalar_one_or_none()
 
     if not token:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Token not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token not found")
 
     await db.delete(token)
     await db.commit()
@@ -222,25 +223,17 @@ async def regenerate_token(
     request: Request,
     token_id: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Regenerate an API token (revokes old one, creates new with same settings)"""
     result = await db.execute(
-        select(ApiToken).where(
-            and_(
-                ApiToken.id == token_id,
-                ApiToken.user_id == current_user.id
-            )
-        )
+        select(ApiToken).where(and_(ApiToken.id == token_id, ApiToken.user_id == current_user.id))
     )
     old_token = result.scalar_one_or_none()
 
     if not old_token:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Token not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token not found")
 
     # Revoke old token
     old_token.is_active = False
@@ -257,7 +250,9 @@ async def regenerate_token(
         token_hash=token_hash,
         token_prefix=token_prefix,
         scopes=old_token.scopes,
-        expires_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(days=30) if old_token.expires_at else None,
+        expires_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(days=30)
+        if old_token.expires_at
+        else None,
     )
 
     db.add(new_token)
@@ -273,25 +268,17 @@ async def regenerate_token(
 async def get_token_usage(
     token_id: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get usage statistics for a token"""
     result = await db.execute(
-        select(ApiToken).where(
-            and_(
-                ApiToken.id == token_id,
-                ApiToken.user_id == current_user.id
-            )
-        )
+        select(ApiToken).where(and_(ApiToken.id == token_id, ApiToken.user_id == current_user.id))
     )
     token = result.scalar_one_or_none()
 
     if not token:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Token not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token not found")
 
     return {
         "token_id": str(token.id),

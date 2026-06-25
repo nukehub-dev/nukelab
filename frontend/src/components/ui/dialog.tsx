@@ -1,14 +1,14 @@
-import * as React from 'react';
-import { cn } from '../../lib/utils';
-import { motion, AnimatePresence } from 'framer-motion';
-import { modalOverlayVariants } from '../../lib/animations';
-import { X } from 'lucide-react';
+import * as React from 'react'
+import { cn } from '../../lib/utils'
+import { motion, AnimatePresence } from 'framer-motion'
+import { modalOverlayVariants } from '../../lib/animations'
+import { X } from 'lucide-react'
 
 interface DialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  children: React.ReactNode;
-  size?: 'default' | 'lg' | 'xl' | '2xl' | 'full';
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  children: React.ReactNode
+  size?: 'default' | 'lg' | 'xl' | '2xl' | 'full'
 }
 
 const sizeClasses: Record<string, string> = {
@@ -17,24 +17,24 @@ const sizeClasses: Record<string, string> = {
   xl: 'w-[800px]',
   '2xl': 'w-[1000px]',
   full: 'w-[90vw]',
-};
+}
 
 function Dialog({ open, onOpenChange, children, size = 'default' }: DialogProps) {
   React.useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onOpenChange(false);
-    };
+      if (e.key === 'Escape') onOpenChange(false)
+    }
     if (open) {
-      document.addEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'hidden';
+      document.addEventListener('keydown', handleEscape)
+      document.body.style.overflow = 'hidden'
     }
     return () => {
-      document.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = '';
-    };
-  }, [open, onOpenChange]);
+      document.removeEventListener('keydown', handleEscape)
+      document.body.style.overflow = ''
+    }
+  }, [open, onOpenChange])
 
-  const widthClass = sizeClasses[size] || sizeClasses.default;
+  const widthClass = sizeClasses[size] || sizeClasses.default
 
   return (
     <AnimatePresence>
@@ -61,7 +61,7 @@ function Dialog({ open, onOpenChange, children, size = 'default' }: DialogProps)
             dragElastic={{ top: 0, bottom: 0.3 }}
             onDragEnd={(_, info) => {
               if (info.offset.y > 80 || info.velocity.y > 500) {
-                onOpenChange(false);
+                onOpenChange(false)
               }
             }}
           >
@@ -70,9 +70,7 @@ function Dialog({ open, onOpenChange, children, size = 'default' }: DialogProps)
               <div className="w-12 h-1.5 rounded-full bg-muted-foreground/30" />
             </div>
             {/* Content */}
-            <div className="flex-1 overflow-y-auto min-h-0">
-              {children}
-            </div>
+            <div className="flex-1 overflow-y-auto min-h-0">{children}</div>
           </motion.div>
           {/* Desktop: Right Drawer */}
           <motion.div
@@ -85,39 +83,29 @@ function Dialog({ open, onOpenChange, children, size = 'default' }: DialogProps)
             exit={{ x: '100%' }}
             transition={{ type: 'spring', stiffness: 300, damping: 30 }}
           >
-            <div className="h-full overflow-y-auto">
-              {children}
-            </div>
+            <div className="h-full overflow-y-auto">{children}</div>
           </motion.div>
         </>
       )}
     </AnimatePresence>
-  );
+  )
 }
 
 const DialogContent = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, children, ...props }, ref) => (
-    <div
-      ref={ref}
-      className={cn('relative p-6', className)}
-      {...props}
-    >
+    <div ref={ref} className={cn('relative p-6', className)} {...props}>
       {children}
     </div>
   )
-);
-DialogContent.displayName = 'DialogContent';
+)
+DialogContent.displayName = 'DialogContent'
 
 const DialogHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
-    <div
-      ref={ref}
-      className={cn('flex flex-col space-y-1.5 pr-10', className)}
-      {...props}
-    />
+    <div ref={ref} className={cn('flex flex-col space-y-1.5 pr-10', className)} {...props} />
   )
-);
-DialogHeader.displayName = 'DialogHeader';
+)
+DialogHeader.displayName = 'DialogHeader'
 
 const DialogTitle = React.forwardRef<HTMLHeadingElement, React.HTMLAttributes<HTMLHeadingElement>>(
   ({ className, ...props }, ref) => (
@@ -127,48 +115,57 @@ const DialogTitle = React.forwardRef<HTMLHeadingElement, React.HTMLAttributes<HT
       {...props}
     />
   )
-);
-DialogTitle.displayName = 'DialogTitle';
+)
+DialogTitle.displayName = 'DialogTitle'
 
-const DialogDescription = React.forwardRef<HTMLParagraphElement, React.HTMLAttributes<HTMLParagraphElement>>(
-  ({ className, ...props }, ref) => (
-    <p
-      ref={ref}
-      className={cn('text-sm text-muted-foreground', className)}
-      {...props}
-    />
-  )
-);
-DialogDescription.displayName = 'DialogDescription';
+const DialogDescription = React.forwardRef<
+  HTMLParagraphElement,
+  React.HTMLAttributes<HTMLParagraphElement>
+>(({ className, ...props }, ref) => (
+  <p ref={ref} className={cn('text-sm text-muted-foreground', className)} {...props} />
+))
+DialogDescription.displayName = 'DialogDescription'
 
 const DialogFooter = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
     <div
       ref={ref}
-      className={cn('flex flex-col-reverse gap-2 lg:flex-row lg:justify-end lg:gap-2 mt-6 pt-6 border-t border-border/50', className)}
-      {...props}
-    />
-  )
-);
-DialogFooter.displayName = 'DialogFooter';
-
-const DialogClose = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement>>(
-  ({ className, ...props }, ref) => (
-    <button
-      ref={ref}
       className={cn(
-        'absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100',
-        'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-        'disabled:pointer-events-none',
+        'flex flex-col-reverse gap-2 lg:flex-row lg:justify-end lg:gap-2 mt-6 pt-6 border-t border-border/50',
         className
       )}
       {...props}
-    >
-      <X className="h-4 w-4" />
-      <span className="sr-only">Close</span>
-    </button>
+    />
   )
-);
-DialogClose.displayName = 'DialogClose';
+)
+DialogFooter.displayName = 'DialogFooter'
 
-export { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose };
+const DialogClose = React.forwardRef<
+  HTMLButtonElement,
+  React.ButtonHTMLAttributes<HTMLButtonElement>
+>(({ className, ...props }, ref) => (
+  <button
+    ref={ref}
+    className={cn(
+      'absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100',
+      'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+      'disabled:pointer-events-none',
+      className
+    )}
+    {...props}
+  >
+    <X className="h-4 w-4" />
+    <span className="sr-only">Close</span>
+  </button>
+))
+DialogClose.displayName = 'DialogClose'
+
+export {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+}

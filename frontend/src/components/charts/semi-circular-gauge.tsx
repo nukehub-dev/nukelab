@@ -1,15 +1,15 @@
-import { cn } from '../../lib/utils';
+import { cn } from '../../lib/utils'
 
 interface SemiCircularGaugeProps {
-  value: number;
-  max?: number;
-  width?: number;
-  height?: number;
-  strokeWidth?: number;
-  color?: string;
-  bgColor?: string;
-  showValue?: boolean;
-  className?: string;
+  value: number
+  max?: number
+  width?: number
+  height?: number
+  strokeWidth?: number
+  color?: string
+  bgColor?: string
+  showValue?: boolean
+  className?: string
 }
 
 export function SemiCircularGauge({
@@ -23,19 +23,19 @@ export function SemiCircularGauge({
   showValue = false,
   className,
 }: SemiCircularGaugeProps) {
-  const radius = (width - strokeWidth) / 2;
-  const circumference = Math.PI * radius; // Half circle
-  const percentage = Math.min(Math.max((value / max) * 100, 0), 100);
-  const offset = circumference - (percentage / 100) * circumference;
+  const radius = (width - strokeWidth) / 2
+  const circumference = Math.PI * radius // Half circle
+  const percentage = Math.min(Math.max((value / max) * 100, 0), 100)
+  const offset = circumference - (percentage / 100) * circumference
 
   // Determine color based on percentage
   const getColor = () => {
-    if (percentage >= 90) return 'var(--destructive)';
-    if (percentage >= 70) return 'var(--chart-3)';
-    return color;
-  };
+    if (percentage >= 90) return 'var(--destructive)'
+    if (percentage >= 70) return 'var(--chart-3)'
+    return color
+  }
 
-  const centerY = height - strokeWidth / 2;
+  const centerY = height - strokeWidth / 2
 
   return (
     <div className={cn('relative inline-flex flex-col items-center', className)}>
@@ -69,5 +69,5 @@ export function SemiCircularGauge({
         </span>
       )}
     </div>
-  );
+  )
 }

@@ -163,9 +163,15 @@ class TestStartupEvent:
                         mock_session.return_value.__aenter__ = mock.AsyncMock(return_value=mock_db)
                         mock_session.return_value.__aexit__ = mock.AsyncMock(return_value=False)
                         with mock.patch("app.services.setting_service.SettingService"):
-                            with mock.patch("app.core.roles.load_role_permissions_from_db", new_callable=mock.AsyncMock):
+                            with mock.patch(
+                                "app.core.roles.load_role_permissions_from_db",
+                                new_callable=mock.AsyncMock,
+                            ):
                                 with mock.patch("app.main.manager") as mock_manager:
-                                    with mock.patch("app.api.auth.run_periodic_refresh_token_cleanup", new_callable=mock.AsyncMock):
+                                    with mock.patch(
+                                        "app.api.auth.run_periodic_refresh_token_cleanup",
+                                        new_callable=mock.AsyncMock,
+                                    ):
                                         await startup()
             mock_conn.run_sync.assert_called_once()
 
@@ -182,9 +188,15 @@ class TestStartupEvent:
                         mock_session.return_value.__aenter__ = mock.AsyncMock(return_value=mock_db)
                         mock_session.return_value.__aexit__ = mock.AsyncMock(return_value=False)
                         with mock.patch("app.services.setting_service.SettingService"):
-                            with mock.patch("app.core.roles.load_role_permissions_from_db", new_callable=mock.AsyncMock):
+                            with mock.patch(
+                                "app.core.roles.load_role_permissions_from_db",
+                                new_callable=mock.AsyncMock,
+                            ):
                                 with mock.patch("app.main.manager") as mock_manager:
-                                    with mock.patch("app.api.auth.run_periodic_refresh_token_cleanup", new_callable=mock.AsyncMock):
+                                    with mock.patch(
+                                        "app.api.auth.run_periodic_refresh_token_cleanup",
+                                        new_callable=mock.AsyncMock,
+                                    ):
                                         await startup()
 
     @pytest.mark.asyncio
@@ -199,10 +211,19 @@ class TestStartupEvent:
                         mock_db = mock.AsyncMock()
                         mock_session.return_value.__aenter__ = mock.AsyncMock(return_value=mock_db)
                         mock_session.return_value.__aexit__ = mock.AsyncMock(return_value=False)
-                        with mock.patch("app.services.setting_service.SettingService", side_effect=Exception("settings fail")):
-                            with mock.patch("app.core.roles.load_role_permissions_from_db", new_callable=mock.AsyncMock):
+                        with mock.patch(
+                            "app.services.setting_service.SettingService",
+                            side_effect=Exception("settings fail"),
+                        ):
+                            with mock.patch(
+                                "app.core.roles.load_role_permissions_from_db",
+                                new_callable=mock.AsyncMock,
+                            ):
                                 with mock.patch("app.main.manager") as mock_manager:
-                                    with mock.patch("app.api.auth.run_periodic_refresh_token_cleanup", new_callable=mock.AsyncMock):
+                                    with mock.patch(
+                                        "app.api.auth.run_periodic_refresh_token_cleanup",
+                                        new_callable=mock.AsyncMock,
+                                    ):
                                         await startup()
 
     @pytest.mark.asyncio
@@ -218,9 +239,15 @@ class TestStartupEvent:
                         mock_session.return_value.__aenter__ = mock.AsyncMock(return_value=mock_db)
                         mock_session.return_value.__aexit__ = mock.AsyncMock(return_value=False)
                         with mock.patch("app.services.setting_service.SettingService"):
-                            with mock.patch("app.core.roles.load_role_permissions_from_db", new_callable=mock.AsyncMock):
+                            with mock.patch(
+                                "app.core.roles.load_role_permissions_from_db",
+                                new_callable=mock.AsyncMock,
+                            ):
                                 with mock.patch("app.main.manager") as mock_manager:
-                                    with mock.patch("app.api.auth.run_periodic_refresh_token_cleanup", new_callable=mock.AsyncMock):
+                                    with mock.patch(
+                                        "app.api.auth.run_periodic_refresh_token_cleanup",
+                                        new_callable=mock.AsyncMock,
+                                    ):
                                         await startup()
                                         mock_manager.start_redis_listener.assert_called_once()
 
@@ -237,11 +264,20 @@ class TestStartupEvent:
                         mock_session.return_value.__aenter__ = mock.AsyncMock(return_value=mock_db)
                         mock_session.return_value.__aexit__ = mock.AsyncMock(return_value=False)
                         with mock.patch("app.services.setting_service.SettingService"):
-                            with mock.patch("app.core.roles.load_role_permissions_from_db", new_callable=mock.AsyncMock):
-                                with mock.patch("app.websocket.metrics_socket.manager") as mock_manager:
+                            with mock.patch(
+                                "app.core.roles.load_role_permissions_from_db",
+                                new_callable=mock.AsyncMock,
+                            ):
+                                with mock.patch(
+                                    "app.websocket.metrics_socket.manager"
+                                ) as mock_manager:
                                     mock_cleanup = mock.AsyncMock()
-                                    with mock.patch("app.api.auth.run_periodic_refresh_token_cleanup", return_value=mock_cleanup):
+                                    with mock.patch(
+                                        "app.api.auth.run_periodic_refresh_token_cleanup",
+                                        return_value=mock_cleanup,
+                                    ):
                                         await startup()
+
 
 """Coverage-focused tests for utility modules and easy wins."""
 
@@ -249,12 +285,14 @@ import pytest
 from unittest import mock
 from cryptography.fernet import InvalidToken
 
+
 class TestMain:
     """app/main.py coverage."""
 
     @pytest.mark.asyncio
     async def test_root_endpoint(self, client):
         from app.main import root
+
         response = await client.get("/")
         assert response.status_code == 200
         data = response.json()
@@ -263,8 +301,8 @@ class TestMain:
     @pytest.mark.asyncio
     async def test_health_endpoint(self, client):
         from app.main import health
+
         response = await client.get("/health")
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "healthy"
-

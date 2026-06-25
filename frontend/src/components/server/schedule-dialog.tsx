@@ -1,39 +1,63 @@
-import { useState } from 'react';
-import { Calendar, Plus, Play, Square, RotateCcw, Trash2, Clock, X } from 'lucide-react';
-import { cn, formatDate } from '../../lib/utils';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '../ui/dialog';
-import { Select, SelectItem } from '../ui/select';
-import { Input } from '../ui/input';
-import { CronBuilder } from '../cron-builder';
-import { humanizeSchedule, parseCron } from '../../lib/cron-utils';
-import { useServerSchedules, useCreateSchedule, useDeleteSchedule } from '../../hooks/use-servers';
-import { useConfirmDialog } from '../ui/confirm-dialog';
+import { useState } from 'react'
+import { Calendar, Plus, Play, Square, RotateCcw, Trash2, Clock, X } from 'lucide-react'
+import { cn, formatDate } from '../../lib/utils'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '../ui/dialog'
+import { Select, SelectItem } from '../ui/select'
+import { Input } from '../ui/input'
+import { CronBuilder } from '../cron-builder'
+import { humanizeSchedule, parseCron } from '../../lib/cron-utils'
+import { useServerSchedules, useCreateSchedule, useDeleteSchedule } from '../../hooks/use-servers'
+import { useConfirmDialog } from '../ui/confirm-dialog'
 
 interface ScheduleDialogProps {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  serverId: string | null;
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  serverId: string | null
 }
 
 function actionMeta(action: string) {
   switch (action) {
-    case 'start': return { icon: Play, label: 'Start', bg: 'bg-emerald-500/10', text: 'text-emerald-400', iconBg: 'bg-emerald-500/15' };
-    case 'stop': return { icon: Square, label: 'Stop', bg: 'bg-amber-500/10', text: 'text-amber-400', iconBg: 'bg-amber-500/15' };
-    default: return { icon: RotateCcw, label: 'Restart', bg: 'bg-primary/10', text: 'text-primary', iconBg: 'bg-primary/15' };
+    case 'start':
+      return {
+        icon: Play,
+        label: 'Start',
+        bg: 'bg-emerald-500/10',
+        text: 'text-emerald-400',
+        iconBg: 'bg-emerald-500/15',
+      }
+    case 'stop':
+      return {
+        icon: Square,
+        label: 'Stop',
+        bg: 'bg-amber-500/10',
+        text: 'text-amber-400',
+        iconBg: 'bg-amber-500/15',
+      }
+    default:
+      return {
+        icon: RotateCcw,
+        label: 'Restart',
+        bg: 'bg-primary/10',
+        text: 'text-primary',
+        iconBg: 'bg-primary/15',
+      }
   }
 }
 
 export function ScheduleDialog({ open, onOpenChange, serverId }: ScheduleDialogProps) {
-  const [showForm, setShowForm] = useState(false);
-  const [newSchedule, setNewSchedule] = useState<{ action: 'start' | 'stop' | 'restart'; cron_expression: string; timezone: string; is_active: boolean }>(
-    { action: 'start', cron_expression: '0 9 * * *', timezone: 'UTC', is_active: true }
-  );
-  const { data: schedules = [] } = useServerSchedules(serverId || '');
-  const createSchedule = useCreateSchedule();
-  const deleteSchedule = useDeleteSchedule();
-  const { confirm, dialog } = useConfirmDialog();
+  const [showForm, setShowForm] = useState(false)
+  const [newSchedule, setNewSchedule] = useState<{
+    action: 'start' | 'stop' | 'restart'
+    cron_expression: string
+    timezone: string
+    is_active: boolean
+  }>({ action: 'start', cron_expression: '0 9 * * *', timezone: 'UTC', is_active: true })
+  const { data: schedules = [] } = useServerSchedules(serverId || '')
+  const createSchedule = useCreateSchedule()
+  const deleteSchedule = useDeleteSchedule()
+  const { confirm, dialog } = useConfirmDialog()
 
-  if (!serverId) return null;
+  if (!serverId) return null
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -75,7 +99,12 @@ export function ScheduleDialog({ open, onOpenChange, serverId }: ScheduleDialogP
                   <label className="text-xs text-muted-foreground mb-1 block">Action</label>
                   <Select
                     value={newSchedule.action}
-                    onChange={(value) => setNewSchedule({ ...newSchedule, action: value as 'start' | 'stop' | 'restart' })}
+                    onChange={(value) =>
+                      setNewSchedule({
+                        ...newSchedule,
+                        action: value as 'start' | 'stop' | 'restart',
+                      })
+                    }
                   >
                     <SelectItem value="start">Start</SelectItem>
                     <SelectItem value="stop">Stop</SelectItem>
@@ -102,9 +131,14 @@ export function ScheduleDialog({ open, onOpenChange, serverId }: ScheduleDialogP
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => {
-                    createSchedule.mutate({ serverId, data: newSchedule });
-                    setShowForm(false);
-                    setNewSchedule({ action: 'start', cron_expression: '0 9 * * *', timezone: 'UTC', is_active: true });
+                    createSchedule.mutate({ serverId, data: newSchedule })
+                    setShowForm(false)
+                    setNewSchedule({
+                      action: 'start',
+                      cron_expression: '0 9 * * *',
+                      timezone: 'UTC',
+                      is_active: true,
+                    })
                   }}
                   className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
                 >
@@ -129,22 +163,29 @@ export function ScheduleDialog({ open, onOpenChange, serverId }: ScheduleDialogP
           ) : (
             <div className="space-y-2 max-h-[400px] overflow-y-auto">
               {schedules.map((schedule) => {
-                const meta = actionMeta(schedule.action);
-                const ActionIcon = meta.icon;
-                const parsed = parseCron(schedule.cron_expression);
-                const humanCron = humanizeSchedule(parsed.minute, parsed.hour, parsed.days);
+                const meta = actionMeta(schedule.action)
+                const ActionIcon = meta.icon
+                const parsed = parseCron(schedule.cron_expression)
+                const humanCron = humanizeSchedule(parsed.minute, parsed.hour, parsed.days)
                 return (
-                  <div key={schedule.id} className="flex items-center gap-3 p-3 rounded-xl bg-surface/50 border border-border/50">
+                  <div
+                    key={schedule.id}
+                    className="flex items-center gap-3 p-3 rounded-xl bg-surface/50 border border-border/50"
+                  >
                     <div className={cn('p-2.5 rounded-xl flex-shrink-0', meta.iconBg)}>
                       <ActionIcon className={cn('w-4 h-4', meta.text)} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium capitalize">{meta.label}</span>
-                        <span className={cn(
-                          'text-xs px-2 py-0.5 rounded-full font-medium',
-                          schedule.is_active ? 'bg-emerald-500/10 text-emerald-400' : 'bg-muted text-muted-foreground'
-                        )}>
+                        <span
+                          className={cn(
+                            'text-xs px-2 py-0.5 rounded-full font-medium',
+                            schedule.is_active
+                              ? 'bg-emerald-500/10 text-emerald-400'
+                              : 'bg-muted text-muted-foreground'
+                          )}
+                        >
                           {schedule.is_active ? 'Active' : 'Inactive'}
                         </span>
                       </div>
@@ -166,15 +207,15 @@ export function ScheduleDialog({ open, onOpenChange, serverId }: ScheduleDialogP
                           confirmLabel: 'Delete',
                           cancelLabel: 'Cancel',
                           variant: 'danger',
-                        });
-                        if (confirmed) deleteSchedule.mutate({ serverId, scheduleId: schedule.id });
+                        })
+                        if (confirmed) deleteSchedule.mutate({ serverId, scheduleId: schedule.id })
                       }}
                       className="p-2 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors flex-shrink-0"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                );
+                )
               })}
             </div>
           )}
@@ -182,5 +223,5 @@ export function ScheduleDialog({ open, onOpenChange, serverId }: ScheduleDialogP
         {dialog}
       </DialogContent>
     </Dialog>
-  );
+  )
 }

@@ -21,8 +21,7 @@ class TestAuthModeOAuth:
         settings.auth_mode = "oauth"
         try:
             response = await client.post(
-                "/api/auth/login",
-                data={"username": "testuser", "password": "testpass123"}
+                "/api/auth/login", data={"username": "testuser", "password": "testpass123"}
             )
             assert response.status_code == 403
             assert "disabled" in response.json()["detail"].lower()
@@ -42,10 +41,7 @@ class TestCustomHTTPBearer:
     @pytest.mark.asyncio
     async def test_me_with_invalid_scheme(self, client):
         """Request with invalid auth scheme should 401."""
-        response = await client.get(
-            "/api/auth/me",
-            headers={"Authorization": "Basic dXNlcjpwYXNz"}
-        )
+        response = await client.get("/api/auth/me", headers={"Authorization": "Basic dXNlcjpwYXNz"})
         assert response.status_code == 401
         assert "Invalid authentication scheme" in response.json()["detail"]
 
@@ -53,8 +49,7 @@ class TestCustomHTTPBearer:
     async def test_me_with_token_scheme(self, client, user_token):
         """Request with 'Token <token>' scheme should work."""
         response = await client.get(
-            "/api/auth/me",
-            headers={"Authorization": f"Token {user_token}"}
+            "/api/auth/me", headers={"Authorization": f"Token {user_token}"}
         )
         assert response.status_code == 200
         assert response.json()["username"] == "testuser"
@@ -73,20 +68,14 @@ class TestVerifyEndpoint:
     @pytest.mark.asyncio
     async def test_verify_invalid_scheme(self, client):
         """Verify with invalid scheme should 401."""
-        response = await client.get(
-            "/api/auth/verify",
-            headers={"Authorization": "Basic invalid"}
-        )
+        response = await client.get("/api/auth/verify", headers={"Authorization": "Basic invalid"})
         assert response.status_code == 401
         assert "Invalid scheme" in response.json()["detail"]
 
     @pytest.mark.asyncio
     async def test_verify_cookie_token(self, client, user_token):
         """Verify should accept token from cookie."""
-        response = await client.get(
-            "/api/auth/verify",
-            cookies={"nukelab_token": user_token}
-        )
+        response = await client.get("/api/auth/verify", cookies={"nukelab_token": user_token})
         assert response.status_code == 200
         assert "X-User-Id" in response.headers
 
@@ -107,8 +96,7 @@ class TestVerifyEndpoint:
         await db_session.commit()
 
         response = await client.get(
-            "/api/auth/verify",
-            headers={"Authorization": f"Bearer {token_plain}"}
+            "/api/auth/verify", headers={"Authorization": f"Bearer {token_plain}"}
         )
         assert response.status_code == 401
 
@@ -129,8 +117,7 @@ class TestVerifyEndpoint:
         await db_session.commit()
 
         response = await client.get(
-            "/api/auth/verify",
-            headers={"Authorization": f"Bearer {token_plain}"}
+            "/api/auth/verify", headers={"Authorization": f"Bearer {token_plain}"}
         )
         assert response.status_code == 200
         assert "X-User-Id" in response.headers
@@ -170,8 +157,7 @@ class TestRefreshInactiveUser:
         """Refresh should fail if user is inactive."""
         # Login first
         login_resp = await client.post(
-            "/api/auth/login",
-            data={"username": "testuser", "password": "testpass123"}
+            "/api/auth/login", data={"username": "testuser", "password": "testpass123"}
         )
         if login_resp.status_code == 429:
             pytest.skip("Rate limited")
@@ -181,10 +167,7 @@ class TestRefreshInactiveUser:
         test_user.is_active = False
         await db_session.commit()
 
-        response = await client.post(
-            "/api/auth/refresh",
-            json={"refresh_token": refresh_token}
-        )
+        response = await client.post("/api/auth/refresh", json={"refresh_token": refresh_token})
         assert response.status_code == 401
         assert "inactive" in response.json()["detail"].lower()
 
@@ -212,8 +195,7 @@ class TestRequireScopes:
 
         # Try to access admin endpoint with wrong scope
         response = await client.get(
-            "/api/admin/users",
-            headers={"Authorization": f"Bearer {token_plain}"}
+            "/api/admin/users", headers={"Authorization": f"Bearer {token_plain}"}
         )
         # Should be 403 due to insufficient scope (admin requires different scope)
         assert response.status_code in [403, 401]
@@ -239,8 +221,7 @@ class TestRequireJWTAuth:
         await db_session.commit()
 
         response = await client.post(
-            "/api/auth/oauth/sync",
-            headers={"Authorization": f"Bearer {token_plain}"}
+            "/api/auth/oauth/sync", headers={"Authorization": f"Bearer {token_plain}"}
         )
         assert response.status_code == 403
         assert "JWT authentication required" in response.json()["detail"]
@@ -253,7 +234,10 @@ class TestOAuthLoginErrors:
     async def test_oauth_login_not_configured(self, client):
         """OAuth login should 503 when not configured."""
         from app.services.oauth_service import OAuthService
-        with mock.patch.object(OAuthService, "is_configured", new_callable=mock.PropertyMock, return_value=False):
+
+        with mock.patch.object(
+            OAuthService, "is_configured", new_callable=mock.PropertyMock, return_value=False
+        ):
             response = await client.get("/api/auth/oauth/login")
             assert response.status_code == 503
             assert "not configured" in response.json()["detail"].lower()
@@ -265,7 +249,10 @@ class TestOAuthLoginErrors:
         settings.auth_mode = "local"
         try:
             from app.services.oauth_service import OAuthService
-            with mock.patch.object(OAuthService, "is_configured", new_callable=mock.PropertyMock, return_value=True):
+
+            with mock.patch.object(
+                OAuthService, "is_configured", new_callable=mock.PropertyMock, return_value=True
+            ):
                 response = await client.get("/api/auth/oauth/login")
                 assert response.status_code == 403
                 assert "disabled" in response.json()["detail"].lower()
@@ -281,8 +268,7 @@ class TestOAuthSyncErrors:
         """OAuth sync should fail for non-OAuth users."""
         test_user.oauth_provider = None
         response = await client.post(
-            "/api/auth/oauth/sync",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/auth/oauth/sync", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 400
         assert "Not an OAuth user" in response.json()["detail"]
@@ -293,8 +279,7 @@ class TestOAuthSyncErrors:
         test_user.oauth_provider = "oauth"
         test_user.security = {"oauth_refresh_token": None}
         response = await client.post(
-            "/api/auth/oauth/sync",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/auth/oauth/sync", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 400
         assert "No refresh token available" in response.json()["detail"]
@@ -309,23 +294,21 @@ class TestLogoutWithStopOnLogout:
         from app.models.server import Server
 
         test_user.preferences = {"stop_on_logout": True}
-        server = Server(name="running-srv", user_id=test_user.id, status="running", container_id=None)
+        server = Server(
+            name="running-srv", user_id=test_user.id, status="running", container_id=None
+        )
         db_session.add(server)
         await db_session.commit()
 
         # Login
         login_resp = await client.post(
-            "/api/auth/login",
-            data={"username": "testuser", "password": "testpass123"}
+            "/api/auth/login", data={"username": "testuser", "password": "testpass123"}
         )
         if login_resp.status_code == 429:
             pytest.skip("Rate limited")
         refresh_token = login_resp.json()["refresh_token"]
 
-        response = await client.post(
-            "/api/auth/logout",
-            json={"refresh_token": refresh_token}
-        )
+        response = await client.post("/api/auth/logout", json={"refresh_token": refresh_token})
         assert response.status_code == 200
         assert "Logged out" in response.json()["message"]
 

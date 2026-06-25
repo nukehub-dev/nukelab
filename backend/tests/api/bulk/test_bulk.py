@@ -17,10 +17,7 @@ class TestBulkServerActions:
         response = await client.post(
             "/api/bulk/servers/bulk-action",
             headers={"Authorization": f"Bearer {admin_token}"},
-            json={
-                "action": "invalid_action",
-                "server_ids": ["123", "456"]
-            }
+            json={"action": "invalid_action", "server_ids": ["123", "456"]},
         )
 
         assert response.status_code == 400
@@ -32,10 +29,7 @@ class TestBulkServerActions:
         response = await client.post(
             "/api/bulk/servers/bulk-action",
             headers={"Authorization": f"Bearer {admin_token}"},
-            json={
-                "action": "start",
-                "server_ids": []
-            }
+            json={"action": "start", "server_ids": []},
         )
 
         # Should not be 400 (invalid action), may be 200 or 422 for empty list
@@ -47,10 +41,7 @@ class TestBulkServerActions:
         response = await client.post(
             "/api/bulk/servers/bulk-action",
             headers={"Authorization": f"Bearer {admin_token}"},
-            json={
-                "action": "stop",
-                "server_ids": []
-            }
+            json={"action": "stop", "server_ids": []},
         )
 
         assert response.status_code != 400
@@ -61,10 +52,7 @@ class TestBulkServerActions:
         response = await client.post(
             "/api/bulk/servers/bulk-action",
             headers={"Authorization": f"Bearer {admin_token}"},
-            json={
-                "action": "restart",
-                "server_ids": []
-            }
+            json={"action": "restart", "server_ids": []},
         )
 
         assert response.status_code != 400
@@ -75,10 +63,7 @@ class TestBulkServerActions:
         response = await client.post(
             "/api/bulk/servers/bulk-action",
             headers={"Authorization": f"Bearer {admin_token}"},
-            json={
-                "action": "delete",
-                "server_ids": []
-            }
+            json={"action": "delete", "server_ids": []},
         )
 
         assert response.status_code != 400
@@ -188,10 +173,7 @@ class TestBulkServerLifecycle:
             response = await client.post(
                 "/api/bulk/servers/bulk-action",
                 headers=headers,
-                json={
-                    "action": "start",
-                    "server_ids": [str(stopped_server.id)]
-                }
+                json={"action": "start", "server_ids": [str(stopped_server.id)]},
             )
 
         assert response.status_code == 200
@@ -202,7 +184,9 @@ class TestBulkServerLifecycle:
         mock_start.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_bulk_start_already_running_server_fails(self, client: AsyncClient, user_token, running_server):
+    async def test_bulk_start_already_running_server_fails(
+        self, client: AsyncClient, user_token, running_server
+    ):
         """Bulk start on an already running server should report failure."""
         headers = {"Authorization": f"Bearer {user_token}"}
 
@@ -210,10 +194,7 @@ class TestBulkServerLifecycle:
             response = await client.post(
                 "/api/bulk/servers/bulk-action",
                 headers=headers,
-                json={
-                    "action": "start",
-                    "server_ids": [str(running_server.id)]
-                }
+                json={"action": "start", "server_ids": [str(running_server.id)]},
             )
 
         assert response.status_code == 200
@@ -231,10 +212,7 @@ class TestBulkServerLifecycle:
             response = await client.post(
                 "/api/bulk/servers/bulk-action",
                 headers=headers,
-                json={
-                    "action": "stop",
-                    "server_ids": [str(running_server.id)]
-                }
+                json={"action": "stop", "server_ids": [str(running_server.id)]},
             )
 
         assert response.status_code == 200
@@ -244,7 +222,9 @@ class TestBulkServerLifecycle:
         mock_stop.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_bulk_stop_already_stopped_server_fails(self, client: AsyncClient, user_token, stopped_server):
+    async def test_bulk_stop_already_stopped_server_fails(
+        self, client: AsyncClient, user_token, stopped_server
+    ):
         """Bulk stop on an already stopped server should report failure."""
         headers = {"Authorization": f"Bearer {user_token}"}
 
@@ -252,10 +232,7 @@ class TestBulkServerLifecycle:
             response = await client.post(
                 "/api/bulk/servers/bulk-action",
                 headers=headers,
-                json={
-                    "action": "stop",
-                    "server_ids": [str(stopped_server.id)]
-                }
+                json={"action": "stop", "server_ids": [str(stopped_server.id)]},
             )
 
         assert response.status_code == 200
@@ -273,10 +250,7 @@ class TestBulkServerLifecycle:
             response = await client.post(
                 "/api/bulk/servers/bulk-action",
                 headers=headers,
-                json={
-                    "action": "restart",
-                    "server_ids": [str(running_server.id)]
-                }
+                json={"action": "restart", "server_ids": [str(running_server.id)]},
             )
 
         assert response.status_code == 200
@@ -294,10 +268,7 @@ class TestBulkServerLifecycle:
             response = await client.post(
                 "/api/bulk/servers/bulk-action",
                 headers=headers,
-                json={
-                    "action": "delete",
-                    "server_ids": [str(stopped_server.id)]
-                }
+                json={"action": "delete", "server_ids": [str(stopped_server.id)]},
             )
 
         assert response.status_code == 200
@@ -307,7 +278,9 @@ class TestBulkServerLifecycle:
         mock_delete.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_bulk_mixed_results(self, client: AsyncClient, user_token, stopped_server, running_server):
+    async def test_bulk_mixed_results(
+        self, client: AsyncClient, user_token, stopped_server, running_server
+    ):
         """Bulk action on multiple servers should report mixed success/failure."""
         headers = {"Authorization": f"Bearer {user_token}"}
 
@@ -317,8 +290,8 @@ class TestBulkServerLifecycle:
                 headers=headers,
                 json={
                     "action": "start",
-                    "server_ids": [str(stopped_server.id), str(running_server.id)]
-                }
+                    "server_ids": [str(stopped_server.id), str(running_server.id)],
+                },
             )
 
         assert response.status_code == 200
@@ -338,10 +311,7 @@ class TestBulkServerLifecycle:
         response = await client.post(
             "/api/bulk/servers/bulk-action",
             headers=headers,
-            json={
-                "action": "start",
-                "server_ids": ["00000000-0000-0000-0000-000000000000"]
-            }
+            json={"action": "start", "server_ids": ["00000000-0000-0000-0000-000000000000"]},
         )
 
         assert response.status_code == 200
@@ -360,7 +330,9 @@ class TestBulkServerLifecycle:
 
         # Ensure admin role has SERVERS_ACCESS_OTHERS
         if "servers:access_others" not in ROLE_PERMISSIONS.get("admin", []):
-            ROLE_PERMISSIONS["admin"] = list(set(ROLE_PERMISSIONS.get("admin", []) + ["servers:access_others"]))
+            ROLE_PERMISSIONS["admin"] = list(
+                set(ROLE_PERMISSIONS.get("admin", []) + ["servers:access_others"])
+            )
             _rebuild_expansion_cache()
 
         headers = {"Authorization": f"Bearer {admin_token}"}
@@ -371,9 +343,9 @@ class TestBulkServerLifecycle:
                 headers=headers,
                 json={
                     "action": "start",
-                    "server_ids": [str(stopped_server.id)]
+                    "server_ids": [str(stopped_server.id)],
                     # No reason provided
-                }
+                },
             )
 
         assert response.status_code == 200
@@ -391,7 +363,9 @@ class TestBulkServerLifecycle:
 
         # Ensure admin role has SERVERS_ACCESS_OTHERS
         if "servers:access_others" not in ROLE_PERMISSIONS.get("admin", []):
-            ROLE_PERMISSIONS["admin"] = list(set(ROLE_PERMISSIONS.get("admin", []) + ["servers:access_others"]))
+            ROLE_PERMISSIONS["admin"] = list(
+                set(ROLE_PERMISSIONS.get("admin", []) + ["servers:access_others"])
+            )
             _rebuild_expansion_cache()
 
         headers = {"Authorization": f"Bearer {admin_token}"}
@@ -403,8 +377,8 @@ class TestBulkServerLifecycle:
                 json={
                     "action": "start",
                     "server_ids": [str(stopped_server.id)],
-                    "reason": "Maintenance required"
-                }
+                    "reason": "Maintenance required",
+                },
             )
 
         assert response.status_code == 200
@@ -421,10 +395,7 @@ class TestBulkServerLifecycle:
         response = await client.post(
             "/api/bulk/servers/bulk-action",
             headers=headers,
-            json={
-                "action": "delete",
-                "server_ids": []
-            }
+            json={"action": "delete", "server_ids": []},
         )
 
         assert response.status_code == 200
@@ -446,14 +417,12 @@ class TestBulkServerLifecycle:
         response = await client.post(
             "/api/bulk/servers/bulk-action",
             headers=headers,
-            json={
-                "action": "start",
-                "server_ids": []
-            }
+            json={"action": "start", "server_ids": []},
         )
 
         # Regular users can access this endpoint
         assert response.status_code == 200
+
 
 """Extended tests for small API modules — coverage gap closure."""
 
@@ -485,6 +454,7 @@ def reset_maintenance_state():
 # Schedules API
 # ─────────────────────────────────────────────────────────────
 
+
 class TestBulkExtended:
     """Tests for bulk endpoint coverage gaps."""
 
@@ -513,5 +483,3 @@ class TestBulkExtended:
 # ─────────────────────────────────────────────────────────────
 # Dashboard API
 # ─────────────────────────────────────────────────────────────
-
-

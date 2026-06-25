@@ -1,6 +1,6 @@
-import { createFileRoute, Link } from '@tanstack/react-router';
-import { useState, useMemo } from 'react';
-import { motion } from 'framer-motion';
+import { createFileRoute, Link } from '@tanstack/react-router'
+import { useState, useMemo } from 'react'
+import { motion } from 'framer-motion'
 import {
   BarChart3,
   Users,
@@ -21,7 +21,7 @@ import {
   GitCommit,
   ToggleLeft,
   ToggleRight,
-} from 'lucide-react';
+} from 'lucide-react'
 import {
   useGlobalUsage,
   useTopConsumers,
@@ -34,44 +34,44 @@ import {
   useWorkspaceAnalytics,
   useLoginEvents,
   useRequestMetrics,
-} from '../hooks/use-analytics';
-import { StatCard } from '../components/data/stat-card';
-import { MetricsAreaChart } from '../components/charts/area-chart';
-import { formatters } from '../components/charts/chart-formatters';
-import { TimeSeriesBarChart } from '../components/charts/time-series-bar-chart';
-import { GaugeChart } from '../components/charts/gauge-chart';
-import { SegmentedBar } from '../components/charts/segmented-bar';
-import { CalendarHeatmap } from '../components/charts/calendar-heatmap';
-import { DateRangePicker, type DateRange } from '../components/ui/date-range-picker';
-import { exportToCSV, exportToJSON } from '../lib/export';
-import { springs } from '../lib/animations';
-import { cn } from '../lib/utils';
-import { usePageGuard } from '../hooks/use-page-guard';
-import { PERMISSIONS } from '../stores/auth-store';
+} from '../hooks/use-analytics'
+import { StatCard } from '../components/data/stat-card'
+import { MetricsAreaChart } from '../components/charts/area-chart'
+import { formatters } from '../components/charts/chart-formatters'
+import { TimeSeriesBarChart } from '../components/charts/time-series-bar-chart'
+import { GaugeChart } from '../components/charts/gauge-chart'
+import { SegmentedBar } from '../components/charts/segmented-bar'
+import { CalendarHeatmap } from '../components/charts/calendar-heatmap'
+import { DateRangePicker, type DateRange } from '../components/ui/date-range-picker'
+import { exportToCSV, exportToJSON } from '../lib/export'
+import { springs } from '../lib/animations'
+import { cn } from '../lib/utils'
+import { usePageGuard } from '../hooks/use-page-guard'
+import { PERMISSIONS } from '../stores/auth-store'
 
 export const Route = createFileRoute('/admin/analytics')({
   component: AnalyticsDashboard,
-});
+})
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                           */
 /* ------------------------------------------------------------------ */
 
 function getDefaultDateRange(): DateRange {
-  const to = new Date().toISOString().split('T')[0];
-  const from = new Date();
-  from.setDate(from.getDate() - 29);
-  return { from: from.toISOString().split('T')[0], to };
+  const to = new Date().toISOString().split('T')[0]
+  const from = new Date()
+  from.setDate(from.getDate() - 29)
+  return { from: from.toISOString().split('T')[0], to }
 }
 
 function getPreviousPeriod(range: DateRange): DateRange {
-  const from = new Date(range.from);
-  const to = new Date(range.to);
-  const diff = to.getTime() - from.getTime();
+  const from = new Date(range.from)
+  const to = new Date(range.to)
+  const diff = to.getTime() - from.getTime()
   return {
     from: new Date(from.getTime() - diff - 86400000).toISOString().split('T')[0],
     to: new Date(from.getTime() - 86400000).toISOString().split('T')[0],
-  };
+  }
 }
 
 function SectionHeader({
@@ -80,10 +80,10 @@ function SectionHeader({
   subtitle,
   delay = 0,
 }: {
-  icon: React.ElementType;
-  title: string;
-  subtitle?: string;
-  delay?: number;
+  icon: React.ElementType
+  title: string
+  subtitle?: string
+  delay?: number
 }) {
   return (
     <motion.div
@@ -99,12 +99,10 @@ function SectionHeader({
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
           {title}
         </h2>
-        {subtitle && (
-          <p className="text-xs text-muted-foreground/70 mt-0.5">{subtitle}</p>
-        )}
+        {subtitle && <p className="text-xs text-muted-foreground/70 mt-0.5">{subtitle}</p>}
       </div>
     </motion.div>
-  );
+  )
 }
 
 function SkeletonCard() {
@@ -119,7 +117,7 @@ function SkeletonCard() {
         <div className="w-10 h-10 rounded-full bg-muted" />
       </div>
     </div>
-  );
+  )
 }
 
 function SkeletonChart() {
@@ -129,17 +127,17 @@ function SkeletonChart() {
       <div className="h-3 w-24 bg-muted rounded" />
       <div className="h-[200px] bg-muted rounded-lg" />
     </div>
-  );
+  )
 }
 
 function formatHours(hours: number): string {
-  if (hours >= 1000) return `${(hours / 1000).toFixed(1)}K hrs`;
-  return `${Math.round(hours)} hrs`;
+  if (hours >= 1000) return `${(hours / 1000).toFixed(1)}K hrs`
+  return `${Math.round(hours)} hrs`
 }
 
 function ExportButton({ data, filename }: { data: unknown[]; filename: string }) {
-  const [open, setOpen] = useState(false);
-  if (!data.length) return null;
+  const [open, setOpen] = useState(false)
+  if (!data.length) return null
   return (
     <div className="relative">
       <button
@@ -154,8 +152,8 @@ function ExportButton({ data, filename }: { data: unknown[]; filename: string })
           <div className="absolute right-0 top-full mt-1 z-50 min-w-[100px] rounded-lg border bg-popover shadow-lg p-1">
             <button
               onClick={() => {
-                exportToCSV(data as Record<string, unknown>[], filename);
-                setOpen(false);
+                exportToCSV(data as Record<string, unknown>[], filename)
+                setOpen(false)
               }}
               className="w-full text-left px-2.5 py-1.5 rounded-md text-sm hover:bg-accent transition-colors"
             >
@@ -163,8 +161,8 @@ function ExportButton({ data, filename }: { data: unknown[]; filename: string })
             </button>
             <button
               onClick={() => {
-                exportToJSON(data, filename);
-                setOpen(false);
+                exportToJSON(data, filename)
+                setOpen(false)
               }}
               className="w-full text-left px-2.5 py-1.5 rounded-md text-sm hover:bg-accent transition-colors"
             >
@@ -174,7 +172,7 @@ function ExportButton({ data, filename }: { data: unknown[]; filename: string })
         </>
       )}
     </div>
-  );
+  )
 }
 
 /* ------------------------------------------------------------------ */
@@ -182,29 +180,31 @@ function ExportButton({ data, filename }: { data: unknown[]; filename: string })
 /* ------------------------------------------------------------------ */
 
 function AnalyticsDashboard() {
-  const allowed = usePageGuard({ permission: PERMISSIONS.ANALYTICS_READ });
-  const [dateRange, setDateRange] = useState<DateRange>(getDefaultDateRange);
-  const [compareMode, setCompareMode] = useState(false);
-  const [heatmapTab, setHeatmapTab] = useState<'signups' | 'credits' | 'servers' | 'logins'>('signups');
+  const allowed = usePageGuard({ permission: PERMISSIONS.ANALYTICS_READ })
+  const [dateRange, setDateRange] = useState<DateRange>(getDefaultDateRange)
+  const [compareMode, setCompareMode] = useState(false)
+  const [heatmapTab, setHeatmapTab] = useState<'signups' | 'credits' | 'servers' | 'logins'>(
+    'signups'
+  )
 
-  const dateParams = { from: dateRange.from, to: dateRange.to };
-  const prevParams = compareMode ? getPreviousPeriod(dateRange) : undefined;
+  const dateParams = { from: dateRange.from, to: dateRange.to }
+  const prevParams = compareMode ? getPreviousPeriod(dateRange) : undefined
 
   /* Data hooks */
-  const { data: globalUsage, isLoading: globalLoading } = useGlobalUsage(dateParams);
-  const { data: globalUsagePrev } = useGlobalUsage(prevParams ?? {});
-  const { data: topConsumers } = useTopConsumers({ ...dateParams, limit: 100 });
-  const { data: environmentUsage } = useEnvironmentUsage();
-  const { data: planUsage } = usePlanUsage();
-  const { data: creditFlow, isLoading: creditLoading } = useCreditFlow(dateParams);
-  const { data: creditFlowPrev } = useCreditFlow(prevParams ?? {});
-  const { data: userGrowth, isLoading: growthLoading } = useUserGrowth(dateParams);
-  const { data: loginEvents } = useLoginEvents(dateParams);
-  const { data: platformMetrics, isLoading: metricsLoading } = usePlatformMetrics(dateParams);
-  const { data: platformMetricsPrev } = usePlatformMetrics(prevParams ?? {});
-  const { data: volumeAnalytics, isLoading: volumeLoading } = useVolumeAnalytics();
-  const { data: workspaceAnalytics, isLoading: workspaceLoading } = useWorkspaceAnalytics();
-  const { data: requestMetrics, isLoading: requestMetricsLoading } = useRequestMetrics(dateParams);
+  const { data: globalUsage, isLoading: globalLoading } = useGlobalUsage(dateParams)
+  const { data: globalUsagePrev } = useGlobalUsage(prevParams ?? {})
+  const { data: topConsumers } = useTopConsumers({ ...dateParams, limit: 100 })
+  const { data: environmentUsage } = useEnvironmentUsage()
+  const { data: planUsage } = usePlanUsage()
+  const { data: creditFlow, isLoading: creditLoading } = useCreditFlow(dateParams)
+  const { data: creditFlowPrev } = useCreditFlow(prevParams ?? {})
+  const { data: userGrowth, isLoading: growthLoading } = useUserGrowth(dateParams)
+  const { data: loginEvents } = useLoginEvents(dateParams)
+  const { data: platformMetrics, isLoading: metricsLoading } = usePlatformMetrics(dateParams)
+  const { data: platformMetricsPrev } = usePlatformMetrics(prevParams ?? {})
+  const { data: volumeAnalytics, isLoading: volumeLoading } = useVolumeAnalytics()
+  const { data: workspaceAnalytics, isLoading: workspaceLoading } = useWorkspaceAnalytics()
+  const { data: requestMetrics, isLoading: requestMetricsLoading } = useRequestMetrics(dateParams)
 
   /* Derived data */
   const serverCreationData = useMemo(
@@ -214,7 +214,7 @@ function AnalyticsDashboard() {
         count: d.count,
       })) || [],
     [globalUsage]
-  );
+  )
 
   const creditFlowData = useMemo(
     () =>
@@ -224,7 +224,7 @@ function AnalyticsDashboard() {
         granted: d.credits_granted,
       })) || [],
     [creditFlow]
-  );
+  )
 
   const creditFlowDataPrev = useMemo(
     () =>
@@ -234,7 +234,7 @@ function AnalyticsDashboard() {
         grantedPrev: d.credits_granted,
       })) || [],
     [creditFlowPrev]
-  );
+  )
 
   const userGrowthData = useMemo(
     () =>
@@ -243,7 +243,7 @@ function AnalyticsDashboard() {
         value: d.count,
       })) || [],
     [userGrowth]
-  );
+  )
 
   const platformMetricsData = useMemo(
     () =>
@@ -253,7 +253,7 @@ function AnalyticsDashboard() {
         memory: d.avg_memory,
       })) || [],
     [platformMetrics]
-  );
+  )
 
   const platformMetricsDataPrev = useMemo(
     () =>
@@ -263,68 +263,59 @@ function AnalyticsDashboard() {
         memoryPrev: d.avg_memory,
       })) || [],
     [platformMetricsPrev]
-  );
+  )
 
   const serverStatusSegments = useMemo(() => {
-    const breakdown = globalUsage?.server_status_breakdown || {};
+    const breakdown = globalUsage?.server_status_breakdown || {}
     const colors: Record<string, string> = {
       running: 'var(--chart-2)',
       stopped: 'var(--muted)',
       pending: 'var(--chart-3)',
       error: 'var(--destructive)',
       unknown: 'var(--border)',
-    };
+    }
     return Object.entries(breakdown)
       .map(([status, value]) => ({
         label: status.charAt(0).toUpperCase() + status.slice(1),
         value,
         color: colors[status] || colors.unknown,
       }))
-      .sort((a, b) => b.value - a.value);
-  }, [globalUsage]);
+      .sort((a, b) => b.value - a.value)
+  }, [globalUsage])
 
   /* Sparkline data for stat cards */
   const activeUsersSparkline = useMemo(
     () => globalUsage?.server_creation_by_day?.map((d) => d.count) || [],
     [globalUsage]
-  );
+  )
 
-  const signupSparkline = useMemo(
-    () => userGrowth?.map((d) => d.count) || [],
-    [userGrowth]
-  );
+  const signupSparkline = useMemo(() => userGrowth?.map((d) => d.count) || [], [userGrowth])
 
   /* Comparison helpers */
   const comparePct = (curr: number, prev: number) => {
-    if (!prev) return curr > 0 ? 100 : 0;
-    return ((curr - prev) / prev) * 100;
-  };
+    if (!prev) return curr > 0 ? 100 : 0
+    return ((curr - prev) / prev) * 100
+  }
 
   const heatmapData = useMemo(() => {
     if (heatmapTab === 'signups') {
-      return (
-        userGrowth?.map((d) => ({ date: d.date, value: d.count })) || []
-      );
+      return userGrowth?.map((d) => ({ date: d.date, value: d.count })) || []
     }
     if (heatmapTab === 'credits') {
-      return (
-        creditFlow?.map((d) => ({ date: d.date, value: d.credits_consumed })) || []
-      );
+      return creditFlow?.map((d) => ({ date: d.date, value: d.credits_consumed })) || []
     }
     if (heatmapTab === 'logins') {
-      return (
-        loginEvents?.map((d) => ({ date: d.date, value: d.count })) || []
-      );
+      return loginEvents?.map((d) => ({ date: d.date, value: d.count })) || []
     }
     return (
       globalUsage?.server_creation_by_day?.map((d) => ({
         date: d.date,
         value: d.count,
       })) || []
-    );
-  }, [heatmapTab, userGrowth, creditFlow, loginEvents, globalUsage]);
+    )
+  }, [heatmapTab, userGrowth, creditFlow, loginEvents, globalUsage])
 
-  if (!allowed) return null;
+  if (!allowed) return null
 
   return (
     <div className="min-h-screen p-6 lg:p-10 space-y-10">
@@ -364,11 +355,7 @@ function AnalyticsDashboard() {
                 : 'bg-background text-muted-foreground hover:bg-accent'
             )}
           >
-            {compareMode ? (
-              <ToggleRight className="w-4 h-4" />
-            ) : (
-              <ToggleLeft className="w-4 h-4" />
-            )}
+            {compareMode ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
             Compare
           </button>
         </div>
@@ -536,14 +523,12 @@ function AnalyticsDashboard() {
                   data={
                     compareMode && creditFlowPrev
                       ? creditFlowData.map((d) => {
-                          const prev = creditFlowDataPrev.find(
-                            (p) => p.timestamp === d.timestamp
-                          );
+                          const prev = creditFlowDataPrev.find((p) => p.timestamp === d.timestamp)
                           return {
                             ...d,
                             consumedPrev: prev?.consumedPrev ?? 0,
                             grantedPrev: prev?.grantedPrev ?? 0,
-                          };
+                          }
                         })
                       : creditFlowData
                   }
@@ -580,9 +565,7 @@ function AnalyticsDashboard() {
                 <div className="flex items-start justify-between mb-4">
                   <div>
                     <h3 className="text-base font-semibold">User Growth</h3>
-                    <p className="text-sm text-muted-foreground mt-0.5">
-                      New signups per day
-                    </p>
+                    <p className="text-sm text-muted-foreground mt-0.5">New signups per day</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <ExportButton
@@ -623,9 +606,7 @@ function AnalyticsDashboard() {
               >
                 <div className="flex items-start justify-between mb-4">
                   <div>
-                    <h3 className="text-base font-semibold">
-                      Platform Resource Usage
-                    </h3>
+                    <h3 className="text-base font-semibold">Platform Resource Usage</h3>
                     <p className="text-sm text-muted-foreground mt-0.5">
                       Average CPU & Memory across all servers
                     </p>
@@ -644,12 +625,12 @@ function AnalyticsDashboard() {
                       ? platformMetricsData.map((d) => {
                           const prev = platformMetricsDataPrev.find(
                             (p) => p.timestamp === d.timestamp
-                          );
+                          )
                           return {
                             ...d,
                             cpuPrev: prev?.cpuPrev ?? 0,
                             memoryPrev: prev?.memoryPrev ?? 0,
-                          };
+                          }
                         })
                       : platformMetricsData
                   }
@@ -685,9 +666,7 @@ function AnalyticsDashboard() {
               >
                 <div className="flex items-start justify-between mb-4">
                   <div>
-                    <h3 className="text-base font-semibold">
-                      Server Status Distribution
-                    </h3>
+                    <h3 className="text-base font-semibold">Server Status Distribution</h3>
                     <p className="text-sm text-muted-foreground mt-0.5">
                       Breakdown by current state
                     </p>
@@ -725,13 +704,9 @@ function AnalyticsDashboard() {
                             className="w-2 h-2 rounded-full"
                             style={{ backgroundColor: seg.color }}
                           />
-                          <span className="text-lg font-bold text-foreground">
-                            {seg.value}
-                          </span>
+                          <span className="text-lg font-bold text-foreground">{seg.value}</span>
                         </div>
-                        <span className="text-xs text-muted-foreground">
-                          {seg.label}
-                        </span>
+                        <span className="text-xs text-muted-foreground">{seg.label}</span>
                       </div>
                     </div>
                   ))}
@@ -778,11 +753,7 @@ function AnalyticsDashboard() {
 
       {/* ── Storage & Collaboration ── */}
       <section>
-        <SectionHeader
-          icon={FolderOpen}
-          title="Storage & Collaboration"
-          delay={0.2}
-        />
+        <SectionHeader icon={FolderOpen} title="Storage & Collaboration" delay={0.2} />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {volumeLoading ? (
             <SkeletonChart />
@@ -832,17 +803,13 @@ function AnalyticsDashboard() {
                     <span className="text-xl font-bold text-foreground">
                       {volumeAnalytics?.total_volumes ?? 0}
                     </span>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Total Volumes
-                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Total Volumes</p>
                   </div>
                   <div className="p-3 rounded-lg bg-surface/50 border border-border/50 text-center">
                     <span className="text-xl font-bold text-foreground">
                       {volumeAnalytics?.total_storage_used_gb ?? 0} GB
                     </span>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Storage Used
-                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Storage Used</p>
                   </div>
                 </div>
 
@@ -877,9 +844,7 @@ function AnalyticsDashboard() {
               <div className="flex items-start justify-between mb-4">
                 <div>
                   <h3 className="text-base font-semibold">Workspace Adoption</h3>
-                  <p className="text-sm text-muted-foreground mt-0.5">
-                    Collaboration metrics
-                  </p>
+                  <p className="text-sm text-muted-foreground mt-0.5">Collaboration metrics</p>
                 </div>
                 <FolderOpen className="w-4 h-4 text-muted-foreground mt-1" />
               </div>
@@ -898,9 +863,7 @@ function AnalyticsDashboard() {
                   <span className="text-lg font-bold text-foreground">
                     {workspaceAnalytics?.total_workspaces ?? 0}
                   </span>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Workspaces
-                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Workspaces</p>
                 </div>
                 <div className="p-3 rounded-lg bg-surface/50 border border-border/50 text-center">
                   <span className="text-lg font-bold text-foreground">
@@ -933,9 +896,7 @@ function AnalyticsDashboard() {
             <div className="flex items-start justify-between mb-4">
               <div>
                 <h3 className="text-base font-semibold">Server Creation</h3>
-                <p className="text-sm text-muted-foreground mt-0.5">
-                  New servers per day
-                </p>
+                <p className="text-sm text-muted-foreground mt-0.5">New servers per day</p>
               </div>
               <div className="flex items-center gap-2">
                 <ExportButton
@@ -963,9 +924,7 @@ function AnalyticsDashboard() {
             <div className="flex items-start justify-between mb-4">
               <div>
                 <h3 className="text-base font-semibold">Top Consumers</h3>
-                <p className="text-sm text-muted-foreground mt-0.5">
-                  By NUKE credits consumed
-                </p>
+                <p className="text-sm text-muted-foreground mt-0.5">By NUKE credits consumed</p>
               </div>
               <TrendingUp className="w-4 h-4 text-muted-foreground mt-1" />
             </div>
@@ -979,9 +938,7 @@ function AnalyticsDashboard() {
                     <span className="text-sm font-medium text-muted-foreground w-6">
                       #{index + 1}
                     </span>
-                    <span className="text-sm font-medium">
-                      {consumer.username}
-                    </span>
+                    <span className="text-sm font-medium">{consumer.username}</span>
                   </div>
                   <span className="text-sm font-medium tabular-nums">
                     {consumer.credits_consumed} NUKE
@@ -1010,7 +967,9 @@ function AnalyticsDashboard() {
           >
             <h3 className="text-sm font-semibold text-muted-foreground mb-1">Total Requests</h3>
             <p className="text-2xl font-bold">
-              {requestMetricsLoading ? '—' : (requestMetrics?.summary.total_requests ?? 0).toLocaleString()}
+              {requestMetricsLoading
+                ? '—'
+                : (requestMetrics?.summary.total_requests ?? 0).toLocaleString()}
             </p>
           </motion.div>
           <motion.div
@@ -1021,7 +980,9 @@ function AnalyticsDashboard() {
           >
             <h3 className="text-sm font-semibold text-muted-foreground mb-1">Avg Duration</h3>
             <p className="text-2xl font-bold">
-              {requestMetricsLoading ? '—' : `${(requestMetrics?.summary.avg_duration_ms ?? 0).toFixed(1)} ms`}
+              {requestMetricsLoading
+                ? '—'
+                : `${(requestMetrics?.summary.avg_duration_ms ?? 0).toFixed(1)} ms`}
             </p>
           </motion.div>
           <motion.div
@@ -1032,7 +993,9 @@ function AnalyticsDashboard() {
           >
             <h3 className="text-sm font-semibold text-muted-foreground mb-1">Error Rate</h3>
             <p className="text-2xl font-bold">
-              {requestMetricsLoading ? '—' : `${(requestMetrics?.summary.error_rate ?? 0).toFixed(2)}%`}
+              {requestMetricsLoading
+                ? '—'
+                : `${(requestMetrics?.summary.error_rate ?? 0).toFixed(2)}%`}
             </p>
           </motion.div>
         </div>
@@ -1061,7 +1024,9 @@ function AnalyticsDashboard() {
                     <span className="tabular-nums">{ep.count} req</span>
                     <span className="tabular-nums">p95: {ep.p95_ms.toFixed(0)}ms</span>
                     {ep.error_rate > 0 && (
-                      <span className="text-destructive tabular-nums">{ep.error_rate.toFixed(1)}% err</span>
+                      <span className="text-destructive tabular-nums">
+                        {ep.error_rate.toFixed(1)}% err
+                      </span>
                     )}
                   </div>
                 </div>
@@ -1088,11 +1053,13 @@ function AnalyticsDashboard() {
                   className="flex items-center justify-between p-3 rounded-lg bg-surface/50 border border-border/50"
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <span className={`text-xs font-mono px-1.5 py-0.5 rounded ${
-                      req.status_code < 400
-                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-                        : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                    }`}>
+                    <span
+                      className={`text-xs font-mono px-1.5 py-0.5 rounded ${
+                        req.status_code < 400
+                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                          : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                      }`}
+                    >
                       {req.status_code}
                     </span>
                     <span className="text-xs font-mono text-muted-foreground">{req.method}</span>
@@ -1129,10 +1096,9 @@ function AnalyticsDashboard() {
                 const maxCount =
                   environmentUsage && environmentUsage.length > 0
                     ? Math.max(...environmentUsage.map((e) => e.server_count))
-                    : 1;
+                    : 1
                 return environmentUsage?.map((env) => {
-                  const pct =
-                    maxCount > 0 ? (env.server_count / maxCount) * 100 : 0;
+                  const pct = maxCount > 0 ? (env.server_count / maxCount) * 100 : 0
                   return (
                     <div
                       key={env.id}
@@ -1152,17 +1118,14 @@ function AnalyticsDashboard() {
                             env.server_count > 0 &&
                             ` (${Math.round(
                               (env.server_count /
-                                environmentUsage.reduce(
-                                  (s, e) => s + e.server_count,
-                                  0
-                                )) *
+                                environmentUsage.reduce((s, e) => s + e.server_count, 0)) *
                                 100
                             )}%)`}
                         </span>
                       </div>
                     </div>
-                  );
-                });
+                  )
+                })
               })()}
               {!environmentUsage?.length && (
                 <div className="text-center py-8 text-muted-foreground">
@@ -1184,10 +1147,9 @@ function AnalyticsDashboard() {
                 const maxCount =
                   planUsage && planUsage.length > 0
                     ? Math.max(...planUsage.map((p) => p.server_count))
-                    : 1;
+                    : 1
                 return planUsage?.map((plan) => {
-                  const pct =
-                    maxCount > 0 ? (plan.server_count / maxCount) * 100 : 0;
+                  const pct = maxCount > 0 ? (plan.server_count / maxCount) * 100 : 0
                   return (
                     <div
                       key={plan.id}
@@ -1213,8 +1175,8 @@ function AnalyticsDashboard() {
                         </span>
                       </div>
                     </div>
-                  );
-                });
+                  )
+                })
               })()}
               {!planUsage?.length && (
                 <div className="text-center py-8 text-muted-foreground">
@@ -1226,5 +1188,5 @@ function AnalyticsDashboard() {
         </div>
       </section>
     </div>
-  );
+  )
 }

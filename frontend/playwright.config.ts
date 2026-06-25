@@ -1,6 +1,6 @@
-import { defineConfig, devices } from '@playwright/test';
+import { defineConfig, devices } from '@playwright/test'
 
-const baseURL = process.env.BASE_URL || 'http://localhost:5173';
+const baseURL = process.env.BASE_URL || 'http://localhost:5173'
 
 export default defineConfig({
   testDir: './e2e',
@@ -26,4 +26,4 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     timeout: 120000,
   },
-});
+})

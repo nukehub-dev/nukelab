@@ -1,12 +1,12 @@
-import { cn } from '../../lib/utils';
+import { cn } from '../../lib/utils'
 
 interface SparklineProps {
-  data: number[];
-  width?: number;
-  height?: number;
-  color?: string;
-  fill?: boolean;
-  className?: string;
+  data: number[]
+  width?: number
+  height?: number
+  color?: string
+  fill?: boolean
+  className?: string
 }
 
 export function MetricSparkline({
@@ -17,28 +17,28 @@ export function MetricSparkline({
   fill = false,
   className,
 }: SparklineProps) {
-  if (data.length < 2) return null;
+  if (data.length < 2) return null
 
-  const min = Math.min(...data);
-  const max = Math.max(...data);
-  const range = max - min || 1;
-  
-  const padding = 2;
-  const chartWidth = width - padding * 2;
-  const chartHeight = height - padding * 2;
-  
+  const min = Math.min(...data)
+  const max = Math.max(...data)
+  const range = max - min || 1
+
+  const padding = 2
+  const chartWidth = width - padding * 2
+  const chartHeight = height - padding * 2
+
   const points = data.map((value, index) => {
-    const x = padding + (index / (data.length - 1)) * chartWidth;
-    const y = padding + chartHeight - ((value - min) / range) * chartHeight;
-    return `${x},${y}`;
-  });
+    const x = padding + (index / (data.length - 1)) * chartWidth
+    const y = padding + chartHeight - ((value - min) / range) * chartHeight
+    return `${x},${y}`
+  })
 
-  const pathD = `M ${points.join(' L ')}`;
-  
+  const pathD = `M ${points.join(' L ')}`
+
   // Create fill path
   const fillPath = fill
     ? `${pathD} L ${padding + chartWidth},${padding + chartHeight} L ${padding},${padding + chartHeight} Z`
-    : undefined;
+    : undefined
 
   return (
     <svg
@@ -48,12 +48,7 @@ export function MetricSparkline({
       viewBox={`0 0 ${width} ${height}`}
     >
       {fill && fillPath && (
-        <path
-          d={fillPath}
-          fill={color}
-          fillOpacity={0.1}
-          className="transition-all duration-500"
-        />
+        <path d={fillPath} fill={color} fillOpacity={0.1} className="transition-all duration-500" />
       )}
       <path
         d={pathD}
@@ -83,5 +78,5 @@ export function MetricSparkline({
         className="animate-pulse"
       />
     </svg>
-  );
+  )
 }

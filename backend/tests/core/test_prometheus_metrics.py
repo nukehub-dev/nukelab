@@ -47,7 +47,9 @@ async def test_request_counter_increments(client, prometheus_enabled):
     # In the ASGI test client the app root_path is not part of the request path,
     # so the recorded path label is "/" rather than "/api/".
     before_response = await client.get("/metrics")
-    before = _extract_counter(before_response.text, "nukelab_http_requests_total", "GET", "/", "200")
+    before = _extract_counter(
+        before_response.text, "nukelab_http_requests_total", "GET", "/", "200"
+    )
 
     response = await client.get("/")
     assert response.status_code == status.HTTP_200_OK

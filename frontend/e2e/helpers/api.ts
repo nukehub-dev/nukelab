@@ -1,9 +1,9 @@
-import type { APIRequestContext } from '@playwright/test';
+import type { APIRequestContext } from '@playwright/test'
 
 export interface LoginResponse {
-  access_token: string;
-  refresh_token: string;
-  token_type: string;
+  access_token: string
+  refresh_token: string
+  token_type: string
 }
 
 export async function apiLogin(
@@ -14,11 +14,11 @@ export async function apiLogin(
   const response = await request.post('/api/auth/login', {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     data: new URLSearchParams({ username, password }).toString(),
-  });
+  })
   if (!response.ok()) {
-    throw new Error(`API login failed: ${await response.text()}`);
+    throw new Error(`API login failed: ${await response.text()}`)
   }
-  return response.json();
+  return response.json()
 }
 
 export async function getOrCreateTestEnvironment(
@@ -27,10 +27,10 @@ export async function getOrCreateTestEnvironment(
 ): Promise<string> {
   const list = await request.get('/api/environments/?is_active=true&limit=100', {
     headers: { Authorization: `Bearer ${token}` },
-  });
-  const listBody = await list.json();
-  const existing = listBody?.data?.items?.find((e: { slug?: string }) => e.slug === 'e2e-default');
-  if (existing) return existing.id;
+  })
+  const listBody = await list.json()
+  const existing = listBody?.data?.items?.find((e: { slug?: string }) => e.slug === 'e2e-default')
+  if (existing) return existing.id
 
   const create = await request.post('/api/environments/', {
     headers: {
@@ -45,22 +45,22 @@ export async function getOrCreateTestEnvironment(
       is_public: true,
       category: 'simulation',
     }),
-  });
+  })
   if (!create.ok()) {
-    throw new Error(`Failed to create test environment: ${await create.text()}`);
+    throw new Error(`Failed to create test environment: ${await create.text()}`)
   }
-  const body = await create.json();
-  return body.data.id;
+  const body = await create.json()
+  return body.data.id
 }
 
 export async function getPlanId(request: APIRequestContext, token: string): Promise<string> {
   const response = await request.get('/api/plans/?is_active=true&limit=100', {
     headers: { Authorization: `Bearer ${token}` },
-  });
-  const body = await response.json();
-  const plan = body?.data?.items?.find((p: { slug?: string }) => p.slug === 'small');
-  if (!plan) throw new Error('Small plan not found');
-  return plan.id;
+  })
+  const body = await response.json()
+  const plan = body?.data?.items?.find((p: { slug?: string }) => p.slug === 'small')
+  if (!plan) throw new Error('Small plan not found')
+  return plan.id
 }
 
 export async function createServer(
@@ -74,12 +74,12 @@ export async function createServer(
       'Content-Type': 'application/json',
     },
     data: JSON.stringify(data),
-  });
+  })
   if (!response.ok()) {
-    throw new Error(`Failed to create server: ${await response.text()}`);
+    throw new Error(`Failed to create server: ${await response.text()}`)
   }
-  const body = await response.json();
-  return body as { id: string; name: string; status: string };
+  const body = await response.json()
+  return body as { id: string; name: string; status: string }
 }
 
 export async function listServers(
@@ -88,14 +88,14 @@ export async function listServers(
 ): Promise<Array<{ id: string; name: string; status: string }>> {
   const response = await request.get('/api/servers/', {
     headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!response.ok()) return [];
-  const body = await response.json();
-  return body?.servers || [];
+  })
+  if (!response.ok()) return []
+  const body = await response.json()
+  return body?.servers || []
 }
 
 export async function deleteServer(request: APIRequestContext, token: string, serverId: string) {
   await request.delete(`/api/servers/${serverId}`, {
     headers: { Authorization: `Bearer ${token}` },
-  });
+  })
 }

@@ -80,8 +80,22 @@ class TestParseContainerStats:
                 ]
             },
             "networks": {
-                "eth0": {"rx_bytes": 100, "tx_bytes": 200, "rx_packets": 10, "tx_packets": 20, "rx_errors": 0, "tx_errors": 0},
-                "eth1": {"rx_bytes": 50, "tx_bytes": 100, "rx_packets": 5, "tx_packets": 10, "rx_errors": 1, "tx_errors": 2},
+                "eth0": {
+                    "rx_bytes": 100,
+                    "tx_bytes": 200,
+                    "rx_packets": 10,
+                    "tx_packets": 20,
+                    "rx_errors": 0,
+                    "tx_errors": 0,
+                },
+                "eth1": {
+                    "rx_bytes": 50,
+                    "tx_bytes": 100,
+                    "rx_packets": 5,
+                    "tx_packets": 10,
+                    "rx_errors": 1,
+                    "tx_errors": 2,
+                },
             },
         }
 
@@ -184,7 +198,9 @@ class TestGetContainerClient:
     @pytest.mark.asyncio
     async def test_get_container_client(self):
         collector = MetricsCollector()
-        with mock.patch("app.services.metrics_collector.get_fresh_container_client", new_callable=mock.AsyncMock) as mock_get:
+        with mock.patch(
+            "app.services.metrics_collector.get_fresh_container_client", new_callable=mock.AsyncMock
+        ) as mock_get:
             mock_client = mock.AsyncMock()
             mock_get.return_value = mock_client
             result = await collector._get_container_client()
@@ -221,7 +237,9 @@ class TestCollectAll:
         mock_client = mock.AsyncMock()
         mock_client.list_containers = mock.AsyncMock(return_value=[])
 
-        with mock.patch("app.services.metrics_collector.get_fresh_container_client", return_value=mock_client):
+        with mock.patch(
+            "app.services.metrics_collector.get_fresh_container_client", return_value=mock_client
+        ):
             await collector.collect_all()
 
         mock_client.list_containers.assert_awaited_once()
@@ -231,7 +249,10 @@ class TestCollectAll:
         """Should exit gracefully on Docker client error."""
         collector = MetricsCollector()
 
-        with mock.patch("app.services.metrics_collector.get_fresh_container_client", side_effect=Exception("docker error")):
+        with mock.patch(
+            "app.services.metrics_collector.get_fresh_container_client",
+            side_effect=Exception("docker error"),
+        ):
             await collector.collect_all()  # should not raise
 
     @pytest.mark.asyncio
@@ -240,14 +261,16 @@ class TestCollectAll:
         collector = MetricsCollector()
         mock_container = mock.AsyncMock()
         mock_container._id = "cid-1"
-        mock_container.show = mock.AsyncMock(return_value={
-            "Config": {"Labels": {"nukelab.server.id": "srv-1"}}
-        })
+        mock_container.show = mock.AsyncMock(
+            return_value={"Config": {"Labels": {"nukelab.server.id": "srv-1"}}}
+        )
 
         mock_client = mock.AsyncMock()
         mock_client.list_containers = mock.AsyncMock(return_value=[mock_container])
 
-        with mock.patch("app.services.metrics_collector.get_fresh_container_client", return_value=mock_client):
+        with mock.patch(
+            "app.services.metrics_collector.get_fresh_container_client", return_value=mock_client
+        ):
             with mock.patch.object(collector, "_collect_container_metrics") as mock_collect:
                 await collector.collect_all()
 
@@ -260,14 +283,14 @@ class TestCollectAll:
         collector = MetricsCollector()
         mock_container = mock.AsyncMock()
         mock_container._id = "cid-1"
-        mock_container.show = mock.AsyncMock(return_value={
-            "Config": {"Labels": {}}
-        })
+        mock_container.show = mock.AsyncMock(return_value={"Config": {"Labels": {}}})
 
         mock_client = mock.AsyncMock()
         mock_client.list_containers = mock.AsyncMock(return_value=[mock_container])
 
-        with mock.patch("app.services.metrics_collector.get_fresh_container_client", return_value=mock_client):
+        with mock.patch(
+            "app.services.metrics_collector.get_fresh_container_client", return_value=mock_client
+        ):
             with mock.patch.object(collector, "_collect_container_metrics") as mock_collect:
                 await collector.collect_all()
 
@@ -280,7 +303,9 @@ class TestCollectAll:
         mock_client = mock.AsyncMock()
         mock_client.list_containers = mock.AsyncMock(return_value=[])
 
-        with mock.patch("app.services.metrics_collector.get_fresh_container_client", return_value=mock_client):
+        with mock.patch(
+            "app.services.metrics_collector.get_fresh_container_client", return_value=mock_client
+        ):
             await collector.collect_all()
 
         mock_client.client.close.assert_awaited_once()
@@ -293,15 +318,23 @@ class TestCollectContainerMetrics:
     async def test_collect_container_metrics_success(self):
         collector = MetricsCollector()
         mock_container = mock.AsyncMock()
-        mock_container.stats = mock.AsyncMock(return_value=[{"cpu_stats": {"cpu_usage": {"total_usage": 100}}, "memory_stats": {}}])
+        mock_container.stats = mock.AsyncMock(
+            return_value=[{"cpu_stats": {"cpu_usage": {"total_usage": 100}}, "memory_stats": {}}]
+        )
 
         mock_client = mock.AsyncMock()
         mock_client.client.containers.get = mock.AsyncMock(return_value=mock_container)
 
-        with mock.patch("app.services.metrics_collector.get_fresh_container_client", return_value=mock_client):
-            with mock.patch.object(collector, "_parse_container_stats", return_value={"server_id": "srv-1"}):
+        with mock.patch(
+            "app.services.metrics_collector.get_fresh_container_client", return_value=mock_client
+        ):
+            with mock.patch.object(
+                collector, "_parse_container_stats", return_value={"server_id": "srv-1"}
+            ):
                 with mock.patch.object(collector, "_persist_metrics", new_callable=mock.AsyncMock):
-                    with mock.patch.object(collector, "_broadcast_metrics", new_callable=mock.AsyncMock):
+                    with mock.patch.object(
+                        collector, "_broadcast_metrics", new_callable=mock.AsyncMock
+                    ):
                         with mock.patch("asyncio.sleep"):
                             await collector._collect_container_metrics("cid-1", "srv-1")
 
@@ -318,7 +351,9 @@ class TestCollectContainerMetrics:
         mock_client = mock.AsyncMock()
         mock_client.client.containers.get = mock.AsyncMock(return_value=mock_container)
 
-        with mock.patch("app.services.metrics_collector.get_fresh_container_client", return_value=mock_client):
+        with mock.patch(
+            "app.services.metrics_collector.get_fresh_container_client", return_value=mock_client
+        ):
             with mock.patch.object(collector, "_parse_container_stats") as mock_parse:
                 await collector._collect_container_metrics("cid-1", "srv-1")
 
@@ -331,22 +366,32 @@ class TestCollectContainerMetrics:
         mock_client = mock.AsyncMock()
         mock_client.client.containers.get = mock.AsyncMock(side_effect=Exception("not found"))
 
-        with mock.patch("app.services.metrics_collector.get_fresh_container_client", return_value=mock_client):
+        with mock.patch(
+            "app.services.metrics_collector.get_fresh_container_client", return_value=mock_client
+        ):
             await collector._collect_container_metrics("cid-1", "srv-1")
 
     @pytest.mark.asyncio
     async def test_collect_container_metrics_closes_client(self):
         collector = MetricsCollector()
         mock_container = mock.AsyncMock()
-        mock_container.stats = mock.AsyncMock(return_value=[{"cpu_stats": {"cpu_usage": {"total_usage": 100}}, "memory_stats": {}}])
+        mock_container.stats = mock.AsyncMock(
+            return_value=[{"cpu_stats": {"cpu_usage": {"total_usage": 100}}, "memory_stats": {}}]
+        )
 
         mock_client = mock.AsyncMock()
         mock_client.client.containers.get = mock.AsyncMock(return_value=mock_container)
 
-        with mock.patch("app.services.metrics_collector.get_fresh_container_client", return_value=mock_client):
-            with mock.patch.object(collector, "_parse_container_stats", return_value={"server_id": "srv-1"}):
+        with mock.patch(
+            "app.services.metrics_collector.get_fresh_container_client", return_value=mock_client
+        ):
+            with mock.patch.object(
+                collector, "_parse_container_stats", return_value={"server_id": "srv-1"}
+            ):
                 with mock.patch.object(collector, "_persist_metrics", new_callable=mock.AsyncMock):
-                    with mock.patch.object(collector, "_broadcast_metrics", new_callable=mock.AsyncMock):
+                    with mock.patch.object(
+                        collector, "_broadcast_metrics", new_callable=mock.AsyncMock
+                    ):
                         with mock.patch("asyncio.sleep"):
                             await collector._collect_container_metrics("cid-1", "srv-1")
 

@@ -33,9 +33,7 @@ class TestNotificationServiceCreate:
         """When in_app is disabled, no notification should be created."""
         test_user.preferences = {
             "notifications": {
-                "events": [
-                    {"event": "server_start", "channels": {"in_app": False, "email": False}}
-                ]
+                "events": [{"event": "server_start", "channels": {"in_app": False, "email": False}}]
             }
         }
         await db_session.commit()
@@ -54,9 +52,7 @@ class TestNotificationServiceCreate:
         """When in_app is enabled, notification should be created."""
         test_user.preferences = {
             "notifications": {
-                "events": [
-                    {"event": "server_start", "channels": {"in_app": True, "email": False}}
-                ]
+                "events": [{"event": "server_start", "channels": {"in_app": True, "email": False}}]
             }
         }
         await db_session.commit()
@@ -313,7 +309,9 @@ class TestNotificationServiceSystemMethods:
     @pytest.mark.asyncio
     async def test_maintenance_window(self, db_session, test_user):
         service = NotificationService(db_session)
-        notif = await service.maintenance_window(test_user.id, "Upgrade", "System will be down for 1 hour")
+        notif = await service.maintenance_window(
+            test_user.id, "Upgrade", "System will be down for 1 hour"
+        )
         assert notif is not None
         assert "Upgrade" == notif.title
         assert "down for 1 hour" in notif.message
@@ -343,9 +341,7 @@ class TestNotificationServicePrefs:
         """User with preferences should return mapped events."""
         test_user.preferences = {
             "notifications": {
-                "events": [
-                    {"event": "server_start", "channels": {"in_app": True, "email": True}}
-                ]
+                "events": [{"event": "server_start", "channels": {"in_app": True, "email": True}}]
             }
         }
         await db_session.commit()
@@ -371,6 +367,7 @@ class TestNotificationServicePrefs:
         assert service._should_send(prefs, "server_start", "in_app") is False
         assert service._should_send(prefs, "server_start", "email") is True
         assert service._should_send(prefs, "server_start", "webhook") is True
+
 
 """Coverage tests for NotificationService edge cases."""
 
@@ -466,7 +463,9 @@ class TestNotificationServiceSendEmail:
         with mock.patch("app.services.email_service.EmailService") as mock_cls:
             mock_email = mock_cls.return_value
             mock_email.enabled = True
-            mock_email.send_email = mock.AsyncMock(return_value={"success": False, "error": "smtp error"})
+            mock_email.send_email = mock.AsyncMock(
+                return_value={"success": False, "error": "smtp error"}
+            )
 
             with mock.patch("logging.getLogger") as mock_getlogger:
                 mock_logger = mock.Mock()
@@ -519,16 +518,16 @@ class TestNotificationServiceCreateEmailOnly:
         """Should send email but not create in-app notification."""
         test_user.preferences = {
             "notifications": {
-                "events": [
-                    {"event": "server_start", "channels": {"in_app": False, "email": True}}
-                ]
+                "events": [{"event": "server_start", "channels": {"in_app": False, "email": True}}]
             }
         }
         await db_session.commit()
 
         service = NotificationService(db_session)
 
-        with mock.patch.object(service, "_send_email_for_notification", new_callable=mock.AsyncMock) as mock_email:
+        with mock.patch.object(
+            service, "_send_email_for_notification", new_callable=mock.AsyncMock
+        ) as mock_email:
             notif = await service.create(
                 user_id=test_user.id,
                 title="Server Started",

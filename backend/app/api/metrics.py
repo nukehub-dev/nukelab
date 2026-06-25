@@ -24,6 +24,7 @@ router = APIRouter()
 
 # ========== Pydantic Schemas ==========
 
+
 class AlertRuleCreate(BaseModel):
     name: str
     description: Optional[str] = None
@@ -61,6 +62,7 @@ class AlertAcknowledgeRequest(BaseModel):
 
 # ========== Server Metrics ==========
 
+
 @router.get("/servers/{server_id}")
 async def get_server_metrics(
     server_id: str,
@@ -69,8 +71,8 @@ async def get_server_metrics(
     interval: str = Query("1m"),
     limit: int = Query(60, ge=1, le=500),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.ANALYTICS_READ)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get metrics history for a server"""
     checker = PermissionChecker(current_user)
@@ -90,13 +92,17 @@ async def get_server_metrics(
     if not to_date:
         to_date = datetime.now(UTC).replace(tzinfo=None)
 
-    query = select(ServerMetric).where(
-        and_(
-            ServerMetric.server_id == server_id,
-            ServerMetric.collected_at >= from_date,
-            ServerMetric.collected_at <= to_date
+    query = (
+        select(ServerMetric)
+        .where(
+            and_(
+                ServerMetric.server_id == server_id,
+                ServerMetric.collected_at >= from_date,
+                ServerMetric.collected_at <= to_date,
+            )
         )
-    ).order_by(desc(ServerMetric.collected_at))
+        .order_by(desc(ServerMetric.collected_at))
+    )
 
     result = await db.execute(query)
     metrics = result.scalars().all()
@@ -118,8 +124,8 @@ async def get_server_metrics(
 async def get_server_latest_metrics(
     server_id: str,
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.ANALYTICS_READ)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get latest metrics for a server"""
     checker = PermissionChecker(current_user)
@@ -134,9 +140,10 @@ async def get_server_latest_metrics(
         checker.require_any([Permission.SERVERS_READ_ALL, Permission.SERVERS_WRITE_ALL])
 
     result = await db.execute(
-        select(ServerMetric).where(
-            ServerMetric.server_id == server_id
-        ).order_by(desc(ServerMetric.collected_at)).limit(1)
+        select(ServerMetric)
+        .where(ServerMetric.server_id == server_id)
+        .order_by(desc(ServerMetric.collected_at))
+        .limit(1)
     )
     metric = result.scalar_one_or_none()
 
@@ -148,14 +155,15 @@ async def get_server_latest_metrics(
 
 # ========== System Metrics ==========
 
+
 @router.get("/system")
 async def get_system_metrics(
     from_date: Optional[datetime] = Query(None),
     to_date: Optional[datetime] = Query(None),
     limit: int = Query(60, ge=1, le=500),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.ANALYTICS_READ)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get system-level metrics history"""
     checker = PermissionChecker(current_user)
@@ -166,12 +174,11 @@ async def get_system_metrics(
     if not to_date:
         to_date = datetime.now(UTC).replace(tzinfo=None)
 
-    query = select(SystemMetric).where(
-        and_(
-            SystemMetric.collected_at >= from_date,
-            SystemMetric.collected_at <= to_date
-        )
-    ).order_by(desc(SystemMetric.collected_at))
+    query = (
+        select(SystemMetric)
+        .where(and_(SystemMetric.collected_at >= from_date, SystemMetric.collected_at <= to_date))
+        .order_by(desc(SystemMetric.collected_at))
+    )
 
     result = await db.execute(query)
     metrics = result.scalars().all()
@@ -190,8 +197,8 @@ async def get_system_metrics(
 @router.get("/system/latest")
 async def get_latest_system_metrics(
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.ANALYTICS_READ)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get latest system metrics"""
     checker = PermissionChecker(current_user)
@@ -207,11 +214,12 @@ async def get_latest_system_metrics(
 
 # ========== Alert Rules ==========
 
+
 @router.get("/alerts/rules")
 async def list_alert_rules(
     current_user: User = Depends(get_current_user),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """List all alert rules"""
     checker = PermissionChecker(current_user)
@@ -227,8 +235,8 @@ async def list_alert_rules(
 async def create_alert_rule(
     data: AlertRuleCreate,
     current_user: User = Depends(get_current_user),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Create a new alert rule"""
     checker = PermissionChecker(current_user)
@@ -264,8 +272,8 @@ async def create_alert_rule(
 async def get_alert_rule(
     rule_id: str,
     current_user: User = Depends(get_current_user),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get alert rule details"""
     checker = PermissionChecker(current_user)
@@ -273,9 +281,7 @@ async def get_alert_rule(
 
     import uuid
 
-    result = await db.execute(
-        select(AlertRule).where(AlertRule.id == uuid.UUID(rule_id))
-    )
+    result = await db.execute(select(AlertRule).where(AlertRule.id == uuid.UUID(rule_id)))
     rule = result.scalar_one_or_none()
 
     if not rule:
@@ -289,8 +295,8 @@ async def update_alert_rule(
     rule_id: str,
     data: AlertRuleUpdate,
     current_user: User = Depends(get_current_user),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Update an alert rule"""
     checker = PermissionChecker(current_user)
@@ -298,9 +304,7 @@ async def update_alert_rule(
 
     import uuid
 
-    result = await db.execute(
-        select(AlertRule).where(AlertRule.id == uuid.UUID(rule_id))
-    )
+    result = await db.execute(select(AlertRule).where(AlertRule.id == uuid.UUID(rule_id)))
     rule = result.scalar_one_or_none()
 
     if not rule:
@@ -308,7 +312,7 @@ async def update_alert_rule(
 
     update_data = data.dict(exclude_unset=True)
     for field, value in update_data.items():
-        if field == 'target_id' and value:
+        if field == "target_id" and value:
             value = uuid.UUID(value)
         setattr(rule, field, value)
 
@@ -322,8 +326,8 @@ async def update_alert_rule(
 async def delete_alert_rule(
     rule_id: str,
     current_user: User = Depends(get_current_user),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Delete an alert rule"""
     checker = PermissionChecker(current_user)
@@ -331,9 +335,7 @@ async def delete_alert_rule(
 
     import uuid
 
-    result = await db.execute(
-        select(AlertRule).where(AlertRule.id == uuid.UUID(rule_id))
-    )
+    result = await db.execute(select(AlertRule).where(AlertRule.id == uuid.UUID(rule_id)))
     rule = result.scalar_one_or_none()
 
     if not rule:
@@ -347,12 +349,13 @@ async def delete_alert_rule(
 
 # ========== Alert History ==========
 
+
 @router.get("/alerts/history")
 async def list_alert_history(
     status: Optional[str] = Query(None),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.ANALYTICS_READ)),
+    db: AsyncSession = Depends(get_db),
 ):
     """List alert history"""
     checker = PermissionChecker(current_user)
@@ -378,8 +381,8 @@ async def acknowledge_alert(
     alert_id: str,
     data: AlertAcknowledgeRequest,
     current_user: User = Depends(get_current_user),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Acknowledge an alert"""
     service = AlertService(db)
@@ -395,8 +398,8 @@ async def acknowledge_alert(
 async def resolve_alert(
     alert_id: str,
     current_user: User = Depends(get_current_user),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Resolve an alert"""
     checker = PermissionChecker(current_user)
@@ -413,13 +416,14 @@ async def resolve_alert(
 
 # ========== Health Checks ==========
 
+
 @router.get("/health/servers/{server_id}")
 async def get_server_health_checks(
     server_id: str,
     limit: int = Query(50, ge=1, le=200),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.ANALYTICS_READ)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get health check history for a server"""
     checker = PermissionChecker(current_user)
@@ -434,9 +438,10 @@ async def get_server_health_checks(
         checker.require_any([Permission.SERVERS_READ_ALL, Permission.SERVERS_WRITE_ALL])
 
     result = await db.execute(
-        select(HealthCheck).where(
-            HealthCheck.server_id == server_id
-        ).order_by(desc(HealthCheck.checked_at)).limit(limit)
+        select(HealthCheck)
+        .where(HealthCheck.server_id == server_id)
+        .order_by(desc(HealthCheck.checked_at))
+        .limit(limit)
     )
     checks = result.scalars().all()
 
@@ -449,8 +454,8 @@ async def get_server_health_checks(
 @router.get("/health/summary")
 async def get_health_summary(
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.ANALYTICS_READ)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get overall health summary"""
     checker = PermissionChecker(current_user)
@@ -458,13 +463,13 @@ async def get_health_summary(
 
     # Count by status
     result = await db.execute(
-        select(HealthCheck.status, func.count(HealthCheck.id))
-        .group_by(HealthCheck.status)
+        select(HealthCheck.status, func.count(HealthCheck.id)).group_by(HealthCheck.status)
     )
     status_counts = {status: count for status, count in result.all()}
 
     # Latest checks per server
     from sqlalchemy import distinct
+
     result = await db.execute(
         select(HealthCheck)
         .distinct(HealthCheck.server_id)
@@ -475,12 +480,13 @@ async def get_health_summary(
     return {
         "status_counts": status_counts,
         "latest_checks": [c.to_dict() for c in latest],
-        "unhealthy_count": status_counts.get('unhealthy', 0),
-        "unknown_count": status_counts.get('unknown', 0),
+        "unhealthy_count": status_counts.get("unhealthy", 0),
+        "unknown_count": status_counts.get("unknown", 0),
     }
 
 
 # ========== Request Metrics ==========
+
 
 @router.get("/requests")
 async def get_request_metrics(
@@ -490,8 +496,8 @@ async def get_request_metrics(
     end_date: Optional[datetime] = Query(None),
     limit: int = Query(100, ge=1, le=500),
     current_user: User = Depends(get_current_user),
-    _ = Depends(require_permissions(Permission.ANALYTICS_READ)),
-    db: AsyncSession = Depends(get_db)
+    _=Depends(require_permissions(Permission.ANALYTICS_READ)),
+    db: AsyncSession = Depends(get_db),
 ):
     """Get HTTP request metrics with aggregation (admin only)."""
     checker = PermissionChecker(current_user)
@@ -523,23 +529,13 @@ async def get_request_metrics(
             RequestMetric.method,
             func.count().label("count"),
             func.avg(RequestMetric.duration_ms).label("avg_duration"),
-            func.percentile_cont(0.5).within_group(
-                RequestMetric.duration_ms.asc()
-            ).label("p50"),
-            func.percentile_cont(0.95).within_group(
-                RequestMetric.duration_ms.asc()
-            ).label("p95"),
-            func.percentile_cont(0.99).within_group(
-                RequestMetric.duration_ms.asc()
-            ).label("p99"),
-            func.sum(
-                case((RequestMetric.status_code >= 400, 1), else_=0)
-            ).label("error_count"),
+            func.percentile_cont(0.5).within_group(RequestMetric.duration_ms.asc()).label("p50"),
+            func.percentile_cont(0.95).within_group(RequestMetric.duration_ms.asc()).label("p95"),
+            func.percentile_cont(0.99).within_group(RequestMetric.duration_ms.asc()).label("p99"),
+            func.sum(case((RequestMetric.status_code >= 400, 1), else_=0)).label("error_count"),
         )
         .group_by(RequestMetric.path, RequestMetric.method)
-        .order_by(desc(func.percentile_cont(0.95).within_group(
-            RequestMetric.duration_ms.asc()
-        )))
+        .order_by(desc(func.percentile_cont(0.95).within_group(RequestMetric.duration_ms.asc())))
         .limit(50)
     )
 
@@ -554,25 +550,25 @@ async def get_request_metrics(
     endpoints = []
     for row in agg_result.all():
         error_rate = (row.error_count / row.count * 100) if row.count > 0 else 0
-        endpoints.append({
-            "path": row.path,
-            "method": row.method,
-            "count": row.count,
-            "avg_duration_ms": round(row.avg_duration, 2) if row.avg_duration else 0,
-            "p50_ms": round(row.p50, 2) if row.p50 else 0,
-            "p95_ms": round(row.p95, 2) if row.p95 else 0,
-            "p99_ms": round(row.p99, 2) if row.p99 else 0,
-            "error_count": row.error_count,
-            "error_rate": round(error_rate, 2),
-        })
+        endpoints.append(
+            {
+                "path": row.path,
+                "method": row.method,
+                "count": row.count,
+                "avg_duration_ms": round(row.avg_duration, 2) if row.avg_duration else 0,
+                "p50_ms": round(row.p50, 2) if row.p50 else 0,
+                "p95_ms": round(row.p95, 2) if row.p95 else 0,
+                "p99_ms": round(row.p99, 2) if row.p99 else 0,
+                "error_count": row.error_count,
+                "error_rate": round(error_rate, 2),
+            }
+        )
 
     # Overall summary
     summary_query = select(
         func.count().label("total_count"),
         func.avg(RequestMetric.duration_ms).label("avg_duration"),
-        func.sum(
-            case((RequestMetric.status_code >= 400, 1), else_=0)
-        ).label("total_errors"),
+        func.sum(case((RequestMetric.status_code >= 400, 1), else_=0)).label("total_errors"),
     )
 
     if start_date:
@@ -585,11 +581,13 @@ async def get_request_metrics(
 
     summary = {
         "total_requests": summary_row.total_count if summary_row else 0,
-        "avg_duration_ms": round(summary_row.avg_duration, 2) if summary_row and summary_row.avg_duration else 0,
+        "avg_duration_ms": round(summary_row.avg_duration, 2)
+        if summary_row and summary_row.avg_duration
+        else 0,
         "total_errors": summary_row.total_errors if summary_row else 0,
-        "error_rate": round(
-            (summary_row.total_errors / summary_row.total_count * 100), 2
-        ) if summary_row and summary_row.total_count else 0,
+        "error_rate": round((summary_row.total_errors / summary_row.total_count * 100), 2)
+        if summary_row and summary_row.total_count
+        else 0,
     }
 
     return {

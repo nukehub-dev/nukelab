@@ -16,7 +16,9 @@ class TestServerMetrics:
     """Tests for /metrics/servers/{server_id} endpoint."""
 
     @pytest.mark.asyncio
-    async def test_get_server_metrics_not_owner_admin_can_access(self, client, admin_token, db_session, test_user):
+    async def test_get_server_metrics_not_owner_admin_can_access(
+        self, client, admin_token, db_session, test_user
+    ):
         """Admin should be able to access another user's server metrics."""
         server = Server(name="srv", user_id=test_user.id, status="running")
         db_session.add(server)
@@ -32,15 +34,16 @@ class TestServerMetrics:
         await db_session.commit()
 
         response = await client.get(
-            f"/api/metrics/servers/{server.id}",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            f"/api/metrics/servers/{server.id}", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
         data = response.json()
         assert "metrics" in data
 
     @pytest.mark.asyncio
-    async def test_get_server_metrics_default_dates(self, client, admin_token, db_session, test_user):
+    async def test_get_server_metrics_default_dates(
+        self, client, admin_token, db_session, test_user
+    ):
         """Should use default date range when not provided."""
         server = Server(name="srv", user_id=test_user.id, status="running")
         db_session.add(server)
@@ -56,8 +59,7 @@ class TestServerMetrics:
         await db_session.commit()
 
         response = await client.get(
-            f"/api/metrics/servers/{server.id}",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            f"/api/metrics/servers/{server.id}", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -83,14 +85,16 @@ class TestServerMetrics:
 
         response = await client.get(
             f"/api/metrics/servers/{server.id}?limit=5",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert response.status_code == 200
         data = response.json()
         assert data["count"] <= 5
 
     @pytest.mark.asyncio
-    async def test_get_server_latest_metrics_no_metric(self, client, admin_token, db_session, test_user):
+    async def test_get_server_latest_metrics_no_metric(
+        self, client, admin_token, db_session, test_user
+    ):
         """Should return None when no metrics exist."""
         server = Server(name="srv", user_id=test_user.id, status="running")
         db_session.add(server)
@@ -99,13 +103,15 @@ class TestServerMetrics:
 
         response = await client.get(
             f"/api/metrics/servers/{server.id}/latest",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert response.status_code == 200
         assert response.json()["metric"] is None
 
     @pytest.mark.asyncio
-    async def test_get_server_latest_metrics_not_owner(self, client, admin_token, db_session, test_user):
+    async def test_get_server_latest_metrics_not_owner(
+        self, client, admin_token, db_session, test_user
+    ):
         """Admin should access latest metrics for other user's server."""
         server = Server(name="srv", user_id=test_user.id, status="running")
         db_session.add(server)
@@ -122,7 +128,7 @@ class TestServerMetrics:
 
         response = await client.get(
             f"/api/metrics/servers/{server.id}/latest",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert response.status_code == 200
         assert response.json()["metric"] is not None
@@ -135,8 +141,7 @@ class TestSystemMetrics:
     async def test_get_system_metrics_default_dates(self, client, admin_token, db_session):
         """Should use default date range when not provided."""
         response = await client.get(
-            "/api/metrics/system",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/metrics/system", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -154,8 +159,7 @@ class TestSystemMetrics:
         await db_session.commit()
 
         response = await client.get(
-            "/api/metrics/system?limit=5",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/metrics/system?limit=5", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -165,8 +169,7 @@ class TestSystemMetrics:
     async def test_get_latest_system_metrics_no_metric(self, client, admin_token):
         """Should return None when no system metrics exist."""
         response = await client.get(
-            "/api/metrics/system/latest",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/metrics/system/latest", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
         assert response.json()["metric"] is None
@@ -176,7 +179,9 @@ class TestAlertRules:
     """Tests for alert rules endpoints."""
 
     @pytest.mark.asyncio
-    async def test_create_alert_rule_with_target_id(self, client, admin_token, db_session, test_user):
+    async def test_create_alert_rule_with_target_id(
+        self, client, admin_token, db_session, test_user
+    ):
         """Should create alert rule with target_id."""
         server = Server(name="srv", user_id=test_user.id, status="running")
         db_session.add(server)
@@ -193,7 +198,7 @@ class TestAlertRules:
                 "threshold": 80.0,
                 "scope": "server",
                 "target_id": str(server.id),
-            }
+            },
         )
         assert response.status_code in [200, 201]
         data = response.json()
@@ -204,9 +209,10 @@ class TestAlertRules:
     async def test_get_alert_rule_not_found(self, client, admin_token):
         """Should return 404 for missing rule."""
         import uuid
+
         response = await client.get(
             f"/api/metrics/alerts/rules/{uuid.uuid4()}",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert response.status_code == 404
 
@@ -214,10 +220,11 @@ class TestAlertRules:
     async def test_update_alert_rule_not_found(self, client, admin_token):
         """Should return 404 when updating missing rule."""
         import uuid
+
         response = await client.put(
             f"/api/metrics/alerts/rules/{uuid.uuid4()}",
             headers={"Authorization": f"Bearer {admin_token}"},
-            json={"name": "Updated"}
+            json={"name": "Updated"},
         )
         assert response.status_code == 404
 
@@ -240,7 +247,7 @@ class TestAlertRules:
         response = await client.put(
             f"/api/metrics/alerts/rules/{rule.id}",
             headers={"Authorization": f"Bearer {admin_token}"},
-            json={"target_id": "550e8400-e29b-41d4-a716-446655440000"}
+            json={"target_id": "550e8400-e29b-41d4-a716-446655440000"},
         )
         assert response.status_code == 200
 
@@ -248,9 +255,10 @@ class TestAlertRules:
     async def test_delete_alert_rule_not_found(self, client, admin_token):
         """Should return 404 when deleting missing rule."""
         import uuid
+
         response = await client.delete(
             f"/api/metrics/alerts/rules/{uuid.uuid4()}",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert response.status_code == 404
 
@@ -259,7 +267,9 @@ class TestHealthChecks:
     """Tests for health check endpoints."""
 
     @pytest.mark.asyncio
-    async def test_get_server_health_checks_not_owner_admin(self, client, admin_token, db_session, test_user):
+    async def test_get_server_health_checks_not_owner_admin(
+        self, client, admin_token, db_session, test_user
+    ):
         """Admin should access health checks for other user's server."""
         server = Server(name="srv", user_id=test_user.id, status="running")
         db_session.add(server)
@@ -276,14 +286,16 @@ class TestHealthChecks:
 
         response = await client.get(
             f"/api/metrics/health/servers/{server.id}",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert response.status_code == 200
         data = response.json()
         assert "checks" in data
 
     @pytest.mark.asyncio
-    async def test_get_server_health_checks_latest(self, client, admin_token, db_session, test_user):
+    async def test_get_server_health_checks_latest(
+        self, client, admin_token, db_session, test_user
+    ):
         """Should include latest check."""
         server = Server(name="srv", user_id=test_user.id, status="running")
         db_session.add(server)
@@ -300,7 +312,7 @@ class TestHealthChecks:
 
         response = await client.get(
             f"/api/metrics/health/servers/{server.id}",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert response.status_code == 200
         data = response.json()

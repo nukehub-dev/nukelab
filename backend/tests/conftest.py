@@ -89,6 +89,7 @@ async def setup_test_database():
     # Create partitions for time-series tables so INSERTs don't fail
     from datetime import datetime, timezone
     from dateutil.relativedelta import relativedelta
+
     now = datetime.now(timezone.utc)
     start = now.strftime("%Y-%m-01")
     end = (now + relativedelta(months=1)).strftime("%Y-%m-01")
@@ -99,7 +100,9 @@ async def setup_test_database():
     }
     async with test_engine.begin() as conn:
         for table in partitioned:
-            await conn.execute(text(f'CREATE TABLE IF NOT EXISTS "{table}_default" PARTITION OF "{table}" DEFAULT'))
+            await conn.execute(
+                text(f'CREATE TABLE IF NOT EXISTS "{table}_default" PARTITION OF "{table}" DEFAULT')
+            )
             part_name = f"{table}_y{now.year}m{now.month:02d}"
             await conn.execute(
                 text(
@@ -203,6 +206,7 @@ async def dispose_stale_pool():
         await _session_module.engine.dispose()
     try:
         from app.main import engine as _main_engine
+
         if isinstance(_main_engine, AsyncEngine):
             await _main_engine.dispose()
     except Exception:
@@ -240,6 +244,7 @@ def reset_maintenance_mode():
     503 Service Unavailable from MaintenanceMiddleware.
     """
     from app.config import settings
+
     settings.maintenance_mode = False
     settings.maintenance_message = ""
     yield
@@ -262,6 +267,7 @@ def reset_role_permissions():
 
     # Rebuild the expansion cache so permission lookups reflect the reset
     from app.core.roles import _rebuild_expansion_cache
+
     _rebuild_expansion_cache()
     yield
 
@@ -275,9 +281,7 @@ async def client(db_session):
 
     app.dependency_overrides[get_db] = override_get_db
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
     app.dependency_overrides.clear()
@@ -328,9 +332,7 @@ async def user_token(test_user):
     """Generate JWT token for test user."""
     from app.api.auth import create_access_token
 
-    return create_access_token(
-        data={"sub": test_user.username, "role": test_user.role}
-    )
+    return create_access_token(data={"sub": test_user.username, "role": test_user.role})
 
 
 @pytest_asyncio.fixture
@@ -338,9 +340,7 @@ async def admin_token(admin_user):
     """Generate JWT token for admin user."""
     from app.api.auth import create_access_token
 
-    return create_access_token(
-        data={"sub": admin_user.username, "role": admin_user.role}
-    )
+    return create_access_token(data={"sub": admin_user.username, "role": admin_user.role})
 
 
 @pytest_asyncio.fixture
@@ -388,9 +388,7 @@ async def support_token(support_user):
     """Generate JWT token for support user."""
     from app.api.auth import create_access_token
 
-    return create_access_token(
-        data={"sub": support_user.username, "role": support_user.role}
-    )
+    return create_access_token(data={"sub": support_user.username, "role": support_user.role})
 
 
 @pytest_asyncio.fixture
@@ -398,9 +396,7 @@ async def moderator_token(moderator_user):
     """Generate JWT token for moderator user."""
     from app.api.auth import create_access_token
 
-    return create_access_token(
-        data={"sub": moderator_user.username, "role": moderator_user.role}
-    )
+    return create_access_token(data={"sub": moderator_user.username, "role": moderator_user.role})
 
 
 @pytest_asyncio.fixture
@@ -428,9 +424,7 @@ async def superadmin_token(superadmin_user):
     """Generate JWT token for super_admin user."""
     from app.api.auth import create_access_token
 
-    return create_access_token(
-        data={"sub": superadmin_user.username, "role": superadmin_user.role}
-    )
+    return create_access_token(data={"sub": superadmin_user.username, "role": superadmin_user.role})
 
 
 @pytest_asyncio.fixture
@@ -462,17 +456,18 @@ async def api_token(db_session, test_user):
     return SimpleNamespace(db_token=token, raw_token=raw_token)
 
 
-
 @pytest.fixture(autouse=True)
 def reset_rate_limiter():
     """Reset the slowapi rate limiter before each test to avoid 429 errors."""
     from app.api.auth import limiter
-    if hasattr(limiter, '_storage') and hasattr(limiter._storage, 'reset'):
+
+    if hasattr(limiter, "_storage") and hasattr(limiter._storage, "reset"):
         limiter._storage.reset()
     # Also clear Redis-backed rate limit keys used by RateLimitMiddleware
     try:
         import redis as sync_redis
         from app.config import settings
+
         sync_r = sync_redis.from_url(settings.redis_url)
         keys = sync_r.keys("rl:*")
         if keys:
@@ -492,6 +487,7 @@ def reset_cache():
     try:
         import redis as sync_redis
         from app.config import settings
+
         sync_r = sync_redis.from_url(settings.redis_url)
         sync_r.flushdb()
         sync_r.close()
@@ -511,6 +507,7 @@ async def reset_cached_redis_clients():
     # 1. Global Redis client singleton
     try:
         from app.core import redis_client as _rc
+
         if _rc._redis_client is not None:
             await _rc._redis_client.aclose()
             _rc._redis_client = None
@@ -520,6 +517,7 @@ async def reset_cached_redis_clients():
     # 2. MetricsWebSocketManager singleton
     try:
         from app.websocket.metrics_socket import manager as _ws_mgr
+
         if _ws_mgr.redis_client is not None:
             await _ws_mgr.redis_client.aclose()
             _ws_mgr.redis_client = None
@@ -535,6 +533,7 @@ async def reset_cached_redis_clients():
 def reset_ip_restriction_cache():
     """Reset IP restriction in-memory cache before each test."""
     from app.middleware.ip_restriction import _invalidate_cache
+
     _invalidate_cache()
     yield
 
@@ -543,6 +542,7 @@ def reset_ip_restriction_cache():
 def reset_shutdown_coordinator():
     """Reset global shutdown coordinator before each test."""
     from app.core.shutdown import reset_shutdown_coordinator
+
     reset_shutdown_coordinator()
     yield
 
@@ -552,6 +552,7 @@ def cleanup_tmp_cache_files():
     """Remove temporary cache files created by system metrics collector."""
     import os
     import glob
+
     for f in glob.glob("/tmp/nukelab_*_cache.json"):
         try:
             os.remove(f)

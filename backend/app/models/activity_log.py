@@ -4,15 +4,18 @@ from sqlalchemy import Column, String, DateTime, Text, ForeignKey, JSON, Index
 from sqlalchemy.dialects.postgresql import UUID, INET
 from app.db.base import Base
 
+
 class ActivityLog(Base):
     __tablename__ = "activity_logs"
     __table_args__ = (
-        Index('ix_activity_logs_created_at', 'created_at'),
+        Index("ix_activity_logs_created_at", "created_at"),
         {"postgresql_partition_by": "RANGE (created_at)"},
     )
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    actor_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    actor_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     action = Column(String(100), nullable=False, index=True)
     target_type = Column(String(50), nullable=False, index=True)
     target_id = Column(UUID(as_uuid=True), nullable=True)

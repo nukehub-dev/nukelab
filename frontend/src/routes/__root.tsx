@@ -1,6 +1,6 @@
-import { createRootRoute } from '@tanstack/react-router';
-import { AppShell } from '../components/layout/app-shell';
-import { WebSocketProvider } from '../contexts/websocket-provider';
+import { createRootRoute } from '@tanstack/react-router'
+import { AppShell } from '../components/layout/app-shell'
+import { WebSocketProvider } from '../contexts/websocket-provider'
 
 export const Route = createRootRoute({
   component: () => (
@@ -8,4 +8,4 @@ export const Route = createRootRoute({
       <AppShell />
     </WebSocketProvider>
   ),
-});
+})

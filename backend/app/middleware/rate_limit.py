@@ -94,6 +94,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     async def _get_redis(self):
         if self._redis is None:
             import redis.asyncio as redis
+
             self._redis = redis.from_url(settings.redis_url)
             self._lua_incr_expire = await self._redis.script_load(_LUA_INCR_EXPIRE)
         return self._redis
@@ -207,6 +208,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         if is_limited:
             from fastapi.responses import JSONResponse
+
             return JSONResponse(
                 status_code=429,
                 content={
@@ -227,7 +229,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if limit > 0:
             response.headers["X-RateLimit-Limit"] = str(limit)
             response.headers["X-RateLimit-Remaining"] = str(remaining)
-            reset_time = (int(time.time()) // settings.rate_limit_window_seconds + 1) * settings.rate_limit_window_seconds
+            reset_time = (
+                int(time.time()) // settings.rate_limit_window_seconds + 1
+            ) * settings.rate_limit_window_seconds
             response.headers["X-RateLimit-Reset"] = str(reset_time)
 
         return response

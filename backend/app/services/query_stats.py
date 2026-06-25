@@ -14,7 +14,7 @@ from sqlalchemy import text
 async def get_approximate_count(db, table_name: str) -> int:
     """
     Return an approximate row count for a table using pg_class.
-    
+
     This is O(1) — it reads the planner's statistics instead of scanning.
     For unfiltered totals on large tables, use this instead of COUNT(*).
     """
@@ -39,7 +39,7 @@ async def get_slow_queries(
 ) -> list[dict[str, Any]]:
     """
     Return the top-N most expensive queries by total execution time.
-    
+
     Requires pg_stat_statements extension.
     """
     result = await db.execute(
@@ -91,7 +91,7 @@ async def explain_analyze(
 ) -> dict[str, Any]:
     """
     Run EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) on a query.
-    
+
     Returns the first plan node (root) as a dict.
     """
     explain_sql = "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) " + query

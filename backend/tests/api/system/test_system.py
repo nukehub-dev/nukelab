@@ -12,6 +12,7 @@ from app.services.setting_service import SettingService
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def reset_maintenance_state():
     """Reset global maintenance state before and after each test."""
@@ -26,6 +27,7 @@ def reset_maintenance_state():
 # SettingService Tests
 # ---------------------------------------------------------------------------
 
+
 class TestSystemConfig:
     """System config endpoint tests."""
 
@@ -33,8 +35,7 @@ class TestSystemConfig:
     async def test_get_system_config_requires_admin(self, client, user_token):
         """Non-admin should not access system config."""
         response = await client.get(
-            "/api/system/config",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/system/config", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 403
 
@@ -42,8 +43,7 @@ class TestSystemConfig:
     async def test_get_system_config_as_admin(self, client, admin_token):
         """Admin should be able to access system config."""
         response = await client.get(
-            "/api/system/config",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/system/config", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -56,10 +56,7 @@ class TestSystemConfig:
         response = await client.put(
             "/api/system/config",
             headers={"Authorization": f"Bearer {admin_token}"},
-            json={
-                "maintenance_mode": True,
-                "maintenance_message": "System down for maintenance"
-            }
+            json={"maintenance_mode": True, "maintenance_message": "System down for maintenance"},
         )
         assert response.status_code == 200
         data = response.json()
@@ -93,7 +90,7 @@ class TestMaintenanceMode:
         """Admin should be able to enable maintenance mode and it persists to DB."""
         response = await client.post(
             "/api/system/maintenance?enabled=true&message=Under maintenance",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert response.status_code == 200
         data = response.json()
@@ -112,7 +109,7 @@ class TestMaintenanceMode:
         """Admin should be able to disable maintenance mode."""
         response = await client.post(
             "/api/system/maintenance?enabled=false",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert response.status_code == 200
         data = response.json()
@@ -131,8 +128,7 @@ class TestSystemStats:
     async def test_get_system_stats(self, client, admin_token, test_user):
         """Admin should get system statistics."""
         response = await client.get(
-            "/api/system/stats",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/system/stats", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -141,11 +137,13 @@ class TestSystemStats:
         assert "credits" in data
         assert "timestamp" in data
 
+
 """Coverage tests for smaller API modules: health, system, quotas, ip_restriction."""
 
 import pytest
 from unittest import mock
 from datetime import datetime, timedelta, UTC
+
 
 class TestSystemEndpoints:
     """app/api/system.py coverage."""
@@ -170,8 +168,7 @@ class TestSystemEndpoints:
     @pytest.mark.asyncio
     async def test_system_config_get(self, client, admin_token):
         response = await client.get(
-            "/api/system/config",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/system/config", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -183,7 +180,7 @@ class TestSystemEndpoints:
         response = await client.put(
             "/api/system/config",
             headers={"Authorization": f"Bearer {admin_token}"},
-            json={"maintenance_mode": False, "maintenance_message": "test"}
+            json={"maintenance_mode": False, "maintenance_message": "test"},
         )
         assert response.status_code == 200
         data = response.json()
@@ -193,7 +190,7 @@ class TestSystemEndpoints:
     async def test_system_toggle_maintenance(self, client, admin_token):
         response = await client.post(
             "/api/system/maintenance?enabled=true&message=test+maintenance",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert response.status_code == 200
         data = response.json()
@@ -202,8 +199,7 @@ class TestSystemEndpoints:
     @pytest.mark.asyncio
     async def test_system_stats(self, client, admin_token):
         response = await client.get(
-            "/api/system/stats",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/system/stats", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -214,16 +210,14 @@ class TestSystemEndpoints:
     @pytest.mark.asyncio
     async def test_system_stats_forbidden_non_admin(self, client, user_token):
         response = await client.get(
-            "/api/system/stats",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/system/stats", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 403
 
     @pytest.mark.asyncio
     async def test_maintenance_windows_list(self, client, admin_token):
         response = await client.get(
-            "/api/system/maintenance-windows",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/system/maintenance-windows", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -237,9 +231,11 @@ class TestSystemEndpoints:
             json={
                 "title": "Test",
                 "message": "Test window",
-                "start_at": (datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1)).isoformat(),
+                "start_at": (
+                    datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1)
+                ).isoformat(),
                 "end_at": (datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1)).isoformat(),
-            }
+            },
         )
         # Should get 400 for invalid date range
         assert response.status_code in (200, 400)
@@ -247,21 +243,22 @@ class TestSystemEndpoints:
     @pytest.mark.asyncio
     async def test_maintenance_window_get_not_found(self, client, admin_token):
         import uuid
+
         response = await client.get(
             f"/api/system/maintenance-windows/{uuid.uuid4()}",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert response.status_code == 404
 
     @pytest.mark.asyncio
     async def test_maintenance_window_delete_not_found(self, client, admin_token):
         import uuid
+
         response = await client.delete(
             f"/api/system/maintenance-windows/{uuid.uuid4()}",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert response.status_code == 404
-
 
 
 """Extended tests for small API modules — coverage gap closure."""
@@ -293,6 +290,7 @@ def reset_maintenance_state():
 # ─────────────────────────────────────────────────────────────
 # Schedules API
 # ─────────────────────────────────────────────────────────────
+
 
 class TestSystemExtended:
     """Tests for system endpoint coverage gaps."""
@@ -361,8 +359,12 @@ class TestSystemExtended:
                 json={
                     "title": "Test Window",
                     "message": "Maintenance",
-                    "start_at": (datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1)).isoformat(),
-                    "end_at": (datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=2)).isoformat(),
+                    "start_at": (
+                        datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1)
+                    ).isoformat(),
+                    "end_at": (
+                        datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=2)
+                    ).isoformat(),
                 },
             )
         assert response.status_code == 200
@@ -371,15 +373,21 @@ class TestSystemExtended:
     async def test_maintenance_windows_create_value_error(self, client, admin_token):
         """ValueError from create_window should return 400."""
         with mock.patch("app.api.system.MaintenanceWindowService") as mock_svc:
-            mock_svc.return_value.create_window = mock.AsyncMock(side_effect=ValueError("bad dates"))
+            mock_svc.return_value.create_window = mock.AsyncMock(
+                side_effect=ValueError("bad dates")
+            )
             response = await client.post(
                 "/api/system/maintenance-windows",
                 headers={"Authorization": f"Bearer {admin_token}"},
                 json={
                     "title": "Test",
                     "message": "Maintenance",
-                    "start_at": (datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1)).isoformat(),
-                    "end_at": (datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=2)).isoformat(),
+                    "start_at": (
+                        datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1)
+                    ).isoformat(),
+                    "end_at": (
+                        datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=2)
+                    ).isoformat(),
                 },
             )
         assert response.status_code == 400
@@ -399,7 +407,9 @@ class TestSystemExtended:
     async def test_maintenance_windows_update_not_found(self, client, admin_token):
         """Should return 404 for updating nonexistent window."""
         with mock.patch("app.api.system.MaintenanceWindowService") as mock_svc:
-            mock_svc.return_value.update_window = mock.AsyncMock(side_effect=ValueError("not found"))
+            mock_svc.return_value.update_window = mock.AsyncMock(
+                side_effect=ValueError("not found")
+            )
             response = await client.put(
                 f"/api/system/maintenance-windows/{uuid_mod.uuid4()}",
                 headers={"Authorization": f"Bearer {admin_token}"},
@@ -428,6 +438,7 @@ class TestSystemExtended:
 
 import pytest
 
+
 class TestSystemAPI:
     """Tests for system endpoints."""
 
@@ -441,8 +452,7 @@ class TestSystemAPI:
     async def test_system_config(self, client, admin_token):
         """System config requires admin."""
         response = await client.get(
-            "/api/system/config",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/system/config", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
 
@@ -450,8 +460,7 @@ class TestSystemAPI:
     async def test_system_stats(self, client, admin_token):
         """System stats requires admin."""
         response = await client.get(
-            "/api/system/stats",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/system/stats", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
 
@@ -459,8 +468,7 @@ class TestSystemAPI:
     async def test_list_maintenance_windows(self, client, admin_token):
         """Maintenance windows requires admin."""
         response = await client.get(
-            "/api/system/maintenance-windows",
-            headers={"Authorization": f"Bearer {admin_token}"}
+            "/api/system/maintenance-windows", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert response.status_code == 200
 
@@ -470,7 +478,7 @@ class TestSystemAPI:
         response = await client.put(
             "/api/system/config",
             headers={"Authorization": f"Bearer {user_token}"},
-            json={"key": "value"}
+            json={"key": "value"},
         )
         assert response.status_code in [403, 404]
 
@@ -480,9 +488,11 @@ class TestSystemAPI:
         response = await client.post(
             "/api/system/maintenance-windows",
             headers={"Authorization": f"Bearer {user_token}"},
-            json={"title": "Test", "message": "test", "start_at": "2025-01-01T00:00:00", "end_at": "2025-01-02T00:00:00"}
+            json={
+                "title": "Test",
+                "message": "test",
+                "start_at": "2025-01-01T00:00:00",
+                "end_at": "2025-01-02T00:00:00",
+            },
         )
         assert response.status_code in [403, 404]
-
-
-

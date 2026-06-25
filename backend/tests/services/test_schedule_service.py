@@ -95,10 +95,7 @@ class TestScheduleServiceCreate:
 
         service = ScheduleService(db_session)
         schedule = await service.create_schedule(
-            str(server.id),
-            str(test_user.id),
-            action="start",
-            cron_expression="0 9 * * *"
+            str(server.id), str(test_user.id), action="start", cron_expression="0 9 * * *"
         )
         assert schedule.action == "start"
         assert schedule.cron_expression == "0 9 * * *"
@@ -113,7 +110,7 @@ class TestScheduleServiceCreate:
                 str(uuid_mod.uuid4()),
                 str(test_user.id),
                 action="delete",
-                cron_expression="0 9 * * *"
+                cron_expression="0 9 * * *",
             )
         assert "Invalid action" in str(exc_info.value)
 
@@ -123,10 +120,7 @@ class TestScheduleServiceCreate:
         service = ScheduleService(db_session)
         with pytest.raises(ValueError):
             await service.create_schedule(
-                str(uuid_mod.uuid4()),
-                str(test_user.id),
-                action="start",
-                cron_expression="invalid"
+                str(uuid_mod.uuid4()), str(test_user.id), action="start", cron_expression="invalid"
             )
 
 
@@ -151,9 +145,7 @@ class TestScheduleServiceUpdate:
         await db_session.commit()
 
         service = ScheduleService(db_session)
-        updated = await service.update_schedule(
-            str(sched.id), str(test_user.id), action="stop"
-        )
+        updated = await service.update_schedule(str(sched.id), str(test_user.id), action="stop")
         assert updated.action == "stop"
 
     @pytest.mark.asyncio
@@ -372,9 +364,10 @@ class TestScheduleServiceExecute:
             class MockResult:
                 def scalar_one_or_none(self):
                     return None
+
             return MockResult()
 
-        with patch.object(db_session, 'execute', side_effect=mock_execute):
+        with patch.object(db_session, "execute", side_effect=mock_execute):
             result = await service.execute_schedule(sched)
 
         assert result["success"] is False
@@ -402,7 +395,10 @@ class TestScheduleServiceExecute:
         service = ScheduleService(db_session)
         result = await service.execute_schedule(sched)
         assert result["success"] is False
-        assert "container missing" in result["message"].lower() or "cannot auto-start" in result["message"]
+        assert (
+            "container missing" in result["message"].lower()
+            or "cannot auto-start" in result["message"]
+        )
 
     @pytest.mark.asyncio
     async def test_execute_schedule_start_stopped_container(self, db_session, test_user):
@@ -427,8 +423,13 @@ class TestScheduleServiceExecute:
         mock_spawner.get_status = AsyncMock(return_value="stopped")
         mock_spawner.start = AsyncMock()
 
-        with patch("app.container.spawner.spawner", mock_spawner), \
-             patch("app.services.schedule_service.broadcast_server_status_change", new_callable=AsyncMock):
+        with (
+            patch("app.container.spawner.spawner", mock_spawner),
+            patch(
+                "app.services.schedule_service.broadcast_server_status_change",
+                new_callable=AsyncMock,
+            ),
+        ):
             result = await service.execute_schedule(sched)
 
         assert result["success"] is True
@@ -486,9 +487,14 @@ class TestScheduleServiceExecute:
         mock_spawner = Mock()
         mock_spawner.delete = AsyncMock()
 
-        with patch("app.container.spawner.spawner", mock_spawner), \
-             patch("app.services.schedule_service.broadcast_server_status_change", new_callable=AsyncMock), \
-             patch("app.services.quota_service.QuotaService") as mock_quota_cls:
+        with (
+            patch("app.container.spawner.spawner", mock_spawner),
+            patch(
+                "app.services.schedule_service.broadcast_server_status_change",
+                new_callable=AsyncMock,
+            ),
+            patch("app.services.quota_service.QuotaService") as mock_quota_cls,
+        ):
             mock_quota = Mock()
             mock_quota.decrement_usage = AsyncMock()
             mock_quota_cls.return_value = mock_quota
@@ -503,11 +509,26 @@ class TestScheduleServiceExecute:
     async def test_execute_schedule_stop_with_plan_billing(self, db_session, test_user):
         """Stop action should reconcile billing when plan exists."""
         from app.models.server_plan import ServerPlan
-        server = Server(name="srv", user_id=test_user.id, status="running", container_id="cid-123", plan_id=uuid_mod.uuid4())
+
+        server = Server(
+            name="srv",
+            user_id=test_user.id,
+            status="running",
+            container_id="cid-123",
+            plan_id=uuid_mod.uuid4(),
+        )
         db_session.add(server)
         await db_session.flush()
 
-        plan = ServerPlan(id=server.plan_id, name="test", slug="test", cpu_limit=1.0, memory_limit="512m", disk_limit="10g", cost_per_hour=1)
+        plan = ServerPlan(
+            id=server.plan_id,
+            name="test",
+            slug="test",
+            cpu_limit=1.0,
+            memory_limit="512m",
+            disk_limit="10g",
+            cost_per_hour=1,
+        )
         db_session.add(plan)
         await db_session.flush()
 
@@ -528,10 +549,15 @@ class TestScheduleServiceExecute:
         mock_credit = Mock()
         mock_credit.reconcile_server_billing = AsyncMock()
 
-        with patch("app.container.spawner.spawner", mock_spawner), \
-             patch("app.services.schedule_service.broadcast_server_status_change", new_callable=AsyncMock), \
-             patch("app.services.credit_service.CreditService", return_value=mock_credit), \
-             patch("app.services.quota_service.QuotaService") as mock_quota_cls:
+        with (
+            patch("app.container.spawner.spawner", mock_spawner),
+            patch(
+                "app.services.schedule_service.broadcast_server_status_change",
+                new_callable=AsyncMock,
+            ),
+            patch("app.services.credit_service.CreditService", return_value=mock_credit),
+            patch("app.services.quota_service.QuotaService") as mock_quota_cls,
+        ):
             mock_quota = Mock()
             mock_quota.decrement_usage = AsyncMock()
             mock_quota_cls.return_value = mock_quota
@@ -564,8 +590,13 @@ class TestScheduleServiceExecute:
         mock_spawner.stop = AsyncMock()
         mock_spawner.start = AsyncMock()
 
-        with patch("app.container.spawner.spawner", mock_spawner), \
-             patch("app.services.schedule_service.broadcast_server_status_change", new_callable=AsyncMock):
+        with (
+            patch("app.container.spawner.spawner", mock_spawner),
+            patch(
+                "app.services.schedule_service.broadcast_server_status_change",
+                new_callable=AsyncMock,
+            ),
+        ):
             result = await service.execute_schedule(sched)
 
         assert result["success"] is True

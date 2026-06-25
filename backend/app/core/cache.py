@@ -29,9 +29,11 @@ from app.core.prometheus_metrics import increment_redis_cache_hit, increment_red
 
 try:
     import msgpack
+
     _USE_MSGPACK = True
 except ImportError:  # pragma: no cover
     import json
+
     _USE_MSGPACK = False
 
 logger = logging.getLogger(__name__)
@@ -74,6 +76,7 @@ def _deserialize(data: str) -> Any:
 # ---------------------------------------------------------------------------
 # Circuit breaker
 # ---------------------------------------------------------------------------
+
 
 class _CacheCircuitBreaker:
     """Simple in-memory circuit breaker for Redis cache operations.
@@ -146,6 +149,7 @@ def _redis_call(func):
 # ---------------------------------------------------------------------------
 # Low-level primitives (fail-safe)
 # ---------------------------------------------------------------------------
+
 
 async def cache_get(key: str) -> Optional[Any]:
     """Fetch a cached value by key.
@@ -258,6 +262,7 @@ async def cache_delete_pattern(pattern: str) -> int:
 # Stampede-protected get-or-set
 # ---------------------------------------------------------------------------
 
+
 async def cache_get_or_set(
     key: str,
     builder: Callable[[], Awaitable[Any]],
@@ -324,6 +329,7 @@ async def cache_get_or_set(
 # SET-based invalidation (O(M) instead of O(N) SCAN)
 # ---------------------------------------------------------------------------
 
+
 async def cache_track_key(track_set_key: str, member_key: str) -> None:
     """Add a cache key to a Redis SET for bulk invalidation.
 
@@ -340,7 +346,9 @@ async def cache_track_key(track_set_key: str, member_key: str) -> None:
         _circuit_breaker.record_success()
     except Exception as exc:
         _circuit_breaker.record_failure()
-        logger.warning("cache_track_key failed for set %r member %r: %s", track_set_key, member_key, exc)
+        logger.warning(
+            "cache_track_key failed for set %r member %r: %s", track_set_key, member_key, exc
+        )
 
 
 async def cache_delete_tracked(track_set_key: str) -> int:

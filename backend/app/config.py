@@ -74,8 +74,8 @@ class Settings(BaseSettings):
     rate_limit_strict_multiplier: float = 0.5
 
     # WebSocket rate limits
-    rate_limit_websocket_cpm: int = 30         # Connections per minute
-    rate_limit_websocket_msg_rpm: int = 120    # Messages per minute per connection
+    rate_limit_websocket_cpm: int = 30  # Connections per minute
+    rate_limit_websocket_msg_rpm: int = 120  # Messages per minute per connection
 
     # Redis window configuration (seconds)
     rate_limit_window_seconds: int = 60
@@ -204,25 +204,29 @@ class Settings(BaseSettings):
     server_auth_max_tokens_per_minute: int = 10
     server_auth_audit_log: bool = True
 
-    @model_validator(mode='after')
-    def set_key_paths(self) -> 'Settings':
+    @model_validator(mode="after")
+    def set_key_paths(self) -> "Settings":
         """Derive key paths from secrets_dir if not explicitly set."""
         if not self.server_auth_private_key_path:
             self.server_auth_private_key_path = os.path.join(
-                self.server_auth_secrets_dir, 'server-auth-private.pem'
+                self.server_auth_secrets_dir, "server-auth-private.pem"
             )
         if not self.server_auth_public_key_path:
             self.server_auth_public_key_path = os.path.join(
-                self.server_auth_secrets_dir, 'server-auth-public.pem'
+                self.server_auth_secrets_dir, "server-auth-public.pem"
             )
         return self
 
-    @model_validator(mode='after')
-    def reject_default_secrets_in_production(self) -> 'Settings':
+    @model_validator(mode="after")
+    def reject_default_secrets_in_production(self) -> "Settings":
         """Refuse to start in production with default/dev secrets."""
         if self.app_env == "production":
-            weak_secrets = {"change-me", "dev-jwt-secret-change-in-production-min-32-chars",
-                            "dev-session-secret-change-in-production", "dev-jwt-secret"}
+            weak_secrets = {
+                "change-me",
+                "dev-jwt-secret-change-in-production-min-32-chars",
+                "dev-session-secret-change-in-production",
+                "dev-jwt-secret",
+            }
             if self.jwt_secret in weak_secrets:
                 raise ValueError(
                     "JWT_SECRET is using a default/dev value. "
@@ -235,8 +239,8 @@ class Settings(BaseSettings):
                 )
         return self
 
-    @model_validator(mode='after')
-    def set_pgbouncer_url(self) -> 'Settings':
+    @model_validator(mode="after")
+    def set_pgbouncer_url(self) -> "Settings":
         """Derive a default PgBouncer URL when pooling is enabled explicitly."""
         if self.pgbouncer_enabled and not self.database_pgbouncer_url:
             parsed = urlparse(self.database_url)
@@ -247,8 +251,8 @@ class Settings(BaseSettings):
                 )
         return self
 
-    @model_validator(mode='after')
-    def validate_cors_in_production(self) -> 'Settings':
+    @model_validator(mode="after")
+    def validate_cors_in_production(self) -> "Settings":
         """Refuse wildcard or empty CORS origins in production."""
         if self.app_env == "production":
             origins = [o.strip() for o in self.cors_origins.split(",") if o.strip()]
@@ -260,9 +264,7 @@ class Settings(BaseSettings):
             # Validate each origin looks like a valid URL (scheme + netloc)
             for origin in origins:
                 if not origin.startswith(("http://", "https://")):
-                    raise ValueError(
-                        f"CORS origin '{origin}' must be a valid HTTP/HTTPS URL."
-                    )
+                    raise ValueError(f"CORS origin '{origin}' must be a valid HTTP/HTTPS URL.")
         return self
 
     class Config:

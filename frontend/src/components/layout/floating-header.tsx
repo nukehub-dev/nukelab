@@ -1,25 +1,25 @@
-import type { LucideIcon } from 'lucide-react';
-import { ArrowLeft } from 'lucide-react';
-import { Link } from '@tanstack/react-router';
-import { cn } from '../../lib/utils';
-import { StatCard } from '../data/stat-card';
-import { ActionButton } from '../actions/action-button';
-import type { ActionType } from '../actions/action-config';
-import type { StatCardProps } from '../data/stat-card';
+import type { LucideIcon } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
+import { cn } from '../../lib/utils'
+import { StatCard } from '../data/stat-card'
+import { ActionButton } from '../actions/action-button'
+import type { ActionType } from '../actions/action-config'
+import type { StatCardProps } from '../data/stat-card'
 
 interface PageHeaderProps {
-  title: string;
-  subtitle?: string;
-  icon?: LucideIcon;
-  stats?: StatCardProps[];
+  title: string
+  subtitle?: string
+  icon?: LucideIcon
+  stats?: StatCardProps[]
   actions?: Array<{
-    action: ActionType;
-    onClick: () => void;
-    loading?: boolean;
-    disabled?: boolean;
-  }>;
-  backTo?: string;
-  className?: string;
+    action: ActionType
+    onClick: () => void
+    loading?: boolean
+    disabled?: boolean
+  }>
+  backTo?: string
+  className?: string
 }
 
 export function FloatingHeader({
@@ -54,9 +54,7 @@ export function FloatingHeader({
         )}
         <div className="flex-1 min-w-0">
           <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
-          {subtitle && (
-            <p className="text-sm text-muted-foreground mt-1 truncate">{subtitle}</p>
-          )}
+          {subtitle && <p className="text-sm text-muted-foreground mt-1 truncate">{subtitle}</p>}
         </div>
 
         {/* Actions */}
@@ -84,5 +82,5 @@ export function FloatingHeader({
         </div>
       )}
     </div>
-  );
+  )
 }

@@ -48,8 +48,8 @@ async def bulk_server_action(
     body: BulkServerActionRequest,
     request: Request,
     current_user: User = Depends(get_current_user),
-    _jwt = Depends(require_jwt_auth()),
-    db: AsyncSession = Depends(get_db)
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
 ):
     """Perform bulk action on servers"""
 
@@ -58,7 +58,7 @@ async def bulk_server_action(
     if body.action not in valid_actions:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid action. Must be one of: {', '.join(valid_actions)}"
+            detail=f"Invalid action. Must be one of: {', '.join(valid_actions)}",
         )
 
     # Check base permission
@@ -69,10 +69,7 @@ async def bulk_server_action(
         "delete": Permission.SERVERS_WRITE_OWN,
     }
     if not has_permission(current_user, base_permissions[body.action]):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Permission denied"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permission denied")
 
     succeeded = []
     failed = []
@@ -81,9 +78,7 @@ async def bulk_server_action(
     for server_id in body.server_ids:
         try:
             # Get server
-            result = await db.execute(
-                select(Server).where(Server.id == server_id)
-            )
+            result = await db.execute(select(Server).where(Server.id == server_id))
             server = result.scalar_one_or_none()
 
             if not server:
@@ -100,10 +95,12 @@ async def bulk_server_action(
                 # Cross-user access requires JWT authentication — API tokens are not allowed
                 auth_context = getattr(request.state, "auth_context", None)
                 if not auth_context or auth_context.auth_method != "jwt":
-                    failed.append({
-                        "server_id": server_id,
-                        "error": "Cross-user server access requires JWT authentication. Please log in via the web interface."
-                    })
+                    failed.append(
+                        {
+                            "server_id": server_id,
+                            "error": "Cross-user server access requires JWT authentication. Please log in via the web interface.",
+                        }
+                    )
                     continue
 
                 if not has_permission(current_user, Permission.SERVERS_ACCESS_OTHERS):
@@ -112,7 +109,12 @@ async def bulk_server_action(
 
                 # Require reason for cross-user access
                 if not body.reason or not body.reason.strip():
-                    failed.append({"server_id": server_id, "error": "A reason is required for cross-user server access"})
+                    failed.append(
+                        {
+                            "server_id": server_id,
+                            "error": "A reason is required for cross-user server access",
+                        }
+                    )
                     continue
 
                 # Audit cross-user bulk action
@@ -165,6 +167,7 @@ async def bulk_server_action(
     # Invalidate server list caches for affected users and admin lists
     if affected_user_ids:
         from app.api.servers import _invalidate_server_list_cache
+
         for user_id in affected_user_ids:
             await _invalidate_server_list_cache(user_id)
 
@@ -173,5 +176,5 @@ async def bulk_server_action(
         "failed": failed,
         "total": len(body.server_ids),
         "success_count": len(succeeded),
-        "failure_count": len(failed)
+        "failure_count": len(failed),
     }

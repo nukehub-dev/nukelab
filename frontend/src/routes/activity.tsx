@@ -1,6 +1,6 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { useState, useEffect, useRef } from 'react';
-import type { ColumnDef, SortingState, ColumnFiltersState } from '@tanstack/react-table';
+import { createFileRoute } from '@tanstack/react-router'
+import { useState, useEffect, useRef } from 'react'
+import type { ColumnDef, SortingState, ColumnFiltersState } from '@tanstack/react-table'
 import {
   Activity,
   Server,
@@ -13,14 +13,14 @@ import {
   Clock,
   Hash,
   Eye,
-} from 'lucide-react';
-import { ResourcePageLayout } from '../components/layout/resource-page-layout';
-import { DataTable } from '../components/data/data-table';
-import { useDataTable } from '../hooks/use-data-table';
-import { useActivity, type ActivityItem } from '../hooks/use-activity';
-import { formatDate, cn } from '../lib/utils';
-import { useThemeStore } from '../stores/theme-store';
-import { Dialog, DialogContent, DialogClose } from '../components/ui/dialog';
+} from 'lucide-react'
+import { ResourcePageLayout } from '../components/layout/resource-page-layout'
+import { DataTable } from '../components/data/data-table'
+import { useDataTable } from '../hooks/use-data-table'
+import { useActivity, type ActivityItem } from '../hooks/use-activity'
+import { formatDate, cn } from '../lib/utils'
+import { useThemeStore } from '../stores/theme-store'
+import { Dialog, DialogContent, DialogClose } from '../components/ui/dialog'
 
 const actionIcons: Record<string, typeof Hash> = {
   server: Server,
@@ -36,7 +36,7 @@ const actionIcons: Record<string, typeof Hash> = {
   permission: Shield,
   login: User,
   logout: User,
-};
+}
 
 const actionColors: Record<string, string> = {
   create: 'text-emerald-400 bg-emerald-400/10',
@@ -51,38 +51,38 @@ const actionColors: Record<string, string> = {
   disable: 'text-red-400 bg-red-400/10',
   login: 'text-blue-400 bg-blue-400/10',
   auth: 'text-blue-400 bg-blue-400/10',
-};
+}
 
 function getActionIcon(action: string) {
-  const key = Object.keys(actionIcons).find((k) => action.toLowerCase().includes(k));
-  return key ? actionIcons[key] : Activity;
+  const key = Object.keys(actionIcons).find((k) => action.toLowerCase().includes(k))
+  return key ? actionIcons[key] : Activity
 }
 
 function getActionColor(action: string) {
-  const key = Object.keys(actionColors).find((k) => action.toLowerCase().includes(k));
-  return key ? actionColors[key] : 'text-muted-foreground bg-muted/30';
+  const key = Object.keys(actionColors).find((k) => action.toLowerCase().includes(k))
+  return key ? actionColors[key] : 'text-muted-foreground bg-muted/30'
 }
 
 function formatActionName(action: string): string {
-  return action.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+  return action.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())
 }
 
 function formatDetailValue(_key: string, value: unknown): string {
-  if (value === null || value === undefined) return '-';
-  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
-  if (typeof value === 'object') return JSON.stringify(value).slice(0, 40);
-  return String(value).slice(0, 60);
+  if (value === null || value === undefined) return '-'
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
+  if (typeof value === 'object') return JSON.stringify(value).slice(0, 40)
+  return String(value).slice(0, 60)
 }
 
 export const Route = createFileRoute('/activity')({
   component: ActivityPage,
-});
+})
 
 function ActivityPage() {
-  const density = useThemeStore((state) => state.density);
-  const [selectedActivity, setSelectedActivity] = useState<ActivityItem | null>(null);
-  const [sorting, setSorting] = useState<SortingState>([{ id: 'timestamp', desc: true }]);
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const density = useThemeStore((state) => state.density)
+  const [selectedActivity, setSelectedActivity] = useState<ActivityItem | null>(null)
+  const [sorting, setSorting] = useState<SortingState>([{ id: 'timestamp', desc: true }])
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
 
   const {
     state: tableState,
@@ -90,45 +90,45 @@ function ActivityPage() {
     setLimit,
     setSearch,
     setFilter,
-  } = useDataTable({ defaultLimit: 25, defaultSortBy: 'timestamp' });
+  } = useDataTable({ defaultLimit: 25, defaultSortBy: 'timestamp' })
 
   // Sync React Table column filters with API filter state
-  const prevColumnFiltersRef = useRef<ColumnFiltersState>([]);
+  const prevColumnFiltersRef = useRef<ColumnFiltersState>([])
   useEffect(() => {
-    const currentIds = new Set(columnFilters.map((f) => f.id));
+    const currentIds = new Set(columnFilters.map((f) => f.id))
 
     columnFilters.forEach((filter) => {
       if (filter.value !== undefined && filter.value !== null) {
-        setFilter(filter.id, String(filter.value));
+        setFilter(filter.id, String(filter.value))
       }
-    });
+    })
 
     prevColumnFiltersRef.current.forEach((filter) => {
       if (!currentIds.has(filter.id)) {
-        setFilter(filter.id, null);
+        setFilter(filter.id, null)
       }
-    });
+    })
 
-    prevColumnFiltersRef.current = columnFilters;
-  }, [columnFilters, setFilter]);
+    prevColumnFiltersRef.current = columnFilters
+  }, [columnFilters, setFilter])
 
   const { data, isLoading, isError, error } = useActivity({
     page: tableState.page,
     limit: tableState.limit,
     action: tableState.filters.action as string,
     target_type: tableState.filters.target_type as string,
-  });
+  })
 
-  const activities = data?.activities || [];
-  const pagination = data?.pagination;
+  const activities = data?.activities || []
+  const pagination = data?.pagination
 
   const columns: ColumnDef<ActivityItem>[] = [
     {
       accessorKey: 'action',
       header: 'Action',
       cell: ({ row }) => {
-        const action = row.getValue('action') as string;
-        const Icon = getActionIcon(action);
+        const action = row.getValue('action') as string
+        const Icon = getActionIcon(action)
         return (
           <div className="flex items-center gap-2">
             <div className={cn('p-1.5 rounded-md', getActionColor(action))}>
@@ -136,15 +136,15 @@ function ActivityPage() {
             </div>
             <span className="font-medium text-sm">{formatActionName(action)}</span>
           </div>
-        );
+        )
       },
     },
     {
       accessorKey: 'target_type',
       header: 'Target',
       cell: ({ row }) => {
-        const targetType = row.getValue('target_type') as string;
-        const targetId = row.original.target_id;
+        const targetType = row.getValue('target_type') as string
+        const targetId = row.original.target_id
         return (
           <div className="text-sm">
             <span className="text-muted-foreground">{targetType}</span>
@@ -152,7 +152,7 @@ function ActivityPage() {
               <span className="ml-1.5 font-mono text-xs">{targetId.slice(0, 8)}...</span>
             )}
           </div>
-        );
+        )
       },
     },
     {
@@ -161,7 +161,9 @@ function ActivityPage() {
       cell: ({ row }) => (
         <div className="flex items-center gap-1.5">
           <Clock className="w-3.5 h-3.5 text-muted-foreground" />
-          <span className="text-sm text-muted-foreground">{formatDate(row.getValue('timestamp') as string)}</span>
+          <span className="text-sm text-muted-foreground">
+            {formatDate(row.getValue('timestamp') as string)}
+          </span>
         </div>
       ),
     },
@@ -179,7 +181,7 @@ function ActivityPage() {
       enableSorting: false,
       size: 50,
     },
-  ];
+  ]
 
   const filters = [
     {
@@ -203,10 +205,10 @@ function ActivityPage() {
         { label: 'Users', value: 'users' },
       ],
     },
-  ];
+  ]
 
   const mobileCardRenderer = (item: ActivityItem) => {
-    const Icon = getActionIcon(item.action);
+    const Icon = getActionIcon(item.action)
     return (
       <div className="p-3 space-y-1.5">
         <div className="flex items-center justify-between gap-2">
@@ -229,8 +231,8 @@ function ActivityPage() {
           <span className="tabular-nums">{formatDate(item.timestamp)}</span>
         </div>
       </div>
-    );
-  };
+    )
+  }
 
   return (
     <>
@@ -278,10 +280,16 @@ function ActivityPage() {
           {selectedActivity && (
             <div className="space-y-5">
               <div className="flex items-start gap-3">
-                <div className={cn('p-2.5 rounded-xl', getActionColor(selectedActivity.action), 'shrink-0')}>
+                <div
+                  className={cn(
+                    'p-2.5 rounded-xl',
+                    getActionColor(selectedActivity.action),
+                    'shrink-0'
+                  )}
+                >
                   {(() => {
-                    const Icon = getActionIcon(selectedActivity.action);
-                    return <Icon className="w-5 h-5" />;
+                    const Icon = getActionIcon(selectedActivity.action)
+                    return <Icon className="w-5 h-5" />
                   })()}
                 </div>
                 <div className="min-w-0 flex-1">
@@ -298,19 +306,28 @@ function ActivityPage() {
               <div className="space-y-3">
                 {selectedActivity.target_type && (
                   <div className="bubble p-3.5">
-                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5">Target</p>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5">
+                      Target
+                    </p>
                     <p className="text-sm font-medium">{selectedActivity.target_type}</p>
                     {selectedActivity.target_id && (
-                      <p className="text-xs text-muted-foreground font-mono mt-0.5">{selectedActivity.target_id}</p>
+                      <p className="text-xs text-muted-foreground font-mono mt-0.5">
+                        {selectedActivity.target_id}
+                      </p>
                     )}
                   </div>
                 )}
 
                 {Object.keys(selectedActivity.details).length > 0 && (
                   <div className="bubble p-3.5 space-y-2">
-                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Details</p>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                      Details
+                    </p>
                     {Object.entries(selectedActivity.details).map(([key, value]) => (
-                      <div key={key} className="flex items-center justify-between py-1.5 border-b border-border/30 last:border-0">
+                      <div
+                        key={key}
+                        className="flex items-center justify-between py-1.5 border-b border-border/30 last:border-0"
+                      >
                         <span className="text-xs text-muted-foreground">{key}</span>
                         <span className="text-sm font-mono">{formatDetailValue(key, value)}</span>
                       </div>
@@ -323,5 +340,5 @@ function ActivityPage() {
         </DialogContent>
       </Dialog>
     </>
-  );
+  )
 }

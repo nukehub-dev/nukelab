@@ -1,0 +1,2 @@
+# Development / formatting dependencies
+ruff==0.15.19

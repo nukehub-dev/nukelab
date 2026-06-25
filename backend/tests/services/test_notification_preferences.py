@@ -20,11 +20,10 @@ class TestNotificationPreferences:
         """With no preferences set, should create in-app notification but not email."""
         service = NotificationService(db_session)
 
-        with patch.object(service, '_send_email_for_notification', new_callable=AsyncMock) as mock_email:
-            notif = await service.server_started(
-                user_id=test_user.id,
-                server_name="test-server"
-            )
+        with patch.object(
+            service, "_send_email_for_notification", new_callable=AsyncMock
+        ) as mock_email:
+            notif = await service.server_started(user_id=test_user.id, server_name="test-server")
 
         # Should create notification
         assert notif is not None
@@ -41,7 +40,10 @@ class TestNotificationPreferences:
         test_user.preferences = {
             "notifications": {
                 "events": [
-                    {"event": "server_start", "channels": {"email": False, "webhook": False, "in_app": False}}
+                    {
+                        "event": "server_start",
+                        "channels": {"email": False, "webhook": False, "in_app": False},
+                    }
                 ]
             }
         }
@@ -49,11 +51,10 @@ class TestNotificationPreferences:
 
         service = NotificationService(db_session)
 
-        with patch.object(service, '_send_email_for_notification', new_callable=AsyncMock) as mock_email:
-            notif = await service.server_started(
-                user_id=test_user.id,
-                server_name="test-server"
-            )
+        with patch.object(
+            service, "_send_email_for_notification", new_callable=AsyncMock
+        ) as mock_email:
+            notif = await service.server_started(user_id=test_user.id, server_name="test-server")
 
         # Should NOT create notification
         assert notif is None
@@ -66,7 +67,10 @@ class TestNotificationPreferences:
         test_user.preferences = {
             "notifications": {
                 "events": [
-                    {"event": "server_start", "channels": {"email": True, "webhook": False, "in_app": True}}
+                    {
+                        "event": "server_start",
+                        "channels": {"email": True, "webhook": False, "in_app": True},
+                    }
                 ]
             }
         }
@@ -74,11 +78,10 @@ class TestNotificationPreferences:
 
         service = NotificationService(db_session)
 
-        with patch.object(service, '_send_email_for_notification', new_callable=AsyncMock) as mock_email:
-            notif = await service.server_started(
-                user_id=test_user.id,
-                server_name="test-server"
-            )
+        with patch.object(
+            service, "_send_email_for_notification", new_callable=AsyncMock
+        ) as mock_email:
+            notif = await service.server_started(user_id=test_user.id, server_name="test-server")
 
         # Should create notification
         assert notif is not None
@@ -96,7 +99,10 @@ class TestNotificationPreferences:
         test_user.preferences = {
             "notifications": {
                 "events": [
-                    {"event": "server_start", "channels": {"email": True, "webhook": False, "in_app": False}}
+                    {
+                        "event": "server_start",
+                        "channels": {"email": True, "webhook": False, "in_app": False},
+                    }
                 ]
             }
         }
@@ -104,11 +110,10 @@ class TestNotificationPreferences:
 
         service = NotificationService(db_session)
 
-        with patch.object(service, '_send_email_for_notification', new_callable=AsyncMock) as mock_email:
-            notif = await service.server_started(
-                user_id=test_user.id,
-                server_name="test-server"
-            )
+        with patch.object(
+            service, "_send_email_for_notification", new_callable=AsyncMock
+        ) as mock_email:
+            notif = await service.server_started(user_id=test_user.id, server_name="test-server")
 
         # Should NOT create notification
         assert notif is None
@@ -134,7 +139,10 @@ class TestNotificationPreferences:
         test_user.preferences = {
             "notifications": {
                 "events": [
-                    {"event": "server_stop", "channels": {"email": False, "webhook": False, "in_app": False}}
+                    {
+                        "event": "server_stop",
+                        "channels": {"email": False, "webhook": False, "in_app": False},
+                    }
                 ]
             }
         }
@@ -142,11 +150,11 @@ class TestNotificationPreferences:
 
         service = NotificationService(db_session)
 
-        with patch.object(service, '_send_email_for_notification', new_callable=AsyncMock) as mock_email:
+        with patch.object(
+            service, "_send_email_for_notification", new_callable=AsyncMock
+        ) as mock_email:
             notif = await service.server_stopped(
-                user_id=test_user.id,
-                server_name="test-server",
-                reason="idle timeout"
+                user_id=test_user.id, server_name="test-server", reason="idle timeout"
             )
 
         assert notif is None
@@ -158,7 +166,10 @@ class TestNotificationPreferences:
         test_user.preferences = {
             "notifications": {
                 "events": [
-                    {"event": "credit_low", "channels": {"email": True, "webhook": False, "in_app": True}}
+                    {
+                        "event": "credit_low",
+                        "channels": {"email": True, "webhook": False, "in_app": True},
+                    }
                 ]
             }
         }
@@ -166,11 +177,10 @@ class TestNotificationPreferences:
 
         service = NotificationService(db_session)
 
-        with patch.object(service, '_send_email_for_notification', new_callable=AsyncMock) as mock_email:
-            notif = await service.low_balance(
-                user_id=test_user.id,
-                balance=10
-            )
+        with patch.object(
+            service, "_send_email_for_notification", new_callable=AsyncMock
+        ) as mock_email:
+            notif = await service.low_balance(user_id=test_user.id, balance=10)
 
         assert notif is not None
         assert "Low Credit Balance" in notif.title
@@ -182,7 +192,10 @@ class TestNotificationPreferences:
         test_user.preferences = {
             "notifications": {
                 "events": [
-                    {"event": "workspace_invite", "channels": {"email": True, "webhook": False, "in_app": True}}
+                    {
+                        "event": "workspace_invite",
+                        "channels": {"email": True, "webhook": False, "in_app": True},
+                    }
                 ]
             }
         }
@@ -190,11 +203,11 @@ class TestNotificationPreferences:
 
         service = NotificationService(db_session)
 
-        with patch.object(service, '_send_email_for_notification', new_callable=AsyncMock) as mock_email:
+        with patch.object(
+            service, "_send_email_for_notification", new_callable=AsyncMock
+        ) as mock_email:
             notif = await service.workspace_invitation(
-                user_id=test_user.id,
-                workspace_name="Test Workspace",
-                inviter_name="admin"
+                user_id=test_user.id, workspace_name="Test Workspace", inviter_name="admin"
             )
 
         assert notif is not None
@@ -206,13 +219,15 @@ class TestNotificationPreferences:
         """Events without explicit preferences should default to in_app=True, email=False."""
         service = NotificationService(db_session)
 
-        with patch.object(service, '_send_email_for_notification', new_callable=AsyncMock) as mock_email:
+        with patch.object(
+            service, "_send_email_for_notification", new_callable=AsyncMock
+        ) as mock_email:
             notif = await service.create(
                 user_id=test_user.id,
                 title="Custom Event",
                 message="Test message",
                 type="system",
-                event_key="nonexistent_event"
+                event_key="nonexistent_event",
             )
 
         # Should create in-app notification (default)
@@ -225,12 +240,14 @@ class TestNotificationPreferences:
         """create() without event_key should default to in_app only."""
         service = NotificationService(db_session)
 
-        with patch.object(service, '_send_email_for_notification', new_callable=AsyncMock) as mock_email:
+        with patch.object(
+            service, "_send_email_for_notification", new_callable=AsyncMock
+        ) as mock_email:
             notif = await service.create(
                 user_id=test_user.id,
                 title="System Alert",
                 message="Something happened",
-                type="system"
+                type="system",
             )
 
         assert notif is not None

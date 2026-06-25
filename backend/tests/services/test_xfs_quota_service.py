@@ -12,11 +12,12 @@ class TestXfsQuotaService:
         with mock.patch("app.services.xfs_quota_service.settings") as mock_settings:
             mock_settings.xfs_quota_enabled = False
             from app.services.xfs_quota_service import XfsQuotaService
+
             service = XfsQuotaService()
             assert service.enabled is False
-            assert service.set_quota("test-vol", 10 * 1024 ** 3) is False
+            assert service.set_quota("test-vol", 10 * 1024**3) is False
             assert service.remove_quota("test-vol") is False
-            assert service.update_quota("test-vol", 10 * 1024 ** 3) is False
+            assert service.update_quota("test-vol", 10 * 1024**3) is False
             assert service.get_quota_usage("test-vol") is None
 
     def test_project_id_deterministic(self):
@@ -25,6 +26,7 @@ class TestXfsQuotaService:
             mock_settings.xfs_quota_enabled = True
             mock_settings.xfs_project_id_start = 10000
             from app.services.xfs_quota_service import XfsQuotaService
+
             service = XfsQuotaService()
             id1 = service._project_id("my-volume")
             id2 = service._project_id("my-volume")
@@ -38,6 +40,7 @@ class TestXfsQuotaService:
         with mock.patch("app.services.xfs_quota_service.settings") as mock_settings:
             mock_settings.volume_storage_path = "/custom/volumes"
             from app.services.xfs_quota_service import XfsQuotaService
+
             service = XfsQuotaService()
             path = service._get_volume_path("my-vol")
             assert path.startswith("/custom/volumes/my-vol/_data")
@@ -47,6 +50,7 @@ class TestXfsQuotaService:
         with mock.patch("app.services.xfs_quota_service.settings") as mock_settings:
             mock_settings.volume_storage_path = ""
             from app.services.xfs_quota_service import XfsQuotaService
+
             service = XfsQuotaService()
             path = service._get_volume_path("my-vol")
             assert "/var/lib/docker/volumes/my-vol/_data" in path
@@ -57,10 +61,12 @@ class TestXfsQuotaService:
             mock_settings.xfs_quota_enabled = True
             mock_settings.volume_storage_path = "/tmp"
             from app.services.xfs_quota_service import XfsQuotaService
+
             service = XfsQuotaService()
 
             # Mock binary found but not XFS
             with mock.patch("subprocess.run") as mock_run:
+
                 def side_effect(cmd, **kwargs):
                     m = mock.MagicMock()
                     if cmd[0] == "which":
@@ -128,10 +134,11 @@ class TestXfsQuotaService:
             mock_settings.xfs_quota_enabled = True
             mock_settings.volume_storage_path = "/tmp"
             from app.services.xfs_quota_service import XfsQuotaService
+
             service = XfsQuotaService()
 
             with mock.patch.object(service, "_xfs_quota_available", return_value=False):
-                assert service.set_quota("test-vol", 10 * 1024 ** 3) is False
+                assert service.set_quota("test-vol", 10 * 1024**3) is False
 
     def test_project_id_stable_across_restarts(self):
         """Project IDs must be identical across Python process restarts.
@@ -158,9 +165,11 @@ class TestXfsQuotaService:
             mock_settings.xfs_quota_enabled = True
             mock_settings.volume_storage_path = "/tmp"
             from app.services.xfs_quota_service import XfsQuotaService
+
             service = XfsQuotaService()
 
             with mock.patch("subprocess.run") as mock_run:
+
                 def side_effect(cmd, **kwargs):
                     m = mock.MagicMock()
                     if cmd[0] == "which":
@@ -181,9 +190,11 @@ class TestXfsQuotaService:
         """_find_mountpoint should walk up to the actual filesystem boundary."""
         import tempfile
         import os
+
         with mock.patch("app.services.xfs_quota_service.settings") as mock_settings:
             mock_settings.xfs_quota_enabled = True
             from app.services.xfs_quota_service import XfsQuotaService
+
             service = XfsQuotaService()
 
             with tempfile.TemporaryDirectory() as tmpdir:
@@ -199,9 +210,11 @@ class TestXfsQuotaService:
         """Should return False when project files are not writable."""
         import tempfile
         import os
+
         with mock.patch("app.services.xfs_quota_service.settings") as mock_settings:
             mock_settings.xfs_quota_enabled = True
             from app.services.xfs_quota_service import XfsQuotaService
+
             service = XfsQuotaService()
 
             with tempfile.TemporaryDirectory() as tmpdir:
@@ -229,15 +242,17 @@ class TestXfsQuotaService:
             mock_settings.xfs_quota_enabled = True
             mock_settings.volume_storage_path = "/var/lib/docker/volumes"
             from app.services.xfs_quota_service import XfsQuotaService
+
             service = XfsQuotaService()
 
             mock_output = "#10000    1048576   10485760  10485760  00 [--------]"
-            with mock.patch.object(
-                service, "_xfs_quota_available", return_value=True
-            ), mock.patch.object(
-                service, "_run_xfs_quota", return_value=mock.MagicMock(
-                    returncode=0, stdout=mock_output
-                )
+            with (
+                mock.patch.object(service, "_xfs_quota_available", return_value=True),
+                mock.patch.object(
+                    service,
+                    "_run_xfs_quota",
+                    return_value=mock.MagicMock(returncode=0, stdout=mock_output),
+                ),
             ):
                 result = service.get_quota_usage("test-vol")
                 assert result is not None

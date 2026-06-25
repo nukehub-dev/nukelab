@@ -1,20 +1,20 @@
-import { useState } from 'react';
-import { cn } from '../../lib/utils';
+import { useState } from 'react'
+import { cn } from '../../lib/utils'
 
 export interface HorizontalBarDataPoint {
-  label: string;
-  value: number;
-  color?: string;
+  label: string
+  value: number
+  color?: string
 }
 
 interface HorizontalBarChartProps {
-  data: HorizontalBarDataPoint[];
-  maxValue?: number;
-  labelWidth?: number;
-  barHeight?: number;
-  className?: string;
-  valueFormatter?: (value: number) => string;
-  showValues?: boolean;
+  data: HorizontalBarDataPoint[]
+  maxValue?: number
+  labelWidth?: number
+  barHeight?: number
+  className?: string
+  valueFormatter?: (value: number) => string
+  showValues?: boolean
 }
 
 export function HorizontalBarChart({
@@ -26,18 +26,16 @@ export function HorizontalBarChart({
   valueFormatter,
   showValues = true,
 }: HorizontalBarChartProps) {
-  const computedMax = maxValue ?? Math.max(...data.map((d) => d.value), 1);
-  const [hovered, setHovered] = useState<number | null>(null);
+  const computedMax = maxValue ?? Math.max(...data.map((d) => d.value), 1)
+  const [hovered, setHovered] = useState<number | null>(null)
 
   return (
     <div className={cn('space-y-1.5', className)}>
       {data.map((item, index) => {
-        const percentage = computedMax > 0 ? (item.value / computedMax) * 100 : 0;
-        const clampedPercentage = Math.min(percentage, 100);
-        const displayValue = valueFormatter
-          ? valueFormatter(item.value)
-          : item.value.toFixed(2);
-        const isHovered = hovered === index;
+        const percentage = computedMax > 0 ? (item.value / computedMax) * 100 : 0
+        const clampedPercentage = Math.min(percentage, 100)
+        const displayValue = valueFormatter ? valueFormatter(item.value) : item.value.toFixed(2)
+        const isHovered = hovered === index
 
         return (
           <div
@@ -106,8 +104,8 @@ export function HorizontalBarChart({
               </div>
             )}
           </div>
-        );
+        )
       })}
     </div>
-  );
+  )
 }

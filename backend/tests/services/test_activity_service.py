@@ -21,7 +21,7 @@ class TestActivityServiceLog:
             actor_id=str(test_user.id),
             details={"name": "test-server"},
             ip_address="127.0.0.1",
-            user_agent="test-agent"
+            user_agent="test-agent",
         )
         assert log.action == "server.create"
         assert log.target_type == "server"
@@ -34,10 +34,7 @@ class TestActivityServiceLog:
     async def test_log_without_optional_fields(self, db_session):
         """log should work without optional fields."""
         service = ActivityService(db_session)
-        log = await service.log(
-            action="system.startup",
-            target_type="system"
-        )
+        log = await service.log(action="system.startup", target_type="system")
         assert log.action == "system.startup"
         assert log.actor_id is None
         assert log.target_id is None
@@ -91,8 +88,15 @@ class TestActivityServiceGetLogs:
         """get_logs should filter by target_id."""
         target_id = str(uuid_mod.uuid4())
         service = ActivityService(db_session)
-        await service.log(action="test", target_type="server", target_id=target_id, actor_id=str(test_user.id))
-        await service.log(action="test", target_type="server", target_id=str(uuid_mod.uuid4()), actor_id=str(test_user.id))
+        await service.log(
+            action="test", target_type="server", target_id=target_id, actor_id=str(test_user.id)
+        )
+        await service.log(
+            action="test",
+            target_type="server",
+            target_id=str(uuid_mod.uuid4()),
+            actor_id=str(test_user.id),
+        )
 
         logs = await service.get_logs(target_id=target_id)
         assert all(str(log.target_id) == target_id for log in logs)

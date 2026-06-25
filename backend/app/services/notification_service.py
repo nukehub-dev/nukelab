@@ -46,22 +46,23 @@ EVENT_KEY_MAP = {
 DEFAULT_CHANNELS = {"email": False, "webhook": False, "in_app": True}
 
 
-async def broadcast_server_status_change(user_id, server_id: str, status: str, extra_data: Optional[dict] = None):
+async def broadcast_server_status_change(
+    user_id, server_id: str, status: str, extra_data: Optional[dict] = None
+):
     """Broadcast a server status change event to the user's WebSocket channel."""
     try:
         import redis.asyncio as redis_client
+
         r = redis_client.from_url(settings.redis_url)
         await r.publish(
             f"user:{user_id}",
-            json.dumps({
-                "event": "server:status_changed",
-                "user_id": str(user_id),
-                "data": {
-                    "server_id": server_id,
-                    "status": status,
-                    **(extra_data or {})
+            json.dumps(
+                {
+                    "event": "server:status_changed",
+                    "user_id": str(user_id),
+                    "data": {"server_id": server_id, "status": status, **(extra_data or {})},
                 }
-            })
+            ),
         )
         await r.aclose()
     except Exception:
@@ -95,17 +96,15 @@ class NotificationService:
         return event_prefs.get(channel, DEFAULT_CHANNELS.get(channel, False))
 
     async def _send_email_for_notification(
-        self,
-        user_id,
-        title: str,
-        message: str,
-        type: str = "system"
+        self, user_id, title: str, message: str, type: str = "system"
     ):
         """Send an email notification to the user. Silently logs errors."""
         import logging
+
         logger = logging.getLogger(__name__)
         try:
             from app.services.email_service import EmailService
+
             email_service = EmailService()
             if not email_service.enabled:
                 return
@@ -137,7 +136,7 @@ class NotificationService:
                 to_email=user.email,
                 subject=f"[NukeLab] {title}",
                 html_body=html_body,
-                text_body=message
+                text_body=message,
             )
             if result["success"]:
                 logger.info(f"Email sent to {user.email}: {title}")
@@ -150,14 +149,17 @@ class NotificationService:
         """Push notification to WebSocket subscribers via Redis pub/sub."""
         try:
             import redis.asyncio as redis_client
+
             r = redis_client.from_url(settings.redis_url)
             await r.publish(
                 f"user:{user_id}",
-                json.dumps({
-                    "event": "notification:new",
-                    "user_id": str(user_id),
-                    "data": notification.to_dict()
-                })
+                json.dumps(
+                    {
+                        "event": "notification:new",
+                        "user_id": str(user_id),
+                        "data": notification.to_dict(),
+                    }
+                ),
             )
             await r.aclose()
         except Exception:
@@ -180,6 +182,7 @@ class NotificationService:
         If no event_key is provided, defaults to in_app only (no email).
         """
         import logging
+
         logger = logging.getLogger(__name__)
 
         # Determine effective event key
@@ -200,7 +203,7 @@ class NotificationService:
                 type=type,
                 severity=severity,
                 action_url=action_url,
-                extra_data=extra_data or {}
+                extra_data=extra_data or {},
             )
             self.db.add(notification)
             await self.db.commit()
@@ -215,7 +218,9 @@ class NotificationService:
 
         return notification
 
-    async def server_started(self, user_id, server_name: str, action_url: Optional[str] = None) -> Optional[Notification]:
+    async def server_started(
+        self, user_id, server_name: str, action_url: Optional[str] = None
+    ) -> Optional[Notification]:
         """Notify user that their server has started."""
         return await self.create(
             user_id=user_id,
@@ -227,7 +232,9 @@ class NotificationService:
             event_key="server_start",
         )
 
-    async def server_ready(self, user_id, server_name: str, action_url: Optional[str] = None) -> Optional[Notification]:
+    async def server_ready(
+        self, user_id, server_name: str, action_url: Optional[str] = None
+    ) -> Optional[Notification]:
         """Notify user that their server is ready to use."""
         return await self.create(
             user_id=user_id,
@@ -239,7 +246,9 @@ class NotificationService:
             event_key="server_ready",
         )
 
-    async def server_idle_warning(self, user_id, server_name: str, idle_minutes: int, action_url: Optional[str] = None) -> Optional[Notification]:
+    async def server_idle_warning(
+        self, user_id, server_name: str, idle_minutes: int, action_url: Optional[str] = None
+    ) -> Optional[Notification]:
         """Warn user that their server will stop soon due to inactivity."""
         return await self.create(
             user_id=user_id,
@@ -251,7 +260,13 @@ class NotificationService:
             event_key="server_stop",
         )
 
-    async def server_stopped(self, user_id, server_name: str, reason: Optional[str] = None, action_url: Optional[str] = None) -> Optional[Notification]:
+    async def server_stopped(
+        self,
+        user_id,
+        server_name: str,
+        reason: Optional[str] = None,
+        action_url: Optional[str] = None,
+    ) -> Optional[Notification]:
         """Notify user that their server has stopped."""
         msg = f"Your server '{server_name}' has been stopped."
         if reason:
@@ -266,7 +281,9 @@ class NotificationService:
             event_key="server_stop",
         )
 
-    async def server_restarted(self, user_id, server_name: str, action_url: Optional[str] = None) -> Optional[Notification]:
+    async def server_restarted(
+        self, user_id, server_name: str, action_url: Optional[str] = None
+    ) -> Optional[Notification]:
         """Notify user that their server has been restarted."""
         return await self.create(
             user_id=user_id,
@@ -289,7 +306,9 @@ class NotificationService:
             event_key="server_stop",
         )
 
-    async def credits_granted(self, user_id, amount: int, new_balance: int, reason: Optional[str] = None) -> Optional[Notification]:
+    async def credits_granted(
+        self, user_id, amount: int, new_balance: int, reason: Optional[str] = None
+    ) -> Optional[Notification]:
         """Notify user that credits have been granted."""
         msg = f"{amount} NUKE credits have been added to your account. New balance: {new_balance}."
         if reason:
@@ -303,7 +322,9 @@ class NotificationService:
             event_key="credit_granted",
         )
 
-    async def credits_deducted(self, user_id, amount: int, new_balance: int, reason: Optional[str] = None) -> Optional[Notification]:
+    async def credits_deducted(
+        self, user_id, amount: int, new_balance: int, reason: Optional[str] = None
+    ) -> Optional[Notification]:
         """Notify user that credits have been deducted."""
         msg = f"{amount} NUKE credits have been deducted from your account. New balance: {new_balance}."
         if reason:
@@ -317,7 +338,9 @@ class NotificationService:
             event_key="credit_low",
         )
 
-    async def daily_allowance(self, user_id, amount: int, new_balance: int) -> Optional[Notification]:
+    async def daily_allowance(
+        self, user_id, amount: int, new_balance: int
+    ) -> Optional[Notification]:
         """Notify user that daily allowance has been granted."""
         return await self.create(
             user_id=user_id,
@@ -328,7 +351,9 @@ class NotificationService:
             event_key="credit_granted",
         )
 
-    async def low_balance(self, user_id, balance: int, threshold: int = 50) -> Optional[Notification]:
+    async def low_balance(
+        self, user_id, balance: int, threshold: int = 50
+    ) -> Optional[Notification]:
         """Warn user about low credit balance."""
         return await self.create(
             user_id=user_id,
@@ -339,7 +364,9 @@ class NotificationService:
             event_key="credit_low",
         )
 
-    async def queue_timeout(self, user_id, server_name: str, action_url: Optional[str] = None) -> Optional[Notification]:
+    async def queue_timeout(
+        self, user_id, server_name: str, action_url: Optional[str] = None
+    ) -> Optional[Notification]:
         """Notify user that their queued server timed out."""
         return await self.create(
             user_id=user_id,
@@ -351,7 +378,9 @@ class NotificationService:
             event_key="queue_position",
         )
 
-    async def server_failed(self, user_id, server_name: str, error: str, action_url: Optional[str] = None) -> Optional[Notification]:
+    async def server_failed(
+        self, user_id, server_name: str, error: str, action_url: Optional[str] = None
+    ) -> Optional[Notification]:
         """Notify user that their server failed to start."""
         return await self.create(
             user_id=user_id,
@@ -363,7 +392,9 @@ class NotificationService:
             event_key="server_start",
         )
 
-    async def workspace_invitation(self, user_id, workspace_name: str, inviter_name: str, action_url: Optional[str] = None) -> Optional[Notification]:
+    async def workspace_invitation(
+        self, user_id, workspace_name: str, inviter_name: str, action_url: Optional[str] = None
+    ) -> Optional[Notification]:
         """Notify user that they've been invited to a workspace."""
         return await self.create(
             user_id=user_id,
@@ -375,7 +406,9 @@ class NotificationService:
             event_key="workspace_invite",
         )
 
-    async def workspace_member_added(self, user_id, workspace_name: str, action_url: Optional[str] = None) -> Optional[Notification]:
+    async def workspace_member_added(
+        self, user_id, workspace_name: str, action_url: Optional[str] = None
+    ) -> Optional[Notification]:
         """Notify user that they've been added to a workspace."""
         return await self.create(
             user_id=user_id,
@@ -387,7 +420,9 @@ class NotificationService:
             event_key="workspace_member_added",
         )
 
-    async def workspace_member_removed(self, user_id, workspace_name: str, action_url: Optional[str] = None) -> Optional[Notification]:
+    async def workspace_member_removed(
+        self, user_id, workspace_name: str, action_url: Optional[str] = None
+    ) -> Optional[Notification]:
         """Notify user that they've been removed from a workspace."""
         return await self.create(
             user_id=user_id,
@@ -399,7 +434,9 @@ class NotificationService:
             event_key="workspace_member_removed",
         )
 
-    async def ownership_transferred(self, user_id, workspace_name: str, previous_owner: str, action_url: Optional[str] = None) -> Optional[Notification]:
+    async def ownership_transferred(
+        self, user_id, workspace_name: str, previous_owner: str, action_url: Optional[str] = None
+    ) -> Optional[Notification]:
         """Notify user that workspace ownership has been transferred to them."""
         return await self.create(
             user_id=user_id,
@@ -411,7 +448,9 @@ class NotificationService:
             event_key="ownership_transferred",
         )
 
-    async def volume_created(self, user_id, volume_name: str, action_url: Optional[str] = None) -> Optional[Notification]:
+    async def volume_created(
+        self, user_id, volume_name: str, action_url: Optional[str] = None
+    ) -> Optional[Notification]:
         """Notify user that a volume has been created."""
         return await self.create(
             user_id=user_id,
@@ -423,7 +462,9 @@ class NotificationService:
             event_key="volume_created",
         )
 
-    async def volume_near_limit(self, user_id, volume_name: str, usage_pct: int, action_url: Optional[str] = None) -> Optional[Notification]:
+    async def volume_near_limit(
+        self, user_id, volume_name: str, usage_pct: int, action_url: Optional[str] = None
+    ) -> Optional[Notification]:
         """Warn user that a volume is near its capacity limit."""
         return await self.create(
             user_id=user_id,
@@ -435,7 +476,9 @@ class NotificationService:
             event_key="volume_near_limit",
         )
 
-    async def volume_deleted(self, user_id, volume_name: str, action_url: Optional[str] = None) -> Optional[Notification]:
+    async def volume_deleted(
+        self, user_id, volume_name: str, action_url: Optional[str] = None
+    ) -> Optional[Notification]:
         """Notify user that a volume has been deleted."""
         return await self.create(
             user_id=user_id,
@@ -447,7 +490,9 @@ class NotificationService:
             event_key="volume_deleted",
         )
 
-    async def api_key_created(self, user_id, key_name: str, action_url: Optional[str] = None) -> Optional[Notification]:
+    async def api_key_created(
+        self, user_id, key_name: str, action_url: Optional[str] = None
+    ) -> Optional[Notification]:
         """Notify user that a new API key has been created."""
         return await self.create(
             user_id=user_id,
@@ -459,7 +504,9 @@ class NotificationService:
             event_key="api_key_created",
         )
 
-    async def maintenance_window(self, user_id, title: str, message: str, action_url: Optional[str] = None) -> Optional[Notification]:
+    async def maintenance_window(
+        self, user_id, title: str, message: str, action_url: Optional[str] = None
+    ) -> Optional[Notification]:
         """Notify user about a scheduled maintenance window."""
         return await self.create(
             user_id=user_id,
@@ -471,7 +518,9 @@ class NotificationService:
             event_key="maintenance",
         )
 
-    async def server_backup_completed(self, user_id, server_name: str, backup_size: str, action_url: Optional[str] = None) -> Optional[Notification]:
+    async def server_backup_completed(
+        self, user_id, server_name: str, backup_size: str, action_url: Optional[str] = None
+    ) -> Optional[Notification]:
         """Notify user that a server backup has been completed."""
         return await self.create(
             user_id=user_id,

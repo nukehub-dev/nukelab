@@ -1,22 +1,22 @@
-import { motion } from 'framer-motion';
-import { type LucideIcon } from 'lucide-react';
-import { Button } from '../ui/button';
-import { cn } from '../../lib/utils';
+import { motion } from 'framer-motion'
+import { type LucideIcon } from 'lucide-react'
+import { Button } from '../ui/button'
+import { cn } from '../../lib/utils'
 
 interface EmptyStateProps {
-  icon: LucideIcon;
-  title: string;
-  description?: string;
+  icon: LucideIcon
+  title: string
+  description?: string
   action?: {
-    label: string;
-    onClick: () => void;
-    icon?: LucideIcon;
-  };
+    label: string
+    onClick: () => void
+    icon?: LucideIcon
+  }
   secondaryAction?: {
-    label: string;
-    onClick: () => void;
-  };
-  className?: string;
+    label: string
+    onClick: () => void
+  }
+  className?: string
 }
 
 export function EmptyState({
@@ -85,5 +85,5 @@ export function EmptyState({
         )}
       </motion.div>
     </motion.div>
-  );
+  )
 }

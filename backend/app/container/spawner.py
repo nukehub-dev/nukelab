@@ -14,24 +14,26 @@ logger = get_logger(__name__)
 class ServerSpawner:
     def __init__(self):
         self.container_client: Optional[ContainerClient] = None
-    
+
     async def _get_container_client(self):
         if not self.container_client:
             self.container_client = await get_container_client()
         return self.container_client
-    
+
     async def _ensure_volume(self, volume_name: str):
         """Create a named Docker volume if it doesn't exist."""
         container_client = await self._get_container_client()
         try:
             await container_client.client.volumes.get(volume_name)
         except Exception:
-            await container_client.client.volumes.create({
-                "Name": volume_name,
-                "Labels": {
-                    "nukelab.managed": "true",
+            await container_client.client.volumes.create(
+                {
+                    "Name": volume_name,
+                    "Labels": {
+                        "nukelab.managed": "true",
+                    },
                 }
-            })
+            )
             logger.info("Created volume: %s", volume_name)
 
     async def spawn(
@@ -50,31 +52,31 @@ class ServerSpawner:
         server_id: Optional[str] = None,
     ) -> Server:
         """Spawn a new server container with persistent volume(s)
-        
+
         Args:
             volume_mounts: List of dicts with keys: volume_id, mount_path, mode
         """
         container_client = await self._get_container_client()
-        
+
         # Use existing server ID or generate new one
         server_id = server_id or str(uuid.uuid4())
         container_name = f"nukelab-server-{username}-{server_name}"
-        
+
         # Build Docker volumes dict from multiple mounts
         volumes = {}
-        
+
         if volume_mounts:
             for mount in volume_mounts:
                 vol_id = mount.get("volume_id")
                 mount_path = mount.get("mount_path", "/data")
                 mode = mount.get("mode", "read_write")
-                
+
                 # Get volume name from database
                 if vol_id:
                     from app.db.session import async_session
                     from sqlalchemy import select
                     from app.models.volume import Volume
-                    
+
                     async with async_session() as db:
                         result = await db.execute(select(Volume).where(Volume.id == vol_id))
                         volume = result.scalar_one_or_none()
@@ -85,9 +87,9 @@ class ServerSpawner:
                             volume_name = f"nukelab-vol-{vol_id[:8]}"
                 else:
                     volume_name = f"nukelab-server-{username}-{server_name}-data"
-                
+
                 await self._ensure_volume(volume_name)
-                
+
                 mount_mode = "ro" if mode == "read_only" else "rw"
                 volumes[volume_name] = {"bind": mount_path, "mode": mount_mode}
         else:
@@ -95,14 +97,14 @@ class ServerSpawner:
             volume_name = f"nukelab-server-{username}-{server_name}-data"
             await self._ensure_volume(volume_name)
             volumes[volume_name] = {"bind": f"/home/{username}", "mode": "rw"}
-        
+
         # Determine image - use provided image or default to naming convention
         if not image:
             image = f"nukelab-environments-{environment}:latest"
-        
+
         # Traefik labels for dynamic routing
         route_prefix = f"/user/{username}/{server_name}"
-        public_url = getattr(settings, 'public_url', 'http://localhost:8080').rstrip('/')
+        public_url = getattr(settings, "public_url", "http://localhost:8080").rstrip("/")
         labels = {
             "traefik.enable": "true",
             f"traefik.http.routers.server-{server_id}.rule": f"PathPrefix(`{route_prefix}`)",
@@ -114,7 +116,7 @@ class ServerSpawner:
             "nukelab.user.id": user_id,
             "nukelab.user.name": username,
         }
-        
+
         # Environment variables
         # Note: We do NOT pass JWT_SECRET to containers anymore.
         # Containers validate server access tokens using the public key only.
@@ -130,16 +132,17 @@ class ServerSpawner:
             "NUKELAB_AUTH_SERVER_ID": server_id,
             **(env_vars or {}),
         }
-        
+
         # Mount public key for auth validation if server auth is enabled
         if settings.server_auth_enabled and settings.server_auth_public_key_path:
             from app.services.server_auth_service import server_auth_service
+
             # Ensure keys exist (generates them if needed)
             server_auth_service._ensure_keys_exist()
             # Share the nukelab-secrets named volume with spawned containers.
             # The volume is mounted read-only at /etc/nukelab/auth.
             volumes["nukelab-secrets"] = {"bind": "/etc/nukelab/auth", "mode": "ro"}
-        
+
         try:
             # Check if image exists locally first, then try to pull
             try:
@@ -153,7 +156,7 @@ class ServerSpawner:
                     # Fallback to dev image if specific env not built
                     # (nukelab-dev has nginx and stays running)
                     image = "nukelab-dev:latest"
-            
+
             # Convert volumes dict to Docker bind mounts format
             # Handle both simple string format and dict format
             binds = []
@@ -168,7 +171,7 @@ class ServerSpawner:
                 else:
                     bind_str = f"{host}:{container}"
                 binds.append(bind_str)
-            
+
             # Create container
             container = await container_client.create_container(
                 name=container_name,
@@ -181,10 +184,10 @@ class ServerSpawner:
                 disk_limit=disk,
                 volumes=volumes,
             )
-            
+
             # Start container
             await container_client.start_container(container.id)
-            
+
             # Fix volume permissions inside the container.
             # Rootless Podman maps the host UID to container root, so named volumes
             # appear as root-owned. We make the mount point itself world-writable
@@ -193,15 +196,13 @@ class ServerSpawner:
             #   - Ownership fights when a volume is shared across multiple users
             #     (each container would otherwise chown to its own user)
             # /home/{username} is already handled by the container's /start.sh.
-            for mount in (volume_mounts or []):
+            for mount in volume_mounts or []:
                 mount_path = mount.get("mount_path", "/data")
                 # Skip the home directory — /start.sh manages that
                 if mount_path == f"/home/{username}":
                     continue
                 try:
-                    exec_instance = await container.exec(
-                        ["chmod", "777", mount_path]
-                    )
+                    exec_instance = await container.exec(["chmod", "777", mount_path])
                     await exec_instance.start(detach=True)
                     await asyncio.sleep(0.2)
                 except Exception as e:
@@ -209,14 +210,14 @@ class ServerSpawner:
                         f"Could not fix permissions for {mount_path} in container "
                         f"{container_name}: {e}"
                     )
-            
+
             # Determine primary volume_id from volume_mounts if provided
             primary_volume_id = None
             if volume_mounts:
                 # Find primary mount or use first mount
                 primary = next((m for m in volume_mounts if m.get("is_primary")), volume_mounts[0])
                 primary_volume_id = primary.get("volume_id")
-            
+
             # Create server record
             server = Server(
                 id=uuid.UUID(server_id),
@@ -234,9 +235,9 @@ class ServerSpawner:
                 started_at=datetime.now(UTC).replace(tzinfo=None),
                 created_at=datetime.now(UTC).replace(tzinfo=None),
             )
-            
+
             return server
-            
+
         except Exception as e:
             # Cleanup on failure
             try:
@@ -245,7 +246,7 @@ class ServerSpawner:
             except:
                 pass
             raise Exception(f"Failed to spawn server: {str(e)}")
-    
+
     async def start(self, container_id: str) -> bool:
         """Start a server container"""
         container_client = await self._get_container_client()
@@ -255,7 +256,7 @@ class ServerSpawner:
         except Exception:
             logger.exception("Error starting container")
             return False
-    
+
     async def stop(self, container_id: str) -> bool:
         """Stop a server container"""
         container_client = await self._get_container_client()
@@ -265,7 +266,7 @@ class ServerSpawner:
         except Exception:
             logger.exception("Error stopping container")
             return False
-    
+
     async def delete(self, container_id: str) -> bool:
         """Delete a server container"""
         container_client = await self._get_container_client()
@@ -275,7 +276,7 @@ class ServerSpawner:
         except Exception:
             logger.exception("Error deleting container")
             return False
-    
+
     async def get_status(self, container_id: str) -> str:
         """Get container status"""
         container_client = await self._get_container_client()
@@ -290,6 +291,7 @@ class ServerSpawner:
                 return "stopped"
         except Exception:
             return "unknown"
+
 
 # Singleton instance
 spawner = ServerSpawner()

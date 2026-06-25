@@ -1,6 +1,6 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { useState, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { createFileRoute } from '@tanstack/react-router'
+import { useState, useMemo } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   FolderOpen,
   Users,
@@ -16,72 +16,81 @@ import {
   LayoutGrid,
   List,
   Pin,
-} from 'lucide-react';
+} from 'lucide-react'
 import {
   useWorkspaces,
   useCreateWorkspace,
   useDeleteWorkspace,
   type Workspace,
-} from '../hooks/use-workspaces';
-import { springs } from '../lib/animations';
-import { cn } from '../lib/utils';
-import { useAuthStore } from '../stores/auth-store';
-import { useThemeStore } from '../stores/theme-store';
-import { useWorkspacePins } from '../hooks/use-workspace-pins';
-import { ResourcePageLayout } from '../components/layout/resource-page-layout';
-import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
-import { Select, SelectItem } from '../components/ui/select';
-import { Textarea } from '../components/ui/textarea';
-import { Card, CardContent } from '../components/ui/card';
-import { SkeletonCard } from '../components/feedback/skeleton';
-import { EmptyState } from '../components/feedback/empty-state';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '../components/ui/dialog';
-import { useConfirmDialog } from '../components/ui/confirm-dialog';
-import { Tooltip } from '../components/ui/tooltip';
-import { Link } from '@tanstack/react-router';
+} from '../hooks/use-workspaces'
+import { springs } from '../lib/animations'
+import { cn } from '../lib/utils'
+import { useAuthStore } from '../stores/auth-store'
+import { useThemeStore } from '../stores/theme-store'
+import { useWorkspacePins } from '../hooks/use-workspace-pins'
+import { ResourcePageLayout } from '../components/layout/resource-page-layout'
+import { Button } from '../components/ui/button'
+import { Input } from '../components/ui/input'
+import { Select, SelectItem } from '../components/ui/select'
+import { Textarea } from '../components/ui/textarea'
+import { Card, CardContent } from '../components/ui/card'
+import { SkeletonCard } from '../components/feedback/skeleton'
+import { EmptyState } from '../components/feedback/empty-state'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from '../components/ui/dialog'
+import { useConfirmDialog } from '../components/ui/confirm-dialog'
+import { Tooltip } from '../components/ui/tooltip'
+import { Link } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/workspaces/')({
   component: WorkspacesListPage,
-});
+})
 
 function formatDate(dateString?: string) {
-  if (!dateString) return '';
-  const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', { 
-    month: 'short', 
-    day: 'numeric', 
-    year: 'numeric' 
-  });
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
 }
 
 // Workspace Card Component
-function WorkspaceCard({ 
-  workspace, 
-  index, 
+function WorkspaceCard({
+  workspace,
+  index,
   onDelete,
   isPinned,
   onTogglePin,
-}: { 
-  workspace: Workspace; 
-  index: number; 
-  onDelete?: () => void;
-  isPinned?: boolean;
-  onTogglePin?: () => void;
+}: {
+  workspace: Workspace
+  index: number
+  onDelete?: () => void
+  isPinned?: boolean
+  onTogglePin?: () => void
 }) {
-  const { density } = useThemeStore();
-  const compact = density === 'compact';
+  const { density } = useThemeStore()
+  const compact = density === 'compact'
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05, ...springs.gentle }}
     >
-      <Link
-        to="/workspaces/$workspaceId"
-        params={{ workspaceId: workspace.id }}
-      >
-        <Card variant="bubble" interactive className={cn("overflow-hidden group", isPinned && "ring-1 ring-primary/30")}>
+      <Link to="/workspaces/$workspaceId" params={{ workspaceId: workspace.id }}>
+        <Card
+          variant="bubble"
+          interactive
+          className={cn('overflow-hidden group', isPinned && 'ring-1 ring-primary/30')}
+        >
           <CardContent className={compact ? 'p-3' : 'p-5'}>
             {/* Header */}
             <div className="flex items-start justify-between mb-4 gap-2">
@@ -91,9 +100,7 @@ function WorkspaceCard({
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-sm truncate">
-                      {workspace.name}
-                    </h3>
+                    <h3 className="font-semibold text-sm truncate">{workspace.name}</h3>
                     {!workspace.is_active && (
                       <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] uppercase tracking-wider bg-muted text-muted-foreground">
                         Inactive
@@ -106,28 +113,30 @@ function WorkspaceCard({
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                    {workspace.description || <span className="italic opacity-60">No description</span>}
+                    {workspace.description || (
+                      <span className="italic opacity-60">No description</span>
+                    )}
                   </p>
                 </div>
               </div>
-              
+
               <div className="flex items-center gap-1 shrink-0">
                 {onTogglePin && (
                   <Tooltip content={isPinned ? 'Unpin workspace' : 'Pin workspace'}>
                     <button
                       onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        onTogglePin();
+                        e.preventDefault()
+                        e.stopPropagation()
+                        onTogglePin()
                       }}
                       className={cn(
-                        "p-1.5 rounded-lg transition-colors",
+                        'p-1.5 rounded-lg transition-colors',
                         isPinned
-                          ? "text-primary hover:text-primary/80"
-                          : "text-muted-foreground hover:text-primary"
+                          ? 'text-primary hover:text-primary/80'
+                          : 'text-muted-foreground hover:text-primary'
                       )}
                     >
-                      <Pin className={cn("w-3.5 h-3.5", isPinned && "fill-primary")} />
+                      <Pin className={cn('w-3.5 h-3.5', isPinned && 'fill-primary')} />
                     </button>
                   </Tooltip>
                 )}
@@ -135,9 +144,9 @@ function WorkspaceCard({
                   <Tooltip content="Delete workspace">
                     <button
                       onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        onDelete();
+                        e.preventDefault()
+                        e.stopPropagation()
+                        onDelete()
                       }}
                       className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
                     >
@@ -172,7 +181,7 @@ function WorkspaceCard({
         </Card>
       </Link>
     </motion.div>
-  );
+  )
 }
 
 // Workspace List Row Component
@@ -183,25 +192,26 @@ function WorkspaceListRow({
   isPinned,
   onTogglePin,
 }: {
-  workspace: Workspace;
-  index: number;
-  onDelete?: () => void;
-  isPinned?: boolean;
-  onTogglePin?: () => void;
+  workspace: Workspace
+  index: number
+  onDelete?: () => void
+  isPinned?: boolean
+  onTogglePin?: () => void
 }) {
-  const { density } = useThemeStore();
-  const compact = density === 'compact';
+  const { density } = useThemeStore()
+  const compact = density === 'compact'
   return (
     <motion.div
       initial={{ opacity: 0, x: -10 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ delay: index * 0.03, ...springs.gentle }}
     >
-      <Link
-        to="/workspaces/$workspaceId"
-        params={{ workspaceId: workspace.id }}
-      >
-        <Card variant="bubble" interactive className={cn("overflow-hidden group", isPinned && "ring-1 ring-primary/30")}>
+      <Link to="/workspaces/$workspaceId" params={{ workspaceId: workspace.id }}>
+        <Card
+          variant="bubble"
+          interactive
+          className={cn('overflow-hidden group', isPinned && 'ring-1 ring-primary/30')}
+        >
           <CardContent className={compact ? 'p-2.5' : 'p-4'}>
             <div className="flex items-center gap-4">
               <div className="p-2 rounded-xl bg-primary/10 shrink-0">
@@ -209,9 +219,7 @@ function WorkspaceListRow({
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-sm truncate">
-                    {workspace.name}
-                  </h3>
+                  <h3 className="font-semibold text-sm truncate">{workspace.name}</h3>
                   {!workspace.is_active && (
                     <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] uppercase tracking-wider bg-muted text-muted-foreground">
                       Inactive
@@ -224,7 +232,9 @@ function WorkspaceListRow({
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                  {workspace.description || <span className="italic opacity-60">No description</span>}
+                  {workspace.description || (
+                    <span className="italic opacity-60">No description</span>
+                  )}
                 </p>
               </div>
               <div className="hidden sm:flex items-center gap-4 text-xs text-muted-foreground shrink-0">
@@ -242,18 +252,18 @@ function WorkspaceListRow({
                 <Tooltip content={isPinned ? 'Unpin workspace' : 'Pin workspace'}>
                   <button
                     onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      onTogglePin();
+                      e.preventDefault()
+                      e.stopPropagation()
+                      onTogglePin()
                     }}
                     className={cn(
-                      "p-1.5 rounded-lg transition-colors shrink-0",
+                      'p-1.5 rounded-lg transition-colors shrink-0',
                       isPinned
-                        ? "text-primary hover:text-primary/80"
-                        : "text-muted-foreground hover:text-primary"
+                        ? 'text-primary hover:text-primary/80'
+                        : 'text-muted-foreground hover:text-primary'
                     )}
                   >
-                    <Pin className={cn("w-3.5 h-3.5", isPinned && "fill-primary")} />
+                    <Pin className={cn('w-3.5 h-3.5', isPinned && 'fill-primary')} />
                   </button>
                 </Tooltip>
               )}
@@ -261,9 +271,9 @@ function WorkspaceListRow({
                 <Tooltip content="Delete workspace">
                   <button
                     onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      onDelete();
+                      e.preventDefault()
+                      e.stopPropagation()
+                      onDelete()
                     }}
                     className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors shrink-0"
                   >
@@ -276,103 +286,105 @@ function WorkspaceListRow({
         </Card>
       </Link>
     </motion.div>
-  );
+  )
 }
 
-type FilterTab = 'all' | 'owned' | 'member' | 'pending';
-type SortOption = 'name_asc' | 'name_desc' | 'newest' | 'oldest' | 'members';
+type FilterTab = 'all' | 'owned' | 'member' | 'pending'
+type SortOption = 'name_asc' | 'name_desc' | 'newest' | 'oldest' | 'members'
 
 function WorkspacesListPage() {
-  const currentUser = useAuthStore((state) => state.user);
-  const { data: workspaces = [], isLoading } = useWorkspaces();
-  const createWorkspace = useCreateWorkspace();
-  const deleteWorkspace = useDeleteWorkspace();
-  const { confirm, dialog } = useConfirmDialog();
-  const { isPinned, togglePin } = useWorkspacePins();
+  const currentUser = useAuthStore((state) => state.user)
+  const { data: workspaces = [], isLoading } = useWorkspaces()
+  const createWorkspace = useCreateWorkspace()
+  const deleteWorkspace = useDeleteWorkspace()
+  const { confirm, dialog } = useConfirmDialog()
+  const { isPinned, togglePin } = useWorkspacePins()
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState<FilterTab>('all');
-  const [sortBy, setSortBy] = useState<SortOption>('newest');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('')
+  const [activeFilter, setActiveFilter] = useState<FilterTab>('all')
+  const [sortBy, setSortBy] = useState<SortOption>('newest')
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+  const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [newWorkspace, setNewWorkspace] = useState({
     name: '',
     description: '',
-  });
+  })
 
   const filteredWorkspaces = useMemo(() => {
-    let result = workspaces;
+    let result = workspaces
 
     // Search filter
     if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
+      const query = searchQuery.toLowerCase()
       result = result.filter(
-        (w) =>
-          w.name.toLowerCase().includes(query) ||
-          w.description?.toLowerCase().includes(query)
-      );
+        (w) => w.name.toLowerCase().includes(query) || w.description?.toLowerCase().includes(query)
+      )
     }
 
     // Category filter
     if (activeFilter === 'owned') {
-      result = result.filter((w) => w.owner_id === currentUser?.id);
+      result = result.filter((w) => w.owner_id === currentUser?.id)
     } else if (activeFilter === 'member') {
-      result = result.filter((w) => w.owner_id !== currentUser?.id && !w.has_pending_invitation);
+      result = result.filter((w) => w.owner_id !== currentUser?.id && !w.has_pending_invitation)
     } else if (activeFilter === 'pending') {
-      result = result.filter((w) => w.has_pending_invitation);
+      result = result.filter((w) => w.has_pending_invitation)
     }
 
     // Sort by user selection, then pin status
     result = [...result].sort((a, b) => {
       // Pin status always takes priority
-      const aPinned = isPinned(a.id) ? 1 : 0;
-      const bPinned = isPinned(b.id) ? 1 : 0;
-      if (aPinned !== bPinned) return bPinned - aPinned;
+      const aPinned = isPinned(a.id) ? 1 : 0
+      const bPinned = isPinned(b.id) ? 1 : 0
+      if (aPinned !== bPinned) return bPinned - aPinned
 
       switch (sortBy) {
         case 'name_asc':
-          return a.name.localeCompare(b.name);
+          return a.name.localeCompare(b.name)
         case 'name_desc':
-          return b.name.localeCompare(a.name);
+          return b.name.localeCompare(a.name)
         case 'newest':
-          return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+          return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
         case 'oldest':
-          return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
+          return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
         case 'members':
-          return (b.member_count || 0) - (a.member_count || 0);
+          return (b.member_count || 0) - (a.member_count || 0)
         default:
-          return 0;
+          return 0
       }
-    });
+    })
 
-    return result;
-  }, [workspaces, searchQuery, activeFilter, sortBy, isPinned, currentUser?.id]);
+    return result
+  }, [workspaces, searchQuery, activeFilter, sortBy, isPinned, currentUser?.id])
 
-  const filterCounts = useMemo(() => ({
-    all: workspaces.length,
-    owned: workspaces.filter((w) => w.owner_id === currentUser?.id).length,
-    member: workspaces.filter((w) => w.owner_id !== currentUser?.id && !w.has_pending_invitation).length,
-    pending: workspaces.filter((w) => w.has_pending_invitation).length,
-  }), [workspaces, currentUser?.id]);
+  const filterCounts = useMemo(
+    () => ({
+      all: workspaces.length,
+      owned: workspaces.filter((w) => w.owner_id === currentUser?.id).length,
+      member: workspaces.filter((w) => w.owner_id !== currentUser?.id && !w.has_pending_invitation)
+        .length,
+      pending: workspaces.filter((w) => w.has_pending_invitation).length,
+    }),
+    [workspaces, currentUser?.id]
+  )
 
   const stats = useMemo(() => {
-    const totalWorkspaces = workspaces.length;
-    const activeWorkspaces = workspaces.filter((w) => w.is_active).length;
-    const totalMembers = workspaces.reduce((acc, w) => acc + (w.member_count || 0), 0);
-    const totalVolumes = workspaces.reduce((acc, w) => acc + (w.volume_count || 0), 0);
+    const totalWorkspaces = workspaces.length
+    const activeWorkspaces = workspaces.filter((w) => w.is_active).length
+    const totalMembers = workspaces.reduce((acc, w) => acc + (w.member_count || 0), 0)
+    const totalVolumes = workspaces.reduce((acc, w) => acc + (w.volume_count || 0), 0)
 
-    return { totalWorkspaces, activeWorkspaces, totalMembers, totalVolumes };
-  }, [workspaces]);
+    return { totalWorkspaces, activeWorkspaces, totalMembers, totalVolumes }
+  }, [workspaces])
 
   const handleCreate = (e: React.FormEvent) => {
-    e.preventDefault();
+    e.preventDefault()
     createWorkspace.mutate(newWorkspace, {
       onSuccess: () => {
-        setShowCreateDialog(false);
-        setNewWorkspace({ name: '', description: '' });
+        setShowCreateDialog(false)
+        setNewWorkspace({ name: '', description: '' })
       },
-    });
-  };
+    })
+  }
 
   const handleDelete = async (workspace: Workspace) => {
     const confirmed = await confirm({
@@ -381,23 +393,73 @@ function WorkspacesListPage() {
       confirmLabel: 'Delete',
       cancelLabel: 'Cancel',
       variant: 'danger',
-    });
+    })
     if (confirmed) {
-      deleteWorkspace.mutate(workspace.id);
+      deleteWorkspace.mutate(workspace.id)
     }
-  };
+  }
 
-  const statCards = isLoading ? [
-    { title: 'Total Workspaces', value: '...', icon: FolderOpen, iconColor: 'text-blue-400', bgColor: 'bg-blue-500/10' },
-    { title: 'Active', value: '...', icon: Activity, iconColor: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
-    { title: 'Total Members', value: '...', icon: Users, iconColor: 'text-violet-400', bgColor: 'bg-violet-500/10' },
-    { title: 'Total Volumes', value: '...', icon: HardDrive, iconColor: 'text-amber-400', bgColor: 'bg-amber-500/10' },
-  ] : [
-    { title: 'Total Workspaces', value: stats.totalWorkspaces, icon: FolderOpen, iconColor: 'text-blue-400', bgColor: 'bg-blue-500/10' },
-    { title: 'Active', value: stats.activeWorkspaces, icon: Activity, iconColor: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
-    { title: 'Total Members', value: stats.totalMembers, icon: Users, iconColor: 'text-violet-400', bgColor: 'bg-violet-500/10' },
-    { title: 'Total Volumes', value: stats.totalVolumes, icon: HardDrive, iconColor: 'text-amber-400', bgColor: 'bg-amber-500/10' },
-  ];
+  const statCards = isLoading
+    ? [
+        {
+          title: 'Total Workspaces',
+          value: '...',
+          icon: FolderOpen,
+          iconColor: 'text-blue-400',
+          bgColor: 'bg-blue-500/10',
+        },
+        {
+          title: 'Active',
+          value: '...',
+          icon: Activity,
+          iconColor: 'text-emerald-400',
+          bgColor: 'bg-emerald-500/10',
+        },
+        {
+          title: 'Total Members',
+          value: '...',
+          icon: Users,
+          iconColor: 'text-violet-400',
+          bgColor: 'bg-violet-500/10',
+        },
+        {
+          title: 'Total Volumes',
+          value: '...',
+          icon: HardDrive,
+          iconColor: 'text-amber-400',
+          bgColor: 'bg-amber-500/10',
+        },
+      ]
+    : [
+        {
+          title: 'Total Workspaces',
+          value: stats.totalWorkspaces,
+          icon: FolderOpen,
+          iconColor: 'text-blue-400',
+          bgColor: 'bg-blue-500/10',
+        },
+        {
+          title: 'Active',
+          value: stats.activeWorkspaces,
+          icon: Activity,
+          iconColor: 'text-emerald-400',
+          bgColor: 'bg-emerald-500/10',
+        },
+        {
+          title: 'Total Members',
+          value: stats.totalMembers,
+          icon: Users,
+          iconColor: 'text-violet-400',
+          bgColor: 'bg-violet-500/10',
+        },
+        {
+          title: 'Total Volumes',
+          value: stats.totalVolumes,
+          icon: HardDrive,
+          iconColor: 'text-amber-400',
+          bgColor: 'bg-amber-500/10',
+        },
+      ]
 
   return (
     <>
@@ -439,7 +501,9 @@ function WorkspacesListPage() {
                     onClick={() => setViewMode('grid')}
                     className={cn(
                       'p-1.5 rounded-md transition-colors',
-                      viewMode === 'grid' ? 'bg-surface shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
+                      viewMode === 'grid'
+                        ? 'bg-surface shadow-sm text-foreground'
+                        : 'text-muted-foreground hover:text-foreground'
                     )}
                   >
                     <LayoutGrid className="w-4 h-4" />
@@ -448,7 +512,9 @@ function WorkspacesListPage() {
                     onClick={() => setViewMode('list')}
                     className={cn(
                       'p-1.5 rounded-md transition-colors',
-                      viewMode === 'list' ? 'bg-surface shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
+                      viewMode === 'list'
+                        ? 'bg-surface shadow-sm text-foreground'
+                        : 'text-muted-foreground hover:text-foreground'
                     )}
                   >
                     <List className="w-4 h-4" />
@@ -473,10 +539,30 @@ function WorkspacesListPage() {
             {/* Filter Tabs */}
             <div className="flex items-center gap-2 flex-wrap">
               {[
-                { key: 'all' as FilterTab, label: 'All', icon: SlidersHorizontal, count: filterCounts.all },
-                { key: 'owned' as FilterTab, label: 'Owned', icon: Crown, count: filterCounts.owned },
-                { key: 'member' as FilterTab, label: 'Member', icon: UserCheck, count: filterCounts.member },
-                { key: 'pending' as FilterTab, label: 'Pending', icon: Clock, count: filterCounts.pending },
+                {
+                  key: 'all' as FilterTab,
+                  label: 'All',
+                  icon: SlidersHorizontal,
+                  count: filterCounts.all,
+                },
+                {
+                  key: 'owned' as FilterTab,
+                  label: 'Owned',
+                  icon: Crown,
+                  count: filterCounts.owned,
+                },
+                {
+                  key: 'member' as FilterTab,
+                  label: 'Member',
+                  icon: UserCheck,
+                  count: filterCounts.member,
+                },
+                {
+                  key: 'pending' as FilterTab,
+                  label: 'Pending',
+                  icon: Clock,
+                  count: filterCounts.pending,
+                },
               ].map((tab) => (
                 <button
                   key={tab.key}
@@ -490,10 +576,12 @@ function WorkspacesListPage() {
                 >
                   <tab.icon className="w-3.5 h-3.5" />
                   {tab.label}
-                  <span className={cn(
-                    'ml-0.5 px-1.5 py-0.5 rounded-full text-[10px]',
-                    activeFilter === tab.key ? 'bg-primary/20' : 'bg-muted'
-                  )}>
+                  <span
+                    className={cn(
+                      'ml-0.5 px-1.5 py-0.5 rounded-full text-[10px]',
+                      activeFilter === tab.key ? 'bg-primary/20' : 'bg-muted'
+                    )}
+                  >
                     {tab.count}
                   </span>
                 </button>
@@ -589,7 +677,7 @@ function WorkspacesListPage() {
                 Create a new workspace for collaborative development.
               </DialogDescription>
             </DialogHeader>
-            
+
             <form onSubmit={handleCreate} className="space-y-4 mt-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Name</label>
@@ -603,18 +691,16 @@ function WorkspacesListPage() {
                 <label className="text-sm font-medium">Description</label>
                 <Textarea
                   value={newWorkspace.description}
-                  onChange={(e) => setNewWorkspace({ ...newWorkspace, description: e.target.value })}
+                  onChange={(e) =>
+                    setNewWorkspace({ ...newWorkspace, description: e.target.value })
+                  }
                   placeholder="Optional description"
                   rows={3}
                 />
               </div>
-              
+
               <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowCreateDialog(false)}
-                >
+                <Button type="button" variant="outline" onClick={() => setShowCreateDialog(false)}>
                   Cancel
                 </Button>
                 <Button type="submit" loading={createWorkspace.isPending}>
@@ -629,5 +715,5 @@ function WorkspacesListPage() {
 
       {dialog}
     </>
-  );
+  )
 }

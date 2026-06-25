@@ -66,8 +66,7 @@ class TestCacheControl:
     async def test_auth_login_has_no_store(self, client):
         """Login endpoint must not be cached by browsers or proxies."""
         response = await client.post(
-            "/api/auth/login",
-            data={"username": "testuser", "password": "wrongpass"}
+            "/api/auth/login", data={"username": "testuser", "password": "wrongpass"}
         )
         cc = response.headers.get("Cache-Control", "")
         assert "no-store" in cc
@@ -77,8 +76,7 @@ class TestCacheControl:
     async def test_auth_me_has_no_store(self, client, user_token):
         """Authenticated user info must not be cached."""
         response = await client.get(
-            "/api/auth/me",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/auth/me", headers={"Authorization": f"Bearer {user_token}"}
         )
         cc = response.headers.get("Cache-Control", "")
         assert "no-store" in cc

@@ -22,6 +22,7 @@ class TestXfsQuotaFullFlow:
             mock_settings.xfs_projects_file = "/tmp/test-projects"
             mock_settings.volume_storage_path = "/tmp/test-volumes"
             from app.services.xfs_quota_service import XfsQuotaService
+
             svc = XfsQuotaService()
             # Bypass the availability check
             svc._xfs_checked = True
@@ -68,7 +69,7 @@ class TestXfsQuotaFullFlow:
 
                     with mock.patch("subprocess.run", side_effect=mock_run):
                         # 1. Set quota
-                        result = service.set_quota("vol1", 5 * 1024 ** 3)
+                        result = service.set_quota("vol1", 5 * 1024**3)
                         assert result is True
                         assert any("project -s" in c for c in call_log)
                         assert any("limit -p bhard=" in c for c in call_log)
@@ -106,6 +107,7 @@ class TestXfsQuotaFullFlow:
 
             with mock.patch.object(service, "_get_volume_path", return_value=vol_path):
                 with mock.patch.object(service, "_find_mountpoint", return_value=tmpdir):
+
                     def mock_run(cmd, **kwargs):
                         m = mock.MagicMock()
                         if "project -s" in " ".join(cmd):
@@ -118,7 +120,7 @@ class TestXfsQuotaFullFlow:
                         return m
 
                     with mock.patch("subprocess.run", side_effect=mock_run):
-                        result = service.set_quota("vol2", 10 * 1024 ** 3)
+                        result = service.set_quota("vol2", 10 * 1024**3)
                         assert result is False
 
     def test_quota_set_fails_when_limit_command_errors(self, service):
@@ -130,6 +132,7 @@ class TestXfsQuotaFullFlow:
 
             with mock.patch.object(service, "_get_volume_path", return_value=vol_path):
                 with mock.patch.object(service, "_find_mountpoint", return_value=tmpdir):
+
                     def mock_run(cmd, **kwargs):
                         m = mock.MagicMock()
                         if "limit -p" in " ".join(cmd) and "bhard=" in " ".join(cmd):
@@ -142,7 +145,7 @@ class TestXfsQuotaFullFlow:
                         return m
 
                     with mock.patch("subprocess.run", side_effect=mock_run):
-                        result = service.set_quota("vol3", 10 * 1024 ** 3)
+                        result = service.set_quota("vol3", 10 * 1024**3)
                         assert result is False
 
     def test_get_quota_usage_handles_various_output_formats(self, service):
@@ -161,6 +164,7 @@ class TestXfsQuotaFullFlow:
                     ]
 
                     for stdout, expected_used, expected_hard in test_cases:
+
                         def mock_run(cmd, **kwargs):
                             m = mock.MagicMock()
                             m.returncode = 0

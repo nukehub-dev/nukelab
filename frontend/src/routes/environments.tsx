@@ -1,22 +1,22 @@
-import { createFileRoute, Link } from '@tanstack/react-router';
-import { Boxes, Search, ExternalLink, Layers, GitBranch, CheckCircle2, XCircle } from 'lucide-react';
-import { useState, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useEnvironments } from '../hooks/use-environments';
-import { useAuthStore } from '../stores/auth-store';
-import { springs } from '../lib/animations';
-import { cn } from '../lib/utils';
-import { ResourcePageLayout } from '../components/layout/resource-page-layout';
-import { Input } from '../components/ui/input';
-import { Button } from '../components/ui/button';
-import { Card, CardContent } from '../components/ui/card';
-import { SkeletonCard } from '../components/feedback/skeleton';
-import { EmptyState } from '../components/feedback/empty-state';
-import type { Environment as EnvironmentType } from '../types/api';
+import { createFileRoute, Link } from '@tanstack/react-router'
+import { Boxes, Search, ExternalLink, Layers, GitBranch, CheckCircle2, XCircle } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { useEnvironments } from '../hooks/use-environments'
+import { useAuthStore } from '../stores/auth-store'
+import { springs } from '../lib/animations'
+import { cn } from '../lib/utils'
+import { ResourcePageLayout } from '../components/layout/resource-page-layout'
+import { Input } from '../components/ui/input'
+import { Button } from '../components/ui/button'
+import { Card, CardContent } from '../components/ui/card'
+import { SkeletonCard } from '../components/feedback/skeleton'
+import { EmptyState } from '../components/feedback/empty-state'
+import type { Environment as EnvironmentType } from '../types/api'
 
 export const Route = createFileRoute('/environments')({
   component: EnvironmentsCatalogPage,
-});
+})
 
 const categoryColors: Record<string, string> = {
   simulation: 'bg-blue-500/10 text-blue-400',
@@ -24,11 +24,11 @@ const categoryColors: Record<string, string> = {
   ml: 'bg-violet-500/10 text-violet-400',
   data: 'bg-amber-500/10 text-amber-400',
   default: 'bg-muted text-muted-foreground',
-};
+}
 
 function EnvironmentCard({ env, index }: { env: EnvironmentType; index: number }) {
-  const categoryColor = categoryColors[env.category || ''] || categoryColors.default;
-  const isInactive = !env.is_active;
+  const categoryColor = categoryColors[env.category || ''] || categoryColors.default
+  const isInactive = !env.is_active
 
   return (
     <motion.div
@@ -39,17 +39,22 @@ function EnvironmentCard({ env, index }: { env: EnvironmentType; index: number }
       <Card
         variant="bubble"
         interactive
-        className={cn("overflow-hidden h-full", isInactive && "opacity-60")}
+        className={cn('overflow-hidden h-full', isInactive && 'opacity-60')}
       >
         <CardContent className="p-5 flex flex-col h-full">
           {/* Header */}
           <div className="flex items-start justify-between mb-3">
             <div className="flex items-center gap-3 min-w-0">
-              <div className={cn("p-2 rounded-xl shrink-0", categoryColor)}>
+              <div className={cn('p-2 rounded-xl shrink-0', categoryColor)}>
                 <Boxes className="w-4 h-4" />
               </div>
               <div className="min-w-0">
-                <h3 className={cn("font-semibold text-sm truncate", isInactive && "text-muted-foreground")}>
+                <h3
+                  className={cn(
+                    'font-semibold text-sm truncate',
+                    isInactive && 'text-muted-foreground'
+                  )}
+                >
                   {env.name}
                 </h3>
                 <code className="text-[10px] text-muted-foreground">{env.slug}</code>
@@ -70,13 +75,16 @@ function EnvironmentCard({ env, index }: { env: EnvironmentType; index: number }
           {/* Meta */}
           <div className="flex items-center gap-2 flex-wrap mb-3">
             {env.category && (
-              <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium", categoryColor)}>
+              <span
+                className={cn(
+                  'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium',
+                  categoryColor
+                )}
+              >
                 {env.category}
               </span>
             )}
-            <span className="text-xs text-muted-foreground font-mono">
-              {env.image}
-            </span>
+            <span className="text-xs text-muted-foreground font-mono">{env.image}</span>
           </div>
 
           {/* Footer */}
@@ -110,51 +118,101 @@ function EnvironmentCard({ env, index }: { env: EnvironmentType; index: number }
         </CardContent>
       </Card>
     </motion.div>
-  );
+  )
 }
 
 function EnvironmentsCatalogPage() {
-  const canManageEnvironments = useAuthStore((state) => state.canManageEnvironments());
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const canManageEnvironments = useAuthStore((state) => state.canManageEnvironments())
+  const [searchQuery, setSearchQuery] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState<string>('')
 
   const { data, isLoading } = useEnvironments({
     search: searchQuery || undefined,
-  });
+  })
 
-  const environments = useMemo(() => data?.data || [], [data?.data]);
+  const environments = useMemo(() => data?.data || [], [data?.data])
 
   // Filter by category client-side, sort active first
   const filteredEnvironments = useMemo(() => {
-    let result = [...environments];
+    let result = [...environments]
     if (selectedCategory !== '') {
-      result = result.filter((e) => e.category === selectedCategory);
+      result = result.filter((e) => e.category === selectedCategory)
     }
     // Sort: active environments first
     result.sort((a, b) => {
-      if (a.is_active === b.is_active) return 0;
-      return a.is_active ? -1 : 1;
-    });
-    return result;
-  }, [environments, selectedCategory]);
+      if (a.is_active === b.is_active) return 0
+      return a.is_active ? -1 : 1
+    })
+    return result
+  }, [environments, selectedCategory])
 
   // Categories
   const categories = useMemo(() => {
-    const cats = [...new Set(environments.map((e) => e.category).filter((c): c is string => !!c))];
-    return cats;
-  }, [environments]);
+    const cats = [...new Set(environments.map((e) => e.category).filter((c): c is string => !!c))]
+    return cats
+  }, [environments])
 
-  const statCards = isLoading ? [
-    { title: 'Total', value: '...', icon: Boxes, iconColor: 'text-blue-400', bgColor: 'bg-blue-500/10' },
-    { title: 'Active', value: '...', icon: CheckCircle2, iconColor: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
-    { title: 'Public', value: '...', icon: GitBranch, iconColor: 'text-violet-400', bgColor: 'bg-violet-500/10' },
-    { title: 'Categories', value: '...', icon: Layers, iconColor: 'text-amber-400', bgColor: 'bg-amber-500/10' },
-  ] : [
-    { title: 'Total', value: environments.length, icon: Boxes, iconColor: 'text-blue-400', bgColor: 'bg-blue-500/10' },
-    { title: 'Active', value: environments.filter((e) => e.is_active).length, icon: CheckCircle2, iconColor: 'text-emerald-400', bgColor: 'bg-emerald-500/10' },
-    { title: 'Public', value: environments.filter((e) => e.is_public).length, icon: GitBranch, iconColor: 'text-violet-400', bgColor: 'bg-violet-500/10' },
-    { title: 'Categories', value: categories.length, icon: Layers, iconColor: 'text-amber-400', bgColor: 'bg-amber-500/10' },
-  ];
+  const statCards = isLoading
+    ? [
+        {
+          title: 'Total',
+          value: '...',
+          icon: Boxes,
+          iconColor: 'text-blue-400',
+          bgColor: 'bg-blue-500/10',
+        },
+        {
+          title: 'Active',
+          value: '...',
+          icon: CheckCircle2,
+          iconColor: 'text-emerald-400',
+          bgColor: 'bg-emerald-500/10',
+        },
+        {
+          title: 'Public',
+          value: '...',
+          icon: GitBranch,
+          iconColor: 'text-violet-400',
+          bgColor: 'bg-violet-500/10',
+        },
+        {
+          title: 'Categories',
+          value: '...',
+          icon: Layers,
+          iconColor: 'text-amber-400',
+          bgColor: 'bg-amber-500/10',
+        },
+      ]
+    : [
+        {
+          title: 'Total',
+          value: environments.length,
+          icon: Boxes,
+          iconColor: 'text-blue-400',
+          bgColor: 'bg-blue-500/10',
+        },
+        {
+          title: 'Active',
+          value: environments.filter((e) => e.is_active).length,
+          icon: CheckCircle2,
+          iconColor: 'text-emerald-400',
+          bgColor: 'bg-emerald-500/10',
+        },
+        {
+          title: 'Public',
+          value: environments.filter((e) => e.is_public).length,
+          icon: GitBranch,
+          iconColor: 'text-violet-400',
+          bgColor: 'bg-violet-500/10',
+        },
+        {
+          title: 'Categories',
+          value: categories.length,
+          icon: Layers,
+          iconColor: 'text-amber-400',
+          bgColor: 'bg-amber-500/10',
+        },
+      ]
 
   return (
     <ResourcePageLayout
@@ -221,12 +279,19 @@ function EnvironmentsCatalogPage() {
         <EmptyState
           icon={Boxes}
           title="No Environments"
-          description={searchQuery || selectedCategory ? "No environments match your filters." : "No environments available."}
+          description={
+            searchQuery || selectedCategory
+              ? 'No environments match your filters.'
+              : 'No environments available.'
+          }
           action={
-            (searchQuery || selectedCategory)
+            searchQuery || selectedCategory
               ? {
                   label: 'Clear Filters',
-                  onClick: () => { setSearchQuery(''); setSelectedCategory(''); },
+                  onClick: () => {
+                    setSearchQuery('')
+                    setSelectedCategory('')
+                  },
                 }
               : undefined
           }
@@ -241,5 +306,5 @@ function EnvironmentsCatalogPage() {
         </div>
       )}
     </ResourcePageLayout>
-  );
+  )
 }

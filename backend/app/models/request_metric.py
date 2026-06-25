@@ -15,8 +15,8 @@ class RequestMetric(Base):
     __tablename__ = "request_metrics"
 
     __table_args__ = (
-        Index('ix_request_metrics_path_status', 'path', 'status_code'),
-        Index('ix_request_metrics_created_at', 'created_at'),
+        Index("ix_request_metrics_path_status", "path", "status_code"),
+        Index("ix_request_metrics_created_at", "created_at"),
         {"postgresql_partition_by": "RANGE (created_at)"},
     )
 
@@ -25,7 +25,9 @@ class RequestMetric(Base):
     path = Column(String(255), nullable=False, index=True)
     status_code = Column(Integer, nullable=False, index=True)
     duration_ms = Column(Float, nullable=False)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    user_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     ip_address = Column(INET, nullable=True)
     user_agent = Column(String, nullable=True)
     correlation_id = Column(String(36), nullable=True, index=True)

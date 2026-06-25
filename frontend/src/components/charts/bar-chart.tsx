@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo } from 'react'
 import {
   BarChart,
   Bar,
@@ -10,29 +10,29 @@ import {
   Cell,
   LabelList,
   type TooltipProps,
-} from 'recharts';
+} from 'recharts'
 
 export interface BarChartDataPoint {
-  label: string;
-  value: number;
-  color?: string;
+  label: string
+  value: number
+  color?: string
 }
 
 export interface BarChartProps {
-  data: BarChartDataPoint[];
-  horizontal?: boolean;
-  height?: number;
-  showAxis?: boolean;
-  showGrid?: boolean;
-  showTooltip?: boolean;
-  showValues?: boolean;
-  barSize?: number;
-  radius?: number | [number, number, number, number];
-  className?: string;
-  name?: string;
-  color?: string;
-  xAxisLabel?: string;
-  yAxisLabel?: string;
+  data: BarChartDataPoint[]
+  horizontal?: boolean
+  height?: number
+  showAxis?: boolean
+  showGrid?: boolean
+  showTooltip?: boolean
+  showValues?: boolean
+  barSize?: number
+  radius?: number | [number, number, number, number]
+  className?: string
+  name?: string
+  color?: string
+  xAxisLabel?: string
+  yAxisLabel?: string
 }
 
 function CustomTooltip({
@@ -41,15 +41,15 @@ function CustomTooltip({
   label,
   name,
 }: TooltipProps<number, string> & { name?: string }) {
-  if (!active || !payload || !payload.length) return null;
+  if (!active || !payload || !payload.length) return null
 
-  const entry = payload[0];
+  const entry = payload[0]
   const value =
     typeof entry.value === 'number'
       ? Number.isInteger(entry.value)
         ? entry.value
         : entry.value.toFixed(2)
-      : entry.value;
+      : entry.value
 
   return (
     <div
@@ -66,15 +66,13 @@ function CustomTooltip({
           className="w-2 h-4 rounded-sm"
           style={{ backgroundColor: entry.color || 'var(--primary)' }}
         />
-        <span className="text-xs text-muted-foreground">
-          {name || entry.name || 'Value'}
-        </span>
+        <span className="text-xs text-muted-foreground">{name || entry.name || 'Value'}</span>
         <span className="font-semibold" style={{ color: 'var(--primary)' }}>
           {value}
         </span>
       </div>
     </div>
-  );
+  )
 }
 
 const DEFAULT_COLORS = [
@@ -83,7 +81,7 @@ const DEFAULT_COLORS = [
   'var(--chart-3)',
   'var(--chart-4)',
   'var(--chart-5)',
-];
+]
 
 export function MetricsBarChart({
   data,
@@ -107,9 +105,9 @@ export function MetricsBarChart({
       axis: 'var(--muted-foreground)',
     }),
     []
-  );
+  )
 
-  const barFill = color || 'var(--primary)';
+  const barFill = color || 'var(--primary)'
 
   return (
     <div className={className} style={{ width: '100%', height }}>
@@ -251,5 +249,5 @@ export function MetricsBarChart({
         </BarChart>
       </ResponsiveContainer>
     </div>
-  );
+  )
 }

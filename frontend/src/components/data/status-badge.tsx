@@ -1,32 +1,28 @@
-import { cn } from '../../lib/utils';
-import { motion } from 'framer-motion';
-import {
-  CheckCircle2,
-  Square,
-  Loader2,
-  AlertCircle,
-  AlertTriangle,
-  Info,
-} from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { cn } from '../../lib/utils'
+import { motion } from 'framer-motion'
+import { CheckCircle2, Square, Loader2, AlertCircle, AlertTriangle, Info } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 
-type StatusType = 'running' | 'stopped' | 'pending' | 'error' | 'warning' | 'info';
+type StatusType = 'running' | 'stopped' | 'pending' | 'error' | 'warning' | 'info'
 
 interface StatusBadgeProps {
-  status: StatusType;
-  label?: string;
-  pulse?: boolean;
-  size?: 'sm' | 'md';
-  className?: string;
+  status: StatusType
+  label?: string
+  pulse?: boolean
+  size?: 'sm' | 'md'
+  className?: string
 }
 
-const statusConfig: Record<StatusType, {
-  icon: LucideIcon;
-  bgColor: string;
-  textColor: string;
-  borderColor: string;
-  defaultLabel: string;
-}> = {
+const statusConfig: Record<
+  StatusType,
+  {
+    icon: LucideIcon
+    bgColor: string
+    textColor: string
+    borderColor: string
+    defaultLabel: string
+  }
+> = {
   running: {
     icon: CheckCircle2,
     bgColor: 'bg-emerald-500/10',
@@ -69,7 +65,7 @@ const statusConfig: Record<StatusType, {
     borderColor: 'border-sky-500/20',
     defaultLabel: 'Info',
   },
-};
+}
 
 export function StatusBadge({
   status,
@@ -78,14 +74,14 @@ export function StatusBadge({
   size = 'md',
   className,
 }: StatusBadgeProps) {
-  const config = statusConfig[status];
-  const { icon: Icon, bgColor, textColor, borderColor, defaultLabel } = config;
-  const shouldPulse = pulse || status === 'running' || status === 'pending';
+  const config = statusConfig[status]
+  const { icon: Icon, bgColor, textColor, borderColor, defaultLabel } = config
+  const shouldPulse = pulse || status === 'running' || status === 'pending'
 
   const sizeClasses = {
     sm: 'h-5 px-2 text-[11px] gap-1',
     md: 'h-6 px-2.5 text-xs gap-1.5',
-  };
+  }
 
   return (
     <motion.span
@@ -103,21 +99,25 @@ export function StatusBadge({
     >
       {shouldPulse ? (
         <span className="relative flex h-2 w-2">
-          <span className={cn(
-            "animate-ping absolute inline-flex h-full w-full rounded-full opacity-75",
-            status === 'running' && 'bg-emerald-400',
-            status === 'pending' && 'bg-blue-400',
-          )} />
-          <span className={cn(
-            "relative inline-flex rounded-full h-2 w-2",
-            status === 'running' && 'bg-emerald-400',
-            status === 'pending' && 'bg-blue-400',
-          )} />
+          <span
+            className={cn(
+              'animate-ping absolute inline-flex h-full w-full rounded-full opacity-75',
+              status === 'running' && 'bg-emerald-400',
+              status === 'pending' && 'bg-blue-400'
+            )}
+          />
+          <span
+            className={cn(
+              'relative inline-flex rounded-full h-2 w-2',
+              status === 'running' && 'bg-emerald-400',
+              status === 'pending' && 'bg-blue-400'
+            )}
+          />
         </span>
       ) : (
         <Icon className="w-3.5 h-3.5" />
       )}
       <span>{label || defaultLabel}</span>
     </motion.span>
-  );
+  )
 }

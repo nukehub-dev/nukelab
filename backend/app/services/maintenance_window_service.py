@@ -25,10 +25,7 @@ class MaintenanceWindowService:
         self.db = db
 
     async def list_windows(
-        self,
-        active_only: bool = False,
-        future_only: bool = False,
-        limit: int = 100
+        self, active_only: bool = False, future_only: bool = False, limit: int = 100
     ) -> List[Dict[str, Any]]:
         """List maintenance windows, optionally filtered."""
         query = select(MaintenanceWindow).order_by(MaintenanceWindow.start_at.desc())
@@ -152,7 +149,7 @@ class MaintenanceWindowService:
         # Remove duplicates, filter out offsets larger than time until start, sort descending
         unique = sorted(
             set(int(o) for o in offsets if int(o) > 0 and int(o) < minutes_until_start),
-            reverse=True
+            reverse=True,
         )
         return unique if unique else [15]
 
@@ -217,12 +214,12 @@ class MaintenanceWindowService:
         )
         return result.scalars().all()
 
-    async def send_advance_notifications(self, window: MaintenanceWindow, offset_minutes: int) -> int:
+    async def send_advance_notifications(
+        self, window: MaintenanceWindow, offset_minutes: int
+    ) -> int:
         """Send advance notifications to all active users for a window."""
         # Get all active users
-        result = await self.db.execute(
-            select(User).where(User.is_active == True)
-        )
+        result = await self.db.execute(select(User).where(User.is_active == True))
         users = result.scalars().all()
 
         notif_service = NotificationService(self.db)

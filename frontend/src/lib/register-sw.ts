@@ -6,17 +6,17 @@
  * /api, /ws, /grafana, /prometheus, /alertmanager, or /jaeger.
  */
 export function registerServiceWorker() {
-  if (import.meta.env.DEV) return;
-  if (!('serviceWorker' in navigator)) return;
+  if (import.meta.env.DEV) return
+  if (!('serviceWorker' in navigator)) return
 
   window.addEventListener('load', () => {
     navigator.serviceWorker
       .register('/sw.js', { scope: '/' })
       .then((registration) => {
-        console.log('SW registered:', registration.scope);
+        console.log('SW registered:', registration.scope)
       })
       .catch((error) => {
-        console.error('SW registration failed:', error);
-      });
-  });
+        console.error('SW registration failed:', error)
+      })
+  })
 }

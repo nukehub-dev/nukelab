@@ -12,6 +12,7 @@ from app.services.setting_service import SettingService
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def reset_maintenance_state():
     """Reset global maintenance state before and after each test."""
@@ -25,6 +26,7 @@ def reset_maintenance_state():
 # ---------------------------------------------------------------------------
 # SettingService Tests
 # ---------------------------------------------------------------------------
+
 
 class TestSettingService:
     """Tests for the SettingService DB persistence layer."""
@@ -115,5 +117,3 @@ class TestSettingService:
 # ---------------------------------------------------------------------------
 # System Config API Tests
 # ---------------------------------------------------------------------------
-
-

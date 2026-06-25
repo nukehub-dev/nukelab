@@ -20,14 +20,16 @@ def _make_oauth_mock():
     m.get_authorize_url = mock.AsyncMock(return_value="http://oauth/authorize")
     m.exchange_code = mock.AsyncMock(return_value={"access_token": "at"})
     m.get_user_info = mock.AsyncMock(return_value={"sub": "oauth123", "email": "test@example.com"})
-    m.extract_user_data = mock.Mock(return_value={
-        "oauth_id": "oauth123",
-        "username": "oauthuser",
-        "email": "test@example.com",
-        "first_name": "Test",
-        "last_name": "User",
-        "extra_profile": {}
-    })
+    m.extract_user_data = mock.Mock(
+        return_value={
+            "oauth_id": "oauth123",
+            "username": "oauthuser",
+            "email": "test@example.com",
+            "first_name": "Test",
+            "last_name": "User",
+            "extra_profile": {},
+        }
+    )
     return m
 
 
@@ -40,7 +42,7 @@ class TestOAuthCallbackErrors:
             client.cookies.set("oauth_state", "test_state")
             response = await client.get(
                 "/api/auth/oauth/callback?error=access_denied&state=test_state",
-                follow_redirects=False
+                follow_redirects=False,
             )
             assert response.status_code == 307
             assert "access_denied" in response.headers["location"]
@@ -50,8 +52,7 @@ class TestOAuthCallbackErrors:
         with mock.patch("app.services.oauth_service.oauth_service", _make_oauth_mock()):
             client.cookies.set("oauth_state", "test_state")
             response = await client.get(
-                "/api/auth/oauth/callback?state=test_state",
-                follow_redirects=False
+                "/api/auth/oauth/callback?state=test_state", follow_redirects=False
             )
             assert response.status_code == 307
             assert "missing" in response.headers["location"].lower()
@@ -61,8 +62,7 @@ class TestOAuthCallbackErrors:
         with mock.patch("app.services.oauth_service.oauth_service", _make_oauth_mock()):
             client.cookies.set("oauth_state", "real_state")
             response = await client.get(
-                "/api/auth/oauth/callback?code=abc&state=fake_state",
-                follow_redirects=False
+                "/api/auth/oauth/callback?code=abc&state=fake_state", follow_redirects=False
             )
             assert response.status_code == 307
             assert "invalid" in response.headers["location"].lower()
@@ -74,7 +74,7 @@ class TestOAuthCallbackErrors:
             client.cookies.set("oauth_sync", "1")
             response = await client.get(
                 "/api/auth/oauth/callback?error=access_denied&state=test_state",
-                follow_redirects=False
+                follow_redirects=False,
             )
             assert response.status_code == 307
             assert "sync=error" in response.headers["location"]
@@ -85,8 +85,7 @@ class TestOAuthCallbackErrors:
             client.cookies.set("oauth_state", "test_state")
             client.cookies.set("oauth_sync", "1")
             response = await client.get(
-                "/api/auth/oauth/callback?state=test_state",
-                follow_redirects=False
+                "/api/auth/oauth/callback?state=test_state", follow_redirects=False
             )
             assert response.status_code == 307
             assert "sync=error" in response.headers["location"]
@@ -98,8 +97,7 @@ class TestOAuthCallbackErrors:
         with mock.patch("app.services.oauth_service.oauth_service", m):
             client.cookies.set("oauth_state", "test_state")
             response = await client.get(
-                "/api/auth/oauth/callback?code=abc&state=test_state",
-                follow_redirects=False
+                "/api/auth/oauth/callback?code=abc&state=test_state", follow_redirects=False
             )
             assert response.status_code == 307
             assert "failed" in response.headers["location"].lower()
@@ -112,8 +110,7 @@ class TestOAuthCallbackErrors:
             client.cookies.set("oauth_state", "test_state")
             client.cookies.set("oauth_sync", "1")
             response = await client.get(
-                "/api/auth/oauth/callback?code=abc&state=test_state",
-                follow_redirects=False
+                "/api/auth/oauth/callback?code=abc&state=test_state", follow_redirects=False
             )
             assert response.status_code == 307
             assert "sync=error" in response.headers["location"]
@@ -127,36 +124,45 @@ class TestOAuthCallbackHappyPaths:
         # Avoid login_events NotNullViolation by mocking db.add to skip LoginEvent
         m = _make_oauth_mock()
         m.exchange_code = mock.AsyncMock(return_value={"access_token": "at", "refresh_token": "rt"})
-        m.get_user_info = mock.AsyncMock(return_value={
-            "sub": "oauth123",
-            "email": "oauth_new@example.com",
-            "preferred_username": "oauthnewuser"
-        })
-        m.extract_user_data = mock.Mock(return_value={
-            "oauth_id": "oauth123",
-            "username": "oauthnewuser",
-            "email": "oauth_new@example.com",
-            "first_name": "OAuth",
-            "last_name": "New",
-            "extra_profile": {"org": "test"}
-        })
+        m.get_user_info = mock.AsyncMock(
+            return_value={
+                "sub": "oauth123",
+                "email": "oauth_new@example.com",
+                "preferred_username": "oauthnewuser",
+            }
+        )
+        m.extract_user_data = mock.Mock(
+            return_value={
+                "oauth_id": "oauth123",
+                "username": "oauthnewuser",
+                "email": "oauth_new@example.com",
+                "first_name": "OAuth",
+                "last_name": "New",
+                "extra_profile": {"org": "test"},
+            }
+        )
         with mock.patch("app.services.oauth_service.oauth_service", m):
             with mock.patch("app.api.auth.get_db") as mock_get_db:
                 from app.db.session import AsyncSessionLocal
+
                 # Use a session that wraps add to ignore LoginEvent
                 real_session = db_session
                 orig_add = real_session.add
+
                 def safe_add(instance):
                     from app.models.login_event import LoginEvent
+
                     if isinstance(instance, LoginEvent):
                         return
                     return orig_add(instance)
-                with mock.patch.object(real_session, 'add', safe_add):
-                    mock_get_db.return_value = __import__('typing').cast(__import__('typing').AsyncIterator, iter([real_session]))
+
+                with mock.patch.object(real_session, "add", safe_add):
+                    mock_get_db.return_value = __import__("typing").cast(
+                        __import__("typing").AsyncIterator, iter([real_session])
+                    )
                     client.cookies.set("oauth_state", "test_state")
                     response = await client.get(
-                        "/api/auth/oauth/callback?code=abc&state=test_state",
-                        follow_redirects=False
+                        "/api/auth/oauth/callback?code=abc&state=test_state", follow_redirects=False
                     )
                     assert response.status_code == 307
                     assert "token=" in response.headers["location"]
@@ -168,24 +174,27 @@ class TestOAuthCallbackHappyPaths:
         await db_session.commit()
 
         m = _make_oauth_mock()
-        m.get_user_info = mock.AsyncMock(return_value={
-            "sub": "oauth456",
-            "email": test_user.email,
-            "preferred_username": test_user.username
-        })
-        m.extract_user_data = mock.Mock(return_value={
-            "oauth_id": "oauth456",
-            "username": test_user.username,
-            "email": test_user.email,
-            "first_name": "Linked",
-            "last_name": "User",
-            "extra_profile": {}
-        })
+        m.get_user_info = mock.AsyncMock(
+            return_value={
+                "sub": "oauth456",
+                "email": test_user.email,
+                "preferred_username": test_user.username,
+            }
+        )
+        m.extract_user_data = mock.Mock(
+            return_value={
+                "oauth_id": "oauth456",
+                "username": test_user.username,
+                "email": test_user.email,
+                "first_name": "Linked",
+                "last_name": "User",
+                "extra_profile": {},
+            }
+        )
         with mock.patch("app.services.oauth_service.oauth_service", m):
             client.cookies.set("oauth_state", "test_state")
             response = await client.get(
-                "/api/auth/oauth/callback?code=abc&state=test_state",
-                follow_redirects=False
+                "/api/auth/oauth/callback?code=abc&state=test_state", follow_redirects=False
             )
             assert response.status_code == 307
             assert "token=" in response.headers["location"]
@@ -197,24 +206,27 @@ class TestOAuthCallbackHappyPaths:
         await db_session.commit()
 
         m = _make_oauth_mock()
-        m.get_user_info = mock.AsyncMock(return_value={
-            "sub": "oauth789",
-            "email": test_user.email,
-        })
-        m.extract_user_data = mock.Mock(return_value={
-            "oauth_id": "oauth789",
-            "username": test_user.username,
-            "email": test_user.email,
-            "first_name": "Sync",
-            "last_name": "Mode",
-            "extra_profile": {}
-        })
+        m.get_user_info = mock.AsyncMock(
+            return_value={
+                "sub": "oauth789",
+                "email": test_user.email,
+            }
+        )
+        m.extract_user_data = mock.Mock(
+            return_value={
+                "oauth_id": "oauth789",
+                "username": test_user.username,
+                "email": test_user.email,
+                "first_name": "Sync",
+                "last_name": "Mode",
+                "extra_profile": {},
+            }
+        )
         with mock.patch("app.services.oauth_service.oauth_service", m):
             client.cookies.set("oauth_state", "test_state")
             client.cookies.set("oauth_sync", "1")
             response = await client.get(
-                "/api/auth/oauth/callback?code=abc&state=test_state",
-                follow_redirects=False
+                "/api/auth/oauth/callback?code=abc&state=test_state", follow_redirects=False
             )
             assert response.status_code == 307
             assert "sync=success" in response.headers["location"]
@@ -226,8 +238,7 @@ class TestOAuthCallbackHappyPaths:
         with mock.patch("app.services.oauth_service.oauth_service", m):
             client.cookies.set("oauth_state", "test_state")
             response = await client.get(
-                "/api/auth/oauth/callback?code=abc&state=test_state",
-                follow_redirects=False
+                "/api/auth/oauth/callback?code=abc&state=test_state", follow_redirects=False
             )
             assert response.status_code == 307
             assert "failed" in response.headers["location"].lower()
@@ -240,8 +251,7 @@ class TestOAuthCallbackHappyPaths:
         with mock.patch("app.services.oauth_service.oauth_service", m):
             client.cookies.set("oauth_state", "test_state")
             response = await client.get(
-                "/api/auth/oauth/callback?code=abc&state=test_state",
-                follow_redirects=False
+                "/api/auth/oauth/callback?code=abc&state=test_state", follow_redirects=False
             )
             assert response.status_code == 307
             assert "failed" in response.headers["location"].lower()
@@ -249,36 +259,48 @@ class TestOAuthCallbackHappyPaths:
     @pytest.mark.asyncio
     async def test_oauth_callback_id_token_fallback(self, client, db_session):
         m = _make_oauth_mock()
-        m.exchange_code = mock.AsyncMock(return_value={"access_token": "at", "id_token": "fake_id_token"})
+        m.exchange_code = mock.AsyncMock(
+            return_value={"access_token": "at", "id_token": "fake_id_token"}
+        )
         m.get_user_info = mock.AsyncMock(return_value=None)
-        m.extract_user_data = mock.Mock(return_value={
-            "oauth_id": "oauth999",
-            "username": "idtokenuser",
-            "email": "idtoken@example.com",
-            "first_name": "",
-            "last_name": "",
-            "extra_profile": {}
-        })
-        with mock.patch("app.services.oauth_service.oauth_service", m):
-            with mock.patch("app.api.auth.jwt.decode", return_value={
-                "sub": "oauth999",
+        m.extract_user_data = mock.Mock(
+            return_value={
+                "oauth_id": "oauth999",
+                "username": "idtokenuser",
                 "email": "idtoken@example.com",
-                "preferred_username": "idtokenuser"
-            }):
+                "first_name": "",
+                "last_name": "",
+                "extra_profile": {},
+            }
+        )
+        with mock.patch("app.services.oauth_service.oauth_service", m):
+            with mock.patch(
+                "app.api.auth.jwt.decode",
+                return_value={
+                    "sub": "oauth999",
+                    "email": "idtoken@example.com",
+                    "preferred_username": "idtokenuser",
+                },
+            ):
                 with mock.patch("app.api.auth.get_db") as mock_get_db:
                     real_session = db_session
                     orig_add = real_session.add
+
                     def safe_add(instance):
                         from app.models.login_event import LoginEvent
+
                         if isinstance(instance, LoginEvent):
                             return
                         return orig_add(instance)
-                    with mock.patch.object(real_session, 'add', safe_add):
-                        mock_get_db.return_value = __import__('typing').cast(__import__('typing').AsyncIterator, iter([real_session]))
+
+                    with mock.patch.object(real_session, "add", safe_add):
+                        mock_get_db.return_value = __import__("typing").cast(
+                            __import__("typing").AsyncIterator, iter([real_session])
+                        )
                         client.cookies.set("oauth_state", "test_state")
                         response = await client.get(
                             "/api/auth/oauth/callback?code=abc&state=test_state",
-                            follow_redirects=False
+                            follow_redirects=False,
                         )
                         assert response.status_code == 307
                         assert "token=" in response.headers["location"]
@@ -292,10 +314,7 @@ class TestOAuthLoginPKCEAndSync:
         m = _make_oauth_mock()
         with mock.patch("app.services.oauth_service.oauth_service", m):
             with mock.patch("app.api.auth.settings.oauth_pkce_enabled", True):
-                response = await client.get(
-                    "/api/auth/oauth/login",
-                    follow_redirects=False
-                )
+                response = await client.get("/api/auth/oauth/login", follow_redirects=False)
                 assert response.status_code == 307
                 assert "oauth_verifier" in response.cookies
 
@@ -303,10 +322,7 @@ class TestOAuthLoginPKCEAndSync:
     async def test_oauth_login_sync_mode(self, client):
         m = _make_oauth_mock()
         with mock.patch("app.services.oauth_service.oauth_service", m):
-            response = await client.get(
-                "/api/auth/oauth/login?sync=1",
-                follow_redirects=False
-            )
+            response = await client.get("/api/auth/oauth/login?sync=1", follow_redirects=False)
             assert response.status_code == 307
             assert "oauth_sync" in response.cookies
             assert "prompt=none" in response.headers["location"]
@@ -328,14 +344,13 @@ class TestGetAuthContextEdgeCases:
             token_prefix=raw[:16],
             scopes=["user:read"],
             is_active=True,
-            expires_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1)
+            expires_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1),
         )
         db_session.add(token)
         await db_session.commit()
 
         response = await client.get(
-            "/api/users/me/profile",
-            headers={"Authorization": f"Bearer {raw}"}
+            "/api/users/me/profile", headers={"Authorization": f"Bearer {raw}"}
         )
         assert response.status_code == 401
 
@@ -352,14 +367,13 @@ class TestGetAuthContextEdgeCases:
             token_hash=get_password_hash(raw),
             token_prefix=raw[:16],
             scopes=["user:read"],
-            is_active=True
+            is_active=True,
         )
         db_session.add(token)
         await db_session.commit()
 
         response = await client.get(
-            "/api/users/me/profile",
-            headers={"Authorization": f"Bearer {raw}"}
+            "/api/users/me/profile", headers={"Authorization": f"Bearer {raw}"}
         )
         assert response.status_code == 401
 
@@ -379,7 +393,7 @@ class TestVerifyRefreshTokenLegacy:
             user_id=test_user.id,
             token_hash=token_hash,
             token_lookup=None,
-            expires_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(days=7)
+            expires_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(days=7),
         )
         db_session.add(rt)
         await db_session.commit()
@@ -405,7 +419,7 @@ class TestEnforceRefreshTokenLimit:
                 token_hash="hash",
                 token_lookup=f"lookup{i}",
                 expires_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(days=7),
-                created_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=i)
+                created_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=i),
             )
             db_session.add(rt)
         await db_session.commit()
@@ -414,10 +428,9 @@ class TestEnforceRefreshTokenLimit:
         await db_session.commit()
 
         result = await db_session.execute(
-            select(func.count()).select_from(RefreshToken).where(
-                RefreshToken.revoked_at == None,
-                RefreshToken.user_id == uid
-            )
+            select(func.count())
+            .select_from(RefreshToken)
+            .where(RefreshToken.revoked_at == None, RefreshToken.user_id == uid)
         )
         count = result.scalar()
         assert count <= 10
@@ -429,6 +442,7 @@ class TestRevokeRefreshTokenValueError:
     @pytest.mark.asyncio
     async def test_revoke_no_args_raises(self):
         from app.api.auth import revoke_refresh_token
+
         with pytest.raises(ValueError):
             await revoke_refresh_token()
 
@@ -439,13 +453,13 @@ class TestVerifyInactiveUser:
     @pytest.mark.asyncio
     async def test_verify_inactive_jwt_user(self, client, test_user, db_session):
         from app.api.auth import create_access_token
+
         test_user.is_active = False
         await db_session.commit()
 
         token = create_access_token(data={"sub": test_user.username, "role": test_user.role})
         response = await client.get(
-            "/api/auth/verify",
-            headers={"Authorization": f"Bearer {token}"}
+            "/api/auth/verify", headers={"Authorization": f"Bearer {token}"}
         )
         assert response.status_code == 401
 
@@ -462,15 +476,12 @@ class TestVerifyInactiveUser:
             token_hash=get_password_hash(raw),
             token_prefix=raw[:16],
             scopes=["user:read"],
-            is_active=True
+            is_active=True,
         )
         db_session.add(token)
         await db_session.commit()
 
-        response = await client.get(
-            "/api/auth/verify",
-            headers={"Authorization": f"Bearer {raw}"}
-        )
+        response = await client.get("/api/auth/verify", headers={"Authorization": f"Bearer {raw}"})
         assert response.status_code == 401
 
 
@@ -529,8 +540,7 @@ class TestOAuthSync:
     @pytest.mark.asyncio
     async def test_oauth_sync_not_oauth_user(self, client, user_token, test_user):
         response = await client.post(
-            "/api/auth/oauth/sync",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/auth/oauth/sync", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 400
         assert "not an oauth user" in response.json()["detail"].lower()
@@ -542,22 +552,22 @@ class TestOAuthSync:
         await db_session.commit()
 
         response = await client.post(
-            "/api/auth/oauth/sync",
-            headers={"Authorization": f"Bearer {user_token}"}
+            "/api/auth/oauth/sync", headers={"Authorization": f"Bearer {user_token}"}
         )
         assert response.status_code == 400
         assert "no refresh token" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_oauth_sync_invalid_refresh_token(self, client, user_token, test_user, db_session):
+    async def test_oauth_sync_invalid_refresh_token(
+        self, client, user_token, test_user, db_session
+    ):
         test_user.oauth_provider = "oauth"
         test_user.security = {"oauth_refresh_token": "invalid"}
         await db_session.commit()
 
         with mock.patch("app.core.token_encryption.decrypt_token", return_value=None):
             response = await client.post(
-                "/api/auth/oauth/sync",
-                headers={"Authorization": f"Bearer {user_token}"}
+                "/api/auth/oauth/sync", headers={"Authorization": f"Bearer {user_token}"}
             )
         assert response.status_code == 400
         assert "invalid refresh token" in response.json()["detail"].lower()
@@ -565,6 +575,7 @@ class TestOAuthSync:
     @pytest.mark.asyncio
     async def test_oauth_sync_success(self, client, user_token, test_user, db_session):
         from app.core.token_encryption import encrypt_token
+
         test_user.oauth_provider = "oauth"
         test_user.security = {"oauth_refresh_token": encrypt_token("rt123")}
         test_user.profile = {}
@@ -573,23 +584,28 @@ class TestOAuthSync:
         mock_oauth = _make_oauth_mock()
         mock_oauth._load_discovery = mock.AsyncMock()
         mock_oauth._get_endpoint = mock.Mock(return_value="http://test/token")
-        mock_oauth.get_user_info = mock.AsyncMock(return_value={"sub": "oauth123", "email": "new@example.com"})
-        mock_oauth.extract_user_data = mock.Mock(return_value={
-            "oauth_id": "oauth123",
-            "username": "oauthuser",
-            "email": "new@example.com",
-            "first_name": "New",
-            "last_name": "Name",
-            "extra_profile": {"org": "TestOrg"},
-        })
+        mock_oauth.get_user_info = mock.AsyncMock(
+            return_value={"sub": "oauth123", "email": "new@example.com"}
+        )
+        mock_oauth.extract_user_data = mock.Mock(
+            return_value={
+                "oauth_id": "oauth123",
+                "username": "oauthuser",
+                "email": "new@example.com",
+                "first_name": "New",
+                "last_name": "Name",
+                "extra_profile": {"org": "TestOrg"},
+            }
+        )
 
-        mock_session = _MockAiohttpClientSession({"access_token": "at_new", "refresh_token": "rt_new"})
+        mock_session = _MockAiohttpClientSession(
+            {"access_token": "at_new", "refresh_token": "rt_new"}
+        )
 
         with mock.patch("app.services.oauth_service.oauth_service", mock_oauth):
             with mock.patch("aiohttp.ClientSession", return_value=mock_session):
                 response = await client.post(
-                    "/api/auth/oauth/sync",
-                    headers={"Authorization": f"Bearer {user_token}"}
+                    "/api/auth/oauth/sync", headers={"Authorization": f"Bearer {user_token}"}
                 )
         assert response.status_code == 200
         data = response.json()
@@ -600,6 +616,7 @@ class TestOAuthSync:
     @pytest.mark.asyncio
     async def test_oauth_sync_generic_exception(self, client, user_token, test_user, db_session):
         from app.core.token_encryption import encrypt_token
+
         test_user.oauth_provider = "oauth"
         test_user.security = {"oauth_refresh_token": encrypt_token("rt123")}
         await db_session.commit()
@@ -609,8 +626,7 @@ class TestOAuthSync:
 
         with mock.patch("app.services.oauth_service.oauth_service", mock_oauth):
             response = await client.post(
-                "/api/auth/oauth/sync",
-                headers={"Authorization": f"Bearer {user_token}"}
+                "/api/auth/oauth/sync", headers={"Authorization": f"Bearer {user_token}"}
             )
         assert response.status_code == 500
         assert "sync failed" in response.json()["detail"].lower()
