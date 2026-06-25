@@ -183,6 +183,17 @@ detect_engine() {
 setup_podman_socket() {
     [ "$CONTAINER_ENGINE" != "podman" ] && return
 
+    # Expand literal ${XDG_RUNTIME_DIR} when it came from an env file that
+    # doesn't perform shell expansion. Without this, the path check fails and
+    # we fall through to auto-detection with a noisy warning.
+    if [ -n "${DOCKER_SOCKET:-}" ]; then
+        case "$DOCKER_SOCKET" in
+            '${XDG_RUNTIME_DIR}'/*)
+                DOCKER_SOCKET="${XDG_RUNTIME_DIR}${DOCKER_SOCKET#'\${XDG_RUNTIME_DIR}'}"
+                ;;
+        esac
+    fi
+
     # If DOCKER_SOCKET is set but doesn't exist, override it
     if [ -n "${DOCKER_SOCKET:-}" ] && [ ! -S "$DOCKER_SOCKET" ]; then
         warn "DOCKER_SOCKET=$DOCKER_SOCKET not found, auto-detecting..."
@@ -338,9 +349,30 @@ clear_state() {
 }
 
 # ─── Mutual Exclusion ──────────────────────────────────────────────────────
-# Dev and prod share container names, so only one may be running at a time.
+# Dev and prod share container names, so only one may run at a time.
 # These helpers detect whether a stack is running and refuse to start a new
 # one when the opposite stack is active.
+
+# Return 0 if any container matching the project prefix is running.
+_project_containers_running() {
+    local _cmd="podman"
+    [ "$CONTAINER_ENGINE" = "docker" ] && _cmd="docker"
+    $_cmd ps --format '{{.Names}}' 2>/dev/null | grep -qE '^nukelab-'
+}
+
+# Warn when NukeLab containers are running but we have no state file. This
+# usually means a previous run left orphans behind.
+_warn_stale_containers() {
+    if [ ! -f "$STATE_FILE" ] && _project_containers_running; then
+        warn "NukeLab containers are already running but no state file was found ($STATE_FILE)."
+        info "This can happen if a previous run crashed or the state file was deleted."
+        info "Stop them first to avoid conflicts:"
+        echo "  ./nukelabctl stop"
+        echo "  # or, if the state file is missing:"
+        echo "  $CONTAINER_ENGINE stop \$($CONTAINER_ENGINE ps -q --filter name=^nukelab-)"
+        echo "  $CONTAINER_ENGINE rm -f \$($CONTAINER_ENGINE ps -aq --filter name=^nukelab-)"
+    fi
+}
 
 # Return 0 if any service managed by the current COMPOSE_ARGS is running.
 _is_stack_running() {
@@ -611,16 +643,17 @@ preflight_checks() {
     fi
 
     # 4. Volume storage path
-    if [ "${APP_ENV:-development}" = "production" ]; then
-        if [ -z "${VOLUME_STORAGE_PATH:-}" ]; then
-            die "VOLUME_STORAGE_PATH is required in production.\nSet it to the host path where container volumes are stored."
-        fi
-        if [ ! -d "$VOLUME_STORAGE_PATH" ]; then
+    # Required in both dev and prod because compose.yml mounts it into backend
+    # and backend-test services.
+    if [ -z "${VOLUME_STORAGE_PATH:-}" ]; then
+        die "VOLUME_STORAGE_PATH is required but not set.\n\nSet it in .env or .env.development, for example:\n  VOLUME_STORAGE_PATH=/var/lib/nukelab/volumes\n\nFor local development you can use:\n  VOLUME_STORAGE_PATH=/tmp/nukelab-volumes"
+    fi
+    if [ ! -d "$VOLUME_STORAGE_PATH" ]; then
+        if [ "${APP_ENV:-development}" = "production" ]; then
             die "VOLUME_STORAGE_PATH does not exist: $VOLUME_STORAGE_PATH"
-        fi
-    else
-        if [ -n "${VOLUME_STORAGE_PATH:-}" ] && [ ! -d "$VOLUME_STORAGE_PATH" ]; then
-            warn "VOLUME_STORAGE_PATH does not exist: $VOLUME_STORAGE_PATH"
+        else
+            warn "Creating VOLUME_STORAGE_PATH directory: $VOLUME_STORAGE_PATH"
+            mkdir -p "$VOLUME_STORAGE_PATH" || die "Failed to create $VOLUME_STORAGE_PATH"
         fi
     fi
 

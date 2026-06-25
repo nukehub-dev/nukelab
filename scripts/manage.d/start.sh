@@ -59,6 +59,7 @@ parse_start_args() {
 cmd_start() {
     # Dev and prod share container names; only one may run at a time.
     _require_other_stack_stopped
+    _warn_stale_containers
 
     setup_cpu_lib_volume
 
