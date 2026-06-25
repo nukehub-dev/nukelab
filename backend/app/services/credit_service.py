@@ -304,7 +304,7 @@ class CreditService:
         # Get total count
         count_query = select(func.count()).select_from(
             select(User)
-            .where(and_(User.is_active == True, User.nuke_balance <= threshold))
+            .where(and_(User.is_active.is_(True), User.nuke_balance <= threshold))
             .subquery()
         )
         total_result = await self.db.execute(count_query)
@@ -314,7 +314,7 @@ class CreditService:
         offset = (page - 1) * limit
         result = await self.db.execute(
             select(User)
-            .where(and_(User.is_active == True, User.nuke_balance <= threshold))
+            .where(and_(User.is_active.is_(True), User.nuke_balance <= threshold))
             .order_by(User.nuke_balance.asc())
             .offset(offset)
             .limit(limit)

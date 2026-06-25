@@ -432,7 +432,7 @@ class TestEnforceRefreshTokenLimit:
         result = await db_session.execute(
             select(func.count())
             .select_from(RefreshToken)
-            .where(RefreshToken.revoked_at == None, RefreshToken.user_id == uid)
+            .where(RefreshToken.revoked_at.is_(None), RefreshToken.user_id == uid)
         )
         count = result.scalar()
         assert count <= 10

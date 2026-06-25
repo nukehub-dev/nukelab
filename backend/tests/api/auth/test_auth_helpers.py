@@ -439,7 +439,7 @@ class TestCreateRefreshTokenForUser:
 
         result = await db_session.execute(
             select(RefreshToken).where(
-                RefreshToken.user_id == test_user.id, RefreshToken.revoked_at == None
+                RefreshToken.user_id == test_user.id, RefreshToken.revoked_at.is_(None)
             )
         )
         tokens = result.scalars().all()

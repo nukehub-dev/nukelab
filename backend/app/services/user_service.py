@@ -59,9 +59,9 @@ class UserService:
 
         if status:
             if status == "active":
-                query = query.where(User.is_active == True)
+                query = query.where(User.is_active.is_(True))
             elif status == "disabled":
-                query = query.where(User.is_active == False)
+                query = query.where(User.is_active.is_(False))
 
         if search:
             search_filter = or_(

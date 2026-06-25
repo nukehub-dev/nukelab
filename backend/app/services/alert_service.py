@@ -20,7 +20,7 @@ class AlertService:
 
     async def evaluate_all_rules(self):
         """Evaluate all active alert rules against latest metrics"""
-        result = await self.db.execute(select(AlertRule).where(AlertRule.is_active == True))
+        result = await self.db.execute(select(AlertRule).where(AlertRule.is_active.is_(True)))
         rules = result.scalars().all()
 
         for rule in rules:

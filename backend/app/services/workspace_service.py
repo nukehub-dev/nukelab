@@ -227,7 +227,7 @@ class WorkspaceService:
         else:
             query = query.where(SharedWorkspace.owner_id == user_id)
 
-        query = query.where(SharedWorkspace.is_active == True)
+        query = query.where(SharedWorkspace.is_active.is_(True))
         result = await self.db.execute(query)
         return result.scalars().all()
 

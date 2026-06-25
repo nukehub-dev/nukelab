@@ -55,7 +55,7 @@ class QuotaService:
         query = (
             select(User, ResourceQuota)
             .outerjoin(ResourceQuota, User.id == ResourceQuota.user_id)
-            .where(User.is_active == True)
+            .where(User.is_active.is_(True))
         )
 
         # Apply search filter

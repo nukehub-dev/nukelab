@@ -128,7 +128,7 @@ async def _enforce_refresh_token_limit(user_id: uuid.UUID, db: AsyncSession) -> 
         select(RefreshToken)
         .where(
             RefreshToken.user_id == user_id,
-            RefreshToken.revoked_at == None,
+            RefreshToken.revoked_at.is_(None),
         )
         .order_by(RefreshToken.created_at.asc())
     )
@@ -190,7 +190,7 @@ async def verify_refresh_token(plaintext: str, db: AsyncSession) -> RefreshToken
         .options(selectinload(RefreshToken.user))
         .where(
             RefreshToken.token_lookup == lookup,
-            RefreshToken.revoked_at == None,
+            RefreshToken.revoked_at.is_(None),
             RefreshToken.expires_at > datetime.now(UTC).replace(tzinfo=None),
         )
     )
@@ -204,8 +204,8 @@ async def verify_refresh_token(plaintext: str, db: AsyncSession) -> RefreshToken
         select(RefreshToken)
         .options(selectinload(RefreshToken.user))
         .where(
-            RefreshToken.token_lookup == None,
-            RefreshToken.revoked_at == None,
+            RefreshToken.token_lookup.is_(None),
+            RefreshToken.revoked_at.is_(None),
             RefreshToken.expires_at > datetime.now(UTC).replace(tzinfo=None),
         )
     )
@@ -326,8 +326,8 @@ async def get_auth_context(
         select(ApiToken).where(
             and_(
                 ApiToken.token_prefix == token_prefix,
-                ApiToken.is_active == True,
-                ApiToken.revoked_at == None,
+                ApiToken.is_active.is_(True),
+                ApiToken.revoked_at.is_(None),
             )
         )
     )
@@ -725,7 +725,7 @@ async def verify_auth(request: Request, db: AsyncSession = Depends(get_db)):
 
     # Try API token
     result = await db.execute(
-        select(ApiToken).where(ApiToken.is_active == True, ApiToken.revoked_at == None)
+        select(ApiToken).where(ApiToken.is_active.is_(True), ApiToken.revoked_at.is_(None))
     )
     api_tokens = result.scalars().all()
 
@@ -760,7 +760,7 @@ async def _resolve_user_from_token(token: str, db: AsyncSession) -> User | None:
         pass
 
     result = await db.execute(
-        select(ApiToken).where(ApiToken.is_active == True, ApiToken.revoked_at == None)
+        select(ApiToken).where(ApiToken.is_active.is_(True), ApiToken.revoked_at.is_(None))
     )
     for api_token in result.scalars().all():
         if verify_password(token, api_token.token_hash):

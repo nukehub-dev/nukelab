@@ -32,7 +32,7 @@ class MaintenanceWindowService:
         query = select(MaintenanceWindow).order_by(MaintenanceWindow.start_at.desc())
 
         if active_only:
-            query = query.where(MaintenanceWindow.is_active == True)
+            query = query.where(MaintenanceWindow.is_active.is_(True))
 
         if future_only:
             query = query.where(MaintenanceWindow.end_at >= datetime.now(UTC).replace(tzinfo=None))
@@ -161,9 +161,9 @@ class MaintenanceWindowService:
         result = await self.db.execute(
             select(MaintenanceWindow).where(
                 and_(
-                    MaintenanceWindow.is_active == True,
+                    MaintenanceWindow.is_active.is_(True),
                     MaintenanceWindow.start_at > now,
-                    MaintenanceWindow.auto_enabled == False,
+                    MaintenanceWindow.auto_enabled.is_(False),
                 )
             )
         )
@@ -192,9 +192,9 @@ class MaintenanceWindowService:
         result = await self.db.execute(
             select(MaintenanceWindow).where(
                 and_(
-                    MaintenanceWindow.is_active == True,
+                    MaintenanceWindow.is_active.is_(True),
                     MaintenanceWindow.start_at <= now,
-                    MaintenanceWindow.auto_enabled == False,
+                    MaintenanceWindow.auto_enabled.is_(False),
                 )
             )
         )
@@ -206,10 +206,10 @@ class MaintenanceWindowService:
         result = await self.db.execute(
             select(MaintenanceWindow).where(
                 and_(
-                    MaintenanceWindow.is_active == True,
+                    MaintenanceWindow.is_active.is_(True),
                     MaintenanceWindow.end_at <= now,
-                    MaintenanceWindow.auto_enabled == True,
-                    MaintenanceWindow.auto_disabled == False,
+                    MaintenanceWindow.auto_enabled.is_(True),
+                    MaintenanceWindow.auto_disabled.is_(False),
                 )
             )
         )
@@ -220,7 +220,7 @@ class MaintenanceWindowService:
     ) -> int:
         """Send advance notifications to all active users for a window."""
         # Get all active users
-        result = await self.db.execute(select(User).where(User.is_active == True))
+        result = await self.db.execute(select(User).where(User.is_active.is_(True)))
         users = result.scalars().all()
 
         notif_service = NotificationService(self.db)

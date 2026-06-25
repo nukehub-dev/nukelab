@@ -72,7 +72,7 @@ async def get_admin_stats(
     total_users_result = await db.execute(select(func.count()).select_from(User))
     total_users = total_users_result.scalar()
 
-    active_users_result = await db.execute(select(func.count()).where(User.is_active == True))
+    active_users_result = await db.execute(select(func.count()).where(User.is_active.is_(True)))
     active_users = active_users_result.scalar()
 
     disabled_users = total_users - active_users
@@ -115,7 +115,7 @@ async def get_admin_stats(
 
     # Low credit users
     low_credit_result = await db.execute(
-        select(func.count()).where(and_(User.is_active == True, User.nuke_balance <= 100))
+        select(func.count()).where(and_(User.is_active.is_(True), User.nuke_balance <= 100))
     )
     low_credit_users = low_credit_result.scalar()
 
@@ -437,7 +437,7 @@ async def admin_credit_summary(
 
     # Total credits in system
     total_credits_result = await db.execute(
-        select(func.sum(User.nuke_balance)).where(User.is_active == True)
+        select(func.sum(User.nuke_balance)).where(User.is_active.is_(True))
     )
     total_credits = total_credits_result.scalar() or 0
 
@@ -460,7 +460,7 @@ async def admin_credit_summary(
 
     # Top users by balance
     top_users_result = await db.execute(
-        select(User).where(User.is_active == True).order_by(desc(User.nuke_balance)).limit(10)
+        select(User).where(User.is_active.is_(True)).order_by(desc(User.nuke_balance)).limit(10)
     )
     top_users = top_users_result.scalars().all()
 

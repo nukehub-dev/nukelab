@@ -117,7 +117,7 @@ async def get_system_stats(
     total_users_result = await db.execute(select(func.count()).select_from(User))
     total_users = total_users_result.scalar()
 
-    active_users_result = await db.execute(select(func.count()).where(User.is_active == True))
+    active_users_result = await db.execute(select(func.count()).where(User.is_active.is_(True)))
     active_users = active_users_result.scalar()
 
     total_servers_result = await db.execute(select(func.count()).select_from(Server))
@@ -129,7 +129,7 @@ async def get_system_stats(
     running_servers = running_servers_result.scalar()
 
     total_credits_result = await db.execute(
-        select(func.sum(User.nuke_balance)).where(User.is_active == True)
+        select(func.sum(User.nuke_balance)).where(User.is_active.is_(True))
     )
     total_credits = total_credits_result.scalar() or 0
 
