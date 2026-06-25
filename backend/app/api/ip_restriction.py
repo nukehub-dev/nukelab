@@ -70,7 +70,7 @@ async def create_ip_restriction(
         ipaddress.ip_network(req.ip_range, strict=False)
     except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"Invalid IP range: {req.ip_range}",
         )
 
@@ -81,7 +81,7 @@ async def create_ip_restriction(
             network = ipaddress.ip_network(req.ip_range, strict=False)
             if ipaddress.ip_address(client_ip) in network:
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail="You cannot block your own IP address. If you want to restrict access, use an allowlist instead.",
                 )
         except ValueError:

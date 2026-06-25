@@ -30,7 +30,8 @@ cmd_test() {
         fi
 
         # Run tests in a fresh container with backend source bind-mounted.
-        local _test_run_cmd="cd /app && python -m pytest ${pytest_args}"
+        # Install dev/test dependencies first so pytest and its plugins are available.
+        local _test_run_cmd="cd /app && pip install -q -r requirements-dev.txt && python -m pytest ${pytest_args}"
         local _test_exit=0
         $COMPOSE "${COMPOSE_ARGS[@]}" run --rm \
             -v "${DIR}/backend:/app:Z" \

@@ -21,7 +21,7 @@ from typing import Any
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from jose import JWTError, jwt
+import jwt
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -227,10 +227,10 @@ class ServerAuthService:
             Token claims dict
 
         Raises:
-            JWTError: If token is invalid
+            jwt.InvalidTokenError: If token is invalid
         """
         if not self.is_enabled:
-            raise JWTError("Server authentication is disabled")
+            raise jwt.InvalidTokenError("Server authentication is disabled")
 
         public_key = self._load_public_key()
 
@@ -247,7 +247,7 @@ class ServerAuthService:
 
         # Validate server scope
         if expected_server_id and claims.get("aud") != str(expected_server_id):
-            raise JWTError("Token not valid for this server")
+            raise jwt.InvalidTokenError("Token not valid for this server")
 
         return claims
 

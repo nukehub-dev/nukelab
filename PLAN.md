@@ -1638,7 +1638,7 @@ Then the server stops and the bulk API returns success
 
 - [ ] **Security**
   - [x] OWASP Top 10 audit — documented in `docs/OWASP-AUDIT.md`; overall rating: Pass
-  - [x] Dependency scanning — Dependabot configured (`.github/dependabot.yml`); `pip-audit`, `npm audit`, and `bandit` integrated via `./nukelabctl security`
+  - [x] Dependency scanning — Dependabot configured (`.github/dependabot.yml`); `pip-audit`, `npm audit`, and `bandit` integrated via `./nukelabctl security`; production dependencies cleared of known CVEs
   - [ ] Secret management (HashiCorp Vault or Sealed Secrets)
   - [x] Security headers (HSTS, CSP, X-Frame-Options, CORP, Permissions-Policy) — exception-safe ASGI middleware
   - [x] Path traversal prevention — centralized `secure_path()` with `Path.resolve()` + `relative_to()`

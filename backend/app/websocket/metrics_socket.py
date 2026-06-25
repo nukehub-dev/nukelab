@@ -6,7 +6,7 @@ import time
 
 import redis.asyncio as redis
 from fastapi import WebSocket, WebSocketDisconnect
-from jose import JWTError, jwt
+import jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -123,7 +123,7 @@ async def validate_token(token: str) -> User | None:
         async with AsyncSessionLocal() as db:
             result = await db.execute(select(User).where(User.username == username))
             return result.scalar_one_or_none()
-    except (JWTError, Exception):
+    except (jwt.InvalidTokenError, Exception):
         return None
 
 

@@ -29,7 +29,7 @@ import logging
 import time
 
 from fastapi import Request
-from jose import ExpiredSignatureError, JWTError, jwt
+import jwt
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
@@ -111,9 +111,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 settings.jwt_secret,
                 algorithms=[settings.jwt_algorithm],
             )
-        except ExpiredSignatureError:
+        except jwt.ExpiredSignatureError:
             return None
-        except JWTError:
+        except jwt.InvalidTokenError:
             return None
 
     def _get_client_ip(self, request: Request) -> str:

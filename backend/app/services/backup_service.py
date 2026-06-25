@@ -196,7 +196,7 @@ class BackupService:
 
         # Extract backup
         with tarfile.open(backup.backup_path, "r:gz") as tar:
-            tar.extractall(path=mountpoint, filter="fully_trusted")
+            tar.extractall(path=mountpoint, filter="data")
 
         return {
             "backup_id": backup_id,

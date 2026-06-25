@@ -6,7 +6,7 @@ import uuid
 from typing import Any
 
 from fastapi import Request, Response
-from jose import JWTError, jwt
+import jwt
 from sqlalchemy import select
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
@@ -135,7 +135,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
             async with AsyncSessionLocal() as db:
                 result = await db.execute(select(User).where(User.username == username))
                 return result.scalar_one_or_none()
-        except JWTError:
+        except jwt.InvalidTokenError:
             return None
 
     def _get_auth_info(self, request: Request) -> dict[str, Any]:

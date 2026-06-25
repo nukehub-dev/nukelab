@@ -121,8 +121,11 @@ This document records the OWASP Top 10 audit performed against the NukeLab platf
 | Node.js dependency audit (npm audit) | ✅ Implemented | `./nukelabctl security` runs `npm audit` |
 | CI security scan workflow | ✅ Implemented | `.github/workflows/security.yml` |
 | Pinned dependency versions | ✅ Implemented | `backend/requirements*.txt`, `frontend/package-lock.json` |
+| Production deps cleared of known CVEs | ✅ Implemented | `pip-audit` reports 0 vulns for `requirements.txt`; `npm audit` reports 0 vulns |
+| python-jose replaced with PyJWT | ✅ Implemented | `backend/requirements.txt`; removes vulnerable `pyasn1` transitive dep |
 
 **Residual Gaps / Notes:**
+- pytest 8.3.5 in dev requirements has an accepted local-only tmpdir CVE (GHSA-6w46-j5rx-g56g); blocked from upgrade by pytest-asyncio compatibility. Ignored in CI via `--ignore-vuln`.
 - Container image scanning (Trivy/Grype) not yet integrated; recommended before production image builds.
 
 **Risk Rating:** Low
@@ -225,17 +228,23 @@ No critical or high-severity gaps remain. The medium-rated item (A08) is process
 ## Running the Scans
 
 ```bash
-# Run all security scanners
+# Run all security scanners (production dependencies only)
 ./nukelabctl security
 
 # Backend only
 ./nukelabctl security --backend-only
+
+# Include dev dependencies in pip-audit
+./nukelabctl security --with-dev
 
 # Skip npm audit
 ./nukelabctl security --no-npm-audit
 
 # Allow moderate npm findings without failing
 ./nukelabctl security --fail-on-high=false
+
+# Only report Bandit high-severity issues
+./nukelabctl security --bandit-severity=high
 ```
 
 Reports are written to `backend/reports/security/`.

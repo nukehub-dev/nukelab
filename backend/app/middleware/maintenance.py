@@ -3,7 +3,7 @@
 import time
 
 from fastapi import Request
-from jose import JWTError, jwt
+import jwt
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
@@ -125,5 +125,5 @@ class MaintenanceMiddleware(BaseHTTPMiddleware):
                 return False
             perms = get_role_permissions(role)
             return Permission.ADMIN_ACCESS in perms or Permission.ALL in perms
-        except JWTError:
+        except jwt.InvalidTokenError:
             return False

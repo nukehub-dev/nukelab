@@ -158,12 +158,12 @@ class TestRateLimitMiddleware:
         """Expired tokens should not consume the real user's rate limit budget."""
         from datetime import UTC, datetime, timedelta
 
-        from jose import jwt as jose_jwt
+        import jwt
 
         settings.rate_limit_enabled = True
 
         # Create an expired token
-        expired_token = jose_jwt.encode(
+        expired_token = jwt.encode(
             {
                 "sub": test_user.username,
                 "role": test_user.role,

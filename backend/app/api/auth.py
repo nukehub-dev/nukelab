@@ -12,7 +12,7 @@ from fastapi.security import (
     HTTPBearer,
     OAuth2PasswordRequestForm,
 )
-from jose import JWTError, jwt
+import jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel
 from slowapi import Limiter
@@ -315,7 +315,7 @@ async def get_auth_context(
                 set_sentry_user(str(user.id), user.role)
                 set_sentry_tag("auth_method", "jwt")
                 return context
-    except JWTError:
+    except jwt.InvalidTokenError:
         pass
 
     # Try API token with fast prefix lookup
@@ -720,7 +720,7 @@ async def verify_auth(request: Request, db: AsyncSession = Depends(get_db)):
                 from fastapi.responses import Response
 
                 return Response(status_code=200, headers={"X-User-Id": str(user.id)})
-    except JWTError:
+    except jwt.InvalidTokenError:
         pass
 
     # Try API token
@@ -756,7 +756,7 @@ async def _resolve_user_from_token(token: str, db: AsyncSession) -> User | None:
             user = result.scalar_one_or_none()
             if user and user.is_active:
                 return user
-    except JWTError:
+    except jwt.InvalidTokenError:
         pass
 
     result = await db.execute(

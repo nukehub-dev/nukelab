@@ -155,7 +155,7 @@ class XfsQuotaService:
         Uses MD5 (not Python's randomized hash()) so IDs are stable
         across process restarts.
         """
-        h = int(hashlib.md5(volume_name.encode("utf-8")).hexdigest(), 16)
+        h = int(hashlib.md5(volume_name.encode("utf-8"), usedforsecurity=False).hexdigest(), 16)
         return self.project_id_start + (h % 1_000_000)
 
     def _write_project_entry(self, project_id: int, volume_path: str) -> bool:

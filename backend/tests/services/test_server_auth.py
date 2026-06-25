@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 import pytest_asyncio
-from jose import jwt
+import jwt
 
 
 @pytest_asyncio.fixture
@@ -163,7 +163,7 @@ class TestServerAuthTokenVerification:
     @pytest.mark.asyncio
     async def test_token_fails_with_wrong_audience(self, db_session, test_user, test_server):
         """Token should fail verification with wrong audience."""
-        from jose.exceptions import JWTError
+        import jwt
 
         from app.services.server_auth_service import server_auth_service
 
@@ -176,7 +176,7 @@ class TestServerAuthTokenVerification:
 
         public_key = server_auth_service.get_public_key_pem()
 
-        with pytest.raises(JWTError):
+        with pytest.raises(jwt.InvalidTokenError):
             jwt.decode(
                 token,
                 public_key,
@@ -189,7 +189,7 @@ class TestServerAuthTokenVerification:
         """Expired token should fail verification."""
         import asyncio
 
-        from jose.exceptions import ExpiredSignatureError
+        import jwt
 
         from app.config import settings
         from app.services.server_auth_service import server_auth_service
@@ -211,7 +211,7 @@ class TestServerAuthTokenVerification:
 
             public_key = server_auth_service.get_public_key_pem()
 
-            with pytest.raises(ExpiredSignatureError):
+            with pytest.raises(jwt.ExpiredSignatureError):
                 jwt.decode(token, public_key, algorithms=["RS256"], audience=str(test_server.id))
         finally:
             settings.server_auth_token_ttl = original_ttl
@@ -222,7 +222,7 @@ class TestServerAuthTokenVerification:
 import uuid
 
 import pytest
-from jose import JWTError
+import jwt
 from sqlalchemy import select
 
 from app.config import settings
@@ -376,7 +376,7 @@ class TestServerAuthServiceValidation:
         )
 
         wrong_id = uuid.uuid4()
-        with pytest.raises(JWTError):
+        with pytest.raises(jwt.InvalidTokenError):
             await service.validate_token(token, expected_server_id=wrong_id)
 
     @pytest.mark.asyncio
@@ -386,7 +386,7 @@ class TestServerAuthServiceValidation:
         original = settings.server_auth_enabled
         settings.server_auth_enabled = False
         try:
-            with pytest.raises(JWTError, match="Server authentication is disabled"):
+            with pytest.raises(jwt.InvalidTokenError, match="Server authentication is disabled"):
                 await service.validate_token("dummy")
         finally:
             settings.server_auth_enabled = original

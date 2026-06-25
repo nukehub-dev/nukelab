@@ -69,7 +69,7 @@ async def create_volume(
     )
     if not quota_check["allowed"]:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=quota_check["reason"]
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=quota_check["reason"]
         )
 
     volume_service = VolumeService(db)

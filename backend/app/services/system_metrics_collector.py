@@ -1,6 +1,8 @@
 import asyncio
 import contextlib
 import json
+import os
+import tempfile
 from datetime import UTC, datetime
 
 import psutil
@@ -77,9 +79,7 @@ class SystemMetricsCollector:
         disk_read_rate = 0
         disk_write_rate = 0
         try:
-            import os
-
-            disk_cache_file = "/tmp/nukelab_disk_cache.json"
+            disk_cache_file = os.path.join(tempfile.gettempdir(), "nukelab_disk_cache.json")
             disk_prev_data = None
             if os.path.exists(disk_cache_file):
                 try:
@@ -121,9 +121,7 @@ class SystemMetricsCollector:
         network_tx_rate = 0
         try:
             # Try to get previous values from a simple cache file
-            import os
-
-            cache_file = "/tmp/nukelab_network_cache.json"
+            cache_file = os.path.join(tempfile.gettempdir(), "nukelab_network_cache.json")
             prev_data = None
             if os.path.exists(cache_file):
                 try:

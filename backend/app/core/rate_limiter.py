@@ -21,7 +21,7 @@ import logging
 import time
 
 from fastapi import HTTPException, Request, status
-from jose import ExpiredSignatureError, JWTError, jwt
+import jwt
 
 from app.config import settings
 from app.core.roles import get_role_rate_limit
@@ -70,9 +70,9 @@ def _extract_jwt_sub(token: str) -> str | None:
     try:
         payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
         return payload.get("sub")
-    except ExpiredSignatureError:
+    except jwt.ExpiredSignatureError:
         return None
-    except JWTError:
+    except jwt.InvalidTokenError:
         return None
 
 
@@ -97,7 +97,7 @@ def _get_user_key_and_role(request: Request) -> tuple[str, str | None]:
                 )
                 role = payload.get("role", "user")
                 return (sub, role)
-            except JWTError:
+            except jwt.InvalidTokenError:
                 pass
         return (f"tkn:{_hash_token(token)}", "user")
 

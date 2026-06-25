@@ -174,7 +174,7 @@ class TestAuthPasswordUtils:
 
 class TestCreateAccessToken:
     def test_create_access_token(self):
-        from jose import jwt
+        import jwt
 
         from app.api.auth import create_access_token
         from app.config import settings
@@ -185,7 +185,7 @@ class TestCreateAccessToken:
         assert "exp" in payload
 
     def test_create_access_token_custom_expiry(self):
-        from jose import jwt
+        import jwt
 
         from app.api.auth import create_access_token
         from app.config import settings

@@ -16,6 +16,7 @@ FRONTEND_AUDIT_REPORT="${SECURITY_REPORT_DIR}/npm-audit-report.json"
 BANDIT_COUNT_FILE="${SECURITY_REPORT_DIR}/.bandit-count"
 PIPAUDIT_COUNT_FILE="${SECURITY_REPORT_DIR}/.pip-audit-count"
 NPM_COUNT_FILE="${SECURITY_REPORT_DIR}/.npm-high-count"
+NPM_TOTAL_COUNT_FILE="${SECURITY_REPORT_DIR}/.npm-total-count"
 
 # Defaults
 SCAN_BACKEND=true
@@ -24,6 +25,7 @@ RUN_BANDIT=true
 RUN_PIP_AUDIT=true
 RUN_NPM_AUDIT=true
 FAIL_ON_HIGH=true
+SCAN_DEV_REQUIREMENTS=false
 BANDIT_SEVERITY="medium"   # low | medium | high
 BANDIT_CONFIDENCE="low"    # low | medium | high
 
@@ -50,6 +52,9 @@ parse_security_args() {
                 ;;
             --bandit-severity=*)
                 BANDIT_SEVERITY="${arg#*=}"
+                ;;
+            --with-dev)
+                SCAN_DEV_REQUIREMENTS=true
                 ;;
             --help|-h)
                 help_security
@@ -158,18 +163,25 @@ _run_pip_audit() {
     local pip_audit_bin
     pip_audit_bin=$(_ensure_venv_tool pip-audit)
 
-    log_warn "Running pip-audit on backend requirements..."
+    local req_args=("-r" "${DIR}/backend/requirements.txt")
+    if $SCAN_DEV_REQUIREMENTS; then
+        req_args+=("-r" "${DIR}/backend/requirements-dev.txt")
+    fi
+
+    if $SCAN_DEV_REQUIREMENTS; then
+        log_warn "Running pip-audit on backend requirements (including dev)..."
+    else
+        log_warn "Running pip-audit on backend requirements..."
+    fi
     "$pip_audit_bin" \
-        -r "${DIR}/backend/requirements.txt" \
-        -r "${DIR}/backend/requirements-dev.txt" \
+        "${req_args[@]}" \
         --format=json \
         --desc \
         --progress-spinner=off \
         -o "$PIPAUDIT_REPORT" 2>/dev/null || true
 
     "$pip_audit_bin" \
-        -r "${DIR}/backend/requirements.txt" \
-        -r "${DIR}/backend/requirements-dev.txt" \
+        "${req_args[@]}" \
         --format=columns \
         --progress-spinner=off \
         >&2 || true
@@ -209,18 +221,23 @@ const fs = require('fs');
 try {
     const data = JSON.parse(fs.readFileSync('$FRONTEND_AUDIT_REPORT', 'utf8'));
     const vulns = data.vulnerabilities || {};
-    let count = 0;
+    let high = 0;
+    let total = 0;
     for (const [name, info] of Object.entries(vulns)) {
+        total++;
         const sev = (info.severity || '').toLowerCase();
-        if (sev === 'high' || sev === 'critical') count++;
+        if (sev === 'high' || sev === 'critical') high++;
     }
-    fs.writeFileSync('$NPM_COUNT_FILE', String(count));
+    fs.writeFileSync('$NPM_COUNT_FILE', String(high));
+    fs.writeFileSync('$NPM_TOTAL_COUNT_FILE', String(total));
 } catch (e) {
     fs.writeFileSync('$NPM_COUNT_FILE', '0');
+    fs.writeFileSync('$NPM_TOTAL_COUNT_FILE', '0');
 }
 " 2>/dev/null
     else
         echo 0 > "$NPM_COUNT_FILE"
+        echo 0 > "$NPM_TOTAL_COUNT_FILE"
     fi
 }
 
@@ -234,6 +251,7 @@ cmd_security() {
     local _bandit_count=0
     local _pip_audit_count=0
     local _npm_high_count=0
+    local _npm_total_count=0
 
     if $SCAN_BACKEND; then
         step "Backend security scans"
@@ -267,11 +285,12 @@ cmd_security() {
         if $RUN_NPM_AUDIT; then
             _run_npm_audit
             _npm_high_count=$(cat "$NPM_COUNT_FILE" 2>/dev/null || echo 0)
+            _npm_total_count=$(cat "$NPM_TOTAL_COUNT_FILE" 2>/dev/null || echo 0)
             if $FAIL_ON_HIGH && [ "$_npm_high_count" -gt 0 ]; then
                 log_warn "npm audit reported $_npm_high_count high/critical vulnerability(ies). See ${FRONTEND_AUDIT_REPORT}"
                 _overall_exit=1
-            elif [ -s "$FRONTEND_AUDIT_REPORT" ]; then
-                log_warn "npm audit reported vulnerabilities. See ${FRONTEND_AUDIT_REPORT}"
+            elif [ "$_npm_total_count" -gt 0 ]; then
+                log_warn "npm audit reported $_npm_total_count vulnerability(ies) (low/moderate). See ${FRONTEND_AUDIT_REPORT}"
             else
                 log_ok "npm audit passed"
             fi
@@ -279,12 +298,13 @@ cmd_security() {
     fi
 
     # Clean up transient count files; keep reports.
-    rm -f "$BANDIT_COUNT_FILE" "$PIPAUDIT_COUNT_FILE" "$NPM_COUNT_FILE"
+    rm -f "$BANDIT_COUNT_FILE" "$PIPAUDIT_COUNT_FILE" "$NPM_COUNT_FILE" "$NPM_TOTAL_COUNT_FILE"
 
     step "Security scan summary"
     echo "  Reports written to: ${SECURITY_REPORT_DIR}"
     echo "  Bandit issues (>= ${BANDIT_SEVERITY}):  ${_bandit_count}"
     echo "  pip-audit vulnerable packages:          ${_pip_audit_count}"
+    echo "  npm total vulnerabilities:              ${_npm_total_count}"
     echo "  npm high/critical vulnerabilities:      ${_npm_high_count}"
 
     if [ $_overall_exit -ne 0 ]; then
@@ -315,6 +335,7 @@ ${BOLD}Options:${RESET}
   --no-bandit             Skip Bandit
   --no-pip-audit          Skip pip-audit
   --no-npm-audit          Skip npm audit
+  --with-dev              Also scan backend/requirements-dev.txt
   --fail-on-high=false    Do not fail the command for npm high/critical findings
   --bandit-severity=low|medium|high
                           Minimum Bandit severity to report (default: medium)
@@ -322,6 +343,7 @@ ${BOLD}Options:${RESET}
 ${BOLD}Examples:${RESET}
   ./nukelabctl security
   ./nukelabctl security --backend-only
+  ./nukelabctl security --with-dev
   ./nukelabctl security --no-npm-audit --bandit-severity=high
 EOF
 }
