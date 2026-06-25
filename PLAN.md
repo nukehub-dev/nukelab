@@ -1,7 +1,7 @@
 # NukeLab Platform v2.0 — Architecture & Implementation Plan
 
-**Status**: Phase 5 & Phase 7 100% Complete · Phase 8 Load Testing Delivered · PgBouncer Hardened for 100k Users
-**Last Updated**: June 10, 2026  
+**Status**: Phase 5 & Phase 7 100% Complete · Phase 8 Load Testing Delivered · CI/CD Pipeline Implemented · Redis Alert Hardened
+**Last Updated**: June 26, 2026  
 **Target Timeline**: 6+ months  
 **Tech Stack**: Vite + React 19 SPA, FastAPI, PostgreSQL 18, Redis, Traefik v3, Docker/Podman
 
@@ -42,6 +42,9 @@
 - **Strict CORS** — Explicit origin whitelist, restricted methods/headers in production, preflight caching; rejects `*` with credentials
 - **Redis Response Caching** — `app.core.cache` with msgpack serialization, circuit breaker, stampede protection, and SET-based invalidation; caches `GET /servers/` and `GET /admin/servers` with 30s TTL; complete invalidation on all mutations
 - **OpenTelemetry Distributed Tracing** — end-to-end tracing across FastAPI, Celery, SQLAlchemy, Redis; OTLP exporter to collector; Jaeger UI at `/jaeger`; Grafana Jaeger datasource; preserves existing correlation ID logging
+- **CI/CD Pipeline** — GitHub Actions workflow (`.github/workflows/ci.yml`) lints backend/frontend, runs backend tests, and builds/pushes `backend`, `frontend`, and `auth-sidecar` images to GitHub Container Registry with path-filtered jobs and branch/tag-based image tags
+- **Dev/Prod Isolation in nukelabctl** — `dev` meta-command with separate state files; mutual exclusion so `start` and `dev start` cannot overlap; `loadtest` always targets production
+- **Redis maxmemory & Alert Hardening** — Redis defaults to `256mb` with `allkeys-lru`; Prometheus alert guards against division-by-zero when `maxmemory` is unset and warns when it is not configured
 
 ### Model Updates
 - **ServerPlan** — Added `max_runtime`, `idle_timeout`, `allow_scheduling`, `allow_snapshots`
@@ -1672,8 +1675,8 @@ Then the server stops and the bulk API returns success
   - [ ] Network Policies
   - [ ] Pod Security Standards
 
-- [ ] **Deployment**
-  - [ ] CI/CD pipeline (GitHub Actions)
+- [x] **Deployment**
+  - [x] CI/CD pipeline (GitHub Actions) — lint/test/build/push to ghcr.io, path-filtered, branch/tag image tagging
   - [ ] Blue-green deployment
   - [ ] Database migration strategy
   - [ ] Rollback procedures
@@ -2366,7 +2369,7 @@ DEFAULT_MAX_SERVERS=3
 
 1. **Environment image build pipeline** — automated builds, registry integration, image versioning, and base-image updates
 2. **CDN for static assets** — quick production performance win for the Vite SPA
-3. **CI/CD pipeline** — GitHub Actions workflow for lint/test/build/deploy; blue-green deployment strategy
+3. **Blue-green deployment** — extend CI/CD with a zero-downtime deploy strategy to a live server
 4. **Secret management** — HashiCorp Vault or Sealed Secrets integration
 5. **Penetration testing** — third-party penetration test before public production launch
 6. **Phase 6 Kubernetes items** remain future goals for multi-node scaling — only pursue after you've saturated a single large server (32+ cores, 128GB+ RAM) and proven you need distribution
