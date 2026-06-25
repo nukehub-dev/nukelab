@@ -3,9 +3,9 @@ Preferences API endpoints.
 """
 
 import os
-from typing import Optional
+
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
-from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import get_current_user
@@ -18,33 +18,33 @@ router = APIRouter()
 
 
 class PreferencesUpdateRequest(BaseModel):
-    theme: Optional[str] = Field(
+    theme: str | None = Field(
         None,
         description="Theme: default, graphite, ocean, amber, github, nord, everforest, rosepine",
     )
-    accent_color: Optional[str] = Field(None, description="Custom accent color (OKLCH value)")
-    oled_mode: Optional[bool] = Field(None, description="OLED dark mode")
-    use_gravatar: Optional[bool] = Field(None, description="Use Gravatar for profile image")
-    language: Optional[str] = Field(None, description="Language code")
-    timezone: Optional[str] = Field(None, description="Timezone")
-    default_environment: Optional[str] = Field(None, description="Default environment")
-    default_plan: Optional[str] = Field(None, description="Default plan")
-    notifications: Optional[dict] = Field(None, description="Notification preferences")
-    dashboard: Optional[dict] = Field(None, description="Dashboard preferences")
-    sidebar_collapsed: Optional[bool] = Field(None, description="Sidebar collapsed state")
-    sidebar_pinned: Optional[bool] = Field(None, description="Sidebar pinned state")
-    density: Optional[str] = Field(None, description="UI density: compact, comfortable")
-    pinned_workspace_ids: Optional[list] = Field(None, description="List of pinned workspace IDs")
-    idle_shutdown_enabled: Optional[bool] = Field(None, description="Auto-stop idle servers")
-    idle_shutdown_timeout: Optional[int] = Field(
+    accent_color: str | None = Field(None, description="Custom accent color (OKLCH value)")
+    oled_mode: bool | None = Field(None, description="OLED dark mode")
+    use_gravatar: bool | None = Field(None, description="Use Gravatar for profile image")
+    language: str | None = Field(None, description="Language code")
+    timezone: str | None = Field(None, description="Timezone")
+    default_environment: str | None = Field(None, description="Default environment")
+    default_plan: str | None = Field(None, description="Default plan")
+    notifications: dict | None = Field(None, description="Notification preferences")
+    dashboard: dict | None = Field(None, description="Dashboard preferences")
+    sidebar_collapsed: bool | None = Field(None, description="Sidebar collapsed state")
+    sidebar_pinned: bool | None = Field(None, description="Sidebar pinned state")
+    density: str | None = Field(None, description="UI density: compact, comfortable")
+    pinned_workspace_ids: list | None = Field(None, description="List of pinned workspace IDs")
+    idle_shutdown_enabled: bool | None = Field(None, description="Auto-stop idle servers")
+    idle_shutdown_timeout: int | None = Field(
         None, description="Minutes of inactivity before shutdown (5-240)"
     )
-    stop_on_logout: Optional[bool] = Field(None, description="Stop all servers on explicit logout")
+    stop_on_logout: bool | None = Field(None, description="Stop all servers on explicit logout")
 
 
 class PreferencesResponse(BaseModel):
     theme: str
-    accent_color: Optional[str]
+    accent_color: str | None
     oled_mode: bool
     use_gravatar: bool
     language: str

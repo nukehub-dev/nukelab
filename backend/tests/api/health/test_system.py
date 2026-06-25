@@ -1,12 +1,8 @@
 """Tests for System API endpoints, maintenance mode, and middleware."""
 
 import pytest
-from sqlalchemy import select
-from app.models.user import User
-from app.models.system_setting import SystemSetting
-from app.config import settings
-from app.services.setting_service import SettingService
 
+from app.config import settings
 
 # ---------------------------------------------------------------------------
 # Fixtures

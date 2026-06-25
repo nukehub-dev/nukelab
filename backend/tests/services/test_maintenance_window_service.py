@@ -1,9 +1,10 @@
 """Tests for MaintenanceWindowService."""
 
-import pytest
 import uuid
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 from unittest import mock
+
+import pytest
 
 from app.models.maintenance_window import MaintenanceWindow
 from app.models.user import User
@@ -523,12 +524,14 @@ class TestEvaluateWindows:
         await db_session.commit()
         await db_session.refresh(w)
 
-        with mock.patch.object(
-            service, "send_advance_notifications", new_callable=mock.AsyncMock, return_value=3
+        with (
+            mock.patch.object(
+                service, "send_advance_notifications", new_callable=mock.AsyncMock, return_value=3
+            ),
+            mock.patch.object(service, "enable_maintenance", new_callable=mock.AsyncMock),
         ):
-            with mock.patch.object(service, "enable_maintenance", new_callable=mock.AsyncMock):
-                with mock.patch.object(service, "disable_maintenance", new_callable=mock.AsyncMock):
-                    result = await service.evaluate_windows()
+            with mock.patch.object(service, "disable_maintenance", new_callable=mock.AsyncMock):
+                result = await service.evaluate_windows()
 
         assert result["notifications_sent"] == 3
         assert result["enabled_count"] == 0
@@ -548,14 +551,16 @@ class TestEvaluateWindows:
         db_session.add(w)
         await db_session.commit()
 
-        with mock.patch.object(
-            service, "send_advance_notifications", new_callable=mock.AsyncMock, return_value=0
-        ):
-            with mock.patch.object(
+        with (
+            mock.patch.object(
+                service, "send_advance_notifications", new_callable=mock.AsyncMock, return_value=0
+            ),
+            mock.patch.object(
                 service, "enable_maintenance", new_callable=mock.AsyncMock
-            ) as mock_enable:
-                with mock.patch.object(service, "disable_maintenance", new_callable=mock.AsyncMock):
-                    result = await service.evaluate_windows()
+            ) as mock_enable,
+        ):
+            with mock.patch.object(service, "disable_maintenance", new_callable=mock.AsyncMock):
+                result = await service.evaluate_windows()
 
         assert result["enabled_count"] == 1
         mock_enable.assert_awaited_once()

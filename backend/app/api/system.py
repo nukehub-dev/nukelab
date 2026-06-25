@@ -1,28 +1,28 @@
-from typing import Optional, List
-from datetime import datetime, UTC, timezone
-from pydantic import BaseModel, Field
-from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from datetime import UTC, datetime
 
-from app.db.session import get_db
-from app.dependencies import get_current_user, require_permissions
-from app.core.permissions import Permission
-from app.models.user import User
-from app.models.server import Server
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.auth import require_jwt_auth
 from app.config import settings
-from app.api.auth import require_scopes, require_jwt_auth
-from app.services.setting_service import SettingService
+from app.core.permissions import Permission
+from app.db.session import get_db
+from app.dependencies import require_permissions
+from app.models.server import Server
+from app.models.user import User
 from app.services.maintenance_window_service import MaintenanceWindowService
+from app.services.setting_service import SettingService
 
 router = APIRouter(tags=["system"])
 
 
 class SystemConfigUpdate(BaseModel):
-    maintenance_mode: Optional[bool] = None
-    maintenance_message: Optional[str] = None
-    daily_allowance_default: Optional[int] = None
+    maintenance_mode: bool | None = None
+    maintenance_message: str | None = None
+    daily_allowance_default: int | None = None
 
 
 @router.get("/health")
@@ -87,7 +87,7 @@ async def update_system_config(
 @router.post("/maintenance")
 async def toggle_maintenance(
     enabled: bool,
-    message: Optional[str] = None,
+    message: str | None = None,
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
     _jwt=Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db),
@@ -149,20 +149,20 @@ class MaintenanceWindowCreate(BaseModel):
     message: str
     start_at: datetime
     end_at: datetime
-    is_active: Optional[bool] = True
-    notify_offsets: Optional[List[int]] = Field(
+    is_active: bool | None = True
+    notify_offsets: list[int] | None = Field(
         default=None,
         description="Notification offsets in minutes before start (e.g. [10080, 1440, 15])",
     )
 
 
 class MaintenanceWindowUpdate(BaseModel):
-    title: Optional[str] = None
-    message: Optional[str] = None
-    start_at: Optional[datetime] = None
-    end_at: Optional[datetime] = None
-    is_active: Optional[bool] = None
-    notify_offsets: Optional[List[int]] = Field(
+    title: str | None = None
+    message: str | None = None
+    start_at: datetime | None = None
+    end_at: datetime | None = None
+    is_active: bool | None = None
+    notify_offsets: list[int] | None = Field(
         default=None, description="Notification offsets in minutes before start"
     )
 
@@ -170,7 +170,7 @@ class MaintenanceWindowUpdate(BaseModel):
 def _naive_utc(dt: datetime) -> datetime:
     """Convert a timezone-aware datetime to naive UTC."""
     if dt.tzinfo is not None:
-        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+        return dt.astimezone(UTC).replace(tzinfo=None)
     return dt
 
 

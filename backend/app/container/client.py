@@ -1,11 +1,12 @@
 import io
+import logging
 import os
 import tarfile
 import uuid
-from typing import Optional, Set
+
 import aiodocker
+
 from app.config import settings
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -15,10 +16,10 @@ class ContainerClient:
     CPU_LIB_TARGET = "/usr/local/lib/nukelab"
 
     def __init__(self):
-        self.client: Optional[aiodocker.Docker] = None
-        self._available_cgroup_controllers: Optional[Set[str]] = None
-        self._storage_support: Optional[bool] = None
-        self._lxcfs_support: Optional[bool] = None
+        self.client: aiodocker.Docker | None = None
+        self._available_cgroup_controllers: set[str] | None = None
+        self._storage_support: bool | None = None
+        self._lxcfs_support: bool | None = None
         self._cpu_lib_volume_ready: bool = False
 
     async def connect(self):
@@ -34,7 +35,7 @@ class ContainerClient:
         """Pull Docker image"""
         await self.client.images.pull(image)
 
-    async def _get_available_controllers(self) -> Set[str]:
+    async def _get_available_controllers(self) -> set[str]:
         """Detect available cgroup v2 controllers from the host"""
         if self._available_cgroup_controllers is not None:
             return self._available_cgroup_controllers
@@ -44,13 +45,13 @@ class ContainerClient:
             # Root cgroup controllers
             cgroup_path = "/sys/fs/cgroup/cgroup.controllers"
             if os.path.exists(cgroup_path):
-                with open(cgroup_path, "r") as f:
+                with open(cgroup_path) as f:
                     controllers.update(f.read().strip().split())
 
             # Current user's subtree controllers
             subtree_path = "/sys/fs/cgroup/cgroup.subtree_control"
             if os.path.exists(subtree_path):
-                with open(subtree_path, "r") as f:
+                with open(subtree_path) as f:
                     controllers.update(f.read().strip().split())
         except Exception as e:
             logger.warning(f"Could not detect cgroup controllers: {e}")
@@ -102,7 +103,7 @@ class ContainerClient:
 
         return mounts
 
-    def _get_cpu_env(self, cpu_limit: Optional[float]) -> dict:
+    def _get_cpu_env(self, cpu_limit: float | None) -> dict:
         """
         Return environment variables that tell common libraries how many
         threads/cores to use, and set LD_PRELOAD to intercept sysconf()
@@ -121,7 +122,7 @@ class ContainerClient:
             "LD_PRELOAD": "/usr/local/lib/nukelab/libnukelab_cpu.so",
         }
 
-    async def _inject_cpu_files(self, container, cpu_limit: Optional[float]) -> None:
+    async def _inject_cpu_files(self, container, cpu_limit: float | None) -> None:
         """Inject system-wide CPU masking files into the container.
 
         Writes:
@@ -229,15 +230,15 @@ class ContainerClient:
         self,
         name: str,
         image: str,
-        command: Optional[str] = None,
-        ports: Optional[dict] = None,
-        volumes: Optional[dict] = None,
-        env: Optional[dict] = None,
-        labels: Optional[dict] = None,
-        network: Optional[str] = None,
-        cpu_limit: Optional[float] = None,
-        memory_limit: Optional[str] = None,
-        disk_limit: Optional[str] = None,
+        command: str | None = None,
+        ports: dict | None = None,
+        volumes: dict | None = None,
+        env: dict | None = None,
+        labels: dict | None = None,
+        network: str | None = None,
+        cpu_limit: float | None = None,
+        memory_limit: str | None = None,
+        disk_limit: str | None = None,
     ):
         """Create a new container with graceful cgroup fallback"""
         config = {
@@ -253,7 +254,7 @@ class ContainerClient:
         }
 
         if ports:
-            config["ExposedPorts"] = {f"{k}/tcp": {} for k in ports.keys()}
+            config["ExposedPorts"] = {f"{k}/tcp": {} for k in ports}
             config["HostConfig"]["PortBindings"] = {
                 f"{k}/tcp": [{"HostPort": str(v)}] for k, v in ports.items()
             }
@@ -399,7 +400,7 @@ class ContainerClient:
         """Get container runtime version info"""
         return await self.client.version()
 
-    async def list_containers(self, filters: Optional[dict] = None):
+    async def list_containers(self, filters: dict | None = None):
         """List containers"""
         return await self.client.containers.list(filters=filters)
 
@@ -407,7 +408,7 @@ class ContainerClient:
         self,
         container_id: str,
         tail: int = 100,
-        since: Optional[int] = None,
+        since: int | None = None,
         timestamps: bool = True,
         stdout: bool = True,
         stderr: bool = True,

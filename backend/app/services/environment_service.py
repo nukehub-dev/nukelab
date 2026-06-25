@@ -3,15 +3,14 @@ Environment template service for business logic.
 """
 
 import uuid
-from datetime import datetime, UTC
-from typing import List, Optional, Dict, Any
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, func
+from datetime import UTC, datetime
+from typing import Any
+
 from fastapi import HTTPException, status
+from sqlalchemy import and_, func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.environment_template import EnvironmentTemplate
-from app.core.permissions import Permission
-from app.dependencies import has_permission
 
 
 class EnvironmentService:
@@ -20,14 +19,14 @@ class EnvironmentService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_by_id(self, env_id: str) -> Optional[EnvironmentTemplate]:
+    async def get_by_id(self, env_id: str) -> EnvironmentTemplate | None:
         """Get environment by ID"""
         result = await self.db.execute(
             select(EnvironmentTemplate).where(EnvironmentTemplate.id == uuid.UUID(env_id))
         )
         return result.scalar_one_or_none()
 
-    async def get_by_slug(self, slug: str) -> Optional[EnvironmentTemplate]:
+    async def get_by_slug(self, slug: str) -> EnvironmentTemplate | None:
         """Get environment by slug"""
         result = await self.db.execute(
             select(EnvironmentTemplate).where(EnvironmentTemplate.slug == slug)
@@ -36,12 +35,12 @@ class EnvironmentService:
 
     async def list_environments(
         self,
-        category: Optional[str] = None,
-        is_active: Optional[bool] = None,
-        search: Optional[str] = None,
+        category: str | None = None,
+        is_active: bool | None = None,
+        search: str | None = None,
         page: int = 1,
         limit: int = 50,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """List environments with filtering and pagination"""
 
         query = select(EnvironmentTemplate)
@@ -88,17 +87,17 @@ class EnvironmentService:
         name: str,
         slug: str,
         image: str,
-        description: Optional[str] = None,
-        dockerfile: Optional[str] = None,
-        packages: Optional[List[str]] = None,
-        environment_variables: Optional[Dict[str, str]] = None,
-        volumes: Optional[List[Dict]] = None,
-        ports: Optional[List[int]] = None,
-        icon: Optional[str] = None,
-        color: Optional[str] = None,
-        category: Optional[str] = None,
+        description: str | None = None,
+        dockerfile: str | None = None,
+        packages: list[str] | None = None,
+        environment_variables: dict[str, str] | None = None,
+        volumes: list[dict] | None = None,
+        ports: list[int] | None = None,
+        icon: str | None = None,
+        color: str | None = None,
+        category: str | None = None,
         is_public: bool = True,
-        created_by: Optional[str] = None,
+        created_by: str | None = None,
     ) -> EnvironmentTemplate:
         """Create new environment template"""
 

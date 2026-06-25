@@ -5,6 +5,7 @@ with a single connection-pooled instance that all modules can import.
 """
 
 import redis.asyncio as redis
+
 from app.config import settings
 from app.core.tracing import is_tracing_enabled
 

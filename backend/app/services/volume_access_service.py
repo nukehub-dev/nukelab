@@ -10,13 +10,11 @@ Permission Model A (Workspace Role Ceiling):
   - Viewer member + any volume role → effective RO
 """
 
-from typing import Optional
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_
-from sqlalchemy.orm import selectinload
 
-from app.models.volume import Volume
 from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
+from app.models.volume import Volume
 from app.models.workspace_volume import WorkspaceVolume
 
 
@@ -40,10 +38,7 @@ class VolumeAccessService:
             return False
 
         # Compute personal_access: RW if owner, else none
-        if str(volume.owner_id) == user_id:
-            personal_access = "read_write"
-        else:
-            personal_access = None
+        personal_access = "read_write" if str(volume.owner_id) == user_id else None
 
         # Find all workspace memberships for this user+volume combo
         workspace_access = await self._get_workspace_access(volume_id, user_id)
@@ -53,9 +48,7 @@ class VolumeAccessService:
 
         # If no effective access, fall back to public visibility
         if effective is None:
-            if volume.visibility == "public" and mode == "read_only":
-                return True
-            return False
+            return bool(volume.visibility == "public" and mode == "read_only")
 
         # Check if effective access satisfies requested mode
         if mode == "read_only":
@@ -71,12 +64,12 @@ class VolumeAccessService:
             return False
         return str(volume.owner_id) == user_id
 
-    async def _get_volume(self, volume_id: str) -> Optional[Volume]:
+    async def _get_volume(self, volume_id: str) -> Volume | None:
         """Get volume by ID"""
         result = await self.db.execute(select(Volume).where(Volume.id == volume_id))
         return result.scalar_one_or_none()
 
-    async def _get_workspace_access(self, volume_id: str, user_id: str) -> Optional[str]:
+    async def _get_workspace_access(self, volume_id: str, user_id: str) -> str | None:
         """Get the most restrictive workspace access for user+volume.
 
         Returns:
@@ -133,7 +126,7 @@ class VolumeAccessService:
         return workspace_access
 
     @staticmethod
-    def _most_restrictive(a: Optional[str], b: Optional[str]) -> Optional[str]:
+    def _most_restrictive(a: str | None, b: str | None) -> str | None:
         """Return the most restrictive of two access levels.
 
         read_only is more restrictive than read_write.
@@ -148,9 +141,7 @@ class VolumeAccessService:
         return "read_write"
 
     @staticmethod
-    def _compute_effective_access(
-        personal: Optional[str], workspace: Optional[str]
-    ) -> Optional[str]:
+    def _compute_effective_access(personal: str | None, workspace: str | None) -> str | None:
         """Compute effective access as MIN(personal, workspace).
 
         If volume is in workspaces and user has workspace access, workspace caps personal.

@@ -2,24 +2,22 @@
 User API endpoints with RBAC enforcement.
 """
 
-from typing import Optional, List
-from pathlib import Path
-from pydantic import BaseModel, Field
 import os
-import shutil
-from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import get_current_user, require_jwt_auth
+from app.config import settings
 from app.core.filesystem import secure_path, validate_avatar_filename
 from app.core.permissions import Permission
 from app.core.security import get_user_permissions
-from app.dependencies import require_permissions, PermissionChecker
 from app.db.session import get_db
+from app.dependencies import PermissionChecker, require_permissions
 from app.models.user import User
 from app.services.user_service import UserService
-from app.services.activity_service import ActivityService
-from app.config import settings
 
 router = APIRouter()
 
@@ -30,56 +28,56 @@ class UserCreateRequest(BaseModel):
     email: str = Field(..., max_length=255)
     password: str = Field(..., min_length=6)
     role: str = Field(default="user")
-    first_name: Optional[str] = Field(default=None, max_length=255)
-    last_name: Optional[str] = Field(default=None, max_length=255)
-    avatar_url: Optional[str] = Field(default=None, max_length=500)
+    first_name: str | None = Field(default=None, max_length=255)
+    last_name: str | None = Field(default=None, max_length=255)
+    avatar_url: str | None = Field(default=None, max_length=500)
     credits: int = Field(default=500, ge=0)
 
 
 class UserUpdateRequest(BaseModel):
-    first_name: Optional[str] = Field(default=None, max_length=255)
-    last_name: Optional[str] = Field(default=None, max_length=255)
-    email: Optional[str] = Field(default=None, max_length=255)
-    avatar_url: Optional[str] = Field(default=None, max_length=500)
-    role: Optional[str] = None
-    profile: Optional[dict] = None
-    preferences: Optional[dict] = None
-    nuke_balance: Optional[int] = None
-    profile_visibility: Optional[str] = Field(default=None, pattern=r"^(private|public)$")
+    first_name: str | None = Field(default=None, max_length=255)
+    last_name: str | None = Field(default=None, max_length=255)
+    email: str | None = Field(default=None, max_length=255)
+    avatar_url: str | None = Field(default=None, max_length=500)
+    role: str | None = None
+    profile: dict | None = None
+    preferences: dict | None = None
+    nuke_balance: int | None = None
+    profile_visibility: str | None = Field(default=None, pattern=r"^(private|public)$")
 
 
 class UserResponse(BaseModel):
     id: str
     username: str
     email: str
-    first_name: Optional[str]
-    last_name: Optional[str]
+    first_name: str | None
+    last_name: str | None
     display_name: str
     avatar_url: str
     role: str
-    permissions: List[str]
+    permissions: list[str]
     nuke_balance: int
     daily_allowance: int
     profile: dict
     preferences: dict
     profile_visibility: str
-    oauth_provider: Optional[str] = None
+    oauth_provider: str | None = None
     is_active: bool
     is_verified: bool
-    last_login: Optional[str]
-    created_at: Optional[str]
-    updated_at: Optional[str]
+    last_login: str | None
+    created_at: str | None
+    updated_at: str | None
     login_count: int
 
 
 class UserListResponse(BaseModel):
-    users: List[UserResponse]
+    users: list[UserResponse]
     pagination: dict
 
 
 class DisableUserRequest(BaseModel):
     disabled: bool = True
-    reason: Optional[str] = None
+    reason: str | None = None
 
 
 class ChangePasswordRequest(BaseModel):
@@ -122,7 +120,7 @@ class DiscoverUserResponse(BaseModel):
 
 
 class DiscoverUserListResponse(BaseModel):
-    users: List[DiscoverUserResponse]
+    users: list[DiscoverUserResponse]
 
 
 # ========== Public Discovery Endpoints ==========
@@ -130,7 +128,7 @@ class DiscoverUserListResponse(BaseModel):
 
 @router.get("/discover", response_model=DiscoverUserListResponse)
 async def discover_users(
-    search: Optional[str] = Query(None, description="Search username/display name"),
+    search: str | None = Query(None, description="Search username/display name"),
     limit: int = Query(50, ge=1, le=100, description="Max results"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -210,7 +208,7 @@ async def upload_avatar(
     if file.content_type not in allowed_types:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid file type. Allowed: JPEG, PNG, WebP, GIF",
+            detail="Invalid file type. Allowed: JPEG, PNG, WebP, GIF",
         )
 
     # Validate file size via chunked read to avoid memory exhaustion
@@ -321,7 +319,8 @@ async def get_public_profile(
     - The viewer shares a workspace with the target user
     Otherwise returns 404 to avoid leaking private profile existence.
     """
-    from sqlalchemy import select, and_, or_
+    from sqlalchemy import and_, or_, select
+
     from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
 
     service = UserService(db)
@@ -391,9 +390,9 @@ async def get_public_profile(
 
 @router.get("/", response_model=UserListResponse)
 async def list_users(
-    role: Optional[str] = Query(None, description="Filter by role"),
-    status: Optional[str] = Query(None, description="Filter by status: active, disabled"),
-    search: Optional[str] = Query(None, description="Search username/email/full_name"),
+    role: str | None = Query(None, description="Filter by role"),
+    status: str | None = Query(None, description="Filter by status: active, disabled"),
+    search: str | None = Query(None, description="Search username/email/full_name"),
     sort_by: str = Query("created_at", description="Sort field"),
     sort_order: str = Query("desc", description="Sort order: asc, desc"),
     page: int = Query(1, ge=1, description="Page number"),
@@ -587,8 +586,9 @@ async def get_user_servers(
     user_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
     """Get user's servers"""
-    from app.models.server import Server
     from sqlalchemy import select
+
+    from app.models.server import Server
 
     # Check access
     checker = PermissionChecker(current_user)
@@ -635,9 +635,11 @@ async def get_my_activity(
     current_user: User = Depends(get_current_user),
 ):
     """Get paginated activity feed for the current user"""
-    from sqlalchemy import select, func, desc, and_
-    from app.models.activity_log import ActivityLog
     from datetime import datetime
+
+    from sqlalchemy import desc, func, select
+
+    from app.models.activity_log import ActivityLog
 
     query = select(ActivityLog).where(ActivityLog.actor_id == current_user.id)
 

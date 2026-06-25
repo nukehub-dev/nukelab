@@ -1,8 +1,9 @@
 """Tests for Shared Workspace service and API with multi-volume support."""
 
+from unittest import mock
+
 import pytest
 from httpx import AsyncClient
-from unittest import mock
 
 
 @pytest.fixture(autouse=True)
@@ -125,8 +126,8 @@ class TestWorkspaceService:
     @pytest.mark.asyncio
     async def test_workspace_volume_management(self, db_session, test_user):
         """Service should add and remove volumes from workspace."""
-        from app.services.workspace_service import WorkspaceService
         from app.services.volume_service import VolumeService
+        from app.services.workspace_service import WorkspaceService
 
         workspace_service = WorkspaceService(db_session)
         volume_service = VolumeService(db_session)
@@ -362,9 +363,11 @@ class TestWorkspaceCollaboration:
         assert "expires_at" in invitation
 
         # Manually expire the invitation in DB via db_session fixture
-        from app.models.workspace_invitation import WorkspaceInvitation
+        from datetime import UTC, datetime, timedelta
+
         from sqlalchemy import update
-        from datetime import datetime, timedelta, UTC
+
+        from app.models.workspace_invitation import WorkspaceInvitation
 
         await db_session.execute(
             update(WorkspaceInvitation)
@@ -571,11 +574,10 @@ class TestWorkspaceCollaboration:
 """Extended tests for Workspace API endpoints."""
 
 import pytest
-from unittest import mock
 
 from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
-from app.models.workspace_volume import WorkspaceVolume
 from app.models.volume import Volume
+from app.models.workspace_volume import WorkspaceVolume
 
 
 class TestWorkspaceInvitations:
@@ -897,16 +899,12 @@ class TestWorkspaceVolumes:
 
 """Extended tests for workspaces.py — covering untested endpoints and error branches."""
 
+import uuid as uuid_mod
+
 import pytest
 import pytest_asyncio
-import uuid as uuid_mod
-from unittest import mock
 
-from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
 from app.models.workspace_invitation import WorkspaceInvitation
-from app.models.workspace_volume import WorkspaceVolume
-from app.models.volume import Volume
-
 
 # ─────────────────────────────────────────────────────────────
 # Fixtures

@@ -1,11 +1,11 @@
 """Maintenance mode middleware — blocks non-admin requests during maintenance."""
 
 import time
-from typing import Dict, List
+
 from fastapi import Request
+from jose import JWTError, jwt
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
-from jose import jwt, JWTError
 
 from app.config import settings
 from app.core.permissions import Permission
@@ -40,7 +40,7 @@ class MaintenanceMiddleware(BaseHTTPMiddleware):
     RATE_LIMIT_WINDOW = 60
 
     # In-memory request log: ip -> list of timestamps
-    _request_log: Dict[str, List[float]] = {}
+    _request_log: dict[str, list[float]] = {}
 
     def __init__(self, app: ASGIApp):
         super().__init__(app)

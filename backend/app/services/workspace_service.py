@@ -2,17 +2,18 @@
 Shared workspace service for managing collaborative workspaces.
 """
 
-from datetime import datetime, timedelta, UTC
-from typing import List, Dict, Any, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, func
 from sqlalchemy.orm import selectinload
 
 from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
-from app.models.workspace_volume import WorkspaceVolume
-from app.models.workspace_invitation import WorkspaceInvitation
 from app.models.user import User
 from app.models.volume import Volume
+from app.models.workspace_invitation import WorkspaceInvitation
+from app.models.workspace_volume import WorkspaceVolume
 
 
 class WorkspaceService:
@@ -22,7 +23,7 @@ class WorkspaceService:
         self.db = db
 
     async def create_workspace(
-        self, name: str, description: Optional[str], owner_id: str
+        self, name: str, description: str | None, owner_id: str
     ) -> SharedWorkspace:
         """Create a new shared workspace and add owner as admin member."""
         workspace = SharedWorkspace(
@@ -52,9 +53,9 @@ class WorkspaceService:
         limit: int = 20,
         sort_by: str = "joined_at",
         sort_order: str = "desc",
-        search: Optional[str] = None,
-        role: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        search: str | None = None,
+        role: str | None = None,
+    ) -> dict[str, Any]:
         """List workspace members with pagination, sorting, and filtering."""
         # Build base query with user joined for sorting/searching
         query = (
@@ -124,8 +125,8 @@ class WorkspaceService:
         limit: int = 20,
         sort_by: str = "added_at",
         sort_order: str = "desc",
-        search: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        search: str | None = None,
+    ) -> dict[str, Any]:
         """List workspace volumes with pagination, sorting, and filtering."""
         # Build base query with volume joined for sorting/searching
         query = (
@@ -183,7 +184,7 @@ class WorkspaceService:
             "limit": limit,
         }
 
-    async def get_workspace(self, workspace_id: str) -> Optional[SharedWorkspace]:
+    async def get_workspace(self, workspace_id: str) -> SharedWorkspace | None:
         """Get workspace by ID with members, volumes, and invitations loaded"""
         result = await self.db.execute(
             select(SharedWorkspace)
@@ -202,7 +203,7 @@ class WorkspaceService:
 
     async def list_workspaces(
         self, user_id: str, include_memberships: bool = True
-    ) -> List[SharedWorkspace]:
+    ) -> list[SharedWorkspace]:
         """List workspaces accessible to user (owned, member of, or invited to)"""
         query = select(SharedWorkspace).options(
             selectinload(SharedWorkspace.owner),
@@ -236,10 +237,10 @@ class WorkspaceService:
         limit: int = 20,
         sort_by: str = "created_at",
         sort_order: str = "desc",
-        search: Optional[str] = None,
-        status: Optional[str] = None,
-        owner_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        search: str | None = None,
+        status: str | None = None,
+        owner_id: str | None = None,
+    ) -> dict[str, Any]:
         """List ALL workspaces (admin view) with pagination, sorting, and filtering."""
         query = select(SharedWorkspace).options(
             selectinload(SharedWorkspace.owner),
@@ -310,10 +311,10 @@ class WorkspaceService:
     async def update_workspace(
         self,
         workspace_id: str,
-        name: Optional[str] = None,
-        description: Optional[str] = None,
-        is_active: Optional[bool] = None,
-    ) -> Optional[SharedWorkspace]:
+        name: str | None = None,
+        description: str | None = None,
+        is_active: bool | None = None,
+    ) -> SharedWorkspace | None:
         """Update workspace details"""
         workspace = await self.get_workspace(workspace_id)
         if not workspace:
@@ -347,7 +348,7 @@ class WorkspaceService:
         workspace_id: str,
         volume_id: str,
         role: str = "read_write",
-        added_by: Optional[str] = None,
+        added_by: str | None = None,
     ) -> WorkspaceVolume:
         """Add a volume to a workspace"""
         workspace_volume = WorkspaceVolume(
@@ -378,7 +379,7 @@ class WorkspaceService:
 
     async def update_volume_role(
         self, workspace_id: str, volume_id: str, role: str
-    ) -> Optional[WorkspaceVolume]:
+    ) -> WorkspaceVolume | None:
         """Update a volume's role in a workspace"""
         result = await self.db.execute(
             select(WorkspaceVolume).where(
@@ -451,7 +452,7 @@ class WorkspaceService:
 
     async def update_member_role(
         self, workspace_id: str, user_id: str, role: str
-    ) -> Optional[WorkspaceMember]:
+    ) -> WorkspaceMember | None:
         """Update a member's role. Owner's role cannot be changed."""
         workspace = await self.get_workspace(workspace_id)
         if not workspace:
@@ -609,7 +610,7 @@ class WorkspaceService:
         await self.db.commit()
         return True
 
-    async def get_invitation(self, invitation_id: str) -> Optional[WorkspaceInvitation]:
+    async def get_invitation(self, invitation_id: str) -> WorkspaceInvitation | None:
         """Get invitation by ID with user loaded"""
         from uuid import UUID
 
@@ -705,7 +706,7 @@ class WorkspaceService:
 
     async def transfer_ownership(
         self, workspace_id: str, current_owner_id: str, new_owner_id: str
-    ) -> Optional[SharedWorkspace]:
+    ) -> SharedWorkspace | None:
         """Transfer workspace ownership to another member."""
         workspace = await self.get_workspace(workspace_id)
         if not workspace:

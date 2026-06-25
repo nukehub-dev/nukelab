@@ -2,8 +2,8 @@
 Permission checking functions and decorators.
 """
 
-from typing import List
 from fastapi import HTTPException, status
+
 from app.core.roles import get_expanded_role_permissions, get_role_permissions
 from app.models.user import User
 
@@ -31,7 +31,7 @@ def has_permission(user: User, permission: str) -> bool:
     return permission in user_perms
 
 
-def has_any_permission(user: User, permissions: List[str]) -> bool:
+def has_any_permission(user: User, permissions: list[str]) -> bool:
     """Check if user has any of the specified permissions (including implied)"""
     if not user or not user.is_active:
         return False
@@ -39,7 +39,7 @@ def has_any_permission(user: User, permissions: List[str]) -> bool:
     return any(perm in user_perms for perm in permissions)
 
 
-def has_all_permissions(user: User, permissions: List[str]) -> bool:
+def has_all_permissions(user: User, permissions: list[str]) -> bool:
     """Check if user has all specified permissions (including implied)"""
     if not user or not user.is_active:
         return False
@@ -55,7 +55,7 @@ def check_permission(user: User, permission: str):
         )
 
 
-def check_any_permission(user: User, permissions: List[str]):
+def check_any_permission(user: User, permissions: list[str]):
     """Check any permission and raise 403 if none allowed"""
     if not has_any_permission(user, permissions):
         raise HTTPException(

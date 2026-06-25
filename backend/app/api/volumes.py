@@ -3,43 +3,40 @@ Volume API endpoints.
 """
 
 import logging
-from typing import Optional, List
-from pydantic import BaseModel
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import BaseModel
 from sqlalchemy import select
-from sqlalchemy.orm import joinedload
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
 from app.api.auth import get_current_user
-from app.dependencies import require_permissions
-from app.core.permissions import Permission
-from app.dependencies import PermissionChecker
 from app.core.filesystem import secure_path
+from app.core.permissions import Permission
 from app.db.session import get_db
+from app.dependencies import PermissionChecker, require_permissions
 from app.models.user import User
-from app.services.quota_service import QuotaService
-from app.models.volume import Volume
-from app.services.volume_service import VolumeService
-from app.services.volume_access_service import VolumeAccessService
 from app.services.notification_service import NotificationService
+from app.services.quota_service import QuotaService
+from app.services.volume_access_service import VolumeAccessService
+from app.services.volume_service import VolumeService
 
 router = APIRouter()
 
 
 class VolumeCreateRequest(BaseModel):
     display_name: str
-    description: Optional[str] = None
-    max_size_bytes: Optional[int] = None
+    description: str | None = None
+    max_size_bytes: int | None = None
 
 
 class VolumeUpdateRequest(BaseModel):
-    display_name: Optional[str] = None
-    description: Optional[str] = None
-    visibility: Optional[str] = None
-    max_size_bytes: Optional[int] = None
-    status: Optional[str] = None
+    display_name: str | None = None
+    description: str | None = None
+    visibility: str | None = None
+    max_size_bytes: int | None = None
+    status: str | None = None
 
 
 class VolumeResponse(BaseModel):
@@ -49,10 +46,10 @@ class VolumeResponse(BaseModel):
     owner_id: str
     visibility: str
     size_bytes: int
-    max_size_bytes: Optional[int]
+    max_size_bytes: int | None
     status: str
     server_count: int
-    description: Optional[str]
+    description: str | None
     created_at: str
     updated_at: str
 
@@ -169,8 +166,9 @@ async def update_volume(
     # Prevent destructive status changes on volumes mounted by running servers
     if request.status and request.status in ("archived", "deleting"):
         from sqlalchemy import func
-        from app.models.server_volume import ServerVolume
+
         from app.models.server import Server
+        from app.models.server_volume import ServerVolume
 
         mount_result = await db.execute(
             select(func.count())
@@ -268,8 +266,8 @@ async def refresh_volume_size(
 # Volume File Browser
 # =============================================================================
 
-import os
 import mimetypes
+import os
 from pathlib import Path
 
 VOLUME_STORAGE_PATH = os.environ.get("VOLUME_STORAGE_PATH", "/var/lib/docker/volumes")
@@ -284,7 +282,7 @@ def _get_volume_base_path(volume_name: str) -> Path:
 async def list_volume_files(
     volume_id: str,
     path: str = "",
-    search: Optional[str] = None,
+    search: str | None = None,
     sort_by: str = "name",  # name, size, modified
     sort_order: str = "asc",  # asc, desc
     page: int = 1,

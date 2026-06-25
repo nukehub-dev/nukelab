@@ -13,7 +13,8 @@ Usage:
   await pm.drop_old_partitions("activity_logs", months_to_keep=12)
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
 from dateutil.relativedelta import relativedelta
 from sqlalchemy import text
 
@@ -71,7 +72,7 @@ class PartitionManager:
             return partition_name
 
         start, end = self._month_bounds(year, month)
-        column = self.PARTITION_CONFIG[table]["column"]
+        self.PARTITION_CONFIG[table]["column"]
 
         await self.db.execute(
             text(
@@ -91,7 +92,7 @@ class PartitionManager:
 
         await self._ensure_default_partition(table)
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         created = []
         for offset in range(months_ahead + 1):
             target = now + relativedelta(months=offset)
@@ -104,7 +105,7 @@ class PartitionManager:
         Detach and drop partitions older than N months.
         Returns the list of dropped partition names.
         """
-        cutoff = datetime.now(timezone.utc) - relativedelta(months=months_to_keep)
+        cutoff = datetime.now(UTC) - relativedelta(months=months_to_keep)
         cutoff_ym = cutoff.year * 12 + cutoff.month
 
         result = await self.db.execute(

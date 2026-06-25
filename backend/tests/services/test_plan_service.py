@@ -1,15 +1,14 @@
 """Tests for PlanService business logic."""
 
-import pytest
 import uuid as uuid_mod
-from datetime import datetime
-from sqlalchemy import select, and_
 
-from app.services.plan_service import PlanService
-from app.models.server_plan import ServerPlan
+import pytest
+from sqlalchemy import and_, select
+
 from app.models.plan_access import UserPlanAccess, WorkspacePlanAccess
+from app.models.server_plan import ServerPlan
 from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
-from app.models.user import User
+from app.services.plan_service import PlanService
 
 
 class TestPlanServiceGetById:

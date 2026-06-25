@@ -2,15 +2,15 @@
 Analytics API endpoints.
 """
 
-from datetime import datetime, timedelta
-from typing import Optional
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import get_current_user
 from app.core.permissions import Permission
-from app.dependencies import PermissionChecker, require_permissions
 from app.db.session import get_db
+from app.dependencies import PermissionChecker, require_permissions
 from app.models.user import User
 from app.services.analytics_service import AnalyticsService
 
@@ -21,8 +21,8 @@ MAX_DATE_RANGE_DAYS = 365
 
 def _parse_date_params(
     days: int = 30,
-    from_date: Optional[datetime] = None,
-    to_date: Optional[datetime] = None,
+    from_date: datetime | None = None,
+    to_date: datetime | None = None,
 ) -> tuple:
     """Parse and validate date range parameters."""
     if from_date and to_date:
@@ -40,8 +40,8 @@ def _parse_date_params(
 async def get_user_usage(
     user_id: str,
     days: int = 30,
-    from_date: Optional[datetime] = Query(None, alias="from"),
-    to_date: Optional[datetime] = Query(None, alias="to"),
+    from_date: datetime | None = Query(None, alias="from"),
+    to_date: datetime | None = Query(None, alias="to"),
     current_user: User = Depends(get_current_user),
     _=Depends(require_permissions(Permission.ANALYTICS_READ_OWN)),
     db: AsyncSession = Depends(get_db),
@@ -60,8 +60,8 @@ async def get_user_usage(
 @router.get("/global")
 async def get_global_usage(
     days: int = 30,
-    from_date: Optional[datetime] = Query(None, alias="from"),
-    to_date: Optional[datetime] = Query(None, alias="to"),
+    from_date: datetime | None = Query(None, alias="from"),
+    to_date: datetime | None = Query(None, alias="to"),
     current_user: User = Depends(get_current_user),
     _=Depends(require_permissions(Permission.ANALYTICS_READ)),
     db: AsyncSession = Depends(get_db),
@@ -79,8 +79,8 @@ async def get_global_usage(
 async def get_top_consumers(
     days: int = 30,
     limit: int = 10,
-    from_date: Optional[datetime] = Query(None, alias="from"),
-    to_date: Optional[datetime] = Query(None, alias="to"),
+    from_date: datetime | None = Query(None, alias="from"),
+    to_date: datetime | None = Query(None, alias="to"),
     current_user: User = Depends(get_current_user),
     _=Depends(require_permissions(Permission.ANALYTICS_READ)),
     db: AsyncSession = Depends(get_db),
@@ -98,8 +98,8 @@ async def get_top_consumers(
 @router.get("/credit-flow")
 async def get_credit_flow(
     days: int = 30,
-    from_date: Optional[datetime] = Query(None, alias="from"),
-    to_date: Optional[datetime] = Query(None, alias="to"),
+    from_date: datetime | None = Query(None, alias="from"),
+    to_date: datetime | None = Query(None, alias="to"),
     current_user: User = Depends(get_current_user),
     _=Depends(require_permissions(Permission.ANALYTICS_READ)),
     db: AsyncSession = Depends(get_db),
@@ -117,8 +117,8 @@ async def get_credit_flow(
 @router.get("/logins")
 async def get_login_events(
     days: int = 30,
-    from_date: Optional[datetime] = Query(None, alias="from"),
-    to_date: Optional[datetime] = Query(None, alias="to"),
+    from_date: datetime | None = Query(None, alias="from"),
+    to_date: datetime | None = Query(None, alias="to"),
     current_user: User = Depends(get_current_user),
     _=Depends(require_permissions(Permission.ANALYTICS_READ)),
     db: AsyncSession = Depends(get_db),
@@ -136,8 +136,8 @@ async def get_login_events(
 @router.get("/user-growth")
 async def get_user_growth(
     days: int = 30,
-    from_date: Optional[datetime] = Query(None, alias="from"),
-    to_date: Optional[datetime] = Query(None, alias="to"),
+    from_date: datetime | None = Query(None, alias="from"),
+    to_date: datetime | None = Query(None, alias="to"),
     current_user: User = Depends(get_current_user),
     _=Depends(require_permissions(Permission.ANALYTICS_READ)),
     db: AsyncSession = Depends(get_db),
@@ -155,8 +155,8 @@ async def get_user_growth(
 @router.get("/platform-metrics")
 async def get_platform_metrics(
     days: int = 30,
-    from_date: Optional[datetime] = Query(None, alias="from"),
-    to_date: Optional[datetime] = Query(None, alias="to"),
+    from_date: datetime | None = Query(None, alias="from"),
+    to_date: datetime | None = Query(None, alias="to"),
     current_user: User = Depends(get_current_user),
     _=Depends(require_permissions(Permission.ANALYTICS_READ)),
     db: AsyncSession = Depends(get_db),
@@ -264,6 +264,7 @@ async def export_analytics(
     if fmt == "csv":
         import csv
         import io
+
         from fastapi.responses import StreamingResponse
 
         output = io.StringIO()

@@ -2,19 +2,20 @@
 Health and Status API endpoints.
 """
 
-import asyncio
+import contextlib
 import time
-from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text
-import redis.asyncio as redis
-import psutil
 
-from app.api.auth import get_current_user, require_jwt_auth
-from app.core.permissions import Permission
-from app.dependencies import require_permissions
-from app.db.session import get_db
+import psutil
+import redis.asyncio as redis
+from fastapi import APIRouter, Depends
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.auth import require_jwt_auth
 from app.config import settings
+from app.core.permissions import Permission
+from app.db.session import get_db
+from app.dependencies import require_permissions
 
 router = APIRouter()
 
@@ -131,10 +132,8 @@ async def detailed_health_check(
         disk_info = get_disk_info("/")
         container_disk_info = None
         if settings.volume_storage_path:
-            try:
+            with contextlib.suppress(Exception):
                 container_disk_info = get_disk_info(settings.volume_storage_path)
-            except Exception:
-                pass
 
         fs_type = None
         try:

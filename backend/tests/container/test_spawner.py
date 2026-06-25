@@ -4,8 +4,9 @@ These tests verify that read-only volume mounts are actually enforced
 at the Docker container level, not just stored in the database.
 """
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch, ANY
 
 
 class TestContainerClientBindFormatting:
@@ -265,7 +266,7 @@ class TestSpawnerVolumeDictBuilding:
         await db_session.commit()
         await db_session.refresh(volume)
 
-        spawner = ServerSpawner()
+        ServerSpawner()
 
         # Build volumes dict manually (same logic as spawn)
         mount = {
@@ -293,7 +294,6 @@ class TestSpawnerVolumeDictBuilding:
     @pytest.mark.asyncio
     async def test_spawner_builds_rw_volume_dict(self, db_session, test_user):
         """Spawner should produce volumes dict with mode='rw' for read_write mounts."""
-        from app.container.spawner import ServerSpawner
         from app.models.volume import Volume
 
         volume = Volume(
@@ -319,11 +319,12 @@ class TestSpawnerVolumeDictBuilding:
 
 """Tests for app.container.spawner.ServerSpawner methods."""
 
-import pytest
 import uuid as uuid_mod
 from unittest import mock
 
-from app.container.spawner import ServerSpawner, spawner
+import pytest
+
+from app.container.spawner import ServerSpawner
 from app.models.server import Server
 
 
@@ -580,7 +581,7 @@ class TestSpawnSuccess:
     async def test_spawn_with_provided_image(self, fresh_spawner):
         """spawn should use provided image."""
         with mock.patch("app.container.spawner.settings.public_url", "http://test"):
-            server = await fresh_spawner.spawn(
+            await fresh_spawner.spawn(
                 user_id=str(uuid_mod.uuid4()),
                 username="testuser",
                 server_name="srv1",
@@ -601,7 +602,7 @@ class TestSpawnSuccess:
         )
 
         with mock.patch("app.container.spawner.settings.public_url", "http://test"):
-            server = await fresh_spawner.spawn(
+            await fresh_spawner.spawn(
                 user_id=str(uuid_mod.uuid4()),
                 username="testuser",
                 server_name="srv1",
@@ -618,7 +619,7 @@ class TestSpawnSuccess:
         )
 
         with mock.patch("app.container.spawner.settings.public_url", "http://test"):
-            server = await fresh_spawner.spawn(
+            await fresh_spawner.spawn(
                 user_id=str(uuid_mod.uuid4()),
                 username="testuser",
                 server_name="srv1",
@@ -633,7 +634,7 @@ class TestSpawnSuccess:
     async def test_spawn_with_env_vars(self, fresh_spawner):
         """spawn should inject custom env_vars."""
         with mock.patch("app.container.spawner.settings.public_url", "http://test"):
-            server = await fresh_spawner.spawn(
+            await fresh_spawner.spawn(
                 user_id=str(uuid_mod.uuid4()),
                 username="testuser",
                 server_name="srv1",
@@ -650,7 +651,7 @@ class TestSpawnSuccess:
     async def test_spawn_with_volume_mounts_no_vol_id(self, fresh_spawner):
         """spawn with volume_mounts lacking volume_id should generate default volume name."""
         with mock.patch("app.container.spawner.settings.public_url", "http://test"):
-            server = await fresh_spawner.spawn(
+            await fresh_spawner.spawn(
                 user_id=str(uuid_mod.uuid4()),
                 username="testuser",
                 server_name="srv1",
@@ -665,7 +666,7 @@ class TestSpawnSuccess:
     async def test_spawn_with_volume_mounts_read_only(self, fresh_spawner):
         """spawn with read_only mode should use 'ro' bind mode."""
         with mock.patch("app.container.spawner.settings.public_url", "http://test"):
-            server = await fresh_spawner.spawn(
+            await fresh_spawner.spawn(
                 user_id=str(uuid_mod.uuid4()),
                 username="testuser",
                 server_name="srv1",

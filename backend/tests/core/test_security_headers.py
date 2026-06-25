@@ -1,10 +1,7 @@
 """Tests for exception-safe security headers middleware and related protections."""
 
 import pytest
-from starlette.requests import Request
-from starlette.responses import Response
 
-from app.core.security_headers_asgi import SecurityHeadersMiddleware
 from app.config import settings
 
 

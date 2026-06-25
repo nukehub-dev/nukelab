@@ -2,11 +2,11 @@
 FastAPI dependencies for authentication and authorization.
 """
 
-from typing import List
-from fastapi import Depends, HTTPException, status, Response
+from fastapi import Depends, HTTPException, Response, status
+
 from app.api.auth import get_current_user
 from app.core.permissions import Permission
-from app.core.security import has_permission, has_any_permission, has_all_permissions
+from app.core.security import has_all_permissions, has_any_permission, has_permission
 from app.models.user import User
 
 
@@ -86,7 +86,7 @@ class PermissionChecker:
                 status_code=status.HTTP_403_FORBIDDEN, detail=f"Permission required: {permission}"
             )
 
-    def require_any(self, permissions: List[str]):
+    def require_any(self, permissions: list[str]):
         """Require any of the specified permissions"""
         if not has_any_permission(self.user, permissions):
             raise HTTPException(
@@ -94,7 +94,7 @@ class PermissionChecker:
                 detail=f"One of these permissions required: {', '.join(permissions)}",
             )
 
-    def require_all(self, permissions: List[str]):
+    def require_all(self, permissions: list[str]):
         """Require all specified permissions"""
         if not has_all_permissions(self.user, permissions):
             raise HTTPException(

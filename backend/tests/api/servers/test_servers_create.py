@@ -1,17 +1,16 @@
 """Tests for server create endpoint happy paths."""
 
+import uuid as uuid_mod
+from unittest import mock
+
 import pytest
 import pytest_asyncio
-from unittest import mock
-import uuid as uuid_mod
-
 from fastapi.exceptions import ResponseValidationError
 
-from app.models.server_plan import ServerPlan
 from app.models.environment_template import EnvironmentTemplate
-from app.models.volume import Volume
 from app.models.server import Server
-from app.models.server_queue import ServerQueue
+from app.models.server_plan import ServerPlan
+from app.models.volume import Volume
 
 
 @pytest_asyncio.fixture
@@ -250,27 +249,29 @@ class TestCreateServerExceptionCleanup:
                             mock_access = mock_access_cls.return_value
                             mock_access.can_access_volume = mock.AsyncMock(return_value=True)
 
-                            with mock.patch(
-                                "app.api.servers.spawner.spawn",
-                                side_effect=Exception("spawn failed"),
-                            ):
-                                with mock.patch(
+                            with (
+                                mock.patch(
+                                    "app.api.servers.spawner.spawn",
+                                    side_effect=Exception("spawn failed"),
+                                ),
+                                mock.patch(
                                     "app.container.client.get_container_client"
-                                ) as mock_get_client:
-                                    mock_container_client = mock.AsyncMock()
-                                    mock_container_client.client.volumes.get = mock.AsyncMock()
-                                    mock_container_client.client.containers.get = mock.AsyncMock()
-                                    mock_get_client.return_value = mock_container_client
+                                ) as mock_get_client,
+                            ):
+                                mock_container_client = mock.AsyncMock()
+                                mock_container_client.client.volumes.get = mock.AsyncMock()
+                                mock_container_client.client.containers.get = mock.AsyncMock()
+                                mock_get_client.return_value = mock_container_client
 
-                                    response = await client.post(
-                                        "/api/servers/",
-                                        headers={"Authorization": f"Bearer {user_token}"},
-                                        json={
-                                            "name": "cleanup-server",
-                                            "plan_id": str(plan.id),
-                                            "environment_id": str(env.id),
-                                        },
-                                    )
+                                response = await client.post(
+                                    "/api/servers/",
+                                    headers={"Authorization": f"Bearer {user_token}"},
+                                    json={
+                                        "name": "cleanup-server",
+                                        "plan_id": str(plan.id),
+                                        "environment_id": str(env.id),
+                                    },
+                                )
 
         assert response.status_code == 500
         assert (

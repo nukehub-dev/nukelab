@@ -1,19 +1,19 @@
 import asyncio
-import logging
 import uuid
-from datetime import datetime, UTC
-from typing import Optional, List, Dict, Any
-from app.container.client import ContainerClient, get_container_client
-from app.models.server import Server
+from datetime import UTC, datetime
+from typing import Any
+
 from app.config import settings
+from app.container.client import ContainerClient, get_container_client
 from app.core.logging import get_logger
+from app.models.server import Server
 
 logger = get_logger(__name__)
 
 
 class ServerSpawner:
     def __init__(self):
-        self.container_client: Optional[ContainerClient] = None
+        self.container_client: ContainerClient | None = None
 
     async def _get_container_client(self):
         if not self.container_client:
@@ -42,14 +42,14 @@ class ServerSpawner:
         username: str,
         server_name: str,
         environment: str = "dev",
-        environment_id: Optional[str] = None,
-        image: Optional[str] = None,
+        environment_id: str | None = None,
+        image: str | None = None,
         cpu: float = 1.0,
         memory: str = "2g",
         disk: str = "10g",
-        env_vars: Optional[dict] = None,
-        volume_mounts: Optional[List[Dict[str, Any]]] = None,
-        server_id: Optional[str] = None,
+        env_vars: dict | None = None,
+        volume_mounts: list[dict[str, Any]] | None = None,
+        server_id: str | None = None,
     ) -> Server:
         """Spawn a new server container with persistent volume(s)
 
@@ -73,8 +73,9 @@ class ServerSpawner:
 
                 # Get volume name from database
                 if vol_id:
-                    from app.db.session import async_session
                     from sqlalchemy import select
+
+                    from app.db.session import async_session
                     from app.models.volume import Volume
 
                     async with async_session() as db:
@@ -164,10 +165,7 @@ class ServerSpawner:
                 if isinstance(container, dict):
                     bind_str = f"{host}:{container['bind']}:{container['mode']}"
                 elif isinstance(container, str):
-                    if ":" in container:
-                        bind_str = f"{host}:{container}"
-                    else:
-                        bind_str = f"{host}:{container}"
+                    bind_str = f"{host}:{container}" if ":" in container else f"{host}:{container}"
                 else:
                     bind_str = f"{host}:{container}"
                 binds.append(bind_str)
@@ -243,7 +241,7 @@ class ServerSpawner:
             try:
                 container = await container_client.client.containers.get(container_name)
                 await container.delete(force=True)
-            except:
+            except Exception:
                 pass
             raise Exception(f"Failed to spawn server: {str(e)}")
 

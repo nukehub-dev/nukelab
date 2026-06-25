@@ -1,11 +1,10 @@
 """Tests for SettingService."""
 
 import pytest
-from sqlalchemy import select
 
-from app.services.setting_service import SettingService
-from app.models.system_setting import SystemSetting
 from app.config import settings
+from app.models.system_setting import SystemSetting
+from app.services.setting_service import SettingService
 
 
 class TestSettingServiceGet:

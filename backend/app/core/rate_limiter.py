@@ -16,12 +16,12 @@ Usage:
 Algorithm: Fixed-window counter with atomic Lua INCR+EXPIRE.
 """
 
-import time
-import logging
 import hashlib
-from typing import Optional
-from fastapi import Request, HTTPException, status
-from jose import jwt, JWTError, ExpiredSignatureError
+import logging
+import time
+
+from fastapi import HTTPException, Request, status
+from jose import ExpiredSignatureError, JWTError, jwt
 
 from app.config import settings
 from app.core.roles import get_role_rate_limit
@@ -66,7 +66,7 @@ def _get_redis_client():
     return redis.from_url(settings.redis_url)
 
 
-def _extract_jwt_sub(token: str) -> Optional[str]:
+def _extract_jwt_sub(token: str) -> str | None:
     try:
         payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
         return payload.get("sub")
@@ -80,7 +80,7 @@ def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()[:16]
 
 
-def _get_user_key_and_role(request: Request) -> tuple[str, Optional[str]]:
+def _get_user_key_and_role(request: Request) -> tuple[str, str | None]:
     auth_header = request.headers.get("Authorization", "")
     token = ""
     if auth_header.startswith("Bearer ") or auth_header.startswith("Token "):
@@ -113,7 +113,7 @@ async def _check_limit(
     request: Request,
     multiplier: float = 1.0,
     custom_key_suffix: str = "",
-    limit_override: Optional[int] = None,
+    limit_override: int | None = None,
 ) -> tuple[int, int]:
     if not settings.rate_limit_enabled:
         return 0, 0

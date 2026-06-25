@@ -1,7 +1,6 @@
 """Coverage-focused tests for utility modules and easy wins."""
 
 import pytest
-from unittest import mock
 from cryptography.fernet import InvalidToken
 
 
@@ -70,7 +69,7 @@ class TestTokenEncryption:
 
     @pytest.mark.asyncio
     async def test_encrypt_decrypt_roundtrip(self):
-        from app.core.token_encryption import encrypt_token, decrypt_token
+        from app.core.token_encryption import decrypt_token, encrypt_token
 
         original = "my-secret-token"
         encrypted = encrypt_token(original)
@@ -105,8 +104,9 @@ class TestSecurityHeadersAsgi:
 
     @pytest.mark.asyncio
     async def test_security_headers_websocket_skipped(self):
-        from app.core.security_headers_asgi import SecurityHeadersMiddleware
         from unittest.mock import AsyncMock
+
+        from app.core.security_headers_asgi import SecurityHeadersMiddleware
 
         app = AsyncMock()
         middleware = SecurityHeadersMiddleware(app)
@@ -118,8 +118,9 @@ class TestSecurityHeadersAsgi:
 
     @pytest.mark.asyncio
     async def test_security_headers_lifespan_skipped(self):
-        from app.core.security_headers_asgi import SecurityHeadersMiddleware
         from unittest.mock import AsyncMock
+
+        from app.core.security_headers_asgi import SecurityHeadersMiddleware
 
         app = AsyncMock()
         middleware = SecurityHeadersMiddleware(app)
@@ -162,8 +163,9 @@ class TestFilesystem:
 
     @pytest.mark.asyncio
     async def test_secure_path_traversal(self, tmp_path):
-        from app.core.filesystem import secure_path
         from fastapi import HTTPException
+
+        from app.core.filesystem import secure_path
 
         with pytest.raises(HTTPException) as exc_info:
             secure_path(str(tmp_path), "../../../etc/passwd")
@@ -171,16 +173,18 @@ class TestFilesystem:
 
     @pytest.mark.asyncio
     async def test_validate_avatar_filename_valid(self):
-        from app.core.filesystem import validate_avatar_filename
         import uuid
+
+        from app.core.filesystem import validate_avatar_filename
 
         fname = f"{uuid.uuid4()}.png"
         validate_avatar_filename(fname)  # Should not raise
 
     @pytest.mark.asyncio
     async def test_validate_avatar_filename_invalid(self):
-        from app.core.filesystem import validate_avatar_filename
         from fastapi import HTTPException
+
+        from app.core.filesystem import validate_avatar_filename
 
         with pytest.raises(HTTPException) as exc_info:
             validate_avatar_filename("../../../etc/passwd")
@@ -188,8 +192,9 @@ class TestFilesystem:
 
     @pytest.mark.asyncio
     async def test_validate_avatar_filename_invalid_ext(self):
-        from app.core.filesystem import validate_avatar_filename
         from fastapi import HTTPException
+
+        from app.core.filesystem import validate_avatar_filename
 
         with pytest.raises(HTTPException) as exc_info:
             validate_avatar_filename("12345.exe")
@@ -214,16 +219,16 @@ class TestSecurity:
 
     @pytest.mark.asyncio
     async def test_has_permission(self, test_user):
-        from app.core.security import has_permission
         from app.core.permissions import Permission
+        from app.core.security import has_permission
 
         result = has_permission(test_user, Permission.SERVERS_READ_OWN)
         assert isinstance(result, bool)
 
     @pytest.mark.asyncio
     async def test_has_permission_inactive(self, test_user):
-        from app.core.security import has_permission
         from app.core.permissions import Permission
+        from app.core.security import has_permission
 
         test_user.is_active = False
         result = has_permission(test_user, Permission.SERVERS_READ_OWN)
@@ -231,25 +236,26 @@ class TestSecurity:
 
     @pytest.mark.asyncio
     async def test_has_any_permission(self, test_user):
-        from app.core.security import has_any_permission
         from app.core.permissions import Permission
+        from app.core.security import has_any_permission
 
         result = has_any_permission(test_user, [Permission.SERVERS_READ_OWN])
         assert isinstance(result, bool)
 
     @pytest.mark.asyncio
     async def test_has_all_permissions(self, test_user):
-        from app.core.security import has_all_permissions
         from app.core.permissions import Permission
+        from app.core.security import has_all_permissions
 
         result = has_all_permissions(test_user, [Permission.SERVERS_READ_OWN])
         assert isinstance(result, bool)
 
     @pytest.mark.asyncio
     async def test_check_permission_raises(self, test_user):
-        from app.core.security import check_permission
-        from app.core.permissions import Permission
         from fastapi import HTTPException
+
+        from app.core.permissions import Permission
+        from app.core.security import check_permission
 
         test_user.is_active = False
         with pytest.raises(HTTPException) as exc_info:
@@ -258,9 +264,10 @@ class TestSecurity:
 
     @pytest.mark.asyncio
     async def test_check_any_permission_raises(self, test_user):
-        from app.core.security import check_any_permission
-        from app.core.permissions import Permission
         from fastapi import HTTPException
+
+        from app.core.permissions import Permission
+        from app.core.security import check_any_permission
 
         test_user.is_active = False
         with pytest.raises(HTTPException) as exc_info:
@@ -269,8 +276,8 @@ class TestSecurity:
 
     @pytest.mark.asyncio
     async def test_expand_permissions(self):
-        from app.core.roles import _expand_permissions
         from app.core.permissions import Permission
+        from app.core.roles import _expand_permissions
 
         result = _expand_permissions([Permission.SERVERS_WRITE_ALL])
         assert Permission.SERVERS_READ_OWN in result

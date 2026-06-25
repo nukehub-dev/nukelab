@@ -1,9 +1,11 @@
 import uuid
-from app.core.time_utils import utc_now
 from datetime import timedelta
-from sqlalchemy import Column, String, DateTime, ForeignKey, UniqueConstraint
+
+from sqlalchemy import Column, DateTime, ForeignKey, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
+
+from app.core.time_utils import utc_now
 from app.db.base import Base
 
 

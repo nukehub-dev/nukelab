@@ -15,9 +15,10 @@ from pathlib import Path
 
 sys.path.insert(0, ".")
 
+from sqlalchemy import select
+
 from app.api.auth import create_access_token
 from app.db.session import AsyncSessionLocal
-from sqlalchemy import select
 from app.models.user import User
 
 # Output path (relative to backend container working dir)

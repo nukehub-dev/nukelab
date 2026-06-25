@@ -1,7 +1,8 @@
 """Tests for the shared Redis client singleton."""
 
-import pytest
 from unittest import mock
+
+import pytest
 
 
 class TestGetRedisClient:
@@ -9,10 +10,9 @@ class TestGetRedisClient:
 
     def test_returns_same_instance_on_multiple_calls(self):
         """The singleton must return the same Redis client object."""
-        from app.core.redis_client import get_redis_client, _redis_client
-
         # Clear any existing singleton
         from app.core import redis_client as rc_module
+        from app.core.redis_client import get_redis_client
 
         original = rc_module._redis_client
         rc_module._redis_client = None
@@ -53,8 +53,8 @@ class TestCloseRedisClient:
     @pytest.mark.asyncio
     async def test_closes_and_clears_singleton(self):
         """Closing must call client.close() and null the singleton."""
-        from app.core.redis_client import close_redis_client, _redis_client
         from app.core import redis_client as rc_module
+        from app.core.redis_client import close_redis_client
 
         mock_client = mock.AsyncMock()
         original = rc_module._redis_client
@@ -70,8 +70,8 @@ class TestCloseRedisClient:
     @pytest.mark.asyncio
     async def test_idempotent_when_already_none(self):
         """Closing when no client exists must not raise."""
-        from app.core.redis_client import close_redis_client
         from app.core import redis_client as rc_module
+        from app.core.redis_client import close_redis_client
 
         original = rc_module._redis_client
         rc_module._redis_client = None

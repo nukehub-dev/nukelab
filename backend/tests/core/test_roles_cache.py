@@ -1,13 +1,11 @@
 """Tests for the precomputed expanded permission cache in roles.py."""
 
-import pytest
-from app.core.roles import (
-    get_expanded_role_permissions,
-    _rebuild_expansion_cache,
-    ROLE_PERMISSIONS,
-    _DEFAULT_ROLE_PERMISSIONS,
-)
 from app.core.permissions import Permission
+from app.core.roles import (
+    ROLE_PERMISSIONS,
+    _rebuild_expansion_cache,
+    get_expanded_role_permissions,
+)
 
 
 class TestExpandedRolePermissions:

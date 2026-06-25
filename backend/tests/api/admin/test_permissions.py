@@ -40,7 +40,7 @@ class TestPermissionMatrixUpdates:
         headers = {"Authorization": f"Bearer {admin_token}"}
 
         resp = await client.get("/api/admin/permissions", headers=headers)
-        data = resp.json()
+        resp.json()
 
         new_perms = ["users:read", "servers:read_all"]
 

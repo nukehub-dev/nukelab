@@ -1,7 +1,8 @@
 """Tests for Auth API endpoints."""
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
-from datetime import datetime, timedelta, UTC
 
 
 class TestRefreshToken:
@@ -73,9 +74,10 @@ class TestRefreshToken:
     @pytest.mark.asyncio
     async def test_refresh_with_expired_token(self, client, test_user, db_session):
         """Expired refresh token should be rejected."""
-        from app.models.refresh_token import RefreshToken
-        from app.api.auth import pwd_context
         import secrets
+
+        from app.api.auth import pwd_context
+        from app.models.refresh_token import RefreshToken
 
         # Create an expired refresh token directly
         plaintext = secrets.token_urlsafe(32)

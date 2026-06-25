@@ -375,14 +375,14 @@ class TestAdminBulkActions:
 
 """Coverage-focused tests for admin.py gaps."""
 
-import pytest
+from datetime import UTC, datetime
 from unittest import mock
-from datetime import datetime, UTC
 
-from app.models.user import User
-from app.models.server import Server
+import pytest
+
 from app.models.activity_log import ActivityLog
 from app.models.health_check import HealthCheck
+from app.models.server import Server
 
 
 class TestBulkUserActionUnknown:
@@ -712,14 +712,11 @@ class TestHealthMonitoringFilters:
 
 """Extended tests for Admin API endpoints."""
 
-import pytest
-from unittest import mock
-from datetime import datetime, timedelta
+from datetime import timedelta
 
-from app.models.user import User
-from app.models.server import Server
+import pytest
+
 from app.models.credit_transaction import CreditTransaction
-from app.models.activity_log import ActivityLog
 from app.models.shared_workspace import SharedWorkspace
 from app.models.volume import Volume
 
@@ -1227,20 +1224,12 @@ class TestAdminHealthMonitoringExtended:
 
 """Extended tests for admin.py — error branches and filter coverage."""
 
-import pytest
-import pytest_asyncio
 import uuid as uuid_mod
-from unittest import mock
-from datetime import datetime, timedelta, UTC
 
-from app.models.user import User
-from app.models.server import Server
-from app.models.server_plan import ServerPlan
+import pytest
+
 from app.models.environment_template import EnvironmentTemplate
-from app.models.shared_workspace import SharedWorkspace
-from app.models.volume import Volume
-from app.models.activity_log import ActivityLog
-
+from app.models.server_plan import ServerPlan
 
 # ─────────────────────────────────────────────────────────────
 # POST /users/bulk-action — exception catch path

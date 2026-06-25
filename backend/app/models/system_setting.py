@@ -1,7 +1,8 @@
 """System-wide dynamic settings stored in the database."""
 
+from sqlalchemy import Column, DateTime, String, Text
+
 from app.core.time_utils import utc_now
-from sqlalchemy import Column, String, DateTime, Text
 from app.db.base import Base
 
 

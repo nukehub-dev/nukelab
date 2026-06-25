@@ -1,14 +1,15 @@
 """Tests for BackupService."""
 
 import os
-import uuid
 import tarfile
-import pytest
+import uuid
 from unittest import mock
+
+import pytest
 from sqlalchemy import select
 
-from app.services.backup_service import BackupService
 from app.models.volume_backup import VolumeBackup
+from app.services.backup_service import BackupService
 
 
 @pytest.fixture
@@ -54,15 +55,15 @@ class TestBackupServiceCreateBackup:
 
         mock_cls = _make_mock_volume_service(str(mountpoint))
 
-        with mock.patch("app.services.backup_service.VolumeService", mock_cls):
-            with mock.patch(
-                "app.services.notification_service.NotificationService"
-            ) as mock_notif_cls:
-                mock_notif = mock.AsyncMock()
-                mock_notif_cls.return_value = mock_notif
-                result = await backup_service.create_backup(
-                    "test-vol", str(test_user.id), description="Test backup"
-                )
+        with (
+            mock.patch("app.services.backup_service.VolumeService", mock_cls),
+            mock.patch("app.services.notification_service.NotificationService") as mock_notif_cls,
+        ):
+            mock_notif = mock.AsyncMock()
+            mock_notif_cls.return_value = mock_notif
+            result = await backup_service.create_backup(
+                "test-vol", str(test_user.id), description="Test backup"
+            )
 
         assert result["status"] == "completed"
         assert result["volume_name"] == "test-vol"
@@ -83,18 +84,18 @@ class TestBackupServiceCreateBackup:
         """Should use fallback mountpoint when volume has none."""
         mock_cls = _make_mock_volume_service(None)
 
-        with mock.patch("app.services.backup_service.VolumeService", mock_cls):
-            with mock.patch(
-                "app.services.notification_service.NotificationService"
-            ) as mock_notif_cls:
-                mock_notif = mock.AsyncMock()
-                mock_notif_cls.return_value = mock_notif
-                with mock.patch("tarfile.open") as mock_tar_open:
-                    mock_tar = mock.Mock()
-                    mock_tar_open.return_value.__enter__ = mock.Mock(return_value=mock_tar)
-                    mock_tar_open.return_value.__exit__ = mock.Mock(return_value=False)
-                    with mock.patch("os.path.getsize", return_value=100):
-                        result = await backup_service.create_backup("test-vol", str(test_user.id))
+        with (
+            mock.patch("app.services.backup_service.VolumeService", mock_cls),
+            mock.patch("app.services.notification_service.NotificationService") as mock_notif_cls,
+        ):
+            mock_notif = mock.AsyncMock()
+            mock_notif_cls.return_value = mock_notif
+            with mock.patch("tarfile.open") as mock_tar_open:
+                mock_tar = mock.Mock()
+                mock_tar_open.return_value.__enter__ = mock.Mock(return_value=mock_tar)
+                mock_tar_open.return_value.__exit__ = mock.Mock(return_value=False)
+                with mock.patch("os.path.getsize", return_value=100):
+                    result = await backup_service.create_backup("test-vol", str(test_user.id))
 
         assert result["status"] == "completed"
         assert result["volume_name"] == "test-vol"

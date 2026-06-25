@@ -1,11 +1,10 @@
 """Extended tests for Servers API error paths."""
 
 import pytest
-import uuid
 
-from app.models.server_plan import ServerPlan
 from app.models.environment_template import EnvironmentTemplate
 from app.models.server import Server
+from app.models.server_plan import ServerPlan
 
 
 class TestCreateServerErrors:

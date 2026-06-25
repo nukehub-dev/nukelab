@@ -10,8 +10,8 @@ Ensures clean teardown of:
 """
 
 import asyncio
+import contextlib
 import time
-from typing import List, Optional
 
 from app.core.logging import get_logger
 
@@ -30,7 +30,7 @@ class ShutdownCoordinator:
     """Coordinates graceful application shutdown."""
 
     def __init__(self):
-        self._background_tasks: List[asyncio.Task] = []
+        self._background_tasks: list[asyncio.Task] = []
         self._shutdown_complete = False
 
     def register_background_task(self, task: asyncio.Task) -> None:
@@ -133,10 +133,8 @@ class ShutdownCoordinator:
         # Force-cancel any that are still pending
         for task in pending:
             task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await task
-            except asyncio.CancelledError:
-                pass
 
         logger.info(
             "background_tasks_cancelled",
@@ -145,7 +143,7 @@ class ShutdownCoordinator:
 
 
 # Global coordinator instance
-_shutdown_coordinator: Optional[ShutdownCoordinator] = None
+_shutdown_coordinator: ShutdownCoordinator | None = None
 
 
 def get_shutdown_coordinator() -> ShutdownCoordinator:

@@ -1,9 +1,10 @@
 """Tests for PostgreSQL native partition management."""
 
+from datetime import UTC, datetime
+from unittest import mock
+
 import pytest
 import pytest_asyncio
-from datetime import datetime, timezone
-from unittest import mock
 from sqlalchemy import text
 
 from app.db.partitioning import PartitionManager
@@ -112,7 +113,7 @@ class TestPartitionManagerWithDB:
             "PARTITION_CONFIG",
             {partition_table: {"column": "created_at", "granularity": "month"}},
         ):
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             # Create a partition for 2 years ago (should be dropped)
             old_year = now.year - 2
             await pm.create_partition(partition_table, old_year, now.month)

@@ -1,8 +1,8 @@
 """Tests for MetricsCollector."""
 
-import pytest
 from unittest import mock
-import json
+
+import pytest
 
 from app.services.metrics_collector import MetricsCollector
 
@@ -169,7 +169,7 @@ class TestPersistMetrics:
 
         with mock.patch("sqlalchemy.ext.asyncio.create_async_engine", return_value=mock_engine):
             with mock.patch("sqlalchemy.orm.sessionmaker", return_value=lambda: mock_db):
-                with mock.patch("app.services.metrics_collector.ServerMetric") as mock_metric_cls:
+                with mock.patch("app.services.metrics_collector.ServerMetric"):
                     metrics = {"server_id": "srv-1", "cpu_percent": 50.0}
                     await collector._persist_metrics(metrics)
 
@@ -268,11 +268,14 @@ class TestCollectAll:
         mock_client = mock.AsyncMock()
         mock_client.list_containers = mock.AsyncMock(return_value=[mock_container])
 
-        with mock.patch(
-            "app.services.metrics_collector.get_fresh_container_client", return_value=mock_client
+        with (
+            mock.patch(
+                "app.services.metrics_collector.get_fresh_container_client",
+                return_value=mock_client,
+            ),
+            mock.patch.object(collector, "_collect_container_metrics") as mock_collect,
         ):
-            with mock.patch.object(collector, "_collect_container_metrics") as mock_collect:
-                await collector.collect_all()
+            await collector.collect_all()
 
         mock_client.list_containers.assert_awaited_once()
         mock_collect.assert_awaited_once_with("cid-1", "srv-1")
@@ -288,11 +291,14 @@ class TestCollectAll:
         mock_client = mock.AsyncMock()
         mock_client.list_containers = mock.AsyncMock(return_value=[mock_container])
 
-        with mock.patch(
-            "app.services.metrics_collector.get_fresh_container_client", return_value=mock_client
+        with (
+            mock.patch(
+                "app.services.metrics_collector.get_fresh_container_client",
+                return_value=mock_client,
+            ),
+            mock.patch.object(collector, "_collect_container_metrics") as mock_collect,
         ):
-            with mock.patch.object(collector, "_collect_container_metrics") as mock_collect:
-                await collector.collect_all()
+            await collector.collect_all()
 
         mock_collect.assert_not_awaited()
 
@@ -325,18 +331,19 @@ class TestCollectContainerMetrics:
         mock_client = mock.AsyncMock()
         mock_client.client.containers.get = mock.AsyncMock(return_value=mock_container)
 
-        with mock.patch(
-            "app.services.metrics_collector.get_fresh_container_client", return_value=mock_client
-        ):
-            with mock.patch.object(
+        with (
+            mock.patch(
+                "app.services.metrics_collector.get_fresh_container_client",
+                return_value=mock_client,
+            ),
+            mock.patch.object(
                 collector, "_parse_container_stats", return_value={"server_id": "srv-1"}
-            ):
-                with mock.patch.object(collector, "_persist_metrics", new_callable=mock.AsyncMock):
-                    with mock.patch.object(
-                        collector, "_broadcast_metrics", new_callable=mock.AsyncMock
-                    ):
-                        with mock.patch("asyncio.sleep"):
-                            await collector._collect_container_metrics("cid-1", "srv-1")
+            ),
+            mock.patch.object(collector, "_persist_metrics", new_callable=mock.AsyncMock),
+        ):
+            with mock.patch.object(collector, "_broadcast_metrics", new_callable=mock.AsyncMock):
+                with mock.patch("asyncio.sleep"):
+                    await collector._collect_container_metrics("cid-1", "srv-1")
 
         mock_client.client.containers.get.assert_awaited_once_with("cid-1")
         assert mock_container.stats.call_count == 2
@@ -351,11 +358,14 @@ class TestCollectContainerMetrics:
         mock_client = mock.AsyncMock()
         mock_client.client.containers.get = mock.AsyncMock(return_value=mock_container)
 
-        with mock.patch(
-            "app.services.metrics_collector.get_fresh_container_client", return_value=mock_client
+        with (
+            mock.patch(
+                "app.services.metrics_collector.get_fresh_container_client",
+                return_value=mock_client,
+            ),
+            mock.patch.object(collector, "_parse_container_stats") as mock_parse,
         ):
-            with mock.patch.object(collector, "_parse_container_stats") as mock_parse:
-                await collector._collect_container_metrics("cid-1", "srv-1")
+            await collector._collect_container_metrics("cid-1", "srv-1")
 
         mock_parse.assert_not_called()
 
@@ -382,17 +392,18 @@ class TestCollectContainerMetrics:
         mock_client = mock.AsyncMock()
         mock_client.client.containers.get = mock.AsyncMock(return_value=mock_container)
 
-        with mock.patch(
-            "app.services.metrics_collector.get_fresh_container_client", return_value=mock_client
-        ):
-            with mock.patch.object(
+        with (
+            mock.patch(
+                "app.services.metrics_collector.get_fresh_container_client",
+                return_value=mock_client,
+            ),
+            mock.patch.object(
                 collector, "_parse_container_stats", return_value={"server_id": "srv-1"}
-            ):
-                with mock.patch.object(collector, "_persist_metrics", new_callable=mock.AsyncMock):
-                    with mock.patch.object(
-                        collector, "_broadcast_metrics", new_callable=mock.AsyncMock
-                    ):
-                        with mock.patch("asyncio.sleep"):
-                            await collector._collect_container_metrics("cid-1", "srv-1")
+            ),
+            mock.patch.object(collector, "_persist_metrics", new_callable=mock.AsyncMock),
+        ):
+            with mock.patch.object(collector, "_broadcast_metrics", new_callable=mock.AsyncMock):
+                with mock.patch("asyncio.sleep"):
+                    await collector._collect_container_metrics("cid-1", "srv-1")
 
         mock_client.client.close.assert_awaited_once()

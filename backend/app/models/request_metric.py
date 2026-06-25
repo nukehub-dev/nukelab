@@ -5,10 +5,12 @@ Tracks latency, status codes, and error rates per endpoint.
 """
 
 import uuid
-from sqlalchemy import Column, String, Integer, Float, DateTime, ForeignKey, Index
-from sqlalchemy.dialects.postgresql import UUID, INET
-from app.db.base import Base
+
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Index, Integer, String
+from sqlalchemy.dialects.postgresql import INET, UUID
+
 from app.core.time_utils import utc_now
+from app.db.base import Base
 
 
 class RequestMetric(Base):

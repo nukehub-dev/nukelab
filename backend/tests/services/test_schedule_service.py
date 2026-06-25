@@ -1,13 +1,14 @@
 """Tests for ScheduleService business logic."""
 
-import pytest
 import uuid as uuid_mod
-from datetime import datetime, timedelta, UTC
-from unittest.mock import patch, AsyncMock, Mock
+from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock, Mock, patch
 
-from app.services.schedule_service import ScheduleService, _validate_cron, _get_next_run
-from app.models.server_schedule import ServerSchedule
+import pytest
+
 from app.models.server import Server
+from app.models.server_schedule import ServerSchedule
+from app.services.schedule_service import ScheduleService, _get_next_run, _validate_cron
 
 
 class TestCronHelpers:
@@ -340,7 +341,7 @@ class TestScheduleServiceExecute:
     @pytest.mark.asyncio
     async def test_execute_schedule_server_not_found(self, db_session, test_user):
         """Should mark schedule inactive when server missing."""
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import patch
 
         server = Server(name="tmp", user_id=test_user.id, status="stopped")
         db_session.add(server)

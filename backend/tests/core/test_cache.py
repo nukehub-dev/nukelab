@@ -1,8 +1,9 @@
 """Tests for the Redis caching utility."""
 
 import asyncio
-import pytest
 from unittest import mock
+
+import pytest
 
 
 @pytest.fixture
@@ -32,7 +33,7 @@ class TestSerialization:
     """Tests that serialize/deserialize round-trip correctly."""
 
     def test_round_trip_dict(self):
-        from app.core.cache import _serialize, _deserialize
+        from app.core.cache import _deserialize, _serialize
 
         original = {"foo": "bar", "count": 42, "active": True}
         data = _serialize(original)
@@ -41,7 +42,7 @@ class TestSerialization:
         assert restored == original
 
     def test_round_trip_list(self):
-        from app.core.cache import _serialize, _deserialize
+        from app.core.cache import _deserialize, _serialize
 
         original = [{"id": "1", "name": "a"}, {"id": "2", "name": "b"}]
         data = _serialize(original)
@@ -49,7 +50,7 @@ class TestSerialization:
         assert restored == original
 
     def test_round_trip_nested(self):
-        from app.core.cache import _serialize, _deserialize
+        from app.core.cache import _deserialize, _serialize
 
         original = {"servers": [{"id": "s1", "tags": ["web", "prod"]}], "meta": {"page": 1}}
         data = _serialize(original)
@@ -76,7 +77,7 @@ class TestCacheGet:
 
     @pytest.mark.asyncio
     async def test_returns_deserialized_value_on_hit(self, mock_redis):
-        from app.core.cache import cache_get, _serialize
+        from app.core.cache import _serialize, cache_get
 
         mock_redis.get.return_value = _serialize({"foo": "bar"})
         result = await cache_get("test-key")
@@ -106,7 +107,7 @@ class TestCacheSet:
 
     @pytest.mark.asyncio
     async def test_stores_serialized_value_with_ttl(self, mock_redis):
-        from app.core.cache import cache_set, _serialize
+        from app.core.cache import cache_set
 
         await cache_set("test-key", {"foo": "bar"}, ttl=60)
         mock_redis.set.assert_awaited_once()
@@ -228,7 +229,7 @@ class TestCacheGetOrSet:
 
     @pytest.mark.asyncio
     async def test_returns_cached_value_on_hit(self, mock_redis):
-        from app.core.cache import cache_get_or_set, _serialize
+        from app.core.cache import _serialize, cache_get_or_set
 
         mock_redis.get.return_value = _serialize({"cached": True})
         builder = mock.AsyncMock(return_value={"fresh": True})
@@ -253,7 +254,7 @@ class TestCacheGetOrSet:
 
     @pytest.mark.asyncio
     async def test_waits_for_lock_holder_when_cache_empty(self, mock_redis):
-        from app.core.cache import cache_get_or_set, _serialize
+        from app.core.cache import _serialize, cache_get_or_set
 
         # First call: miss, lock not acquired (someone else has it)
         # Second call after retry: hit
@@ -374,7 +375,7 @@ class TestCircuitBreaker:
 
     @pytest.mark.asyncio
     async def test_circuit_opens_after_threshold_failures(self, mock_redis):
-        from app.core.cache import cache_get, _circuit_breaker
+        from app.core.cache import _circuit_breaker, cache_get
 
         mock_redis.get.side_effect = ConnectionError("Redis down")
 
@@ -387,7 +388,7 @@ class TestCircuitBreaker:
 
     @pytest.mark.asyncio
     async def test_circuit_skips_redis_when_open(self, mock_redis):
-        from app.core.cache import cache_get, _circuit_breaker
+        from app.core.cache import _circuit_breaker, cache_get
 
         # Force circuit open
         _circuit_breaker._state = "open"
@@ -400,7 +401,7 @@ class TestCircuitBreaker:
 
     @pytest.mark.asyncio
     async def test_circuit_closes_after_recovery_timeout(self, mock_redis):
-        from app.core.cache import cache_get, _circuit_breaker
+        from app.core.cache import _circuit_breaker, cache_get
 
         _circuit_breaker._state = "open"
         _circuit_breaker._last_failure_time = asyncio.get_event_loop().time() - 31
@@ -414,7 +415,7 @@ class TestCircuitBreaker:
 
     @pytest.mark.asyncio
     async def test_circuit_resets_on_success(self, mock_redis):
-        from app.core.cache import cache_get, _circuit_breaker
+        from app.core.cache import _circuit_breaker, cache_get
 
         # Start with some failures
         _circuit_breaker._failures = 3

@@ -2,19 +2,19 @@
 Usage analytics service for aggregating platform metrics.
 """
 
-from datetime import datetime, timedelta, UTC, date, UTC
-from typing import Dict, Any, List, Optional, Tuple
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, or_, text, case
-from sqlalchemy.dialects.postgresql import INTERVAL
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
+from sqlalchemy import and_, case, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.credit_transaction import CreditTransaction
+from app.models.daily_server_metric import DailyServerMetric
 from app.models.server import Server
 from app.models.server_metric import ServerMetric
-from app.models.daily_server_metric import DailyServerMetric
-from app.models.user import User
-from app.models.credit_transaction import CreditTransaction
-from app.models.volume import Volume
 from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
+from app.models.user import User
+from app.models.volume import Volume
 
 
 class AnalyticsService:
@@ -25,10 +25,10 @@ class AnalyticsService:
 
     def _parse_date_range(
         self,
-        days: Optional[int] = None,
-        from_date: Optional[datetime] = None,
-        to_date: Optional[datetime] = None,
-    ) -> Tuple[datetime, datetime]:
+        days: int | None = None,
+        from_date: datetime | None = None,
+        to_date: datetime | None = None,
+    ) -> tuple[datetime, datetime]:
         """Parse date range from days or explicit from/to dates.
 
         When from_date/to_date are provided (date-only from frontend),
@@ -52,9 +52,9 @@ class AnalyticsService:
         self,
         user_id: str,
         days: int = 30,
-        from_date: Optional[datetime] = None,
-        to_date: Optional[datetime] = None,
-    ) -> Dict[str, Any]:
+        from_date: datetime | None = None,
+        to_date: datetime | None = None,
+    ) -> dict[str, Any]:
         """Get usage trends for a user over time"""
         since, until = self._parse_date_range(days, from_date, to_date)
         use_rollups = self._should_use_rollups(since, until)
@@ -65,7 +65,7 @@ class AnalyticsService:
 
     async def _get_user_usage_from_raw(
         self, user_id: str, since: datetime, until: datetime
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Get user usage from raw ServerMetric rows (for short windows)."""
         day_trunc = func.date_trunc("day", ServerMetric.collected_at)
         result = await self.db.execute(
@@ -248,7 +248,7 @@ class AnalyticsService:
 
     async def _get_user_usage_from_rollups(
         self, user_id: str, since: datetime, until: datetime
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Get user usage from DailyServerMetric rollups (for longer windows)."""
         result = await self.db.execute(
             select(
@@ -429,9 +429,9 @@ class AnalyticsService:
     async def get_global_usage(
         self,
         days: int = 30,
-        from_date: Optional[datetime] = None,
-        to_date: Optional[datetime] = None,
-    ) -> Dict[str, Any]:
+        from_date: datetime | None = None,
+        to_date: datetime | None = None,
+    ) -> dict[str, Any]:
         """Get platform-wide usage statistics"""
         since, until = self._parse_date_range(days, from_date, to_date)
 
@@ -500,7 +500,7 @@ class AnalyticsService:
 
         # Server status breakdown
         result = await self.db.execute(select(Server.status, func.count()).group_by(Server.status))
-        status_breakdown = {status: count for status, count in result.all()}
+        status_breakdown = dict(result.all())
 
         # Average platform CPU
         result = await self.db.execute(
@@ -566,9 +566,9 @@ class AnalyticsService:
         self,
         days: int = 30,
         limit: int = 10,
-        from_date: Optional[datetime] = None,
-        to_date: Optional[datetime] = None,
-    ) -> List[Dict[str, Any]]:
+        from_date: datetime | None = None,
+        to_date: datetime | None = None,
+    ) -> list[dict[str, Any]]:
         """Get top credit consumers"""
         since, until = self._parse_date_range(days, from_date, to_date)
 
@@ -603,9 +603,9 @@ class AnalyticsService:
     async def get_credit_flow(
         self,
         days: int = 30,
-        from_date: Optional[datetime] = None,
-        to_date: Optional[datetime] = None,
-    ) -> List[Dict[str, Any]]:
+        from_date: datetime | None = None,
+        to_date: datetime | None = None,
+    ) -> list[dict[str, Any]]:
         """Get daily credit flow (consumed vs granted) over time"""
         since, until = self._parse_date_range(days, from_date, to_date)
         day_trunc = func.date_trunc("day", CreditTransaction.created_at)
@@ -643,9 +643,9 @@ class AnalyticsService:
     async def get_user_growth(
         self,
         days: int = 30,
-        from_date: Optional[datetime] = None,
-        to_date: Optional[datetime] = None,
-    ) -> List[Dict[str, Any]]:
+        from_date: datetime | None = None,
+        to_date: datetime | None = None,
+    ) -> list[dict[str, Any]]:
         """Get daily new user signups over time"""
         since, until = self._parse_date_range(days, from_date, to_date)
         day_trunc = func.date_trunc("day", User.created_at)
@@ -674,9 +674,9 @@ class AnalyticsService:
     async def get_daily_logins(
         self,
         days: int = 30,
-        from_date: Optional[datetime] = None,
-        to_date: Optional[datetime] = None,
-    ) -> List[Dict[str, Any]]:
+        from_date: datetime | None = None,
+        to_date: datetime | None = None,
+    ) -> list[dict[str, Any]]:
         """Get daily login counts."""
         since, until = self._parse_date_range(days, from_date, to_date)
 
@@ -707,9 +707,9 @@ class AnalyticsService:
     async def get_platform_metrics(
         self,
         days: int = 30,
-        from_date: Optional[datetime] = None,
-        to_date: Optional[datetime] = None,
-    ) -> List[Dict[str, Any]]:
+        from_date: datetime | None = None,
+        to_date: datetime | None = None,
+    ) -> list[dict[str, Any]]:
         """Get daily aggregated platform-wide resource usage"""
         since, until = self._parse_date_range(days, from_date, to_date)
         use_rollups = self._should_use_rollups(since, until)
@@ -720,7 +720,7 @@ class AnalyticsService:
 
     async def _get_platform_metrics_from_raw(
         self, since: datetime, until: datetime
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Get platform metrics from raw ServerMetric rows."""
         day_trunc = func.date_trunc("day", ServerMetric.collected_at)
 
@@ -766,7 +766,7 @@ class AnalyticsService:
 
     async def _get_platform_metrics_from_rollups(
         self, since: datetime, until: datetime
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Get platform metrics from DailyServerMetric rollups."""
         result = await self.db.execute(
             select(
@@ -808,7 +808,7 @@ class AnalyticsService:
             for day, avg_cpu, peak_cpu, avg_memory, peak_memory, avg_network_rx, avg_network_tx, avg_disk_read, avg_disk_write, data_points in rows
         ]
 
-    async def get_volume_analytics(self) -> Dict[str, Any]:
+    async def get_volume_analytics(self) -> dict[str, Any]:
         """Get storage/volume analytics snapshot"""
         # Total volumes
         result = await self.db.execute(select(func.count()).select_from(Volume))
@@ -857,7 +857,7 @@ class AnalyticsService:
             "volumes_by_status": volumes_by_status,
         }
 
-    async def get_workspace_analytics(self) -> Dict[str, Any]:
+    async def get_workspace_analytics(self) -> dict[str, Any]:
         """Get workspace collaboration analytics snapshot"""
         # Total workspaces
         result = await self.db.execute(select(func.count()).select_from(SharedWorkspace))
@@ -874,12 +874,12 @@ class AnalyticsService:
 
         # Workspace adoption: users who own or belong to a workspace / total users
         result = await self.db.execute(select(func.count(func.distinct(WorkspaceMember.user_id))))
-        workspace_users = result.scalar() or 0
+        result.scalar() or 0
 
         result = await self.db.execute(select(func.count(func.distinct(SharedWorkspace.owner_id))))
-        workspace_owners = result.scalar() or 0
+        result.scalar() or 0
 
-        total_workspace_users = len(set())  # Can't easily union in SQLAlchemy without subquery
+        len(set())  # Can't easily union in SQLAlchemy without subquery
         # Better: use a subquery approach
         result = await self.db.execute(
             select(func.count(func.distinct(WorkspaceMember.user_id))).union(
@@ -911,7 +911,7 @@ class AnalyticsService:
             "total_users": total_users,
         }
 
-    async def get_environment_usage(self) -> List[Dict[str, Any]]:
+    async def get_environment_usage(self) -> list[dict[str, Any]]:
         """Get usage by environment"""
         from app.models.environment_template import EnvironmentTemplate
 
@@ -937,7 +937,7 @@ class AnalyticsService:
             for env_id, name, server_count in environments
         ]
 
-    async def get_plan_usage(self) -> List[Dict[str, Any]]:
+    async def get_plan_usage(self) -> list[dict[str, Any]]:
         """Get usage by plan"""
         from app.models.server_plan import ServerPlan
 

@@ -2,41 +2,38 @@
 Bulk Operations API endpoints.
 """
 
-from typing import List, Dict, Optional
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
-from fastapi import APIRouter, Depends, HTTPException, status, Request
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.auth import get_current_user, require_jwt_auth, limiter
+from app.api.auth import get_current_user, limiter, require_jwt_auth
 from app.api.servers import (
+    _perform_server_delete,
+    _perform_server_restart,
     _perform_server_start,
     _perform_server_stop,
-    _perform_server_restart,
-    _perform_server_delete,
-    _audit_cross_user_access,
 )
 from app.core.permissions import Permission
 from app.core.security import has_permission
+from app.db.session import get_db
+from app.models.server import Server
+from app.models.user import User
 from app.services.activity_service import ActivityService
 from app.services.notification_service import NotificationService
-from app.dependencies import require_permissions, PermissionChecker
-from app.db.session import get_db
-from app.models.user import User
-from app.models.server import Server
 
 router = APIRouter()
 
 
 class BulkServerActionRequest(BaseModel):
     action: str  # start, stop, restart, delete
-    server_ids: List[str]
-    reason: Optional[str] = None
+    server_ids: list[str]
+    reason: str | None = None
 
 
 class BulkActionResponse(BaseModel):
-    succeeded: List[str]
-    failed: List[Dict[str, str]]
+    succeeded: list[str]
+    failed: list[dict[str, str]]
     total: int
     success_count: int
     failure_count: int

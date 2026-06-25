@@ -1,11 +1,11 @@
 """Tests for WebhookService business logic."""
 
-import pytest
-import json
-import hmac
 import hashlib
-from datetime import datetime
-from unittest.mock import patch, AsyncMock, MagicMock
+import hmac
+import json
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from app.services.webhook_service import WebhookService
 
@@ -124,9 +124,6 @@ class TestWebhookServiceDispatchToUser:
 """Extended coverage tests for WebhookService error/retry branches."""
 
 import pytest
-from unittest.mock import patch, AsyncMock, MagicMock
-
-from app.services.webhook_service import WebhookService
 
 
 def _make_awaitable_context_manager(response_status=200, side_effect=None):

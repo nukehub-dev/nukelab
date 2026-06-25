@@ -1,14 +1,12 @@
 """Coverage-focused tests for auth.py gaps."""
 
-import pytest
+from datetime import UTC, datetime, timedelta
 from unittest import mock
-from datetime import datetime, timedelta, UTC
-from jose import jwt as jose_jwt
 
-from app.models.user import User
-from app.models.refresh_token import RefreshToken
+import pytest
+
 from app.models.api_token import ApiToken
-from app.models.login_event import LoginEvent
+from app.models.refresh_token import RefreshToken
 
 
 def _make_oauth_mock():
@@ -143,8 +141,6 @@ class TestOAuthCallbackHappyPaths:
         )
         with mock.patch("app.services.oauth_service.oauth_service", m):
             with mock.patch("app.api.auth.get_db") as mock_get_db:
-                from app.db.session import AsyncSessionLocal
-
                 # Use a session that wraps add to ignore LoginEvent
                 real_session = db_session
                 orig_add = real_session.add
@@ -273,37 +269,39 @@ class TestOAuthCallbackHappyPaths:
                 "extra_profile": {},
             }
         )
-        with mock.patch("app.services.oauth_service.oauth_service", m):
-            with mock.patch(
+        with (
+            mock.patch("app.services.oauth_service.oauth_service", m),
+            mock.patch(
                 "app.api.auth.jwt.decode",
                 return_value={
                     "sub": "oauth999",
                     "email": "idtoken@example.com",
                     "preferred_username": "idtokenuser",
                 },
-            ):
-                with mock.patch("app.api.auth.get_db") as mock_get_db:
-                    real_session = db_session
-                    orig_add = real_session.add
+            ),
+            mock.patch("app.api.auth.get_db") as mock_get_db,
+        ):
+            real_session = db_session
+            orig_add = real_session.add
 
-                    def safe_add(instance):
-                        from app.models.login_event import LoginEvent
+            def safe_add(instance):
+                from app.models.login_event import LoginEvent
 
-                        if isinstance(instance, LoginEvent):
-                            return
-                        return orig_add(instance)
+                if isinstance(instance, LoginEvent):
+                    return
+                return orig_add(instance)
 
-                    with mock.patch.object(real_session, "add", safe_add):
-                        mock_get_db.return_value = __import__("typing").cast(
-                            __import__("typing").AsyncIterator, iter([real_session])
-                        )
-                        client.cookies.set("oauth_state", "test_state")
-                        response = await client.get(
-                            "/api/auth/oauth/callback?code=abc&state=test_state",
-                            follow_redirects=False,
-                        )
-                        assert response.status_code == 307
-                        assert "token=" in response.headers["location"]
+            with mock.patch.object(real_session, "add", safe_add):
+                mock_get_db.return_value = __import__("typing").cast(
+                    __import__("typing").AsyncIterator, iter([real_session])
+                )
+                client.cookies.set("oauth_state", "test_state")
+                response = await client.get(
+                    "/api/auth/oauth/callback?code=abc&state=test_state",
+                    follow_redirects=False,
+                )
+                assert response.status_code == 307
+                assert "token=" in response.headers["location"]
 
 
 class TestOAuthLoginPKCEAndSync:
@@ -333,8 +331,9 @@ class TestGetAuthContextEdgeCases:
 
     @pytest.mark.asyncio
     async def test_expired_api_token(self, client, db_session, test_user):
-        from app.api.auth import get_password_hash
         import secrets
+
+        from app.api.auth import get_password_hash
 
         raw = f"nukelab_{secrets.token_urlsafe(32)}"
         token = ApiToken(
@@ -356,8 +355,9 @@ class TestGetAuthContextEdgeCases:
 
     @pytest.mark.asyncio
     async def test_api_token_inactive_user(self, client, db_session, test_user):
-        from app.api.auth import get_password_hash
         import secrets
+
+        from app.api.auth import get_password_hash
 
         test_user.is_active = False
         raw = f"nukelab_{secrets.token_urlsafe(32)}"
@@ -383,9 +383,9 @@ class TestVerifyRefreshTokenLegacy:
 
     @pytest.mark.asyncio
     async def test_legacy_refresh_token_lookup(self, db_session, test_user):
-        from app.api.auth import verify_refresh_token, pwd_context
         import secrets
-        import hashlib
+
+        from app.api.auth import pwd_context, verify_refresh_token
 
         plaintext = secrets.token_urlsafe(32)
         token_hash = pwd_context.hash(plaintext)
@@ -408,9 +408,11 @@ class TestEnforceRefreshTokenLimit:
 
     @pytest.mark.asyncio
     async def test_enforce_token_limit_revokes_oldest(self, db_session, test_user):
-        from app.api.auth import _enforce_refresh_token_limit
         import uuid
-        from sqlalchemy import select, func
+
+        from sqlalchemy import func, select
+
+        from app.api.auth import _enforce_refresh_token_limit
 
         uid = uuid.UUID(str(test_user.id))
         for i in range(11):
@@ -465,8 +467,9 @@ class TestVerifyInactiveUser:
 
     @pytest.mark.asyncio
     async def test_verify_inactive_api_token_user(self, client, db_session, test_user):
-        from app.api.auth import get_password_hash
         import secrets
+
+        from app.api.auth import get_password_hash
 
         test_user.is_active = False
         raw = f"nukelab_{secrets.token_urlsafe(32)}"

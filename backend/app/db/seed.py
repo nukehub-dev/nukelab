@@ -5,14 +5,16 @@ Run this after database initialization.
 """
 
 import asyncio
-from sqlalchemy.ext.asyncio import AsyncSession
+
 from sqlalchemy import select
-from app.db.session import async_session
-from app.services.plan_service import PlanService
-from app.models.user import User
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.api.auth import get_password_hash
 from app.config import settings
 from app.core.logging import get_logger
+from app.db.session import async_session
+from app.models.user import User
+from app.services.plan_service import PlanService
 
 logger = get_logger(__name__)
 

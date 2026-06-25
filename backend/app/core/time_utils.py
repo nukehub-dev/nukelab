@@ -3,7 +3,7 @@ Time duration parsing utilities.
 """
 
 import re
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 
 
 def utc_now():

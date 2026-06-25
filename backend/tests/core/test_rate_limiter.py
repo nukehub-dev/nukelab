@@ -1,20 +1,20 @@
 """Tests for app.core.rate_limiter."""
 
-import pytest
 from unittest import mock
+
+import pytest
 from fastapi import Request
-from starlette.datastructures import Headers
 
 from app.core.rate_limiter import (
-    _extract_jwt_sub,
-    _hash_token,
-    _get_user_key_and_role,
+    RateLimitExceeded,
     _check_limit,
+    _extract_jwt_sub,
+    _get_user_key_and_role,
+    _hash_token,
+    rate_limit_auth,
     rate_limit_general,
     rate_limit_strict,
-    rate_limit_auth,
     rate_limit_websocket,
-    RateLimitExceeded,
 )
 
 
@@ -129,14 +129,16 @@ class TestCheckLimit:
 
     @pytest.mark.asyncio
     async def test_redis_error_fails_open(self):
-        with mock.patch(
-            "app.core.rate_limiter._get_redis_client", side_effect=Exception("Redis down")
+        with (
+            mock.patch(
+                "app.core.rate_limiter._get_redis_client", side_effect=Exception("Redis down")
+            ),
+            mock.patch("app.core.rate_limiter.settings.rate_limit_enabled", True),
         ):
-            with mock.patch("app.core.rate_limiter.settings.rate_limit_enabled", True):
-                req = Request({"type": "http", "headers": [], "client": ("1.1.1.1", 12345)})
-                limit, remaining = await _check_limit(req)
-                assert limit == 0
-                assert remaining == 0
+            req = Request({"type": "http", "headers": [], "client": ("1.1.1.1", 12345)})
+            limit, remaining = await _check_limit(req)
+            assert limit == 0
+            assert remaining == 0
 
     @pytest.mark.asyncio
     async def test_custom_limit_override(self):

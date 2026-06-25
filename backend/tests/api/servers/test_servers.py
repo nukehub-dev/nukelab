@@ -1,9 +1,10 @@
 """Tests for Server model and Server lifecycle with volume support."""
 
+from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from datetime import datetime, timedelta, UTC
 from httpx import AsyncClient
-from unittest.mock import MagicMock, AsyncMock, patch
 
 from app.models.server import Server
 
@@ -62,10 +63,9 @@ class TestServerVolumeIntegration:
     @pytest.mark.asyncio
     async def test_server_creation_with_auto_volume(self, db_session, test_user):
         """Server creation without volume_id should auto-create a volume."""
-        from app.models.server_plan import ServerPlan
+
         from app.models.environment_template import EnvironmentTemplate
-        from app.models.volume import Volume
-        from sqlalchemy import select
+        from app.models.server_plan import ServerPlan
 
         plan = ServerPlan(
             name="Test Plan",
@@ -143,8 +143,9 @@ class TestServerVolumeIntegration:
     @pytest.mark.asyncio
     async def test_server_volume_quota_validation(self, db_session, test_user):
         """Server should validate volume quota against plan limit."""
-        from app.services.volume_service import VolumeService
         from unittest.mock import AsyncMock, patch
+
+        from app.services.volume_service import VolumeService
 
         service = VolumeService(db_session)
 
@@ -176,11 +177,9 @@ class TestServerLifecycleE2E:
         self, client: AsyncClient, test_user, user_token, db_session
     ):
         """E2E: Create server prerequisites and verify billing fields exist."""
-        from app.models.server_plan import ServerPlan
-        from app.models.environment_template import EnvironmentTemplate
-        from sqlalchemy import select
 
-        headers = {"Authorization": f"Bearer {user_token}"}
+        from app.models.environment_template import EnvironmentTemplate
+        from app.models.server_plan import ServerPlan
 
         plan = ServerPlan(
             name="Test Plan",
@@ -240,11 +239,10 @@ class TestServerWorkspaceVolumeAccess:
         self, client: AsyncClient, test_user, admin_user, user_token, db_session
     ):
         """A workspace viewer must be blocked from mounting a shared volume as read-write."""
-        from app.models.server_plan import ServerPlan
         from app.models.environment_template import EnvironmentTemplate
+        from app.models.server_plan import ServerPlan
         from app.models.volume import Volume
         from app.services.workspace_service import WorkspaceService
-        from app.api.auth import create_access_token
 
         # Admin creates workspace and adds volume
         ws_service = WorkspaceService(db_session)
@@ -339,11 +337,12 @@ class TestServerWorkspaceVolumeAccess:
         self, client: AsyncClient, test_user, admin_user, user_token, db_session
     ):
         """A workspace viewer should be allowed to mount a shared volume as read-only."""
-        from app.models.server_plan import ServerPlan
+        from unittest.mock import AsyncMock, patch
+
         from app.models.environment_template import EnvironmentTemplate
+        from app.models.server_plan import ServerPlan
         from app.models.volume import Volume
         from app.services.workspace_service import WorkspaceService
-        from unittest.mock import AsyncMock, patch
 
         ws_service = WorkspaceService(db_session)
         workspace = await ws_service.create_workspace(
@@ -446,11 +445,12 @@ class TestServerWorkspaceVolumeAccess:
         self, client: AsyncClient, test_user, admin_user, user_token, db_session
     ):
         """A workspace editor (read_write member) should be allowed to mount as read-write."""
-        from app.models.server_plan import ServerPlan
+        from unittest.mock import AsyncMock, patch
+
         from app.models.environment_template import EnvironmentTemplate
+        from app.models.server_plan import ServerPlan
         from app.models.volume import Volume
         from app.services.workspace_service import WorkspaceService
-        from unittest.mock import AsyncMock, patch
 
         ws_service = WorkspaceService(db_session)
         workspace = await ws_service.create_workspace(
@@ -550,9 +550,9 @@ class TestServerPlanAccessValidation:
         self, client: AsyncClient, test_user, user_token, db_session
     ):
         """User should be blocked from starting a server if their plan access was revoked."""
-        from app.models.server_plan import ServerPlan
         from app.models.environment_template import EnvironmentTemplate
         from app.models.server import Server
+        from app.models.server_plan import ServerPlan
 
         plan = ServerPlan(
             name="Restricted Plan",
@@ -608,9 +608,9 @@ class TestServerPlanAccessValidation:
         self, client: AsyncClient, test_user, user_token, db_session
     ):
         """User should be blocked from restarting a server if their plan access was revoked."""
-        from app.models.server_plan import ServerPlan
         from app.models.environment_template import EnvironmentTemplate
         from app.models.server import Server
+        from app.models.server_plan import ServerPlan
 
         plan = ServerPlan(
             name="Restricted Plan 2",
@@ -666,10 +666,11 @@ class TestServerPlanAccessValidation:
         self, client: AsyncClient, test_user, user_token, db_session
     ):
         """User should be allowed to start a server when plan access is still valid."""
-        from app.models.server_plan import ServerPlan
+        from unittest.mock import AsyncMock, MagicMock, patch
+
         from app.models.environment_template import EnvironmentTemplate
         from app.models.server import Server
-        from unittest.mock import AsyncMock, patch, MagicMock
+        from app.models.server_plan import ServerPlan
 
         plan = ServerPlan(
             name="Valid Plan",
@@ -731,13 +732,12 @@ class TestServerPlanAccessValidation:
 
 """Coverage-focused tests for servers.py gaps."""
 
-import pytest
 from unittest import mock
-from datetime import datetime
 
-from app.models.server import Server
-from app.models.volume import Volume
+import pytest
+
 from app.models.server_volume import ServerVolume
+from app.models.volume import Volume
 
 
 class TestGetServerVolumes:
@@ -833,8 +833,8 @@ class TestCreateServerValidation:
     async def test_create_server_plan_not_available_for_role(
         self, client, user_token, test_user, db_session
     ):
-        from app.models.server_plan import ServerPlan
         from app.models.environment_template import EnvironmentTemplate
+        from app.models.server_plan import ServerPlan
 
         env = EnvironmentTemplate(name="test-env", slug="test-env", image="python:3.11")
         db_session.add(env)
@@ -860,8 +860,8 @@ class TestCreateServerValidation:
 
     @pytest.mark.asyncio
     async def test_create_server_quota_exceeded(self, client, user_token, test_user, db_session):
-        from app.models.server_plan import ServerPlan
         from app.models.environment_template import EnvironmentTemplate
+        from app.models.server_plan import ServerPlan
 
         env = EnvironmentTemplate(name="test-env2", slug="test-env2", image="python:3.11")
         db_session.add(env)
@@ -962,17 +962,14 @@ class TestUpdateServerBranches:
 
 """Coverage-focused tests for servers.py endpoints — happy paths and status sync."""
 
-import pytest
+import contextlib
 import uuid
-from unittest import mock
-from datetime import datetime, UTC
 
-from app.models.server import Server
-from app.models.user import User
-from app.models.volume import Volume
-from app.models.server_volume import ServerVolume
-from app.models.server_plan import ServerPlan
+import pytest
+
 from app.models.environment_template import EnvironmentTemplate
+from app.models.server_plan import ServerPlan
+from app.models.user import User
 
 
 class TestCreateServerHappyPath:
@@ -1748,9 +1745,10 @@ class TestGetServerPermissionCheck:
 
     @pytest.mark.asyncio
     async def test_get_server_cross_user_api_token_forbidden(self, client, test_user, db_session):
-        from app.models.api_token import ApiToken
-        from app.api.auth import get_password_hash
         import secrets
+
+        from app.api.auth import get_password_hash
+        from app.models.api_token import ApiToken
 
         other_user = User(
             username="otherapi",
@@ -2032,26 +2030,26 @@ class TestStartServer:
             started_at=datetime.now(UTC).replace(tzinfo=None),
         )
 
-        with mock.patch("app.api.servers.spawner.spawn", return_value=spawned):
-            with mock.patch(
+        with (
+            mock.patch("app.api.servers.spawner.spawn", return_value=spawned),
+            mock.patch(
                 "app.services.plan_service.PlanService.can_user_use_plan", return_value=True
-            ):
-                with mock.patch(
-                    "app.services.plan_service.PlanService.get_by_id", return_value=plan
-                ):
-                    with mock.patch("app.services.volume_service.VolumeService") as MockVS:
-                        vs_inst = MockVS.return_value
-                        vs_inst.record_mount = mock.AsyncMock()
+            ),
+            mock.patch("app.services.plan_service.PlanService.get_by_id", return_value=plan),
+            mock.patch("app.services.volume_service.VolumeService") as MockVS,
+        ):
+            vs_inst = MockVS.return_value
+            vs_inst.record_mount = mock.AsyncMock()
 
-                        with mock.patch("app.services.notification_service.NotificationService"):
-                            with mock.patch(
-                                "app.services.notification_service.broadcast_server_status_change",
-                                mock.AsyncMock(),
-                            ):
-                                response = await client.post(
-                                    f"/api/servers/{s1.id}/start",
-                                    headers={"Authorization": f"Bearer {user_token}"},
-                                )
+            with mock.patch("app.services.notification_service.NotificationService"):
+                with mock.patch(
+                    "app.services.notification_service.broadcast_server_status_change",
+                    mock.AsyncMock(),
+                ):
+                    response = await client.post(
+                        f"/api/servers/{s1.id}/start",
+                        headers={"Authorization": f"Bearer {user_token}"},
+                    )
 
         assert response.status_code == 200
         data = response.json()
@@ -3080,13 +3078,15 @@ class TestStartServerNoContainer:
             allocated_memory="512m",
         )
 
-        with mock.patch("app.api.servers.spawner.spawn", return_value=spawned):
-            with mock.patch(
+        with (
+            mock.patch("app.api.servers.spawner.spawn", return_value=spawned),
+            mock.patch(
                 "app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()
-            ):
-                response = await client.post(
-                    f"/api/servers/{s1.id}/start", headers={"Authorization": f"Bearer {user_token}"}
-                )
+            ),
+        ):
+            response = await client.post(
+                f"/api/servers/{s1.id}/start", headers={"Authorization": f"Bearer {user_token}"}
+            )
 
         assert response.status_code == 200
         data = response.json()
@@ -3223,15 +3223,17 @@ class TestUpdateServerEnvironmentChange:
             allocated_memory="512m",
         )
 
-        with mock.patch("app.api.servers.spawner.spawn", return_value=spawned):
-            with mock.patch(
+        with (
+            mock.patch("app.api.servers.spawner.spawn", return_value=spawned),
+            mock.patch(
                 "app.services.notification_service.broadcast_server_status_change", mock.AsyncMock()
-            ):
-                response = await client.patch(
-                    f"/api/servers/{s1.id}",
-                    headers={"Authorization": f"Bearer {admin_token}"},
-                    json={"environment_id": str(env2.id), "reason": "Admin update"},
-                )
+            ),
+        ):
+            response = await client.patch(
+                f"/api/servers/{s1.id}",
+                headers={"Authorization": f"Bearer {admin_token}"},
+                json={"environment_id": str(env2.id), "reason": "Admin update"},
+            )
 
         assert response.status_code == 200
         data = response.json()
@@ -3397,28 +3399,30 @@ class TestCreateServerExceptionCleanup:
                     ps_inst.can_user_use_plan = mock.AsyncMock(return_value=True)
                     ps_inst.get_by_id = mock.AsyncMock(return_value=plan)
 
-                    with mock.patch(
-                        "app.api.servers.spawner.spawn", side_effect=Exception("spawn failed")
-                    ):
-                        with mock.patch(
+                    with (
+                        mock.patch(
+                            "app.api.servers.spawner.spawn", side_effect=Exception("spawn failed")
+                        ),
+                        mock.patch(
                             "app.container.client.get_container_client", return_value=mock_client
-                        ):
-                            response = await client.post(
-                                "/api/servers/",
-                                headers={"Authorization": f"Bearer {user_token}"},
-                                json={
-                                    "name": "srvclean",
-                                    "plan_id": str(plan.id),
-                                    "environment_id": str(env.id),
-                                    "volume_mounts": [
-                                        {
-                                            "volume_id": "",
-                                            "mount_path": "/data",
-                                            "mode": "read_write",
-                                        }
-                                    ],
-                                },
-                            )
+                        ),
+                    ):
+                        response = await client.post(
+                            "/api/servers/",
+                            headers={"Authorization": f"Bearer {user_token}"},
+                            json={
+                                "name": "srvclean",
+                                "plan_id": str(plan.id),
+                                "environment_id": str(env.id),
+                                "volume_mounts": [
+                                    {
+                                        "volume_id": "",
+                                        "mount_path": "/data",
+                                        "mode": "read_write",
+                                    }
+                                ],
+                            },
+                        )
 
         assert response.status_code == 500
 
@@ -4343,8 +4347,8 @@ class TestCreateServerResourcePoolQueue:
                     rp_inst = MockRP.return_value
                     rp_inst.can_fit = mock.AsyncMock(return_value=False)
                     rp_inst.get_queue_position = mock.AsyncMock(return_value=1)
-                    try:
-                        response = await client.post(
+                    with contextlib.suppress(Exception):
+                        await client.post(
                             "/api/servers/",
                             headers={"Authorization": f"Bearer {user_token}"},
                             json={
@@ -4353,8 +4357,6 @@ class TestCreateServerResourcePoolQueue:
                                 "environment_id": str(env.id),
                             },
                         )
-                    except Exception:
-                        pass
 
 
 class TestStartServerNoContainerException:

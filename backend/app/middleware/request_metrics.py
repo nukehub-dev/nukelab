@@ -6,18 +6,19 @@ Writes are batched to reduce DB pressure.
 """
 
 import asyncio
+import contextlib
 import re
 import time
 import uuid
-from typing import List, Optional
+
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
-from app.core.logging import get_logger
-from app.core.context import correlation_id
-from app.core.prometheus_metrics import record_http_request
 from app.config import settings
+from app.core.context import correlation_id
+from app.core.logging import get_logger
+from app.core.prometheus_metrics import record_http_request
 from app.db.session import AsyncSessionLocal
 from app.models.request_metric import RequestMetric
 
@@ -77,10 +78,7 @@ class _RouteAwareNormalizer:
             # Prepend root_path so /servers/{id} becomes /api/servers/{id}
             if root and root != "/":
                 pattern = regex.pattern
-                if pattern.startswith("^"):
-                    pattern = "^" + root + pattern[1:]
-                else:
-                    pattern = root + pattern
+                pattern = "^" + root + pattern[1:] if pattern.startswith("^") else root + pattern
                 regex = re.compile(pattern)
                 template = root + template
 
@@ -94,7 +92,7 @@ class _RouteAwareNormalizer:
 
 
 # Lazily initialized on first request
-_route_normalizer: Optional[_RouteAwareNormalizer] = None
+_route_normalizer: _RouteAwareNormalizer | None = None
 
 
 def _normalize_path(path: str) -> str:
@@ -112,11 +110,11 @@ class _RequestMetricsBuffer:
     """In-memory buffer with periodic flush for request metrics."""
 
     def __init__(self, max_size: int = 100, flush_interval: float = 5.0):
-        self._buffer: List[dict] = []
+        self._buffer: list[dict] = []
         self._lock = asyncio.Lock()
         self._max_size = max_size
         self._flush_interval = flush_interval
-        self._flush_task: Optional[asyncio.Task] = None
+        self._flush_task: asyncio.Task | None = None
         self._started = False
         self._pending_adds: set = set()
 
@@ -171,10 +169,8 @@ class _RequestMetricsBuffer:
     async def shutdown(self) -> None:
         if self._flush_task:
             self._flush_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._flush_task
-            except asyncio.CancelledError:
-                pass
 
         # Yield so any fire-and-forget add() tasks that were created just
         # before shutdown have a chance to append to the buffer.

@@ -2,16 +2,16 @@
 Credit API endpoints with RBAC enforcement.
 """
 
-from typing import Optional
 from datetime import datetime
+
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
-from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import get_current_user, require_jwt_auth
 from app.core.permissions import Permission
-from app.dependencies import PermissionChecker, require_permissions
 from app.db.session import get_db
+from app.dependencies import require_permissions
 from app.models.user import User
 from app.services.credit_service import CreditService
 from app.services.notification_service import NotificationService
@@ -52,9 +52,9 @@ async def get_my_credits(
 
 @router.get("/history")
 async def get_my_credit_history(
-    transaction_type: Optional[str] = Query(None, description="Filter by type"),
-    from_date: Optional[datetime] = Query(None, description="From date"),
-    to_date: Optional[datetime] = Query(None, description="To date"),
+    transaction_type: str | None = Query(None, description="Filter by type"),
+    from_date: datetime | None = Query(None, description="From date"),
+    to_date: datetime | None = Query(None, description="To date"),
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=100),
     sort_by: str = Query("created_at", description="Sort column"),
@@ -99,9 +99,9 @@ async def get_user_credits(
 @router.get("/users/{user_id}/history")
 async def get_user_credit_history(
     user_id: str,
-    transaction_type: Optional[str] = Query(None),
-    from_date: Optional[datetime] = Query(None),
-    to_date: Optional[datetime] = Query(None),
+    transaction_type: str | None = Query(None),
+    from_date: datetime | None = Query(None),
+    to_date: datetime | None = Query(None),
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=100),
     sort_by: str = Query("created_at"),

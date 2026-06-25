@@ -1,16 +1,18 @@
 """Tests for server authentication service (RS256 tokens with IP binding)."""
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 import pytest_asyncio
-from datetime import datetime, timedelta, UTC
 from jose import jwt
 
 
 @pytest_asyncio.fixture
 async def test_server(db_session, test_user):
     """Create a test server for auth tests."""
-    from app.models.server import Server
     import uuid
+
+    from app.models.server import Server
 
     server = Server(
         id=uuid.uuid4(),
@@ -101,8 +103,8 @@ class TestServerAuthTokenGeneration:
     @pytest.mark.asyncio
     async def test_token_is_short_lived(self, db_session, test_user, test_server):
         """Token should expire within a reasonable time (default 5 minutes)."""
-        from app.services.server_auth_service import server_auth_service
         from app.config import settings
+        from app.services.server_auth_service import server_auth_service
 
         before = datetime.now(UTC)
 
@@ -132,8 +134,8 @@ class TestServerAuthTokenVerification:
     @pytest.mark.asyncio
     async def test_token_verifies_with_public_key(self, db_session, test_user, test_server):
         """Token signed by backend should verify with the public key."""
+
         from app.services.server_auth_service import server_auth_service
-        import asyncio
 
         token = await server_auth_service.generate_access_token(
             db=db_session,
@@ -161,9 +163,9 @@ class TestServerAuthTokenVerification:
     @pytest.mark.asyncio
     async def test_token_fails_with_wrong_audience(self, db_session, test_user, test_server):
         """Token should fail verification with wrong audience."""
-        from app.services.server_auth_service import server_auth_service
         from jose.exceptions import JWTError
-        from app.config import settings
+
+        from app.services.server_auth_service import server_auth_service
 
         token = await server_auth_service.generate_access_token(
             db=db_session,
@@ -185,10 +187,12 @@ class TestServerAuthTokenVerification:
     @pytest.mark.asyncio
     async def test_token_fails_after_expiry(self, db_session, test_user, test_server):
         """Expired token should fail verification."""
-        from app.services.server_auth_service import server_auth_service
-        from jose.exceptions import ExpiredSignatureError
-        from app.config import settings
         import asyncio
+
+        from jose.exceptions import ExpiredSignatureError
+
+        from app.config import settings
+        from app.services.server_auth_service import server_auth_service
 
         # Temporarily set very short TTL
         original_ttl = settings.server_auth_token_ttl
@@ -215,16 +219,16 @@ class TestServerAuthTokenVerification:
 
 """Extended tests for ServerAuthService (revocation, cleanup, stats, rate limits)."""
 
-import pytest
 import uuid
-from datetime import datetime, timedelta, UTC
-from jose import jwt, JWTError
+
+import pytest
+from jose import JWTError
 from sqlalchemy import select
 
-from app.services.server_auth_service import ServerAuthService
-from app.models.server_access_token import ServerAccessToken
-from app.models.server import Server
 from app.config import settings
+from app.models.server import Server
+from app.models.server_access_token import ServerAccessToken
+from app.services.server_auth_service import ServerAuthService
 
 
 class TestServerAuthServiceRevocation:

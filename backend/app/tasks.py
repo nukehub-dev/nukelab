@@ -1,14 +1,18 @@
 import asyncio
 import threading
-from app.worker import celery_app
+
+from app.config import settings
 from app.core.logging import get_logger
+from app.worker import celery_app
 
 logger = get_logger(__name__)
+import contextlib
+
+from app.db.session import AsyncSessionLocal
+from app.services.alert_service import AlertService
+from app.services.health_check_service import HealthCheckService
 from app.services.metrics_collector import MetricsCollector
 from app.services.system_metrics_collector import SystemMetricsCollector
-from app.services.health_check_service import HealthCheckService
-from app.services.alert_service import AlertService
-from app.db.session import AsyncSessionLocal
 
 
 def _run_async(coro):
@@ -30,10 +34,8 @@ def _run_async(coro):
             exception.append(e)
         finally:
             logger.debug("[_run_async] Cleaning up event loop...")
-            try:
+            with contextlib.suppress(Exception):
                 loop.run_until_complete(loop.shutdown_asyncgens())
-            except Exception:
-                pass
             loop.close()
             asyncio.set_event_loop(None)
             logger.debug("[_run_async] Event loop closed")
@@ -89,19 +91,20 @@ def shutdown_idle_servers(self):
     """Stop servers that have been idle beyond user preference timeout"""
 
     async def _enforce():
+        from datetime import UTC, datetime, timedelta
+
         from sqlalchemy import select
+
+        from app.container.spawner import spawner
         from app.models.server import Server
         from app.models.server_plan import ServerPlan
         from app.models.user import User
-        from app.services.notification_service import NotificationService
         from app.services.credit_service import CreditService
+        from app.services.notification_service import NotificationService
         from app.services.quota_service import QuotaService
-        from app.container.spawner import spawner
-        from datetime import datetime, timedelta, UTC
 
         async with AsyncSessionLocal() as db:
             stopped_count = 0
-            warned_count = 0
 
             # Get all running servers with their users
             result = await db.execute(
@@ -248,17 +251,19 @@ def process_nuke_billing(self):
     """Periodic NUKE billing - deduct usage costs for running servers"""
 
     async def _bill():
+        from datetime import UTC, datetime
+
         from sqlalchemy import select
+
+        from app.config import settings
         from app.models.server import Server
         from app.models.server_plan import ServerPlan
         from app.models.user import User
+        from app.services.credit_service import CreditService
         from app.services.notification_service import (
             NotificationService,
             broadcast_server_status_change,
         )
-        from app.services.credit_service import CreditService
-        from datetime import datetime, timedelta, UTC
-        from app.config import settings
 
         async with AsyncSessionLocal() as db:
             credit_service = CreditService(db)
@@ -359,17 +364,19 @@ def enforce_auto_stop(self):
     """Enforce idle timeout and max runtime limits on running servers"""
 
     async def _enforce():
+        from datetime import UTC, datetime
+
         from sqlalchemy import select
+
+        from app.config import settings
+        from app.container.spawner import spawner
+        from app.core.time_utils import parse_duration
         from app.models.server import Server
         from app.models.server_plan import ServerPlan
         from app.services.notification_service import (
             NotificationService,
             broadcast_server_status_change,
         )
-        from datetime import datetime, timedelta, UTC
-        from app.core.time_utils import parse_duration
-        from app.config import settings
-        from app.container.spawner import spawner
         from app.services.quota_service import QuotaService
 
         async with AsyncSessionLocal() as db:
@@ -464,18 +471,20 @@ def process_server_queue(self):
     """Process queued servers - start next in line when resources free up"""
 
     async def _process():
+        from datetime import UTC, datetime, timedelta
+
         from sqlalchemy import select
-        from app.models.server_queue import ServerQueue
-        from app.models.server_plan import ServerPlan
-        from app.models.user import User
-        from app.services.notification_service import NotificationService
-        from app.services.resource_pool_service import ResourcePoolService
-        from app.services.credit_service import CreditService
-        from app.services.quota_service import QuotaService
+
+        from app.config import settings
         from app.container.spawner import spawner
         from app.core.time_utils import parse_duration
-        from datetime import datetime, timedelta, UTC
-        from app.config import settings
+        from app.models.server_plan import ServerPlan
+        from app.models.server_queue import ServerQueue
+        from app.models.user import User
+        from app.services.credit_service import CreditService
+        from app.services.notification_service import NotificationService
+        from app.services.quota_service import QuotaService
+        from app.services.resource_pool_service import ResourcePoolService
 
         async with AsyncSessionLocal() as db:
             resource_pool = ResourcePoolService(db)
@@ -639,8 +648,8 @@ def evaluate_schedules(self):
     """Evaluate and execute due server schedules"""
 
     async def _evaluate():
-        from app.services.schedule_service import ScheduleService
         from app.db.session import AsyncSessionLocal
+        from app.services.schedule_service import ScheduleService
 
         async with AsyncSessionLocal() as db:
             service = ScheduleService(db)
@@ -674,12 +683,14 @@ def rollup_server_metrics(self):
     """Aggregate raw ServerMetric rows into DailyServerMetric every night."""
 
     async def _rollup():
-        from sqlalchemy import select, func, and_, insert, update
+        from datetime import date, timedelta
+
+        from sqlalchemy import and_, func, select
         from sqlalchemy.dialects.postgresql import insert as pg_insert
-        from app.models.server_metric import ServerMetric
-        from app.models.daily_server_metric import DailyServerMetric
+
         from app.db.session import AsyncSessionLocal
-        from datetime import datetime, timedelta, UTC, date, UTC
+        from app.models.daily_server_metric import DailyServerMetric
+        from app.models.server_metric import ServerMetric
 
         async with AsyncSessionLocal() as db:
             # Process the last 7 days (to catch up if missed)
@@ -687,7 +698,7 @@ def rollup_server_metrics(self):
             start_date = end_date - timedelta(days=7)
 
             # Find all distinct (server_id, date) pairs in the raw metrics
-            day_trunc = func.date_trunc("day", ServerMetric.collected_at)
+            func.date_trunc("day", ServerMetric.collected_at)
             result = await db.execute(
                 select(
                     ServerMetric.server_id,
@@ -780,18 +791,20 @@ def cleanup_expired_data(self):
     """Delete expired raw data based on retention settings."""
 
     async def _cleanup():
-        from sqlalchemy import delete, text, select
+        from datetime import UTC, datetime, timedelta
+
+        from sqlalchemy import delete, select
+
+        from app.db.session import AsyncSessionLocal
+        from app.models.activity_log import ActivityLog
+        from app.models.alert_history import AlertHistory
+        from app.models.daily_server_metric import DailyServerMetric
+        from app.models.health_check import HealthCheck
+        from app.models.notification import Notification
+        from app.models.request_metric import RequestMetric
         from app.models.server_metric import ServerMetric
         from app.models.system_metric import SystemMetric
-        from app.models.health_check import HealthCheck
-        from app.models.alert_history import AlertHistory
-        from app.models.activity_log import ActivityLog
-        from app.models.notification import Notification
-        from app.models.daily_server_metric import DailyServerMetric
         from app.models.system_setting import SystemSetting
-        from app.models.request_metric import RequestMetric
-        from app.db.session import AsyncSessionLocal
-        from datetime import datetime, timedelta, UTC
 
         async with AsyncSessionLocal() as db:
             # Helper to read retention setting
@@ -921,24 +934,24 @@ def enforce_volume_quotas(self):
     """
 
     async def _enforce():
+        from datetime import UTC, datetime
+
         from sqlalchemy import select
         from sqlalchemy.orm import selectinload
+
+        from app.container.spawner import spawner
         from app.models.server import Server
         from app.models.server_plan import ServerPlan
-        from app.models.user import User
-        from app.models.volume import Volume
         from app.models.server_volume import ServerVolume
-        from app.services.volume_service import VolumeService
-        from app.services.xfs_quota_service import xfs_quota_service
+        from app.models.user import User
+        from app.services.credit_service import CreditService
         from app.services.notification_service import (
             NotificationService,
             broadcast_server_status_change,
         )
-        from app.services.credit_service import CreditService
         from app.services.quota_service import QuotaService
-        from app.container.spawner import spawner
-        from datetime import datetime, UTC
-        from app.config import settings
+        from app.services.volume_service import VolumeService
+        from app.services.xfs_quota_service import xfs_quota_service
 
         async with AsyncSessionLocal() as db:
             volume_service = VolumeService(db)
@@ -1147,9 +1160,10 @@ def update_prometheus_business_metrics(self):
         return "Prometheus disabled; skipping business metrics update"
 
     async def _update():
-        from sqlalchemy import select, func
-        from app.models.user import User
+        from sqlalchemy import func, select
+
         from app.models.server import Server
+        from app.models.user import User
 
         async with AsyncSessionLocal() as db:
             # Total users
@@ -1162,12 +1176,12 @@ def update_prometheus_business_metrics(self):
 
             # Servers by status
             result = await db.execute(select(Server.status, func.count()).group_by(Server.status))
-            server_counts = {status: count for status, count in result.all()}
+            server_counts = dict(result.all())
 
         from app.core.prometheus_metrics import (
-            set_users_total,
             set_nuke_balance_total,
             set_servers_total,
+            set_users_total,
         )
 
         set_users_total(users_total)

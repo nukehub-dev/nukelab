@@ -14,8 +14,8 @@ Design principles:
 """
 
 import json
-from app.core.permissions import Permission
 
+from app.core.permissions import Permission
 
 # Role to permissions mapping
 ROLE_PERMISSIONS = {
@@ -275,9 +275,9 @@ _DEFAULT_ROLE_PERMISSIONS = {role: list(perms) for role, perms in ROLE_PERMISSIO
 async def load_role_permissions_from_db() -> None:
     """Load custom role permissions from database, falling back to defaults."""
     try:
+        from app.core.permissions import Permission
         from app.db.session import AsyncSessionLocal
         from app.services.setting_service import SettingService
-        from app.core.permissions import Permission
 
         async with AsyncSessionLocal() as db:
             service = SettingService(db)

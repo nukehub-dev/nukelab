@@ -1,20 +1,20 @@
 """Admin API for managing IP allowlist/blocklist."""
 
 import uuid
-from typing import List, Optional
-from datetime import datetime, UTC
-from pydantic import BaseModel, Field
-from fastapi import APIRouter, Depends, HTTPException, status, Request
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
+from datetime import UTC, datetime
 
-from app.api.auth import get_current_user, require_jwt_auth
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel, Field
+from sqlalchemy import desc, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.auth import require_jwt_auth
 from app.core.permissions import Permission
-from app.dependencies import require_permissions
 from app.db.session import get_db
-from app.models.user import User
+from app.dependencies import require_permissions
+from app.middleware.ip_restriction import _get_client_ip, _invalidate_cache
 from app.models.ip_restriction import IPRestriction
-from app.middleware.ip_restriction import _invalidate_cache, _get_client_ip
+from app.models.user import User
 
 router = APIRouter()
 
@@ -24,23 +24,23 @@ class IPRestrictionCreate(BaseModel):
         ..., min_length=1, max_length=50, description="IP or CIDR range, e.g. 192.168.1.0/24"
     )
     restriction_type: str = Field(..., pattern="^(allow|block)$")
-    note: Optional[str] = Field(None, max_length=500)
+    note: str | None = Field(None, max_length=500)
 
 
 class IPRestrictionResponse(BaseModel):
     id: str
     ip_range: str
     restriction_type: str
-    note: Optional[str]
+    note: str | None
     is_active: bool
-    created_by_id: Optional[str]
-    created_at: Optional[str]
+    created_by_id: str | None
+    created_at: str | None
 
     class Config:
         from_attributes = True
 
 
-@router.get("/ip-restrictions", response_model=List[IPRestrictionResponse])
+@router.get("/ip-restrictions", response_model=list[IPRestrictionResponse])
 async def list_ip_restrictions(
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
     _jwt=Depends(require_jwt_auth()),

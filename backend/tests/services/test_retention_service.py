@@ -3,9 +3,9 @@
 import pytest
 from sqlalchemy import select
 
-from app.services.retention_service import RetentionService
-from app.models.system_setting import SystemSetting
 from app.core.retention import DEFAULT_RETENTION_POLICIES
+from app.models.system_setting import SystemSetting
+from app.services.retention_service import RetentionService
 
 
 class TestRetentionServiceGetPolicy:

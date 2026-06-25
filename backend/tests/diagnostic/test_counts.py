@@ -3,10 +3,10 @@
 import pytest
 from sqlalchemy import select
 
+from app.models.maintenance_window import MaintenanceWindow
+from app.models.server import Server
 from app.models.user import User
 from app.models.volume import Volume
-from app.models.server import Server
-from app.models.maintenance_window import MaintenanceWindow
 
 
 @pytest.mark.asyncio

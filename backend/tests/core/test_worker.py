@@ -1,6 +1,5 @@
 """Tests for Celery worker correlation ID propagation."""
 
-import pytest
 from unittest import mock
 
 

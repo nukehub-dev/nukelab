@@ -4,11 +4,10 @@ Tests for NotificationService preference checking.
 Ensures notifications respect user preferences for in_app and email channels.
 """
 
-import pytest
 from unittest.mock import AsyncMock, patch
 
-from app.models.user import User
-from app.models.notification import Notification
+import pytest
+
 from app.services.notification_service import NotificationService
 
 

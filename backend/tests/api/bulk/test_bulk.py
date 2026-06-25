@@ -1,9 +1,10 @@
 """Tests for Bulk Operations API endpoints."""
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
-from unittest.mock import AsyncMock, patch
 
 from app.models.server import Server
 
@@ -75,7 +76,6 @@ class TestBulkServerLifecycle:
     @pytest_asyncio.fixture
     async def stopped_server(self, db_session, test_user):
         """Create a stopped server ready to be started."""
-        from app.models.server_plan import ServerPlan
         from app.models.environment_template import EnvironmentTemplate
 
         plan = ServerPlan(
@@ -121,7 +121,6 @@ class TestBulkServerLifecycle:
     @pytest_asyncio.fixture
     async def running_server(self, db_session, test_user):
         """Create a running server ready to be stopped."""
-        from app.models.server_plan import ServerPlan
         from app.models.environment_template import EnvironmentTemplate
 
         plan = ServerPlan(
@@ -325,7 +324,6 @@ class TestBulkServerLifecycle:
         self, client: AsyncClient, admin_token, stopped_server, test_user
     ):
         """Bulk action on another user's server without reason should fail."""
-        from app.models.user import User
         from app.core.roles import ROLE_PERMISSIONS, _rebuild_expansion_cache
 
         # Ensure admin role has SERVERS_ACCESS_OTHERS
@@ -426,18 +424,13 @@ class TestBulkServerLifecycle:
 
 """Extended tests for small API modules — coverage gap closure."""
 
-import pytest
-from unittest import mock
-from datetime import datetime, timedelta, UTC
 import uuid as uuid_mod
+from unittest import mock
+
+import pytest
 
 from app.config import settings
-from app.models.server import Server
 from app.models.server_plan import ServerPlan
-from app.models.environment_template import EnvironmentTemplate
-from app.models.notification import Notification
-from app.models.activity_log import ActivityLog
-from app.models.credit_transaction import CreditTransaction
 
 
 @pytest.fixture(autouse=True)

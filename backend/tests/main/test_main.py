@@ -1,12 +1,13 @@
 """Tests for app/main.py application setup and core endpoints."""
 
-import pytest
 from unittest import mock
+
+import pytest
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
-from app.main import app, startup, root, health, rate_limit_exceeded_handler
 from app.config import settings
+from app.main import app, health, rate_limit_exceeded_handler, root, startup
 
 
 class TestAppConfiguration:
@@ -133,7 +134,6 @@ class TestHealthEndpoint:
 
     @pytest.mark.asyncio
     async def test_health_returns_503_during_shutdown(self):
-        from app.core.shutdown import is_shutting_down
         from app.core import shutdown as _shutdown_mod
 
         _shutdown_mod._is_shutting_down = True
@@ -167,7 +167,7 @@ class TestStartupEvent:
                                 "app.core.roles.load_role_permissions_from_db",
                                 new_callable=mock.AsyncMock,
                             ):
-                                with mock.patch("app.main.manager") as mock_manager:
+                                with mock.patch("app.main.manager"):
                                     with mock.patch(
                                         "app.api.auth.run_periodic_refresh_token_cleanup",
                                         new_callable=mock.AsyncMock,
@@ -192,7 +192,7 @@ class TestStartupEvent:
                                 "app.core.roles.load_role_permissions_from_db",
                                 new_callable=mock.AsyncMock,
                             ):
-                                with mock.patch("app.main.manager") as mock_manager:
+                                with mock.patch("app.main.manager"):
                                     with mock.patch(
                                         "app.api.auth.run_periodic_refresh_token_cleanup",
                                         new_callable=mock.AsyncMock,
@@ -211,20 +211,22 @@ class TestStartupEvent:
                         mock_db = mock.AsyncMock()
                         mock_session.return_value.__aenter__ = mock.AsyncMock(return_value=mock_db)
                         mock_session.return_value.__aexit__ = mock.AsyncMock(return_value=False)
-                        with mock.patch(
-                            "app.services.setting_service.SettingService",
-                            side_effect=Exception("settings fail"),
-                        ):
-                            with mock.patch(
+                        with (
+                            mock.patch(
+                                "app.services.setting_service.SettingService",
+                                side_effect=Exception("settings fail"),
+                            ),
+                            mock.patch(
                                 "app.core.roles.load_role_permissions_from_db",
                                 new_callable=mock.AsyncMock,
-                            ):
-                                with mock.patch("app.main.manager") as mock_manager:
-                                    with mock.patch(
-                                        "app.api.auth.run_periodic_refresh_token_cleanup",
-                                        new_callable=mock.AsyncMock,
-                                    ):
-                                        await startup()
+                            ),
+                            mock.patch("app.main.manager"),
+                            mock.patch(
+                                "app.api.auth.run_periodic_refresh_token_cleanup",
+                                new_callable=mock.AsyncMock,
+                            ),
+                        ):
+                            await startup()
 
     @pytest.mark.asyncio
     async def test_startup_starts_redis_listener(self):
@@ -268,9 +270,7 @@ class TestStartupEvent:
                                 "app.core.roles.load_role_permissions_from_db",
                                 new_callable=mock.AsyncMock,
                             ):
-                                with mock.patch(
-                                    "app.websocket.metrics_socket.manager"
-                                ) as mock_manager:
+                                with mock.patch("app.websocket.metrics_socket.manager"):
                                     mock_cleanup = mock.AsyncMock()
                                     with mock.patch(
                                         "app.api.auth.run_periodic_refresh_token_cleanup",
@@ -282,8 +282,6 @@ class TestStartupEvent:
 """Coverage-focused tests for utility modules and easy wins."""
 
 import pytest
-from unittest import mock
-from cryptography.fernet import InvalidToken
 
 
 class TestMain:
@@ -291,7 +289,6 @@ class TestMain:
 
     @pytest.mark.asyncio
     async def test_root_endpoint(self, client):
-        from app.main import root
 
         response = await client.get("/")
         assert response.status_code == 200
@@ -300,7 +297,6 @@ class TestMain:
 
     @pytest.mark.asyncio
     async def test_health_endpoint(self, client):
-        from app.main import health
 
         response = await client.get("/health")
         assert response.status_code == 200

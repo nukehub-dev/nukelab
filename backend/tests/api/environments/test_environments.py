@@ -18,7 +18,6 @@ class TestEnvironmentsList:
     @pytest.mark.asyncio
     async def test_update_environment(self, client, admin_token, db_session):
         """Admin should update an environment."""
-        from app.models.environment_template import EnvironmentTemplate
 
         env = EnvironmentTemplate(name="Updatable", slug="updatable", image="test:latest")
         db_session.add(env)
@@ -37,7 +36,6 @@ class TestEnvironmentsList:
     @pytest.mark.asyncio
     async def test_deactivate_environment(self, client, admin_token, db_session):
         """Admin should deactivate an environment."""
-        from app.models.environment_template import EnvironmentTemplate
 
         env = EnvironmentTemplate(name="Deact", slug="deact", image="test:latest", is_active=True)
         db_session.add(env)
@@ -53,7 +51,6 @@ class TestEnvironmentsList:
     @pytest.mark.asyncio
     async def test_permanently_delete_environment(self, client, admin_token, db_session):
         """Admin should permanently delete an environment."""
-        from app.models.environment_template import EnvironmentTemplate
 
         env = EnvironmentTemplate(name="PermDel", slug="permdel", image="test:latest")
         db_session.add(env)
@@ -70,7 +67,6 @@ class TestEnvironmentsList:
     @pytest.mark.asyncio
     async def test_clone_environment(self, client, admin_token, db_session):
         """Admin should clone an environment."""
-        from app.models.environment_template import EnvironmentTemplate
 
         env = EnvironmentTemplate(name="Original", slug="original", image="test:latest")
         db_session.add(env)
@@ -90,7 +86,6 @@ class TestEnvironmentsList:
     @pytest.mark.asyncio
     async def test_clone_environment_not_found(self, client, admin_token):
         """Cloning nonexistent environment should 404."""
-        import uuid
 
         response = await client.post(
             f"/api/environments/{uuid.uuid4()}/clone",
@@ -145,7 +140,6 @@ class TestEnvironmentActivation:
     @pytest.mark.asyncio
     async def test_activate_environment(self, client, admin_token, db_session):
         """Admin should activate/deactivate environment."""
-        from app.models.environment_template import EnvironmentTemplate
 
         env = EnvironmentTemplate(
             name="Active Test", slug="active-test", image="test:latest", is_active=False
@@ -163,13 +157,11 @@ class TestEnvironmentActivation:
 
 """Extended tests for Environments, Notifications, and Health API endpoints."""
 
-import pytest
 import uuid
 
+import pytest
+
 from app.models.environment_template import EnvironmentTemplate
-from app.models.notification import Notification
-from app.models.health_check import HealthCheck
-from app.models.server import Server
 
 
 class TestEnvironmentsAPI:
@@ -184,15 +176,6 @@ class TestEnvironmentsAPI:
         assert response.status_code == 200
         data = response.json()
         assert "success" in data
-
-    @pytest.mark.asyncio
-    async def test_get_environment_not_found(self, client, user_token):
-        """Getting non-existent environment should 404."""
-        response = await client.get(
-            "/api/environments/00000000-0000-0000-0000-000000000000",
-            headers={"Authorization": f"Bearer {user_token}"},
-        )
-        assert response.status_code == 404
 
     @pytest.mark.asyncio
     async def test_get_environment_not_found(self, client, user_token):

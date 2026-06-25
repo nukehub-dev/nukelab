@@ -3,20 +3,20 @@ Audit middleware for automatic activity logging.
 """
 
 import uuid
-from typing import Dict, Any
+from typing import Any
+
 from fastapi import Request, Response
+from jose import JWTError, jwt
+from sqlalchemy import select
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from jose import jwt, JWTError
 
+from app.config import settings
+from app.core.context import correlation_id
+from app.core.logging import get_logger
+from app.db.session import AsyncSessionLocal
 from app.models.activity_log import ActivityLog
 from app.models.user import User
-from app.db.session import AsyncSessionLocal
-from app.config import settings
-from app.core.logging import get_logger
-from app.core.context import correlation_id
 
 logger = get_logger(__name__)
 
@@ -64,13 +64,13 @@ class AuditMiddleware(BaseHTTPMiddleware):
         if response.status_code < 400:
             try:
                 await self._log_activity(request, response, before_state)
-            except Exception as e:
+            except Exception:
                 # Don't fail the request if logging fails
                 logger.exception("Audit logging error")
 
         return response
 
-    async def _capture_before_state(self, request: Request) -> Dict[str, Any]:
+    async def _capture_before_state(self, request: Request) -> dict[str, Any]:
         """Capture state before modification"""
         path = request.url.path
 
@@ -90,7 +90,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
 
         return {}
 
-    async def _fetch_record(self, target_type: str, target_id: str) -> Dict[str, Any]:
+    async def _fetch_record(self, target_type: str, target_id: str) -> dict[str, Any]:
         """Fetch record from database before modification"""
         async with AsyncSessionLocal() as db:
             if target_type == "users":
@@ -138,7 +138,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
         except JWTError:
             return None
 
-    def _get_auth_info(self, request: Request) -> Dict[str, Any]:
+    def _get_auth_info(self, request: Request) -> dict[str, Any]:
         """Extract authentication method and scopes from request state."""
         auth_context = getattr(request.state, "auth_context", None)
         if not auth_context:
@@ -150,7 +150,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
         return info
 
     async def _log_activity(
-        self, request: Request, response: Response, before_state: Dict[str, Any]
+        self, request: Request, response: Response, before_state: dict[str, Any]
     ):
         """Log the activity"""
 

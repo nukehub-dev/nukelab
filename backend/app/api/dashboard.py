@@ -2,29 +2,27 @@
 Dashboard API endpoints - Aggregated data for the frontend dashboard.
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func
-from typing import Optional
 
 from app.api.auth import get_current_user
 from app.core.permissions import Permission
 from app.core.security import has_permission
-from app.dependencies import require_permissions
 from app.db.session import get_db
-from app.models.user import User
-from app.models.server import Server
-from app.models.server_plan import ServerPlan
-from app.models.credit_transaction import CreditTransaction
+from app.dependencies import require_permissions
 from app.models.activity_log import ActivityLog
 from app.models.health_check import HealthCheck
+from app.models.server import Server
+from app.models.server_plan import ServerPlan
+from app.models.user import User
 
 router = APIRouter()
 
 
 async def _get_system_health(db: AsyncSession) -> str:
     """Determine overall system health from latest health checks."""
-    from datetime import datetime, timedelta, UTC
+    from datetime import UTC, datetime, timedelta
 
     recent = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1)
     subq = (

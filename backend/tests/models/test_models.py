@@ -1,8 +1,9 @@
 """Coverage tests for model to_dict and property methods (in-memory, no DB)."""
 
-import pytest
 import uuid
-from datetime import datetime, UTC
+from datetime import UTC, datetime
+
+import pytest
 
 
 class TestActivityLogModel:
@@ -71,8 +72,9 @@ class TestCreditTransactionModel:
 class TestDailyServerMetricModel:
     @pytest.mark.asyncio
     async def test_to_dict(self):
-        from app.models.daily_server_metric import DailyServerMetric
         from datetime import date
+
+        from app.models.daily_server_metric import DailyServerMetric
 
         dm = DailyServerMetric(server_id=uuid.uuid4(), date=date.today())
         d = dm.to_dict()

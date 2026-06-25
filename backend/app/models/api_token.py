@@ -1,8 +1,10 @@
 import uuid
-from app.core.time_utils import utc_now
-from sqlalchemy import Column, String, Boolean, DateTime, Integer, JSON, ForeignKey
+
+from sqlalchemy import JSON, Boolean, Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
+
+from app.core.time_utils import utc_now
 from app.db.base import Base
 
 

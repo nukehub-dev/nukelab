@@ -8,6 +8,7 @@ prometheus_client.multiprocess.MultiProcessCollector.
 """
 
 from prometheus_client import (
+    CONTENT_TYPE_LATEST,
     CollectorRegistry,
     Counter,
     Gauge,
@@ -15,7 +16,6 @@ from prometheus_client import (
     PlatformCollector,
     ProcessCollector,
     generate_latest,
-    CONTENT_TYPE_LATEST,
 )
 from sqlalchemy import func, select
 
@@ -161,8 +161,8 @@ async def refresh_business_metrics() -> None:
         return
 
     from app.db.session import AsyncSessionLocal
-    from app.models.user import User
     from app.models.server import Server
+    from app.models.user import User
 
     async with AsyncSessionLocal() as db:
         user_count = (await db.execute(select(func.count(User.id)))).scalar() or 0

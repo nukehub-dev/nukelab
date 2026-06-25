@@ -1,20 +1,22 @@
-import json
 import asyncio
-import time
+import contextlib
+import json
 import logging
-from typing import Set, Dict, Optional
+import time
+
+import redis.asyncio as redis
 from fastapi import WebSocket, WebSocketDisconnect
 from jose import JWTError, jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-import redis.asyncio as redis
+
 from app.config import settings
-from app.core.prometheus_metrics import set_active_websocket_connections
-from app.db.session import AsyncSessionLocal
-from app.models.user import User
-from app.models.server import Server
 from app.core.permissions import Permission
-from app.core.roles import get_role_permissions, get_role_rate_limit
+from app.core.prometheus_metrics import set_active_websocket_connections
+from app.core.roles import get_role_permissions
+from app.db.session import AsyncSessionLocal
+from app.models.server import Server
+from app.models.user import User
 
 logger = logging.getLogger(__name__)
 
@@ -41,13 +43,13 @@ return count
 """
 
 # Track active connections
-connections: Dict[str, Set[WebSocket]] = {}
+connections: dict[str, set[WebSocket]] = {}
 
 # Track authenticated users per connection
-connection_users: Dict[WebSocket, dict] = {}
+connection_users: dict[WebSocket, dict] = {}
 
 # Track active log streaming tasks
-log_streams: Dict[str, asyncio.Task] = {}
+log_streams: dict[str, asyncio.Task] = {}
 
 
 def _update_active_websocket_connections() -> None:
@@ -92,12 +94,10 @@ async def stream_logs_to_websocket(
                 break
 
     except Exception as e:
-        try:
+        with contextlib.suppress(Exception):
             await websocket.send_json(
                 {"event": "logs:error", "server_id": server_id, "error": str(e)}
             )
-        except Exception:
-            pass
     finally:
         # Clean up
         room = f"logs:{server_id}"
@@ -111,7 +111,7 @@ async def stream_logs_to_websocket(
             log_streams.pop(task_key, None)
 
 
-async def validate_token(token: str) -> Optional[User]:
+async def validate_token(token: str) -> User | None:
     """Validate a JWT token string and return the user."""
     if not token:
         return None
@@ -127,7 +127,7 @@ async def validate_token(token: str) -> Optional[User]:
         return None
 
 
-async def validate_websocket_token(websocket: WebSocket) -> Optional[User]:
+async def validate_websocket_token(websocket: WebSocket) -> User | None:
     """Validate JWT token from WebSocket query parameters"""
     return await validate_token(websocket.query_params.get("token") or "")
 
@@ -150,10 +150,7 @@ async def check_server_access(user: User, server_id: str, db: AsyncSession) -> b
     result = await db.execute(select(Server).where(Server.id == server_id))
     server = result.scalar_one_or_none()
 
-    if server and str(server.user_id) == str(user.id):
-        return True
-
-    return False
+    return bool(server and str(server.user_id) == str(user.id))
 
 
 class MetricsWebSocketManager:
@@ -211,10 +208,8 @@ class MetricsWebSocketManager:
     async def stop_redis_listener(self):
         self._running = False
         if self.redis_client:
-            try:
+            with contextlib.suppress(Exception):
                 await self.redis_client.close()
-            except Exception:
-                pass
             self.redis_client = None
 
     async def close_all_connections(self, timeout: float = 5.0):
@@ -236,20 +231,16 @@ class MetricsWebSocketManager:
             return
 
         async def _close_one(ws):
-            try:
+            with contextlib.suppress(Exception):
                 await ws.close(code=1001, reason="Server shutting down")
-            except Exception:
-                pass
 
         # Close in parallel — bounded by *timeout* regardless of connection count
         close_tasks = [asyncio.create_task(_close_one(ws)) for ws in all_websockets]
         done, pending = await asyncio.wait(close_tasks, timeout=timeout)
         for task in pending:
             task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await task
-            except asyncio.CancelledError:
-                pass
 
         connections.clear()
         connection_users.clear()
@@ -320,7 +311,7 @@ class MetricsWebSocketManager:
 
         self._cleanup_disconnected(disconnected)
 
-    async def _authenticate(self, websocket: WebSocket) -> Optional[User]:
+    async def _authenticate(self, websocket: WebSocket) -> User | None:
         """Authenticate a WebSocket connection.
 
         First tries query parameter (backward compat), then waits for
@@ -337,7 +328,7 @@ class MetricsWebSocketManager:
             data = json.loads(message)
             if data.get("type") == "auth":
                 return await validate_token(data.get("token") or "")
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass
         except Exception:
             pass
@@ -379,7 +370,7 @@ class MetricsWebSocketManager:
 
         try:
             # Lazy-init Redis for WS message throttling
-            ws_redis: Optional[redis.Redis] = None
+            ws_redis: redis.Redis | None = None
             if settings.rate_limit_enabled:
                 try:
                     ws_redis = redis.from_url(settings.redis_url)
@@ -437,9 +428,9 @@ class MetricsWebSocketManager:
                             room = f"user:{target_id}"
                             # Users can only subscribe to their own user channel
                             # Admins/moderators can subscribe to any
-                            if str(target_id) == str(user.id):
-                                allowed = True
-                            elif has_permission(user, Permission.USERS_READ):
+                            if str(target_id) == str(user.id) or has_permission(
+                                user, Permission.USERS_READ
+                            ):
                                 allowed = True
                             else:
                                 await websocket.send_json(
@@ -585,10 +576,8 @@ class MetricsWebSocketManager:
         finally:
             # Close Redis client if opened
             if ws_redis is not None:
-                try:
+                with contextlib.suppress(Exception):
                     await ws_redis.aclose()
-                except Exception:
-                    pass
 
             # Clean up on disconnect/error
             connection_users.pop(websocket, None)
@@ -605,10 +594,8 @@ class MetricsWebSocketManager:
             ]
             for task in tasks_to_cancel:
                 task.cancel()
-                try:
+                with contextlib.suppress(asyncio.CancelledError):
                     await task
-                except asyncio.CancelledError:
-                    pass
 
 
 async def _check_ws_message_rate_limit(

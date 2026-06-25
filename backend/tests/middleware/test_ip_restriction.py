@@ -1,17 +1,18 @@
 """Tests for IP restriction middleware."""
 
-import pytest
 from unittest import mock
-from fastapi import Request, FastAPI
+
+import pytest
+from fastapi import FastAPI, Request
 from starlette.testclient import TestClient
 
 from app.middleware.ip_restriction import (
+    IPRestrictionMiddleware,
+    _forbidden_response,
     _get_client_ip,
-    _ip_matches,
     _get_restrictions,
     _invalidate_cache,
-    _forbidden_response,
-    IPRestrictionMiddleware,
+    _ip_matches,
 )
 
 

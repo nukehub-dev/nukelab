@@ -1,6 +1,5 @@
 """Tests for XFS project quota service."""
 
-import pytest
 from unittest import mock
 
 
@@ -81,8 +80,9 @@ class TestXfsQuotaService:
 
     def test_update_line_file_operations(self):
         """_update_line should create, update, and append lines correctly."""
-        import tempfile
         import os
+        import tempfile
+
         from app.services.xfs_quota_service import _update_line
 
         with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
@@ -108,8 +108,9 @@ class TestXfsQuotaService:
 
     def test_remove_line_file_operations(self):
         """_remove_line should remove matching lines."""
-        import tempfile
         import os
+        import tempfile
+
         from app.services.xfs_quota_service import _remove_line
 
         with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
@@ -188,8 +189,8 @@ class TestXfsQuotaService:
 
     def test_find_mountpoint(self):
         """_find_mountpoint should walk up to the actual filesystem boundary."""
-        import tempfile
         import os
+        import tempfile
 
         with mock.patch("app.services.xfs_quota_service.settings") as mock_settings:
             mock_settings.xfs_quota_enabled = True
@@ -208,8 +209,8 @@ class TestXfsQuotaService:
 
     def test_write_project_entry_readonly_etc(self):
         """Should return False when project files are not writable."""
-        import tempfile
         import os
+        import tempfile
 
         with mock.patch("app.services.xfs_quota_service.settings") as mock_settings:
             mock_settings.xfs_quota_enabled = True

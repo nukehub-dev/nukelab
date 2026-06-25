@@ -1,8 +1,10 @@
 import uuid
-from app.core.time_utils import utc_now
-from sqlalchemy import Column, String, DateTime, Boolean, Text, ForeignKey
+
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
+
+from app.core.time_utils import utc_now
 from app.db.base import Base
 
 
@@ -37,11 +39,11 @@ class SharedWorkspace(Base):
     def to_dict(self):
         try:
             member_count = len(self.members) if self.members else 0
-        except:
+        except Exception:
             member_count = 0
         try:
             volume_count = len(self.volume_associations) if self.volume_associations else 0
-        except:
+        except Exception:
             volume_count = 0
         owner_name = None
         owner_username = None
@@ -49,7 +51,7 @@ class SharedWorkspace(Base):
             if self.owner:
                 owner_name = self.owner.display_name or self.owner.username
                 owner_username = self.owner.username
-        except:
+        except Exception:
             pass
         return {
             "id": str(self.id),

@@ -1,22 +1,22 @@
-from typing import Optional, List
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, desc, case
 from pydantic import BaseModel
+from sqlalchemy import and_, case, desc, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import get_current_user, require_jwt_auth
 from app.core.permissions import Permission
-from app.dependencies import PermissionChecker, require_permissions
 from app.db.session import get_db
-from app.models.user import User
+from app.dependencies import PermissionChecker, require_permissions
+from app.models.alert_history import AlertHistory
+from app.models.alert_rule import AlertRule
+from app.models.health_check import HealthCheck
+from app.models.request_metric import RequestMetric
 from app.models.server import Server
 from app.models.server_metric import ServerMetric
 from app.models.system_metric import SystemMetric
-from app.models.alert_rule import AlertRule
-from app.models.alert_history import AlertHistory
-from app.models.health_check import HealthCheck
-from app.models.request_metric import RequestMetric
+from app.models.user import User
 from app.services.alert_service import AlertService
 
 router = APIRouter()
@@ -27,37 +27,37 @@ router = APIRouter()
 
 class AlertRuleCreate(BaseModel):
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     metric_type: str
     operator: str
     threshold: float
     scope: str = "global"
-    target_id: Optional[str] = None
+    target_id: str | None = None
     duration_seconds: int = 60
     cooldown_seconds: int = 300
     notify_admin: bool = True
     notify_user: bool = True
     email_enabled: bool = False
-    webhook_url: Optional[str] = None
+    webhook_url: str | None = None
 
 
 class AlertRuleUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    metric_type: Optional[str] = None
-    operator: Optional[str] = None
-    threshold: Optional[float] = None
-    is_active: Optional[bool] = None
-    duration_seconds: Optional[int] = None
-    cooldown_seconds: Optional[int] = None
-    notify_admin: Optional[bool] = None
-    notify_user: Optional[bool] = None
-    email_enabled: Optional[bool] = None
-    webhook_url: Optional[str] = None
+    name: str | None = None
+    description: str | None = None
+    metric_type: str | None = None
+    operator: str | None = None
+    threshold: float | None = None
+    is_active: bool | None = None
+    duration_seconds: int | None = None
+    cooldown_seconds: int | None = None
+    notify_admin: bool | None = None
+    notify_user: bool | None = None
+    email_enabled: bool | None = None
+    webhook_url: str | None = None
 
 
 class AlertAcknowledgeRequest(BaseModel):
-    notes: Optional[str] = None
+    notes: str | None = None
 
 
 # ========== Server Metrics ==========
@@ -66,8 +66,8 @@ class AlertAcknowledgeRequest(BaseModel):
 @router.get("/servers/{server_id}")
 async def get_server_metrics(
     server_id: str,
-    from_date: Optional[datetime] = Query(None),
-    to_date: Optional[datetime] = Query(None),
+    from_date: datetime | None = Query(None),
+    to_date: datetime | None = Query(None),
     interval: str = Query("1m"),
     limit: int = Query(60, ge=1, le=500),
     current_user: User = Depends(get_current_user),
@@ -158,8 +158,8 @@ async def get_server_latest_metrics(
 
 @router.get("/system")
 async def get_system_metrics(
-    from_date: Optional[datetime] = Query(None),
-    to_date: Optional[datetime] = Query(None),
+    from_date: datetime | None = Query(None),
+    to_date: datetime | None = Query(None),
     limit: int = Query(60, ge=1, le=500),
     current_user: User = Depends(get_current_user),
     _=Depends(require_permissions(Permission.ANALYTICS_READ)),
@@ -352,7 +352,7 @@ async def delete_alert_rule(
 
 @router.get("/alerts/history")
 async def list_alert_history(
-    status: Optional[str] = Query(None),
+    status: str | None = Query(None),
     current_user: User = Depends(get_current_user),
     _=Depends(require_permissions(Permission.ANALYTICS_READ)),
     db: AsyncSession = Depends(get_db),
@@ -465,10 +465,9 @@ async def get_health_summary(
     result = await db.execute(
         select(HealthCheck.status, func.count(HealthCheck.id)).group_by(HealthCheck.status)
     )
-    status_counts = {status: count for status, count in result.all()}
+    status_counts = dict(result.all())
 
     # Latest checks per server
-    from sqlalchemy import distinct
 
     result = await db.execute(
         select(HealthCheck)
@@ -490,10 +489,10 @@ async def get_health_summary(
 
 @router.get("/requests")
 async def get_request_metrics(
-    path: Optional[str] = Query(None),
-    status_code: Optional[int] = Query(None),
-    start_date: Optional[datetime] = Query(None),
-    end_date: Optional[datetime] = Query(None),
+    path: str | None = Query(None),
+    status_code: int | None = Query(None),
+    start_date: datetime | None = Query(None),
+    end_date: datetime | None = Query(None),
     limit: int = Query(100, ge=1, le=500),
     current_user: User = Depends(get_current_user),
     _=Depends(require_permissions(Permission.ANALYTICS_READ)),

@@ -1,12 +1,13 @@
 """Tests for server action endpoints (start/stop/restart/delete) with mocked spawner."""
 
-import pytest
-import pytest_asyncio
 from unittest import mock
 
+import pytest
+import pytest_asyncio
+
+from app.models.environment_template import EnvironmentTemplate
 from app.models.server import Server
 from app.models.server_plan import ServerPlan
-from app.models.environment_template import EnvironmentTemplate
 
 
 @pytest_asyncio.fixture

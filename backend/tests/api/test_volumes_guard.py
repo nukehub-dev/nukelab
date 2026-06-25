@@ -11,10 +11,10 @@ class TestVolumeStatusGuard:
         self, client, admin_token, db_session
     ):
         """Should reject archiving a volume mounted by a running server."""
-        from app.models.volume import Volume
         from app.models.server import Server
         from app.models.server_volume import ServerVolume
         from app.models.user import User
+        from app.models.volume import Volume
 
         headers = {"Authorization": f"Bearer {admin_token}"}
 
@@ -77,10 +77,10 @@ class TestVolumeStatusGuard:
         self, client, admin_token, db_session
     ):
         """Should allow resizing a volume mounted by a running server."""
-        from app.models.volume import Volume
         from app.models.server import Server
         from app.models.server_volume import ServerVolume
         from app.models.user import User
+        from app.models.volume import Volume
 
         headers = {"Authorization": f"Bearer {admin_token}"}
 

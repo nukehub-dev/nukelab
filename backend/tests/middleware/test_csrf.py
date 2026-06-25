@@ -54,7 +54,7 @@ class TestCSRFProtection:
 
         # Attempt a state-changing request WITHOUT CSRF header
         # Use a cookie-only request (no Authorization header)
-        response = await client.post(
+        await client.post(
             "/api/auth/logout",
             cookies={"nukelab_token": login_resp.cookies.get("nukelab_token", "")},
         )
@@ -73,7 +73,7 @@ class TestCSRFProtection:
         # Get CSRF token
         csrf_resp = await client.get("/api/auth/csrf-token")
         assert csrf_resp.status_code == 200
-        real_token = csrf_resp.json()["csrf_token"]
+        csrf_resp.json()["csrf_token"]
 
         # Make a POST to a protected endpoint with wrong CSRF header
         response = await client.post(
@@ -124,8 +124,8 @@ class TestCSRFMiddlewareUnit:
     @pytest.mark.asyncio
     async def test_csrf_disabled_skips_validation(self):
         """When csrf_protection_enabled=False, middleware is a pass-through."""
-        from app.middleware.csrf import CSRFProtectMiddleware
         from app.config import settings
+        from app.middleware.csrf import CSRFProtectMiddleware
 
         original = settings.csrf_protection_enabled
         try:

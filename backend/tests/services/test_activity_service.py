@@ -1,10 +1,10 @@
 """Tests for ActivityService business logic."""
 
-import pytest
 import uuid as uuid_mod
 
+import pytest
+
 from app.services.activity_service import ActivityService
-from app.models.activity_log import ActivityLog
 
 
 class TestActivityServiceLog:

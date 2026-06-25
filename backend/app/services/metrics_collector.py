@@ -1,13 +1,14 @@
 import asyncio
+import contextlib
 import json
-from datetime import datetime, UTC
-from typing import Dict, List, Optional
-import aiodocker
-from app.container.client import get_fresh_container_client
-from app.models.server_metric import ServerMetric
+from datetime import UTC, datetime
+
 import redis.asyncio as redis
+
 from app.config import settings
+from app.container.client import get_fresh_container_client
 from app.core.logging import get_logger
+from app.models.server_metric import ServerMetric
 
 logger = get_logger(__name__)
 
@@ -61,10 +62,8 @@ class MetricsCollector:
 
         # Close docker client after all processing is done
         if container_client and container_client.client:
-            try:
+            with contextlib.suppress(Exception):
                 await container_client.client.close()
-            except Exception:
-                pass
 
     async def _collect_container_metrics(self, container_id, server_id):
         """Collect metrics for a single container"""
@@ -100,10 +99,8 @@ class MetricsCollector:
             pass
         finally:
             if container_client and container_client.client:
-                try:
+                with contextlib.suppress(Exception):
                     await container_client.client.close()
-                except Exception:
-                    pass
 
     def _parse_container_stats(
         self, stats1: dict, stats2: dict, server_id: str, container_id: str
@@ -183,10 +180,11 @@ class MetricsCollector:
 
     async def _persist_metrics(self, metrics: dict):
         """Save metrics to database using a fresh engine"""
-        from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-        from sqlalchemy.orm import sessionmaker
         from sqlalchemy.exc import IntegrityError
+        from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+        from sqlalchemy.orm import sessionmaker
         from sqlalchemy.pool import NullPool
+
         from app.config import settings
 
         _use_pgbouncer = bool(settings.database_pgbouncer_url)
@@ -233,21 +231,15 @@ class MetricsCollector:
         except Exception:
             logger.exception("Metrics collector: Error during persist")
             if db:
-                try:
+                with contextlib.suppress(Exception):
                     await db.rollback()
-                except Exception:
-                    pass
         finally:
             if db:
-                try:
+                with contextlib.suppress(Exception):
                     await db.close()
-                except Exception:
-                    pass
             if engine:
-                try:
+                with contextlib.suppress(Exception):
                     await engine.dispose()
-                except Exception:
-                    pass
 
     async def _broadcast_metrics(self, metrics: dict):
         """Broadcast metrics via Redis pub/sub"""

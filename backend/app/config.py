@@ -1,8 +1,8 @@
 import os
-from typing import Optional
 from urllib.parse import urlparse, urlunparse
-from pydantic_settings import BaseSettings
+
 from pydantic import model_validator
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -55,7 +55,7 @@ class Settings(BaseSettings):
 
     # Prometheus metrics export (used by /api/metrics endpoint)
     prometheus_enabled: bool = False
-    prometheus_multiproc_dir: Optional[str] = None
+    prometheus_multiproc_dir: str | None = None
 
     # Per-user tier limits (requests per minute, per user ID from JWT)
     rate_limit_guest_rpm: int = 30

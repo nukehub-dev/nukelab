@@ -1,12 +1,13 @@
-from datetime import datetime, timedelta, UTC
-from typing import List, Optional, Dict
-from sqlalchemy import select, and_
+from datetime import UTC, datetime, timedelta
+
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models.alert_rule import AlertRule
+
+from app.core.logging import get_logger
 from app.models.alert_history import AlertHistory
+from app.models.alert_rule import AlertRule
 from app.models.server_metric import ServerMetric
 from app.models.user import User
-from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -143,7 +144,7 @@ class AlertService:
 
         await self.db.commit()
 
-    async def _get_metrics_for_rule(self, rule: AlertRule) -> List[ServerMetric]:
+    async def _get_metrics_for_rule(self, rule: AlertRule) -> list[ServerMetric]:
         """Get latest metrics based on rule scope"""
         if rule.scope == "server" and rule.target_id:
             result = await self.db.execute(
@@ -177,7 +178,7 @@ class AlertService:
             )
             return result.scalars().all()
 
-    def _extract_metric_value(self, metric: ServerMetric, metric_type: str) -> Optional[float]:
+    def _extract_metric_value(self, metric: ServerMetric, metric_type: str) -> float | None:
         """Extract the relevant value from a metric based on type"""
         mapping = {
             "cpu": metric.cpu_percent,
@@ -188,9 +189,8 @@ class AlertService:
         }
         return mapping.get(metric_type)
 
-    async def acknowledge_alert(self, alert_id: str, user_id: str, notes: Optional[str] = None):
+    async def acknowledge_alert(self, alert_id: str, user_id: str, notes: str | None = None):
         """Acknowledge an alert"""
-        from sqlalchemy.dialects.postgresql import UUID
         import uuid
 
         result = await self.db.execute(
@@ -210,7 +210,7 @@ class AlertService:
         await self.db.commit()
         return alert
 
-    async def resolve_alert(self, alert_id: str, resolved_value: Optional[float] = None):
+    async def resolve_alert(self, alert_id: str, resolved_value: float | None = None):
         """Resolve an alert"""
         import uuid
 

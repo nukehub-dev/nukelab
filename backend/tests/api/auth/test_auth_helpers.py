@@ -1,8 +1,9 @@
 """Additional auth coverage tests for easier endpoints and branches."""
 
-import pytest
+from datetime import UTC, datetime, timedelta
 from unittest import mock
-from datetime import datetime, timedelta, UTC
+
+import pytest
 
 
 class TestCsrfToken:
@@ -150,7 +151,7 @@ class TestLogout:
 
         response = await client.post(
             "/api/auth/logout",
-            headers={"Authorization": f"Bearer dummy"},
+            headers={"Authorization": "Bearer dummy"},
             json={"refresh_token": rt},
         )
         assert response.status_code == 200
@@ -203,7 +204,7 @@ class TestLogout:
                             ):
                                 response = await client.post(
                                     "/api/auth/logout",
-                                    headers={"Authorization": f"Bearer dummy"},
+                                    headers={"Authorization": "Bearer dummy"},
                                     json={"refresh_token": rt},
                                 )
 
@@ -218,8 +219,9 @@ class TestCustomHTTPBearer:
 
     @pytest.mark.asyncio
     async def test_bearer_no_authorization_header(self):
-        from app.api.auth import CustomHTTPBearer
         from unittest.mock import AsyncMock
+
+        from app.api.auth import CustomHTTPBearer
 
         request = AsyncMock()
         request.headers = {}
@@ -230,8 +232,9 @@ class TestCustomHTTPBearer:
 
     @pytest.mark.asyncio
     async def test_bearer_invalid_scheme(self):
-        from app.api.auth import CustomHTTPBearer
         from unittest.mock import AsyncMock
+
+        from app.api.auth import CustomHTTPBearer
 
         request = AsyncMock()
         request.headers = {"Authorization": "Basic abc123"}
@@ -242,8 +245,9 @@ class TestCustomHTTPBearer:
 
     @pytest.mark.asyncio
     async def test_bearer_auto_error_false_returns_none(self):
-        from app.api.auth import CustomHTTPBearer
         from unittest.mock import AsyncMock
+
+        from app.api.auth import CustomHTTPBearer
 
         request = AsyncMock()
         request.headers = {}
@@ -253,8 +257,9 @@ class TestCustomHTTPBearer:
 
     @pytest.mark.asyncio
     async def test_bearer_valid_token(self):
-        from app.api.auth import CustomHTTPBearer
         from unittest.mock import AsyncMock
+
+        from app.api.auth import CustomHTTPBearer
 
         request = AsyncMock()
         request.headers = {"Authorization": "Bearer validtoken123"}
@@ -264,8 +269,9 @@ class TestCustomHTTPBearer:
 
     @pytest.mark.asyncio
     async def test_bearer_token_scheme(self):
-        from app.api.auth import CustomHTTPBearer
         from unittest.mock import AsyncMock
+
+        from app.api.auth import CustomHTTPBearer
 
         request = AsyncMock()
         request.headers = {"Authorization": "Token validtoken123"}
@@ -279,8 +285,9 @@ class TestRequireScopes:
 
     @pytest.mark.asyncio
     async def test_require_scopes_jwt_bypasses(self):
-        from app.api.auth import require_scopes, AuthContext
         from unittest.mock import AsyncMock
+
+        from app.api.auth import AuthContext, require_scopes
 
         request = AsyncMock()
         user = AsyncMock()
@@ -291,8 +298,9 @@ class TestRequireScopes:
 
     @pytest.mark.asyncio
     async def test_require_scopes_api_token_matching(self):
-        from app.api.auth import require_scopes, AuthContext
         from unittest.mock import AsyncMock
+
+        from app.api.auth import AuthContext, require_scopes
 
         request = AsyncMock()
         user = AsyncMock()
@@ -305,8 +313,9 @@ class TestRequireScopes:
 
     @pytest.mark.asyncio
     async def test_require_scopes_api_token_wildcard(self):
-        from app.api.auth import require_scopes, AuthContext
         from unittest.mock import AsyncMock
+
+        from app.api.auth import AuthContext, require_scopes
 
         request = AsyncMock()
         user = AsyncMock()
@@ -319,9 +328,11 @@ class TestRequireScopes:
 
     @pytest.mark.asyncio
     async def test_require_scopes_api_token_missing(self):
-        from app.api.auth import require_scopes, AuthContext
-        from fastapi import HTTPException
         from unittest.mock import AsyncMock
+
+        from fastapi import HTTPException
+
+        from app.api.auth import AuthContext, require_scopes
 
         request = AsyncMock()
         user = AsyncMock()
@@ -335,9 +346,11 @@ class TestRequireScopes:
 
     @pytest.mark.asyncio
     async def test_require_scopes_no_auth_context(self):
-        from app.api.auth import require_scopes
-        from fastapi import HTTPException
         from unittest.mock import AsyncMock
+
+        from fastapi import HTTPException
+
+        from app.api.auth import require_scopes
 
         request = AsyncMock()
         request.state.auth_context = None
@@ -353,8 +366,9 @@ class TestRequireJwtAuth:
 
     @pytest.mark.asyncio
     async def test_require_jwt_auth_passes(self):
-        from app.api.auth import require_jwt_auth, AuthContext
         from unittest.mock import AsyncMock
+
+        from app.api.auth import AuthContext, require_jwt_auth
 
         request = AsyncMock()
         user = AsyncMock()
@@ -365,9 +379,11 @@ class TestRequireJwtAuth:
 
     @pytest.mark.asyncio
     async def test_require_jwt_auth_rejects_api_token(self):
-        from app.api.auth import require_jwt_auth, AuthContext
-        from fastapi import HTTPException
         from unittest.mock import AsyncMock
+
+        from fastapi import HTTPException
+
+        from app.api.auth import AuthContext, require_jwt_auth
 
         request = AsyncMock()
         user = AsyncMock()
@@ -381,9 +397,11 @@ class TestRequireJwtAuth:
 
     @pytest.mark.asyncio
     async def test_require_jwt_auth_no_context(self):
-        from app.api.auth import require_jwt_auth
-        from fastapi import HTTPException
         from unittest.mock import AsyncMock
+
+        from fastapi import HTTPException
+
+        from app.api.auth import require_jwt_auth
 
         request = AsyncMock()
         request.state.auth_context = None
@@ -409,13 +427,14 @@ class TestCreateRefreshTokenForUser:
 
     @pytest.mark.asyncio
     async def test_create_refresh_token_enforces_limit(self, db_session, test_user):
-        from app.api.auth import create_refresh_token_for_user, MAX_REFRESH_TOKENS_PER_USER
+        from app.api.auth import MAX_REFRESH_TOKENS_PER_USER, create_refresh_token_for_user
 
         # Create max + 1 tokens
-        for i in range(MAX_REFRESH_TOKENS_PER_USER + 1):
+        for _i in range(MAX_REFRESH_TOKENS_PER_USER + 1):
             await create_refresh_token_for_user(str(test_user.id), db_session)
         # Count active tokens
         from sqlalchemy import select
+
         from app.models.refresh_token import RefreshToken
 
         result = await db_session.execute(
@@ -443,10 +462,11 @@ class TestAuthContextEdgeCases:
 
     @pytest.mark.asyncio
     async def test_get_auth_context_api_token_expired(self, client, db_session, test_user):
+        import uuid
+        from unittest.mock import AsyncMock
+
         from app.api.auth import get_auth_context
         from app.models.api_token import ApiToken
-        from unittest.mock import AsyncMock
-        import uuid
 
         # Create an expired API token
         token_str = "test_expired_token_123456789012345678901234567890"
@@ -528,10 +548,11 @@ class TestVerifyAuthEndpoint:
 
     @pytest.mark.asyncio
     async def test_verify_auth_api_token(self, client, db_session, test_user):
-        from app.models.api_token import ApiToken
-        from app.api.auth import get_password_hash
         import secrets
         import uuid
+
+        from app.api.auth import get_password_hash
+        from app.models.api_token import ApiToken
 
         # Create an active API token with matching hash
         token_str = "nl_" + secrets.token_urlsafe(32)

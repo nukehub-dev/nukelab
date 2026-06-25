@@ -1,7 +1,8 @@
 """Tests for database seeding."""
 
-import pytest
 from unittest import mock
+
+import pytest
 
 from app.db.seed import seed_admin_user, seed_plans
 
@@ -21,6 +22,7 @@ class TestSeedAdminUser:
                     await seed_admin_user(db_session)
 
         from sqlalchemy import select
+
         from app.models.user import User
 
         result = await db_session.execute(select(User).where(User.username == "devadmin"))
@@ -31,8 +33,8 @@ class TestSeedAdminUser:
 
     @pytest.mark.asyncio
     async def test_skips_when_admin_exists(self, db_session):
-        from app.models.user import User
         from app.api.auth import get_password_hash
+        from app.models.user import User
 
         existing = User(
             username="seedtest",
@@ -50,7 +52,7 @@ class TestSeedAdminUser:
                 await seed_admin_user(db_session)
 
         # Should still be only one
-        from sqlalchemy import select, func
+        from sqlalchemy import func, select
 
         result = await db_session.execute(
             select(func.count()).select_from(User).where(User.username == "seedtest")
@@ -64,6 +66,7 @@ class TestSeedPlans:
         await seed_plans(db_session)
 
         from sqlalchemy import select
+
         from app.models.server_plan import ServerPlan
 
         result = await db_session.execute(select(ServerPlan).where(ServerPlan.slug == "small"))
@@ -77,7 +80,8 @@ class TestSeedPlans:
         # Run again
         await seed_plans(db_session)
 
-        from sqlalchemy import select, func
+        from sqlalchemy import func, select
+
         from app.models.server_plan import ServerPlan
 
         result = await db_session.execute(select(func.count()).select_from(ServerPlan))
@@ -88,8 +92,6 @@ class TestSeedPlans:
 """Coverage-focused tests for utility modules and easy wins."""
 
 import pytest
-from unittest import mock
-from cryptography.fernet import InvalidToken
 
 
 class TestDbSeed:
@@ -183,6 +185,7 @@ class TestDbSeed:
                         await seed_all()
 
         from sqlalchemy import select
+
         from app.models.user import User
 
         result = await db_session.execute(select(User).where(User.username == "seedalladmin"))

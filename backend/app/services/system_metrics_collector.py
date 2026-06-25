@@ -1,19 +1,20 @@
 import asyncio
+import contextlib
 import json
+from datetime import UTC, datetime
+
 import psutil
-from datetime import datetime, UTC
-from typing import Dict
-from app.db.session import AsyncSessionLocal
-from app.models.system_metric import SystemMetric
-from app.container.client import get_fresh_container_client
-from app.config import settings
 import redis.asyncio as redis
+
+from app.config import settings
+from app.container.client import get_fresh_container_client
+from app.models.system_metric import SystemMetric
 
 
 class SystemMetricsCollector:
     """Collect host-level system metrics"""
 
-    async def collect(self) -> Dict:
+    async def collect(self) -> dict:
         """Collect current system metrics"""
 
         # CPU - call twice: first to initialize, second to get actual value
@@ -69,10 +70,8 @@ class SystemMetricsCollector:
             pass
         finally:
             if container_client and container_client.client:
-                try:
+                with contextlib.suppress(Exception):
                     await container_client.client.close()
-                except Exception:
-                    pass
 
         # Calculate disk I/O rate (bytes/sec) by comparing with previous reading
         disk_read_rate = 0
@@ -84,7 +83,7 @@ class SystemMetricsCollector:
             disk_prev_data = None
             if os.path.exists(disk_cache_file):
                 try:
-                    with open(disk_cache_file, "r") as f:
+                    with open(disk_cache_file) as f:
                         disk_prev_data = json.load(f)
                 except Exception:
                     pass
@@ -128,7 +127,7 @@ class SystemMetricsCollector:
             prev_data = None
             if os.path.exists(cache_file):
                 try:
-                    with open(cache_file, "r") as f:
+                    with open(cache_file) as f:
                         prev_data = json.load(f)
                 except Exception:
                     pass
@@ -189,7 +188,7 @@ class SystemMetricsCollector:
         }
 
         # Persist to DB using a fresh engine to avoid asyncpg conflicts in Celery threads
-        from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+        from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
         from sqlalchemy.orm import sessionmaker
         from sqlalchemy.pool import NullPool
 
@@ -227,21 +226,15 @@ class SystemMetricsCollector:
         except Exception:
             pass
             if db:
-                try:
+                with contextlib.suppress(Exception):
                     await db.rollback()
-                except Exception:
-                    pass
         finally:
             if db:
-                try:
+                with contextlib.suppress(Exception):
                     await db.close()
-                except Exception:
-                    pass
             if engine:
-                try:
+                with contextlib.suppress(Exception):
                     await engine.dispose()
-                except Exception:
-                    pass
 
         # Broadcast via Redis
         try:

@@ -3,35 +3,35 @@ Shared Workspace API endpoints.
 """
 
 import logging
-from typing import Optional, List
-from pydantic import BaseModel
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
 from app.api.auth import get_current_user
 from app.core.permissions import Permission
-from app.dependencies import require_permissions
 from app.db.session import get_db
+from app.dependencies import require_permissions
 from app.models.user import User
-from app.services.workspace_service import WorkspaceService
-from app.services.volume_access_service import VolumeAccessService
-from app.services.notification_service import NotificationService
 from app.services.activity_service import ActivityService
+from app.services.notification_service import NotificationService
+from app.services.volume_access_service import VolumeAccessService
+from app.services.workspace_service import WorkspaceService
 
 router = APIRouter()
 
 
 class CreateWorkspaceRequest(BaseModel):
     name: str
-    description: Optional[str] = None
+    description: str | None = None
 
 
 class UpdateWorkspaceRequest(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    is_active: Optional[bool] = None
+    name: str | None = None
+    description: str | None = None
+    is_active: bool | None = None
 
 
 class AddMemberRequest(BaseModel):
@@ -324,9 +324,11 @@ async def get_workspace_activity(
     db: AsyncSession = Depends(get_db),
 ):
     """Get activity feed for a workspace. Must be member or owner."""
-    from sqlalchemy import select, func, and_, desc
-    from app.models.activity_log import ActivityLog
     import uuid
+
+    from sqlalchemy import and_, desc, func, select
+
+    from app.models.activity_log import ActivityLog
 
     service = WorkspaceService(db)
 
@@ -705,8 +707,8 @@ async def list_workspace_members(
     limit: int = 20,
     sort_by: str = "joined_at",
     sort_order: str = "desc",
-    search: Optional[str] = None,
-    role: Optional[str] = None,
+    search: str | None = None,
+    role: str | None = None,
     current_user: User = Depends(get_current_user),
     _=Depends(require_permissions(Permission.WORKSPACES_READ_OWN, Permission.WORKSPACES_READ_ALL)),
     db: AsyncSession = Depends(get_db),
@@ -751,7 +753,7 @@ async def list_workspace_volumes(
     limit: int = 20,
     sort_by: str = "added_at",
     sort_order: str = "desc",
-    search: Optional[str] = None,
+    search: str | None = None,
     current_user: User = Depends(get_current_user),
     _=Depends(require_permissions(Permission.WORKSPACES_READ_OWN, Permission.WORKSPACES_READ_ALL)),
     db: AsyncSession = Depends(get_db),
@@ -826,7 +828,7 @@ async def remove_member(
     # Notify removed member
     notif_service = NotificationService(db)
     await notif_service.workspace_member_removed(
-        user_id=user_id, workspace_name=workspace_name, action_url=f"/workspaces"
+        user_id=user_id, workspace_name=workspace_name, action_url="/workspaces"
     )
 
     return {"message": "Member removed", "user_id": user_id}

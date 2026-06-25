@@ -14,7 +14,7 @@ import logging
 import logging.handlers
 import os
 import sys
-from typing import Any, Optional
+from typing import Any
 
 from app.config import settings
 from app.core.context import correlation_id
@@ -82,11 +82,11 @@ class TextFormatter(logging.Formatter):
 
 
 def configure_logging(
-    level: Optional[str] = None,
-    log_format: Optional[str] = None,
-    log_file: Optional[str] = None,
-    max_bytes: Optional[int] = None,
-    backup_count: Optional[int] = None,
+    level: str | None = None,
+    log_format: str | None = None,
+    log_file: str | None = None,
+    max_bytes: int | None = None,
+    backup_count: int | None = None,
 ) -> None:
     """
     Configure root logger with structured or text formatting.

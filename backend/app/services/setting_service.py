@@ -1,11 +1,12 @@
 """Service for managing dynamic system settings stored in the database."""
 
 import logging
-from typing import Optional
-from sqlalchemy.ext.asyncio import AsyncSession
+
 from sqlalchemy import select
-from app.models.system_setting import SystemSetting
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.config import settings
+from app.models.system_setting import SystemSetting
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +17,7 @@ class SettingService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get(self, key: str, default: Optional[str] = None) -> Optional[str]:
+    async def get(self, key: str, default: str | None = None) -> str | None:
         """Get a setting value by key."""
         result = await self.db.execute(select(SystemSetting).where(SystemSetting.key == key))
         row = result.scalar_one_or_none()
@@ -48,14 +49,14 @@ class SettingService:
                 logger.info(f"Loaded maintenance_mode={settings.maintenance_mode} from DB")
             elif row.key == "maintenance_message":
                 settings.maintenance_message = row.value
-                logger.info(f"Loaded maintenance_message from DB")
+                logger.info("Loaded maintenance_message from DB")
             elif row.key == "daily_allowance_default":
                 try:
                     settings.daily_allowance_default = int(row.value)
                 except ValueError:
                     logger.warning(f"Invalid daily_allowance_default value: {row.value}")
 
-    async def save_maintenance(self, enabled: bool, message: Optional[str] = None) -> None:
+    async def save_maintenance(self, enabled: bool, message: str | None = None) -> None:
         """Persist maintenance mode settings to the database and update global config."""
         await self.set("maintenance_mode", "true" if enabled else "false")
         if message is not None:

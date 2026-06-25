@@ -1,7 +1,9 @@
 import uuid
+
+from sqlalchemy import JSON, Column, DateTime, ForeignKey, Index, String, Text
+from sqlalchemy.dialects.postgresql import INET, UUID
+
 from app.core.time_utils import utc_now
-from sqlalchemy import Column, String, DateTime, Text, ForeignKey, JSON, Index
-from sqlalchemy.dialects.postgresql import UUID, INET
 from app.db.base import Base
 
 

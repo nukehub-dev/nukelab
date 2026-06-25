@@ -1,13 +1,13 @@
 """Tests for the OpenTelemetry tracing enrichment middleware."""
 
-import pytest
 from unittest import mock
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from fastapi import Request
 from starlette.datastructures import URL, Headers
 
-from app.middleware.tracing import TracingEnrichmentMiddleware, SKIP_PATHS
+from app.middleware.tracing import SKIP_PATHS, TracingEnrichmentMiddleware
 
 
 @pytest.fixture

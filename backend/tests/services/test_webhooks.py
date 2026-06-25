@@ -1,7 +1,5 @@
 """Tests for Webhook service."""
 
-import pytest
-
 
 class TestWebhookSigning:
     """Webhook HMAC signature tests."""

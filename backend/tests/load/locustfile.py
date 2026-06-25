@@ -24,18 +24,19 @@ import os
 import random
 import time
 from pathlib import Path
+
+from locust import HttpUser, between, events, task
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from locust import HttpUser, task, between, events
 
 # When running high-load API tests, skip container ops (spawn/stop)
 # which bottleneck on the Docker daemon rather than the API.
 _SKIP_CONTAINER_OPS = os.environ.get("SKIP_CONTAINER_OPS", "0") == "1"
 
 from common import (
+    DEFAULT_ADMIN,
     ENDPOINT_WEIGHTS,
     PATHS,
-    DEFAULT_ADMIN,
     TEST_PASSWORD,
 )
 

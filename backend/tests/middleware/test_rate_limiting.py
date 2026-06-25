@@ -4,17 +4,15 @@ Rate limiting tests — HTTP middleware + WebSocket message throttling.
 Uses a mock Redis to avoid requiring a real Redis server in tests.
 """
 
-import time
+from unittest.mock import AsyncMock, patch
+
 import pytest
 import pytest_asyncio
-from unittest.mock import AsyncMock, patch, MagicMock
-from fastapi import WebSocket
 
 from app.config import settings
-from app.middleware.rate_limit import RateLimitMiddleware
 from app.core.roles import ROLE_RATE_LIMITS as ROLE_LIMITS
+from app.middleware.rate_limit import RateLimitMiddleware
 from app.websocket.metrics_socket import _check_ws_message_rate_limit
-
 
 # ─── Fixtures ──────────────────────────────────────────────────────────────
 
@@ -104,7 +102,7 @@ class TestRateLimitMiddleware:
 
         with patch.object(RateLimitMiddleware, "_get_redis", return_value=mock_redis):
             # Fire requests up to the limit
-            for i in range(user_limit + 2):
+            for _i in range(user_limit + 2):
                 response = await client.get(
                     "/api/servers/",
                     headers={"Authorization": f"Bearer {user_token}"},
@@ -158,8 +156,9 @@ class TestRateLimitMiddleware:
     @pytest.mark.asyncio
     async def test_expired_jwt_does_not_exhaust_quota(self, client, test_user, mock_redis):
         """Expired tokens should not consume the real user's rate limit budget."""
+        from datetime import UTC, datetime, timedelta
+
         from jose import jwt as jose_jwt
-        from datetime import datetime, timedelta, UTC
 
         settings.rate_limit_enabled = True
 
@@ -238,7 +237,7 @@ class TestRateLimitMiddleware:
 
         with patch.object(RateLimitMiddleware, "_get_redis", return_value=mock_redis):
             # Fire requests to an admin endpoint up to strict limit
-            for i in range(strict_limit + 2):
+            for _i in range(strict_limit + 2):
                 response = await client.get(
                     "/api/admin/users",
                     headers={"Authorization": f"Bearer {user_token}"},
@@ -276,7 +275,7 @@ class TestWebSocketRateLimiting:
 
         # Simulate sending messages up to the limit
         exceeded = False
-        for i in range(user_limit + 2):
+        for _i in range(user_limit + 2):
             is_limited, limit, remaining = await _check_ws_message_rate_limit(
                 mock_redis, "testuser", "user"
             )

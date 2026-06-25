@@ -1,16 +1,13 @@
 """Tests for QuotaService business logic."""
 
-import pytest
 import uuid as uuid_mod
 
-from sqlalchemy import select, and_, func
+import pytest
 
-from app.services.quota_service import QuotaService
 from app.models.resource_quota import ResourceQuota
 from app.models.server import Server
 from app.models.server_plan import ServerPlan
-from app.models.volume import Volume
-from app.models.user import User
+from app.services.quota_service import QuotaService
 
 
 class TestQuotaServiceGet:

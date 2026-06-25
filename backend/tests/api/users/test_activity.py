@@ -1,8 +1,9 @@
 """Tests for user activity feed endpoint."""
 
-import pytest
 import uuid
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
+
+import pytest
 
 from app.models.activity_log import ActivityLog
 
@@ -14,10 +15,10 @@ class TestUserActivityAPI:
     async def test_list_own_activity(self, client, test_user, user_token, db_session):
         """Should return paginated activity for the current user."""
         # Seed activity logs
-        for i in range(3):
+        for _i in range(3):
             log = ActivityLog(
                 actor_id=test_user.id,
-                action=f"create_servers",
+                action="create_servers",
                 target_type="servers",
                 target_id=uuid.uuid4(),
                 details={"method": "POST", "status_code": 201},

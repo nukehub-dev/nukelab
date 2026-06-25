@@ -1,7 +1,6 @@
 """Tests for app.core.token_encryption."""
 
-import pytest
-from app.core.token_encryption import encrypt_token, decrypt_token
+from app.core.token_encryption import decrypt_token, encrypt_token
 
 
 class TestTokenEncryption:

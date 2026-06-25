@@ -20,13 +20,11 @@ Logic:
 import ipaddress
 import logging
 import time
-from typing import Optional, List
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
-from app.config import settings
 from app.db.session import AsyncSessionLocal
 
 logger = logging.getLogger(__name__)
@@ -47,7 +45,7 @@ _EXEMPT_PREFIXES = {
 }
 
 # In-memory cache: (restrictions_list, timestamp)
-_cache: Optional[tuple] = None
+_cache: tuple | None = None
 _CACHE_TTL_SECONDS = 30
 
 
@@ -77,7 +75,7 @@ def _ip_matches(client_ip: str, pattern: str) -> bool:
         return False
 
 
-async def _get_restrictions() -> List[dict]:
+async def _get_restrictions() -> list[dict]:
     """Fetch active IP restrictions from DB with caching."""
     global _cache
 
@@ -169,9 +167,10 @@ def _forbidden_response(detail: str):
 async def _log_blocked(request: Request, client_ip: str, reason: str):
     """Log a blocked IP attempt to ActivityLog."""
     try:
-        from app.models.activity_log import ActivityLog
-        from app.db.session import AsyncSessionLocal
         import uuid as uuid_mod
+
+        from app.db.session import AsyncSessionLocal
+        from app.models.activity_log import ActivityLog
 
         async with AsyncSessionLocal() as db:
             log = ActivityLog(

@@ -1,12 +1,12 @@
 """Tests for Request Metrics Middleware."""
 
-import pytest
 import asyncio
-from unittest.mock import patch, AsyncMock, MagicMock, Mock
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
+
+import pytest
 
 from app.middleware.request_metrics import (
     RequestMetricsMiddleware,
-    _RequestMetricsBuffer,
     _metrics_buffer,
 )
 
@@ -115,8 +115,8 @@ class TestRouteAwareNormalizer:
     """Route-aware path normalization using actual FastAPI routes."""
 
     def test_uuid_route_normalized_to_template(self):
-        from app.middleware.request_metrics import _RouteAwareNormalizer
         from app.main import app
+        from app.middleware.request_metrics import _RouteAwareNormalizer
 
         normalizer = _RouteAwareNormalizer(app)
 
@@ -125,8 +125,8 @@ class TestRouteAwareNormalizer:
         assert result == "/api/servers/{server_id}/stop"
 
     def test_by_path_route_with_slugs(self):
-        from app.middleware.request_metrics import _RouteAwareNormalizer
         from app.main import app
+        from app.middleware.request_metrics import _RouteAwareNormalizer
 
         normalizer = _RouteAwareNormalizer(app)
 
@@ -135,8 +135,8 @@ class TestRouteAwareNormalizer:
         assert result == "/api/servers/by-path/{username}/{server_name}"
 
     def test_static_route_unchanged(self):
-        from app.middleware.request_metrics import _RouteAwareNormalizer
         from app.main import app
+        from app.middleware.request_metrics import _RouteAwareNormalizer
 
         normalizer = _RouteAwareNormalizer(app)
 
@@ -144,8 +144,8 @@ class TestRouteAwareNormalizer:
         assert result == "/api/auth/login"
 
     def test_unknown_path_falls_back(self):
-        from app.middleware.request_metrics import _RouteAwareNormalizer
         from app.main import app
+        from app.middleware.request_metrics import _RouteAwareNormalizer
 
         normalizer = _RouteAwareNormalizer(app)
 
@@ -154,8 +154,8 @@ class TestRouteAwareNormalizer:
         assert result == "/api/unknown/:id"
 
     def test_avatar_filename_with_uuid(self):
-        from app.middleware.request_metrics import _RouteAwareNormalizer
         from app.main import app
+        from app.middleware.request_metrics import _RouteAwareNormalizer
 
         normalizer = _RouteAwareNormalizer(app)
 

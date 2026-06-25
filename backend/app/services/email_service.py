@@ -2,8 +2,8 @@
 Email notification service with SMTP and templates.
 """
 
-from typing import Dict, Any, Optional
-from datetime import datetime
+from typing import Any
+
 from app.config import settings
 
 
@@ -22,8 +22,8 @@ class EmailService:
         self.enabled = bool(self.smtp_host)
 
     async def send_email(
-        self, to_email: str, subject: str, html_body: str, text_body: Optional[str] = None
-    ) -> Dict[str, Any]:
+        self, to_email: str, subject: str, html_body: str, text_body: str | None = None
+    ) -> dict[str, Any]:
         """Send an email using explicit SMTP control"""
         if not self.enabled:
             return {"success": False, "error": "SMTP not configured"}
@@ -31,6 +31,7 @@ class EmailService:
         try:
             from email.mime.multipart import MIMEMultipart
             from email.mime.text import MIMEText
+
             import aiosmtplib
 
             msg = MIMEMultipart("alternative")
@@ -60,7 +61,7 @@ class EmailService:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    def render_template(self, template_name: str, context: Dict[str, Any]) -> str:
+    def render_template(self, template_name: str, context: dict[str, Any]) -> str:
         """Render an email template"""
         templates = {
             "welcome": self._welcome_template,
@@ -76,7 +77,7 @@ class EmailService:
 
         return template_func(context)
 
-    def _welcome_template(self, ctx: Dict[str, Any]) -> str:
+    def _welcome_template(self, ctx: dict[str, Any]) -> str:
         return f"""
         <html>
         <body>
@@ -88,7 +89,7 @@ class EmailService:
         </html>
         """
 
-    def _credit_low_template(self, ctx: Dict[str, Any]) -> str:
+    def _credit_low_template(self, ctx: dict[str, Any]) -> str:
         return f"""
         <html>
         <body>
@@ -101,7 +102,7 @@ class EmailService:
         </html>
         """
 
-    def _server_ready_template(self, ctx: Dict[str, Any]) -> str:
+    def _server_ready_template(self, ctx: dict[str, Any]) -> str:
         return f"""
         <html>
         <body>
@@ -113,7 +114,7 @@ class EmailService:
         </html>
         """
 
-    def _server_stopped_template(self, ctx: Dict[str, Any]) -> str:
+    def _server_stopped_template(self, ctx: dict[str, Any]) -> str:
         return f"""
         <html>
         <body>
@@ -125,7 +126,7 @@ class EmailService:
         </html>
         """
 
-    def _maintenance_template(self, ctx: Dict[str, Any]) -> str:
+    def _maintenance_template(self, ctx: dict[str, Any]) -> str:
         return f"""
         <html>
         <body>

@@ -20,8 +20,8 @@ from sqlalchemy import select
 # Ensure backend is on path
 sys.path.insert(0, ".")
 
-from app.models.user import User
 from app.core.security import get_password_hash
+from app.models.user import User
 
 TEST_PASSWORD = "LoadTest123!"
 

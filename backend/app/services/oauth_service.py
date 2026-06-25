@@ -1,11 +1,13 @@
 """OAuth/OIDC authentication service with discovery support."""
 
-import secrets
 import base64
 import hashlib
-from typing import Optional, Dict, Any
-import aiohttp
+import secrets
+from typing import Any
 from urllib.parse import urlencode
+
+import aiohttp
+
 from app.config import settings
 from app.core.logging import get_logger
 
@@ -16,7 +18,7 @@ class OAuthService:
     """Handle OAuth 2.0 / OIDC authentication flows."""
 
     def __init__(self):
-        self.discovery_data: Optional[Dict[str, Any]] = None
+        self.discovery_data: dict[str, Any] | None = None
         self._discovery_loaded = False
 
     @property
@@ -28,7 +30,7 @@ class OAuthService:
             and (settings.oauth_discovery_url or settings.oauth_authorize_url)
         )
 
-    async def _load_discovery(self) -> Dict[str, Any]:
+    async def _load_discovery(self) -> dict[str, Any]:
         """Load OIDC discovery document if URL is configured."""
         if self._discovery_loaded:
             return self.discovery_data or {}
@@ -48,7 +50,7 @@ class OAuthService:
             logger.exception("OAuth discovery failed")
             return {}
 
-    def _get_endpoint(self, endpoint_type: str) -> Optional[str]:
+    def _get_endpoint(self, endpoint_type: str) -> str | None:
         """Get endpoint URL from discovery or manual config."""
         # Try discovery first
         if self.discovery_data:
@@ -71,7 +73,7 @@ class OAuthService:
         }
         return manual_map.get(endpoint_type)
 
-    async def get_authorize_url(self, state: str, code_challenge: Optional[str] = None) -> str:
+    async def get_authorize_url(self, state: str, code_challenge: str | None = None) -> str:
         """Build OAuth authorization URL."""
         await self._load_discovery()
 
@@ -95,7 +97,7 @@ class OAuthService:
         query = urlencode(params)
         return f"{authorize_url}?{query}"
 
-    async def exchange_code(self, code: str, code_verifier: Optional[str] = None) -> Dict[str, Any]:
+    async def exchange_code(self, code: str, code_verifier: str | None = None) -> dict[str, Any]:
         """Exchange authorization code for tokens."""
         await self._load_discovery()
 
@@ -119,7 +121,7 @@ class OAuthService:
                 response.raise_for_status()
                 return await response.json()
 
-    async def get_user_info(self, access_token: str) -> Dict[str, Any]:
+    async def get_user_info(self, access_token: str) -> dict[str, Any]:
         """Fetch user info from OAuth provider."""
         await self._load_discovery()
 
@@ -149,7 +151,7 @@ class OAuthService:
         )
         return verifier, challenge
 
-    def extract_user_data(self, userinfo: Dict[str, Any]) -> Dict[str, Any]:
+    def extract_user_data(self, userinfo: dict[str, Any]) -> dict[str, Any]:
         """Extract normalized user data from OAuth provider response."""
         username_claim = settings.oauth_username_claim
         email_claim = settings.oauth_email_claim

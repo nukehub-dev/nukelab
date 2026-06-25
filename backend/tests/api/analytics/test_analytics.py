@@ -1,21 +1,20 @@
 """Tests for Analytics service and API."""
 
-import pytest
 import uuid as uuid_mod
-from datetime import datetime, timedelta, UTC
-from httpx import AsyncClient
-from sqlalchemy import select
+from datetime import UTC, datetime, timedelta
 
+import pytest
+from httpx import AsyncClient
+
+from app.models.credit_transaction import CreditTransaction
+from app.models.daily_server_metric import DailyServerMetric
 from app.models.server import Server
 from app.models.server_metric import ServerMetric
-from app.models.daily_server_metric import DailyServerMetric
-from app.models.credit_transaction import CreditTransaction
 from app.models.server_plan import ServerPlan
-from app.models.volume import Volume
 from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
+from app.models.volume import Volume
 from app.services.analytics_service import AnalyticsService
 from app.services.retention_service import RetentionService
-
 
 """Tests for Analytics service and API."""
 
@@ -1026,18 +1025,11 @@ class TestAnalyticsAPIExtended:
 
 """Extended tests for small API modules — coverage gap closure."""
 
-import pytest
 from unittest import mock
-from datetime import datetime, timedelta, UTC
-import uuid as uuid_mod
+
+import pytest
 
 from app.config import settings
-from app.models.server import Server
-from app.models.server_plan import ServerPlan
-from app.models.environment_template import EnvironmentTemplate
-from app.models.notification import Notification
-from app.models.activity_log import ActivityLog
-from app.models.credit_transaction import CreditTransaction
 
 
 @pytest.fixture(autouse=True)

@@ -3,15 +3,15 @@ Server schedule service for cron-based server scheduling.
 """
 
 import uuid
-from datetime import datetime, timedelta, UTC
-from typing import List, Optional, Dict, Any
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from datetime import UTC, datetime
+from typing import Any
 
-from app.models.server_schedule import ServerSchedule
-from app.models.server import Server
+from sqlalchemy import and_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.models.notification import Notification
-from app.core.time_utils import parse_duration
+from app.models.server import Server
+from app.models.server_schedule import ServerSchedule
 from app.services.notification_service import broadcast_server_status_change
 
 
@@ -42,8 +42,8 @@ class ScheduleService:
         self.db = db
 
     async def get_schedules_for_server(
-        self, server_id: str, user_id: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
+        self, server_id: str, user_id: str | None = None
+    ) -> list[dict[str, Any]]:
         """Get all schedules for a server"""
         query = select(ServerSchedule).where(ServerSchedule.server_id == uuid.UUID(server_id))
 
@@ -95,10 +95,10 @@ class ScheduleService:
         self,
         schedule_id: str,
         user_id: str,
-        action: Optional[str] = None,
-        cron_expression: Optional[str] = None,
-        timezone: Optional[str] = None,
-        is_active: Optional[bool] = None,
+        action: str | None = None,
+        cron_expression: str | None = None,
+        timezone: str | None = None,
+        is_active: bool | None = None,
     ) -> ServerSchedule:
         """Update an existing schedule"""
 
@@ -156,19 +156,19 @@ class ScheduleService:
         await self.db.commit()
         return True
 
-    async def get_due_schedules(self) -> List[ServerSchedule]:
+    async def get_due_schedules(self) -> list[ServerSchedule]:
         """Get all schedules that are due to run"""
         result = await self.db.execute(
             select(ServerSchedule).where(
                 and_(
-                    ServerSchedule.is_active == True,
+                    ServerSchedule.is_active,
                     ServerSchedule.next_run_at <= datetime.now(UTC).replace(tzinfo=None),
                 )
             )
         )
         return result.scalars().all()
 
-    async def execute_schedule(self, schedule: ServerSchedule) -> Dict[str, Any]:
+    async def execute_schedule(self, schedule: ServerSchedule) -> dict[str, Any]:
         """Execute a schedule action on a server"""
         from app.container.spawner import spawner
         from app.services.quota_service import QuotaService
@@ -217,8 +217,8 @@ class ScheduleService:
 
                     # Reconcile exact billing for final partial interval
                     if server.plan_id:
-                        from app.services.credit_service import CreditService
                         from app.models.server_plan import ServerPlan
+                        from app.services.credit_service import CreditService
 
                         credit_service = CreditService(self.db)
                         plan_result = await self.db.execute(

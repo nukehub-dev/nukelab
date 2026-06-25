@@ -5,10 +5,11 @@ an actual XFS filesystem. They verify that the service constructs the
 correct commands and handles all output formats.
 """
 
-import pytest
-from unittest import mock
-import tempfile
 import os
+import tempfile
+from unittest import mock
+
+import pytest
 
 
 class TestXfsQuotaFullFlow:
@@ -165,7 +166,7 @@ class TestXfsQuotaFullFlow:
 
                     for stdout, expected_used, expected_hard in test_cases:
 
-                        def mock_run(cmd, **kwargs):
+                        def mock_run(cmd, stdout=stdout, **kwargs):
                             m = mock.MagicMock()
                             m.returncode = 0
                             m.stdout = stdout

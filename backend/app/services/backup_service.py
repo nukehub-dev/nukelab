@@ -3,15 +3,14 @@ Backup and restore service for Docker volumes.
 """
 
 import os
-import shutil
 import tarfile
 import uuid
-from datetime import datetime, UTC
-from typing import List, Dict, Any, Optional
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, desc
+from datetime import UTC, datetime
+from typing import Any
 
-from app.models.user import User
+from sqlalchemy import desc, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.services.volume_service import VolumeService
 
 
@@ -24,8 +23,8 @@ class BackupService:
         os.makedirs(backup_path, exist_ok=True)
 
     async def create_backup(
-        self, volume_name: str, user_id: str, description: Optional[str] = None
-    ) -> Dict[str, Any]:
+        self, volume_name: str, user_id: str, description: str | None = None
+    ) -> dict[str, Any]:
         """Create a tar.gz backup of a Docker volume"""
         from app.models.volume_backup import VolumeBackup
 
@@ -99,8 +98,8 @@ class BackupService:
             raise
 
     async def list_backups(
-        self, volume_name: Optional[str] = None, user_id: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
+        self, volume_name: str | None = None, user_id: str | None = None
+    ) -> list[dict[str, Any]]:
         """List backups, optionally filtered by volume or user"""
         from app.models.volume_backup import VolumeBackup
 
@@ -130,7 +129,7 @@ class BackupService:
             for b in backups
         ]
 
-    async def get_backup(self, backup_id: str) -> Optional[Dict[str, Any]]:
+    async def get_backup(self, backup_id: str) -> dict[str, Any] | None:
         """Get backup details"""
         from app.models.volume_backup import VolumeBackup
 
@@ -155,8 +154,8 @@ class BackupService:
         }
 
     async def restore_backup(
-        self, backup_id: str, target_volume_name: Optional[str] = None
-    ) -> Dict[str, Any]:
+        self, backup_id: str, target_volume_name: str | None = None
+    ) -> dict[str, Any]:
         """Restore a backup to a volume"""
         from app.models.volume_backup import VolumeBackup
 
@@ -243,7 +242,7 @@ class BackupService:
 
         deleted_count = 0
 
-        for volume_name, backups in by_volume.items():
+        for _volume_name, backups in by_volume.items():
             # Keep 7 most recent daily
             daily_keep = backups[:7]
 

@@ -2,11 +2,10 @@
 
 import pytest
 from sqlalchemy import select
-from app.models.user import User
-from app.models.system_setting import SystemSetting
-from app.config import settings
-from app.services.setting_service import SettingService
 
+from app.config import settings
+from app.models.system_setting import SystemSetting
+from app.services.setting_service import SettingService
 
 # ---------------------------------------------------------------------------
 # Fixtures

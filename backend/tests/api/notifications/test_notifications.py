@@ -98,13 +98,9 @@ class TestNotificationActions:
 
 """Extended tests for Environments, Notifications, and Health API endpoints."""
 
-import pytest
 import uuid
 
-from app.models.environment_template import EnvironmentTemplate
-from app.models.notification import Notification
-from app.models.health_check import HealthCheck
-from app.models.server import Server
+import pytest
 
 
 class TestNotificationsAPI:
@@ -151,18 +147,11 @@ class TestNotificationsAPI:
 
 """Extended tests for small API modules — coverage gap closure."""
 
-import pytest
-from unittest import mock
-from datetime import datetime, timedelta, UTC
 import uuid as uuid_mod
 
+import pytest
+
 from app.config import settings
-from app.models.server import Server
-from app.models.server_plan import ServerPlan
-from app.models.environment_template import EnvironmentTemplate
-from app.models.notification import Notification
-from app.models.activity_log import ActivityLog
-from app.models.credit_transaction import CreditTransaction
 
 
 @pytest.fixture(autouse=True)
@@ -282,9 +271,6 @@ class TestNotificationsExtended:
 """Extended tests for Notifications API endpoints."""
 
 import pytest
-import uuid
-
-from app.models.notification import Notification
 
 
 class TestNotificationUnreadCount:

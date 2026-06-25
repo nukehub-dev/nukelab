@@ -1,8 +1,6 @@
 """Tests for OpenTelemetry tracing initialization and helpers."""
 
 import os
-
-import pytest
 from unittest import mock
 
 from app.core import tracing

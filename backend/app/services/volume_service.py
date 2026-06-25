@@ -2,20 +2,22 @@
 Volume management service with quota enforcement.
 """
 
-from typing import List, Dict, Any, Optional
-from datetime import datetime, UTC
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, func
-from sqlalchemy.orm import selectinload
-import uuid
+from datetime import UTC, datetime
+from typing import Any
 
-from app.models.volume import Volume
-from app.models.server import Server
-from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
-from app.models.workspace_volume import WorkspaceVolume
-from app.container.client import get_container_client
+from sqlalchemy import func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
 from app.config import settings
+from app.container.client import get_container_client
+from app.core.logging import get_logger
+from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
+from app.models.volume import Volume
+from app.models.workspace_volume import WorkspaceVolume
 from app.services.xfs_quota_service import xfs_quota_service
+
+logger = get_logger(__name__)
 
 
 class VolumeService:
@@ -24,7 +26,7 @@ class VolumeService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    def _get_volume_storage_paths(self, name: str, mountpoint: Optional[str] = None) -> List[str]:
+    def _get_volume_storage_paths(self, name: str, mountpoint: str | None = None) -> list[str]:
         """Build a list of possible volume storage paths to try."""
         import os
 
@@ -49,8 +51,8 @@ class VolumeService:
         name: str,
         display_name: str,
         owner_id: str,
-        max_size_bytes: Optional[int] = None,
-        description: Optional[str] = None,
+        max_size_bytes: int | None = None,
+        description: str | None = None,
         visibility: str = "private",
     ) -> Volume:
         """Create a new volume record and Docker volume"""
@@ -93,7 +95,7 @@ class VolumeService:
 
         return volume
 
-    async def get_volume(self, volume_id: str) -> Optional[Volume]:
+    async def get_volume(self, volume_id: str) -> Volume | None:
         """Get volume by ID"""
         from sqlalchemy.orm import selectinload
 
@@ -105,14 +107,14 @@ class VolumeService:
         )
         return result.scalar_one_or_none()
 
-    async def get_volume_by_name(self, name: str) -> Optional[Volume]:
+    async def get_volume_by_name(self, name: str) -> Volume | None:
         """Get volume by Docker name"""
         result = await self.db.execute(select(Volume).where(Volume.name == name))
         return result.scalar_one_or_none()
 
     async def list_volumes(
         self, user_id: str, include_workspace_volumes: bool = True
-    ) -> List[Volume]:
+    ) -> list[Volume]:
         """List volumes accessible to user (owned or in workspaces)"""
         conditions = [Volume.owner_id == user_id]
 
@@ -152,11 +154,11 @@ class VolumeService:
         limit: int = 20,
         sort_by: str = "created_at",
         sort_order: str = "desc",
-        search: Optional[str] = None,
-        status: Optional[str] = None,
-        visibility: Optional[str] = None,
-        owner_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        search: str | None = None,
+        status: str | None = None,
+        visibility: str | None = None,
+        owner_id: str | None = None,
+    ) -> dict[str, Any]:
         """List ALL volumes (admin view) with pagination, sorting, and filtering."""
         from app.models.user import User
 
@@ -229,7 +231,7 @@ class VolumeService:
             "limit": limit,
         }
 
-    def validate_max_size(self, volume: Volume, max_size_bytes: Optional[int]) -> None:
+    def validate_max_size(self, volume: Volume, max_size_bytes: int | None) -> None:
         """Validate that max_size_bytes is not below the volume's current size.
 
         Raises ValueError with a descriptive message if the limit would be
@@ -246,12 +248,12 @@ class VolumeService:
     async def update_volume(
         self,
         volume_id: str,
-        display_name: Optional[str] = None,
-        description: Optional[str] = None,
-        visibility: Optional[str] = None,
-        max_size_bytes: Optional[int] = None,
-        status: Optional[str] = None,
-    ) -> Optional[Volume]:
+        display_name: str | None = None,
+        description: str | None = None,
+        visibility: str | None = None,
+        max_size_bytes: int | None = None,
+        status: str | None = None,
+    ) -> Volume | None:
         """Update volume metadata"""
         volume = await self.get_volume(volume_id)
         if not volume:
@@ -305,7 +307,7 @@ class VolumeService:
         await self.db.commit()
         return True
 
-    async def update_volume_size(self, volume_id: str) -> Optional[int]:
+    async def update_volume_size(self, volume_id: str) -> int | None:
         """Update volume size from filesystem"""
         volume = await self.get_volume(volume_id)
         if not volume:
@@ -330,10 +332,10 @@ class VolumeService:
                     )
         return size_bytes
 
-    async def get_volume_size(self, name: str, mountpoint: Optional[str] = None) -> Optional[int]:
+    async def get_volume_size(self, name: str, mountpoint: str | None = None) -> int | None:
         """Get volume size in bytes (requires du command)"""
-        import subprocess
         import os
+        import subprocess
 
         paths_to_try = self._get_volume_storage_paths(name, mountpoint)
 
@@ -351,8 +353,8 @@ class VolumeService:
         return None
 
     async def check_volumes_quota(
-        self, volume_ids: List[str], plan_disk_limit: str
-    ) -> Dict[str, Any]:
+        self, volume_ids: list[str], plan_disk_limit: str
+    ) -> dict[str, Any]:
         """Batch quota check: fetches all volumes once, updates sizes once,
         and performs both per-volume and aggregate checks in-memory.
 

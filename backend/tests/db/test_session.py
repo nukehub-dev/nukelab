@@ -1,7 +1,9 @@
 """Coverage tests for app/db/session.py."""
 
-import pytest
+import contextlib
 from unittest import mock
+
+import pytest
 
 
 class TestEngineConfiguration:
@@ -97,10 +99,8 @@ class TestGetDb:
             assert db is mock_session
 
             # Simulate exception being thrown inside the context
-            try:
+            with contextlib.suppress(RuntimeError):
                 await gen.athrow(RuntimeError, RuntimeError("db error"))
-            except RuntimeError:
-                pass
 
         mock_session.rollback.assert_awaited_once()
         mock_session.close.assert_awaited_once()

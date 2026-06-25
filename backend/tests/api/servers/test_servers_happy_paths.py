@@ -1,14 +1,12 @@
 """Happy-path tests for Servers API with mocked container spawner."""
 
-import pytest
 from unittest import mock
-from sqlalchemy import select
+
+import pytest
 
 from app.models.server import Server
-from app.models.server_plan import ServerPlan
-from app.models.environment_template import EnvironmentTemplate
-from app.models.volume import Volume
 from app.models.server_volume import ServerVolume
+from app.models.volume import Volume
 
 
 class TestServerGetEndpoints:

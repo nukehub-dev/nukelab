@@ -1,12 +1,8 @@
 """Tests for System API endpoints, maintenance mode, and middleware."""
 
 import pytest
-from sqlalchemy import select
-from app.models.user import User
-from app.models.system_setting import SystemSetting
-from app.config import settings
-from app.services.setting_service import SettingService
 
+from app.config import settings
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -128,6 +124,7 @@ class TestMaintenanceMiddleware:
     async def test_rate_limiting_on_blocked_requests(self, client, user_token, admin_token):
         """Blocked requests should be rate-limited after too many attempts."""
         from unittest import mock
+
         from app.config import settings
         from app.middleware.maintenance import MaintenanceMiddleware
 

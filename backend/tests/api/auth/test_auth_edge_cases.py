@@ -1,14 +1,14 @@
 """Extended tests for Auth API error paths and uncovered branches."""
 
-import pytest
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 from unittest import mock
 
+import pytest
+
+from app.api.auth import pwd_context
 from app.config import settings
-from app.models.user import User
 from app.models.api_token import ApiToken
 from app.models.refresh_token import RefreshToken
-from app.api.auth import pwd_context
 
 
 class TestAuthModeOAuth:
@@ -178,7 +178,6 @@ class TestRequireScopes:
     @pytest.mark.asyncio
     async def test_api_token_insufficient_scope(self, client, test_user, db_session):
         """API token without required scope should 403."""
-        from app.api.auth import create_access_token
 
         token_plain = "scoped-token-12345"
         token_hash = pwd_context.hash(token_plain)

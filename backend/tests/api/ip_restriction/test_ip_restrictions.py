@@ -1,17 +1,13 @@
 """Tests for IP allowlist/blocklist middleware and admin API."""
 
+from unittest.mock import patch
+
 import pytest
-import pytest_asyncio
-import ipaddress
-from unittest.mock import patch, AsyncMock
-from sqlalchemy import text
 
 from app.middleware.ip_restriction import (
-    _ip_matches,
-    _get_client_ip,
     _invalidate_cache,
+    _ip_matches,
 )
-from app.models.ip_restriction import IPRestriction
 
 
 @pytest.fixture(autouse=True)
@@ -52,20 +48,22 @@ class TestIPRestrictionMiddleware:
 
     @pytest.mark.asyncio
     async def test_blocklist_blocks_matching_ip(self, client, admin_token):
-        with patch(
-            "app.middleware.ip_restriction._get_restrictions",
-            return_value=[{"ip_range": "1.2.3.4/32", "restriction_type": "block"}],
-        ):
-            with patch(
+        with (
+            patch(
+                "app.middleware.ip_restriction._get_restrictions",
+                return_value=[{"ip_range": "1.2.3.4/32", "restriction_type": "block"}],
+            ),
+            patch(
                 "app.middleware.ip_restriction._get_client_ip",
                 return_value="1.2.3.4",
-            ):
-                response = await client.get(
-                    "/api/servers/",
-                    headers={"Authorization": f"Bearer {admin_token}"},
-                )
-                assert response.status_code == 403
-                assert "blocked" in response.json()["detail"].lower()
+            ),
+        ):
+            response = await client.get(
+                "/api/servers/",
+                headers={"Authorization": f"Bearer {admin_token}"},
+            )
+            assert response.status_code == 403
+            assert "blocked" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
     async def test_blocklist_allows_non_matching_ip(self, client, admin_token):
@@ -81,85 +79,95 @@ class TestIPRestrictionMiddleware:
 
     @pytest.mark.asyncio
     async def test_allowlist_blocks_non_matching_ip(self, client, admin_token):
-        with patch(
-            "app.middleware.ip_restriction._get_restrictions",
-            return_value=[{"ip_range": "10.0.0.0/8", "restriction_type": "allow"}],
-        ):
-            with patch(
+        with (
+            patch(
+                "app.middleware.ip_restriction._get_restrictions",
+                return_value=[{"ip_range": "10.0.0.0/8", "restriction_type": "allow"}],
+            ),
+            patch(
                 "app.middleware.ip_restriction._get_client_ip",
                 return_value="8.8.8.8",
-            ):
-                response = await client.get(
-                    "/api/servers/",
-                    headers={"Authorization": f"Bearer {admin_token}"},
-                )
-                assert response.status_code == 403
-                assert "allowlist" in response.json()["detail"].lower()
+            ),
+        ):
+            response = await client.get(
+                "/api/servers/",
+                headers={"Authorization": f"Bearer {admin_token}"},
+            )
+            assert response.status_code == 403
+            assert "allowlist" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
     async def test_allowlist_allows_matching_ip(self, client, admin_token):
-        with patch(
-            "app.middleware.ip_restriction._get_restrictions",
-            return_value=[{"ip_range": "10.0.0.0/8", "restriction_type": "allow"}],
-        ):
-            with patch(
+        with (
+            patch(
+                "app.middleware.ip_restriction._get_restrictions",
+                return_value=[{"ip_range": "10.0.0.0/8", "restriction_type": "allow"}],
+            ),
+            patch(
                 "app.middleware.ip_restriction._get_client_ip",
                 return_value="10.1.2.3",
-            ):
-                response = await client.get(
-                    "/api/servers/",
-                    headers={"Authorization": f"Bearer {admin_token}"},
-                )
-                assert response.status_code in (200, 404)
+            ),
+        ):
+            response = await client.get(
+                "/api/servers/",
+                headers={"Authorization": f"Bearer {admin_token}"},
+            )
+            assert response.status_code in (200, 404)
 
     @pytest.mark.asyncio
     async def test_exempt_paths_always_allowed(self, client):
-        with patch(
-            "app.middleware.ip_restriction._get_restrictions",
-            return_value=[{"ip_range": "0.0.0.0/0", "restriction_type": "block"}],
-        ):
-            with patch(
+        with (
+            patch(
+                "app.middleware.ip_restriction._get_restrictions",
+                return_value=[{"ip_range": "0.0.0.0/0", "restriction_type": "block"}],
+            ),
+            patch(
                 "app.middleware.ip_restriction._get_client_ip",
                 return_value="1.2.3.4",
-            ):
-                # Health check should still work
-                response = await client.get("/api/health")
-                assert response.status_code == 200
+            ),
+        ):
+            # Health check should still work
+            response = await client.get("/api/health")
+            assert response.status_code == 200
 
-                # Auth should still work
-                response = await client.get("/api/auth/me")
-                assert response.status_code in (200, 401)
+            # Auth should still work
+            response = await client.get("/api/auth/me")
+            assert response.status_code in (200, 401)
 
     @pytest.mark.asyncio
     async def test_inactive_restriction_ignored(self, client, admin_token):
-        with patch(
-            "app.middleware.ip_restriction._get_restrictions",
-            return_value=[{"ip_range": "1.2.3.4/32", "restriction_type": "block"}],
-        ):
-            with patch(
+        with (
+            patch(
+                "app.middleware.ip_restriction._get_restrictions",
+                return_value=[{"ip_range": "1.2.3.4/32", "restriction_type": "block"}],
+            ),
+            patch(
                 "app.middleware.ip_restriction._get_client_ip",
                 return_value="1.2.3.4",
-            ):
-                response = await client.get(
-                    "/api/servers/",
-                    headers={"Authorization": f"Bearer {admin_token}"},
-                )
-                assert response.status_code == 403
+            ),
+        ):
+            response = await client.get(
+                "/api/servers/",
+                headers={"Authorization": f"Bearer {admin_token}"},
+            )
+            assert response.status_code == 403
 
         # Now simulate inactive (empty list = no active restrictions)
-        with patch(
-            "app.middleware.ip_restriction._get_restrictions",
-            return_value=[],
-        ):
-            with patch(
+        with (
+            patch(
+                "app.middleware.ip_restriction._get_restrictions",
+                return_value=[],
+            ),
+            patch(
                 "app.middleware.ip_restriction._get_client_ip",
                 return_value="1.2.3.4",
-            ):
-                response = await client.get(
-                    "/api/servers/",
-                    headers={"Authorization": f"Bearer {admin_token}"},
-                )
-                assert response.status_code in (200, 404)
+            ),
+        ):
+            response = await client.get(
+                "/api/servers/",
+                headers={"Authorization": f"Bearer {admin_token}"},
+            )
+            assert response.status_code in (200, 404)
 
 
 class TestIPRestrictionAPI:
@@ -374,9 +382,8 @@ class TestIPRestrictionMiddlewareModes:
 
 """Coverage tests for smaller API modules: health, system, quotas, ip_restriction."""
 
+
 import pytest
-from unittest import mock
-from datetime import datetime, timedelta, UTC
 
 
 class TestIpRestrictionEndpoints:

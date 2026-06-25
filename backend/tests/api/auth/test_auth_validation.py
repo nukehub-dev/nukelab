@@ -1,14 +1,12 @@
 """Extended tests for auth.py — logout stop_on_logout, scope checks, verify branches."""
 
-import pytest
-import uuid as uuid_mod
-from datetime import datetime, timedelta
 from unittest import mock
 
+import pytest
+
+from app.models.environment_template import EnvironmentTemplate
 from app.models.server import Server
 from app.models.server_plan import ServerPlan
-from app.models.environment_template import EnvironmentTemplate
-
 
 # ─────────────────────────────────────────────────────────────
 # POST /logout — stop_on_logout branches
@@ -64,9 +62,7 @@ class TestLogoutStopOnLogout:
                             "app.services.notification_service.NotificationService"
                         ) as mock_notif_cls:
                             mock_notif_cls.return_value.server_stopped = mock.AsyncMock()
-                            with mock.patch(
-                                "app.api.auth.broadcast_server_status_change"
-                            ) as mock_bc:
+                            with mock.patch("app.api.auth.broadcast_server_status_change"):
                                 response = await client.post(
                                     "/api/auth/logout",
                                     headers={"Authorization": f"Bearer {user_token}"},
@@ -185,8 +181,8 @@ class TestVerifyBranches:
     @pytest.mark.asyncio
     async def test_verify_plain_token_no_scheme(self, client, test_user, db_session):
         """Token without scheme prefix should be rejected (401)."""
-        from app.models.api_token import ApiToken
         from app.api.auth import pwd_context
+        from app.models.api_token import ApiToken
 
         plain = "plain-token-no-scheme-123"
         token = ApiToken(
@@ -220,8 +216,8 @@ class TestRequireScopes:
     @pytest.mark.asyncio
     async def test_require_scopes_wildcard_match(self, client, test_user, db_session):
         """Wildcard scope like servers:* should match servers:read."""
-        from app.models.api_token import ApiToken
         from app.api.auth import pwd_context
+        from app.models.api_token import ApiToken
 
         plain = "wildcard-scope-token"
         token = ApiToken(
@@ -239,8 +235,8 @@ class TestRequireScopes:
         # We can test this indirectly via /api/auth/verify or another endpoint
         # Since we don't have a direct endpoint with require_scopes("servers:read"),
         # let's test the dependency function directly
-        from app.api.auth import require_scopes, AuthContext
-        from fastapi import Request
+
+        from app.api.auth import AuthContext, require_scopes
 
         req = mock.Mock()
         req.state.auth_context = AuthContext(
@@ -256,8 +252,9 @@ class TestRequireScopes:
     @pytest.mark.asyncio
     async def test_require_scopes_insufficient_scope(self, client, test_user, db_session):
         """Token without required scope should fail."""
-        from app.api.auth import require_scopes, AuthContext
         from fastapi import HTTPException
+
+        from app.api.auth import AuthContext, require_scopes
 
         req = mock.Mock()
         req.state.auth_context = AuthContext(
@@ -276,7 +273,7 @@ class TestRequireScopes:
     @pytest.mark.asyncio
     async def test_require_scopes_jwt_bypass(self, client, test_user, db_session):
         """JWT auth should bypass scope checks."""
-        from app.api.auth import require_scopes, AuthContext
+        from app.api.auth import AuthContext, require_scopes
 
         req = mock.Mock()
         req.state.auth_context = AuthContext(
@@ -301,8 +298,9 @@ class TestRequireJwtAuth:
     @pytest.mark.asyncio
     async def test_require_jwt_auth_missing_context(self, client, test_user):
         """Missing auth_context should return 401."""
-        from app.api.auth import require_jwt_auth
         from fastapi import HTTPException
+
+        from app.api.auth import require_jwt_auth
 
         req = mock.Mock()
         req.state.auth_context = None
@@ -316,8 +314,9 @@ class TestRequireJwtAuth:
     @pytest.mark.asyncio
     async def test_require_jwt_auth_api_token_rejected(self, client, test_user):
         """API token auth should return 403."""
-        from app.api.auth import require_jwt_auth, AuthContext
         from fastapi import HTTPException
+
+        from app.api.auth import AuthContext, require_jwt_auth
 
         req = mock.Mock()
         req.state.auth_context = AuthContext(
@@ -336,7 +335,7 @@ class TestRequireJwtAuth:
     @pytest.mark.asyncio
     async def test_require_jwt_auth_jwt_allowed(self, client, test_user):
         """JWT auth should pass."""
-        from app.api.auth import require_jwt_auth, AuthContext
+        from app.api.auth import AuthContext, require_jwt_auth
 
         req = mock.Mock()
         req.state.auth_context = AuthContext(

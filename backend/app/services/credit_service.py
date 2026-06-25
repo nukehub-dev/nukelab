@@ -3,17 +3,17 @@ Credit service for managing user credits.
 """
 
 import uuid
-from datetime import datetime, timedelta, UTC
-from typing import List, Optional, Dict, Any
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func
-from sqlalchemy.orm import selectinload
-from fastapi import HTTPException, status
+from datetime import UTC, datetime
+from typing import Any
 
-from app.models.user import User
-from app.models.credit_transaction import CreditTransaction
-from app.services.notification_service import NotificationService
+from fastapi import HTTPException, status
+from sqlalchemy import and_, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.logging import get_logger
+from app.models.credit_transaction import CreditTransaction
+from app.models.user import User
+from app.services.notification_service import NotificationService
 
 logger = get_logger(__name__)
 
@@ -35,14 +35,14 @@ class CreditService:
     async def get_transaction_history(
         self,
         user_id: str,
-        transaction_type: Optional[str] = None,
-        from_date: Optional[datetime] = None,
-        to_date: Optional[datetime] = None,
+        transaction_type: str | None = None,
+        from_date: datetime | None = None,
+        to_date: datetime | None = None,
         page: int = 1,
         limit: int = 50,
         sort_by: str = "created_at",
         sort_order: str = "desc",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Get user's credit transaction history"""
 
         query = select(CreditTransaction).where(CreditTransaction.user_id == uuid.UUID(user_id))
@@ -91,9 +91,9 @@ class CreditService:
         amount: int,
         transaction_type: str,
         description: str,
-        actor_id: Optional[str] = None,
-        server_id: Optional[str] = None,
-        meta: Optional[Dict] = None,
+        actor_id: str | None = None,
+        server_id: str | None = None,
+        meta: dict | None = None,
     ) -> CreditTransaction:
         """Create a credit transaction and update user balance"""
 
@@ -179,7 +179,7 @@ class CreditService:
         return transaction
 
     async def consume_credits(
-        self, user_id: str, amount: int, description: str, server_id: Optional[str] = None
+        self, user_id: str, amount: int, description: str, server_id: str | None = None
     ) -> CreditTransaction:
         """Consume credits for server usage"""
         return await self._create_transaction(
@@ -299,7 +299,7 @@ class CreditService:
 
     async def get_low_credit_users(
         self, threshold: int = 100, page: int = 1, limit: int = 50
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Get users with low credits"""
         # Get total count
         count_query = select(func.count()).select_from(
@@ -341,7 +341,7 @@ class CreditService:
             },
         }
 
-    async def get_credit_summary(self, user_id: str) -> Dict[str, Any]:
+    async def get_credit_summary(self, user_id: str) -> dict[str, Any]:
         """Get credit summary for a user"""
         balance = await self.get_balance(user_id)
 

@@ -2,17 +2,15 @@
 
 import json
 import logging
-import pytest
-from unittest.mock import patch
 
+from app.core.context import correlation_id
 from app.core.logging import (
+    CorrelationIdFilter,
     JSONFormatter,
     TextFormatter,
-    CorrelationIdFilter,
     configure_logging,
     get_logger,
 )
-from app.core.context import correlation_id
 
 
 class TestJSONFormatter:

@@ -3,10 +3,10 @@ Activity logging service for audit trail.
 """
 
 import uuid
-from datetime import datetime
-from typing import Optional, List, Dict, Any
+from typing import Any
+
+from sqlalchemy import and_, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, desc
 
 from app.models.activity_log import ActivityLog
 
@@ -21,11 +21,11 @@ class ActivityService:
         self,
         action: str,
         target_type: str,
-        target_id: Optional[str] = None,
-        actor_id: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
-        ip_address: Optional[str] = None,
-        user_agent: Optional[str] = None,
+        target_id: str | None = None,
+        actor_id: str | None = None,
+        details: dict[str, Any] | None = None,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
     ) -> ActivityLog:
         """Log an activity"""
         log = ActivityLog(
@@ -46,13 +46,13 @@ class ActivityService:
 
     async def get_logs(
         self,
-        actor_id: Optional[str] = None,
-        action: Optional[str] = None,
-        target_type: Optional[str] = None,
-        target_id: Optional[str] = None,
+        actor_id: str | None = None,
+        action: str | None = None,
+        target_type: str | None = None,
+        target_id: str | None = None,
         limit: int = 50,
         offset: int = 0,
-    ) -> List[ActivityLog]:
+    ) -> list[ActivityLog]:
         """Get activity logs with filtering"""
         query = select(ActivityLog)
 
@@ -75,7 +75,7 @@ class ActivityService:
 
     async def get_user_activity(
         self, user_id: str, limit: int = 50, offset: int = 0
-    ) -> List[ActivityLog]:
+    ) -> list[ActivityLog]:
         """Get activity for a specific user"""
         result = await self.db.execute(
             select(ActivityLog)
@@ -88,7 +88,7 @@ class ActivityService:
 
     async def get_workspace_activity(
         self, workspace_id: str, limit: int = 50, offset: int = 0
-    ) -> List[ActivityLog]:
+    ) -> list[ActivityLog]:
         """Get activity logs for a specific workspace"""
         result = await self.db.execute(
             select(ActivityLog)

@@ -1,15 +1,16 @@
 """Extended tests for CreditService business logic."""
 
-import pytest
 import uuid as uuid_mod
-from datetime import datetime, timedelta, UTC
-from unittest.mock import patch, AsyncMock
+from datetime import UTC, datetime, timedelta
+from unittest.mock import patch
 
-from app.services.credit_service import CreditService
-from app.models.user import User
+import pytest
+
 from app.models.credit_transaction import CreditTransaction
-from app.models.server_plan import ServerPlan
 from app.models.server import Server
+from app.models.server_plan import ServerPlan
+from app.models.user import User
+from app.services.credit_service import CreditService
 
 
 class TestCreditServiceBalance:

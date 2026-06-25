@@ -1,16 +1,13 @@
 """Tests for MaintenanceWindow model, service, and API endpoints."""
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 import pytest_asyncio
-from datetime import datetime, timedelta, UTC
-from uuid import uuid4
 
-from app.models.maintenance_window import MaintenanceWindow
-from app.models.user import User
-from app.services.maintenance_window_service import MaintenanceWindowService
-from app.services.setting_service import SettingService
 from app.config import settings
-
+from app.models.maintenance_window import MaintenanceWindow
+from app.services.maintenance_window_service import MaintenanceWindowService
 
 # ---------------------------------------------------------------------------
 # Fixtures

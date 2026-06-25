@@ -8,7 +8,6 @@ counts bytes as they stream through and aborts if the limit is exceeded.
 Returns 413 Payload Too Large if the limit is exceeded.
 """
 
-from typing import Callable
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.core.logging import get_logger

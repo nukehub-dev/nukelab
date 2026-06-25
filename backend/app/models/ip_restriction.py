@@ -1,9 +1,11 @@
 """IP restriction model for allowlist/blocklist."""
 
 import uuid
-from app.core.time_utils import utc_now
-from sqlalchemy import Column, String, DateTime, Text, ForeignKey, Boolean, Index
+
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import UUID
+
+from app.core.time_utils import utc_now
 from app.db.base import Base
 
 

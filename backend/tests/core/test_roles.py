@@ -1,23 +1,22 @@
 """Tests for app.core.roles helpers."""
 
-import pytest
 from unittest import mock
 
+import pytest
+
+from app.core.permissions import Permission
 from app.core.roles import (
+    _DEFAULT_ROLE_PERMISSIONS,
     ROLE_PERMISSIONS,
-    ROLE_RATE_LIMITS,
     VALID_ROLES,
-    ROLE_HIERARCHY,
-    get_role_permissions,
-    is_valid_role,
     get_role_level,
-    has_higher_or_equal_role,
+    get_role_permissions,
     get_role_rate_limit,
+    has_higher_or_equal_role,
+    is_valid_role,
     load_role_permissions_from_db,
     save_role_permissions_to_db,
-    _DEFAULT_ROLE_PERMISSIONS,
 )
-from app.core.permissions import Permission
 
 
 class TestGetRolePermissions:

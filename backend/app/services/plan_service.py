@@ -3,18 +3,19 @@ Server plan service for business logic.
 """
 
 import uuid
-from datetime import datetime, UTC
-from typing import List, Optional, Dict, Any
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func
-from sqlalchemy.orm import selectinload
-from fastapi import HTTPException, status
+from datetime import UTC, datetime
+from typing import Any
 
-from app.models.server_plan import ServerPlan
-from app.models.plan_access import UserPlanAccess, WorkspacePlanAccess
-from app.models.shared_workspace import WorkspaceMember
+from fastapi import HTTPException, status
+from sqlalchemy import and_, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
 from app.core.permissions import Permission
 from app.core.roles import get_role_permissions
+from app.models.plan_access import UserPlanAccess, WorkspacePlanAccess
+from app.models.server_plan import ServerPlan
+from app.models.shared_workspace import WorkspaceMember
 
 
 class PlanService:
@@ -23,27 +24,27 @@ class PlanService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_by_id(self, plan_id: str) -> Optional[ServerPlan]:
+    async def get_by_id(self, plan_id: str) -> ServerPlan | None:
         """Get plan by ID"""
         result = await self.db.execute(
             select(ServerPlan).where(ServerPlan.id == uuid.UUID(plan_id))
         )
         return result.scalar_one_or_none()
 
-    async def get_by_slug(self, slug: str) -> Optional[ServerPlan]:
+    async def get_by_slug(self, slug: str) -> ServerPlan | None:
         """Get plan by slug"""
         result = await self.db.execute(select(ServerPlan).where(ServerPlan.slug == slug))
         return result.scalar_one_or_none()
 
     async def list_plans(
         self,
-        category: Optional[str] = None,
-        is_active: Optional[bool] = None,
-        user_role: Optional[str] = None,
-        user_id: Optional[str] = None,
+        category: str | None = None,
+        is_active: bool | None = None,
+        user_role: str | None = None,
+        user_id: str | None = None,
         page: int = 1,
         limit: int = 50,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """List plans with filtering and pagination"""
 
         query = select(ServerPlan)
@@ -141,7 +142,7 @@ class PlanService:
         self,
         name: str,
         slug: str,
-        description: Optional[str] = None,
+        description: str | None = None,
         category: str = "cpu",
         cpu_limit: float = 1.0,
         memory_limit: str = "2g",
@@ -151,7 +152,7 @@ class PlanService:
         cost_per_hour: int = 10,
         cooldown_seconds: int = 0,
         is_public: bool = False,
-        visible_to_roles: Optional[List[str]] = None,
+        visible_to_roles: list[str] | None = None,
         priority: int = 0,
     ) -> ServerPlan:
         """Create new server plan"""
@@ -223,7 +224,7 @@ class PlanService:
         await self.db.commit()
 
     async def can_user_use_plan(
-        self, plan_id: str, user_role: str, user_id: Optional[str] = None
+        self, plan_id: str, user_role: str, user_id: str | None = None
     ) -> bool:
         """Check if a user can use a plan"""
         plan = await self.get_by_id(plan_id)
@@ -272,7 +273,7 @@ class PlanService:
 
     # ─── User Plan Access ───
 
-    async def list_plan_users(self, plan_id: str) -> List[Dict[str, Any]]:
+    async def list_plan_users(self, plan_id: str) -> list[dict[str, Any]]:
         """List users with direct access to a plan"""
         result = await self.db.execute(
             select(UserPlanAccess)
@@ -294,7 +295,7 @@ class PlanService:
         return data
 
     async def grant_user_access(
-        self, plan_id: str, user_id: str, granted_by: Optional[str] = None
+        self, plan_id: str, user_id: str, granted_by: str | None = None
     ) -> UserPlanAccess:
         """Grant a user access to a plan"""
         plan = await self.get_by_id(plan_id)
@@ -339,7 +340,7 @@ class PlanService:
 
     # ─── Workspace Plan Access ───
 
-    async def list_plan_workspaces(self, plan_id: str) -> List[Dict[str, Any]]:
+    async def list_plan_workspaces(self, plan_id: str) -> list[dict[str, Any]]:
         """List workspaces with access to a plan"""
         from app.models.shared_workspace import SharedWorkspace
 
@@ -368,7 +369,7 @@ class PlanService:
         return data
 
     async def grant_workspace_access(
-        self, plan_id: str, workspace_id: str, granted_by: Optional[str] = None
+        self, plan_id: str, workspace_id: str, granted_by: str | None = None
     ) -> WorkspacePlanAccess:
         """Grant a workspace access to a plan"""
         plan = await self.get_by_id(plan_id)

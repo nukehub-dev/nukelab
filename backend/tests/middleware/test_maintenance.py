@@ -1,7 +1,8 @@
 """Tests for MaintenanceMiddleware."""
 
-import pytest
 from unittest import mock
+
+import pytest
 from fastapi import FastAPI
 from starlette.testclient import TestClient
 

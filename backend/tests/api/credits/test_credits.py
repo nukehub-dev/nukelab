@@ -1,7 +1,9 @@
 """Tests for Credits API endpoints."""
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
-from datetime import datetime, timedelta, UTC
+
 from app.models.server import Server
 
 
@@ -109,9 +111,9 @@ class TestServerBillingReconciliation:
     @pytest.mark.asyncio
     async def test_reconcile_exact_billing_short_run(self, db_session, test_user):
         """Server stopped after short run should bill exact duration."""
-        from app.services.credit_service import CreditService
-        from app.models.server_plan import ServerPlan
         import uuid as uuid_mod
+
+        from app.services.credit_service import CreditService
 
         plan = ServerPlan(
             id=uuid_mod.uuid4(),
@@ -149,9 +151,9 @@ class TestServerBillingReconciliation:
     @pytest.mark.asyncio
     async def test_reconcile_no_double_billing(self, db_session, test_user):
         """Server already billed via ticks should not double-bill."""
-        from app.services.credit_service import CreditService
-        from app.models.server_plan import ServerPlan
         import uuid as uuid_mod
+
+        from app.services.credit_service import CreditService
 
         plan = ServerPlan(
             id=uuid_mod.uuid4(),
@@ -185,9 +187,9 @@ class TestServerBillingReconciliation:
     @pytest.mark.asyncio
     async def test_reconcile_partial_under_billing(self, db_session, test_user):
         """Server under-billed via ticks should bill difference."""
-        from app.services.credit_service import CreditService
-        from app.models.server_plan import ServerPlan
         import uuid as uuid_mod
+
+        from app.services.credit_service import CreditService
 
         plan = ServerPlan(
             id=uuid_mod.uuid4(),
@@ -221,9 +223,9 @@ class TestServerBillingReconciliation:
     @pytest.mark.asyncio
     async def test_reconcile_zero_cost_plan(self, db_session, test_user):
         """Free plan should not bill anything."""
-        from app.services.credit_service import CreditService
-        from app.models.server_plan import ServerPlan
         import uuid as uuid_mod
+
+        from app.services.credit_service import CreditService
 
         plan = ServerPlan(
             id=uuid_mod.uuid4(),
@@ -269,18 +271,13 @@ class TestTransactions:
 
 """Extended tests for small API modules — coverage gap closure."""
 
-import pytest
-from unittest import mock
-from datetime import datetime, timedelta, UTC
 import uuid as uuid_mod
+from unittest import mock
+
+import pytest
 
 from app.config import settings
-from app.models.server import Server
 from app.models.server_plan import ServerPlan
-from app.models.environment_template import EnvironmentTemplate
-from app.models.notification import Notification
-from app.models.activity_log import ActivityLog
-from app.models.credit_transaction import CreditTransaction
 
 
 @pytest.fixture(autouse=True)

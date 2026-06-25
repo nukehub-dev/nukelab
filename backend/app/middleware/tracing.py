@@ -10,7 +10,6 @@ from opentelemetry import trace
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.types import ASGIApp
 
-from app.config import settings
 from app.core.logging import get_logger
 from app.core.tracing import set_correlation_from_trace, set_span_status_from_http
 

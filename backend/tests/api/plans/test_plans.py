@@ -1,11 +1,11 @@
 """Tests for Plans API endpoints."""
 
-import pytest
-from datetime import datetime, UTC
-from sqlalchemy import select
+from datetime import UTC, datetime
 
-from app.models.server_plan import ServerPlan
+import pytest
+
 from app.models.plan_access import UserPlanAccess, WorkspacePlanAccess
+from app.models.server_plan import ServerPlan
 from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
 
 
@@ -506,18 +506,12 @@ class TestPlanWorkspaceAccess:
 
 """Extended tests for small API modules — coverage gap closure."""
 
-import pytest
-from unittest import mock
-from datetime import datetime, timedelta, UTC
 import uuid as uuid_mod
+from unittest import mock
+
+import pytest
 
 from app.config import settings
-from app.models.server import Server
-from app.models.server_plan import ServerPlan
-from app.models.environment_template import EnvironmentTemplate
-from app.models.notification import Notification
-from app.models.activity_log import ActivityLog
-from app.models.credit_transaction import CreditTransaction
 
 
 @pytest.fixture(autouse=True)
@@ -633,12 +627,8 @@ class TestPlansExtended:
 
 """Extended tests for smaller API endpoints (tokens, plans, quotas, schedules)."""
 
-import pytest
-import uuid
 
-from app.models.server_plan import ServerPlan
-from app.models.server_schedule import ServerSchedule
-from app.models.server import Server
+import pytest
 
 
 class TestPlansAPI:

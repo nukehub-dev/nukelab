@@ -1,20 +1,20 @@
 import secrets
-from datetime import datetime, timedelta, UTC
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from datetime import UTC, datetime, timedelta
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+
 from app.api.auth import (
     get_current_user,
     get_password_hash,
-    verify_password,
     limiter,
     require_jwt_auth,
 )
 from app.db.session import get_db
-from app.models.user import User
 from app.models.api_token import ApiToken
+from app.models.user import User
 
 router = APIRouter()
 
@@ -54,10 +54,10 @@ class TokenCreate(BaseModel):
         max_length=255,
         description="Token name (e.g., 'VS Code', 'GitHub Actions')",
     )
-    scopes: List[str] = Field(
+    scopes: list[str] = Field(
         default=["servers:read", "servers:start"], description="Permission scopes"
     )
-    expires_days: Optional[int] = Field(
+    expires_days: int | None = Field(
         default=30, ge=1, le=365, description="Token expiration in days"
     )
 
@@ -77,11 +77,11 @@ class TokenCreate(BaseModel):
 class TokenResponse(BaseModel):
     id: str
     name: str
-    scopes: List[str]
+    scopes: list[str]
     usage_count: int
-    last_used_at: Optional[str]
+    last_used_at: str | None
     created_at: str
-    expires_at: Optional[str]
+    expires_at: str | None
     is_active: bool
 
 
@@ -89,7 +89,7 @@ class TokenCreateResponse(TokenResponse):
     token: str  # Only returned once on creation
 
 
-@router.get("", response_model=List[TokenResponse])
+@router.get("", response_model=list[TokenResponse])
 async def list_tokens(
     current_user: User = Depends(get_current_user),
     _=Depends(require_jwt_auth()),

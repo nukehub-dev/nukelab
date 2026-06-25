@@ -4,32 +4,31 @@ Server API endpoints with RBAC and ownership enforcement.
 
 import logging
 import re
-from datetime import datetime, timedelta, UTC
-from typing import Optional
-from app.config import settings
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from datetime import UTC, datetime, timedelta
+
+import aiodocker
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
 
 from app.api.auth import get_current_user, limiter
-from app.core.permissions import Permission
-from app.core.security import has_any_permission
-from app.dependencies import PermissionChecker, require_permissions
-from app.db.session import get_db
-from app.models.user import User
-from app.models.server import Server
+from app.config import settings
 from app.container.spawner import spawner
-import aiodocker
-from app.services.notification_service import NotificationService, broadcast_server_status_change
-from app.services.activity_service import ActivityService
 from app.core.cache import (
-    cache_get_or_set,
     cache_delete,
     cache_delete_tracked,
-    cache_track_key,
+    cache_get_or_set,
 )
+from app.core.permissions import Permission
+from app.core.security import has_any_permission
+from app.db.session import get_db
+from app.dependencies import PermissionChecker, require_permissions
+from app.models.server import Server
+from app.models.user import User
+from app.services.activity_service import ActivityService
+from app.services.notification_service import NotificationService, broadcast_server_status_change
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +43,7 @@ def _server_list_cache_key(user_id: str) -> str:
 
 
 def _admin_server_list_cache_key(
-    page: int, limit: int, status: Optional[str], user_id: Optional[str]
+    page: int, limit: int, status: str | None, user_id: str | None
 ) -> str:
     return f"servers:list:admin:{page}:{limit}:{status or 'all'}:{user_id or 'all'}"
 
@@ -59,7 +58,7 @@ class VolumeMountRequest(BaseModel):
     volume_id: str
     mount_path: str = "/data"
     mode: str = "read_write"  # read_write, read_only
-    max_size_bytes: Optional[int] = None  # For auto-created volumes when volume_id is empty
+    max_size_bytes: int | None = None  # For auto-created volumes when volume_id is empty
 
 
 # Docker-compatible name pattern used for container and volume names
@@ -76,21 +75,21 @@ class ServerCreateRequest(BaseModel):
     )
     plan_id: str
     environment_id: str
-    volume_id: Optional[str] = None  # Deprecated: use volume_mounts
-    volume_mode: Optional[str] = "read_write"  # Deprecated: use volume_mounts
-    volume_mounts: Optional[list[VolumeMountRequest]] = None
+    volume_id: str | None = None  # Deprecated: use volume_mounts
+    volume_mode: str | None = "read_write"  # Deprecated: use volume_mounts
+    volume_mounts: list[VolumeMountRequest] | None = None
 
 
 class ServerUpdateRequest(BaseModel):
-    name: Optional[str] = None
-    plan_id: Optional[str] = None
-    environment_id: Optional[str] = None
-    volume_mounts: Optional[list[VolumeMountRequest]] = None
-    reason: Optional[str] = None
+    name: str | None = None
+    plan_id: str | None = None
+    environment_id: str | None = None
+    volume_mounts: list[VolumeMountRequest] | None = None
+    reason: str | None = None
 
 
 class ReasonRequest(BaseModel):
-    reason: Optional[str] = None
+    reason: str | None = None
 
 
 class ServerResponse(BaseModel):
@@ -156,7 +155,7 @@ async def get_server_with_permission_check(
 
 
 async def _audit_cross_user_access(
-    server: Server, current_user: User, db: AsyncSession, action: str, reason: Optional[str] = None
+    server: Server, current_user: User, db: AsyncSession, action: str, reason: str | None = None
 ):
     """Log audit trail and notify owner when admin accesses another user's server.
     Raises 400 if reason is not provided for cross-user access."""
@@ -238,8 +237,8 @@ def _serialize_volume_mounts(server: Server) -> list:
 async def _get_server_volume_mounts(db: AsyncSession, server_id: str) -> list:
     """Load volume mounts for a server."""
     from sqlalchemy.orm import selectinload
+
     from app.models.server_volume import ServerVolume
-    from app.models.volume import Volume
 
     result = await db.execute(
         select(ServerVolume)
@@ -276,10 +275,11 @@ async def create_server(
     db: AsyncSession = Depends(get_db),
 ):
     """Create and spawn a new server using a plan and environment template."""
-    from app.services.quota_service import QuotaService
-    from app.services.plan_service import PlanService
-    from app.services.environment_service import EnvironmentService
     import uuid
+
+    from app.services.environment_service import EnvironmentService
+    from app.services.plan_service import PlanService
+    from app.services.quota_service import QuotaService
 
     checker = PermissionChecker(current_user)
     checker.require(Permission.SERVERS_WRITE_OWN)
@@ -365,9 +365,9 @@ async def create_server(
         }
 
     try:
-        from app.services.volume_service import VolumeService
-        from app.services.volume_access_service import VolumeAccessService
         from app.models.server_volume import ServerVolume
+        from app.services.volume_access_service import VolumeAccessService
+        from app.services.volume_service import VolumeService
 
         volume_service = VolumeService(db)
         volume_access = VolumeAccessService(db)
@@ -630,6 +630,7 @@ async def list_servers(
         checker = PermissionChecker(current_user)
 
         from sqlalchemy.orm import selectinload
+
         from app.models.server_volume import ServerVolume
 
         if checker.is_admin() or has_any_permission(current_user, [Permission.SERVERS_READ_ALL]):
@@ -836,12 +837,13 @@ async def _perform_server_start(
     server_id: str,
 ) -> dict:
     """Execute server start logic. Raises HTTPException on failure."""
-    from app.services.plan_service import PlanService
-    from app.services.credit_service import CreditService
-    from app.services.volume_service import VolumeService
-    from app.services.environment_service import EnvironmentService
     from sqlalchemy import select as sa_select
+
     from app.models.user import User
+    from app.services.credit_service import CreditService
+    from app.services.environment_service import EnvironmentService
+    from app.services.plan_service import PlanService
+    from app.services.volume_service import VolumeService
 
     # Check plan access — user may have lost access since creation
     if server.plan_id:
@@ -1061,12 +1063,11 @@ async def _perform_server_stop(
     server_id: str,
 ) -> dict:
     """Execute server stop logic. Raises HTTPException on failure."""
-    from app.services.credit_service import CreditService
     from app.models.server_plan import ServerPlan
+    from app.services.credit_service import CreditService
     from app.services.quota_service import QuotaService
-    from app.services.volume_service import VolumeService
 
-    volume_mounts = await _load_server_volume_mounts(db, str(server.id))
+    await _load_server_volume_mounts(db, str(server.id))
 
     if server.container_id:
         try:
@@ -1139,12 +1140,13 @@ async def _perform_server_restart(
     server_id: str,
 ) -> dict:
     """Execute server restart logic. Raises HTTPException on failure."""
-    from app.services.plan_service import PlanService
-    from app.services.credit_service import CreditService
-    from app.services.volume_service import VolumeService
-    from app.services.environment_service import EnvironmentService
     from sqlalchemy import select as sa_select
+
     from app.models.user import User
+    from app.services.credit_service import CreditService
+    from app.services.environment_service import EnvironmentService
+    from app.services.plan_service import PlanService
+    from app.services.volume_service import VolumeService
 
     if server.plan_id:
         plan_service = PlanService(db)
@@ -1272,11 +1274,11 @@ async def _perform_server_delete(
     server_id: str,
 ) -> dict:
     """Execute server delete logic. Raises HTTPException on failure."""
-    from app.services.volume_service import VolumeService
-    from app.models.credit_transaction import CreditTransaction
     from sqlalchemy import delete
 
-    volume_mounts = await _load_server_volume_mounts(db, str(server.id))
+    from app.models.credit_transaction import CreditTransaction
+
+    await _load_server_volume_mounts(db, str(server.id))
 
     if server.container_id:
         try:
@@ -1392,7 +1394,7 @@ async def restart_server(
 async def delete_server(
     server_id: str,
     request: Request,
-    reason: Optional[str] = None,
+    reason: str | None = None,
     current_user: User = Depends(get_current_user),
     _=Depends(require_permissions(Permission.SERVERS_WRITE_OWN)),
     db: AsyncSession = Depends(get_db),
@@ -1460,14 +1462,16 @@ async def update_server(
     if str(server.user_id) != str(current_user.id):
         await _audit_cross_user_access(server, current_user, db, "server.update", body.reason)
 
-    from app.services.quota_service import QuotaService
-    from app.services.plan_service import PlanService
-    from app.services.environment_service import EnvironmentService
-    from app.services.volume_service import VolumeService
-    from app.services.volume_access_service import VolumeAccessService
-    from app.models.server_volume import ServerVolume
-    from sqlalchemy import delete as sa_delete
     import uuid
+
+    from sqlalchemy import delete as sa_delete
+
+    from app.models.server_volume import ServerVolume
+    from app.services.environment_service import EnvironmentService
+    from app.services.plan_service import PlanService
+    from app.services.quota_service import QuotaService
+    from app.services.volume_access_service import VolumeAccessService
+    from app.services.volume_service import VolumeService
 
     volume_service = VolumeService(db)
     volume_access = VolumeAccessService(db)
@@ -1614,6 +1618,7 @@ async def update_server(
             # Persist home-directory flag for privacy warnings even after deletion
             if "server_owner" not in locals():
                 from sqlalchemy import select as sa_select
+
                 from app.models.user import User
 
                 result = await db.execute(sa_select(User).where(User.id == server.user_id))
@@ -1649,6 +1654,7 @@ async def update_server(
 
         # Get server owner's username
         from sqlalchemy import select as sa_select
+
         from app.models.user import User
 
         result = await db.execute(sa_select(User).where(User.id == server.user_id))
@@ -1726,6 +1732,7 @@ async def test_metric(
 ):
     """Send a test metric via Redis pub/sub to verify WebSocket pipeline."""
     import json
+
     from app.core.redis_client import get_redis_client
     from app.websocket.metrics_socket import connections
 
@@ -1848,7 +1855,7 @@ async def get_server_logs(
     server_id: str,
     request: Request,
     tail: int = 100,
-    since: Optional[str] = None,
+    since: str | None = None,
     follow: bool = False,
     current_user: User = Depends(get_current_user),
     _=Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.SERVERS_READ_ALL)),
@@ -1898,7 +1905,7 @@ async def get_server_logs(
             "follow": follow,
             "status": "running",
         }
-    except aiodocker.DockerError as e:
+    except aiodocker.DockerError:
         # Container not found or Docker error — return empty logs gracefully
         return {
             "server_id": server_id,
@@ -1926,7 +1933,7 @@ class ServerAccessTokenResponse(BaseModel):
 
 
 class ServerAccessTokenRequest(BaseModel):
-    reason: Optional[str] = None
+    reason: str | None = None
 
 
 @router.post("/{server_id}/access-token")

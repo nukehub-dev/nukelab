@@ -31,7 +31,6 @@ class TestEmailTemplates:
 
 """Extended tests for EmailService (all templates, disabled state)."""
 
-import pytest
 from unittest import mock
 
 from app.services.email_service import EmailService
@@ -94,9 +93,6 @@ class TestEmailServiceTemplates:
 """Extended tests for EmailService send method."""
 
 import pytest
-from unittest import mock
-
-from app.services.email_service import EmailService
 
 
 class TestEmailServiceSendEnabled:

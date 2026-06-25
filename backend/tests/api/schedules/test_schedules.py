@@ -9,7 +9,6 @@ class TestScheduleModel:
     @pytest.mark.asyncio
     async def test_schedule_has_required_fields(self):
         """Schedule model should have cron, action, active, and next_run fields."""
-        from app.models.server_schedule import ServerSchedule
 
         schedule = ServerSchedule()
         assert hasattr(schedule, "cron_expression")
@@ -43,18 +42,15 @@ class TestScheduleTasks:
 
 """Extended tests for small API modules — coverage gap closure."""
 
-import pytest
-from unittest import mock
-from datetime import datetime, timedelta, UTC
 import uuid as uuid_mod
+from unittest import mock
+
+import pytest
 
 from app.config import settings
+from app.models.environment_template import EnvironmentTemplate
 from app.models.server import Server
 from app.models.server_plan import ServerPlan
-from app.models.environment_template import EnvironmentTemplate
-from app.models.notification import Notification
-from app.models.activity_log import ActivityLog
-from app.models.credit_transaction import CreditTransaction
 
 
 @pytest.fixture(autouse=True)
@@ -291,12 +287,10 @@ class TestSchedulesAPI:
 
 """Extended tests for smaller API endpoints (tokens, plans, quotas, schedules)."""
 
-import pytest
-import uuid
 
-from app.models.server_plan import ServerPlan
+import pytest
+
 from app.models.server_schedule import ServerSchedule
-from app.models.server import Server
 
 
 class TestSchedulesAPIExtended:

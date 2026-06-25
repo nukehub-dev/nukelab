@@ -2,15 +2,14 @@
 
 import pytest
 from fastapi import HTTPException
-from unittest import mock
 
+from app.core.permissions import Permission
 from app.dependencies import (
     PermissionChecker,
-    require_permissions,
-    require_admin,
     get_current_active_user,
+    require_admin,
+    require_permissions,
 )
-from app.core.permissions import Permission
 
 
 class TestGetCurrentActiveUser:

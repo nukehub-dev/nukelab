@@ -39,9 +39,7 @@ class TestUserDashboard:
         self, client, test_user, user_token, db_session
     ):
         """Dashboard should calculate hourly cost from running servers."""
-        import uuid as uuid_mod
         from app.models.server import Server
-        from app.models.server_plan import ServerPlan
 
         plan = ServerPlan(
             id=uuid_mod.uuid4(),
@@ -107,18 +105,14 @@ class TestAdminDashboard:
 
 """Extended tests for small API modules — coverage gap closure."""
 
-import pytest
-from unittest import mock
-from datetime import datetime, timedelta, UTC
 import uuid as uuid_mod
 
+import pytest
+
 from app.config import settings
+from app.models.activity_log import ActivityLog
 from app.models.server import Server
 from app.models.server_plan import ServerPlan
-from app.models.environment_template import EnvironmentTemplate
-from app.models.notification import Notification
-from app.models.activity_log import ActivityLog
-from app.models.credit_transaction import CreditTransaction
 
 
 @pytest.fixture(autouse=True)
@@ -167,11 +161,7 @@ class TestDashboardExtended:
 """Extended tests for dashboard API endpoints."""
 
 import pytest
-from datetime import datetime, timedelta
-from sqlalchemy import select
 
-from app.models.server import Server
-from app.models.activity_log import ActivityLog
 from app.models.health_check import HealthCheck
 
 

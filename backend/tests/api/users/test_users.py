@@ -1,9 +1,8 @@
 """Tests for User model and User API endpoints."""
 
-import pytest
 import hashlib
 
-from app.models.user import User
+import pytest
 
 
 class TestUserModel:
@@ -198,15 +197,15 @@ class TestAvatarPathTraversal:
 
 """Coverage-focused tests for users.py gaps."""
 
-import pytest
 import os
 import tempfile
-from unittest import mock
 from io import BytesIO
+from unittest import mock
 
-from app.models.user import User
-from app.models.server import Server
+import pytest
+
 from app.models.activity_log import ActivityLog
+from app.models.server import Server
 from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
 
 
@@ -696,11 +695,6 @@ class TestSerializeUserEdgeCases:
 """Extended tests for Users API endpoints."""
 
 import pytest
-from unittest import mock
-
-from app.models.user import User
-from app.models.activity_log import ActivityLog
-from app.models.server import Server
 
 
 class TestDiscoverUsers:
@@ -848,7 +842,7 @@ class TestImpersonateUser:
         assert response.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_impersonate_not_found(self, client, superadmin_token):
+    async def test_impersonate_not_found_superadmin(self, client, superadmin_token):
         import uuid
 
         response = await client.post(

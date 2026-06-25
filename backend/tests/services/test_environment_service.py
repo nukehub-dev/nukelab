@@ -1,12 +1,12 @@
 """Tests for EnvironmentService business logic."""
 
-import pytest
 import uuid as uuid_mod
 
+import pytest
 from sqlalchemy import select
 
-from app.services.environment_service import EnvironmentService
 from app.models.environment_template import EnvironmentTemplate
+from app.services.environment_service import EnvironmentService
 
 
 class TestEnvironmentServiceGetById:

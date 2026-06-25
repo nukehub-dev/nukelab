@@ -1,8 +1,8 @@
 """Tests for ContainerClient."""
 
-import io
-import pytest
 from unittest import mock
+
+import pytest
 
 from app.container.client import ContainerClient, get_container_client, get_fresh_container_client
 

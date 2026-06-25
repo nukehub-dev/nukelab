@@ -1,14 +1,15 @@
 """Tests for graceful shutdown coordinator."""
 
-import pytest
-from unittest import mock
 import asyncio
+from unittest import mock
+
+import pytest
 
 from app.core.shutdown import (
     ShutdownCoordinator,
     get_shutdown_coordinator,
-    reset_shutdown_coordinator,
     is_shutting_down,
+    reset_shutdown_coordinator,
 )
 
 

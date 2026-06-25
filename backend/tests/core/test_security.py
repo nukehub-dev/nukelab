@@ -1,19 +1,20 @@
 """Tests for app.core.security and app.api.auth security primitives."""
 
-import pytest
+from datetime import UTC, datetime, timedelta
 from unittest import mock
-from datetime import datetime, timedelta, UTC
 
+import pytest
+
+from app.core.permissions import Permission
 from app.core.roles import _expand_permissions
 from app.core.security import (
-    get_user_permissions,
-    has_permission,
-    has_any_permission,
-    has_all_permissions,
-    check_permission,
     check_any_permission,
+    check_permission,
+    get_user_permissions,
+    has_all_permissions,
+    has_any_permission,
+    has_permission,
 )
-from app.core.permissions import Permission
 from app.models.user import User
 
 
@@ -173,8 +174,9 @@ class TestAuthPasswordUtils:
 
 class TestCreateAccessToken:
     def test_create_access_token(self):
-        from app.api.auth import create_access_token
         from jose import jwt
+
+        from app.api.auth import create_access_token
         from app.config import settings
 
         token = create_access_token(data={"sub": "testuser"})
@@ -183,8 +185,9 @@ class TestCreateAccessToken:
         assert "exp" in payload
 
     def test_create_access_token_custom_expiry(self):
-        from app.api.auth import create_access_token
         from jose import jwt
+
+        from app.api.auth import create_access_token
         from app.config import settings
 
         future = timedelta(minutes=60)
@@ -196,8 +199,9 @@ class TestCreateAccessToken:
 class TestCustomHTTPBearer:
     @pytest.mark.asyncio
     async def test_bearer_scheme(self):
-        from app.api.auth import CustomHTTPBearer
         from fastapi import Request
+
+        from app.api.auth import CustomHTTPBearer
 
         req = mock.Mock(spec=Request)
         req.headers = {"Authorization": "Bearer mytoken"}
@@ -207,8 +211,9 @@ class TestCustomHTTPBearer:
 
     @pytest.mark.asyncio
     async def test_token_scheme(self):
-        from app.api.auth import CustomHTTPBearer
         from fastapi import Request
+
+        from app.api.auth import CustomHTTPBearer
 
         req = mock.Mock(spec=Request)
         req.headers = {"Authorization": "Token mytoken"}
@@ -218,8 +223,9 @@ class TestCustomHTTPBearer:
 
     @pytest.mark.asyncio
     async def test_invalid_scheme(self):
+        from fastapi import HTTPException, Request
+
         from app.api.auth import CustomHTTPBearer
-        from fastapi import Request, HTTPException
 
         req = mock.Mock(spec=Request)
         req.headers = {"Authorization": "Basic abc"}
@@ -230,8 +236,9 @@ class TestCustomHTTPBearer:
 
     @pytest.mark.asyncio
     async def test_no_header(self):
+        from fastapi import HTTPException, Request
+
         from app.api.auth import CustomHTTPBearer
-        from fastapi import Request, HTTPException
 
         req = mock.Mock(spec=Request)
         req.headers = {}
@@ -242,8 +249,9 @@ class TestCustomHTTPBearer:
 
     @pytest.mark.asyncio
     async def test_no_header_no_auto_error(self):
-        from app.api.auth import CustomHTTPBearer
         from fastapi import Request
+
+        from app.api.auth import CustomHTTPBearer
 
         req = mock.Mock(spec=Request)
         req.headers = {}
@@ -254,8 +262,9 @@ class TestCustomHTTPBearer:
 
 class TestRequireScopes:
     def test_require_scopes_jwt_bypass(self):
-        from app.api.auth import require_scopes
         from fastapi import Request
+
+        from app.api.auth import require_scopes
 
         checker = require_scopes("servers:read")
         req = mock.Mock(spec=Request)
@@ -267,8 +276,9 @@ class TestRequireScopes:
         asyncio.get_event_loop().run_until_complete(checker(req, user))
 
     def test_require_scopes_api_token_match(self):
+        from fastapi import Request
+
         from app.api.auth import require_scopes
-        from fastapi import Request, HTTPException
 
         checker = require_scopes("servers:read")
         req = mock.Mock(spec=Request)
@@ -279,8 +289,9 @@ class TestRequireScopes:
         asyncio.get_event_loop().run_until_complete(checker(req, user))
 
     def test_require_scopes_api_token_no_match(self):
+        from fastapi import HTTPException, Request
+
         from app.api.auth import require_scopes
-        from fastapi import Request, HTTPException
 
         checker = require_scopes("servers:write")
         req = mock.Mock(spec=Request)
@@ -293,8 +304,9 @@ class TestRequireScopes:
         assert exc_info.value.status_code == 403
 
     def test_require_scopes_wildcard(self):
-        from app.api.auth import require_scopes
         from fastapi import Request
+
+        from app.api.auth import require_scopes
 
         checker = require_scopes("servers:write")
         req = mock.Mock(spec=Request)
@@ -305,8 +317,9 @@ class TestRequireScopes:
         asyncio.get_event_loop().run_until_complete(checker(req, user))
 
     def test_require_scopes_no_auth_context(self):
+        from fastapi import HTTPException, Request
+
         from app.api.auth import require_scopes
-        from fastapi import Request, HTTPException
 
         checker = require_scopes("servers:read")
         req = mock.Mock(spec=Request)
@@ -321,8 +334,9 @@ class TestRequireScopes:
 
 class TestRequireJWTAuth:
     def test_require_jwt_auth_pass(self):
-        from app.api.auth import require_jwt_auth
         from fastapi import Request
+
+        from app.api.auth import require_jwt_auth
 
         checker = require_jwt_auth()
         req = mock.Mock(spec=Request)
@@ -333,8 +347,9 @@ class TestRequireJWTAuth:
         asyncio.get_event_loop().run_until_complete(checker(req, user))
 
     def test_require_jwt_auth_rejects_api_token(self):
+        from fastapi import HTTPException, Request
+
         from app.api.auth import require_jwt_auth
-        from fastapi import Request, HTTPException
 
         checker = require_jwt_auth()
         req = mock.Mock(spec=Request)
@@ -348,8 +363,9 @@ class TestRequireJWTAuth:
         assert "JWT" in exc_info.value.detail
 
     def test_require_jwt_auth_no_context(self):
+        from fastapi import HTTPException, Request
+
         from app.api.auth import require_jwt_auth
-        from fastapi import Request, HTTPException
 
         checker = require_jwt_auth()
         req = mock.Mock(spec=Request)
@@ -391,8 +407,8 @@ class TestRefreshTokenUtils:
     async def test_revoke_refresh_token(self, db_session, test_user):
         from app.api.auth import (
             create_refresh_token_for_user,
-            verify_refresh_token,
             revoke_refresh_token,
+            verify_refresh_token,
         )
 
         plaintext = await create_refresh_token_for_user(str(test_user.id), db_session)
@@ -420,8 +436,10 @@ class TestRefreshTokenUtils:
 
     @pytest.mark.asyncio
     async def test_refresh_token_enforcement_limit(self, db_session, test_user):
-        from app.api.auth import create_refresh_token_for_user, verify_refresh_token
-        from app.api.auth import MAX_REFRESH_TOKENS_PER_USER
+        from app.api.auth import (
+            create_refresh_token_for_user,
+            verify_refresh_token,
+        )
 
         # Reduce limit to avoid connection exhaustion in tests
         with mock.patch("app.api.auth.MAX_REFRESH_TOKENS_PER_USER", 3):
@@ -440,12 +458,13 @@ class TestRefreshTokenUtils:
 
     @pytest.mark.asyncio
     async def test_cleanup_expired_refresh_tokens(self, db_session, test_user):
-        from app.api.auth import create_refresh_token_for_user, cleanup_expired_refresh_tokens
-        from app.models.refresh_token import RefreshToken
         from sqlalchemy import select
 
+        from app.api.auth import cleanup_expired_refresh_tokens, create_refresh_token_for_user
+        from app.models.refresh_token import RefreshToken
+
         # Create an expired token by backdating
-        plaintext = await create_refresh_token_for_user(str(test_user.id), db_session)
+        await create_refresh_token_for_user(str(test_user.id), db_session)
 
         # Manually expire it
         result = await db_session.execute(
@@ -460,8 +479,8 @@ class TestRefreshTokenUtils:
 
     @pytest.mark.asyncio
     async def test_run_periodic_cleanup_runs(self, db_session):
+
         from app.api.auth import run_periodic_refresh_token_cleanup
-        import asyncio
 
         call_count = 0
 
@@ -471,10 +490,12 @@ class TestRefreshTokenUtils:
             if call_count >= 2:
                 raise SystemExit("stop")
 
-        with mock.patch("app.api.auth.asyncio.sleep", side_effect=fake_sleep):
-            with mock.patch(
+        with (
+            mock.patch("app.api.auth.asyncio.sleep", side_effect=fake_sleep),
+            mock.patch(
                 "app.api.auth.cleanup_expired_refresh_tokens", new_callable=mock.AsyncMock
-            ) as mock_cleanup:
-                with pytest.raises(SystemExit):
-                    await run_periodic_refresh_token_cleanup()
-                mock_cleanup.assert_called_once()
+            ) as mock_cleanup,
+        ):
+            with pytest.raises(SystemExit):
+                await run_periodic_refresh_token_cleanup()
+            mock_cleanup.assert_called_once()

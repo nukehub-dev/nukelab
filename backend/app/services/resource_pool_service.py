@@ -3,14 +3,14 @@ Global resource pool service for tracking platform-wide resource availability.
 """
 
 import uuid
-from typing import Dict, Any, Optional
+from typing import Any
+
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func
 
 from app.models.server import Server
 from app.models.server_plan import ServerPlan
 from app.models.server_queue import ServerQueue
-from app.config import settings
 
 
 class ResourcePoolService:
@@ -30,7 +30,7 @@ class ResourcePoolService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_available_resources(self) -> Dict[str, Any]:
+    async def get_available_resources(self) -> dict[str, Any]:
         """Get currently available resources"""
         allocated = await self._get_allocated_resources()
 
@@ -52,7 +52,7 @@ class ResourcePoolService:
             },
         }
 
-    async def _get_allocated_resources(self) -> Dict[str, float]:
+    async def _get_allocated_resources(self) -> dict[str, float]:
         """Get resources allocated by running servers"""
         result = await self.db.execute(
             select(Server).where(Server.status.in_(["running", "starting"]))
@@ -138,7 +138,7 @@ class ResourcePoolService:
 
         return 0
 
-    async def get_next_in_queue(self) -> Optional[ServerQueue]:
+    async def get_next_in_queue(self) -> ServerQueue | None:
         """Get the next queued server that can be started"""
         result = await self.db.execute(
             select(ServerQueue)

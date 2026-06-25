@@ -1,8 +1,9 @@
 """Tests for Celery background tasks."""
 
-import pytest
 import asyncio
 from unittest import mock
+
+import pytest
 
 
 def _run_async_raises(exc):
@@ -17,14 +18,14 @@ def _run_async_raises(exc):
 
 
 from app.tasks import (
-    example_task,
-    evaluate_maintenance_windows,
+    _run_async,
+    check_container_health,
     cleanup_inactive_servers,
     collect_container_metrics,
     collect_system_metrics,
-    check_container_health,
     evaluate_alert_rules,
-    _run_async,
+    evaluate_maintenance_windows,
+    example_task,
 )
 
 
@@ -52,19 +53,21 @@ class TestExampleTask:
 
 class TestEvaluateMaintenanceWindows:
     def test_evaluate_maintenance_windows(self):
-        with mock.patch(
-            "app.tasks._run_async",
-            side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
-        ):
-            with mock.patch(
+        with (
+            mock.patch(
+                "app.tasks._run_async",
+                side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
+            ),
+            mock.patch(
                 "app.services.maintenance_window_service.MaintenanceWindowService.evaluate_windows",
                 new_callable=mock.AsyncMock,
                 return_value={"notifications_sent": 5, "enabled_count": 2, "disabled_count": 1},
-            ):
-                result = evaluate_maintenance_windows.run()
-                assert "5 notifications sent" in result
-                assert "2 enabled" in result
-                assert "1 disabled" in result
+            ),
+        ):
+            result = evaluate_maintenance_windows.run()
+            assert "5 notifications sent" in result
+            assert "2 enabled" in result
+            assert "1 disabled" in result
 
     def test_evaluate_maintenance_windows_error(self):
         with mock.patch(
@@ -82,113 +85,125 @@ class TestCleanupInactiveServers:
 
 class TestCollectContainerMetrics:
     def test_collect_container_metrics(self):
-        with mock.patch(
-            "app.tasks._run_async",
-            side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
-        ):
-            with mock.patch(
+        with (
+            mock.patch(
+                "app.tasks._run_async",
+                side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
+            ),
+            mock.patch(
                 "app.services.metrics_collector.MetricsCollector.collect_all",
                 new_callable=mock.AsyncMock,
-            ):
-                result = collect_container_metrics.run()
-                assert result == "Container metrics collected"
+            ),
+        ):
+            result = collect_container_metrics.run()
+            assert result == "Container metrics collected"
 
     def test_collect_container_metrics_error(self):
-        with mock.patch(
-            "app.tasks._run_async",
-            side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
-        ):
-            with mock.patch(
+        with (
+            mock.patch(
+                "app.tasks._run_async",
+                side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
+            ),
+            mock.patch(
                 "app.services.metrics_collector.MetricsCollector.collect_all",
                 side_effect=Exception("conn fail"),
-            ):
-                result = collect_container_metrics.run()
-                assert "Error" in result
+            ),
+        ):
+            result = collect_container_metrics.run()
+            assert "Error" in result
 
 
 class TestCollectSystemMetrics:
     def test_collect_system_metrics(self):
-        with mock.patch(
-            "app.tasks._run_async",
-            side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
-        ):
-            with mock.patch(
+        with (
+            mock.patch(
+                "app.tasks._run_async",
+                side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
+            ),
+            mock.patch(
                 "app.services.system_metrics_collector.SystemMetricsCollector.collect",
                 new_callable=mock.AsyncMock,
-            ):
-                result = collect_system_metrics.run()
-                assert result == "System metrics collected"
+            ),
+        ):
+            result = collect_system_metrics.run()
+            assert result == "System metrics collected"
 
     def test_collect_system_metrics_error(self):
-        with mock.patch(
-            "app.tasks._run_async",
-            side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
-        ):
-            with mock.patch(
+        with (
+            mock.patch(
+                "app.tasks._run_async",
+                side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
+            ),
+            mock.patch(
                 "app.services.system_metrics_collector.SystemMetricsCollector.collect",
                 side_effect=Exception("conn fail"),
-            ):
-                result = collect_system_metrics.run()
-                assert "Error" in result
+            ),
+        ):
+            result = collect_system_metrics.run()
+            assert "Error" in result
 
 
 class TestCheckContainerHealth:
     def test_check_container_health(self):
-        with mock.patch(
-            "app.tasks._run_async",
-            side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
-        ):
-            with mock.patch(
+        with (
+            mock.patch(
+                "app.tasks._run_async",
+                side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
+            ),
+            mock.patch(
                 "app.services.health_check_service.HealthCheckService.check_all_containers",
                 new_callable=mock.AsyncMock,
-            ):
-                result = check_container_health.run()
-                assert result == "Health checks completed"
+            ),
+        ):
+            result = check_container_health.run()
+            assert result == "Health checks completed"
 
     def test_check_container_health_error(self):
-        with mock.patch(
-            "app.tasks._run_async",
-            side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
-        ):
-            with mock.patch(
+        with (
+            mock.patch(
+                "app.tasks._run_async",
+                side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
+            ),
+            mock.patch(
                 "app.services.health_check_service.HealthCheckService.check_all_containers",
                 side_effect=Exception("db fail"),
-            ):
-                result = check_container_health.run()
-                assert "Error" in result
+            ),
+        ):
+            result = check_container_health.run()
+            assert "Error" in result
 
 
 class TestEvaluateAlertRules:
     def test_evaluate_alert_rules(self):
-        with mock.patch(
-            "app.tasks._run_async",
-            side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
-        ):
-            with mock.patch(
+        with (
+            mock.patch(
+                "app.tasks._run_async",
+                side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
+            ),
+            mock.patch(
                 "app.services.alert_service.AlertService.evaluate_all_rules",
                 new_callable=mock.AsyncMock,
-            ):
-                result = evaluate_alert_rules.run()
-                assert result == "Alert rules evaluated"
+            ),
+        ):
+            result = evaluate_alert_rules.run()
+            assert result == "Alert rules evaluated"
 
     def test_evaluate_alert_rules_error(self):
-        with mock.patch(
-            "app.tasks._run_async",
-            side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
-        ):
-            with mock.patch(
+        with (
+            mock.patch(
+                "app.tasks._run_async",
+                side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
+            ),
+            mock.patch(
                 "app.services.alert_service.AlertService.evaluate_all_rules",
                 side_effect=Exception("db fail"),
-            ):
-                result = evaluate_alert_rules.run()
-                assert "Error" in result
+            ),
+        ):
+            result = evaluate_alert_rules.run()
+            assert "Error" in result
 
 
 """Coverage-focused tests for utility modules and easy wins."""
-
-import pytest
-from unittest import mock
-from cryptography.fernet import InvalidToken
 
 
 class TestTasks:
@@ -206,7 +221,7 @@ class TestTasks:
         from app.tasks import cleanup_inactive_servers
 
         result = cleanup_inactive_servers.run()
-        assert "Cleanup completed" == result
+        assert result == "Cleanup completed"
 
     @pytest.mark.asyncio
     async def test_collect_container_metrics_error(self):
@@ -319,19 +334,18 @@ class TestTasks:
 
 """Tests for remaining Celery background tasks not covered in test_tasks.py."""
 
-import pytest
-import asyncio
-from unittest import mock
 from datetime import datetime, timedelta
 
+import pytest
+
 from app.tasks import (
-    shutdown_idle_servers,
-    process_nuke_billing,
-    enforce_auto_stop,
-    process_server_queue,
-    evaluate_schedules,
-    rollup_server_metrics,
     cleanup_expired_data,
+    enforce_auto_stop,
+    evaluate_schedules,
+    process_nuke_billing,
+    process_server_queue,
+    rollup_server_metrics,
+    shutdown_idle_servers,
 )
 
 
@@ -342,19 +356,21 @@ class TestShutdownIdleServers:
         async def _mock_enforce():
             return "Stopped 0 idle servers"
 
-        with mock.patch(
-            "app.tasks._run_async",
-            side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
+        with (
+            mock.patch(
+                "app.tasks._run_async",
+                side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
+            ),
+            mock.patch("app.tasks.AsyncSessionLocal") as mock_session,
         ):
-            with mock.patch("app.tasks.AsyncSessionLocal") as mock_session:
-                mock_db = mock.AsyncMock()
-                mock_result = mock.Mock()
-                mock_result.all.return_value = []
-                mock_db.execute.return_value = mock_result
-                mock_session.return_value.__aenter__ = mock.AsyncMock(return_value=mock_db)
-                mock_session.return_value.__aexit__ = mock.AsyncMock(return_value=False)
-                result = shutdown_idle_servers.run()
-                assert "Stopped" in result or "0" in result
+            mock_db = mock.AsyncMock()
+            mock_result = mock.Mock()
+            mock_result.all.return_value = []
+            mock_db.execute.return_value = mock_result
+            mock_session.return_value.__aenter__ = mock.AsyncMock(return_value=mock_db)
+            mock_session.return_value.__aexit__ = mock.AsyncMock(return_value=False)
+            result = shutdown_idle_servers.run()
+            assert "Stopped" in result or "0" in result
 
     def test_shutdown_idle_servers_error(self):
         with mock.patch(
@@ -371,19 +387,21 @@ class TestProcessNukeBilling:
         async def _mock_bill():
             return "Billed 0 servers, stopped 0 servers"
 
-        with mock.patch(
-            "app.tasks._run_async",
-            side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
+        with (
+            mock.patch(
+                "app.tasks._run_async",
+                side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
+            ),
+            mock.patch("app.tasks.AsyncSessionLocal") as mock_session,
         ):
-            with mock.patch("app.tasks.AsyncSessionLocal") as mock_session:
-                mock_db = mock.AsyncMock()
-                mock_result = mock.Mock()
-                mock_result.all.return_value = []
-                mock_db.execute.return_value = mock_result
-                mock_session.return_value.__aenter__ = mock.AsyncMock(return_value=mock_db)
-                mock_session.return_value.__aexit__ = mock.AsyncMock(return_value=False)
-                result = process_nuke_billing.run()
-                assert "Billed" in result
+            mock_db = mock.AsyncMock()
+            mock_result = mock.Mock()
+            mock_result.all.return_value = []
+            mock_db.execute.return_value = mock_result
+            mock_session.return_value.__aenter__ = mock.AsyncMock(return_value=mock_db)
+            mock_session.return_value.__aexit__ = mock.AsyncMock(return_value=False)
+            result = process_nuke_billing.run()
+            assert "Billed" in result
 
     def test_process_nuke_billing_error(self):
         with mock.patch(
@@ -400,19 +418,21 @@ class TestEnforceAutoStop:
         async def _mock_enforce():
             return "Stopped 0 servers, warned 0 servers"
 
-        with mock.patch(
-            "app.tasks._run_async",
-            side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
+        with (
+            mock.patch(
+                "app.tasks._run_async",
+                side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
+            ),
+            mock.patch("app.tasks.AsyncSessionLocal") as mock_session,
         ):
-            with mock.patch("app.tasks.AsyncSessionLocal") as mock_session:
-                mock_db = mock.AsyncMock()
-                mock_result = mock.Mock()
-                mock_result.all.return_value = []
-                mock_db.execute.return_value = mock_result
-                mock_session.return_value.__aenter__ = mock.AsyncMock(return_value=mock_db)
-                mock_session.return_value.__aexit__ = mock.AsyncMock(return_value=False)
-                result = enforce_auto_stop.run()
-                assert "Stopped" in result
+            mock_db = mock.AsyncMock()
+            mock_result = mock.Mock()
+            mock_result.all.return_value = []
+            mock_db.execute.return_value = mock_result
+            mock_session.return_value.__aenter__ = mock.AsyncMock(return_value=mock_db)
+            mock_session.return_value.__aexit__ = mock.AsyncMock(return_value=False)
+            result = enforce_auto_stop.run()
+            assert "Stopped" in result
 
     def test_enforce_auto_stop_error(self):
         with mock.patch(
@@ -429,20 +449,22 @@ class TestProcessServerQueue:
         async def _mock_process():
             return "Started 0 queued servers, timed out 0 entries"
 
-        with mock.patch(
-            "app.tasks._run_async",
-            side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
+        with (
+            mock.patch(
+                "app.tasks._run_async",
+                side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
+            ),
+            mock.patch("app.tasks.AsyncSessionLocal") as mock_session,
         ):
-            with mock.patch("app.tasks.AsyncSessionLocal") as mock_session:
-                mock_db = mock.AsyncMock()
-                mock_result = mock.Mock()
-                mock_result.scalars.return_value.all.return_value = []
-                mock_result.all.return_value = []
-                mock_db.execute.return_value = mock_result
-                mock_session.return_value.__aenter__ = mock.AsyncMock(return_value=mock_db)
-                mock_session.return_value.__aexit__ = mock.AsyncMock(return_value=False)
-                result = process_server_queue.run()
-                assert "Started" in result
+            mock_db = mock.AsyncMock()
+            mock_result = mock.Mock()
+            mock_result.scalars.return_value.all.return_value = []
+            mock_result.all.return_value = []
+            mock_db.execute.return_value = mock_result
+            mock_session.return_value.__aenter__ = mock.AsyncMock(return_value=mock_db)
+            mock_session.return_value.__aexit__ = mock.AsyncMock(return_value=False)
+            result = process_server_queue.run()
+            assert "Started" in result
 
     def test_process_server_queue_error(self):
         with mock.patch(
@@ -459,20 +481,22 @@ class TestEvaluateSchedules:
         async def _mock_eval():
             return "Executed 0 schedules, 0 failed"
 
-        with mock.patch(
-            "app.tasks._run_async",
-            side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
+        with (
+            mock.patch(
+                "app.tasks._run_async",
+                side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
+            ),
+            mock.patch("app.tasks.AsyncSessionLocal") as mock_session,
         ):
-            with mock.patch("app.tasks.AsyncSessionLocal") as mock_session:
-                mock_db = mock.AsyncMock()
-                mock_session.return_value.__aenter__ = mock.AsyncMock(return_value=mock_db)
-                mock_session.return_value.__aexit__ = mock.AsyncMock(return_value=False)
-                with mock.patch("app.services.schedule_service.ScheduleService") as mock_svc:
-                    mock_instance = mock.AsyncMock()
-                    mock_instance.get_due_schedules = mock.AsyncMock(return_value=[])
-                    mock_svc.return_value = mock_instance
-                    result = evaluate_schedules.run()
-                    assert "Executed" in result
+            mock_db = mock.AsyncMock()
+            mock_session.return_value.__aenter__ = mock.AsyncMock(return_value=mock_db)
+            mock_session.return_value.__aexit__ = mock.AsyncMock(return_value=False)
+            with mock.patch("app.services.schedule_service.ScheduleService") as mock_svc:
+                mock_instance = mock.AsyncMock()
+                mock_instance.get_due_schedules = mock.AsyncMock(return_value=[])
+                mock_svc.return_value = mock_instance
+                result = evaluate_schedules.run()
+                assert "Executed" in result
 
     def test_evaluate_schedules_error(self):
         with mock.patch(
@@ -489,19 +513,21 @@ class TestRollupServerMetrics:
         async def _mock_rollup():
             return "Upserted 0 daily rollup rows"
 
-        with mock.patch(
-            "app.tasks._run_async",
-            side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
+        with (
+            mock.patch(
+                "app.tasks._run_async",
+                side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
+            ),
+            mock.patch("app.tasks.AsyncSessionLocal") as mock_session,
         ):
-            with mock.patch("app.tasks.AsyncSessionLocal") as mock_session:
-                mock_db = mock.AsyncMock()
-                mock_result = mock.Mock()
-                mock_result.all.return_value = []
-                mock_db.execute.return_value = mock_result
-                mock_session.return_value.__aenter__ = mock.AsyncMock(return_value=mock_db)
-                mock_session.return_value.__aexit__ = mock.AsyncMock(return_value=False)
-                result = rollup_server_metrics.run()
-                assert "Upserted" in result or "rollup" in result or "Error" in result
+            mock_db = mock.AsyncMock()
+            mock_result = mock.Mock()
+            mock_result.all.return_value = []
+            mock_db.execute.return_value = mock_result
+            mock_session.return_value.__aenter__ = mock.AsyncMock(return_value=mock_db)
+            mock_session.return_value.__aexit__ = mock.AsyncMock(return_value=False)
+            result = rollup_server_metrics.run()
+            assert "Upserted" in result or "rollup" in result or "Error" in result
 
     def test_rollup_server_metrics_error(self):
         with mock.patch(
@@ -518,19 +544,21 @@ class TestCleanupExpiredData:
         async def _mock_cleanup():
             return "Cleanup disabled"
 
-        with mock.patch(
-            "app.tasks._run_async",
-            side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
+        with (
+            mock.patch(
+                "app.tasks._run_async",
+                side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
+            ),
+            mock.patch("app.tasks.AsyncSessionLocal") as mock_session,
         ):
-            with mock.patch("app.tasks.AsyncSessionLocal") as mock_session:
-                mock_db = mock.AsyncMock()
-                mock_result = mock.Mock()
-                mock_result.scalar_one_or_none.return_value = "0"
-                mock_db.execute.return_value = mock_result
-                mock_session.return_value.__aenter__ = mock.AsyncMock(return_value=mock_db)
-                mock_session.return_value.__aexit__ = mock.AsyncMock(return_value=False)
-                result = cleanup_expired_data.run()
-                assert "disabled" in result or "Cleanup" in result or "Error" in result
+            mock_db = mock.AsyncMock()
+            mock_result = mock.Mock()
+            mock_result.scalar_one_or_none.return_value = "0"
+            mock_db.execute.return_value = mock_result
+            mock_session.return_value.__aenter__ = mock.AsyncMock(return_value=mock_db)
+            mock_session.return_value.__aexit__ = mock.AsyncMock(return_value=False)
+            result = cleanup_expired_data.run()
+            assert "disabled" in result or "Cleanup" in result or "Error" in result
 
     def test_cleanup_expired_data_error(self):
         with mock.patch(
@@ -542,39 +570,26 @@ class TestCleanupExpiredData:
 
 """Extended tests for tasks.py — branch coverage for Celery task internals."""
 
-import pytest
-import asyncio
-from unittest import mock
-from datetime import datetime, timedelta, UTC
 import uuid as uuid_mod
+from datetime import UTC
 
-from app.tasks import (
-    _run_async,
-    example_task,
-    evaluate_maintenance_windows,
-    shutdown_idle_servers,
-    process_nuke_billing,
-    enforce_auto_stop,
-    process_server_queue,
-    evaluate_schedules,
-    rollup_server_metrics,
-    cleanup_expired_data,
-)
-
+import pytest
 
 # ── helpers ──────────────────────────────────────────────────
 
 
 def _run_with_mock_db(task_func, mock_db):
     """Run a Celery task with _run_async patched to execute in current loop."""
-    with mock.patch(
-        "app.tasks._run_async",
-        side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
+    with (
+        mock.patch(
+            "app.tasks._run_async",
+            side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
+        ),
+        mock.patch("app.tasks.AsyncSessionLocal") as mock_session,
     ):
-        with mock.patch("app.tasks.AsyncSessionLocal") as mock_session:
-            mock_session.return_value.__aenter__ = mock.AsyncMock(return_value=mock_db)
-            mock_session.return_value.__aexit__ = mock.AsyncMock(return_value=False)
-            return task_func.run()
+        mock_session.return_value.__aenter__ = mock.AsyncMock(return_value=mock_db)
+        mock_session.return_value.__aexit__ = mock.AsyncMock(return_value=False)
+        return task_func.run()
 
 
 def _make_async_mock_db():
@@ -740,25 +755,28 @@ class TestShutdownIdleServersBranches:
         plan_res.scalar_one_or_none.return_value = plan
         db.execute = mock.AsyncMock(side_effect=[rows_res, plan_res])
 
-        with mock.patch(
-            "app.container.spawner.spawner.get_status", new=mock.AsyncMock(return_value="running")
-        ):
-            with mock.patch(
+        with (
+            mock.patch(
+                "app.container.spawner.spawner.get_status",
+                new=mock.AsyncMock(return_value="running"),
+            ),
+            mock.patch(
                 "app.container.spawner.spawner.delete", new=mock.AsyncMock(return_value=True)
-            ):
-                with mock.patch("app.services.credit_service.CreditService") as mock_credit:
-                    mock_credit.return_value.reconcile_server_billing = mock.AsyncMock()
-                    with mock.patch("app.services.quota_service.QuotaService") as mock_quota:
-                        mock_quota.return_value.decrement_usage = mock.AsyncMock()
-                        with mock.patch(
-                            "app.services.notification_service.NotificationService"
-                        ) as mock_notif:
-                            mock_notif.return_value.server_stopped = mock.AsyncMock()
-                            with mock.patch(
-                                "app.services.notification_service.broadcast_server_status_change",
-                                new=mock.AsyncMock(),
-                            ):
-                                result = _run_with_mock_db(shutdown_idle_servers, db)
+            ),
+            mock.patch("app.services.credit_service.CreditService") as mock_credit,
+        ):
+            mock_credit.return_value.reconcile_server_billing = mock.AsyncMock()
+            with mock.patch("app.services.quota_service.QuotaService") as mock_quota:
+                mock_quota.return_value.decrement_usage = mock.AsyncMock()
+                with mock.patch(
+                    "app.services.notification_service.NotificationService"
+                ) as mock_notif:
+                    mock_notif.return_value.server_stopped = mock.AsyncMock()
+                    with mock.patch(
+                        "app.services.notification_service.broadcast_server_status_change",
+                        new=mock.AsyncMock(),
+                    ):
+                        result = _run_with_mock_db(shutdown_idle_servers, db)
         assert "Stopped 1 idle servers" in result
 
     def test_stop_exception_caught(self):
@@ -879,21 +897,21 @@ class TestEnforceAutoStopBranches:
         plan.idle_timeout = None
 
         db = self._make_db([(server, plan)])
-        with mock.patch(
-            "app.container.spawner.spawner.delete", new=mock.AsyncMock(return_value=True)
+        with (
+            mock.patch(
+                "app.container.spawner.spawner.delete", new=mock.AsyncMock(return_value=True)
+            ),
+            mock.patch("app.services.quota_service.QuotaService") as mock_quota,
         ):
-            with mock.patch("app.services.quota_service.QuotaService") as mock_quota:
-                mock_quota.return_value.decrement_usage = mock.AsyncMock()
+            mock_quota.return_value.decrement_usage = mock.AsyncMock()
+            with mock.patch("app.services.notification_service.NotificationService") as mock_notif:
+                mock_notif.return_value.server_stopped = mock.AsyncMock()
                 with mock.patch(
-                    "app.services.notification_service.NotificationService"
-                ) as mock_notif:
-                    mock_notif.return_value.server_stopped = mock.AsyncMock()
-                    with mock.patch(
-                        "app.tasks.broadcast_server_status_change",
-                        new=mock.AsyncMock(),
-                        create=True,
-                    ):
-                        result = _run_with_mock_db(enforce_auto_stop, db)
+                    "app.tasks.broadcast_server_status_change",
+                    new=mock.AsyncMock(),
+                    create=True,
+                ):
+                    result = _run_with_mock_db(enforce_auto_stop, db)
         assert "Stopped 1 servers" in result
 
     def test_idle_timeout_warning(self):
@@ -908,16 +926,20 @@ class TestEnforceAutoStopBranches:
         plan.idle_timeout = "30m"
 
         db = self._make_db([(server, plan)])
-        with mock.patch(
-            "app.container.spawner.spawner.delete", new=mock.AsyncMock(return_value=True)
+        with (
+            mock.patch(
+                "app.container.spawner.spawner.delete", new=mock.AsyncMock(return_value=True)
+            ),
+            mock.patch("app.services.notification_service.NotificationService") as mock_notif,
         ):
-            with mock.patch("app.services.notification_service.NotificationService") as mock_notif:
-                mock_notif.return_value.server_idle_warning = mock.AsyncMock()
-                with mock.patch(
+            mock_notif.return_value.server_idle_warning = mock.AsyncMock()
+            with (
+                mock.patch(
                     "app.tasks.broadcast_server_status_change", new=mock.AsyncMock(), create=True
-                ):
-                    with mock.patch("app.config.settings.server_warn_before_stop", 300):
-                        result = _run_with_mock_db(enforce_auto_stop, db)
+                ),
+                mock.patch("app.config.settings.server_warn_before_stop", 300),
+            ):
+                result = _run_with_mock_db(enforce_auto_stop, db)
         assert "warned 1 servers" in result
 
     def test_idle_timeout_exceeded(self):
@@ -932,22 +954,24 @@ class TestEnforceAutoStopBranches:
         plan.idle_timeout = "30m"
 
         db = self._make_db([(server, plan)])
-        with mock.patch(
-            "app.container.spawner.spawner.delete", new=mock.AsyncMock(return_value=True)
+        with (
+            mock.patch(
+                "app.container.spawner.spawner.delete", new=mock.AsyncMock(return_value=True)
+            ),
+            mock.patch("app.services.quota_service.QuotaService") as mock_quota,
         ):
-            with mock.patch("app.services.quota_service.QuotaService") as mock_quota:
-                mock_quota.return_value.decrement_usage = mock.AsyncMock()
-                with mock.patch(
-                    "app.services.notification_service.NotificationService"
-                ) as mock_notif:
-                    mock_notif.return_value.server_stopped = mock.AsyncMock()
-                    with mock.patch(
+            mock_quota.return_value.decrement_usage = mock.AsyncMock()
+            with mock.patch("app.services.notification_service.NotificationService") as mock_notif:
+                mock_notif.return_value.server_stopped = mock.AsyncMock()
+                with (
+                    mock.patch(
                         "app.tasks.broadcast_server_status_change",
                         new=mock.AsyncMock(),
                         create=True,
-                    ):
-                        with mock.patch("app.config.settings.server_warn_before_stop", 300):
-                            result = _run_with_mock_db(enforce_auto_stop, db)
+                    ),
+                    mock.patch("app.config.settings.server_warn_before_stop", 300),
+                ):
+                    result = _run_with_mock_db(enforce_auto_stop, db)
         assert "Stopped 1 servers" in result
 
     def test_parse_duration_exception(self):
@@ -1142,14 +1166,16 @@ class TestProcessServerQueueBranches:
                 mock_quota.return_value.check_spawn_allowed = mock.AsyncMock(
                     return_value={"allowed": True}
                 )
-                with mock.patch(
-                    "app.container.spawner.spawner.spawn", side_effect=Exception("spawn failed")
-                ):
-                    with mock.patch(
+                with (
+                    mock.patch(
+                        "app.container.spawner.spawner.spawn", side_effect=Exception("spawn failed")
+                    ),
+                    mock.patch(
                         "app.services.notification_service.NotificationService"
-                    ) as mock_notif:
-                        mock_notif.return_value.server_failed = mock.AsyncMock()
-                        result = _run_with_mock_db(process_server_queue, db)
+                    ) as mock_notif,
+                ):
+                    mock_notif.return_value.server_failed = mock.AsyncMock()
+                    result = _run_with_mock_db(process_server_queue, db)
         assert "Started 0 queued servers" in result
 
 
@@ -1207,57 +1233,65 @@ class TestCleanupExpiredDataBranches:
 
 class TestOtherTasks:
     def test_collect_container_metrics_error(self):
-        with mock.patch(
-            "app.tasks._run_async",
-            side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
-        ):
-            with mock.patch(
+        with (
+            mock.patch(
+                "app.tasks._run_async",
+                side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
+            ),
+            mock.patch(
                 "app.services.metrics_collector.MetricsCollector.collect_all",
                 side_effect=Exception("collector fail"),
-            ):
-                result = __import__(
-                    "app.tasks", fromlist=["collect_container_metrics"]
-                ).collect_container_metrics.run()
+            ),
+        ):
+            result = __import__(
+                "app.tasks", fromlist=["collect_container_metrics"]
+            ).collect_container_metrics.run()
         assert "Error" in result
 
     def test_collect_system_metrics_error(self):
-        with mock.patch(
-            "app.tasks._run_async",
-            side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
-        ):
-            with mock.patch(
+        with (
+            mock.patch(
+                "app.tasks._run_async",
+                side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
+            ),
+            mock.patch(
                 "app.services.system_metrics_collector.SystemMetricsCollector.collect",
                 side_effect=Exception("collector fail"),
-            ):
-                result = __import__(
-                    "app.tasks", fromlist=["collect_system_metrics"]
-                ).collect_system_metrics.run()
+            ),
+        ):
+            result = __import__(
+                "app.tasks", fromlist=["collect_system_metrics"]
+            ).collect_system_metrics.run()
         assert "Error" in result
 
     def test_check_container_health_error(self):
-        with mock.patch(
-            "app.tasks._run_async",
-            side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
-        ):
-            with mock.patch(
+        with (
+            mock.patch(
+                "app.tasks._run_async",
+                side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
+            ),
+            mock.patch(
                 "app.services.health_check_service.HealthCheckService.check_all_containers",
                 side_effect=Exception("health fail"),
-            ):
-                result = __import__(
-                    "app.tasks", fromlist=["check_container_health"]
-                ).check_container_health.run()
+            ),
+        ):
+            result = __import__(
+                "app.tasks", fromlist=["check_container_health"]
+            ).check_container_health.run()
         assert "Error" in result
 
     def test_evaluate_alert_rules_error(self):
-        with mock.patch(
-            "app.tasks._run_async",
-            side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
-        ):
-            with mock.patch(
+        with (
+            mock.patch(
+                "app.tasks._run_async",
+                side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
+            ),
+            mock.patch(
                 "app.services.alert_service.AlertService.evaluate_all_rules",
                 side_effect=Exception("alert fail"),
-            ):
-                result = __import__(
-                    "app.tasks", fromlist=["evaluate_alert_rules"]
-                ).evaluate_alert_rules.run()
+            ),
+        ):
+            result = __import__(
+                "app.tasks", fromlist=["evaluate_alert_rules"]
+            ).evaluate_alert_rules.run()
         assert "Error" in result

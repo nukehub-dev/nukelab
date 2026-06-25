@@ -2,22 +2,23 @@
 Webhook notification service with HMAC signing and retries.
 """
 
-import hmac
-import hashlib
-import json
 import asyncio
-from typing import Dict, Any, Optional
-from datetime import datetime, UTC
+import hashlib
+import hmac
+import json
+from datetime import UTC, datetime
+from typing import Any
+
 import aiohttp
 
 
 class WebhookService:
     """Webhook dispatch service with HMAC-SHA256 signing and retries"""
 
-    def __init__(self, secret: Optional[str] = None):
+    def __init__(self, secret: str | None = None):
         self.secret = secret or "nukelab-webhook-secret"
 
-    def _sign_payload(self, payload: Dict[str, Any]) -> str:
+    def _sign_payload(self, payload: dict[str, Any]) -> str:
         """Generate HMAC-SHA256 signature for payload"""
         payload_json = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         signature = hmac.new(
@@ -26,8 +27,8 @@ class WebhookService:
         return signature
 
     async def dispatch(
-        self, url: str, event: str, payload: Dict[str, Any], max_retries: int = 3
-    ) -> Dict[str, Any]:
+        self, url: str, event: str, payload: dict[str, Any], max_retries: int = 3
+    ) -> dict[str, Any]:
         """Dispatch webhook with retries"""
 
         webhook_payload = {
@@ -73,13 +74,14 @@ class WebhookService:
         }
 
     async def dispatch_to_user(
-        self, user_id: str, event: str, payload: Dict[str, Any], db=None
-    ) -> Dict[str, Any]:
+        self, user_id: str, event: str, payload: dict[str, Any], db=None
+    ) -> dict[str, Any]:
         """Dispatch webhook to user's configured webhook URL"""
         if not db:
             return {"success": False, "error": "No database session"}
 
         from sqlalchemy import select
+
         from app.models.user import User
 
         result = await db.execute(select(User).where(User.id == user_id))

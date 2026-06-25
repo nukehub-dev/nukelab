@@ -1,15 +1,15 @@
 """Tests for AlertService business logic."""
 
-import pytest
 import uuid as uuid_mod
-from datetime import datetime, timedelta, UTC
-from unittest.mock import patch, AsyncMock
+from datetime import UTC, datetime
 
-from app.services.alert_service import AlertService
-from app.models.alert_rule import AlertRule
+import pytest
+
 from app.models.alert_history import AlertHistory
-from app.models.server_metric import ServerMetric
+from app.models.alert_rule import AlertRule
 from app.models.server import Server
+from app.models.server_metric import ServerMetric
+from app.services.alert_service import AlertService
 
 
 class TestAlertServiceExtractMetric:

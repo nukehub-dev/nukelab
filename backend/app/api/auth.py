@@ -3,37 +3,36 @@ import hashlib
 import logging
 import secrets
 import uuid
-from datetime import datetime, timedelta, UTC
-from typing import Optional, List
 from dataclasses import dataclass
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from datetime import UTC, datetime, timedelta
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.security import (
-    OAuth2PasswordBearer,
-    OAuth2PasswordRequestForm,
     HTTPBearer,
-    HTTPAuthorizationCredentials,
+    OAuth2PasswordRequestForm,
 )
-from pydantic import BaseModel
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
-from sqlalchemy.orm import selectinload
+from pydantic import BaseModel
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from sqlalchemy import and_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
 from app.config import settings
+from app.container.spawner import spawner
+from app.core.permissions import Permission
+from app.core.security import get_user_permissions, has_permission
+from app.core.sentry import set_sentry_tag, set_sentry_user
 from app.db.session import get_db
-from app.models.user import User
-from app.models.login_event import LoginEvent
 from app.models.api_token import ApiToken
+from app.models.login_event import LoginEvent
 from app.models.refresh_token import RefreshToken
 from app.models.server import Server
-from app.container.spawner import spawner
+from app.models.user import User
 from app.services.notification_service import NotificationService, broadcast_server_status_change
-from app.core.security import get_user_permissions, has_permission
-from app.core.permissions import Permission
-from app.core.sentry import set_sentry_user, set_sentry_tag
 
 logger = logging.getLogger(__name__)
 
@@ -97,8 +96,8 @@ class AuthContext:
 
     user: User
     auth_method: str  # "jwt", "api_token"
-    token_scopes: List[str]
-    api_token_id: Optional[str] = None
+    token_scopes: list[str]
+    api_token_id: str | None = None
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -109,7 +108,7 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
     to_encode = data.copy()
     expire = datetime.now(UTC).replace(tzinfo=None) + (
         expires_delta or timedelta(minutes=settings.jwt_expire_minutes)
@@ -144,8 +143,8 @@ async def _enforce_refresh_token_limit(user_id: uuid.UUID, db: AsyncSession) -> 
 async def create_refresh_token_for_user(
     user_id: str,
     db: AsyncSession,
-    user_agent: Optional[str] = None,
-    ip_address: Optional[str] = None,
+    user_agent: str | None = None,
+    ip_address: str | None = None,
 ) -> str:
     """Create a new refresh token, store hashed version in DB, return plaintext.
 
@@ -176,7 +175,7 @@ async def create_refresh_token_for_user(
     return plaintext
 
 
-async def verify_refresh_token(plaintext: str, db: AsyncSession) -> Optional[RefreshToken]:
+async def verify_refresh_token(plaintext: str, db: AsyncSession) -> RefreshToken | None:
     """Verify a refresh token.
 
     Fast path (new tokens): query by deterministic SHA-256 lookup hash — O(log n) via btree index.
@@ -217,9 +216,9 @@ async def verify_refresh_token(plaintext: str, db: AsyncSession) -> Optional[Ref
 
 
 async def revoke_refresh_token(
-    plaintext: Optional[str] = None,
-    db: Optional[AsyncSession] = None,
-    rt: Optional[RefreshToken] = None,
+    plaintext: str | None = None,
+    db: AsyncSession | None = None,
+    rt: RefreshToken | None = None,
 ) -> bool:
     """Revoke a refresh token.
 
@@ -572,7 +571,7 @@ async def refresh_token_endpoint(
 
 @router.post("/logout")
 async def logout_endpoint(
-    request: Request, body: Optional[RefreshRequest] = None, db: AsyncSession = Depends(get_db)
+    request: Request, body: RefreshRequest | None = None, db: AsyncSession = Depends(get_db)
 ):
     """Revoke refresh token, clear cookies, optionally stop all running servers."""
     user = None
@@ -610,8 +609,8 @@ async def logout_endpoint(
 
                         # Reconcile billing
                         if server.plan_id:
-                            from app.services.credit_service import CreditService
                             from app.models.server_plan import ServerPlan
+                            from app.services.credit_service import CreditService
 
                             credit_service = CreditService(db)
                             plan_result = await db.execute(
@@ -747,7 +746,7 @@ async def verify_auth(request: Request, db: AsyncSession = Depends(get_db)):
     raise HTTPException(status_code=401, detail="Invalid token")
 
 
-async def _resolve_user_from_token(token: str, db: AsyncSession) -> Optional[User]:
+async def _resolve_user_from_token(token: str, db: AsyncSession) -> User | None:
     """Resolve a User from a JWT access token or active API token hash."""
     try:
         payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
@@ -925,7 +924,7 @@ async def get_auth_methods():
 
 
 @router.get("/oauth/login")
-async def oauth_login(sync: Optional[str] = None):
+async def oauth_login(sync: str | None = None):
     """Redirect to OAuth provider authorization endpoint."""
     from app.services.oauth_service import oauth_service
 
@@ -990,15 +989,16 @@ async def oauth_login(sync: Optional[str] = None):
 @router.get("/oauth/callback")
 async def oauth_callback(
     request: Request,
-    code: Optional[str] = None,
-    state: Optional[str] = None,
-    error: Optional[str] = None,
-    error_description: Optional[str] = None,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+    error_description: str | None = None,
     db: AsyncSession = Depends(get_db),
 ):
     """Handle OAuth callback from identity provider."""
-    from app.services.oauth_service import oauth_service
     from fastapi.responses import RedirectResponse
+
+    from app.services.oauth_service import oauth_service
 
     # Handle OAuth errors
     # Use FRONTEND_URL if explicitly set (dev Vite server), otherwise use PUBLIC_URL (production Traefik)
@@ -1223,9 +1223,10 @@ async def oauth_sync(
     db: AsyncSession = Depends(get_db),
 ):
     """Sync user profile from OAuth provider using stored refresh token."""
-    from app.services.oauth_service import oauth_service
-    from app.core.token_encryption import decrypt_token
     import aiohttp
+
+    from app.core.token_encryption import decrypt_token
+    from app.services.oauth_service import oauth_service
 
     if not current_user.oauth_provider or not current_user.security:
         raise HTTPException(status_code=400, detail="Not an OAuth user")

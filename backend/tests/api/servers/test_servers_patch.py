@@ -1,13 +1,14 @@
 """Comprehensive tests for PATCH /api/servers/{server_id} (update_server)."""
 
+import uuid as uuid_mod
+from unittest import mock
+
 import pytest
 import pytest_asyncio
-from unittest import mock
-import uuid as uuid_mod
 
+from app.models.environment_template import EnvironmentTemplate
 from app.models.server import Server
 from app.models.server_plan import ServerPlan
-from app.models.environment_template import EnvironmentTemplate
 from app.models.volume import Volume
 
 

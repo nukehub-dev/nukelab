@@ -2,15 +2,14 @@
 Server Plan API endpoints.
 """
 
-from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import get_db
-from app.dependencies import get_current_user, require_permissions
 from app.api.auth import require_jwt_auth
 from app.core.permissions import Permission
 from app.core.security import has_permission
+from app.db.session import get_db
+from app.dependencies import get_current_user, require_permissions
 from app.services.plan_service import PlanService
 
 router = APIRouter(tags=["plans"])
@@ -18,8 +17,8 @@ router = APIRouter(tags=["plans"])
 
 @router.get("/")
 async def list_plans(
-    category: Optional[str] = None,
-    is_active: Optional[bool] = Query(None),
+    category: str | None = None,
+    is_active: bool | None = Query(None),
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=100),
     current_user=Depends(get_current_user),

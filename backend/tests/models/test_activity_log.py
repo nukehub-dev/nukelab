@@ -1,7 +1,5 @@
 """Tests for Activity Log model."""
 
-import pytest
-
 
 class TestActivityLogModel:
     """Activity log model field tests."""

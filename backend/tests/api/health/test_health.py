@@ -76,9 +76,9 @@ class TestPlatformStatus:
 
 """Coverage tests for smaller API modules: health, system, quotas, ip_restriction."""
 
-import pytest
 from unittest import mock
-from datetime import datetime, timedelta, UTC
+
+import pytest
 
 
 class TestHealthEndpoints:
@@ -116,13 +116,8 @@ class TestHealthEndpoints:
 
 """Extended tests for Environments, Notifications, and Health API endpoints."""
 
-import pytest
-import uuid
 
-from app.models.environment_template import EnvironmentTemplate
-from app.models.notification import Notification
-from app.models.health_check import HealthCheck
-from app.models.server import Server
+import pytest
 
 
 class TestHealthAPI:
@@ -156,10 +151,6 @@ class TestHealthAPI:
 """Extended tests for Health API failure paths."""
 
 import pytest
-from unittest import mock
-
-from app.main import app
-from app.db.session import get_db
 
 
 class TestDetailedHealthFailures:

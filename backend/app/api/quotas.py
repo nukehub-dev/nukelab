@@ -2,14 +2,13 @@
 Resource Quota API endpoints.
 """
 
-from typing import Optional
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import get_db
-from app.dependencies import get_current_user, require_permissions
 from app.api.auth import require_jwt_auth
 from app.core.permissions import Permission
+from app.db.session import get_db
+from app.dependencies import get_current_user, require_permissions
 from app.services.quota_service import QuotaService
 
 router = APIRouter(tags=["quotas"])
@@ -29,7 +28,7 @@ async def get_my_quota(
 
 @router.get("/all")
 async def list_all_quotas(
-    search: Optional[str] = None,
+    search: str | None = None,
     page: int = 1,
     limit: int = 50,
     current_user=Depends(require_permissions(Permission.QUOTA_READ)),

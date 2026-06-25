@@ -22,10 +22,11 @@ import asyncio
 import base64
 import logging
 import time
-from typing import Any, Awaitable, Callable, Optional
+from collections.abc import Awaitable, Callable
+from typing import Any
 
-from app.core.redis_client import get_redis_client
 from app.core.prometheus_metrics import increment_redis_cache_hit, increment_redis_cache_miss
+from app.core.redis_client import get_redis_client
 
 try:
     import msgpack
@@ -151,7 +152,7 @@ def _redis_call(func):
 # ---------------------------------------------------------------------------
 
 
-async def cache_get(key: str) -> Optional[Any]:
+async def cache_get(key: str) -> Any | None:
     """Fetch a cached value by key.
 
     Returns ``None`` on cache miss, deserialization error, or Redis error.

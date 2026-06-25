@@ -1,9 +1,10 @@
 """Tests for SystemMetricsCollector."""
 
-import pytest
-from unittest import mock
 import json
 import os
+from unittest import mock
+
+import pytest
 
 from app.services.system_metrics_collector import SystemMetricsCollector
 
@@ -233,11 +234,6 @@ class TestSystemMetricsCollect:
 """Extended coverage tests for SystemMetricsCollector edge cases."""
 
 import pytest
-import json
-import os
-from unittest import mock
-
-from app.services.system_metrics_collector import SystemMetricsCollector
 
 
 class TestSystemMetricsCollectorEdgeCases:
@@ -386,7 +382,7 @@ class TestSystemMetricsCollectorEdgeCases:
                                                     return_value=lambda: mock_session,
                                                 ):
                                                     with mock.patch("redis.asyncio.from_url"):
-                                                        result = await collector.collect()
+                                                        await collector.collect()
 
         mock_session.rollback.assert_awaited_once()
         mock_session.close.assert_awaited_once()
@@ -508,7 +504,7 @@ class TestSystemMetricsCollectorEdgeCases:
         """Should calculate network I/O rate from cache."""
         collector = SystemMetricsCollector()
 
-        import json, os
+        import json
 
         with open("/tmp/nukelab_network_cache.json", "w") as f:
             json.dump(

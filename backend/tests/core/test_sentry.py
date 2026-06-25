@@ -1,6 +1,5 @@
 """Tests for Sentry error tracking initialization and helpers."""
 
-import pytest
 from unittest import mock
 
 

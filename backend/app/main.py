@@ -1,7 +1,9 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, WebSocket, Request, Depends, HTTPException
+
+from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
+
 from app.config import settings
 from app.core.logging import configure_logging, get_logger
 from app.core.sentry import init_sentry
@@ -9,33 +11,33 @@ from app.core.tracing import init_tracing, is_tracing_enabled
 
 logger = get_logger(__name__)
 from app.api import (
-    auth,
-    users,
-    servers,
-    tokens,
-    credits,
     admin,
-    preferences,
+    analytics,
+    auth,
+    bulk,
+    credits,
+    dashboard,
     environments,
-    plans,
-    quotas,
+    health,
+    ip_restriction,
     metrics,
     notifications,
-    dashboard,
-    bulk,
-    health,
-    system,
+    plans,
+    preferences,
+    quotas,
     schedules,
+    servers,
+    system,
+    tokens,
+    users,
     volumes,
-    analytics,
     workspaces,
-    ip_restriction,
 )
-from app.db.base import Base
-from app.db.session import engine, AsyncSessionLocal
-from app.websocket.metrics_socket import manager
 from app.core.shutdown import get_shutdown_coordinator
+from app.db.base import Base
+from app.db.session import AsyncSessionLocal, engine
 from app.middleware.request_metrics import _metrics_buffer
+from app.websocket.metrics_socket import manager
 
 
 async def startup():
@@ -100,6 +102,7 @@ async def startup():
     # Start periodic refresh token cleanup (prevents unbounded growth at scale)
     try:
         import asyncio
+
         from app.api.auth import run_periodic_refresh_token_cleanup
 
         cleanup_task = asyncio.create_task(run_periodic_refresh_token_cleanup())
@@ -277,8 +280,9 @@ async def root():
 
 @app.get("/health")
 async def health():
-    from app.core.shutdown import is_shutting_down
     from fastapi.responses import JSONResponse
+
+    from app.core.shutdown import is_shutting_down
 
     if is_shutting_down():
         return JSONResponse(

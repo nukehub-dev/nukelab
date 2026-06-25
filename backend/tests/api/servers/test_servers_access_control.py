@@ -7,15 +7,14 @@ Covers:
 - Access-token endpoint reason requirement
 """
 
+import uuid
+from unittest.mock import AsyncMock, patch
+
 import pytest
 import pytest_asyncio
-import uuid
-from datetime import datetime
 from httpx import AsyncClient
-from unittest.mock import AsyncMock, patch, MagicMock
 
 from app.models.server import Server
-
 
 # ---------------------------------------------------------------------------
 # Fixtures specific to cross-user tests
@@ -42,9 +41,10 @@ async def other_user_server(db_session, test_user):
 @pytest_asyncio.fixture
 async def admin_api_token(db_session, admin_user):
     """Create an API token for admin user with server management scopes."""
-    from app.models.api_token import ApiToken
-    from app.api.auth import get_password_hash
     import secrets
+
+    from app.api.auth import get_password_hash
+    from app.models.api_token import ApiToken
 
     raw_token = f"nukelab_{secrets.token_urlsafe(32)}"
     token_hash = get_password_hash(raw_token)
@@ -371,6 +371,7 @@ class TestCrossUserAuditLogging:
     ):
         """Stopping another user's server with reason should log an audit entry."""
         from sqlalchemy import select
+
         from app.models.activity_log import ActivityLog
 
         with patch("app.api.servers.spawner.stop", new_callable=AsyncMock) as mock_stop:

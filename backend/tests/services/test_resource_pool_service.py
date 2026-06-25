@@ -1,12 +1,13 @@
 """Tests for ResourcePoolService business logic."""
 
-import pytest
 import uuid as uuid_mod
 
-from app.services.resource_pool_service import ResourcePoolService
+import pytest
+
 from app.models.server import Server
 from app.models.server_plan import ServerPlan
 from app.models.server_queue import ServerQueue
+from app.services.resource_pool_service import ResourcePoolService
 
 
 class TestResourcePoolServiceParseMemory:

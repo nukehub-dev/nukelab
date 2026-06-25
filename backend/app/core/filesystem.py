@@ -1,6 +1,5 @@
 """Filesystem security utilities for safe path resolution."""
 
-import os
 import re
 from pathlib import Path
 

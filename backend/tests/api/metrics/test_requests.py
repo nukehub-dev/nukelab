@@ -1,8 +1,6 @@
 """Tests for request metrics API endpoint."""
 
 import pytest
-from datetime import datetime, timedelta, UTC
-from unittest.mock import patch
 
 from app.models.request_metric import RequestMetric
 

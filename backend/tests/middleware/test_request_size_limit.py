@@ -1,10 +1,10 @@
 """Tests for request body size limit middleware."""
 
-import pytest
 from unittest import mock
-from starlette.types import Scope
 
-from app.middleware.request_size_limit import RequestSizeLimitMiddleware, RequestBodyTooLarge
+import pytest
+
+from app.middleware.request_size_limit import RequestBodyTooLarge, RequestSizeLimitMiddleware
 
 
 class TestRequestSizeLimitMiddleware:

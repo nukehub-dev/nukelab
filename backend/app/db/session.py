@@ -1,12 +1,16 @@
 import os
 import time
+
 from sqlalchemy import event
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.pool import NullPool
+
 from app.config import settings
 from app.core.logging import get_logger
 from app.core.tracing import is_tracing_enabled
+
+logger = get_logger(__name__)
 
 # PgBouncer is controlled by PGBOUNCER_ENABLED. When enabled, the app routes
 # through PgBouncer (DATABASE_PGBOUNCER_URL is optional and overrides the

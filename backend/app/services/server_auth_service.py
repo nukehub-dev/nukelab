@@ -12,17 +12,18 @@ Architecture:
 - Key rotation supported without container redeployment
 """
 
-import uuid
-import os
 import logging
-from datetime import datetime, timedelta, UTC
-from typing import Optional, Dict, Any
+import os
+import uuid
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
+from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.backends import default_backend
-from jose import jwt, JWTError
+from jose import JWTError, jwt
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func
 
 from app.config import settings
 from app.models.server_access_token import ServerAccessToken
@@ -128,10 +129,10 @@ class ServerAuthService:
         db: AsyncSession,
         server_id: uuid.UUID,
         user_id: uuid.UUID,
-        client_ip: Optional[str] = None,
-        user_agent: Optional[str] = None,
+        client_ip: str | None = None,
+        user_agent: str | None = None,
         token_type: str = "session",
-        custom_claims: Optional[Dict[str, Any]] = None,
+        custom_claims: dict[str, Any] | None = None,
     ) -> str:
         """Generate a short-lived access token for server access.
 
@@ -212,8 +213,8 @@ class ServerAuthService:
     async def validate_token(
         self,
         token: str,
-        expected_server_id: Optional[uuid.UUID] = None,
-    ) -> Dict[str, Any]:
+        expected_server_id: uuid.UUID | None = None,
+    ) -> dict[str, Any]:
         """Validate a server access token locally.
 
         This is designed to be used by containers/sidecars.
@@ -385,7 +386,7 @@ class ServerAuthService:
         self,
         db: AsyncSession,
         server_id: uuid.UUID,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Get access statistics for a server."""
         # Active tokens
         result = await db.execute(

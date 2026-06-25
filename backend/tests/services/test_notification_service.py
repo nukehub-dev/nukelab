@@ -1,12 +1,11 @@
 """Extended tests for NotificationService (preferences, all convenience methods)."""
 
-import pytest
 from unittest import mock
-from sqlalchemy import select
 
-from app.services.notification_service import NotificationService
+import pytest
+
 from app.models.notification import Notification
-from app.models.user import User
+from app.services.notification_service import NotificationService
 
 
 class TestNotificationServiceCreate:
@@ -313,7 +312,7 @@ class TestNotificationServiceSystemMethods:
             test_user.id, "Upgrade", "System will be down for 1 hour"
         )
         assert notif is not None
-        assert "Upgrade" == notif.title
+        assert notif.title == "Upgrade"
         assert "down for 1 hour" in notif.message
 
     @pytest.mark.asyncio
@@ -372,12 +371,8 @@ class TestNotificationServicePrefs:
 """Coverage tests for NotificationService edge cases."""
 
 import pytest
-from unittest import mock
-from sqlalchemy import select
 
-from app.services.notification_service import NotificationService, broadcast_server_status_change
-from app.models.notification import Notification
-from app.models.user import User
+from app.services.notification_service import broadcast_server_status_change
 
 
 class TestBroadcastServerStatusChange:

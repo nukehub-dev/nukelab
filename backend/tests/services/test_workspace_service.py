@@ -1,17 +1,15 @@
 """Tests for WorkspaceService business logic."""
 
-import pytest
 import uuid as uuid_mod
-from datetime import datetime, timedelta
 
-from sqlalchemy import select, and_
+import pytest
+from sqlalchemy import and_, select
 
-from app.services.workspace_service import WorkspaceService
 from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
+from app.models.volume import Volume
 from app.models.workspace_invitation import WorkspaceInvitation
 from app.models.workspace_volume import WorkspaceVolume
-from app.models.volume import Volume
-from app.models.user import User
+from app.services.workspace_service import WorkspaceService
 
 
 class TestWorkspaceServiceCreate:

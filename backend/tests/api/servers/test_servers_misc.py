@@ -1,15 +1,16 @@
 """Tests for miscellaneous server API endpoints."""
 
-import pytest
-from unittest import mock
 import uuid as uuid_mod
-import aiodocker
+from unittest import mock
 
-from app.models.server import Server
-from app.models.server_queue import ServerQueue
-from app.models.server_plan import ServerPlan
-from app.models.environment_template import EnvironmentTemplate
+import aiodocker
+import pytest
+
 from app.api.servers import spawner
+from app.models.environment_template import EnvironmentTemplate
+from app.models.server import Server
+from app.models.server_plan import ServerPlan
+from app.models.server_queue import ServerQueue
 
 
 class TestServerQueueStatus:

@@ -3,22 +3,20 @@ Server schedule API endpoints.
 """
 
 import logging
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
 from app.api.auth import get_current_user
-from app.dependencies import require_permissions
+from app.api.servers import _audit_cross_user_access, get_server_with_permission_check
 from app.core.permissions import Permission
-from app.dependencies import PermissionChecker
 from app.db.session import get_db
+from app.dependencies import PermissionChecker, require_permissions
 from app.models.user import User
-from app.models.server import Server
 from app.services.schedule_service import ScheduleService
-from app.api.servers import get_server_with_permission_check, _audit_cross_user_access
 
 router = APIRouter()
 
@@ -28,15 +26,15 @@ class ScheduleCreateRequest(BaseModel):
     cron_expression: str
     timezone: str = "UTC"
     is_active: bool = True
-    reason: Optional[str] = None
+    reason: str | None = None
 
 
 class ScheduleUpdateRequest(BaseModel):
-    action: Optional[str] = None
-    cron_expression: Optional[str] = None
-    timezone: Optional[str] = None
-    is_active: Optional[bool] = None
-    reason: Optional[str] = None
+    action: str | None = None
+    cron_expression: str | None = None
+    timezone: str | None = None
+    is_active: bool | None = None
+    reason: str | None = None
 
 
 @router.get("/servers/{server_id}/schedules")
@@ -155,7 +153,7 @@ async def delete_schedule(
     server_id: str,
     schedule_id: str,
     request: Request,
-    reason: Optional[str] = None,
+    reason: str | None = None,
     current_user: User = Depends(get_current_user),
     _=Depends(require_permissions(Permission.SERVERS_WRITE_ALL)),
     db: AsyncSession = Depends(get_db),

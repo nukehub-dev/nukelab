@@ -1,9 +1,9 @@
 """Tests for app.core.filesystem security utilities."""
 
-import pytest
 import tempfile
-import os
 from pathlib import Path
+
+import pytest
 from fastapi import HTTPException
 
 from app.core.filesystem import secure_path, validate_avatar_filename

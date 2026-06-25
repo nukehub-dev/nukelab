@@ -1,11 +1,13 @@
 """Service for managing data retention policies."""
 
-from typing import Dict, Any, Optional
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+import contextlib
+from typing import Any
 
-from app.models.system_setting import SystemSetting
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.retention import DEFAULT_RETENTION_POLICIES, VALIDATION_RANGES
+from app.models.system_setting import SystemSetting
 
 
 class RetentionService:
@@ -14,7 +16,7 @@ class RetentionService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_policy(self) -> Dict[str, Any]:
+    async def get_policy(self) -> dict[str, Any]:
         """Get current retention policy from DB, filling in defaults."""
         policy = dict(DEFAULT_RETENTION_POLICIES)
 
@@ -30,14 +32,12 @@ class RetentionService:
                 if isinstance(policy[row.key], bool):
                     policy[row.key] = row.value.lower() == "true" if row.value else policy[row.key]
                 elif isinstance(policy[row.key], int):
-                    try:
+                    with contextlib.suppress(ValueError, TypeError):
                         policy[row.key] = int(row.value)
-                    except (ValueError, TypeError):
-                        pass
 
         return policy
 
-    async def set_policy(self, updates: Dict[str, Any]) -> Dict[str, Any]:
+    async def set_policy(self, updates: dict[str, Any]) -> dict[str, Any]:
         """Update retention policy settings with validation."""
         validated = {}
 
@@ -48,10 +48,7 @@ class RetentionService:
             # Convert to correct type
             default = DEFAULT_RETENTION_POLICIES[key]
             if isinstance(default, bool):
-                if isinstance(value, str):
-                    value = value.lower() == "true"
-                else:
-                    value = bool(value)
+                value = value.lower() == "true" if isinstance(value, str) else bool(value)
             elif isinstance(default, int):
                 try:
                     value = int(value)

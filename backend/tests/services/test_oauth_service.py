@@ -1,7 +1,8 @@
 """Tests for OAuthService."""
 
-import pytest
 from unittest import mock
+
+import pytest
 
 from app.services.oauth_service import OAuthService
 

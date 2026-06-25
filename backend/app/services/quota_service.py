@@ -3,11 +3,11 @@ Resource quota service for business logic.
 """
 
 import uuid
-from datetime import datetime, UTC
-from typing import Optional, Dict, Any
+from datetime import UTC, datetime
+from typing import Any
+
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func
-from fastapi import HTTPException, status
 
 from app.models.resource_quota import ResourceQuota
 from app.models.server import Server
@@ -21,7 +21,7 @@ class QuotaService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_user_quota(self, user_id: str) -> Optional[ResourceQuota]:
+    async def get_user_quota(self, user_id: str) -> ResourceQuota | None:
         """Get quota for a user"""
         result = await self.db.execute(
             select(ResourceQuota).where(ResourceQuota.user_id == uuid.UUID(user_id))
@@ -38,17 +38,18 @@ class QuotaService:
             await self.db.refresh(quota)
         return quota
 
-    async def get_role_quota(self, role: str) -> Optional[ResourceQuota]:
+    async def get_role_quota(self, role: str) -> ResourceQuota | None:
         """Get quota for a role"""
         result = await self.db.execute(select(ResourceQuota).where(ResourceQuota.role == role))
         return result.scalar_one_or_none()
 
     async def list_quotas(
-        self, search: Optional[str] = None, page: int = 1, limit: int = 50
-    ) -> Dict[str, Any]:
+        self, search: str | None = None, page: int = 1, limit: int = 50
+    ) -> dict[str, Any]:
         """List all users with their quota limits (admin view)"""
-        from app.models.user import User
         from sqlalchemy import func
+
+        from app.models.user import User
 
         # Build base query: all active users left joined with their quotas
         query = (
@@ -93,7 +94,7 @@ class QuotaService:
             usage = (
                 quota.to_dict()["usage"]
                 if quota
-                else {k: 0 for k in ["cpu", "memory_mb", "disk_mb", "gpu", "servers"]}
+                else dict.fromkeys(["cpu", "memory_mb", "disk_mb", "gpu", "servers"], 0)
             )
             items.append(
                 {
@@ -119,11 +120,11 @@ class QuotaService:
     async def update_user_quota(
         self,
         user_id: str,
-        max_cpu_total: Optional[float] = None,
-        max_memory_total: Optional[str] = None,
-        max_disk_total: Optional[str] = None,
-        max_gpu_total: Optional[int] = None,
-        max_servers_total: Optional[int] = None,
+        max_cpu_total: float | None = None,
+        max_memory_total: str | None = None,
+        max_disk_total: str | None = None,
+        max_gpu_total: int | None = None,
+        max_servers_total: int | None = None,
     ) -> ResourceQuota:
         """Update user's quota limits"""
 
@@ -147,7 +148,7 @@ class QuotaService:
         return quota
 
     async def recalculate_usage(
-        self, user_id: str, exclude_server_id: Optional[str] = None
+        self, user_id: str, exclude_server_id: str | None = None
     ) -> ResourceQuota:
         """Recalculate current usage from active servers and volumes"""
 
@@ -215,8 +216,8 @@ class QuotaService:
             return f"{mem_mb} MB"
 
     async def check_spawn_allowed(
-        self, user_id: str, plan_id: str, exclude_server_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+        self, user_id: str, plan_id: str, exclude_server_id: str | None = None
+    ) -> dict[str, Any]:
         """Check if user can spawn a server with given plan"""
 
         quota = await self.recalculate_usage(user_id, exclude_server_id)
@@ -294,8 +295,8 @@ class QuotaService:
         return {"allowed": True, "reason": None, "estimated_cost_per_hour": plan.cost_per_hour}
 
     async def check_volume_creation_allowed(
-        self, user_id: str, requested_size_bytes: Optional[int] = None
-    ) -> Dict[str, Any]:
+        self, user_id: str, requested_size_bytes: int | None = None
+    ) -> dict[str, Any]:
         """Check if user can create a volume with given size"""
 
         quota = await self.get_or_create_user_quota(user_id)

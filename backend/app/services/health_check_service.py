@@ -1,13 +1,15 @@
+import contextlib
 import json
-from datetime import datetime, timedelta, UTC
-from typing import Optional
-from sqlalchemy import select, func
+from datetime import UTC, datetime, timedelta
+
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.config import settings
 from app.container.client import get_fresh_container_client
+from app.core.logging import get_logger
 from app.models.health_check import HealthCheck
 from app.models.server import Server
-from app.config import settings
-from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -70,10 +72,7 @@ class HealthCheckService:
             health_status = health.get("Status", "unknown")
 
             if health_status == "unknown":
-                if state.get("Running"):
-                    health_status = "healthy"
-                else:
-                    health_status = "unhealthy"
+                health_status = "healthy" if state.get("Running") else "unhealthy"
 
             log = health.get("Log", [])
             last_check = log[-1] if log else {}
@@ -120,10 +119,8 @@ class HealthCheckService:
             await self.db.commit()
         finally:
             if container_client and container_client.client:
-                try:
+                with contextlib.suppress(Exception):
                     await container_client.client.close()
-                except Exception:
-                    pass
 
     async def _auto_restart(self, server: Server):
         """Auto-restart a failed container with rate limiting."""

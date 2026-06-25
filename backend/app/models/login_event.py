@@ -1,7 +1,9 @@
 import uuid
-from app.core.time_utils import utc_now
-from sqlalchemy import Column, DateTime, String, ForeignKey, Index
+
+from sqlalchemy import Column, DateTime, ForeignKey, Index, String
 from sqlalchemy.dialects.postgresql import UUID
+
+from app.core.time_utils import utc_now
 from app.db.base import Base
 
 

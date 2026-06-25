@@ -14,23 +14,24 @@ TEST_DATABASE_URL = "postgresql+asyncpg://nukelab:nukelab123@postgres:5432/nukel
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 
 import asyncio
+import contextlib
+from datetime import UTC
 
 import pytest
 import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.pool import NullPool
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.pool import NullPool
 
-from app.main import app
-from app.db.session import get_db
-from app.db.base import Base
-from app.models.user import User
-from app.models.notification import Notification
 from app.api.auth import get_password_hash
+from app.db.base import Base
+from app.db.session import get_db
+from app.main import app
 
 # Import all models to register them with Base.metadata
 from app.models import *
+from app.models.user import User
 
 # Create test engine with NullPool to avoid connection issues
 # Each test gets a fresh connection that is closed immediately after
@@ -87,10 +88,11 @@ async def setup_test_database():
         await conn.run_sync(Base.metadata.create_all)
 
     # Create partitions for time-series tables so INSERTs don't fail
-    from datetime import datetime, timezone
+    from datetime import datetime
+
     from dateutil.relativedelta import relativedelta
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     start = now.strftime("%Y-%m-01")
     end = (now + relativedelta(months=1)).strftime("%Y-%m-01")
     partitioned = {
@@ -119,8 +121,9 @@ async def setup_test_database():
     # We use a separate pooled engine (not the NullPool test_engine) so that
     # the dispose_stale_pool fixture can forcibly close any leaked connections
     # between tests instead of relying on every session to be closed explicitly.
-    import app.db.session as _session_module
     from sqlalchemy.orm import sessionmaker
+
+    import app.db.session as _session_module
 
     _original_engine = _session_module.engine
     _original_async_session_local = _session_module.AsyncSessionLocal
@@ -259,7 +262,7 @@ def reset_role_permissions():
     Some tests modify ROLE_PERMISSIONS in memory (e.g. test_permissions.py).
     This fixture ensures subsequent tests start with clean defaults.
     """
-    from app.core.roles import ROLE_PERMISSIONS, _DEFAULT_ROLE_PERMISSIONS
+    from app.core.roles import _DEFAULT_ROLE_PERMISSIONS, ROLE_PERMISSIONS
 
     # Restore defaults in-place so all imported references see the change
     for role, perms in _DEFAULT_ROLE_PERMISSIONS.items():
@@ -430,9 +433,10 @@ async def superadmin_token(superadmin_user):
 @pytest_asyncio.fixture
 async def api_token(db_session, test_user):
     """Create an API token for test user with default scopes."""
-    from app.models.api_token import ApiToken
-    from app.api.auth import get_password_hash
     import secrets
+
+    from app.api.auth import get_password_hash
+    from app.models.api_token import ApiToken
 
     raw_token = f"nukelab_{secrets.token_urlsafe(32)}"
     token_hash = get_password_hash(raw_token)
@@ -466,6 +470,7 @@ def reset_rate_limiter():
     # Also clear Redis-backed rate limit keys used by RateLimitMiddleware
     try:
         import redis as sync_redis
+
         from app.config import settings
 
         sync_r = sync_redis.from_url(settings.redis_url)
@@ -486,6 +491,7 @@ def reset_cache():
     """
     try:
         import redis as sync_redis
+
         from app.config import settings
 
         sync_r = sync_redis.from_url(settings.redis_url)
@@ -550,18 +556,14 @@ def reset_shutdown_coordinator():
 @pytest.fixture(autouse=True)
 def cleanup_tmp_cache_files():
     """Remove temporary cache files created by system metrics collector."""
-    import os
     import glob
+    import os
 
     for f in glob.glob("/tmp/nukelab_*_cache.json"):
-        try:
+        with contextlib.suppress(OSError):
             os.remove(f)
-        except OSError:
-            pass
     yield
     # Also cleanup after test
     for f in glob.glob("/tmp/nukelab_*_cache.json"):
-        try:
+        with contextlib.suppress(OSError):
             os.remove(f)
-        except OSError:
-            pass

@@ -1,8 +1,8 @@
 """Tests for volume quota enforcement periodic task."""
 
-import pytest
 from unittest import mock
-from datetime import datetime, UTC
+
+import pytest
 
 
 class TestEnforceVolumeQuotas:
@@ -17,7 +17,6 @@ class TestEnforceVolumeQuotas:
     @pytest.mark.asyncio
     async def test_no_running_servers(self):
         """Should return early when no servers are running."""
-        from app.tasks import enforce_volume_quotas
 
         with mock.patch("app.tasks.AsyncSessionLocal") as mock_session_cls:
             mock_db = mock.AsyncMock()
@@ -30,11 +29,10 @@ class TestEnforceVolumeQuotas:
             mock_db.execute.return_value = mock_result
 
             # The task uses _run_async which runs in a thread, so we test the inner async function
-            from app.tasks import _run_async
             from app.tasks import enforce_volume_quotas as task
 
             # Call the inner _enforce function directly via the task
-            result = task.run()
+            task.run()
             # Since it's a celery task with _run_async, we just verify it doesn't crash
             # The actual async logic is tested below with mocked DB
 
@@ -43,7 +41,7 @@ class TestEnforceVolumeQuotas:
         from app.tasks import enforce_volume_quotas
 
         # Mock the async inner function
-        async_mock = mock.AsyncMock(return_value="Stopped 1 servers, warned 0 volumes")
+        mock.AsyncMock(return_value="Stopped 1 servers, warned 0 volumes")
 
         with mock.patch.object(
             enforce_volume_quotas, "run", return_value="Stopped 1 servers, warned 0 volumes"

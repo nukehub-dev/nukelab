@@ -8,24 +8,23 @@ all helpers are no-ops so existing tests and local development are unaffected.
 from __future__ import annotations
 
 import os
-from typing import Optional
 
 from opentelemetry import trace
+from opentelemetry.baggage.propagation import W3CBaggagePropagator
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter as GRPCExporter
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter as HTTPExporter
 from opentelemetry.propagate import set_global_textmap
 from opentelemetry.propagators.composite import CompositePropagator
-from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
-from opentelemetry.baggage.propagation import W3CBaggagePropagator
 from opentelemetry.sdk.resources import (
-    Resource,
+    DEPLOYMENT_ENVIRONMENT,
     SERVICE_NAME,
     SERVICE_VERSION,
-    DEPLOYMENT_ENVIRONMENT,
+    Resource,
 )
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.trace import Status, StatusCode
+from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
 from app.config import settings
 from app.core.context import correlation_id
@@ -48,7 +47,7 @@ def _build_resource() -> Resource:
     )
 
 
-def _build_exporter() -> Optional[GRPCExporter | HTTPExporter]:
+def _build_exporter() -> GRPCExporter | HTTPExporter | None:
     """Build an OTLP exporter based on configuration."""
     # Standard OTEL env vars take precedence over application settings.
     endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT") or settings.otel_exporter_otlp_endpoint

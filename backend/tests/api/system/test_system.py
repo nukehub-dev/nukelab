@@ -2,11 +2,9 @@
 
 import pytest
 from sqlalchemy import select
-from app.models.user import User
-from app.models.system_setting import SystemSetting
-from app.config import settings
-from app.services.setting_service import SettingService
 
+from app.config import settings
+from app.models.system_setting import SystemSetting
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -140,9 +138,10 @@ class TestSystemStats:
 
 """Coverage tests for smaller API modules: health, system, quotas, ip_restriction."""
 
-import pytest
+from datetime import UTC, datetime, timedelta
 from unittest import mock
-from datetime import datetime, timedelta, UTC
+
+import pytest
 
 
 class TestSystemEndpoints:
@@ -263,29 +262,9 @@ class TestSystemEndpoints:
 
 """Extended tests for small API modules — coverage gap closure."""
 
-import pytest
-from unittest import mock
-from datetime import datetime, timedelta, UTC
 import uuid as uuid_mod
 
-from app.config import settings
-from app.models.server import Server
-from app.models.server_plan import ServerPlan
-from app.models.environment_template import EnvironmentTemplate
-from app.models.notification import Notification
-from app.models.activity_log import ActivityLog
-from app.models.credit_transaction import CreditTransaction
-
-
-@pytest.fixture(autouse=True)
-def reset_maintenance_state():
-    """Reset global maintenance state before and after each test."""
-    settings.maintenance_mode = False
-    settings.maintenance_message = "System under maintenance"
-    yield
-    settings.maintenance_mode = False
-    settings.maintenance_message = "System under maintenance"
-
+import pytest
 
 # ─────────────────────────────────────────────────────────────
 # Schedules API

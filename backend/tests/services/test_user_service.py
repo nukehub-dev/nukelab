@@ -1,14 +1,13 @@
 """Tests for UserService business logic."""
 
-import pytest
 import uuid as uuid_mod
-from datetime import datetime
 
-from sqlalchemy import select, and_, func
+import pytest
+from sqlalchemy import select
 
-from app.services.user_service import UserService
-from app.models.user import User
 from app.models.server import Server
+from app.models.user import User
+from app.services.user_service import UserService
 
 
 class TestUserServiceGetBy:

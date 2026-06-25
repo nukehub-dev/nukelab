@@ -3,39 +3,36 @@ Admin dashboard API endpoints.
 Provides statistics, user management, server management, and activity logs.
 """
 
-from typing import Optional, List
-from datetime import datetime, timedelta, UTC
-from pydantic import BaseModel
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, desc
+from datetime import UTC, datetime, timedelta
 
-from app.api.auth import get_current_user, require_jwt_auth, limiter
-from app.services.notification_service import broadcast_server_status_change
-from app.core.permissions import Permission
-from app.dependencies import require_permissions, PermissionChecker
-from app.db.session import get_db
-from app.models.user import User
-from app.models.server import Server
-from app.models.credit_transaction import CreditTransaction
-from app.models.activity_log import ActivityLog
-from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
-from app.models.workspace_volume import WorkspaceVolume
-from app.models.volume import Volume
-from app.services.user_service import UserService
-from app.services.credit_service import CreditService
-from app.services.workspace_service import WorkspaceService
-from app.services.volume_service import VolumeService
-from app.core.roles import ROLE_PERMISSIONS, get_role_permissions, VALID_ROLES
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import BaseModel
+from sqlalchemy import and_, desc, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.auth import get_current_user, limiter, require_jwt_auth
 from app.config import settings
-from app.core.cache import cache_get_or_set, cache_track_key, cache_delete_tracked
+from app.core.cache import cache_get_or_set, cache_track_key
+from app.core.permissions import Permission
+from app.core.roles import ROLE_PERMISSIONS, VALID_ROLES, get_role_permissions
+from app.db.session import get_db
+from app.dependencies import require_permissions
+from app.models.activity_log import ActivityLog
+from app.models.credit_transaction import CreditTransaction
+from app.models.server import Server
+from app.models.user import User
+from app.services.credit_service import CreditService
+from app.services.notification_service import broadcast_server_status_change
+from app.services.user_service import UserService
+from app.services.volume_service import VolumeService
+from app.services.workspace_service import WorkspaceService
 
 # Cache TTL for admin server lists (seconds)
 _ADMIN_SERVER_LIST_CACHE_TTL = 30
 
 
 def _admin_server_list_cache_key(
-    page: int, limit: int, status: Optional[str], user_id: Optional[str]
+    page: int, limit: int, status: str | None, user_id: str | None
 ) -> str:
     return f"servers:list:admin:{page}:{limit}:{status or 'all'}:{user_id or 'all'}"
 
@@ -46,16 +43,16 @@ router = APIRouter()
 # Request/Response Models
 class BulkActionRequest(BaseModel):
     action: str  # disable, enable, delete
-    user_ids: List[str]
+    user_ids: list[str]
 
 
 class BulkServerActionRequest(BaseModel):
     action: str  # start, stop, delete
-    server_ids: List[str]
+    server_ids: list[str]
 
 
 class BulkCreditGrantRequest(BaseModel):
-    user_ids: List[str]
+    user_ids: list[str]
     amount: int
     reason: str
 
@@ -143,9 +140,9 @@ async def get_admin_stats(
 
 @router.get("/users")
 async def admin_list_users(
-    role: Optional[str] = Query(None),
-    status: Optional[str] = Query(None),
-    search: Optional[str] = Query(None),
+    role: str | None = Query(None),
+    status: str | None = Query(None),
+    search: str | None = Query(None),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
@@ -188,6 +185,7 @@ async def bulk_user_action(
     """Perform bulk action on users (atomic batch operation)."""
     import os
     from uuid import UUID
+
     from app.config import settings
 
     results = {"success": [], "failed": []}
@@ -271,8 +269,8 @@ async def bulk_user_action(
 
 @router.get("/servers")
 async def admin_list_servers(
-    status: Optional[str] = Query(None),
-    user_id: Optional[str] = Query(None),
+    status: str | None = Query(None),
+    user_id: str | None = Query(None),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
@@ -345,8 +343,9 @@ async def bulk_server_action(
     db: AsyncSession = Depends(get_db),
 ):
     """Perform bulk action on servers (batch fetch, single commit)."""
-    from app.container.spawner import spawner
     from uuid import UUID
+
+    from app.container.spawner import spawner
 
     # Validate action up front
     if body.action not in ("start", "stop", "delete"):
@@ -510,11 +509,11 @@ async def bulk_grant_credits(
 
 @router.get("/activity")
 async def get_activity_logs(
-    user_id: Optional[str] = Query(None),
-    action: Optional[str] = Query(None),
-    target_type: Optional[str] = Query(None),
-    from_date: Optional[datetime] = Query(None),
-    to_date: Optional[datetime] = Query(None),
+    user_id: str | None = Query(None),
+    action: str | None = Query(None),
+    target_type: str | None = Query(None),
+    from_date: datetime | None = Query(None),
+    to_date: datetime | None = Query(None),
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=100),
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
@@ -574,7 +573,7 @@ async def admin_system_health(
 
     # Database connection check
     try:
-        result = await db.execute(select(func.count()).select_from(User))
+        await db.execute(select(func.count()).select_from(User))
         db_status = "healthy"
     except Exception as e:
         db_status = f"error: {str(e)}"
@@ -592,18 +591,17 @@ async def admin_system_health(
 @router.get("/activity/export")
 async def export_activity_logs(
     format: str = Query("json", pattern="^(json|csv)$"),
-    user_id: Optional[str] = Query(None),
-    action: Optional[str] = Query(None),
-    target_type: Optional[str] = Query(None),
-    from_date: Optional[datetime] = Query(None),
-    to_date: Optional[datetime] = Query(None),
+    user_id: str | None = Query(None),
+    action: str | None = Query(None),
+    target_type: str | None = Query(None),
+    from_date: datetime | None = Query(None),
+    to_date: datetime | None = Query(None),
     limit: int = Query(1000, ge=1, le=10000),
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
     _jwt=Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db),
 ):
     """Export activity logs (admin only)"""
-    from app.api.auth import get_current_user, require_jwt_auth
 
     query = select(ActivityLog)
 
@@ -674,7 +672,7 @@ async def get_permission_matrix(
 
 
 class UpdateRolePermissionsRequest(BaseModel):
-    permissions: List[str]
+    permissions: list[str]
 
 
 @router.put("/permissions/{role}")
@@ -738,7 +736,7 @@ class EmailConfigResponse(BaseModel):
 
 
 class EmailTestRequest(BaseModel):
-    to_email: Optional[str] = None
+    to_email: str | None = None
 
 
 @router.get("/email-config", response_model=EmailConfigResponse)
@@ -877,16 +875,16 @@ async def get_email_status(
 
 
 class UpdateWorkspaceRequest(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    is_active: Optional[bool] = None
+    name: str | None = None
+    description: str | None = None
+    is_active: bool | None = None
 
 
 @router.get("/workspaces")
 async def admin_list_workspaces(
-    search: Optional[str] = Query(None),
-    status: Optional[str] = Query(None),
-    owner_id: Optional[str] = Query(None),
+    search: str | None = Query(None),
+    status: str | None = Query(None),
+    owner_id: str | None = Query(None),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     sort_by: str = Query("created_at"),
@@ -995,8 +993,8 @@ async def admin_list_workspace_members(
     workspace_id: str,
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
-    search: Optional[str] = Query(None),
-    role: Optional[str] = Query(None),
+    search: str | None = Query(None),
+    role: str | None = Query(None),
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
     _jwt=Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db),
@@ -1027,7 +1025,7 @@ async def admin_list_workspace_volumes(
     workspace_id: str,
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
-    search: Optional[str] = Query(None),
+    search: str | None = Query(None),
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
     _jwt=Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db),
@@ -1056,19 +1054,19 @@ async def admin_list_workspace_volumes(
 
 
 class UpdateVolumeRequest(BaseModel):
-    display_name: Optional[str] = None
-    description: Optional[str] = None
-    visibility: Optional[str] = None
-    status: Optional[str] = None
-    max_size_bytes: Optional[int] = None
+    display_name: str | None = None
+    description: str | None = None
+    visibility: str | None = None
+    status: str | None = None
+    max_size_bytes: int | None = None
 
 
 @router.get("/volumes")
 async def admin_list_volumes(
-    search: Optional[str] = Query(None),
-    status: Optional[str] = Query(None),
-    visibility: Optional[str] = Query(None),
-    owner_id: Optional[str] = Query(None),
+    search: str | None = Query(None),
+    status: str | None = Query(None),
+    visibility: str | None = Query(None),
+    owner_id: str | None = Query(None),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     sort_by: str = Query("created_at"),
@@ -1176,6 +1174,8 @@ async def admin_delete_volume(
 
 # ========== Retention Policy Management ==========
 
+import contextlib
+
 from app.services.retention_service import RetentionService
 
 
@@ -1212,7 +1212,7 @@ async def update_retention_policy(
 
 class BulkWorkspaceActionRequest(BaseModel):
     action: str  # delete, activate, deactivate
-    workspace_ids: List[str]
+    workspace_ids: list[str]
 
 
 @router.post("/workspaces/bulk-action")
@@ -1260,7 +1260,7 @@ async def bulk_workspace_action(
 
 class BulkVolumeActionRequest(BaseModel):
     action: str  # delete, archive, activate
-    volume_ids: List[str]
+    volume_ids: list[str]
 
 
 @router.post("/volumes/bulk-action")
@@ -1316,8 +1316,8 @@ class HealthMonitoringResponse(BaseModel):
 async def get_health_monitoring(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
-    status_filter: Optional[str] = Query(None, alias="status"),
-    search: Optional[str] = Query(None),
+    status_filter: str | None = Query(None, alias="status"),
+    search: str | None = Query(None),
     current_user: User = Depends(get_current_user),
     _=Depends(require_permissions(Permission.ADMIN_ACCESS)),
     db: AsyncSession = Depends(get_db),
@@ -1331,14 +1331,17 @@ async def get_health_monitoring(
     - Composite index on (server_id, checked_at) for fast latest-check lookups
     """
     import time
+
     import psutil
     import redis.asyncio as redis
-    from sqlalchemy import text as sa_text, or_
+    from sqlalchemy import or_
+    from sqlalchemy import text as sa_text
+
+    from app.config import settings
     from app.container.client import container_client
     from app.models.health_check import HealthCheck
     from app.models.user import User as UserModel
     from app.services.email_service import EmailService
-    from app.config import settings
 
     # ------------------------------------------------------------------
     # System health (fast, always computed)
@@ -1463,10 +1466,8 @@ async def get_health_monitoring(
         disk_info = get_disk_info("/")
         container_disk_info = None
         if settings.volume_storage_path:
-            try:
+            with contextlib.suppress(Exception):
                 container_disk_info = get_disk_info(settings.volume_storage_path)
-            except Exception:
-                pass
 
         fs_type = None
         try:
@@ -1636,7 +1637,7 @@ async def get_health_monitoring(
         .where(latest_check_subq.c.rn == 1)
         .group_by(latest_check_subq.c.status)
     )
-    status_counts = {status: count for status, count in summary_result.all()}
+    status_counts = dict(summary_result.all())
     unhealthy_count = status_counts.get("unhealthy", 0)
     unknown_count = status_counts.get("unknown", 0)
     restarting_count = status_counts.get("restarting", 0)

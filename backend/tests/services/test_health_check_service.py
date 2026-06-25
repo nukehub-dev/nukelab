@@ -1,13 +1,13 @@
 """Tests for HealthCheckService business logic."""
 
-import pytest
-import uuid as uuid_mod
-from datetime import datetime, timedelta, UTC
-from unittest.mock import patch, AsyncMock, MagicMock
+from datetime import UTC, datetime
+from unittest.mock import patch
 
-from app.services.health_check_service import HealthCheckService, _broadcast_health_update
+import pytest
+
 from app.models.health_check import HealthCheck
 from app.models.server import Server
+from app.services.health_check_service import HealthCheckService, _broadcast_health_update
 
 
 class TestBroadcastHealthUpdate:
@@ -143,14 +143,10 @@ class TestHealthCheckServiceCheckAll:
 
 """Extended tests for HealthCheckService (container health checks, auto-restart)."""
 
-import pytest
-from datetime import datetime, timedelta, UTC
 from unittest import mock
-from sqlalchemy import select
 
-from app.services.health_check_service import HealthCheckService, _broadcast_health_update
-from app.models.server import Server
-from app.models.health_check import HealthCheck
+import pytest
+from sqlalchemy import select
 
 
 class TestCheckAllContainers:
@@ -335,16 +331,18 @@ class TestAutoRestart:
         await db_session.commit()
 
         service = HealthCheckService(db_session)
-        with mock.patch(
-            "app.services.health_check_service.settings.server_auto_restart_enabled", True
-        ):
-            with mock.patch(
+        with (
+            mock.patch(
+                "app.services.health_check_service.settings.server_auto_restart_enabled", True
+            ),
+            mock.patch(
                 "app.services.health_check_service.settings.server_auto_restart_max_attempts", 3
-            ):
-                with mock.patch(
-                    "app.services.health_check_service.settings.server_auto_restart_window", 3600
-                ):
-                    await service._auto_restart(server)
+            ),
+            mock.patch(
+                "app.services.health_check_service.settings.server_auto_restart_window", 3600
+            ),
+        ):
+            await service._auto_restart(server)
 
     @pytest.mark.asyncio
     async def test_auto_restart_no_container_id(self, db_session, test_user):
@@ -371,24 +369,22 @@ class TestAutoRestart:
         await db_session.refresh(server)
 
         service = HealthCheckService(db_session)
-        with mock.patch(
-            "app.services.health_check_service.settings.server_auto_restart_enabled", True
-        ):
-            with mock.patch(
+        with (
+            mock.patch(
+                "app.services.health_check_service.settings.server_auto_restart_enabled", True
+            ),
+            mock.patch(
                 "app.services.health_check_service.settings.server_auto_restart_max_attempts", 10
-            ):
-                with mock.patch(
-                    "app.services.health_check_service.settings.server_auto_restart_window", 3600
-                ):
-                    with mock.patch(
-                        "app.container.spawner.spawner.stop", mock.AsyncMock()
-                    ) as mock_stop:
-                        with mock.patch(
-                            "app.container.spawner.spawner.start", mock.AsyncMock()
-                        ) as mock_start:
-                            await service._auto_restart(server)
-                            mock_stop.assert_called_once_with("c3")
-                            mock_start.assert_called_once_with("c3")
+            ),
+            mock.patch(
+                "app.services.health_check_service.settings.server_auto_restart_window", 3600
+            ),
+            mock.patch("app.container.spawner.spawner.stop", mock.AsyncMock()) as mock_stop,
+            mock.patch("app.container.spawner.spawner.start", mock.AsyncMock()) as mock_start,
+        ):
+            await service._auto_restart(server)
+            mock_stop.assert_called_once_with("c3")
+            mock_start.assert_called_once_with("c3")
 
     @pytest.mark.asyncio
     async def test_auto_restart_failure(self, db_session, test_user):
@@ -401,19 +397,19 @@ class TestAutoRestart:
         await db_session.refresh(server)
 
         service = HealthCheckService(db_session)
-        with mock.patch(
-            "app.services.health_check_service.settings.server_auto_restart_enabled", True
-        ):
-            with mock.patch(
+        with (
+            mock.patch(
+                "app.services.health_check_service.settings.server_auto_restart_enabled", True
+            ),
+            mock.patch(
                 "app.services.health_check_service.settings.server_auto_restart_max_attempts", 10
-            ):
-                with mock.patch(
-                    "app.services.health_check_service.settings.server_auto_restart_window", 3600
-                ):
-                    with mock.patch(
-                        "app.container.spawner.spawner.stop", side_effect=Exception("Stop failed")
-                    ):
-                        await service._auto_restart(server)
+            ),
+            mock.patch(
+                "app.services.health_check_service.settings.server_auto_restart_window", 3600
+            ),
+            mock.patch("app.container.spawner.spawner.stop", side_effect=Exception("Stop failed")),
+        ):
+            await service._auto_restart(server)
 
         result = await db_session.execute(
             select(HealthCheck).where(

@@ -1,8 +1,9 @@
 """Tests for admin volume management endpoints."""
 
+from unittest import mock
+
 import pytest
 from httpx import AsyncClient
-from unittest import mock
 
 
 @pytest.fixture(autouse=True)
@@ -519,9 +520,10 @@ class TestBulkVolumeActions:
         self, client: AsyncClient, admin_user, db_session
     ):
         """API token authentication should be rejected for volume bulk actions (JWT only)."""
-        from app.models.api_token import ApiToken
-        from app.api.auth import get_password_hash
         import secrets
+
+        from app.api.auth import get_password_hash
+        from app.models.api_token import ApiToken
 
         raw_token = f"nukelab_{secrets.token_urlsafe(32)}"
         token_hash = get_password_hash(raw_token)

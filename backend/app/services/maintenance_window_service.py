@@ -4,16 +4,17 @@ Handles creation, updates, and evaluation of maintenance windows.
 """
 
 import uuid
-from datetime import datetime, timedelta, UTC
-from typing import List, Optional, Dict, Any
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
+from sqlalchemy import and_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.logging import get_logger
 from app.models.maintenance_window import MaintenanceWindow
 from app.models.user import User
 from app.services.notification_service import NotificationService
 from app.services.setting_service import SettingService
-from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -26,7 +27,7 @@ class MaintenanceWindowService:
 
     async def list_windows(
         self, active_only: bool = False, future_only: bool = False, limit: int = 100
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """List maintenance windows, optionally filtered."""
         query = select(MaintenanceWindow).order_by(MaintenanceWindow.start_at.desc())
 
@@ -42,7 +43,7 @@ class MaintenanceWindowService:
         windows = result.scalars().all()
         return [w.to_dict() for w in windows]
 
-    async def get_window(self, window_id: str) -> Optional[MaintenanceWindow]:
+    async def get_window(self, window_id: str) -> MaintenanceWindow | None:
         """Get a single maintenance window by ID."""
         result = await self.db.execute(
             select(MaintenanceWindow).where(MaintenanceWindow.id == uuid.UUID(window_id))
@@ -55,9 +56,9 @@ class MaintenanceWindowService:
         message: str,
         start_at: datetime,
         end_at: datetime,
-        created_by: Optional[str] = None,
+        created_by: str | None = None,
         is_active: bool = True,
-        notify_offsets: Optional[List[int]] = None,
+        notify_offsets: list[int] | None = None,
     ) -> MaintenanceWindow:
         """Create a new maintenance window."""
         if end_at <= start_at:
@@ -88,12 +89,12 @@ class MaintenanceWindowService:
     async def update_window(
         self,
         window_id: str,
-        title: Optional[str] = None,
-        message: Optional[str] = None,
-        start_at: Optional[datetime] = None,
-        end_at: Optional[datetime] = None,
-        is_active: Optional[bool] = None,
-        notify_offsets: Optional[List[int]] = None,
+        title: str | None = None,
+        message: str | None = None,
+        start_at: datetime | None = None,
+        end_at: datetime | None = None,
+        is_active: bool | None = None,
+        notify_offsets: list[int] | None = None,
     ) -> MaintenanceWindow:
         """Update an existing maintenance window."""
         window = await self.get_window(window_id)
@@ -138,7 +139,7 @@ class MaintenanceWindowService:
         await self.db.commit()
         return True
 
-    def _normalize_offsets(self, offsets: Optional[List[int]], start_at: datetime) -> List[int]:
+    def _normalize_offsets(self, offsets: list[int] | None, start_at: datetime) -> list[int]:
         """Validate and normalize notification offsets.
         Filters out offsets that are larger than the time remaining until start.
         """
@@ -148,12 +149,12 @@ class MaintenanceWindowService:
         minutes_until_start = int((start_at - now).total_seconds() / 60)
         # Remove duplicates, filter out offsets larger than time until start, sort descending
         unique = sorted(
-            set(int(o) for o in offsets if int(o) > 0 and int(o) < minutes_until_start),
+            {int(o) for o in offsets if int(o) > 0 and int(o) < minutes_until_start},
             reverse=True,
         )
         return unique if unique else [15]
 
-    async def get_pending_notifications(self) -> List[tuple[MaintenanceWindow, int]]:
+    async def get_pending_notifications(self) -> list[tuple[MaintenanceWindow, int]]:
         """Get (window, offset_minutes) pairs that need notification sent."""
         now = datetime.now(UTC).replace(tzinfo=None)
 
@@ -168,7 +169,7 @@ class MaintenanceWindowService:
         )
         windows = result.scalars().all()
 
-        pending: List[tuple[MaintenanceWindow, int]] = []
+        pending: list[tuple[MaintenanceWindow, int]] = []
         for window in windows:
             offsets = window.notify_offsets or [15]
             notified = set(window.notified_offsets or [])
@@ -185,7 +186,7 @@ class MaintenanceWindowService:
                     break  # Only one offset per window per evaluation cycle
         return pending
 
-    async def get_windows_to_enable(self) -> List[MaintenanceWindow]:
+    async def get_windows_to_enable(self) -> list[MaintenanceWindow]:
         """Get active windows whose start time has arrived."""
         now = datetime.now(UTC).replace(tzinfo=None)
         result = await self.db.execute(
@@ -199,7 +200,7 @@ class MaintenanceWindowService:
         )
         return result.scalars().all()
 
-    async def get_windows_to_disable(self) -> List[MaintenanceWindow]:
+    async def get_windows_to_disable(self) -> list[MaintenanceWindow]:
         """Get active windows whose end time has passed."""
         now = datetime.now(UTC).replace(tzinfo=None)
         result = await self.db.execute(
@@ -283,7 +284,7 @@ class MaintenanceWindowService:
         window.auto_disabled = True
         await self.db.commit()
 
-    async def evaluate_windows(self) -> Dict[str, Any]:
+    async def evaluate_windows(self) -> dict[str, Any]:
         """Evaluate all maintenance windows and take appropriate actions."""
         notifications_sent = 0
         enabled_count = 0

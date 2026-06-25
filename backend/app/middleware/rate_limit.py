@@ -24,14 +24,14 @@ Security features:
   - Redis failures fail-open (no self-inflicted outages)
 """
 
-import time
-import logging
 import hashlib
-from typing import Optional, Tuple
+import logging
+import time
+
 from fastapi import Request
+from jose import ExpiredSignatureError, JWTError, jwt
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
-from jose import jwt, JWTError, ExpiredSignatureError
 
 from app.config import settings
 from app.core.roles import get_role_rate_limit
@@ -58,9 +58,7 @@ def _is_trusted_proxy(ip: str) -> bool:
     """Check if IP is in trusted proxy ranges."""
     if ip in ("127.0.0.1", "::1", "localhost"):
         return True
-    if ip.startswith("172.") or ip.startswith("10.") or ip.startswith("192.168."):
-        return True
-    return False
+    return bool(ip.startswith("172.") or ip.startswith("10.") or ip.startswith("192.168."))
 
 
 def _hash_token_for_key(token: str) -> str:
@@ -100,13 +98,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return self._redis
 
     @staticmethod
-    def _extract_token(request: Request) -> Optional[str]:
+    def _extract_token(request: Request) -> str | None:
         auth = request.headers.get("Authorization", "")
         if auth.startswith("Bearer ") or auth.startswith("Token "):
             return auth.split(" ", 1)[1]
         return request.cookies.get("nukelab_token")
 
-    def _decode_jwt(self, token: str) -> Optional[dict]:
+    def _decode_jwt(self, token: str) -> dict | None:
         try:
             return jwt.decode(
                 token,
@@ -135,9 +133,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     async def _check_rate_limit(
         self,
         user_key: str,
-        role: Optional[str],
+        role: str | None,
         path: str,
-    ) -> Tuple[bool, int, int, int]:
+    ) -> tuple[bool, int, int, int]:
         window = settings.rate_limit_window_seconds
         bucket = int(time.time()) // window
 
@@ -188,7 +186,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         token = self._extract_token(request)
         user_key: str
-        role: Optional[str]
+        role: str | None
 
         if token:
             payload = self._decode_jwt(token)

@@ -1,7 +1,8 @@
 """Tests for API token management, authentication, and scope enforcement."""
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
-from datetime import datetime, timedelta, UTC
 
 
 class TestTokenCreation:
@@ -130,9 +131,10 @@ class TestTokenAuthentication:
     @pytest.mark.asyncio
     async def test_expired_api_token_rejected(self, client, db_session, test_user):
         """Expired token should be rejected."""
-        from app.models.api_token import ApiToken
-        from app.api.auth import get_password_hash
         import secrets
+
+        from app.api.auth import get_password_hash
+        from app.models.api_token import ApiToken
 
         raw_token = f"nukelab_{secrets.token_urlsafe(32)}"
         token_hash = get_password_hash(raw_token)
@@ -178,6 +180,7 @@ class TestTokenAuthentication:
 
         # Refresh from DB
         from sqlalchemy import select
+
         from app.models.api_token import ApiToken
 
         result = await db_session.execute(
@@ -256,6 +259,7 @@ class TestTokenManagement:
 
         # Verify token is inactive
         from sqlalchemy import select
+
         from app.models.api_token import ApiToken
 
         result = await db_session.execute(select(ApiToken).where(ApiToken.id == token_id))
@@ -281,6 +285,7 @@ class TestTokenManagement:
 
         # Verify token is gone
         from sqlalchemy import select
+
         from app.models.api_token import ApiToken
 
         result = await db_session.execute(select(ApiToken).where(ApiToken.id == token_id))
@@ -366,9 +371,10 @@ class TestScopeEnforcement:
     @pytest.mark.asyncio
     async def test_scope_enforcement_basic(self, client, db_session, test_user):
         """Test that scope checking works at the dependency level."""
-        from app.models.api_token import ApiToken
-        from app.api.auth import get_password_hash
         import secrets
+
+        from app.api.auth import get_password_hash
+        from app.models.api_token import ApiToken
 
         # Create token with only user:read scope
         raw_token = f"nukelab_{secrets.token_urlsafe(32)}"
@@ -451,9 +457,10 @@ class TestScopedEndpointAccess:
     @pytest.mark.asyncio
     async def test_api_token_inherits_role_permissions(self, client, db_session, test_user):
         """API tokens inherit the user's role permissions regardless of scopes."""
-        from app.models.api_token import ApiToken
-        from app.api.auth import get_password_hash
         import secrets
+
+        from app.api.auth import get_password_hash
+        from app.models.api_token import ApiToken
 
         raw_token = f"nukelab_{secrets.token_urlsafe(32)}"
         token_hash = get_password_hash(raw_token)
@@ -507,9 +514,10 @@ class TestAdminEndpointScopeAccess:
     @pytest.mark.asyncio
     async def test_api_token_blocked_from_admin_endpoints(self, client, db_session, admin_user):
         """Admin API tokens should be blocked from admin endpoints (JWT-only)."""
-        from app.models.api_token import ApiToken
-        from app.api.auth import get_password_hash
         import secrets
+
+        from app.api.auth import get_password_hash
+        from app.models.api_token import ApiToken
 
         raw_token = f"nukelab_{secrets.token_urlsafe(32)}"
         token_hash = get_password_hash(raw_token)
@@ -539,9 +547,10 @@ class TestAdminEndpointScopeAccess:
         self, client, db_session, admin_user
     ):
         """Admin API token without admin:read should be blocked from /admin/stats."""
-        from app.models.api_token import ApiToken
-        from app.api.auth import get_password_hash
         import secrets
+
+        from app.api.auth import get_password_hash
+        from app.models.api_token import ApiToken
 
         raw_token = f"nukelab_{secrets.token_urlsafe(32)}"
         token_hash = get_password_hash(raw_token)
@@ -571,9 +580,10 @@ class TestAdminEndpointScopeAccess:
         self, client, db_session, admin_user
     ):
         """Admin API token with only admin:read should be blocked from write endpoints."""
-        from app.models.api_token import ApiToken
-        from app.api.auth import get_password_hash
         import secrets
+
+        from app.api.auth import get_password_hash
+        from app.models.api_token import ApiToken
 
         raw_token = f"nukelab_{secrets.token_urlsafe(32)}"
         token_hash = get_password_hash(raw_token)
@@ -604,9 +614,10 @@ class TestAdminEndpointScopeAccess:
         self, client, db_session, admin_user
     ):
         """Admin API tokens should be blocked from admin write endpoints (JWT-only)."""
-        from app.models.api_token import ApiToken
-        from app.api.auth import get_password_hash
         import secrets
+
+        from app.api.auth import get_password_hash
+        from app.models.api_token import ApiToken
 
         raw_token = f"nukelab_{secrets.token_urlsafe(32)}"
         token_hash = get_password_hash(raw_token)
@@ -646,9 +657,10 @@ class TestAdminEndpointScopeAccess:
         self, client, db_session, test_user
     ):
         """Regular user with admin:read scope should still be blocked by require_permissions."""
-        from app.models.api_token import ApiToken
-        from app.api.auth import get_password_hash
         import secrets
+
+        from app.api.auth import get_password_hash
+        from app.models.api_token import ApiToken
 
         raw_token = f"nukelab_{secrets.token_urlsafe(32)}"
         token_hash = get_password_hash(raw_token)
@@ -676,12 +688,8 @@ class TestAdminEndpointScopeAccess:
 
 """Extended tests for smaller API endpoints (tokens, plans, quotas, schedules)."""
 
-import pytest
-import uuid
 
-from app.models.server_plan import ServerPlan
-from app.models.server_schedule import ServerSchedule
-from app.models.server import Server
+import pytest
 
 
 class TestTokensAPI:

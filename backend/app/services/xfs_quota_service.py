@@ -18,7 +18,6 @@ Setup on host:
 import hashlib
 import os
 import subprocess
-from typing import Optional
 
 from app.config import settings
 from app.core.logging import get_logger
@@ -57,9 +56,7 @@ class XfsQuotaService:
                 capture_output=True,
                 timeout=5,
             )
-            if result.returncode != 0 and "permission" in result.stderr.lower():
-                return False
-            return True
+            return not (result.returncode != 0 and "permission" in result.stderr.lower())
         except Exception:
             return False
 
@@ -109,7 +106,7 @@ class XfsQuotaService:
 
         return self._xfs_available
 
-    def _get_volume_path(self, volume_name: str) -> Optional[str]:
+    def _get_volume_path(self, volume_name: str) -> str | None:
         """Resolve the host filesystem path for a named volume."""
         candidates = []
 
@@ -313,7 +310,7 @@ class XfsQuotaService:
         """Update an existing XFS project quota limit."""
         return self.set_quota(volume_name, bytes_limit)
 
-    def get_quota_usage(self, volume_name: str) -> Optional[dict]:
+    def get_quota_usage(self, volume_name: str) -> dict | None:
         """Return current usage and limit for a volume's project quota."""
         if not self.enabled or not self._xfs_quota_available():
             return None
@@ -351,7 +348,7 @@ class XfsQuotaService:
         return None
 
 
-def _parse_quota_value(value: str) -> Optional[int]:
+def _parse_quota_value(value: str) -> int | None:
     """Parse a quota value from xfs_quota output."""
     if value.lower() in ("none", "0", "-"):
         return 0
@@ -368,7 +365,7 @@ def _update_line(filepath: str, line_prefix: str) -> None:
     found = False
 
     if os.path.exists(filepath):
-        with open(filepath, "r") as f:
+        with open(filepath) as f:
             for line in f:
                 stripped = line.strip()
                 if stripped.startswith(key + ":"):
@@ -389,7 +386,7 @@ def _remove_line(filepath: str, prefix: str) -> None:
     if not os.path.exists(filepath):
         return
 
-    with open(filepath, "r") as f:
+    with open(filepath) as f:
         lines = f.readlines()
 
     with open(filepath, "w") as f:

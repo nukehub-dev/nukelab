@@ -1,12 +1,11 @@
 """Tests for Audit Middleware."""
 
+from unittest.mock import AsyncMock, Mock, patch
+
 import pytest
-import uuid
-from unittest.mock import patch, AsyncMock, Mock
 
 from app.middleware.audit import AuditMiddleware
 from app.models.activity_log import ActivityLog
-from app.models.user import User
 
 
 class TestAuditMiddleware:

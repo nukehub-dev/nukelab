@@ -1,7 +1,8 @@
 """Extended tests for Dashboard and Analytics API endpoints."""
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
-from datetime import datetime, timedelta, UTC
 
 from app.models.activity_log import ActivityLog
 

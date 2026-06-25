@@ -2,17 +2,17 @@
 Notifications API endpoints.
 """
 
-from typing import Optional, List
-from pydantic import BaseModel, Field
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from datetime import UTC, datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func
-from datetime import datetime, UTC
 
 from app.api.auth import get_current_user
 from app.db.session import get_db
-from app.models.user import User
 from app.models.notification import Notification
+from app.models.user import User
 
 router = APIRouter()
 
@@ -24,14 +24,14 @@ class NotificationResponse(BaseModel):
     message: str
     severity: str
     read: bool
-    read_at: Optional[str]
-    action_url: Optional[str]
+    read_at: str | None
+    action_url: str | None
     extra_data: dict
     created_at: str
 
 
 class NotificationListResponse(BaseModel):
-    notifications: List[NotificationResponse]
+    notifications: list[NotificationResponse]
     unread_count: int
     total: int
     page: int
@@ -39,7 +39,7 @@ class NotificationListResponse(BaseModel):
 
 
 class MarkReadRequest(BaseModel):
-    notification_ids: List[str]
+    notification_ids: list[str]
 
 
 def serialize_notification(notification: Notification) -> dict:
@@ -60,7 +60,7 @@ def serialize_notification(notification: Notification) -> dict:
 @router.get("/", response_model=NotificationListResponse)
 async def list_notifications(
     unread_only: bool = Query(False, description="Only unread notifications"),
-    type: Optional[str] = Query(None, description="Filter by type"),
+    type: str | None = Query(None, description="Filter by type"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     db: AsyncSession = Depends(get_db),
@@ -198,14 +198,14 @@ async def create_notification(
     title: str,
     message: str,
     severity: str = "info",
-    action_url: Optional[str] = None,
-    extra_data: Optional[dict] = None,
+    action_url: str | None = None,
+    extra_data: dict | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Create a notification for a user (Admin only)"""
-    from app.dependencies import PermissionChecker
     from app.core.permissions import Permission
+    from app.dependencies import PermissionChecker
 
     checker = PermissionChecker(current_user)
     checker.require(Permission.ADMIN_ACCESS)

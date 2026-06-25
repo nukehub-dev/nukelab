@@ -1,15 +1,12 @@
 """Extended coverage tests for metrics API endpoints."""
 
 import pytest
-from datetime import datetime, timedelta, UTC
-from unittest import mock
 
+from app.models.alert_rule import AlertRule
+from app.models.health_check import HealthCheck
 from app.models.server import Server
 from app.models.server_metric import ServerMetric
 from app.models.system_metric import SystemMetric
-from app.models.alert_rule import AlertRule
-from app.models.alert_history import AlertHistory
-from app.models.health_check import HealthCheck
 
 
 class TestServerMetrics:
