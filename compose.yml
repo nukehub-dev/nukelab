@@ -233,7 +233,7 @@ services:
             - PROMETHEUS_ENABLED=false
             - PGBOUNCER_ENABLED=false
             - TESTING=true
-            - in =/var/run/docker.sock
+            - DOCKER_SOCKET=/var/run/docker.sock
         volumes:
             - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:Z
             - /var/lib/lxcfs:/var/lib/lxcfs:ro
