@@ -57,6 +57,8 @@ services:
     redis:
         image: docker.io/library/redis:7-alpine
         container_name: nukelab-redis
+        command: >
+          sh -c "exec redis-server --maxmemory $${REDIS_MAXMEMORY:-256mb} --maxmemory-policy $${REDIS_MAXMEMORY_POLICY:-allkeys-lru}"
         networks:
             - nukelab-network
         healthcheck:
@@ -220,6 +222,7 @@ services:
             context: ./backend
             dockerfile: Dockerfile
             target: test
+        image: nukelab-backend-test:test
         container_name: nukelab-backend-test
         env_file:
             - .env.development

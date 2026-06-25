@@ -49,10 +49,24 @@ groups:
           description: "Postgres is using {{ $value | humanizePercentage }} of max connections."
 
       - alert: NukeLabRedisMemoryHigh
-        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.85
+        expr: |
+          (
+            redis_memory_max_bytes > 0
+            and
+            redis_memory_used_bytes / redis_memory_max_bytes > 0.85
+          )
         for: 5m
         labels:
           severity: warning
         annotations:
           summary: "Redis memory usage is high"
           description: "Redis is using {{ $value | humanizePercentage }} of max memory."
+
+      - alert: NukeLabRedisMaxMemoryNotSet
+        expr: redis_memory_max_bytes == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis maxmemory is not configured"
+          description: "Redis has no maxmemory limit; memory alerts cannot be calculated. Set REDIS_MAXMEMORY in your environment."

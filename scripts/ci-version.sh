@@ -61,9 +61,13 @@ esac
 
 # GitHub Actions: write outputs
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
-    printf 'tags<<EOF\n%s\nEOF\n' "${_tags[*]}" >> "$GITHUB_OUTPUT"
-    printf 'version=%s\n' "$_version" >> "$GITHUB_OUTPUT"
-    printf 'latest=%s\n' "$_latest" >> "$GITHUB_OUTPUT"
+    {
+        printf 'tags<<EOF\n'
+        printf '%s\n' "${_tags[@]}"
+        printf 'EOF\n'
+        printf 'version=%s\n' "$_version"
+        printf 'latest=%s\n' "$_latest"
+    } >> "$GITHUB_OUTPUT"
 fi
 
 # Human-readable summary for logs
