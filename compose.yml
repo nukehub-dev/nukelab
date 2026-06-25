@@ -1,341 +1,388 @@
 services:
-  # Reverse Proxy
-  traefik:
-    image: docker.io/library/traefik:v3.1
-    container_name: nukelab-traefik
-    command:
-      - --configFile=/etc/traefik/traefik.yml
-    ports:
-      - "8080:80"
-      - "8443:443"
-    volumes:
-      - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:ro
-      - ./certs:/certs:ro
-      - letsencrypt:/letsencrypt
-      - ./infrastructure/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
-      - ./infrastructure/traefik/dynamic:/etc/traefik/dynamic:ro
-    networks:
-      - nukelab-network
-    restart: unless-stopped
+    # Reverse Proxy
+    traefik:
+        image: docker.io/library/traefik:v3.1
+        container_name: nukelab-traefik
+        command:
+            - --configFile=/etc/traefik/traefik.yml
+        ports:
+            - "8080:80"
+            - "8443:443"
+        volumes:
+            - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:ro
+            - ./certs:/certs:ro
+            - letsencrypt:/letsencrypt
+            - ./infrastructure/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+            - ./infrastructure/traefik/dynamic:/etc/traefik/dynamic:ro
+        networks:
+            - nukelab-network
+        restart: unless-stopped
 
-  # Database
-  postgres:
-    image: docker.io/library/postgres:17-alpine
-    container_name: nukelab-postgres
-    environment:
-      POSTGRES_USER: ${DATABASE_USER:-nukelab}
-      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-nukelab123}
-      POSTGRES_DB: ${DATABASE_NAME:-nukelab}
-    command:
-      - postgres
-      - -c
-      - shared_preload_libraries=pg_stat_statements
-      - -c
-      - pg_stat_statements.track=all
-      - -c
-      - pg_stat_statements.max=10000
-      - -c
-      - log_min_duration_statement=250
-      - -c
-      - "log_line_prefix=%t [%p]: [%l-1] user=%u,db=%d,app=%a,client=%h"
-      - -c
-      - log_destination=stderr
-      - -c
-      - max_connections=500
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    networks:
-      - nukelab-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-nukelab}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
+    # Database
+    postgres:
+        image: docker.io/library/postgres:17-alpine
+        container_name: nukelab-postgres
+        environment:
+            POSTGRES_USER: ${DATABASE_USER:-nukelab}
+            POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-nukelab123}
+            POSTGRES_DB: ${DATABASE_NAME:-nukelab}
+        command:
+            - postgres
+            - -c
+            - shared_preload_libraries=pg_stat_statements
+            - -c
+            - pg_stat_statements.track=all
+            - -c
+            - pg_stat_statements.max=10000
+            - -c
+            - log_min_duration_statement=250
+            - -c
+            - "log_line_prefix=%t [%p]: [%l-1] user=%u,db=%d,app=%a,client=%h"
+            - -c
+            - log_destination=stderr
+            - -c
+            - max_connections=500
+        volumes:
+            - postgres-data:/var/lib/postgresql/data
+        networks:
+            - nukelab-network
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-nukelab}"]
+            interval: 5s
+            timeout: 5s
+            retries: 5
+        restart: unless-stopped
 
-  # Cache & Message Broker
-  redis:
-    image: docker.io/library/redis:7-alpine
-    container_name: nukelab-redis
-    networks:
-      - nukelab-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
+    # Cache & Message Broker
+    redis:
+        image: docker.io/library/redis:7-alpine
+        container_name: nukelab-redis
+        networks:
+            - nukelab-network
+        healthcheck:
+            test: ["CMD", "redis-cli", "ping"]
+            interval: 5s
+            timeout: 5s
+            retries: 5
+        restart: unless-stopped
 
-  # Backend API
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: nukelab-backend
-    environment:
-      - APP_NAME=${APP_NAME:-NukeLab}
-      - APP_ENV=${APP_ENV:-development}
-      - APP_DEBUG=${APP_DEBUG:-true}
-      - APP_URL=${APP_URL:-http://localhost:8080}
-      - PUBLIC_URL=${APP_URL:-http://localhost:8080}
-      - FRONTEND_URL=${FRONTEND_URL:-}
-      - APP_TIMEZONE=${APP_TIMEZONE:-UTC}
-      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-change-in-production-min-32-chars}
-      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
-      - JWT_EXPIRE_MINUTES=${JWT_EXPIRE_MINUTES:-15}
-      - JWT_REFRESH_EXPIRE_DAYS=${JWT_REFRESH_EXPIRE_DAYS:-7}
-      - SESSION_SECRET=${SESSION_SECRET:-dev-session-secret-change-in-production}
-      - SESSION_MAX_AGE=${SESSION_MAX_AGE:-86400}
-      - SESSION_SECURE=${SESSION_SECURE:-false}
-      - SESSION_HTTPONLY=${SESSION_HTTPONLY:-true}
-      - SESSION_SAMESITE=${SESSION_SAMESITE:-lax}
-      - SECURITY_HEADERS_ENABLED=${SECURITY_HEADERS_ENABLED:-true}
-      - CSRF_PROTECTION_ENABLED=${CSRF_PROTECTION_ENABLED:-true}
-      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://localhost:8000}
-      - CORS_ALLOW_CREDENTIALS=${CORS_ALLOW_CREDENTIALS:-true}
-      # Rate Limiting — per-user tier configuration (Redis-backed)
-      - RATE_LIMIT_ENABLED=${RATE_LIMIT_ENABLED:-true}
-      - RATE_LIMIT_GUEST_RPM=${RATE_LIMIT_GUEST_RPM:-30}
-      - RATE_LIMIT_USER_RPM=${RATE_LIMIT_USER_RPM:-120}
-      - RATE_LIMIT_SUPPORT_RPM=${RATE_LIMIT_SUPPORT_RPM:-300}
-      - RATE_LIMIT_MODERATOR_RPM=${RATE_LIMIT_MODERATOR_RPM:-300}
-      - RATE_LIMIT_ADMIN_RPM=${RATE_LIMIT_ADMIN_RPM:-600}
-      - RATE_LIMIT_SUPER_ADMIN_RPM=${RATE_LIMIT_SUPER_ADMIN_RPM:-3000}
-      - RATE_LIMIT_STRICT_MULTIPLIER=${RATE_LIMIT_STRICT_MULTIPLIER:-0.5}
-      - RATE_LIMIT_WEBSOCKET_CPM=${RATE_LIMIT_WEBSOCKET_CPM:-30}
-      - RATE_LIMIT_WINDOW_SECONDS=${RATE_LIMIT_WINDOW_SECONDS:-60}
-      - RATE_LIMIT_BUCKET_TTL_MULTIPLIER=${RATE_LIMIT_BUCKET_TTL_MULTIPLIER:-2}
-      - AUTH_MODE=${AUTH_MODE:-local}
-      - LOCAL_AUTH_BCRYPT_ROUNDS=${LOCAL_AUTH_BCRYPT_ROUNDS:-12}
-      - OAUTH_PROVIDER_NAME=${OAUTH_PROVIDER_NAME:-}
-      - OAUTH_CLIENT_ID=${OAUTH_CLIENT_ID:-}
-      - OAUTH_CLIENT_SECRET=${OAUTH_CLIENT_SECRET:-}
-      - OAUTH_DISCOVERY_URL=${OAUTH_DISCOVERY_URL:-}
-      - OAUTH_AUTHORIZE_URL=${OAUTH_AUTHORIZE_URL:-}
-      - OAUTH_TOKEN_URL=${OAUTH_TOKEN_URL:-}
-      - OAUTH_USERDATA_URL=${OAUTH_USERDATA_URL:-}
-      - OAUTH_CALLBACK_URL=${OAUTH_CALLBACK_URL:-}
-      - OAUTH_SCOPE=${OAUTH_SCOPE:-openid profile email}
-      - OAUTH_USERNAME_CLAIM=${OAUTH_USERNAME_CLAIM:-preferred_username}
-      - OAUTH_EMAIL_CLAIM=${OAUTH_EMAIL_CLAIM:-email}
-      - OAUTH_NAME_CLAIM=${OAUTH_NAME_CLAIM:-name}
-      - OAUTH_PKCE_ENABLED=${OAUTH_PKCE_ENABLED:-true}
-      - OAUTH_PROFILE_URL=${OAUTH_PROFILE_URL:-}
-      - DEV_MODE=${DEV_MODE:-true}
-      - DEV_ADMIN_USER=${DEV_ADMIN_USER:-admin}
-      - DEV_ADMIN_PASSWORD=${DEV_ADMIN_PASSWORD:-admin123}
-      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://nukelab:nukelab123@postgres:5432/nukelab}
-      - PGBOUNCER_ENABLED=${PGBOUNCER_ENABLED:-false}
-      - DATABASE_PGBOUNCER_URL=${DATABASE_PGBOUNCER_URL:-}
-      - DATABASE_POOL_SIZE=${DATABASE_POOL_SIZE:-10}
-      - DATABASE_POOL_MAX_OVERFLOW=${DATABASE_POOL_MAX_OVERFLOW:-10}
-      - DATABASE_POOL_TIMEOUT=${DATABASE_POOL_TIMEOUT:-30}
-      - DATABASE_POOL_RECYCLE=${DATABASE_POOL_RECYCLE:-3600}
-      - DATABASE_POOL_PRE_PING=${DATABASE_POOL_PRE_PING:-true}
-      - DATABASE_QUERY_TIMEOUT_SECONDS=${DATABASE_QUERY_TIMEOUT_SECONDS:-30}
-      - DATABASE_ECHO=${DATABASE_ECHO:-false}
-      - OBSERVABILITY_SLOW_QUERY_THRESHOLD_MS=${OBSERVABILITY_SLOW_QUERY_THRESHOLD_MS:-100}
-      - OBSERVABILITY_PG_STAT_STATEMENTS_ENABLED=${OBSERVABILITY_PG_STAT_STATEMENTS_ENABLED:-true}
-      - PROMETHEUS_ENABLED=${PROMETHEUS_ENABLED:-true}
-      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
-      - REDIS_DB=${REDIS_DB:-0}
-      - DOCKER_NETWORK=${DOCKER_NETWORK:-nukelab-network}
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - LOG_FORMAT=${LOG_FORMAT:-json}
-      - DEV_RELOAD=${DEV_RELOAD:-true}
-      - VOLUME_STORAGE_PATH=${VOLUME_STORAGE_PATH:-}
-      # Server auth configuration
-      - SERVER_AUTH_ENABLED=${SERVER_AUTH_ENABLED:-true}
-      - SERVER_AUTH_SECRETS_DIR=${SERVER_AUTH_SECRETS_DIR:-/run/secrets}
-      - SERVER_AUTH_TOKEN_TTL=${SERVER_AUTH_TOKEN_TTL:-300}
-      - SERVER_AUTH_KEY_ALGORITHM=${SERVER_AUTH_KEY_ALGORITHM:-RS256}
-      - SERVER_AUTH_KEY_ROTATION_DAYS=${SERVER_AUTH_KEY_ROTATION_DAYS:-30}
-      - SERVER_AUTH_MAX_TOKENS_PER_MINUTE=${SERVER_AUTH_MAX_TOKENS_PER_MINUTE:-10}
-      - SERVER_AUTH_AUDIT_LOG=${SERVER_AUTH_AUDIT_LOG:-true}
-      # Email / SMTP configuration
-      - SMTP_HOST=${SMTP_HOST:-}
-      - SMTP_PORT=${SMTP_PORT:-587}
-      - SMTP_USER=${SMTP_USER:-}
-      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
-      - SMTP_TLS=${SMTP_TLS:-true}
-      - SMTP_VERIFY_CERTS=${SMTP_VERIFY_CERTS:-true}
-      - SMTP_FROM=${SMTP_FROM:-noreply@nukelab.local}
-      - SMTP_FROM_NAME=${SMTP_FROM_NAME:-NukeLab}
-      # Error tracking
-      - SENTRY_DSN=${SENTRY_DSN:-}
-      - SENTRY_RELEASE=${SENTRY_RELEASE:-}
-      # OpenTelemetry distributed tracing
-      - OTEL_TRACES_ENABLED=${OTEL_TRACES_ENABLED:-false}
-      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
-      - OTEL_EXPORTER_OTLP_PROTOCOL=${OTEL_EXPORTER_OTLP_PROTOCOL:-grpc}
-      - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-nukelab-backend}
-      - OTEL_SERVICE_VERSION=${OTEL_SERVICE_VERSION:-2.0.0}
-      - OTEL_LOG_CORRELATION=${OTEL_LOG_CORRELATION:-true}
-      - OTEL_SAMPLER_RATIO=${OTEL_SAMPLER_RATIO:-1.0}
-      # XFS project quotas (requires host XFS + prjquota; add cap_add below)
-      - XFS_QUOTA_ENABLED=${XFS_QUOTA_ENABLED:-false}
-      - XFS_PROJECT_ID_START=${XFS_PROJECT_ID_START:-10000}
-      - XFS_PROJECTS_FILE=${XFS_PROJECTS_FILE:-/data/xfs/projects.nukelab}
-    volumes:
-      - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:Z
-      - /var/lib/lxcfs:/var/lib/lxcfs:ro
-      - ${VOLUME_STORAGE_PATH:?VOLUME_STORAGE_PATH must be set in .env}:${VOLUME_STORAGE_PATH}:rw
-      - uploads:${UPLOAD_DIR:-/data/uploads}
-      - secrets:${SERVER_AUTH_SECRETS_DIR:-/run/secrets}
-      - xfs-projects:/data/xfs
-    cap_add:
-      - SYS_ADMIN
-    networks:
-      - nukelab-network
-    depends_on:
-      - postgres
-      - redis
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.backend.rule=PathPrefix(`/api`)"
-      - "traefik.http.routers.backend.middlewares=api-chain@file"
-      - "traefik.http.services.backend.loadbalancer.server.port=8000"
-      # Auth endpoints — stricter rate limit (10/min per IP)
-      - "traefik.http.routers.backend-auth.rule=PathPrefix(`/api/auth`)"
-      - "traefik.http.routers.backend-auth.priority=100"
-      - "traefik.http.routers.backend-auth.middlewares=auth-chain@file"
-      - "traefik.http.routers.backend-auth.service=backend"
-      # Metrics endpoint — externally accessible only to authenticated admins.
-      # Prometheus scrapes the backend container directly inside the Docker network.
-      - "traefik.http.routers.backend-metrics.rule=PathPrefix(`/api/metrics`)"
-      - "traefik.http.routers.backend-metrics.priority=200"
-      - "traefik.http.routers.backend-metrics.middlewares=monitoring-auth@file"
-      - "traefik.http.routers.backend-metrics.service=backend"
-      # WebSocket endpoint
-      - "traefik.http.routers.ws.rule=PathPrefix(`/ws`)"
-      - "traefik.http.routers.ws.middlewares=ws-chain@file"
-      - "traefik.http.routers.ws.service=backend"
-    restart: unless-stopped
-    stop_grace_period: 30s
+    # Backend API
+    backend:
+        build:
+            context: ./backend
+            dockerfile: Dockerfile
+        container_name: nukelab-backend
+        environment:
+            - APP_NAME=${APP_NAME:-NukeLab}
+            - APP_ENV=${APP_ENV:-development}
+            - APP_DEBUG=${APP_DEBUG:-true}
+            - APP_URL=${APP_URL:-http://localhost:8080}
+            - PUBLIC_URL=${APP_URL:-http://localhost:8080}
+            - FRONTEND_URL=${FRONTEND_URL:-}
+            - APP_TIMEZONE=${APP_TIMEZONE:-UTC}
+            - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-change-in-production-min-32-chars}
+            - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+            - JWT_EXPIRE_MINUTES=${JWT_EXPIRE_MINUTES:-15}
+            - JWT_REFRESH_EXPIRE_DAYS=${JWT_REFRESH_EXPIRE_DAYS:-7}
+            - SESSION_SECRET=${SESSION_SECRET:-dev-session-secret-change-in-production}
+            - SESSION_MAX_AGE=${SESSION_MAX_AGE:-86400}
+            - SESSION_SECURE=${SESSION_SECURE:-false}
+            - SESSION_HTTPONLY=${SESSION_HTTPONLY:-true}
+            - SESSION_SAMESITE=${SESSION_SAMESITE:-lax}
+            - SECURITY_HEADERS_ENABLED=${SECURITY_HEADERS_ENABLED:-true}
+            - CSRF_PROTECTION_ENABLED=${CSRF_PROTECTION_ENABLED:-true}
+            - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://localhost:8000}
+            - CORS_ALLOW_CREDENTIALS=${CORS_ALLOW_CREDENTIALS:-true}
+            # Rate Limiting — per-user tier configuration (Redis-backed)
+            - RATE_LIMIT_ENABLED=${RATE_LIMIT_ENABLED:-true}
+            - RATE_LIMIT_GUEST_RPM=${RATE_LIMIT_GUEST_RPM:-30}
+            - RATE_LIMIT_USER_RPM=${RATE_LIMIT_USER_RPM:-120}
+            - RATE_LIMIT_SUPPORT_RPM=${RATE_LIMIT_SUPPORT_RPM:-300}
+            - RATE_LIMIT_MODERATOR_RPM=${RATE_LIMIT_MODERATOR_RPM:-300}
+            - RATE_LIMIT_ADMIN_RPM=${RATE_LIMIT_ADMIN_RPM:-600}
+            - RATE_LIMIT_SUPER_ADMIN_RPM=${RATE_LIMIT_SUPER_ADMIN_RPM:-3000}
+            - RATE_LIMIT_STRICT_MULTIPLIER=${RATE_LIMIT_STRICT_MULTIPLIER:-0.5}
+            - RATE_LIMIT_WEBSOCKET_CPM=${RATE_LIMIT_WEBSOCKET_CPM:-30}
+            - RATE_LIMIT_WINDOW_SECONDS=${RATE_LIMIT_WINDOW_SECONDS:-60}
+            - RATE_LIMIT_BUCKET_TTL_MULTIPLIER=${RATE_LIMIT_BUCKET_TTL_MULTIPLIER:-2}
+            - AUTH_MODE=${AUTH_MODE:-local}
+            - LOCAL_AUTH_BCRYPT_ROUNDS=${LOCAL_AUTH_BCRYPT_ROUNDS:-12}
+            - OAUTH_PROVIDER_NAME=${OAUTH_PROVIDER_NAME:-}
+            - OAUTH_CLIENT_ID=${OAUTH_CLIENT_ID:-}
+            - OAUTH_CLIENT_SECRET=${OAUTH_CLIENT_SECRET:-}
+            - OAUTH_DISCOVERY_URL=${OAUTH_DISCOVERY_URL:-}
+            - OAUTH_AUTHORIZE_URL=${OAUTH_AUTHORIZE_URL:-}
+            - OAUTH_TOKEN_URL=${OAUTH_TOKEN_URL:-}
+            - OAUTH_USERDATA_URL=${OAUTH_USERDATA_URL:-}
+            - OAUTH_CALLBACK_URL=${OAUTH_CALLBACK_URL:-}
+            - OAUTH_SCOPE=${OAUTH_SCOPE:-openid profile email}
+            - OAUTH_USERNAME_CLAIM=${OAUTH_USERNAME_CLAIM:-preferred_username}
+            - OAUTH_EMAIL_CLAIM=${OAUTH_EMAIL_CLAIM:-email}
+            - OAUTH_NAME_CLAIM=${OAUTH_NAME_CLAIM:-name}
+            - OAUTH_PKCE_ENABLED=${OAUTH_PKCE_ENABLED:-true}
+            - OAUTH_PROFILE_URL=${OAUTH_PROFILE_URL:-}
+            - DEV_MODE=${DEV_MODE:-true}
+            - DEV_ADMIN_USER=${DEV_ADMIN_USER:-admin}
+            - DEV_ADMIN_PASSWORD=${DEV_ADMIN_PASSWORD:-admin123}
+            - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://nukelab:nukelab123@postgres:5432/nukelab}
+            - PGBOUNCER_ENABLED=${PGBOUNCER_ENABLED:-false}
+            - DATABASE_PGBOUNCER_URL=${DATABASE_PGBOUNCER_URL:-}
+            - DATABASE_POOL_SIZE=${DATABASE_POOL_SIZE:-10}
+            - DATABASE_POOL_MAX_OVERFLOW=${DATABASE_POOL_MAX_OVERFLOW:-10}
+            - DATABASE_POOL_TIMEOUT=${DATABASE_POOL_TIMEOUT:-30}
+            - DATABASE_POOL_RECYCLE=${DATABASE_POOL_RECYCLE:-3600}
+            - DATABASE_POOL_PRE_PING=${DATABASE_POOL_PRE_PING:-true}
+            - DATABASE_QUERY_TIMEOUT_SECONDS=${DATABASE_QUERY_TIMEOUT_SECONDS:-30}
+            - DATABASE_ECHO=${DATABASE_ECHO:-false}
+            - OBSERVABILITY_SLOW_QUERY_THRESHOLD_MS=${OBSERVABILITY_SLOW_QUERY_THRESHOLD_MS:-100}
+            - OBSERVABILITY_PG_STAT_STATEMENTS_ENABLED=${OBSERVABILITY_PG_STAT_STATEMENTS_ENABLED:-true}
+            - PROMETHEUS_ENABLED=${PROMETHEUS_ENABLED:-true}
+            - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+            - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+            - REDIS_DB=${REDIS_DB:-0}
+            - DOCKER_NETWORK=${DOCKER_NETWORK:-nukelab-network}
+            - LOG_LEVEL=${LOG_LEVEL:-INFO}
+            - LOG_FORMAT=${LOG_FORMAT:-json}
+            - DEV_RELOAD=${DEV_RELOAD:-true}
+            - VOLUME_STORAGE_PATH=${VOLUME_STORAGE_PATH:-}
+            # Server auth configuration
+            - SERVER_AUTH_ENABLED=${SERVER_AUTH_ENABLED:-true}
+            - SERVER_AUTH_SECRETS_DIR=${SERVER_AUTH_SECRETS_DIR:-/run/secrets}
+            - SERVER_AUTH_TOKEN_TTL=${SERVER_AUTH_TOKEN_TTL:-300}
+            - SERVER_AUTH_KEY_ALGORITHM=${SERVER_AUTH_KEY_ALGORITHM:-RS256}
+            - SERVER_AUTH_KEY_ROTATION_DAYS=${SERVER_AUTH_KEY_ROTATION_DAYS:-30}
+            - SERVER_AUTH_MAX_TOKENS_PER_MINUTE=${SERVER_AUTH_MAX_TOKENS_PER_MINUTE:-10}
+            - SERVER_AUTH_AUDIT_LOG=${SERVER_AUTH_AUDIT_LOG:-true}
+            # Email / SMTP configuration
+            - SMTP_HOST=${SMTP_HOST:-}
+            - SMTP_PORT=${SMTP_PORT:-587}
+            - SMTP_USER=${SMTP_USER:-}
+            - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+            - SMTP_TLS=${SMTP_TLS:-true}
+            - SMTP_VERIFY_CERTS=${SMTP_VERIFY_CERTS:-true}
+            - SMTP_FROM=${SMTP_FROM:-noreply@nukelab.local}
+            - SMTP_FROM_NAME=${SMTP_FROM_NAME:-NukeLab}
+            # Error tracking
+            - SENTRY_DSN=${SENTRY_DSN:-}
+            - SENTRY_RELEASE=${SENTRY_RELEASE:-}
+            # OpenTelemetry distributed tracing
+            - OTEL_TRACES_ENABLED=${OTEL_TRACES_ENABLED:-false}
+            - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+            - OTEL_EXPORTER_OTLP_PROTOCOL=${OTEL_EXPORTER_OTLP_PROTOCOL:-grpc}
+            - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-nukelab-backend}
+            - OTEL_SERVICE_VERSION=${OTEL_SERVICE_VERSION:-2.0.0}
+            - OTEL_LOG_CORRELATION=${OTEL_LOG_CORRELATION:-true}
+            - OTEL_SAMPLER_RATIO=${OTEL_SAMPLER_RATIO:-1.0}
+            # XFS project quotas (requires host XFS + prjquota; add cap_add below)
+            - XFS_QUOTA_ENABLED=${XFS_QUOTA_ENABLED:-false}
+            - XFS_PROJECT_ID_START=${XFS_PROJECT_ID_START:-10000}
+            - XFS_PROJECTS_FILE=${XFS_PROJECTS_FILE:-/data/xfs/projects.nukelab}
+        volumes:
+            - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:Z
+            - /var/lib/lxcfs:/var/lib/lxcfs:ro
+            - ${VOLUME_STORAGE_PATH:?VOLUME_STORAGE_PATH must be set in .env}:${VOLUME_STORAGE_PATH}:rw
+            - uploads:${UPLOAD_DIR:-/data/uploads}
+            - secrets:${SERVER_AUTH_SECRETS_DIR:-/run/secrets}
+            - xfs-projects:/data/xfs
+        cap_add:
+            - SYS_ADMIN
+        networks:
+            - nukelab-network
+        depends_on:
+            - postgres
+            - redis
+        labels:
+            - "traefik.enable=true"
+            - "traefik.http.routers.backend.rule=PathPrefix(`/api`)"
+            - "traefik.http.routers.backend.middlewares=api-chain@file"
+            - "traefik.http.services.backend.loadbalancer.server.port=8000"
+            # Auth endpoints — stricter rate limit (10/min per IP)
+            - "traefik.http.routers.backend-auth.rule=PathPrefix(`/api/auth`)"
+            - "traefik.http.routers.backend-auth.priority=100"
+            - "traefik.http.routers.backend-auth.middlewares=auth-chain@file"
+            - "traefik.http.routers.backend-auth.service=backend"
+            # Metrics endpoint — externally accessible only to authenticated admins.
+            # Prometheus scrapes the backend container directly inside the Docker network.
+            - "traefik.http.routers.backend-metrics.rule=PathPrefix(`/api/metrics`)"
+            - "traefik.http.routers.backend-metrics.priority=200"
+            - "traefik.http.routers.backend-metrics.middlewares=monitoring-auth@file"
+            - "traefik.http.routers.backend-metrics.service=backend"
+            # WebSocket endpoint
+            - "traefik.http.routers.ws.rule=PathPrefix(`/ws`)"
+            - "traefik.http.routers.ws.middlewares=ws-chain@file"
+            - "traefik.http.routers.ws.service=backend"
+        restart: unless-stopped
+        stop_grace_period: 30s
 
-  # Frontend
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: nukelab-frontend
-    environment:
-      - VITE_API_URL=${VITE_API_URL:-/api}
-      - VITE_WS_URL=${VITE_WS_URL:-/ws}
-      - VITE_SENTRY_DSN=${VITE_SENTRY_DSN:-}
-      - VITE_SENTRY_RELEASE=${VITE_SENTRY_RELEASE:-}
-    networks:
-      - nukelab-network
-    depends_on:
-      - backend
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3000/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.frontend.rule=PathPrefix(`/`)"
-      - "traefik.http.services.frontend.loadbalancer.server.port=3000"
-      - "traefik.http.routers.frontend.priority=1"
-      - "traefik.http.routers.frontend.middlewares=frontend-chain@file"
-      - "traefik.http.routers.user-gateway.rule=PathPrefix(`/user/`)"
-      - "traefik.http.routers.user-gateway.service=frontend"
-      - "traefik.http.routers.user-gateway.priority=2"
-      - "traefik.http.routers.user-gateway.middlewares=frontend-chain@file"
-    restart: unless-stopped
+    # Backend test runner (pre-installs dev dependencies)
+    backend-test:
+        build:
+            context: ./backend
+            dockerfile: Dockerfile
+            target: test
+        container_name: nukelab-backend-test
+        env_file:
+            - .env.development
+        environment:
+            - DATABASE_URL=postgresql+asyncpg://${DATABASE_USER:-nukelab}:${DATABASE_PASSWORD:-nukelab123}@postgres:5432/${DATABASE_NAME:-nukelab}_test
+            - REDIS_URL=redis://redis:6379/1
+            - RATE_LIMIT_ENABLED=false
+            - OTEL_TRACES_ENABLED=false
+            - SENTRY_DSN=
+            - PROMETHEUS_SCRAPE_TOKEN=
+            - PROMETHEUS_ENABLED=false
+            - PGBOUNCER_ENABLED=false
+            - TESTING=true
+            - in =/var/run/docker.sock
+        volumes:
+            - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:Z
+            - /var/lib/lxcfs:/var/lib/lxcfs:ro
+            - ${VOLUME_STORAGE_PATH:?VOLUME_STORAGE_PATH must be set in .env}:${VOLUME_STORAGE_PATH}:rw
+            - uploads:${UPLOAD_DIR:-/data/uploads}
+            - secrets:${SERVER_AUTH_SECRETS_DIR:-/run/secrets}
+            - xfs-projects:/data/xfs
+        cap_add:
+            - SYS_ADMIN
+        depends_on:
+            postgres:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+        networks:
+            - nukelab-network
+        profiles:
+            - test
 
-  # Celery Worker
-  celery-worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: nukelab-celery-worker
-    command: celery -A app.worker worker --loglevel=info -P threads -c 4
-    environment:
-      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://nukelab:nukelab123@postgres:5432/nukelab}
-      - PGBOUNCER_ENABLED=${PGBOUNCER_ENABLED:-false}
-      - DATABASE_PGBOUNCER_URL=${DATABASE_PGBOUNCER_URL:-}
-      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
-      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret}
-      - SENTRY_DSN=${SENTRY_DSN:-}
-      - SENTRY_RELEASE=${SENTRY_RELEASE:-}
-      # OpenTelemetry distributed tracing
-      - OTEL_TRACES_ENABLED=${OTEL_TRACES_ENABLED:-false}
-      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
-      - OTEL_EXPORTER_OTLP_PROTOCOL=${OTEL_EXPORTER_OTLP_PROTOCOL:-grpc}
-      - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-nukelab-backend}
-      - OTEL_SERVICE_VERSION=${OTEL_SERVICE_VERSION:-2.0.0}
-      - OTEL_LOG_CORRELATION=${OTEL_LOG_CORRELATION:-true}
-      - OTEL_SAMPLER_RATIO=${OTEL_SAMPLER_RATIO:-1.0}
-      - VOLUME_STORAGE_PATH=${VOLUME_STORAGE_PATH:-}
-      - XFS_QUOTA_ENABLED=${XFS_QUOTA_ENABLED:-false}
-      - XFS_PROJECT_ID_START=${XFS_PROJECT_ID_START:-10000}
-      - XFS_PROJECTS_FILE=${XFS_PROJECTS_FILE:-/data/xfs/projects.nukelab}
-    volumes:
-      - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
-      - ${VOLUME_STORAGE_PATH:-/var/lib/docker/volumes}:${VOLUME_STORAGE_PATH:-/var/lib/docker/volumes}:rw
-      - secrets:${SERVER_AUTH_SECRETS_DIR:-/run/secrets}
-      - xfs-projects:/data/xfs
-    cap_add:
-      - SYS_ADMIN
-    networks:
-      - nukelab-network
-    depends_on:
-      - redis
-      - postgres
-    restart: unless-stopped
-    stop_grace_period: 20s
+    # Frontend
+    frontend:
+        build:
+            context: ./frontend
+            dockerfile: Dockerfile
+        container_name: nukelab-frontend
+        environment:
+            - VITE_API_URL=${VITE_API_URL:-/api}
+            - VITE_WS_URL=${VITE_WS_URL:-/ws}
+            - VITE_SENTRY_DSN=${VITE_SENTRY_DSN:-}
+            - VITE_SENTRY_RELEASE=${VITE_SENTRY_RELEASE:-}
+        networks:
+            - nukelab-network
+        depends_on:
+            - backend
+        healthcheck:
+            test:
+                [
+                    "CMD",
+                    "wget",
+                    "--quiet",
+                    "--tries=1",
+                    "--spider",
+                    "http://127.0.0.1:3000/health",
+                ]
+            interval: 10s
+            timeout: 5s
+            retries: 3
+        labels:
+            - "traefik.enable=true"
+            - "traefik.http.routers.frontend.rule=PathPrefix(`/`)"
+            - "traefik.http.services.frontend.loadbalancer.server.port=3000"
+            - "traefik.http.routers.frontend.priority=1"
+            - "traefik.http.routers.frontend.middlewares=frontend-chain@file"
+            - "traefik.http.routers.user-gateway.rule=PathPrefix(`/user/`)"
+            - "traefik.http.routers.user-gateway.service=frontend"
+            - "traefik.http.routers.user-gateway.priority=2"
+            - "traefik.http.routers.user-gateway.middlewares=frontend-chain@file"
+        restart: unless-stopped
 
-  # Celery Beat (Scheduler)
-  celery-beat:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: nukelab-celery-beat
-    command: celery -A app.worker beat --loglevel=info --schedule /tmp/celerybeat-schedule
-    environment:
-      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://nukelab:nukelab123@postgres:5432/nukelab}
-      - PGBOUNCER_ENABLED=${PGBOUNCER_ENABLED:-false}
-      - DATABASE_PGBOUNCER_URL=${DATABASE_PGBOUNCER_URL:-}
-      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
-      - SENTRY_DSN=${SENTRY_DSN:-}
-      - SENTRY_RELEASE=${SENTRY_RELEASE:-}
-      # OpenTelemetry distributed tracing
-      - OTEL_TRACES_ENABLED=${OTEL_TRACES_ENABLED:-false}
-      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
-      - OTEL_EXPORTER_OTLP_PROTOCOL=${OTEL_EXPORTER_OTLP_PROTOCOL:-grpc}
-      - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-nukelab-backend}
-      - OTEL_SERVICE_VERSION=${OTEL_SERVICE_VERSION:-2.0.0}
-      - OTEL_LOG_CORRELATION=${OTEL_LOG_CORRELATION:-true}
-      - OTEL_SAMPLER_RATIO=${OTEL_SAMPLER_RATIO:-1.0}
-      - XFS_QUOTA_ENABLED=${XFS_QUOTA_ENABLED:-false}
-      - XFS_PROJECT_ID_START=${XFS_PROJECT_ID_START:-10000}
-      - XFS_PROJECTS_FILE=${XFS_PROJECTS_FILE:-/data/xfs/projects.nukelab}
-    volumes:
-      - secrets:${SERVER_AUTH_SECRETS_DIR:-/run/secrets}
-    networks:
-      - nukelab-network
-    depends_on:
-      - redis
-      - postgres
-    restart: unless-stopped
-    stop_grace_period: 20s
+    # Celery Worker
+    celery-worker:
+        build:
+            context: ./backend
+            dockerfile: Dockerfile
+        container_name: nukelab-celery-worker
+        command: celery -A app.worker worker --loglevel=info -P threads -c 4
+        environment:
+            - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://nukelab:nukelab123@postgres:5432/nukelab}
+            - PGBOUNCER_ENABLED=${PGBOUNCER_ENABLED:-false}
+            - DATABASE_PGBOUNCER_URL=${DATABASE_PGBOUNCER_URL:-}
+            - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+            - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret}
+            - SENTRY_DSN=${SENTRY_DSN:-}
+            - SENTRY_RELEASE=${SENTRY_RELEASE:-}
+            # OpenTelemetry distributed tracing
+            - OTEL_TRACES_ENABLED=${OTEL_TRACES_ENABLED:-false}
+            - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+            - OTEL_EXPORTER_OTLP_PROTOCOL=${OTEL_EXPORTER_OTLP_PROTOCOL:-grpc}
+            - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-nukelab-backend}
+            - OTEL_SERVICE_VERSION=${OTEL_SERVICE_VERSION:-2.0.0}
+            - OTEL_LOG_CORRELATION=${OTEL_LOG_CORRELATION:-true}
+            - OTEL_SAMPLER_RATIO=${OTEL_SAMPLER_RATIO:-1.0}
+            - VOLUME_STORAGE_PATH=${VOLUME_STORAGE_PATH:-}
+            - XFS_QUOTA_ENABLED=${XFS_QUOTA_ENABLED:-false}
+            - XFS_PROJECT_ID_START=${XFS_PROJECT_ID_START:-10000}
+            - XFS_PROJECTS_FILE=${XFS_PROJECTS_FILE:-/data/xfs/projects.nukelab}
+        volumes:
+            - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+            - ${VOLUME_STORAGE_PATH:-/var/lib/docker/volumes}:${VOLUME_STORAGE_PATH:-/var/lib/docker/volumes}:rw
+            - secrets:${SERVER_AUTH_SECRETS_DIR:-/run/secrets}
+            - xfs-projects:/data/xfs
+        cap_add:
+            - SYS_ADMIN
+        networks:
+            - nukelab-network
+        depends_on:
+            - redis
+            - postgres
+        restart: unless-stopped
+        stop_grace_period: 20s
+
+    # Celery Beat (Scheduler)
+    celery-beat:
+        build:
+            context: ./backend
+            dockerfile: Dockerfile
+        container_name: nukelab-celery-beat
+        command: celery -A app.worker beat --loglevel=info --schedule /tmp/celerybeat-schedule
+        environment:
+            - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://nukelab:nukelab123@postgres:5432/nukelab}
+            - PGBOUNCER_ENABLED=${PGBOUNCER_ENABLED:-false}
+            - DATABASE_PGBOUNCER_URL=${DATABASE_PGBOUNCER_URL:-}
+            - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+            - SENTRY_DSN=${SENTRY_DSN:-}
+            - SENTRY_RELEASE=${SENTRY_RELEASE:-}
+            # OpenTelemetry distributed tracing
+            - OTEL_TRACES_ENABLED=${OTEL_TRACES_ENABLED:-false}
+            - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4317}
+            - OTEL_EXPORTER_OTLP_PROTOCOL=${OTEL_EXPORTER_OTLP_PROTOCOL:-grpc}
+            - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-nukelab-backend}
+            - OTEL_SERVICE_VERSION=${OTEL_SERVICE_VERSION:-2.0.0}
+            - OTEL_LOG_CORRELATION=${OTEL_LOG_CORRELATION:-true}
+            - OTEL_SAMPLER_RATIO=${OTEL_SAMPLER_RATIO:-1.0}
+            - XFS_QUOTA_ENABLED=${XFS_QUOTA_ENABLED:-false}
+            - XFS_PROJECT_ID_START=${XFS_PROJECT_ID_START:-10000}
+            - XFS_PROJECTS_FILE=${XFS_PROJECTS_FILE:-/data/xfs/projects.nukelab}
+        volumes:
+            - secrets:${SERVER_AUTH_SECRETS_DIR:-/run/secrets}
+        networks:
+            - nukelab-network
+        depends_on:
+            - redis
+            - postgres
+        restart: unless-stopped
+        stop_grace_period: 20s
 
 volumes:
-  postgres-data:
-    name: nukelab-postgres-data
-  letsencrypt:
-    name: nukelab-letsencrypt
-  uploads:
-    name: nukelab-uploads
-  secrets:
-    name: nukelab-secrets
-  xfs-projects:
-    name: nukelab-xfs-projects
+    postgres-data:
+        name: nukelab-postgres-data
+    letsencrypt:
+        name: nukelab-letsencrypt
+    uploads:
+        name: nukelab-uploads
+    secrets:
+        name: nukelab-secrets
+    xfs-projects:
+        name: nukelab-xfs-projects
 
 networks:
-  nukelab-network:
-    name: nukelab-network
-    driver: bridge
+    nukelab-network:
+        name: nukelab-network
+        driver: bridge

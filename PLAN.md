@@ -1634,7 +1634,8 @@ Then the server stops and the bulk API returns success
   - [ ] Unit tests (backend >80% coverage)
   - [ ] Integration tests (API endpoints)
   - [ ] E2E tests (Playwright)
-  - [x] Load testing (Locust/k6) — Phase 8 delivered: Locust + k6 hybrid, 5 profiles, PgBouncer connection flood
+  - [x] Load testing (Locust/k6) — Phase 8 delivered: Locust/k6 hybrid, 5 profiles, PgBouncer connection flood
+  - [x] Dedicated backend test image — `backend/Dockerfile` `target=test` with dev deps pre-installed; `./nukelabctl test backend` uses `backend-test` service
 
 - [ ] **Security**
   - [x] OWASP Top 10 audit — documented in `docs/OWASP-AUDIT.md`; overall rating: Pass

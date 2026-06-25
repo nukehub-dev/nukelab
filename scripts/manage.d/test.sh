@@ -16,7 +16,7 @@ cmd_test() {
             pytest_args="--cov=app --cov-report=term --cov-report=html ${pytest_args}"
         fi
 
-:         # To avoid Postgres connection exhaustion from the live dev server
+        # To avoid Postgres connection exhaustion from the live dev server
         # (uvicorn workers + Celery) while tests run, stop the backend services
         # first, run tests in a fresh one-off container, then restart them.
         local _backend_was_running=false
@@ -29,11 +29,12 @@ cmd_test() {
             $COMPOSE "${COMPOSE_ARGS[@]}" stop backend celery-worker celery-beat >/dev/null 2>&1 || true
         fi
 
-        # Run tests in a fresh container with backend source bind-mounted.
-        # Install dev/test dependencies first so pytest and its plugins are available.
-        local _test_run_cmd="cd /app && pip install -q -r requirements-dev.txt && python -m pytest ${pytest_args}"
+        # Run tests in the dedicated backend-test container. Dev/test
+        # dependencies are baked into the image (Dockerfile target=test),
+        # so no runtime pip install is required.
+        local _test_run_cmd="python -m pytest ${pytest_args}"
         local _test_exit=0
-        $COMPOSE "${COMPOSE_ARGS[@]}" run --rm \
+        $COMPOSE --profile test "${COMPOSE_ARGS[@]}" run --rm \
             -v "${DIR}/backend:/app:Z" \
             -v "${DIR}/resources:/app/resources:ro" \
             -e "DATABASE_URL=postgresql+asyncpg://${DATABASE_USER:-nukelab}:${DATABASE_PASSWORD:-nukelab123}@postgres:5432/${DATABASE_NAME:-nukelab}_test" \
@@ -45,7 +46,7 @@ cmd_test() {
             -e "PROMETHEUS_ENABLED=false" \
             -e "PGBOUNCER_ENABLED=false" \
             -e "TESTING=true" \
-            backend bash -c "${_test_run_cmd}" || _test_exit=$?
+            backend-test bash -c "${_test_run_cmd}" || _test_exit=$?
 
         # Restart backend services if they were running before.
         if $_backend_was_running; then
@@ -61,7 +62,7 @@ cmd_test() {
 
 help_test() {
     cat <<-EOF
-${BOLD}Usage:${RESET} ./nukelabctl test [target] [options]
+${BOLD}Usage:${RESET} ./nukelabctl test [target]
 
 Run tests.
 
@@ -72,7 +73,7 @@ ${BOLD}Options:${RESET}
 
 ${BOLD}Examples:${RESET}
   ./nukelabctl test
+  ./nukelabctl test backend
   ./nukelabctl test backend --coverage
 EOF
 }
-

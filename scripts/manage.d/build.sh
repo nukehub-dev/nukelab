@@ -6,6 +6,8 @@ cmd_build() {
     if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
         log "Building backend containers..."
         _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" build backend celery-worker celery-beat
+        log "Building backend test container..."
+        _run_quiet_unless_verbose $COMPOSE --profile test "${COMPOSE_ARGS[@]}" build backend-test
     fi
 
     if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
