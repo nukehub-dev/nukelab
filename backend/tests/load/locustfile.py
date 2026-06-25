@@ -48,11 +48,11 @@ TOKEN_REFRESH_THRESHOLD_SECONDS = 14 * 60
 
 
 def _configure_retries(client):
-    """Retry transient connection drops; do NOT retry 5xx responses."""
+    """Retry transient connection drops/resets; do NOT retry 5xx responses."""
     retry = Retry(
         total=0,
         connect=3,
-        read=0,
+        read=3,
         backoff_factor=0.2,
         status_forcelist=None,
         raise_on_status=False,
@@ -168,6 +168,8 @@ class AuthMixin:
                     sleep_time = (2 ** attempt) + random.random() * 3  # jitter
                     time.sleep(sleep_time)
                 else:
+                    body = getattr(resp, 'text', '')[:200]
+                    print(f"🔴 Login failed for {username}: HTTP {resp.status_code} {body}")
                     resp.failure(f"Login failed: {resp.status_code}")
                     self.auth_failed = True
                     return False
@@ -319,9 +321,10 @@ class RegularUser(HttpUser, AuthMixin):
 class AdminUser(HttpUser, AuthMixin):
     """Admin performing dashboard operations.
 
-    Excluded from default runs (fixed_count=0) because all AdminUsers share
-    the same login account, which rapidly hits per-IP rate limits and causes
-    401 cascades. Run explicitly when you want to test admin endpoints:
+    Kept out of default runs by explicit class selection in run-load-tests.sh.
+    All AdminUsers share the same login account, which rapidly hits per-IP
+    rate limits and causes 401 cascades. Run explicitly when you want to test
+    admin endpoints:
 
         locust -f locustfile.py AdminUser --host http://... -u 5 -r 1
     """
@@ -389,7 +392,7 @@ class ConnectionFloodUser(HttpUser, AuthMixin):
     """
 
     weight = 1
-    fixed_count = 0  # Excluded from default runs; still selectable by class name
+    fixed_count = 0
     wait_time = between(30, 60)
 
     def on_start(self):

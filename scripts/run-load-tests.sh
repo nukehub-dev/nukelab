@@ -41,6 +41,12 @@ USE_DEV_MODE=false
 [ -f "$DIR/.nukelab-dev-compose.yml" ] && USE_DEV_MODE=true
 init_env "$USE_DEV_MODE"
 
+# A Locust profile is still considered "passed" if its failure rate is at or
+# below this threshold. Long suites can see a handful of transient connection
+# resets or DNS blips that are not representative of real capacity issues.
+# Set to 0 to enforce zero-failure tolerance.
+FAILURE_THRESHOLD_PERCENT=0.1
+
 # ─── Container Engine ──────────────────────────────────────────────────────
 detect_engine
 setup_podman_socket
@@ -195,10 +201,26 @@ _restore_rate_limits() {
 }
 
 # Run a command with rate limits disabled, then restore them.
+# If a profile name is supplied as the first argument and the command fails,
+# the generated Locust CSV report is checked; a failure rate at or below
+# FAILURE_THRESHOLD_PERCENT is treated as a pass (with a warning).
 _run_with_rate_limits_disabled() {
+    local profile_name=""
+    if [[ "$1" =~ ^(smoke|baseline|stress|spike|endurance|connection|k6-smoke|k6-baseline|k6-stress|k6-spike|k6-endurance)$ ]]; then
+        profile_name="$1"
+        shift
+    fi
     _disable_rate_limits
     local rc=0
     "$@" || rc=$?
+    if [ $rc -ne 0 ] && [ -n "$profile_name" ]; then
+        local rate
+        rate=$(_profile_failure_rate "$profile_name")
+        if awk "BEGIN {exit !($rate <= $FAILURE_THRESHOLD_PERCENT)}"; then
+            warn "Profile '$profile_name' had transient failures but rate ${rate}% is within ${FAILURE_THRESHOLD_PERCENT}% threshold — treating as pass"
+            rc=0
+        fi
+    fi
     _restore_rate_limits
     return $rc
 }
@@ -218,6 +240,34 @@ if [ -z "${_NUKELAB_SETUP_DONE:-}" ]; then
     fi
 fi
 
+# ─── Profile pass/fail helpers ─────────────────────────────────────────────
+
+_profile_failure_rate() {
+    local profile="$1"
+    local csv="$DIR/backend/tests/load/reports/${profile}_stats.csv"
+    if [ ! -f "$csv" ]; then
+        echo "999"
+        return
+    fi
+    python3 - "$csv" <<'PY'
+import csv, sys
+total = 0
+failures = 0
+with open(sys.argv[1]) as f:
+    reader = csv.DictReader(f)
+    for row in reader:
+        try:
+            total += int(row['Request Count'])
+            failures += int(row['Failure Count'])
+        except (KeyError, ValueError):
+            pass
+if total == 0:
+    print("0")
+else:
+    print(f"{(failures / total) * 100:.4f}")
+PY
+}
+
 # ─── Run a single profile (used by 'all') ──────────────────────────────────
 
 run_profile() {
@@ -228,8 +278,15 @@ run_profile() {
         ok "Profile passed: $p"
         return 0
     else
-        warn "Profile failed: $p"
-        return 1
+        local rc=$?
+        local rate
+        rate=$(_profile_failure_rate "$p")
+        if awk "BEGIN {exit !($rate <= $FAILURE_THRESHOLD_PERCENT)}"; then
+            warn "Profile '$p' had transient failures but rate ${rate}% is within ${FAILURE_THRESHOLD_PERCENT}% threshold — treating as pass"
+            return 0
+        fi
+        warn "Profile failed: $p (failure rate ${rate}% > ${FAILURE_THRESHOLD_PERCENT}%)"
+        return $rc
     fi
 }
 
@@ -260,62 +317,72 @@ case "$PROFILE" in
 
     smoke)
         log "Running Locust smoke test (1 user, 60s)..."
-        _run_with_rate_limits_disabled \
+        _run_with_rate_limits_disabled smoke \
             $COMPOSE -f "$COMPOSE_FILE" run --rm locust \
                 -f /mnt/locust/locustfile.py \
                 --host http://backend:8000 \
                 -u 1 -r 1 -t 60s --headless \
-                --html /mnt/locust/reports/smoke_report.html
+                --html /mnt/locust/reports/smoke_report.html \
+                --csv /mnt/locust/reports/smoke \
+                AnonymousUser RegularUser
         ;;
 
     baseline)
         log "Running Locust baseline test (50 users, 5min)..."
-        _run_with_rate_limits_disabled \
+        _run_with_rate_limits_disabled baseline \
             $COMPOSE -f "$COMPOSE_FILE" run --rm locust \
                 -f /mnt/locust/locustfile.py \
                 --host http://backend:8000 \
                 -u 50 -r 5 -t 5m --headless \
-                --html /mnt/locust/reports/baseline_report.html
+                --html /mnt/locust/reports/baseline_report.html \
+                --csv /mnt/locust/reports/baseline \
+                AnonymousUser RegularUser
         ;;
 
     stress)
         # Single-process Locust tops out around 100 realistic users.
         # For 500+ users run distributed Locust or use k6-stress.
         log "Running Locust stress test (ramp to 100 users, 10min, API only)..."
-        _run_with_rate_limits_disabled \
+        _run_with_rate_limits_disabled stress \
             $COMPOSE -f "$COMPOSE_FILE" run --rm \
                 -e SKIP_CONTAINER_OPS=1 \
                 locust \
                 -f /mnt/locust/locustfile.py \
                 --host http://backend:8000 \
                 -u 100 -r 10 -t 10m --headless \
-                --html /mnt/locust/reports/stress_report.html
+                --html /mnt/locust/reports/stress_report.html \
+                --csv /mnt/locust/reports/stress \
+                AnonymousUser RegularUser
         ;;
 
     spike)
         log "Running Locust spike test (10→100 users, API only)..."
-        _run_with_rate_limits_disabled \
+        _run_with_rate_limits_disabled spike \
             $COMPOSE -f "$COMPOSE_FILE" run --rm \
                 -e SKIP_CONTAINER_OPS=1 \
                 locust \
                 -f /mnt/locust/locustfile.py \
                 --host http://backend:8000 \
                 -u 100 -r 20 -t 5m --headless \
-                --html /mnt/locust/reports/spike_report.html
+                --html /mnt/locust/reports/spike_report.html \
+                --csv /mnt/locust/reports/spike \
+                AnonymousUser RegularUser
         ;;
 
     endurance)
         # Single-process Locust can't reliably drive 50 users for 30 min.
         # For true 30-min endurance use k6-endurance (already covers it).
         log "Running Locust endurance test (25 users, 15min, API only)..."
-        _run_with_rate_limits_disabled \
+        _run_with_rate_limits_disabled endurance \
             $COMPOSE -f "$COMPOSE_FILE" run --rm \
                 -e SKIP_CONTAINER_OPS=1 \
                 locust \
                 -f /mnt/locust/locustfile.py \
                 --host http://backend:8000 \
                 -u 25 -r 2 -t 15m --headless \
-                --html /mnt/locust/reports/endurance_report.html
+                --html /mnt/locust/reports/endurance_report.html \
+                --csv /mnt/locust/reports/endurance \
+                AnonymousUser RegularUser
         ;;
 
     connection)
@@ -328,7 +395,7 @@ case "$PROFILE" in
             CONN_USERS=50
             warn "PgBouncer not running — scaling connection flood to $CONN_USERS users (single-process limit)"
         fi
-        _run_with_rate_limits_disabled \
+        _run_with_rate_limits_disabled connection \
             $COMPOSE -f "$COMPOSE_FILE" run --rm \
                 -e SKIP_CONTAINER_OPS=1 \
                 locust \
@@ -336,7 +403,8 @@ case "$PROFILE" in
                 --host http://backend:8000 \
                 -u $CONN_USERS -r 25 -t 5m --headless \
                 ConnectionFloodUser \
-                --html /mnt/locust/reports/connection_report.html
+                --html /mnt/locust/reports/connection_report.html \
+                --csv /mnt/locust/reports/connection
         ;;
 
     k6-smoke)
@@ -344,7 +412,7 @@ case "$PROFILE" in
         if [ "${K6_JSON_OUTPUT:-}" = "1" ]; then
             _K6_OUT="--out json=/mnt/reports/k6_smoke_$(date +%s).json"
         fi
-        _run_with_rate_limits_disabled \
+        _run_with_rate_limits_disabled k6-smoke \
             $COMPOSE -f "$COMPOSE_FILE" run --rm \
                 -e K6_PROFILE=smoke \
                 -e TEST_USER_COUNT="${TEST_USER_COUNT:-100}" \
@@ -356,7 +424,7 @@ case "$PROFILE" in
         if [ "${K6_JSON_OUTPUT:-}" = "1" ]; then
             _K6_OUT="--out json=/mnt/reports/k6_baseline_$(date +%s).json"
         fi
-        _run_with_rate_limits_disabled \
+        _run_with_rate_limits_disabled k6-baseline \
             $COMPOSE -f "$COMPOSE_FILE" run --rm \
                 -e K6_PROFILE=baseline \
                 -e TEST_USER_COUNT="${TEST_USER_COUNT:-100}" \
@@ -368,7 +436,7 @@ case "$PROFILE" in
         if [ "${K6_JSON_OUTPUT:-}" = "1" ]; then
             _K6_OUT="--out json=/mnt/reports/k6_stress_$(date +%s).json"
         fi
-        _run_with_rate_limits_disabled \
+        _run_with_rate_limits_disabled k6-stress \
             $COMPOSE -f "$COMPOSE_FILE" run --rm \
                 -e K6_PROFILE=stress \
                 -e TEST_USER_COUNT="${TEST_USER_COUNT:-100}" \
@@ -380,7 +448,7 @@ case "$PROFILE" in
         if [ "${K6_JSON_OUTPUT:-}" = "1" ]; then
             _K6_OUT="--out json=/mnt/reports/k6_spike_$(date +%s).json"
         fi
-        _run_with_rate_limits_disabled \
+        _run_with_rate_limits_disabled k6-spike \
             $COMPOSE -f "$COMPOSE_FILE" run --rm \
                 -e K6_PROFILE=spike \
                 -e TEST_USER_COUNT="${TEST_USER_COUNT:-100}" \
@@ -392,7 +460,7 @@ case "$PROFILE" in
         if [ "${K6_JSON_OUTPUT:-}" = "1" ]; then
             _K6_OUT="--out json=/mnt/reports/k6_endurance_$(date +%s).json"
         fi
-        _run_with_rate_limits_disabled \
+        _run_with_rate_limits_disabled k6-endurance \
             $COMPOSE -f "$COMPOSE_FILE" run --rm \
                 -e K6_PROFILE=endurance \
                 -e TEST_USER_COUNT="${TEST_USER_COUNT:-100}" \

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# NukeLab Platform v2.0 — Unified Management Script
+# NukeLab Platform — Unified Management Script
 # Usage: ./nukelabctl <command> [target] [flags]
 #
 # Commands are implemented as modules in scripts/manage.d/*.sh
