@@ -78,6 +78,10 @@ certs/*.key
 backend/tests/load/reports/
 backend/tests/load/tokens.json
 
+# Security scan reports
+backend/reports/
+backend/.venv-security/
+
 # Pytest cache
 .pytest_cache/
 

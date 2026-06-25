@@ -1,0 +1,148 @@
+name: Security Scans
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Run weekly on Mondays at 06:00 UTC
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  backend-bandit:
+    name: Bandit Static Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        working-directory: ./backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install 'bandit[toml]>=1.8.2,<2.0'
+
+      - name: Run Bandit
+        id: bandit
+        continue-on-error: true
+        working-directory: ./backend
+        run: |
+          bandit -r app -f json -o bandit-report.json -ii -ll
+          bandit -r app -f screen -ii -ll
+
+      - name: Upload Bandit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: backend/bandit-report.json
+
+      - name: Fail on Bandit findings
+        if: steps.bandit.outcome == 'failure'
+        run: |
+          echo "Bandit found security issues. See uploaded artifact."
+          exit 1
+
+  backend-pip-audit:
+    name: pip-audit Python Dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pip-audit
+        run: |
+          python -m pip install --upgrade pip
+          pip install pip-audit==2.7.3
+
+      - name: Run pip-audit
+        id: pip-audit
+        continue-on-error: true
+        working-directory: ./backend
+        run: |
+          pip-audit -r requirements.txt -r requirements-dev.txt --format=json --desc -o pip-audit-report.json
+          pip-audit -r requirements.txt -r requirements-dev.txt --format=columns
+
+      - name: Upload pip-audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pip-audit-report
+          path: backend/pip-audit-report.json
+
+      - name: Fail on pip-audit findings
+        if: steps.pip-audit.outcome == 'failure'
+        run: |
+          echo "pip-audit found vulnerable Python dependencies. See uploaded artifact."
+          exit 1
+
+  frontend-npm-audit:
+    name: npm audit Frontend Dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Run npm audit
+        id: npm-audit
+        continue-on-error: true
+        working-directory: ./frontend
+        run: |
+          npm audit --json > npm-audit-report.json
+          npm audit
+
+      - name: Check for high/critical vulnerabilities
+        id: check-high
+        working-directory: ./frontend
+        run: |
+          count=$(node -e "
+            const fs = require('fs');
+            const data = JSON.parse(fs.readFileSync('npm-audit-report.json', 'utf8'));
+            const vulns = data.vulnerabilities || {};
+            let count = 0;
+            for (const [name, info] of Object.entries(vulns)) {
+              const sev = (info.severity || '').toLowerCase();
+              if (sev === 'high' || sev === 'critical') count++;
+            }
+            console.log(count);
+          " || echo 0)
+          echo "high-critical-count=$count" >> "$GITHUB_OUTPUT"
+
+      - name: Upload npm audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-audit-report
+          path: frontend/npm-audit-report.json
+
+      - name: Fail on high/critical npm findings
+        if: steps.check-high.outputs.high-critical-count > 0
+        run: |
+          echo "npm audit found ${{ steps.check-high.outputs.high-critical-count }} high/critical vulnerability(ies). See uploaded artifact."
+          exit 1

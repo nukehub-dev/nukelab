@@ -1637,8 +1637,8 @@ Then the server stops and the bulk API returns success
   - [x] Load testing (Locust/k6) — Phase 8 delivered: Locust + k6 hybrid, 5 profiles, PgBouncer connection flood
 
 - [ ] **Security**
-  - [ ] OWASP Top 10 audit
-  - [ ] Dependency scanning (Snyk, Dependabot)
+  - [x] OWASP Top 10 audit — documented in `docs/OWASP-AUDIT.md`; overall rating: Pass
+  - [x] Dependency scanning — Dependabot configured (`.github/dependabot.yml`); `pip-audit`, `npm audit`, and `bandit` integrated via `./nukelabctl security`
   - [ ] Secret management (HashiCorp Vault or Sealed Secrets)
   - [x] Security headers (HSTS, CSP, X-Frame-Options, CORP, Permissions-Policy) — exception-safe ASGI middleware
   - [x] Path traversal prevention — centralized `secure_path()` with `Path.resolve()` + `relative_to()`
@@ -2361,10 +2361,11 @@ DEFAULT_MAX_SERVERS=3
 
 ---
 
-**Next Steps**: Phases 1–5, 7, and 8 are complete. Platform is production-hardened with PgBouncer, load testing infrastructure, structured logging, metrics, graceful shutdown, rate limiting, CSRF, security headers, IP restrictions, request size limits, database connection pooling, Redis response caching, Prometheus + Grafana, Sentry, and database profiling tooling. Recommended next work:
+**Next Steps**: Phases 1–5, 7, and 8 are complete. Platform is production-hardened with PgBouncer, load testing infrastructure, structured logging, metrics, graceful shutdown, rate limiting, CSRF, security headers, IP restrictions, request size limits, database connection pooling, Redis response caching, Prometheus + Grafana, Sentry, database profiling tooling, OWASP Top 10 audit, and dependency scanning. Recommended next work:
 
-1. **Run load tests and act on results** — execute `./scripts/run-load-tests.sh baseline` and `./scripts/run-load-tests.sh stress`, then use `scripts/db_profiler.py slow-queries` to fix whatever breaks first
-2. **E2E tests (Playwright)** — critical user flows: login, spawn server, stop server, admin bulk actions
-3. **Environment image build pipeline** — automated builds, registry integration, image versioning, and base-image updates
-4. **E2E tests (Playwright)** — critical user flows: login, spawn server, stop server, admin bulk actions
-5. **Phase 6 items** (Kubernetes, CI/CD, blue-green deployment) remain future goals for multi-node scaling — only pursue after you've saturated a single large server (32+ cores, 128GB+ RAM) and proven you need distribution
+1. **Environment image build pipeline** — automated builds, registry integration, image versioning, and base-image updates
+2. **CDN for static assets** — quick production performance win for the Vite SPA
+3. **CI/CD pipeline** — GitHub Actions workflow for lint/test/build/deploy; blue-green deployment strategy
+4. **Secret management** — HashiCorp Vault or Sealed Secrets integration
+5. **Penetration testing** — third-party penetration test before public production launch
+6. **Phase 6 Kubernetes items** remain future goals for multi-node scaling — only pursue after you've saturated a single large server (32+ cores, 128GB+ RAM) and proven you need distribution

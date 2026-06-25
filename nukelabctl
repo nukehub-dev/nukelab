@@ -221,6 +221,9 @@ ${BOLD}Testing:${RESET}
   ${GREEN}loadtest${RESET}   [profile]                 Run Locust/k6 load tests
   ${GREEN}selftest${RESET}                             Quick nukelabctl sanity check
 
+${BOLD}Security:${RESET}
+  ${GREEN}security${RESET}   [options]                 Run Bandit, pip-audit, and npm audit
+
 ${BOLD}Diagnostics:${RESET}
   ${GREEN}doctor${RESET}                               Check host environment readiness
   ${GREEN}version${RESET}                              Show version and engine info
@@ -255,6 +258,7 @@ ${BOLD}Examples:${RESET}
   ./nukelabctl restore backups/nukelab_backup_20250607_120000.sql
   ./nukelabctl test backend --coverage    # Run backend tests with coverage
   ./nukelabctl loadtest baseline          # Run Locust baseline load test
+  ./nukelabctl security                   # Run all security scanners
   ./nukelabctl clean                      # Clean up dangling resources
 
 EOF
@@ -333,7 +337,7 @@ main() {
             fi
             _dispatch_command "$CMD"
             ;;
-        status|logs|shell|exec|db-migrate|db-shell|backup|restore|e2e|loadtest|doctor)
+        status|logs|shell|exec|db-migrate|db-shell|backup|restore|e2e|loadtest|security|doctor)
             init_env "$USE_DEV_MODE"
             detect_engine
             setup_podman_socket

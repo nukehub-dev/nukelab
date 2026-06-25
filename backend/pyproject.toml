@@ -15,3 +15,8 @@ quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
+
+[tool.bandit]
+exclude_dirs = ["tests", "htmlcov", ".pytest_cache", ".ruff_cache", "alembic/versions"]
+skips = ["B101"]  # assert_used is acceptable in our codebase
+
