@@ -260,13 +260,9 @@ class Settings(BaseSettings):
             public_path = self.user_auth_public_key_path
 
             if not private_path or not os.path.exists(private_path):
-                raise ValueError(
-                    f"USER_AUTH_PRIVATE_KEY_PATH does not exist: {private_path}"
-                )
+                raise ValueError(f"USER_AUTH_PRIVATE_KEY_PATH does not exist: {private_path}")
             if not public_path or not os.path.exists(public_path):
-                raise ValueError(
-                    f"USER_AUTH_PUBLIC_KEY_PATH does not exist: {public_path}"
-                )
+                raise ValueError(f"USER_AUTH_PUBLIC_KEY_PATH does not exist: {public_path}")
 
             private_mode = os.stat(private_path).st_mode
             if private_mode & 0o077:

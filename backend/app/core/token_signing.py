@@ -130,9 +130,7 @@ class UserAuthKeyManager:
         ring: dict[str, str] = {self._active_kid: self._active_public_pem}
 
         # Load retired verification-only public keys.
-        retired_pattern = os.path.join(
-            self._secrets_dir, "user-auth-public-*.pem"
-        )
+        retired_pattern = os.path.join(self._secrets_dir, "user-auth-public-*.pem")
         for retired_path in glob.glob(retired_pattern):
             try:
                 with open(retired_path, "rb") as f:
