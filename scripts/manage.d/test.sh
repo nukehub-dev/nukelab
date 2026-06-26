@@ -51,6 +51,7 @@ cmd_test() {
             -e "SENTRY_DSN=" \
             -e "PROMETHEUS_SCRAPE_TOKEN=" \
             -e "PROMETHEUS_ENABLED=false" \
+            -e "REQUEST_METRICS_STORE=prometheus" \
             -e "PGBOUNCER_ENABLED=false" \
             -e "TESTING=true" \
             backend-test bash -c "${_test_run_cmd}" || _test_exit=$?

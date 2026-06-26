@@ -117,9 +117,10 @@ class _RequestMetricsBuffer:
         self._flush_task: asyncio.Task | None = None
         self._started = False
         self._pending_adds: set = set()
+        self._loop: asyncio.AbstractEventLoop | None = None
 
     async def add(self, record: dict) -> None:
-        if not self._started:
+        if not self._started or self._flush_task is None or self._flush_task.done():
             self._start()
 
         async with self._lock:
@@ -130,14 +131,34 @@ class _RequestMetricsBuffer:
             await self.flush()
 
     def _start(self) -> None:
-        if self._started:
+        try:
+            current_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # No event loop running (shouldn't happen in middleware, but be safe)
             return
+
+        # If already started on the same loop with a live task, nothing to do.
+        if (
+            self._started
+            and self._loop is current_loop
+            and self._flush_task is not None
+            and not self._flush_task.done()
+        ):
+            return
+
         self._started = True
+        self._loop = current_loop
+
+        # Cancel any stale task from a previous loop (can't await across loops).
+        if self._flush_task is not None and not self._flush_task.done():
+            with contextlib.suppress(Exception):
+                self._flush_task.cancel()
+
         try:
             self._flush_task = asyncio.create_task(self._periodic_flush())
         except RuntimeError:
-            # No event loop yet (shouldn't happen in middleware, but be safe)
-            pass
+            self._started = False
+            self._loop = None
 
     async def _periodic_flush(self) -> None:
         while True:
@@ -167,19 +188,52 @@ class _RequestMetricsBuffer:
             logger.exception("Failed to flush request metrics batch (size=%s)", len(batch))
 
     async def shutdown(self) -> None:
-        if self._flush_task:
-            self._flush_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._flush_task
+        try:
+            if self._flush_task and not self._flush_task.done():
+                try:
+                    current_loop = asyncio.get_running_loop()
+                    if self._loop is current_loop:
+                        self._flush_task.cancel()
+                        with contextlib.suppress(asyncio.CancelledError):
+                            await self._flush_task
+                    else:
+                        # Task belongs to a different loop; cancel only.
+                        self._flush_task.cancel()
+                except RuntimeError:
+                    self._flush_task.cancel()
 
-        # Yield so any fire-and-forget add() tasks that were created just
-        # before shutdown have a chance to append to the buffer.
-        if self._pending_adds:
-            await asyncio.sleep(0)
-            # Clean up completed tasks from the set
-            self._pending_adds = {t for t in self._pending_adds if not t.done()}
+            # Drain any fire-and-forget add() tasks that were created just before
+            # shutdown so they can append to the buffer. Use a short timeout so a
+            # stuck task does not block graceful shutdown, then cancel stragglers.
+            if self._pending_adds:
+                pending = {t for t in self._pending_adds if not t.done()}
+                if pending:
+                    try:
+                        done, still_pending = await asyncio.wait(
+                            pending, timeout=1.0, return_when=asyncio.ALL_COMPLETED
+                        )
+                        for task in still_pending:
+                            task.cancel()
+                        await asyncio.gather(*still_pending, return_exceptions=True)
+                    except Exception:
+                        logger.exception("Failed to drain pending metrics add tasks")
+                self._pending_adds.clear()
 
-        await self.flush()
+            await self.flush()
+        finally:
+            self._started = False
+            self._loop = None
+
+    def reset(self) -> None:
+        """Reset the buffer and cancel its background task (useful for tests)."""
+        self._buffer = []
+        self._pending_adds = {t for t in self._pending_adds if not t.done()}
+        if self._flush_task and not self._flush_task.done():
+            with contextlib.suppress(Exception):
+                self._flush_task.cancel()
+        self._flush_task = None
+        self._started = False
+        self._loop = None
 
 
 # Global buffer instance

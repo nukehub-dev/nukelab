@@ -4,6 +4,7 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
+import pytest_asyncio
 
 from app.middleware.request_metrics import (
     RequestMetricsMiddleware,
@@ -14,20 +15,13 @@ from app.middleware.request_metrics import (
 class TestRequestMetricsBuffer:
     """Buffered metrics flush behavior."""
 
-    @pytest.fixture(autouse=True)
-    def reset_buffer(self):
-        """Clear the global buffer before each test."""
-        _metrics_buffer._buffer = []
-        _metrics_buffer._started = False
-        if _metrics_buffer._flush_task and not _metrics_buffer._flush_task.done():
-            try:
-                _metrics_buffer._flush_task.cancel()
-            except RuntimeError:
-                pass  # Event loop may be closed
-        _metrics_buffer._flush_task = None
+    @pytest_asyncio.fixture(autouse=True)
+    async def reset_buffer(self):
+        """Clear the global buffer before and after each test."""
+        _metrics_buffer.reset()
         yield
-        _metrics_buffer._buffer = []
-        _metrics_buffer._started = False
+        await _metrics_buffer.shutdown()
+        _metrics_buffer.reset()
 
     @pytest.mark.asyncio
     async def test_add_to_buffer(self):
@@ -170,6 +164,12 @@ class TestRequestMetricsMiddleware:
     @pytest.fixture
     def middleware(self):
         return RequestMetricsMiddleware(app=None)
+
+    @pytest.fixture(autouse=True)
+    def enable_db_metrics_store(self):
+        """Force DB metrics storage so middleware calls the buffer."""
+        with patch("app.middleware.request_metrics.settings.request_metrics_store", "both"):
+            yield
 
     @pytest.fixture
     def mock_request(self):

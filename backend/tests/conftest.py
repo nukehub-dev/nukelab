@@ -567,6 +567,25 @@ def reset_shutdown_coordinator():
     yield
 
 
+@pytest_asyncio.fixture(autouse=True)
+async def reset_metrics_buffer():
+    """Reset the global request metrics buffer after each test.
+
+    The buffer is a module-level singleton whose background flush task is
+    bound to the event loop of the test that created it.  Without an explicit
+    teardown, the task can outlive its loop and be destroyed while pending,
+    which triggers asyncio's "Task was destroyed but it is pending!" warning.
+
+    We use ``reset()`` rather than ``shutdown()`` so buffered metrics are
+    discarded instead of flushed to the database.  Flushing would write outside
+    the test transaction and pollute the DB for subsequent tests.
+    """
+    yield
+    from app.middleware.request_metrics import _metrics_buffer
+
+    _metrics_buffer.reset()
+
+
 @pytest.fixture(autouse=True)
 def cleanup_tmp_cache_files():
     """Remove temporary cache files created by system metrics collector."""

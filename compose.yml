@@ -238,12 +238,16 @@ services:
             - DATABASE_NAME=${DATABASE_NAME:-nukelab}_test
             - DATABASE_HOST=${DATABASE_HOST:-postgres}
             - DATABASE_PORT=${DATABASE_PORT:-5432}
+            # Ensure URL is derived from component env vars, not an old DATABASE_URL in .env.development.
+            - DATABASE_URL=
             - REDIS_URL=redis://redis:6379/1
             - RATE_LIMIT_ENABLED=false
             - OTEL_TRACES_ENABLED=false
             - SENTRY_DSN=
             - PROMETHEUS_SCRAPE_TOKEN=
             - PROMETHEUS_ENABLED=false
+            # Don't write request metrics to the DB in tests; they bypass the test transaction.
+            - REQUEST_METRICS_STORE=prometheus
             - PGBOUNCER_ENABLED=false
             - TESTING=true
             - DOCKER_SOCKET=/var/run/docker.sock
