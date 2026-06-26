@@ -297,7 +297,7 @@ async def get_auth_context(
 
     # Try JWT first
     try:
-        payload = token_signing.decode_access_token(token)
+        payload = await token_signing.verify_access_token(token)
         username: str = payload.get("sub")
         if username:
             result = await db.execute(select(User).where(User.username == username))
@@ -570,7 +570,7 @@ async def refresh_token_endpoint(
 async def logout_endpoint(
     request: Request, body: RefreshRequest | None = None, db: AsyncSession = Depends(get_db)
 ):
-    """Revoke refresh token, clear cookies, optionally stop all running servers."""
+    """Revoke access token, revoke refresh token, clear cookies, optionally stop servers."""
     user = None
 
     # Identify user from refresh token if provided
@@ -578,6 +578,33 @@ async def logout_endpoint(
         rt = await verify_refresh_token(body.refresh_token, db)
         if rt:
             user = rt.user
+
+    # Denylist the current access token so it cannot be reused after logout.
+    access_token = _extract_token_from_request_optional(request)
+    if access_token:
+        try:
+            payload = await token_signing.verify_access_token(access_token)
+            jti = payload.get("jti")
+            if jti:
+                from app.services.token_revocation_service import token_revocation_service
+
+                expires = payload.get("exp")
+                ttl_seconds = (
+                    int(expires - datetime.now(UTC).timestamp())
+                    if expires
+                    else settings.jwt_expire_minutes * 60
+                )
+                if ttl_seconds > 0:
+                    await token_revocation_service.denylist_jti(jti, ttl_seconds)
+            if user is None:
+                username = payload.get("sub")
+                if username:
+                    result = await db.execute(select(User).where(User.username == username))
+                    user = result.scalar_one_or_none()
+        except jwt.InvalidTokenError:
+            # If the access token is invalid/expired we still proceed with refresh-token
+            # revocation and cookie cleanup.
+            pass
 
     # Stop all running servers if user preference is enabled
     if user:
@@ -708,7 +735,7 @@ async def verify_auth(request: Request, db: AsyncSession = Depends(get_db)):
 
     # Try JWT
     try:
-        payload = token_signing.decode_access_token(token)
+        payload = await token_signing.verify_access_token(token)
         username: str = payload.get("sub")
         if username:
             result = await db.execute(select(User).where(User.username == username))
@@ -746,7 +773,7 @@ async def verify_auth(request: Request, db: AsyncSession = Depends(get_db)):
 async def _resolve_user_from_token(token: str, db: AsyncSession) -> User | None:
     """Resolve a User from a JWT access token or active API token hash."""
     try:
-        payload = token_signing.decode_access_token(token)
+        payload = await token_signing.verify_access_token(token)
         username: str = payload.get("sub")
         if username:
             result = await db.execute(select(User).where(User.username == username))
@@ -776,6 +803,14 @@ async def _resolve_user_from_token(token: str, db: AsyncSession) -> User | None:
 
 def _extract_token_from_request(request: Request) -> str:
     """Extract bearer/API token from Authorization header, query param, or cookie."""
+    token = _extract_token_from_request_optional(request)
+    if token is None:
+        raise HTTPException(status_code=401, detail="Missing token")
+    return token
+
+
+def _extract_token_from_request_optional(request: Request) -> str | None:
+    """Extract bearer/API token from request, returning None if not present."""
     # 1. Authorization header
     authorization = request.headers.get("Authorization", "")
     if authorization:
@@ -791,11 +826,7 @@ def _extract_token_from_request(request: Request) -> str:
         return query_token
 
     # 3. Cookie
-    cookie_token = request.cookies.get("nukelab_token")
-    if cookie_token:
-        return cookie_token
-
-    raise HTTPException(status_code=401, detail="Missing token")
+    return request.cookies.get("nukelab_token")
 
 
 @router.get("/verify-admin")

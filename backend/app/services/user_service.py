@@ -15,6 +15,7 @@ from app.core.permissions import Permission
 from app.core.roles import VALID_ROLES, get_role_level, is_valid_role
 from app.core.security import has_permission
 from app.models.user import User
+from app.services.token_revocation_service import token_revocation_service
 
 
 class UserService:
@@ -203,6 +204,10 @@ class UserService:
             else:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid role")
 
+            # Role changed: revoke outstanding access tokens so the old role
+            # cannot be used to access resources.
+            await token_revocation_service.revoke_user_tokens(sub=user.username)
+
         # Only users with credits management permission can update credits
         if "nuke_balance" in data and data["nuke_balance"] is not None and updated_by:
             # Only enforce if credits are actually changing
@@ -269,6 +274,10 @@ class UserService:
         await self.db.commit()
         await self.db.refresh(user)
 
+        if disabled:
+            # Deactivation revokes all outstanding access tokens immediately.
+            await token_revocation_service.revoke_user_tokens(sub=user.username)
+
         return user
 
     async def change_password(self, user_id: str, current_password: str, new_password: str) -> bool:
@@ -294,6 +303,11 @@ class UserService:
         user.security = security
 
         await self.db.commit()
+
+        # Revoke all outstanding access tokens so the old password cannot be used
+        # to maintain a session.
+        await token_revocation_service.revoke_user_tokens(sub=user.username)
+
         return True
 
     async def discover_users(self, search: str | None = None, limit: int = 50) -> list[User]:

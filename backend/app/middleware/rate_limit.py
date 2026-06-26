@@ -105,9 +105,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return auth.split(" ", 1)[1]
         return request.cookies.get("nukelab_token")
 
-    def _decode_jwt(self, token: str) -> dict | None:
+    async def _decode_jwt(self, token: str) -> dict | None:
         try:
-            return token_signing.decode_access_token(token)
+            return await token_signing.verify_access_token(token)
         except jwt.ExpiredSignatureError:
             return None
         except jwt.InvalidTokenError:
@@ -186,7 +186,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         role: str | None
 
         if token:
-            payload = self._decode_jwt(token)
+            payload = await self._decode_jwt(token)
             if payload and payload.get("sub"):
                 user_key = payload["sub"]
                 role = payload.get("role", "user")

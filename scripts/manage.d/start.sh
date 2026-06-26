@@ -91,7 +91,9 @@ cmd_start() {
         if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
             log "Starting backend containers..."
             local _up_args=(-d)
-            if ! $START_BUILD; then
+            if $START_BUILD; then
+                _up_args+=(--build)
+            else
                 _up_args+=(--no-build)
             fi
             # Suppress noisy compose warnings about containers that do not
@@ -146,7 +148,9 @@ cmd_start() {
         _prod_backend_services=$(_backend_services)
 
         local _up_args=(-d)
-        if ! $START_BUILD; then
+        if $START_BUILD; then
+            _up_args+=(--build)
+        else
             _up_args+=(--no-build)
         fi
 
@@ -168,12 +172,18 @@ cmd_start() {
                 fi
                 rm -f "$_up_out"
             fi
+            if $START_WAIT; then
+                wait_for_backend || true
+            fi
 
             log "Starting frontend container..."
             _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" up "${_up_args[@]}" frontend
         elif [ "$TARGET" = "backend" ]; then
             log "Starting backend services..."
             _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" up "${_up_args[@]}" $_prod_backend_services
+            if $START_WAIT; then
+                wait_for_backend || true
+            fi
         elif [ "$TARGET" = "frontend" ]; then
             log "Starting frontend container..."
             _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" up "${_up_args[@]}" frontend

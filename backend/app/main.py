@@ -206,20 +206,23 @@ app.add_middleware(RequestSizeLimitMiddleware, max_size=settings.max_request_bod
 # CORS — strict in production, permissive but safe in development
 _cors_origins_list = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 
+# Always include the public URL origin (where Traefik serves the frontend) and
+# the explicit frontend URL (e.g., a separate Vite dev server) so the UI can
+# reach the API regardless of which origin the user loads it from.
+_cors_origins = list(_cors_origins_list)
+for _origin in (settings.public_url, settings.frontend_url):
+    _origin = (_origin or "").rstrip("/")
+    if _origin and _origin not in _cors_origins:
+        _cors_origins.append(_origin)
+
 if settings.app_debug:
-    # Debug mode: use configured origins (default includes localhost dev servers).
+    # Debug mode: permissive methods/headers.
     # Wildcard + credentials is invalid per CORS spec, so we avoid it.
-    _cors_origins = list(_cors_origins_list)
-    # Auto-include frontend_url if set (e.g., Vite dev server on a non-standard port)
-    frontend_origin = settings.frontend_url.rstrip("/") if settings.frontend_url else ""
-    if frontend_origin and frontend_origin not in _cors_origins:
-        _cors_origins.append(frontend_origin)
     _cors_methods = ["*"]
     _cors_headers = ["*"]
     _cors_credentials = settings.cors_allow_credentials
 else:
-    # Production: explicit whitelist only
-    _cors_origins = _cors_origins_list
+    # Production: explicit whitelist only.
     _cors_methods = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
     _cors_headers = [
         "Authorization",

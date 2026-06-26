@@ -122,6 +122,35 @@ class TestRefreshToken:
         assert "Logged out" in response.json()["message"]
 
     @pytest.mark.asyncio
+    async def test_logout_denylists_access_token(self, client, test_user):
+        """Logout should denylist the current access token so it cannot be reused."""
+        login_resp = await client.post(
+            "/api/auth/login", data={"username": "testuser", "password": "testpass123"}
+        )
+        access_token = login_resp.json()["access_token"]
+        refresh_token = login_resp.json()["refresh_token"]
+
+        # Use the access token once to confirm it works.
+        me_resp = await client.get(
+            "/api/auth/me", headers={"Authorization": f"Bearer {access_token}"}
+        )
+        assert me_resp.status_code == 200
+
+        # Logout with both tokens.
+        logout_resp = await client.post(
+            "/api/auth/logout",
+            json={"refresh_token": refresh_token},
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        assert logout_resp.status_code == 200
+
+        # The same access token should now be rejected.
+        me_resp2 = await client.get(
+            "/api/auth/me", headers={"Authorization": f"Bearer {access_token}"}
+        )
+        assert me_resp2.status_code == 401
+
+    @pytest.mark.asyncio
     async def test_new_access_token_works_after_refresh(self, client, test_user):
         """New access token from refresh should authenticate requests."""
         # Login

@@ -117,7 +117,7 @@ async def validate_token(token: str) -> User | None:
     if not token:
         return None
     try:
-        payload = token_signing.decode_access_token(token)
+        payload = await token_signing.verify_access_token(token)
         username: str = payload.get("sub")
         if not username:
             return None

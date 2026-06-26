@@ -215,11 +215,14 @@ class Settings(BaseSettings):
 
     # User Auth - Asymmetric key signing for API access tokens
     user_auth_key_algorithm: str = "EdDSA"  # Ed25519 via cryptography
-    user_auth_secrets_dir: str = "/run/secrets"
+    user_auth_secrets_dir: str = "/run/user-secrets"
     user_auth_private_key_path: str = ""
     user_auth_public_key_path: str = ""
     user_auth_issuer: str = "NukeLab"
     user_auth_audience: str = "nukelab-api"
+    user_auth_leeway_seconds: int = 5
+    user_auth_denylist_fail_closed: bool = True
+    user_auth_key_rotation_grace_seconds: int | None = None
 
     @model_validator(mode="after")
     def set_key_paths(self) -> "Settings":
@@ -240,6 +243,37 @@ class Settings(BaseSettings):
             self.user_auth_public_key_path = os.path.join(
                 self.user_auth_secrets_dir, "user-auth-public.pem"
             )
+        return self
+
+    @model_validator(mode="after")
+    def set_user_auth_rotation_grace(self) -> "Settings":
+        """Default key rotation grace period to 2× access-token lifetime."""
+        if self.user_auth_key_rotation_grace_seconds is None:
+            self.user_auth_key_rotation_grace_seconds = self.jwt_expire_minutes * 2 * 60
+        return self
+
+    @model_validator(mode="after")
+    def validate_user_auth_keys_in_production(self) -> "Settings":
+        """Refuse to start in production with missing or weakly-protected keys."""
+        if self.app_env == "production":
+            private_path = self.user_auth_private_key_path
+            public_path = self.user_auth_public_key_path
+
+            if not private_path or not os.path.exists(private_path):
+                raise ValueError(
+                    f"USER_AUTH_PRIVATE_KEY_PATH does not exist: {private_path}"
+                )
+            if not public_path or not os.path.exists(public_path):
+                raise ValueError(
+                    f"USER_AUTH_PUBLIC_KEY_PATH does not exist: {public_path}"
+                )
+
+            private_mode = os.stat(private_path).st_mode
+            if private_mode & 0o077:
+                raise ValueError(
+                    f"USER_AUTH_PRIVATE_KEY_PATH permissions are too permissive: "
+                    f"{oct(private_mode & 0o777)}. Group/other must have no access."
+                )
         return self
 
     @model_validator(mode="after")

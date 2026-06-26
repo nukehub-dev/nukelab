@@ -76,7 +76,7 @@ class MaintenanceMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # Check if user is admin — allow admins through
-        is_admin = self._is_admin(request)
+        is_admin = await self._is_admin(request)
         if is_admin:
             return await call_next(request)
 
@@ -104,7 +104,7 @@ class MaintenanceMiddleware(BaseHTTPMiddleware):
             },
         )
 
-    def _is_admin(self, request: Request) -> bool:
+    async def _is_admin(self, request: Request) -> bool:
         """Check if the requesting user has ADMIN_ACCESS via JWT role claim."""
         token = None
 
@@ -120,7 +120,7 @@ class MaintenanceMiddleware(BaseHTTPMiddleware):
             return False
 
         try:
-            payload = token_signing.decode_access_token(token)
+            payload = await token_signing.verify_access_token(token)
             role = payload.get("role")
             if not role:
                 return False

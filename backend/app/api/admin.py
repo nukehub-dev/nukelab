@@ -23,6 +23,7 @@ from app.models.server import Server
 from app.models.user import User
 from app.services.credit_service import CreditService
 from app.services.notification_service import broadcast_server_status_change
+from app.services.token_revocation_service import token_revocation_service
 from app.services.user_service import UserService
 from app.services.volume_service import VolumeService
 from app.services.workspace_service import WorkspaceService
@@ -261,6 +262,28 @@ async def bulk_user_action(
         "message": f"Processed {len(body.user_ids)} users",
         "action": body.action,
         "results": results,
+    }
+
+
+@router.post("/users/{username}/revoke-tokens")
+async def admin_revoke_user_tokens(
+    username: str,
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Revoke all active access tokens for a user (admin kill-switch)."""
+    service = UserService(db)
+    user = await service.get_by_username(username)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    await token_revocation_service.revoke_user_tokens(sub=user.username)
+
+    return {
+        "username": username,
+        "revoked_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
+        "message": f"All access tokens revoked for {username}",
     }
 
 

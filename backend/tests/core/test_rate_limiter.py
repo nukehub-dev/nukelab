@@ -8,9 +8,9 @@ from fastapi import Request
 from app.core.rate_limiter import (
     RateLimitExceeded,
     _check_limit,
-    _extract_jwt_sub,
     _get_user_key_and_role,
     _hash_token,
+    _verify_token_payload,
     rate_limit_auth,
     rate_limit_general,
     rate_limit_strict,
@@ -18,17 +18,20 @@ from app.core.rate_limiter import (
 )
 
 
-class TestExtractJwtSub:
-    def test_extracts_sub_from_valid_token(self, admin_token):
-        result = _extract_jwt_sub(admin_token)
-        assert result == "adminuser"
+class TestVerifyTokenPayload:
+    @pytest.mark.asyncio
+    async def test_extracts_sub_from_valid_token(self, admin_token):
+        result = await _verify_token_payload(admin_token)
+        assert result["sub"] == "adminuser"
 
-    def test_returns_none_for_invalid_token(self):
-        result = _extract_jwt_sub("not.a.token")
+    @pytest.mark.asyncio
+    async def test_returns_none_for_invalid_token(self):
+        result = await _verify_token_payload("not.a.token")
         assert result is None
 
-    def test_returns_none_for_empty(self):
-        assert _extract_jwt_sub("") is None
+    @pytest.mark.asyncio
+    async def test_returns_none_for_empty(self):
+        assert await _verify_token_payload("") is None
 
 
 class TestHashToken:
@@ -43,49 +46,54 @@ class TestHashToken:
 
 
 class TestGetUserKeyAndRole:
-    def test_bearer_jwt(self, admin_token):
+    @pytest.mark.asyncio
+    async def test_bearer_jwt(self, admin_token):
         scope = {"type": "http", "headers": [(b"authorization", f"Bearer {admin_token}".encode())]}
         request = Request(scope)
-        key, role = _get_user_key_and_role(request)
+        key, role = await _get_user_key_and_role(request)
         assert key == "adminuser"
         assert role == "admin"
 
-    def test_token_prefix(self):
+    @pytest.mark.asyncio
+    async def test_token_prefix(self):
         scope = {"type": "http", "headers": [(b"authorization", b"Token faketoken123")]}
         request = Request(scope)
-        key, role = _get_user_key_and_role(request)
+        key, role = await _get_user_key_and_role(request)
         assert key.startswith("tkn:")
         assert role == "user"
 
-    def test_cookie_fallback(self):
+    @pytest.mark.asyncio
+    async def test_cookie_fallback(self):
         scope = {
             "type": "http",
             "headers": [(b"cookie", b"nukelab_token=cookietok")],
         }
         request = Request(scope)
-        key, role = _get_user_key_and_role(request)
+        key, role = await _get_user_key_and_role(request)
         assert key.startswith("tkn:")
         assert role == "user"
 
-    def test_ip_fallback(self):
+    @pytest.mark.asyncio
+    async def test_ip_fallback(self):
         scope = {
             "type": "http",
             "headers": [],
             "client": ("192.168.1.5", 12345),
         }
         request = Request(scope)
-        key, role = _get_user_key_and_role(request)
+        key, role = await _get_user_key_and_role(request)
         assert key == "ip:192.168.1.5"
         assert role == "unauthenticated"
 
-    def test_x_forwarded_for(self):
+    @pytest.mark.asyncio
+    async def test_x_forwarded_for(self):
         scope = {
             "type": "http",
             "headers": [(b"x-forwarded-for", b"10.0.0.1, 10.0.0.2")],
             "client": ("192.168.1.5", 12345),
         }
         request = Request(scope)
-        key, role = _get_user_key_and_role(request)
+        key, role = await _get_user_key_and_role(request)
         assert key == "ip:10.0.0.1"
 
 

@@ -546,6 +546,16 @@ async def reset_cached_redis_clients():
     except Exception:
         pass
 
+    # 3. Token revocation service singleton
+    try:
+        from app.services.token_revocation_service import token_revocation_service as _trs
+
+        if _trs._redis is not None:
+            await _trs._redis.aclose()
+            _trs._redis = None
+    except Exception:
+        pass
+
     yield
 
 

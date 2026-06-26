@@ -219,6 +219,8 @@ ${BOLD}Maintenance:${RESET}
   ${GREEN}clean${RESET}                                Remove dangling images/volumes
   ${GREEN}remove${RESET}     [target]                  Remove containers (keep data)
   ${GREEN}reset${RESET}                                ⚠️ Delete ALL data & containers
+  ${GREEN}rotate-user-auth-key${RESET}               Rotate the active user-auth Ed25519 key
+  ${GREEN}cleanup-user-auth-keys${RESET}             Remove expired retired user-auth keys
 
 ${BOLD}Development Tools:${RESET}
   ${GREEN}shell${RESET}      [service]                 Open shell in container
@@ -283,6 +285,8 @@ ${BOLD}Examples:${RESET}
   ./nukelabctl lint                       # Lint backend and frontend
   ./nukelabctl lint frontend --fix        # Auto-fix frontend issues
   ./nukelabctl clean                      # Clean up dangling resources
+  ./nukelabctl rotate-user-auth-key       # Rotate the active user-auth key
+  ./nukelabctl cleanup-user-auth-keys     # Prune expired retired public keys
 
 EOF
 }
@@ -403,7 +407,7 @@ main() {
         lint)
             _dispatch_command "$CMD"
             ;;
-        status|logs|shell|exec|db-migrate|db-shell|backup|restore|e2e|security|doctor)
+        status|logs|shell|exec|db-migrate|db-shell|backup|restore|e2e|security|doctor|rotate-user-auth-key|cleanup-user-auth-keys)
             init_env "$USE_DEV_MODE"
             detect_engine
             setup_podman_socket

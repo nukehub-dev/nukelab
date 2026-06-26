@@ -128,7 +128,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
             return None
         token = auth_header[7:]
         try:
-            payload = token_signing.decode_access_token(token)
+            payload = await token_signing.verify_access_token(token)
             username = payload.get("sub")
             if not username:
                 return None

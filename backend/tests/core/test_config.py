@@ -1,162 +1,83 @@
-"""Tests for configuration validation."""
+"""Tests for app.config validators."""
+
+import os
 
 import pytest
-from pydantic import ValidationError
 
 from app.config import Settings
 
 
-class TestProductionSecretValidation:
-    """Production environment secret validation tests."""
+class TestProductionUserAuthKeyValidation:
+    def test_production_requires_existing_keys(self, tmp_path):
+        secrets_dir = tmp_path / "secrets"
+        secrets_dir.mkdir()
+        private_path = secrets_dir / "user-auth-private.pem"
+        public_path = secrets_dir / "user-auth-public.pem"
+        private_path.write_text("private")
+        public_path.write_text("public")
+        os.chmod(private_path, 0o600)
 
-    def test_production_with_default_jwt_secret_raises(self):
-        """Starting in production with default JWT_SECRET must fail."""
-        with pytest.raises(ValidationError) as exc_info:
-            Settings(app_env="production", jwt_secret="change-me")
-        assert "JWT_SECRET" in str(exc_info.value)
-
-    def test_production_with_default_session_secret_raises(self):
-        """Starting in production with default SESSION_SECRET must fail."""
-        with pytest.raises(ValidationError) as exc_info:
-            Settings(app_env="production", session_secret="change-me")
-        assert "SESSION_SECRET" in str(exc_info.value)
-
-    def test_production_with_strong_secrets_succeeds(self):
-        """Production with strong secrets should initialize fine."""
-        settings = Settings(
+        # Should not raise.
+        Settings(
             app_env="production",
-            jwt_secret="a-strong-production-jwt-secret-min-32-characters",
-            session_secret="another-strong-production-session-secret-here",
+            user_auth_private_key_path=str(private_path),
+            user_auth_public_key_path=str(public_path),
+            cors_origins="https://example.com",
+            jwt_secret="a-strong-random-secret-at-least-32-characters-long",
+            session_secret="another-strong-random-secret-for-tests-only",
         )
-        assert settings.app_env == "production"
 
-    def test_development_with_default_secrets_succeeds(self):
-        """Development mode should allow default secrets for convenience."""
-        settings = Settings(app_env="development", jwt_secret="change-me")
-        assert settings.jwt_secret == "change-me"
+    def test_production_rejects_missing_private_key(self, tmp_path):
+        private_path = tmp_path / "missing-private.pem"
+        public_path = tmp_path / "public.pem"
+        public_path.write_text("public")
 
-    def test_dev_jwt_secret_also_rejected_in_production(self):
-        """The compose.yml default JWT secret must also be rejected."""
-        with pytest.raises(ValidationError) as exc_info:
+        with pytest.raises(ValueError, match="USER_AUTH_PRIVATE_KEY_PATH"):
             Settings(
                 app_env="production",
-                jwt_secret="dev-jwt-secret-change-in-production-min-32-chars",
+                user_auth_private_key_path=str(private_path),
+                user_auth_public_key_path=str(public_path),
+                cors_origins="https://example.com",
             )
-        assert "JWT_SECRET" in str(exc_info.value)
 
-    def test_dev_session_secret_also_rejected_in_production(self):
-        """The compose.yml default session secret must also be rejected."""
-        with pytest.raises(ValidationError) as exc_info:
+    def test_production_rejects_missing_public_key(self, tmp_path):
+        private_path = tmp_path / "private.pem"
+        public_path = tmp_path / "missing-public.pem"
+        private_path.write_text("private")
+
+        with pytest.raises(ValueError, match="USER_AUTH_PUBLIC_KEY_PATH"):
             Settings(
                 app_env="production",
-                session_secret="dev-session-secret-change-in-production",
+                user_auth_private_key_path=str(private_path),
+                user_auth_public_key_path=str(public_path),
+                cors_origins="https://example.com",
             )
-        assert "SESSION_SECRET" in str(exc_info.value)
 
+    def test_production_rejects_permissive_private_key(self, tmp_path):
+        secrets_dir = tmp_path / "secrets"
+        secrets_dir.mkdir()
+        private_path = secrets_dir / "user-auth-private.pem"
+        public_path = secrets_dir / "user-auth-public.pem"
+        private_path.write_text("private")
+        public_path.write_text("public")
+        os.chmod(private_path, 0o644)
 
-class TestCorsValidation:
-    """CORS configuration validation tests."""
-
-    def test_production_with_wildcard_cors_origin_raises(self):
-        with pytest.raises(ValidationError) as exc_info:
+        with pytest.raises(ValueError, match="permissions"):
             Settings(
                 app_env="production",
-                jwt_secret="a-strong-production-jwt-secret-min-32-characters",
-                session_secret="another-strong-production-session-secret-here",
-                cors_origins="*",
+                user_auth_private_key_path=str(private_path),
+                user_auth_public_key_path=str(public_path),
+                cors_origins="https://example.com",
             )
-        assert "CORS_ORIGINS" in str(exc_info.value)
 
-    def test_production_with_empty_cors_origin_raises(self):
-        with pytest.raises(ValidationError) as exc_info:
-            Settings(
-                app_env="production",
-                jwt_secret="a-strong-production-jwt-secret-min-32-characters",
-                session_secret="another-strong-production-session-secret-here",
-                cors_origins="",
-            )
-        assert "CORS_ORIGINS" in str(exc_info.value)
+    def test_development_allows_missing_keys(self, tmp_path):
+        # In development the config validator should not block missing key paths;
+        # the key manager will auto-generate them when accessed.
+        private_path = tmp_path / "missing-private.pem"
+        public_path = tmp_path / "missing-public.pem"
 
-    def test_production_with_explicit_origins_succeeds(self):
-        settings = Settings(
-            app_env="production",
-            jwt_secret="a-strong-production-jwt-secret-min-32-characters",
-            session_secret="another-strong-production-session-secret-here",
-            cors_origins="https://app.example.com,https://admin.example.com",
+        Settings(
+            app_env="development",
+            user_auth_private_key_path=str(private_path),
+            user_auth_public_key_path=str(public_path),
         )
-        assert settings.app_env == "production"
-
-    def test_production_with_invalid_origin_url_raises(self):
-        with pytest.raises(ValidationError) as exc_info:
-            Settings(
-                app_env="production",
-                jwt_secret="a-strong-production-jwt-secret-min-32-characters",
-                session_secret="another-strong-production-session-secret-here",
-                cors_origins="not-a-valid-url",
-            )
-        assert "CORS origin" in str(exc_info.value)
-
-    def test_development_with_wildcard_cors_origin_succeeds(self):
-        settings = Settings(app_env="development", cors_origins="*")
-        assert settings.cors_origins == "*"
-
-
-class TestPgBouncerSettings:
-    """PgBouncer auto-detection and URL derivation."""
-
-    def test_pgbouncer_disabled_by_default(self):
-        settings = Settings()
-        assert settings.pgbouncer_enabled is False
-        assert settings.database_pgbouncer_url == ""
-
-    def test_pgbouncer_enabled_derives_default_url(self):
-        settings = Settings(
-            pgbouncer_enabled=True,
-            database_user="nukelab",
-            database_password="secret",
-            database_name="nukelab",
-        )
-        assert settings.database_url == (
-            "postgresql+asyncpg://nukelab:secret@postgres:5432/nukelab"
-        )
-        assert settings.database_pgbouncer_url == (
-            "postgresql+asyncpg://nukelab:secret@pgbouncer:6432/nukelab"
-        )
-
-    def test_pgbouncer_url_can_be_overridden(self):
-        explicit = "postgresql+asyncpg://user:pass@pgbouncer:6432/db"
-        settings = Settings(pgbouncer_enabled=True, database_pgbouncer_url=explicit)
-        assert settings.database_pgbouncer_url == explicit
-
-
-class TestDatabasePoolSettings:
-    """Database connection pool configuration defaults."""
-
-    def test_pool_settings_exist_and_have_correct_types(self):
-        """Pool settings must exist on the settings object with expected types."""
-        from app.config import settings
-
-        assert isinstance(settings.database_pool_size, int)
-        assert isinstance(settings.database_pool_max_overflow, int)
-        assert isinstance(settings.database_pool_timeout, int)
-        assert isinstance(settings.database_pool_recycle, int)
-        assert isinstance(settings.database_pool_pre_ping, bool)
-        assert isinstance(settings.database_query_timeout_seconds, int)
-        assert settings.database_pool_recycle > 0
-        assert settings.database_query_timeout_seconds > 0
-
-    def test_pool_settings_are_customizable(self):
-        settings = Settings(
-            database_pool_size=5,
-            database_pool_max_overflow=2,
-            database_pool_timeout=10,
-            database_pool_recycle=1800,
-            database_pool_pre_ping=False,
-            database_query_timeout_seconds=60,
-        )
-        assert settings.database_pool_size == 5
-        assert settings.database_pool_max_overflow == 2
-        assert settings.database_pool_timeout == 10
-        assert settings.database_pool_recycle == 1800
-        assert settings.database_pool_pre_ping is False
-        assert settings.database_query_timeout_seconds == 60

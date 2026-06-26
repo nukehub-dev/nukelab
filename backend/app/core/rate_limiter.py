@@ -67,10 +67,9 @@ def _get_redis_client():
     return redis.from_url(settings.redis_url)
 
 
-def _extract_jwt_sub(token: str) -> str | None:
+async def _verify_token_payload(token: str) -> dict | None:
     try:
-        payload = token_signing.decode_access_token(token)
-        return payload.get("sub")
+        return await token_signing.verify_access_token(token)
     except jwt.ExpiredSignatureError:
         return None
     except jwt.InvalidTokenError:
@@ -81,7 +80,7 @@ def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()[:16]
 
 
-def _get_user_key_and_role(request: Request) -> tuple[str, str | None]:
+async def _get_user_key_and_role(request: Request) -> tuple[str, str | None]:
     auth_header = request.headers.get("Authorization", "")
     token = ""
     if auth_header.startswith("Bearer ") or auth_header.startswith("Token "):
@@ -90,14 +89,12 @@ def _get_user_key_and_role(request: Request) -> tuple[str, str | None]:
         token = request.cookies.get("nukelab_token", "")
 
     if token:
-        sub = _extract_jwt_sub(token)
-        if sub:
-            try:
-                payload = token_signing.decode_access_token(token)
-                role = payload.get("role", "user")
+        payload = await _verify_token_payload(token)
+        if payload:
+            sub = payload.get("sub")
+            role = payload.get("role", "user")
+            if sub:
                 return (sub, role)
-            except jwt.InvalidTokenError:
-                pass
         return (f"tkn:{_hash_token(token)}", "user")
 
     client_ip = request.headers.get(
@@ -117,7 +114,7 @@ async def _check_limit(
     if not settings.rate_limit_enabled:
         return 0, 0
 
-    user_key, role = _get_user_key_and_role(request)
+    user_key, role = await _get_user_key_and_role(request)
 
     if limit_override is not None:
         limit = limit_override
