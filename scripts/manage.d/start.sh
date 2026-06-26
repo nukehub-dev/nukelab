@@ -94,7 +94,20 @@ cmd_start() {
             if ! $START_BUILD; then
                 _up_args+=(--no-build)
             fi
-            _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" up "${_up_args[@]}" $_dev_backend_services
+            # Suppress noisy compose warnings about containers that do not
+            # yet exist; they are harmless on a fresh start/restart.
+            if $VERBOSE; then
+                _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" up "${_up_args[@]}" $_dev_backend_services
+            else
+                local _up_out
+                _up_out=$(mktemp)
+                if ! $COMPOSE "${COMPOSE_ARGS[@]}" up "${_up_args[@]}" $_dev_backend_services > "$_up_out" 2>&1; then
+                    cat "$_up_out" >&2
+                    rm -f "$_up_out"
+                    return 1
+                fi
+                rm -f "$_up_out"
+            fi
             if $START_WAIT; then
                 wait_for_backend || true
             fi
