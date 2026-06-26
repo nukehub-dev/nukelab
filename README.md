@@ -148,6 +148,28 @@ Tags applied depend on the branch/tag:
 | `develop` branch | `develop`, `sha-abc1234` | no |
 | Pull request | `pr-42`, `sha-abc1234` | no |
 
+## CDN for Static Assets
+
+For production, you can offload frontend static assets (JS/CSS chunks) to a CDN:
+
+1. Set the CDN origin to your NukeLab frontend (e.g. `https://nukelab.example.com/`).
+2. Configure the CDN to cache everything under `/assets/` with long TTLs.
+3. Add the CDN URL to your environment:
+
+```bash
+# .env
+VITE_CDN_URL=https://cdn.example.com/
+```
+
+4. Rebuild and restart the frontend container:
+
+```bash
+./nukelabctl build frontend
+./nukelabctl restart frontend
+```
+
+The container continues to serve `index.html` (needed for TanStack Router's client-side routing), but all JS/CSS assets are loaded from the CDN. Leave `VITE_CDN_URL` empty to serve everything from the container.
+
 ## Project Structure
 
 ```

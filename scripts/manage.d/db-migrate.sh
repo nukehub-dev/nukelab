@@ -7,7 +7,7 @@ cmd_db_migrate() {
         # DDL must not go through the connection pooler.
         local direct_url
         direct_url=$(_direct_database_url)
-        if [[ "$DATABASE_URL" =~ pgbouncer ]] || [[ "$DATABASE_URL" =~ :6432 ]]; then
+        if [[ "${DATABASE_HOST:-postgres}" == "pgbouncer" ]] || [[ "${DATABASE_PORT:-5432}" == "6432" ]]; then
             info "Routing migration through direct Postgres connection"
         fi
         _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" exec -e "DATABASE_URL=$direct_url" backend alembic upgrade head

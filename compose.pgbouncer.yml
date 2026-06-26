@@ -11,15 +11,16 @@
 #   ./nukelabctl start --overlay compose.pgbouncer.yml
 #
 # Then update .env:
-#   DATABASE_URL=postgresql+asyncpg://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres:5432/${DATABASE_NAME}
+#   DATABASE_HOST=postgres
+#   DATABASE_PORT=5432
 #   PGBOUNCER_ENABLED=true
 #   # Optional explicit URL (defaults to pgbouncer:6432 with the same credentials)
 #   DATABASE_PGBOUNCER_URL=postgresql+asyncpg://${DATABASE_USER}:${DATABASE_PASSWORD}@pgbouncer:6432/${DATABASE_NAME}
 #
-# IMPORTANT: Keep DATABASE_URL pointed at direct Postgres so migrations and
-# DDL bypass PgBouncer automatically. When PgBouncer is enabled,
-# SQLAlchemy client-side pooling is disabled (NullPool) to avoid double-pooling
-# and connection storms at scale. PgBouncer becomes the single source of truth.
+# IMPORTANT: Keep DATABASE_HOST=postgres and DATABASE_PORT=5432 so migrations
+# and DDL bypass PgBouncer automatically. When PgBouncer is enabled, SQLAlchemy
+# client-side pooling is disabled (NullPool) to avoid double-pooling and
+# connection storms at scale. PgBouncer becomes the single source of truth.
 
 services:
     pgbouncer:

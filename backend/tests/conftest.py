@@ -10,8 +10,20 @@ import os
 # app module is imported so that app.db.session.engine is created with the test
 # URL and every module that imports AsyncSessionLocal gets a sessionmaker
 # bound to the test database.
-TEST_DATABASE_URL = "postgresql+asyncpg://nukelab:nukelab123@postgres:5432/nukelab_test"
-os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+TEST_DATABASE_USER = "nukelab"
+TEST_DATABASE_PASSWORD = "nukelab123"
+TEST_DATABASE_HOST = "postgres"
+TEST_DATABASE_PORT = "5432"
+TEST_DATABASE_NAME = "nukelab_test"
+TEST_DATABASE_URL = (
+    f"postgresql+asyncpg://{TEST_DATABASE_USER}:{TEST_DATABASE_PASSWORD}"
+    f"@{TEST_DATABASE_HOST}:{TEST_DATABASE_PORT}/{TEST_DATABASE_NAME}"
+)
+os.environ["DATABASE_USER"] = TEST_DATABASE_USER
+os.environ["DATABASE_PASSWORD"] = TEST_DATABASE_PASSWORD
+os.environ["DATABASE_HOST"] = TEST_DATABASE_HOST
+os.environ["DATABASE_PORT"] = TEST_DATABASE_PORT
+os.environ["DATABASE_NAME"] = TEST_DATABASE_NAME
 
 import asyncio
 import contextlib

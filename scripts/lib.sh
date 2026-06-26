@@ -183,15 +183,17 @@ detect_engine() {
 setup_podman_socket() {
     [ "$CONTAINER_ENGINE" != "podman" ] && return
 
-    # Expand literal ${XDG_RUNTIME_DIR} when it came from an env file that
-    # doesn't perform shell expansion. Without this, the path check fails and
-    # we fall through to auto-detection with a noisy warning.
-    if [ -n "${DOCKER_SOCKET:-}" ]; then
-        case "$DOCKER_SOCKET" in
-            '${XDG_RUNTIME_DIR}'/*)
-                DOCKER_SOCKET="${XDG_RUNTIME_DIR}${DOCKER_SOCKET#'\${XDG_RUNTIME_DIR}'}"
-                ;;
-        esac
+    # Env files do not perform shell expansion, so a value like
+    # ${XDG_RUNTIME_DIR}/podman/podman.sock is taken literally. Replace any
+    # literal reference with the actual variable value, and collapse the
+    # common copy-paste mistake /run/user/1000${XDG_RUNTIME_DIR}/... so the
+    # path becomes valid.
+    if [ -n "${DOCKER_SOCKET:-}" ] && [ -n "${XDG_RUNTIME_DIR:-}" ]; then
+        DOCKER_SOCKET="${DOCKER_SOCKET//\$\{XDG_RUNTIME_DIR\}/$XDG_RUNTIME_DIR}"
+        DOCKER_SOCKET="${DOCKER_SOCKET//\$XDG_RUNTIME_DIR/$XDG_RUNTIME_DIR}"
+        while [[ "$DOCKER_SOCKET" == *"$XDG_RUNTIME_DIR$XDG_RUNTIME_DIR"* ]]; do
+            DOCKER_SOCKET="${DOCKER_SOCKET/$XDG_RUNTIME_DIR$XDG_RUNTIME_DIR/$XDG_RUNTIME_DIR}"
+        done
     fi
 
     # If DOCKER_SOCKET is set but doesn't exist, override it
@@ -486,10 +488,10 @@ EOF
             info "Adding overlay $_pgbouncer_overlay"
         fi
 
-        # Warn if DATABASE_URL also points to PgBouncer (migrations should use direct Postgres)
-        if [[ "${DATABASE_URL:-}" =~ pgbouncer ]] || [[ "${DATABASE_URL:-}" =~ :6432 ]]; then
-            warn "DATABASE_URL also points to PgBouncer. Migrations should use direct Postgres."
-            info "Hint: Keep DATABASE_URL pointed at postgres:5432 for DDL/migrations"
+        # Warn if the database host/port point to PgBouncer (migrations should use direct Postgres)
+        if [[ "${DATABASE_HOST:-postgres}" == "pgbouncer" ]] || [[ "${DATABASE_PORT:-5432}" == "6432" ]]; then
+            warn "Database host/port point to PgBouncer. Migrations should use direct Postgres."
+            info "Hint: Keep DATABASE_HOST=postgres and DATABASE_PORT=5432 for DDL/migrations"
         fi
     fi
 
@@ -890,16 +892,11 @@ setup_cpu_lib_volume() {
     ok "Built and stored libnukelab_cpu.so in volume"
 }
 
-# Returns a direct Postgres URL by rewriting the host/port in DATABASE_URL to
-# postgres:5432. This is useful for migrations and other DDL operations that
-# must not go through PgBouncer.
+# Returns a direct Postgres URL built from the database component env vars.
+# This is useful for migrations and other DDL operations that must not go
+# through PgBouncer.
 _direct_database_url() {
-    local url="${DATABASE_URL:-}"
-    if [ -z "$url" ]; then
-        echo "postgresql+asyncpg://${DATABASE_USER:-nukelab}:${DATABASE_PASSWORD:-nukelab123}@postgres:5432/${DATABASE_NAME:-nukelab}"
-        return
-    fi
-    echo "$url" | sed -E 's|@([^/]+)|@postgres:5432|'
+    echo "postgresql+asyncpg://${DATABASE_USER:-nukelab}:${DATABASE_PASSWORD:-nukelab123}@${DATABASE_HOST:-postgres}:${DATABASE_PORT:-5432}/${DATABASE_NAME:-nukelab}"
 }
 
 wait_for_backend() {

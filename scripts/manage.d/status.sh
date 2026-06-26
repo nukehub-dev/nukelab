@@ -41,13 +41,13 @@ parse_status_args() {
 cmd_status() {
     step "Container Status"
 
+    # podman-compose does not support the --filter flag on `ps`, so use the
+    # container engine directly. Dev and prod share the same project prefix and
+    # are mutually exclusive, so filtering by name is sufficient.
     if $STATUS_RUNNING_ONLY; then
-        local project_name="${COMPOSE_PROJECT_NAME:-$(basename "$DIR")}"
-        $CONTAINER_ENGINE ps --filter "label=com.docker.compose.project=$project_name" --filter "status=running"
+        $CONTAINER_ENGINE ps --filter "name=^nukelab-" --filter "status=running"
     else
-        # Use --filter so `status` shows only the containers belonging to the
-        # active project (prod vs dev) instead of every Compose project.
-        $COMPOSE "${COMPOSE_ARGS[@]}" ps --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME:-$(basename "$DIR")}"
+        $CONTAINER_ENGINE ps --filter "name=^nukelab-"
     fi
 
     echo ""

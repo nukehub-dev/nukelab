@@ -112,7 +112,12 @@ class TestPgBouncerSettings:
     def test_pgbouncer_enabled_derives_default_url(self):
         settings = Settings(
             pgbouncer_enabled=True,
-            database_url="postgresql+asyncpg://nukelab:secret@postgres:5432/nukelab",
+            database_user="nukelab",
+            database_password="secret",
+            database_name="nukelab",
+        )
+        assert settings.database_url == (
+            "postgresql+asyncpg://nukelab:secret@postgres:5432/nukelab"
         )
         assert settings.database_pgbouncer_url == (
             "postgresql+asyncpg://nukelab:secret@pgbouncer:6432/nukelab"

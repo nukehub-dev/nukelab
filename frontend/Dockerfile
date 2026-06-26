@@ -3,6 +3,9 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
+# Build-time arg for the CDN base URL. Leave unset to serve assets from /.
+ARG VITE_CDN_URL
+
 # Copy package files
 COPY package*.json ./
 RUN npm ci

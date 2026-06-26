@@ -105,7 +105,14 @@ class Settings(BaseSettings):
     oauth_picture_claim: str = "picture"
     oauth_pkce_enabled: bool = True
 
-    database_url: str = "postgresql+asyncpg://nukelab:nukelab123@postgres:5432/nukelab"
+    # Database connection components
+    database_user: str = "nukelab"
+    database_password: str = "nukelab123"
+    database_name: str = "nukelab"
+    database_host: str = "postgres"
+    database_port: int = 5432
+    database_url: str = ""  # Optional override; derived from components if empty
+
     pgbouncer_enabled: bool = False
     database_pgbouncer_url: str = ""  # Optional override; default derived from database_url
     database_pool_size: int = 10
@@ -237,6 +244,16 @@ class Settings(BaseSettings):
                     "SESSION_SECRET is using a default/dev value. "
                     "Set a strong random secret before running in production."
                 )
+        return self
+
+    @model_validator(mode="after")
+    def set_database_url(self) -> "Settings":
+        """Derive DATABASE_URL from components when no override is provided."""
+        if not self.database_url:
+            self.database_url = (
+                f"postgresql+asyncpg://{self.database_user}:{self.database_password}"
+                f"@{self.database_host}:{self.database_port}/{self.database_name}"
+            )
         return self
 
     @model_validator(mode="after")

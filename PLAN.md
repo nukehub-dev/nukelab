@@ -82,8 +82,8 @@ NukeLab v2.0 is a ground-up rebuild of the multi-user scientific computing platf
 │                     Traefik v3 (Reverse Proxy)                   │
 │                                                                  │
 │  ┌────────────┐  ┌────────────┐  ┌──────────────────────────┐   │
-│  │ /app/*     │  │ /api/*     │  │ /user/{username}/*       │   │
-  │  │ → Vite SPA  │  │ → FastAPI  │  │ → NukeIDE Container      │   │
+│  │ /*         │  │ /api/*     │  │ /user/{username}/*       │   │
+│  │ → Vite SPA │  │ → FastAPI  │  │ → NukeIDE Container      │   │
 │  │   Frontend │  │   Backend  │  │   (Nginx + Theia)        │   │
 │  └────────────┘  └────────────┘  └──────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
@@ -2061,7 +2061,11 @@ services:
   backend:
     build: ./backend
     environment:
-      - DATABASE_URL=postgresql+asyncpg://nukelab:password@postgres:5432/nukelab
+      - DATABASE_USER=nukelab
+      - DATABASE_PASSWORD=password
+      - DATABASE_NAME=nukelab
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
       - REDIS_URL=redis://redis:6379/0
       - AUTH_MODE=local
       - JWT_SECRET=${JWT_SECRET}
@@ -2098,7 +2102,11 @@ services:
     build: ./backend
     command: celery -A app.workers worker --loglevel=info
     environment:
-      - DATABASE_URL=postgresql+asyncpg://nukelab:password@postgres:5432/nukelab
+      - DATABASE_USER=nukelab
+      - DATABASE_PASSWORD=password
+      - DATABASE_NAME=nukelab
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
       - REDIS_URL=redis://redis:6379/0
     depends_on:
       - redis
@@ -2111,7 +2119,11 @@ services:
     build: ./backend
     command: celery -A app.workers beat --loglevel=info
     environment:
-      - DATABASE_URL=postgresql+asyncpg://nukelab:password@postgres:5432/nukelab
+      - DATABASE_USER=nukelab
+      - DATABASE_PASSWORD=password
+      - DATABASE_NAME=nukelab
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
       - REDIS_URL=redis://redis:6379/0
     depends_on:
       - redis
@@ -2281,7 +2293,13 @@ APP_DEBUG=true
 APP_URL=https://nukelab.org
 
 # Database
-DATABASE_URL=postgresql+asyncpg://user:pass@host:5432/db
+DATABASE_USER=user
+DATABASE_PASSWORD=pass
+DATABASE_NAME=db
+DATABASE_HOST=host
+DATABASE_PORT=5432
+# Optional override; when empty the backend builds DATABASE_URL from the components above
+# DATABASE_URL=postgresql+asyncpg://user:pass@host:5432/db
 DATABASE_POOL_SIZE=20
 
 # Redis

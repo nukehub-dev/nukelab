@@ -190,7 +190,7 @@ PostgreSQL streaming replication is **asynchronous** by default. This means:
 
 If primary fails:
 1. Promote replica: `pg_ctl promote`
-2. Update application `DATABASE_URL` to point to replica
+2. Update `DATABASE_HOST`/`DATABASE_PORT` (or set `DATABASE_URL`) to point to replica
 3. Rebuild new primary from promoted replica
 
 **Better:** Use Patroni or repmgr for automated failover.

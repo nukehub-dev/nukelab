@@ -126,7 +126,13 @@ services:
             - DEV_MODE=${DEV_MODE:-true}
             - DEV_ADMIN_USER=${DEV_ADMIN_USER:-admin}
             - DEV_ADMIN_PASSWORD=${DEV_ADMIN_PASSWORD:-admin123}
-            - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://nukelab:nukelab123@postgres:5432/nukelab}
+            - DATABASE_USER=${DATABASE_USER:-nukelab}
+            - DATABASE_PASSWORD=${DATABASE_PASSWORD:-nukelab123}
+            - DATABASE_NAME=${DATABASE_NAME:-nukelab}
+            - DATABASE_HOST=${DATABASE_HOST:-postgres}
+            - DATABASE_PORT=${DATABASE_PORT:-5432}
+            # DATABASE_URL is optional; when empty the backend builds the URL from the components above.
+            - DATABASE_URL=${DATABASE_URL:-}
             - PGBOUNCER_ENABLED=${PGBOUNCER_ENABLED:-false}
             - DATABASE_PGBOUNCER_URL=${DATABASE_PGBOUNCER_URL:-}
             - DATABASE_POOL_SIZE=${DATABASE_POOL_SIZE:-10}
@@ -227,7 +233,11 @@ services:
         env_file:
             - .env.development
         environment:
-            - DATABASE_URL=postgresql+asyncpg://${DATABASE_USER:-nukelab}:${DATABASE_PASSWORD:-nukelab123}@postgres:5432/${DATABASE_NAME:-nukelab}_test
+            - DATABASE_USER=${DATABASE_USER:-nukelab}
+            - DATABASE_PASSWORD=${DATABASE_PASSWORD:-nukelab123}
+            - DATABASE_NAME=${DATABASE_NAME:-nukelab}_test
+            - DATABASE_HOST=${DATABASE_HOST:-postgres}
+            - DATABASE_PORT=${DATABASE_PORT:-5432}
             - REDIS_URL=redis://redis:6379/1
             - RATE_LIMIT_ENABLED=false
             - OTEL_TRACES_ENABLED=false
@@ -261,6 +271,8 @@ services:
         build:
             context: ./frontend
             dockerfile: Dockerfile
+            args:
+                - VITE_CDN_URL=${VITE_CDN_URL:-}
         container_name: nukelab-frontend
         environment:
             - VITE_API_URL=${VITE_API_URL:-/api}
@@ -304,7 +316,12 @@ services:
         container_name: nukelab-celery-worker
         command: celery -A app.worker worker --loglevel=info -P threads -c 4
         environment:
-            - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://nukelab:nukelab123@postgres:5432/nukelab}
+            - DATABASE_USER=${DATABASE_USER:-nukelab}
+            - DATABASE_PASSWORD=${DATABASE_PASSWORD:-nukelab123}
+            - DATABASE_NAME=${DATABASE_NAME:-nukelab}
+            - DATABASE_HOST=${DATABASE_HOST:-postgres}
+            - DATABASE_PORT=${DATABASE_PORT:-5432}
+            - DATABASE_URL=${DATABASE_URL:-}
             - PGBOUNCER_ENABLED=${PGBOUNCER_ENABLED:-false}
             - DATABASE_PGBOUNCER_URL=${DATABASE_PGBOUNCER_URL:-}
             - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
@@ -346,7 +363,12 @@ services:
         container_name: nukelab-celery-beat
         command: celery -A app.worker beat --loglevel=info --schedule /tmp/celerybeat-schedule
         environment:
-            - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://nukelab:nukelab123@postgres:5432/nukelab}
+            - DATABASE_USER=${DATABASE_USER:-nukelab}
+            - DATABASE_PASSWORD=${DATABASE_PASSWORD:-nukelab123}
+            - DATABASE_NAME=${DATABASE_NAME:-nukelab}
+            - DATABASE_HOST=${DATABASE_HOST:-postgres}
+            - DATABASE_PORT=${DATABASE_PORT:-5432}
+            - DATABASE_URL=${DATABASE_URL:-}
             - PGBOUNCER_ENABLED=${PGBOUNCER_ENABLED:-false}
             - DATABASE_PGBOUNCER_URL=${DATABASE_PGBOUNCER_URL:-}
             - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}

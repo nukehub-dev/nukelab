@@ -53,6 +53,26 @@ cmd_dev() {
     # DEV_SUBCMD and EXTRA_ARGS are ready to use.
     USE_DEV_MODE=true
 
+    # Dev subcommands support an optional target (backend|frontend|all) in
+    # EXTRA_ARGS. Extract it so the underlying start/stop/restart command sees
+    # the correct TARGET instead of the default "all".
+    local _remaining_args=()
+    for arg in "${EXTRA_ARGS[@]}"; do
+        case "$arg" in
+            backend|frontend|all)
+                if [ -z "$TARGET" ] || [ "$TARGET" = "all" ]; then
+                    TARGET="$arg"
+                else
+                    _remaining_args+=("$arg")
+                fi
+                ;;
+            *)
+                _remaining_args+=("$arg")
+                ;;
+        esac
+    done
+    EXTRA_ARGS=("${_remaining_args[@]}")
+
     case "$DEV_SUBCMD" in
         start)
             _acquire_lock

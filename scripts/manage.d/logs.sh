@@ -1,6 +1,7 @@
 # Default values for logs options.
 LOGS_TAIL=""
 LOGS_FOLLOW=true
+LOGS_FOLLOW_EXPLICIT=false
 
 help_logs() {
     cat <<-EOF
@@ -10,6 +11,7 @@ Stream container logs.
 
 ${BOLD}Options:${RESET}
   --tail N, -n N    Show last N lines per service
+  --follow, -f      Stream new log lines (default when --tail is omitted)
   --no-follow       Do not stream new log lines (just print and exit)
   --help, -h        Show this help
 
@@ -33,8 +35,14 @@ parse_logs_args() {
                 _tail_set=true
                 EXTRA_ARGS=("${EXTRA_ARGS[@]:2}")
                 ;;
+            --follow|-f)
+                LOGS_FOLLOW=true
+                LOGS_FOLLOW_EXPLICIT=true
+                EXTRA_ARGS=("${EXTRA_ARGS[@]:1}")
+                ;;
             --no-follow)
                 LOGS_FOLLOW=false
+                LOGS_FOLLOW_EXPLICIT=true
                 EXTRA_ARGS=("${EXTRA_ARGS[@]:1}")
                 ;;
             --help|-h)
@@ -58,6 +66,13 @@ parse_logs_args() {
 
     if $_tail_set && ! [[ "$LOGS_TAIL" =~ ^[0-9]+$ ]]; then
         die "--tail requires a non-negative integer, got: $LOGS_TAIL"
+    fi
+
+    # When --tail is used without an explicit follow decision, just print the
+    # last N lines and exit. This avoids hanging when the user only wants a
+    # quick look at recent logs.
+    if $_tail_set && ! $LOGS_FOLLOW_EXPLICIT; then
+        LOGS_FOLLOW=false
     fi
 }
 

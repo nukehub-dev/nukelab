@@ -144,8 +144,9 @@ Set `PGBOUNCER_ENABLED=true` in your `.env`. `nukelabctl` auto-detects it and
 injects the overlay — no need to set `COMPOSE_OVERLAYS`.
 
 ```bash
-# 1. Keep DATABASE_URL on direct Postgres (used for migrations)
-DATABASE_URL=postgresql+asyncpg://nukelab:strong-password@postgres:5432/nukelab
+# 1. Keep database host/port on direct Postgres (used for migrations)
+DATABASE_HOST=postgres
+DATABASE_PORT=5432
 
 # 2. Enable PgBouncer (DATABASE_PGBOUNCER_URL is optional; a default is used)
 PGBOUNCER_ENABLED=true
@@ -178,7 +179,7 @@ This avoids **double-pooling**, which causes connection storms and starvation at
 
 ### 4.4 Operational Notes
 
-**Migrations use `DATABASE_URL` directly.** Because `DATABASE_URL` stays pointed at Postgres, Alembic migrations automatically bypass PgBouncer — no manual URL swapping needed. DDL and long-running migrations should never go through PgBouncer because transaction pooling interferes with session-level features required by schema changes.
+**Migrations use direct Postgres.** Because `DATABASE_HOST`/`DATABASE_PORT` stay pointed at Postgres, Alembic migrations automatically bypass PgBouncer — no manual URL swapping needed. DDL and long-running migrations should never go through PgBouncer because transaction pooling interferes with session-level features required by schema changes.
 
 **Monitoring PgBouncer.** Connect to the admin console:
 

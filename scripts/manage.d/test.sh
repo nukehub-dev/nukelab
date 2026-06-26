@@ -35,7 +35,11 @@ cmd_test() {
         $COMPOSE --profile test "${COMPOSE_ARGS[@]}" run --rm \
             -v "${DIR}/backend:/app:Z" \
             -v "${DIR}/resources:/app/resources:ro" \
-            -e "DATABASE_URL=postgresql+asyncpg://${DATABASE_USER:-nukelab}:${DATABASE_PASSWORD:-nukelab123}@postgres:5432/${DATABASE_NAME:-nukelab}_test" \
+            -e "DATABASE_USER=${DATABASE_USER:-nukelab}" \
+            -e "DATABASE_PASSWORD=${DATABASE_PASSWORD:-nukelab123}" \
+            -e "DATABASE_NAME=${DATABASE_NAME:-nukelab}_test" \
+            -e "DATABASE_HOST=${DATABASE_HOST:-postgres}" \
+            -e "DATABASE_PORT=${DATABASE_PORT:-5432}" \
             -e "REDIS_URL=redis://redis:6379/1" \
             -e "RATE_LIMIT_ENABLED=false" \
             -e "OTEL_TRACES_ENABLED=false" \
