@@ -1655,7 +1655,7 @@ Then the server stops and the bulk API returns success
   - [x] Database connection pooling — `pool_size`, `max_overflow`, `pool_timeout`, `pool_recycle`, `pool_pre_ping` wired into `create_async_engine`; asyncpg `command_timeout` for query abort
   - [x] Redis response caching — msgpack serialization, circuit breaker, stampede protection, SET-based invalidation; server list + admin list endpoints; 30s TTL with proactive invalidation
   - [x] Database query optimization — `db_profiler.py`, `tune_autovacuum.py`, `app/services/query_stats.py`, slow-query SQLAlchemy event listener, and model indexes
-  - [ ] CDN for static assets
+  - [x] CDN for static assets — `VITE_CDN_URL` build-time support in Vite + Dockerfile + compose; container still serves `index.html` for client-side routing
   - [x] PgBouncer setup — transaction mode, auto-overlay, 20k client conn
 
 - [ ] **Observability**
@@ -2386,8 +2386,7 @@ DEFAULT_MAX_SERVERS=3
 **Next Steps**: Phases 1–5, 7, and 8 are complete. Platform is production-hardened with PgBouncer, load testing infrastructure, structured logging, metrics, graceful shutdown, rate limiting, CSRF, security headers, IP restrictions, request size limits, database connection pooling, Redis response caching, Prometheus + Grafana, Sentry, database profiling tooling, OWASP Top 10 audit, and dependency scanning. Recommended next work:
 
 1. **Environment image build pipeline** — automated builds, registry integration, image versioning, and base-image updates
-2. **CDN for static assets** — quick production performance win for the Vite SPA
-3. **Blue-green deployment** — extend CI/CD with a zero-downtime deploy strategy to a live server
-4. **Secret management** — HashiCorp Vault or Sealed Secrets integration
-5. **Penetration testing** — third-party penetration test before public production launch
-6. **Phase 6 Kubernetes items** remain future goals for multi-node scaling — only pursue after you've saturated a single large server (32+ cores, 128GB+ RAM) and proven you need distribution
+2. **Blue-green deployment** — extend CI/CD with a zero-downtime deploy strategy to a live server
+3. **Secret management** — HashiCorp Vault or Sealed Secrets integration
+4. **Penetration testing** — third-party penetration test before public production launch
+5. **Phase 6 Kubernetes items** remain future goals for multi-node scaling — only pursue after you've saturated a single large server (32+ cores, 128GB+ RAM) and proven you need distribution

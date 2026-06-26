@@ -106,7 +106,7 @@ This document records the OWASP Top 10 audit performed against the NukeLab platf
 | Permissions-Policy / CORP headers | ✅ Implemented | Security headers middleware |
 
 **Residual Gaps / Notes:**
-- CDN for static assets not yet configured (tracked separately).
+- None. CDN support is configurable via `VITE_CDN_URL`; actual CDN origin provisioning is an external deployment step.
 
 **Risk Rating:** Low
 
