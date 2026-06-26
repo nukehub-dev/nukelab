@@ -30,6 +30,10 @@ cmd_test() {
         # Run tests in the dedicated backend-test container. Dev/test
         # dependencies are baked into the image (Dockerfile target=test),
         # so no runtime pip install is required.
+        #
+        # DATABASE_URL is intentionally cleared so the backend derives the URL
+        # from the component env vars. An old DATABASE_URL in .env.development
+        # would otherwise take precedence and route tests to the wrong database.
         local _test_run_cmd="python -m pytest ${pytest_args}"
         local _test_exit=0
         $COMPOSE --profile test "${COMPOSE_ARGS[@]}" run --rm \
@@ -40,6 +44,7 @@ cmd_test() {
             -e "DATABASE_NAME=${DATABASE_NAME:-nukelab}_test" \
             -e "DATABASE_HOST=${DATABASE_HOST:-postgres}" \
             -e "DATABASE_PORT=${DATABASE_PORT:-5432}" \
+            -e "DATABASE_URL=" \
             -e "REDIS_URL=redis://redis:6379/1" \
             -e "RATE_LIMIT_ENABLED=false" \
             -e "OTEL_TRACES_ENABLED=false" \

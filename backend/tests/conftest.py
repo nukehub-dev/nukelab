@@ -24,6 +24,8 @@ os.environ["DATABASE_PASSWORD"] = TEST_DATABASE_PASSWORD
 os.environ["DATABASE_HOST"] = TEST_DATABASE_HOST
 os.environ["DATABASE_PORT"] = TEST_DATABASE_PORT
 os.environ["DATABASE_NAME"] = TEST_DATABASE_NAME
+# Make sure an inherited DATABASE_URL does not override the component vars above.
+os.environ["DATABASE_URL"] = ""
 
 import asyncio
 import contextlib
@@ -55,7 +57,7 @@ test_engine = create_async_engine(
 )
 
 
-@pytest_asyncio.fixture(scope="session", autouse=True)
+@pytest_asyncio.fixture(scope="session", autouse=True, loop_scope="session")
 async def setup_test_database():
     """Create test database and tables before all tests, drop after."""
     admin_engine = create_async_engine(

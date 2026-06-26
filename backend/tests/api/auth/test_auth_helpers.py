@@ -36,7 +36,11 @@ class TestAuthMethods:
     @pytest.mark.asyncio
     async def test_get_auth_methods_oauth_mode(self, client):
         with mock.patch("app.api.auth.settings.auth_mode", "oauth"):
-            with mock.patch("app.api.auth.settings.oauth_client_id", "client123"):
+            with mock.patch(
+                "app.services.oauth_service.OAuthService.is_configured",
+                new_callable=mock.PropertyMock,
+                return_value=True,
+            ):
                 response = await client.get("/api/auth/methods")
                 assert response.status_code == 200
                 data = response.json()
@@ -46,7 +50,11 @@ class TestAuthMethods:
     @pytest.mark.asyncio
     async def test_get_auth_methods_both_mode(self, client):
         with mock.patch("app.api.auth.settings.auth_mode", "both"):
-            with mock.patch("app.api.auth.settings.oauth_client_id", "client123"):
+            with mock.patch(
+                "app.services.oauth_service.OAuthService.is_configured",
+                new_callable=mock.PropertyMock,
+                return_value=True,
+            ):
                 response = await client.get("/api/auth/methods")
                 assert response.status_code == 200
                 data = response.json()
