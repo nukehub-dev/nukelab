@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core import token_signing
 from app.core.permissions import Permission
 from app.core.prometheus_metrics import set_active_websocket_connections
 from app.core.roles import get_role_permissions
@@ -116,7 +117,7 @@ async def validate_token(token: str) -> User | None:
     if not token:
         return None
     try:
-        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+        payload = token_signing.decode_access_token(token)
         username: str = payload.get("sub")
         if not username:
             return None

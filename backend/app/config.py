@@ -17,8 +17,10 @@ class Settings(BaseSettings):
     maintenance_mode: bool = False
     maintenance_message: str = "System under maintenance"
 
+    # Legacy shared secret: now used only by app.core.token_encryption for
+    # encrypting OAuth refresh tokens. User access tokens are signed with
+    # asymmetric EdDSA keys (see user_auth_* below).
     jwt_secret: str = "change-me"
-    jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 15
     jwt_refresh_expire_days: int = 7
 
@@ -211,6 +213,14 @@ class Settings(BaseSettings):
     server_auth_max_tokens_per_minute: int = 10
     server_auth_audit_log: bool = True
 
+    # User Auth - Asymmetric key signing for API access tokens
+    user_auth_key_algorithm: str = "EdDSA"  # Ed25519 via cryptography
+    user_auth_secrets_dir: str = "/run/secrets"
+    user_auth_private_key_path: str = ""
+    user_auth_public_key_path: str = ""
+    user_auth_issuer: str = "NukeLab"
+    user_auth_audience: str = "nukelab-api"
+
     @model_validator(mode="after")
     def set_key_paths(self) -> "Settings":
         """Derive key paths from secrets_dir if not explicitly set."""
@@ -221,6 +231,14 @@ class Settings(BaseSettings):
         if not self.server_auth_public_key_path:
             self.server_auth_public_key_path = os.path.join(
                 self.server_auth_secrets_dir, "server-auth-public.pem"
+            )
+        if not self.user_auth_private_key_path:
+            self.user_auth_private_key_path = os.path.join(
+                self.user_auth_secrets_dir, "user-auth-private.pem"
+            )
+        if not self.user_auth_public_key_path:
+            self.user_auth_public_key_path = os.path.join(
+                self.user_auth_secrets_dir, "user-auth-public.pem"
             )
         return self
 

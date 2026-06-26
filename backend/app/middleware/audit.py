@@ -11,7 +11,7 @@ from sqlalchemy import select
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
-from app.config import settings
+from app.core import token_signing
 from app.core.context import correlation_id
 from app.core.logging import get_logger
 from app.db.session import AsyncSessionLocal
@@ -128,7 +128,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
             return None
         token = auth_header[7:]
         try:
-            payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+            payload = token_signing.decode_access_token(token)
             username = payload.get("sub")
             if not username:
                 return None

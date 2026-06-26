@@ -174,25 +174,22 @@ class TestAuthPasswordUtils:
 
 class TestCreateAccessToken:
     def test_create_access_token(self):
-        import jwt
-
         from app.api.auth import create_access_token
-        from app.config import settings
+        from app.core import token_signing
 
         token = create_access_token(data={"sub": "testuser"})
-        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+        payload = token_signing.decode_access_token(token)
         assert payload["sub"] == "testuser"
         assert "exp" in payload
+        assert payload["kid"] == token_signing.user_auth_key_manager.get_key_id()
 
     def test_create_access_token_custom_expiry(self):
-        import jwt
-
         from app.api.auth import create_access_token
-        from app.config import settings
+        from app.core import token_signing
 
         future = timedelta(minutes=60)
         token = create_access_token(data={"sub": "testuser"}, expires_delta=future)
-        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+        payload = token_signing.decode_access_token(token)
         assert payload["sub"] == "testuser"
 
 

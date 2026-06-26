@@ -156,21 +156,16 @@ class TestRateLimitMiddleware:
     @pytest.mark.asyncio
     async def test_expired_jwt_does_not_exhaust_quota(self, client, test_user, mock_redis):
         """Expired tokens should not consume the real user's rate limit budget."""
-        from datetime import UTC, datetime, timedelta
+        from datetime import timedelta
 
-        import jwt
+        from app.core import token_signing
 
         settings.rate_limit_enabled = True
 
         # Create an expired token
-        expired_token = jwt.encode(
-            {
-                "sub": test_user.username,
-                "role": test_user.role,
-                "exp": datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1),
-            },
-            settings.jwt_secret,
-            algorithm=settings.jwt_algorithm,
+        expired_token = token_signing.create_access_token(
+            data={"sub": test_user.username, "role": test_user.role},
+            expires_delta=timedelta(hours=-1),
         )
 
         with patch.object(RateLimitMiddleware, "_get_redis", return_value=mock_redis):

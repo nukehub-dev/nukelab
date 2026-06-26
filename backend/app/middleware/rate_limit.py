@@ -34,6 +34,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
 from app.config import settings
+from app.core import token_signing
 from app.core.roles import get_role_rate_limit
 
 logger = logging.getLogger(__name__)
@@ -106,11 +107,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     def _decode_jwt(self, token: str) -> dict | None:
         try:
-            return jwt.decode(
-                token,
-                settings.jwt_secret,
-                algorithms=[settings.jwt_algorithm],
-            )
+            return token_signing.decode_access_token(token)
         except jwt.ExpiredSignatureError:
             return None
         except jwt.InvalidTokenError:

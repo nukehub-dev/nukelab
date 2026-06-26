@@ -8,6 +8,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
 from app.config import settings
+from app.core import token_signing
 from app.core.permissions import Permission
 from app.core.roles import get_role_permissions
 
@@ -119,7 +120,7 @@ class MaintenanceMiddleware(BaseHTTPMiddleware):
             return False
 
         try:
-            payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+            payload = token_signing.decode_access_token(token)
             role = payload.get("role")
             if not role:
                 return False

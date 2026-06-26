@@ -24,6 +24,7 @@ import jwt
 from fastapi import HTTPException, Request, status
 
 from app.config import settings
+from app.core import token_signing
 from app.core.roles import get_role_rate_limit
 
 logger = logging.getLogger(__name__)
@@ -68,7 +69,7 @@ def _get_redis_client():
 
 def _extract_jwt_sub(token: str) -> str | None:
     try:
-        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+        payload = token_signing.decode_access_token(token)
         return payload.get("sub")
     except jwt.ExpiredSignatureError:
         return None
@@ -92,9 +93,7 @@ def _get_user_key_and_role(request: Request) -> tuple[str, str | None]:
         sub = _extract_jwt_sub(token)
         if sub:
             try:
-                payload = jwt.decode(
-                    token, settings.jwt_secret, algorithms=[settings.jwt_algorithm]
-                )
+                payload = token_signing.decode_access_token(token)
                 role = payload.get("role", "user")
                 return (sub, role)
             except jwt.InvalidTokenError:

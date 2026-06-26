@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.security import (
     HTTPBearer,
     OAuth2PasswordRequestForm,
@@ -23,6 +23,7 @@ from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.container.spawner import spawner
+from app.core import token_signing
 from app.core.permissions import Permission
 from app.core.security import get_user_permissions, has_permission
 from app.core.sentry import set_sentry_tag, set_sentry_user
@@ -109,12 +110,8 @@ def get_password_hash(password: str) -> str:
 
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
-    to_encode = data.copy()
-    expire = datetime.now(UTC).replace(tzinfo=None) + (
-        expires_delta or timedelta(minutes=settings.jwt_expire_minutes)
-    )
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    """Create an asymmetric EdDSA-signed access token."""
+    return token_signing.create_access_token(data, expires_delta)
 
 
 # Hard cap on active refresh tokens per user to prevent unbounded growth
@@ -300,7 +297,7 @@ async def get_auth_context(
 
     # Try JWT first
     try:
-        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+        payload = token_signing.decode_access_token(token)
         username: str = payload.get("sub")
         if username:
             result = await db.execute(select(User).where(User.username == username))
@@ -711,7 +708,7 @@ async def verify_auth(request: Request, db: AsyncSession = Depends(get_db)):
 
     # Try JWT
     try:
-        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+        payload = token_signing.decode_access_token(token)
         username: str = payload.get("sub")
         if username:
             result = await db.execute(select(User).where(User.username == username))
@@ -749,7 +746,7 @@ async def verify_auth(request: Request, db: AsyncSession = Depends(get_db)):
 async def _resolve_user_from_token(token: str, db: AsyncSession) -> User | None:
     """Resolve a User from a JWT access token or active API token hash."""
     try:
-        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+        payload = token_signing.decode_access_token(token)
         username: str = payload.get("sub")
         if username:
             result = await db.execute(select(User).where(User.username == username))
@@ -921,6 +918,25 @@ async def get_auth_methods():
         "oauth_provider_name": settings.oauth_provider_name or None,
         "oauth_profile_url": settings.oauth_profile_url or None,
     }
+
+
+@router.get("/jwks.json")
+async def get_jwks():
+    """Return the JSON Web Key Set for verifying user access tokens."""
+    return JSONResponse(
+        content=token_signing.user_auth_key_manager.get_jwks(),
+        headers={"Cache-Control": "public, max-age=300"},
+    )
+
+
+@router.get("/public-key.pem")
+async def get_public_key_pem():
+    """Return the current public key in PEM format."""
+    return PlainTextResponse(
+        content=token_signing.user_auth_key_manager.get_public_key_pem(),
+        media_type="application/x-pem-file",
+        headers={"Cache-Control": "public, max-age=300"},
+    )
 
 
 @router.get("/oauth/login")
