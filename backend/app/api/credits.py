@@ -80,6 +80,39 @@ async def get_my_credit_history(
 
 
 # ========== Admin Credit Management ==========
+class UserDailyAllowanceRequest(BaseModel):
+    amount: int = Field(..., ge=0, description="Daily allowance amount")
+
+
+@router.put("/users/{user_id}/daily-allowance")
+async def update_user_daily_allowance(
+    user_id: str,
+    request: UserDailyAllowanceRequest,
+    current_user: User = Depends(require_permissions(Permission.CREDITS_GRANT)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update a user's daily credit allowance"""
+    from app.services.activity_service import ActivityService
+    from app.services.user_service import UserService
+
+    service = UserService(db)
+    user = await service.update_user(
+        user_id=user_id,
+        data={"daily_allowance": request.amount},
+        updated_by=current_user,
+    )
+
+    activity_service = ActivityService(db)
+    await activity_service.log(
+        action="credits.update_user_daily_allowance",
+        target_type="user",
+        target_id=user_id,
+        actor_id=str(current_user.id),
+        details={"amount": request.amount},
+    )
+
+    return {"message": f"Updated daily allowance to {request.amount}", "user": user.to_dict()}
 
 
 @router.get("/users/{user_id}")

@@ -84,7 +84,7 @@ class TestSettingServiceLoadIntoConfig:
     async def test_load_daily_allowance(self, db_session):
         """Should load credits_daily_allowance into global settings."""
         original = settings.credits_daily_allowance
-        db_session.add(SystemSetting(key="daily_allowance_default", value="500"))
+        db_session.add(SystemSetting(key="credits_daily_allowance", value="500"))
         await db_session.commit()
 
         service = SettingService(db_session)
@@ -95,9 +95,9 @@ class TestSettingServiceLoadIntoConfig:
 
     @pytest.mark.asyncio
     async def test_load_invalid_daily_allowance_ignored(self, db_session):
-        """Should ignore invalid daily_allowance_default values."""
+        """Should ignore invalid credits_daily_allowance values."""
         original = settings.credits_daily_allowance
-        db_session.add(SystemSetting(key="daily_allowance_default", value="invalid"))
+        db_session.add(SystemSetting(key="credits_daily_allowance", value="invalid"))
         await db_session.commit()
 
         service = SettingService(db_session)

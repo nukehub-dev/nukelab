@@ -27,6 +27,17 @@ class TestCreditsAdmin:
     """Admin credit management tests."""
 
     @pytest.mark.asyncio
+    async def test_update_user_daily_allowance(self, client, admin_token, test_user):
+        """Admin should update a user's daily allowance."""
+        response = await client.put(
+            f"/api/credits/users/{test_user.id}/daily-allowance",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"amount": 2000},
+        )
+        assert response.status_code == 200
+        assert response.json()["user"]["daily_allowance"] == 2000
+
+    @pytest.mark.asyncio
     async def test_grant_credits_to_user(self, client, admin_token, test_user):
         """Admin should grant credits to a user."""
         response = await client.post(
@@ -34,7 +45,6 @@ class TestCreditsAdmin:
             headers={"Authorization": f"Bearer {admin_token}"},
             json={"amount": 100, "reason": "Bonus"},
         )
-
         assert response.status_code == 200
 
     @pytest.mark.asyncio

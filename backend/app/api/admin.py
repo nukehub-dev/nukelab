@@ -6,7 +6,7 @@ Provides statistics, user management, server management, and activity logs.
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import and_, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -448,6 +448,46 @@ async def bulk_server_action(
 
 
 # ========== Credit Management (Admin) ==========
+class UpdateSystemDailyAllowanceRequest(BaseModel):
+    amount: int = Field(..., ge=0, description="System-wide default daily allowance")
+
+
+@router.get("/credits/default-allowance")
+async def get_system_daily_allowance(
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get the system-wide default daily allowance"""
+    from app.services.setting_service import SettingService
+
+    service = SettingService(db)
+    return {"default_daily_allowance": await service.get_daily_allowance()}
+
+
+@router.put("/credits/default-allowance")
+async def update_system_daily_allowance(
+    request: UpdateSystemDailyAllowanceRequest,
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update the system-wide default daily allowance"""
+    from app.services.activity_service import ActivityService
+    from app.services.setting_service import SettingService
+
+    service = SettingService(db)
+    await service.set_daily_allowance(request.amount)
+
+    activity_service = ActivityService(db)
+    await activity_service.log(
+        action="credits.update_system_daily_allowance",
+        target_type="system",
+        actor_id=str(current_user.id),
+        details={"amount": request.amount},
+    )
+
+    return {"message": f"System default daily allowance updated to {request.amount}"}
 
 
 @router.get("/credits/summary")

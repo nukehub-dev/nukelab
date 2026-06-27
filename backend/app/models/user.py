@@ -132,6 +132,7 @@ class User(Base):
             "avatar_url": self.get_avatar_url(),
             "role": self.role,
             "nuke_balance": self.nuke_balance,
+            "daily_allowance": self.daily_allowance,
             "profile": self.profile or {},
             "preferences": self.preferences or {},
             "profile_visibility": self.profile_visibility or "private",

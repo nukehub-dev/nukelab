@@ -221,6 +221,20 @@ class UserService:
                     )
                 user.nuke_balance = data["nuke_balance"]
 
+        if "daily_allowance" in data and data["daily_allowance"] is not None:
+            if updated_by is None:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="An actor is required to update daily allowance",
+                )
+            if user.daily_allowance != data["daily_allowance"]:
+                if not has_permission(updated_by, Permission.CREDITS_GRANT):
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Insufficient permissions to update daily allowance",
+                    )
+                user.daily_allowance = data["daily_allowance"]
+
         for field in allowed_fields:
             if field in data:
                 setattr(user, field, data[field])

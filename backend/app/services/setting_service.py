@@ -50,11 +50,11 @@ class SettingService:
             elif row.key == "maintenance_message":
                 settings.maintenance_message = row.value
                 logger.info("Loaded maintenance_message from DB")
-            elif row.key == "daily_allowance_default":
+            elif row.key in ("credits_daily_allowance", "daily_allowance_default"):
                 try:
-                    settings.daily_allowance_default = int(row.value)
+                    settings.credits_daily_allowance = int(row.value)
                 except ValueError:
-                    logger.warning(f"Invalid daily_allowance_default value: {row.value}")
+                    logger.warning(f"Invalid credits_daily_allowance value: {row.value}")
 
     async def save_maintenance(self, enabled: bool, message: str | None = None) -> None:
         """Persist maintenance mode settings to the database and update global config."""
@@ -65,6 +65,27 @@ class SettingService:
         settings.maintenance_mode = enabled
         if message is not None:
             settings.maintenance_message = message
+
+    async def get_daily_allowance(self) -> int:
+        """Return the system-wide default daily allowance.
+
+        Always reads from the database (with a fallback to the in-process
+        config default) so values written by other worker processes are
+        observed without requiring a restart.
+        """
+        for key in ("credits_daily_allowance", "daily_allowance_default"):
+            value = await self.get(key)
+            if value is not None:
+                try:
+                    return int(value)
+                except ValueError:
+                    logger.warning(f"Invalid {key} value: {value}")
+        return settings.credits_daily_allowance
+
+    async def set_daily_allowance(self, amount: int) -> None:
+        """Persist the system-wide default daily allowance and refresh config."""
+        await self.set("credits_daily_allowance", str(amount))
+        settings.credits_daily_allowance = amount
 
     async def get_maintenance(self) -> dict:
         """Get current maintenance mode settings (from DB or fallback to config)."""

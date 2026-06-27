@@ -232,6 +232,15 @@ class TestUserServiceUpdate:
         )
         assert updated.nuke_balance == 9999
 
+    @pytest.mark.asyncio
+    async def test_update_user_daily_allowance_by_admin(self, db_session, test_user, admin_user):
+        """Admin should be able to update daily allowance."""
+        service = UserService(db_session)
+        updated = await service.update_user(
+            str(test_user.id), {"daily_allowance": 2000}, updated_by=admin_user
+        )
+        assert updated.daily_allowance == 2000
+
 
 class TestUserServiceDelete:
     """Tests for delete_user."""
