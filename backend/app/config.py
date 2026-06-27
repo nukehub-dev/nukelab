@@ -1,7 +1,8 @@
 import os
+from typing import Any
 from urllib.parse import urlparse, urlunparse
 
-from pydantic import model_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -223,6 +224,14 @@ class Settings(BaseSettings):
     user_auth_leeway_seconds: int = 5
     user_auth_denylist_fail_closed: bool = True
     user_auth_key_rotation_grace_seconds: int | None = None
+
+    @field_validator("user_auth_key_rotation_grace_seconds", mode="before")
+    @classmethod
+    def _empty_rotation_grace_to_none(cls, value: Any) -> Any:
+        """Treat an empty env value as "use the default"."""
+        if value == "" or value is None:
+            return None
+        return value
 
     @model_validator(mode="after")
     def set_key_paths(self) -> "Settings":

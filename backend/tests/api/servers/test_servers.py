@@ -2624,7 +2624,7 @@ class TestServerTestMetric:
     async def test_test_metric(self, client, user_token):
         mock_redis = mock.AsyncMock()
 
-        with mock.patch("redis.asyncio.from_url", return_value=mock_redis):
+        with mock.patch("app.core.redis_client.get_redis_client", return_value=mock_redis):
             response = await client.post(
                 f"/api/servers/{uuid.uuid4()}/test-metric",
                 headers={"Authorization": f"Bearer {user_token}"},

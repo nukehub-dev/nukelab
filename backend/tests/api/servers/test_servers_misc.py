@@ -203,7 +203,7 @@ class TestServerTestMetric:
         db_session.add(server)
         await db_session.commit()
 
-        with mock.patch("redis.asyncio.from_url") as mock_redis_cls:
+        with mock.patch("app.core.redis_client.get_redis_client") as mock_redis_cls:
             mock_r = mock.AsyncMock()
             mock_redis_cls.return_value = mock_r
 
