@@ -192,7 +192,16 @@ parse_args() {
 # ─── Help ─────────────────────────────────────────────────────────────────-
 print_help() {
     cat <<-EOF
-${BOLD}${CYAN}NukeLab${RESET} — Management Script
+${BOLD}${CYAN}
+ _   _       _        _           _
+| \\ | |     | |      | |         | |
+|  \\| |_   _| | _____| |     __ _| |__
+| . \` | | | | |/ / _ \\ |    / _\` | '_ \\
+| |\\  | |_| |   <  __/ |___| (_| | |_) |
+|_| \\_|\\__,_|_|\\_\\___|______\\__,_|_.__/ ${RESET}${DIM}v2
+${RESET}
+${DIM}Unified Management Script${RESET}
+${BOLD}${CYAN}────────────────────────────────────────────${RESET}
 
 ${BOLD}Usage:${RESET} ./nukelabctl <command> [target] [flags]
 
@@ -219,8 +228,8 @@ ${BOLD}Maintenance:${RESET}
   ${GREEN}clean${RESET}                                Remove dangling images/volumes
   ${GREEN}remove${RESET}     [target]                  Remove containers (keep data)
   ${GREEN}reset${RESET}                                ⚠️ Delete ALL data & containers
-  ${GREEN}rotate-user-auth-key${RESET}               Rotate the active user-auth Ed25519 key
-  ${GREEN}cleanup-user-auth-keys${RESET}             Remove expired retired user-auth keys
+  ${GREEN}rotate-user-auth-key${RESET}                 Rotate the active user-auth Ed25519 key
+  ${GREEN}cleanup-user-auth-keys${RESET}               Remove expired retired user-auth keys
 
 ${BOLD}Development Tools:${RESET}
   ${GREEN}shell${RESET}      [service]                 Open shell in container
@@ -240,7 +249,7 @@ ${BOLD}Testing:${RESET}
   ${GREEN}selftest${RESET}                             Quick nukelabctl sanity check
 
 ${BOLD}Code Quality:${RESET}
-  ${GREEN}lint${RESET}       [target] [--fix]            Lint backend/frontend code
+  ${GREEN}lint${RESET}       [target] [--fix]          Lint backend/frontend code
 
 ${BOLD}Security:${RESET}
   ${GREEN}security${RESET}   [options]                 Run Bandit, pip-audit, and npm audit
