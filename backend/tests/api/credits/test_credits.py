@@ -361,3 +361,81 @@ class TestCreditsExtended:
 # ─────────────────────────────────────────────────────────────
 # System API
 # ─────────────────────────────────────────────────────────────
+
+
+class TestBulkCreditActions:
+    """Bulk grant + bulk allowance admin endpoints."""
+
+    @pytest.mark.asyncio
+    async def test_bulk_grant_credits(self, client, admin_token, test_user, admin_user):
+        """Admin should grant credits to multiple users at once."""
+        response = await client.post(
+            "/api/admin/credits/grant-bulk",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"user_ids": [str(test_user.id)], "amount": 100, "reason": "Bulk bonus"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["results"]["success"][0]["user_id"] == str(test_user.id)
+        assert data["results"]["success"][0]["granted_amount"] == 100
+        assert data["results"]["success"][0]["capped"] is False
+
+    @pytest.mark.asyncio
+    async def test_bulk_grant_reports_missing_user(self, client, admin_token):
+        """Bulk grant should report missing users in the failed list, not 500."""
+        response = await client.post(
+            "/api/admin/credits/grant-bulk",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={
+                "user_ids": ["00000000-0000-0000-0000-000000000000"],
+                "amount": 50,
+                "reason": "Test",
+            },
+        )
+        assert response.status_code == 200
+        assert len(response.json()["results"]["failed"]) == 1
+
+    @pytest.mark.asyncio
+    async def test_bulk_grant_requires_credits_grant(self, client, user_token, test_user):
+        """Non-grant users should be forbidden from bulk grant."""
+        response = await client.post(
+            "/api/admin/credits/grant-bulk",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"user_ids": [str(test_user.id)], "amount": 100, "reason": "Bulk bonus"},
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_bulk_set_daily_allowance(self, client, admin_token, test_user):
+        """Admin should set the daily allowance for multiple users at once."""
+        response = await client.post(
+            "/api/admin/credits/bulk-allowance",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"user_ids": [str(test_user.id)], "amount": 1500},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["results"]["success"][0]["daily_allowance"] == 1500
+
+    @pytest.mark.asyncio
+    async def test_bulk_set_daily_allowance_reports_missing(self, client, admin_token):
+        """Bulk allowance should report missing users, not 500."""
+        response = await client.post(
+            "/api/admin/credits/bulk-allowance",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"user_ids": ["00000000-0000-0000-0000-000000000000"], "amount": 100},
+        )
+        assert response.status_code == 200
+        assert len(response.json()["results"]["failed"]) == 1
+
+    @pytest.mark.asyncio
+    async def test_bulk_set_daily_allowance_requires_credits_grant(
+        self, client, user_token, test_user
+    ):
+        """Non-grant users should be forbidden from bulk allowance."""
+        response = await client.post(
+            "/api/admin/credits/bulk-allowance",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"user_ids": [str(test_user.id)], "amount": 1500},
+        )
+        assert response.status_code == 403

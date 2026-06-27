@@ -532,6 +532,77 @@ async def update_system_max_balance(
     return {"message": f"System max balance updated to {request.amount}"}
 
 
+class BulkSetAllowanceRequest(BaseModel):
+    user_ids: list[str] = Field(..., min_length=1, description="Users to update")
+    amount: int = Field(..., ge=0, description="New daily allowance (NUKE / day)")
+
+
+@router.post("/credits/bulk-allowance")
+async def bulk_set_daily_allowance(
+    body: BulkSetAllowanceRequest,
+    current_user: User = Depends(require_permissions(Permission.CREDITS_GRANT)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Set the daily allowance for many users at once. Requires
+    CREDITS_GRANT (same permission as the single-user endpoint).
+    Failures are reported per user and do not abort the batch.
+    """
+    from uuid import UUID
+
+    from app.services.activity_service import ActivityService
+    from app.services.user_service import UserService
+
+    if not body.user_ids:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No user IDs provided")
+
+    results: dict[str, list[dict]] = {"success": [], "failed": []}
+
+    try:
+        user_uuids = [UUID(uid) for uid in body.user_ids]
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid user ID format: {e}"
+        )
+
+    result = await db.execute(select(User).where(User.id.in_(user_uuids)))
+    users = {str(u.id): u for u in result.scalars().all()}
+
+    missing = set(body.user_ids) - set(users)
+    for uid in missing:
+        results["failed"].append({"user_id": uid, "error": "User not found"})
+
+    user_service = UserService(db)
+    activity_service = ActivityService(db)
+    actor_id = str(current_user.id)
+
+    for uid, _user in users.items():
+        try:
+            updated = await user_service.update_user(
+                user_id=uid,
+                data={"daily_allowance": body.amount},
+                updated_by=current_user,
+            )
+            await activity_service.log(
+                action="credits.update_user_daily_allowance",
+                target_type="user",
+                target_id=uid,
+                actor_id=actor_id,
+                details={"amount": body.amount, "bulk": True},
+            )
+            results["success"].append({"user_id": uid, "daily_allowance": updated.daily_allowance})
+        except HTTPException as e:
+            results["failed"].append({"user_id": uid, "error": e.detail})
+        except Exception as e:  # noqa: BLE001 — bulk must not abort on one user
+            results["failed"].append({"user_id": uid, "error": str(e)})
+
+    summary = (
+        f"Bulk allowance update for {len(results['success'])}/{len(body.user_ids)} users "
+        f"({len(results['failed'])} failed)"
+    )
+    return {"message": summary, "results": results}
+
+
 @router.get("/credits/summary")
 async def admin_credit_summary(
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
@@ -587,26 +658,56 @@ async def bulk_grant_credits(
     _jwt=Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db),
 ):
-    """Grant credits to multiple users"""
+    """Grant credits to multiple users. Cap-aware: per-user results
+    record the actual credited amount and a `capped` flag when the
+    system max-balance cap reduced the grant. Each grant is linked to
+    the credit ledger row via `transaction_id` in the activity log.
+    Failures are reported per user and do not abort the batch.
+    """
+    from app.services.activity_service import ActivityService
+
     service = CreditService(db)
-    results = {"success": [], "failed": []}
+    activity_service = ActivityService(db)
+    results: dict[str, list[dict]] = {"success": [], "failed": []}
+    actor_id = str(current_user.id)
 
     for user_id in request.user_ids:
         try:
-            await service.grant_credits(
+            tx = await service.grant_credits(
                 user_id=user_id,
                 amount=request.amount,
-                actor_id=str(current_user.id),
+                actor_id=actor_id,
                 reason=request.reason,
             )
-            results["success"].append(user_id)
+            await activity_service.log(
+                action="credits.grant",
+                target_type="user",
+                target_id=user_id,
+                actor_id=actor_id,
+                details={
+                    "transaction_id": str(tx.id),
+                    "requested_amount": request.amount,
+                    "granted_amount": tx.amount,
+                    "reason": request.reason,
+                    "bulk": True,
+                },
+            )
+            results["success"].append(
+                {
+                    "user_id": user_id,
+                    "granted_amount": tx.amount,
+                    "new_balance": tx.balance_after,
+                    "capped": tx.amount != request.amount,
+                }
+            )
         except Exception as e:
             results["failed"].append({"user_id": user_id, "error": str(e)})
 
-    return {
-        "message": f"Granted {request.amount} credits to {len(request.user_ids)} users",
-        "results": results,
-    }
+    summary = (
+        f"Bulk grant to {len(results['success'])}/{len(request.user_ids)} users "
+        f"({len(results['failed'])} failed)"
+    )
+    return {"message": summary, "results": results}
 
 
 # ========== Activity Logs ==========

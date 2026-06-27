@@ -13,6 +13,8 @@ import {
   ArrowLeft,
   Wallet,
   RefreshCw,
+  Users,
+  X,
 } from 'lucide-react'
 import { useUsers } from '../hooks/use-users'
 import { useLowBalanceUsers } from '../hooks/use-credits'
@@ -25,6 +27,7 @@ import { cn } from '../lib/utils'
 import { CreditAdjustDialog } from '../components/admin/credit-adjust-dialog'
 import { CreditHistoryDialog } from '../components/admin/credit-history-dialog'
 import { DailyAllowanceDialog } from '../components/admin/daily-allowance-dialog'
+import { BulkCreditDialog } from '../components/admin/bulk-credit-dialog'
 import { DataTable } from '../components/data/data-table'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { StatCard } from '../components/data/stat-card'
@@ -83,6 +86,14 @@ function CreditsAdminPage() {
   const [adjustDialogOpen, setAdjustDialogOpen] = useState(false)
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false)
   const [allowanceDialogOpen, setAllowanceDialogOpen] = useState(false)
+  const [bulkDialogOpen, setBulkDialogOpen] = useState(false)
+  const [bulkMode, setBulkMode] = useState<'grant' | 'allowance'>('grant')
+
+  const selectedUserIds = useMemo(
+    () => Object.keys(rowSelection).filter((id) => rowSelection[id]),
+    [rowSelection]
+  )
+  const selectedCount = selectedUserIds.length
 
   const {
     data: usersData,
@@ -148,6 +159,20 @@ function CreditsAdminPage() {
     if (value === systemAllowanceValue) return
     updateSystemAllowance.mutate(value)
   }
+
+  const openBulkGrant = useCallback(() => {
+    setBulkMode('grant')
+    setBulkDialogOpen(true)
+  }, [])
+
+  const openBulkAllowance = useCallback(() => {
+    setBulkMode('allowance')
+    setBulkDialogOpen(true)
+  }, [])
+
+  const handleClearSelection = useCallback(() => {
+    setRowSelection({})
+  }, [])
 
   const SortIcon = ({ columnId }: { columnId: string }) => {
     const sort = sorting.find((s) => s.id === columnId)
@@ -623,6 +648,48 @@ function CreditsAdminPage() {
         )}
       </motion.div>
 
+      {/* Bulk action bar — appears when rows are selected */}
+      {selectedCount > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex flex-wrap items-center gap-2 p-3 rounded-xl bg-primary/5 border border-primary/20"
+        >
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Users className="w-4 h-4 text-primary" />
+            {selectedCount} user{selectedCount === 1 ? '' : 's'} selected
+          </div>
+          <div className="flex items-center gap-2 ml-auto">
+            {canGrant && (
+              <Button size="sm" variant="secondary" className="h-8 text-xs" onClick={openBulkGrant}>
+                <CreditCard className="w-3.5 h-3.5" />
+                <span className="ml-1.5">Bulk Grant</span>
+              </Button>
+            )}
+            {canManageAllowance && (
+              <Button
+                size="sm"
+                variant="secondary"
+                className="h-8 text-xs"
+                onClick={openBulkAllowance}
+              >
+                <Wallet className="w-3.5 h-3.5" />
+                <span className="ml-1.5">Bulk Allowance</span>
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 text-xs"
+              onClick={handleClearSelection}
+            >
+              <X className="w-3.5 h-3.5" />
+              <span className="ml-1.5">Clear</span>
+            </Button>
+          </div>
+        </motion.div>
+      )}
+
       {/* DataTable */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -680,6 +747,12 @@ function CreditsAdminPage() {
         user={selectedUser}
         open={allowanceDialogOpen}
         onOpenChange={setAllowanceDialogOpen}
+      />
+      <BulkCreditDialog
+        mode={bulkMode}
+        userIds={selectedUserIds}
+        open={bulkDialogOpen}
+        onOpenChange={setBulkDialogOpen}
       />
     </div>
   )

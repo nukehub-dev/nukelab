@@ -200,3 +200,85 @@ export function useCreditActions() {
     updateUserDailyAllowance,
   }
 }
+
+interface BulkResult {
+  user_id: string
+  error?: string
+  granted_amount?: number
+  new_balance?: number
+  capped?: boolean
+  daily_allowance?: number
+}
+
+interface BulkResponse {
+  message: string
+  results: { success: BulkResult[]; failed: BulkResult[] }
+}
+
+interface BulkGrantData {
+  userIds: string[]
+  amount: number
+  reason: string
+}
+
+interface BulkAllowanceData {
+  userIds: string[]
+  amount: number
+}
+
+export function useBulkCreditActions() {
+  const queryClient = useQueryClient()
+  const { success, error: showError } = useToast()
+
+  const bulkGrantCredits = useMutation({
+    mutationFn: ({ userIds, amount, reason }: BulkGrantData) =>
+      api.post<BulkResponse>('/admin/credits/grant-bulk', {
+        user_ids: userIds,
+        amount,
+        reason,
+      }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['credits'] })
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      const ok = data.results.success.length
+      const fail = data.results.failed.length
+      if (fail > 0) {
+        showError('Bulk grant partially failed', `${ok} succeeded, ${fail} failed — see results`)
+      } else {
+        success('Bulk grant complete', data.message)
+      }
+    },
+    onError: (err) => {
+      showError('Failed to bulk grant credits', getErrorMessage(err))
+    },
+  })
+
+  const bulkSetAllowance = useMutation({
+    mutationFn: ({ userIds, amount }: BulkAllowanceData) =>
+      api.post<BulkResponse>('/admin/credits/bulk-allowance', {
+        user_ids: userIds,
+        amount,
+      }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['credits'] })
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      const ok = data.results.success.length
+      const fail = data.results.failed.length
+      if (fail > 0) {
+        showError(
+          'Bulk allowance partially failed',
+          `${ok} succeeded, ${fail} failed — see results`
+        )
+      } else {
+        success('Bulk allowance update complete', data.message)
+      }
+    },
+    onError: (err) => {
+      showError('Failed to bulk update allowance', getErrorMessage(err))
+    },
+  })
+
+  return { bulkGrantCredits, bulkSetAllowance }
+}
