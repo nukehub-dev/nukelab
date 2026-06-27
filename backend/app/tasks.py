@@ -1270,3 +1270,51 @@ def grant_daily_allowance_to_all(self):
     except Exception as e:
         logger.exception("Fatal error in grant_daily_allowance_to_all: %s", e)
         return f"Fatal error: {e}"
+
+
+@celery_app.task(bind=True)
+def cleanup_expired_allowance_overrides(self):
+    """Null out expired daily-allowance overrides for storage hygiene.
+
+    Not strictly required for correctness — grant_daily_allowance uses
+    effective_daily_allowance, which already ignores an override once
+    override_until < now — but keeping the columns populated past
+    expiry clutters the admin UI and the user record. Runs hourly.
+    """
+
+    async def _cleanup():
+        from datetime import timedelta
+
+        from sqlalchemy import and_, select
+
+        from app.core.time_utils import utc_now
+        from app.models.user import User
+
+        async with AsyncSessionLocal() as db:
+            # Window: anything that expired at least a minute ago, so
+            # we don't race the expiry boundary by milliseconds.
+            cutoff = utc_now() - timedelta(minutes=1)
+            result = await db.execute(
+                select(User).where(
+                    and_(
+                        User.daily_allowance_override.is_not(None),
+                        User.daily_allowance_override_until < cutoff,
+                    )
+                )
+            )
+            expired = result.scalars().all()
+
+            for user in expired:
+                user.daily_allowance_override = None
+                user.daily_allowance_override_until = None
+
+            if expired:
+                await db.commit()
+
+            return f"Cleaned up {len(expired)} expired allowance overrides"
+
+    try:
+        return _run_async(_cleanup())
+    except Exception as e:
+        logger.exception("Fatal error in cleanup_expired_allowance_overrides: %s", e)
+        return f"Fatal error: {e}"

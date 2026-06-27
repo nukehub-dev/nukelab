@@ -15,6 +15,7 @@ import {
   RefreshCw,
   Users,
   X,
+  Clock,
 } from 'lucide-react'
 import { useUsers } from '../hooks/use-users'
 import { useLowBalanceUsers } from '../hooks/use-credits'
@@ -28,6 +29,7 @@ import { CreditAdjustDialog } from '../components/admin/credit-adjust-dialog'
 import { CreditHistoryDialog } from '../components/admin/credit-history-dialog'
 import { DailyAllowanceDialog } from '../components/admin/daily-allowance-dialog'
 import { BulkCreditDialog } from '../components/admin/bulk-credit-dialog'
+import { AllowanceOverrideDialog } from '../components/admin/allowance-override-dialog'
 import { DataTable } from '../components/data/data-table'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { StatCard } from '../components/data/stat-card'
@@ -88,6 +90,7 @@ function CreditsAdminPage() {
   const [allowanceDialogOpen, setAllowanceDialogOpen] = useState(false)
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false)
   const [bulkMode, setBulkMode] = useState<'grant' | 'allowance'>('grant')
+  const [overrideDialogOpen, setOverrideDialogOpen] = useState(false)
 
   const selectedUserIds = useMemo(
     () => Object.keys(rowSelection).filter((id) => rowSelection[id]),
@@ -168,6 +171,11 @@ function CreditsAdminPage() {
   const openBulkAllowance = useCallback(() => {
     setBulkMode('allowance')
     setBulkDialogOpen(true)
+  }, [])
+
+  const handleSetOverride = useCallback((user: User) => {
+    setSelectedUser(user)
+    setOverrideDialogOpen(true)
   }, [])
 
   const handleClearSelection = useCallback(() => {
@@ -294,12 +302,24 @@ function CreditsAdminPage() {
         </button>
       ),
       cell: ({ row }) => {
+        const user = row.original
         const allowance = row.getValue('daily_allowance') as number
+        const overrideActive = user.has_active_allowance_override
         return (
           <div className="flex items-center gap-1.5 text-sm">
             <Wallet className="w-3.5 h-3.5 text-muted-foreground" />
             <span className="font-mono">{(allowance ?? 0).toLocaleString()}</span>
             <span className="text-[10px] text-muted-foreground">/day</span>
+            {overrideActive && (
+              <Tooltip
+                content={`Override active: ${user.daily_allowance_override} / day until ${user.daily_allowance_override_until ? new Date(user.daily_allowance_override_until).toLocaleString() : 'soon'}`}
+              >
+                <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 cursor-help">
+                  <Clock className="w-2.5 h-2.5" />
+                  Override
+                </span>
+              </Tooltip>
+            )}
           </div>
         )
       },
@@ -348,6 +368,16 @@ function CreditsAdminPage() {
                 </button>
               </Tooltip>
             )}
+            {canManageAllowance && (
+              <Tooltip content="Time-boxed Override">
+                <button
+                  onClick={() => handleSetOverride(user)}
+                  className="p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-colors inline-flex"
+                >
+                  <Clock className="w-4 h-4" />
+                </button>
+              </Tooltip>
+            )}
           </div>
         )
       },
@@ -387,11 +417,17 @@ function CreditsAdminPage() {
             </span>
           </div>
           <div className="flex-1">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="font-medium">{user.username}</span>
               {isLow && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400">
                   Low
+                </span>
+              )}
+              {user.has_active_allowance_override && (
+                <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400">
+                  <Clock className="w-2.5 h-2.5" />
+                  Override
                 </span>
               )}
             </div>
@@ -435,6 +471,16 @@ function CreditsAdminPage() {
                 className="p-1.5 rounded-lg hover:bg-violet-500/10 text-violet-400 transition-colors inline-flex"
               >
                 <Wallet className="w-4 h-4" />
+              </button>
+            </Tooltip>
+          )}
+          {canManageAllowance && (
+            <Tooltip content="Time-boxed Override">
+              <button
+                onClick={() => handleSetOverride(user)}
+                className="p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-colors inline-flex"
+              >
+                <Clock className="w-4 h-4" />
               </button>
             </Tooltip>
           )}
@@ -753,6 +799,11 @@ function CreditsAdminPage() {
         userIds={selectedUserIds}
         open={bulkDialogOpen}
         onOpenChange={setBulkDialogOpen}
+      />
+      <AllowanceOverrideDialog
+        user={selectedUser}
+        open={overrideDialogOpen}
+        onOpenChange={setOverrideDialogOpen}
       />
     </div>
   )

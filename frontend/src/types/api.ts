@@ -63,6 +63,10 @@ export interface User {
   permissions?: string[]
   nuke_balance: number
   daily_allowance: number
+  daily_allowance_override?: number | null
+  daily_allowance_override_until?: string | null
+  effective_daily_allowance?: number
+  has_active_allowance_override?: boolean
   is_active: boolean
   is_verified: boolean
   last_login?: string

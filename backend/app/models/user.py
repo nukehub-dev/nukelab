@@ -27,6 +27,12 @@ class User(Base):
     # NUKE Currency & Quotas
     nuke_balance = Column(Integer, default=100)
     daily_allowance = Column(Integer, default=100)
+    # Time-boxed boost: while override_until > now, grant_daily_allowance
+    # uses daily_allowance_override instead of daily_allowance. Expires
+    # automatically (no write needed at revert); cleanup task nulls
+    # expired rows purely for storage hygiene.
+    daily_allowance_override = Column(Integer, nullable=True)
+    daily_allowance_override_until = Column(DateTime, nullable=True)
     last_nuke_reset = Column(DateTime, nullable=True)
 
     # Avatar
@@ -102,6 +108,28 @@ class User(Base):
             return " ".join(parts)
         return self.username
 
+    @property
+    def has_active_allowance_override(self) -> bool:
+        """True iff a time-boxed override is currently in effect."""
+        return (
+            self.daily_allowance_override is not None
+            and self.daily_allowance_override_until is not None
+            and self.daily_allowance_override_until > utc_now()
+        )
+
+    @property
+    def effective_daily_allowance(self) -> int:
+        """The allowance amount actually used at grant time.
+
+        Returns the override amount while the override window is active,
+        otherwise the base daily_allowance. Reads `utc_now()` so the
+        revert is implicit — a periodic cleanup task can null expired
+        rows for storage hygiene without affecting correctness.
+        """
+        if self.has_active_allowance_override:
+            return self.daily_allowance_override
+        return self.daily_allowance
+
     def get_gravatar_url(self, size=200, default="identicon"):
         """Generate Gravatar URL from email"""
         email_hash = hashlib.md5(
@@ -133,6 +161,14 @@ class User(Base):
             "role": self.role,
             "nuke_balance": self.nuke_balance,
             "daily_allowance": self.daily_allowance,
+            "daily_allowance_override": self.daily_allowance_override,
+            "daily_allowance_override_until": (
+                self.daily_allowance_override_until.isoformat()
+                if self.daily_allowance_override_until
+                else None
+            ),
+            "effective_daily_allowance": self.effective_daily_allowance,
+            "has_active_allowance_override": self.has_active_allowance_override,
             "profile": self.profile or {},
             "preferences": self.preferences or {},
             "profile_visibility": self.profile_visibility or "private",

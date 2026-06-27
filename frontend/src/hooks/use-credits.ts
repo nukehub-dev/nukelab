@@ -282,3 +282,52 @@ export function useBulkCreditActions() {
 
   return { bulkGrantCredits, bulkSetAllowance }
 }
+
+interface AllowanceOverrideData {
+  userId: string
+  amount: number
+  until: string // ISO 8601
+}
+
+export function useAllowanceOverride() {
+  const queryClient = useQueryClient()
+  const { success, error: showError } = useToast()
+
+  const setOverride = useMutation({
+    mutationFn: ({ userId, amount, until }: AllowanceOverrideData) =>
+      api.put<{ message: string; user: { daily_allowance_override: number } }>(
+        `/credits/users/${userId}/allowance-override`,
+        { amount, until }
+      ),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['credits'] })
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      queryClient.invalidateQueries({ queryKey: ['credits', 'summary', variables.userId] })
+      success(
+        'Override set',
+        `${variables.amount.toLocaleString()} NUKE/day until ${new Date(variables.until).toLocaleString()}`
+      )
+    },
+    onError: (err) => {
+      showError('Failed to set override', getErrorMessage(err))
+    },
+  })
+
+  const clearOverride = useMutation({
+    mutationFn: (userId: string) =>
+      api.delete<{ message: string; user: { daily_allowance_override: number } }>(
+        `/credits/users/${userId}/allowance-override`
+      ),
+    onSuccess: (_data, userId) => {
+      queryClient.invalidateQueries({ queryKey: ['credits'] })
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      queryClient.invalidateQueries({ queryKey: ['credits', 'summary', userId] })
+      success('Override cleared', 'Reverted to base daily allowance')
+    },
+    onError: (err) => {
+      showError('Failed to clear override', getErrorMessage(err))
+    },
+  })
+
+  return { setOverride, clearOverride }
+}

@@ -439,3 +439,117 @@ class TestBulkCreditActions:
             json={"user_ids": [str(test_user.id)], "amount": 1500},
         )
         assert response.status_code == 403
+
+
+class TestAllowanceOverride:
+    """Time-boxed daily-allowance override endpoints."""
+
+    @pytest.mark.asyncio
+    async def test_set_allowance_override(self, client, admin_token, test_user):
+        """Admin should set a time-boxed allowance override."""
+        from datetime import UTC, datetime, timedelta
+
+        until = (datetime.now(UTC) + timedelta(days=7)).isoformat()
+        response = await client.put(
+            f"/api/credits/users/{test_user.id}/allowance-override",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"amount": 2000, "until": until},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["user"]["daily_allowance_override"] == 2000
+        assert data["user"]["has_active_allowance_override"] is True
+        # Effective is the override amount while the window is open
+        assert data["user"]["effective_daily_allowance"] == 2000
+
+    @pytest.mark.asyncio
+    async def test_clear_allowance_override(self, client, admin_token, test_user):
+        """Admin should clear an override immediately."""
+        from datetime import UTC, datetime, timedelta
+
+        until = (datetime.now(UTC) + timedelta(days=7)).isoformat()
+        await client.put(
+            f"/api/credits/users/{test_user.id}/allowance-override",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"amount": 2000, "until": until},
+        )
+
+        response = await client.delete(
+            f"/api/credits/users/{test_user.id}/allowance-override",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["user"]["daily_allowance_override"] is None
+        assert data["user"]["has_active_allowance_override"] is False
+        # Effective reverts to the base amount after clear
+        assert data["user"]["effective_daily_allowance"] == test_user.daily_allowance
+
+    @pytest.mark.asyncio
+    async def test_override_requires_credits_grant(self, client, user_token, test_user):
+        """Non-grant users should be forbidden from setting an override."""
+        from datetime import UTC, datetime, timedelta
+
+        until = (datetime.now(UTC) + timedelta(days=7)).isoformat()
+        response = await client.put(
+            f"/api/credits/users/{test_user.id}/allowance-override",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"amount": 2000, "until": until},
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_grant_daily_allowance_uses_override(self, db_session, test_user, admin_user):
+        """grant_daily_allowance should use the override amount while active."""
+        from datetime import UTC, datetime, timedelta
+
+        from app.services.user_service import UserService
+
+        # Set an override via the service path
+        await UserService(db_session).update_user(
+            str(test_user.id),
+            {
+                "daily_allowance_override": 5000,
+                "daily_allowance_override_until": (
+                    datetime.now(UTC) + timedelta(days=1)
+                ).isoformat(),
+            },
+            updated_by=admin_user,
+        )
+
+        from app.services.credit_service import CreditService
+
+        service = CreditService(db_session)
+        tx = await service.grant_daily_allowance(str(test_user.id))
+        # Effective = 5000 (override), not the base daily_allowance
+        assert tx.amount == 5000
+        assert tx.meta.get("override_active") is True
+
+    @pytest.mark.asyncio
+    async def test_expired_override_ignored_by_effective_allowance(
+        self, db_session, test_user, admin_user
+    ):
+        """An expired override is ignored; effective falls back to base."""
+        from datetime import UTC, datetime, timedelta
+
+        from app.services.user_service import UserService
+
+        # Set an override whose expiry is already in the past
+        await UserService(db_session).update_user(
+            str(test_user.id),
+            {
+                "daily_allowance_override": 5000,
+                "daily_allowance_override_until": (
+                    datetime.now(UTC) - timedelta(days=1)
+                ).isoformat(),
+            },
+            updated_by=admin_user,
+        )
+
+        from app.services.credit_service import CreditService
+
+        service = CreditService(db_session)
+        tx = await service.grant_daily_allowance(str(test_user.id))
+        # Effective = base daily_allowance since override expired
+        assert tx.amount == test_user.daily_allowance
+        assert tx.meta.get("override_active") is False

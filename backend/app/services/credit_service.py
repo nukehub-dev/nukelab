@@ -229,13 +229,20 @@ class CreditService:
         # Attempt the grant. The unique index is the last line of
         # defense against cross-process races; if a concurrent insert
         # wins, we surface the same 400 to the caller instead of 500.
+        # Use the effective allowance (override if currently active,
+        # else the base amount) so time-boxed boosts take effect for
+        # every grant while the override window is open.
+        effective_allowance = user.effective_daily_allowance
         try:
             transaction = await self._create_transaction(
                 user_id=user_id,
-                amount=user.daily_allowance,
+                amount=effective_allowance,
                 transaction_type=DAILY_ALLOWANCE_TYPE,
-                description=f"Daily allowance: {user.daily_allowance} credits",
-                meta={"source": "auto_grant"},
+                description=f"Daily allowance: {effective_allowance} credits",
+                meta={
+                    "source": "auto_grant",
+                    "override_active": user.has_active_allowance_override,
+                },
             )
         except IntegrityError:
             # The unique partial index fired — another worker just

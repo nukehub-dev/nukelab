@@ -235,6 +235,53 @@ class UserService:
                     )
                 user.daily_allowance = data["daily_allowance"]
 
+        # Time-boxed allowance override. Set by passing both
+        # daily_allowance_override (int) and daily_allowance_override_until
+        # (ISO datetime or None to clear). Requires CREDITS_GRANT. The
+        # override auto-expires (no write needed at revert); passing
+        # override=None clears it immediately.
+        if "daily_allowance_override" in data:
+            if updated_by is None:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="An actor is required to set allowance override",
+                )
+            if not has_permission(updated_by, Permission.CREDITS_GRANT):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Insufficient permissions to set allowance override",
+                )
+            override_value = data["daily_allowance_override"]
+            until_value = data.get("daily_allowance_override_until")
+            if override_value is None:
+                # Explicit clear
+                user.daily_allowance_override = None
+                user.daily_allowance_override_until = None
+            else:
+                if not isinstance(override_value, int) or override_value < 0:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Override amount must be a non-negative integer",
+                    )
+                if not until_value:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="An expiry (daily_allowance_override_until) is required to set an override",
+                    )
+                user.daily_allowance_override = override_value
+                # Accept ISO strings or datetime; store naive UTC for
+                # consistency with the rest of the schema.
+                if isinstance(until_value, str):
+                    parsed = datetime.fromisoformat(until_value.replace("Z", ""))
+                    if parsed.tzinfo is not None:
+                        parsed = parsed.astimezone(UTC).replace(tzinfo=None)
+                    user.daily_allowance_override_until = parsed
+                else:
+                    # Already a datetime; assume naive UTC or convert tz-aware.
+                    if until_value.tzinfo is not None:
+                        until_value = until_value.astimezone(UTC).replace(tzinfo=None)
+                    user.daily_allowance_override_until = until_value
+
         for field in allowed_fields:
             if field in data:
                 setattr(user, field, data[field])

@@ -115,6 +115,87 @@ async def update_user_daily_allowance(
     return {"message": f"Updated daily allowance to {request.amount}", "user": user.to_dict()}
 
 
+class AllowanceOverrideRequest(BaseModel):
+    amount: int = Field(..., ge=0, description="Override allowance amount (NUKE / day)")
+    until: datetime = Field(
+        ..., description="ISO 8601 expiry timestamp (when the override reverts to base)"
+    )
+
+
+@router.put("/users/{user_id}/allowance-override")
+async def set_user_allowance_override(
+    user_id: str,
+    request: AllowanceOverrideRequest,
+    current_user: User = Depends(require_permissions(Permission.CREDITS_GRANT)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Set a time-boxed daily-allowance override for a user.
+
+    The user's effective allowance becomes `amount` until `until` (UTC),
+    after which it automatically reverts to the base `daily_allowance`
+    — no manual clear required at expiry.
+    """
+    from app.services.activity_service import ActivityService
+    from app.services.user_service import UserService
+
+    service = UserService(db)
+    user = await service.update_user(
+        user_id=user_id,
+        data={
+            "daily_allowance_override": request.amount,
+            "daily_allowance_override_until": request.until.isoformat(),
+        },
+        updated_by=current_user,
+    )
+
+    activity_service = ActivityService(db)
+    await activity_service.log(
+        action="credits.set_allowance_override",
+        target_type="user",
+        target_id=user_id,
+        actor_id=str(current_user.id),
+        details={"amount": request.amount, "until": request.until.isoformat()},
+    )
+
+    return {
+        "message": f"Override set: {request.amount} NUKE/day until {request.until.isoformat()}",
+        "user": user.to_dict(),
+    }
+
+
+@router.delete("/users/{user_id}/allowance-override")
+async def clear_user_allowance_override(
+    user_id: str,
+    current_user: User = Depends(require_permissions(Permission.CREDITS_GRANT)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Clear a user's daily-allowance override immediately.
+    Reverts the effective allowance to the base `daily_allowance`.
+    """
+    from app.services.activity_service import ActivityService
+    from app.services.user_service import UserService
+
+    service = UserService(db)
+    user = await service.update_user(
+        user_id=user_id,
+        data={"daily_allowance_override": None},
+        updated_by=current_user,
+    )
+
+    activity_service = ActivityService(db)
+    await activity_service.log(
+        action="credits.clear_allowance_override",
+        target_type="user",
+        target_id=user_id,
+        actor_id=str(current_user.id),
+        details={},
+    )
+
+    return {"message": "Allowance override cleared", "user": user.to_dict()}
+
+
 @router.get("/users/{user_id}")
 async def get_user_credits(
     user_id: str,
