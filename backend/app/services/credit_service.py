@@ -108,6 +108,14 @@ class CreditService:
         transactions cannot both read the same balance and double-spend
         / double-grant. The balance is re-read from the locked row
         (authoritative) rather than from the unguarded get_balance().
+
+        Positive amounts are clamped to the system-wide max balance
+        (settings.credits_max_balance read live from the DB via
+        SettingService.get_max_balance) so a user's balance never
+        exceeds the cap. The transaction records the *actual* credited
+        amount, which may be less than requested; if the cap fully
+        absorbs the grant, a 0-amount transaction is still recorded (for
+        the daily-allowance idempotency marker and audit clarity).
         """
 
         # Lock the user row for the duration of this transaction so
@@ -123,7 +131,18 @@ class CreditService:
             )
 
         current_balance = user.nuke_balance or 0
-        new_balance = current_balance + amount
+
+        # Clamp positive grants to the configured max balance.
+        # The cap is read live so admin changes propagate to all workers.
+        effective_amount = amount
+        if amount > 0:
+            from app.services.setting_service import SettingService
+
+            max_balance = await SettingService(self.db).get_max_balance()
+            if max_balance > 0 and current_balance + amount > max_balance:
+                effective_amount = max(0, max_balance - current_balance)
+
+        new_balance = current_balance + effective_amount
 
         if new_balance < 0:
             raise HTTPException(
@@ -131,19 +150,32 @@ class CreditService:
                 detail=f"Insufficient credits. Current: {current_balance}, Required: {abs(amount)}",
             )
 
+        # Annotate meta with the standardized schema (reason + source +
+        # capped flag). Missing keys are filled so consumers can rely on
+        # the shape across all transaction types.
+        normalized_meta = {
+            "reason": (meta or {}).get("reason"),
+            "source": (meta or {}).get("source", "system"),
+            **(meta or {}),
+        }
+        if effective_amount != amount:
+            normalized_meta["capped"] = True
+            normalized_meta["requested_amount"] = amount
+            normalized_meta["granted_amount"] = effective_amount
+
         # Update user balance on the locked row
         user.nuke_balance = new_balance
 
         # Create transaction record
         transaction = CreditTransaction(
             user_id=uuid.UUID(user_id),
-            amount=amount,
+            amount=effective_amount,
             balance_after=new_balance,
             type=transaction_type,
             description=description,
             actor_id=uuid.UUID(actor_id) if actor_id else None,
             server_id=uuid.UUID(server_id) if server_id else None,
-            meta=meta or {},
+            meta=normalized_meta,
         )
 
         self.db.add(transaction)
@@ -203,6 +235,7 @@ class CreditService:
                 amount=user.daily_allowance,
                 transaction_type=DAILY_ALLOWANCE_TYPE,
                 description=f"Daily allowance: {user.daily_allowance} credits",
+                meta={"source": "auto_grant"},
             )
         except IntegrityError:
             # The unique partial index fired — another worker just
@@ -214,11 +247,18 @@ class CreditService:
                 detail="Daily allowance already granted today",
             ) from None
 
-        # Notify user
-        notif_service = NotificationService(self.db)
-        await notif_service.daily_allowance(
-            user_id=user_id, amount=user.daily_allowance, new_balance=transaction.balance_after
-        )
+        # Notify user only if the grant actually added credits.
+        # _create_transaction clamps to 0 when the user is at the
+        # max-balance cap; recording a 0-amount daily_allowance tx is
+        # intentional — it still satisfies the unique index so we don't
+        # retry today, but there's no balance change worth notifying.
+        if transaction.amount > 0:
+            notif_service = NotificationService(self.db)
+            await notif_service.daily_allowance(
+                user_id=user_id,
+                amount=transaction.amount,
+                new_balance=transaction.balance_after,
+            )
 
         return transaction
 
@@ -320,7 +360,7 @@ class CreditService:
             transaction_type="admin_grant",
             description=f"Admin grant: {reason}",
             actor_id=actor_id,
-            meta={"reason": reason},
+            meta={"reason": reason, "source": "admin_panel"},
         )
 
     async def deduct_credits(
@@ -333,7 +373,7 @@ class CreditService:
             transaction_type="admin_deduct",
             description=f"Admin deduction: {reason}",
             actor_id=actor_id,
-            meta={"reason": reason},
+            meta={"reason": reason, "source": "admin_panel"},
         )
 
     async def check_sufficient_credits(self, user_id: str, required: int) -> bool:

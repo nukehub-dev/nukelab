@@ -490,6 +490,48 @@ async def update_system_daily_allowance(
     return {"message": f"System default daily allowance updated to {request.amount}"}
 
 
+class UpdateSystemMaxBalanceRequest(BaseModel):
+    amount: int = Field(..., ge=0, description="System-wide max credit balance (0 = unlimited)")
+
+
+@router.get("/credits/max-balance")
+async def get_system_max_balance(
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get the system-wide max credit balance cap"""
+    from app.services.setting_service import SettingService
+
+    service = SettingService(db)
+    return {"max_balance": await service.get_max_balance()}
+
+
+@router.put("/credits/max-balance")
+async def update_system_max_balance(
+    request: UpdateSystemMaxBalanceRequest,
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update the system-wide max credit balance cap (0 = unlimited)"""
+    from app.services.activity_service import ActivityService
+    from app.services.setting_service import SettingService
+
+    service = SettingService(db)
+    await service.set_max_balance(request.amount)
+
+    activity_service = ActivityService(db)
+    await activity_service.log(
+        action="credits.update_system_max_balance",
+        target_type="system",
+        actor_id=str(current_user.id),
+        details={"amount": request.amount},
+    )
+
+    return {"message": f"System max balance updated to {request.amount}"}
+
+
 @router.get("/credits/summary")
 async def admin_credit_summary(
     current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),

@@ -480,3 +480,153 @@ class TestGrantDailyAllowanceRaceResolution:
             )
 
         assert lock_calls, "Expected _create_transaction to issue SELECT...FOR UPDATE on users"
+
+
+class TestCreditCapAndMeta:
+    """Tests for the max-balance clamp and standardized transaction meta."""
+
+    @pytest.mark.asyncio
+    async def test_grant_is_clamped_at_max_balance(self, db_session, test_user, admin_user):
+        """Grant beyond the cap should be clamped; tx records actual amount."""
+        from app.config import settings
+
+        service = CreditService(db_session)
+        test_user.nuke_balance = 4800
+        await db_session.commit()
+
+        original_max = settings.credits_max_balance
+        settings.credits_max_balance = 5000
+        try:
+            tx = await service.grant_credits(
+                user_id=str(test_user.id),
+                amount=500,
+                actor_id=str(admin_user.id),
+                reason="Should clamp",
+            )
+        finally:
+            settings.credits_max_balance = original_max
+
+        assert tx.amount == 200  # 5000 - 4800
+        assert tx.balance_after == 5000
+        assert await service.get_balance(str(test_user.id)) == 5000
+        # meta records the clamp for audit
+        assert tx.meta.get("capped") is True
+        assert tx.meta.get("requested_amount") == 500
+        assert tx.meta.get("granted_amount") == 200
+
+    @pytest.mark.asyncio
+    async def test_grant_records_zero_when_already_at_cap(self, db_session, test_user, admin_user):
+        """When balance is already at cap, grant records a 0-amount tx."""
+        from app.config import settings
+
+        service = CreditService(db_session)
+        test_user.nuke_balance = 5000
+        await db_session.commit()
+
+        original_max = settings.credits_max_balance
+        settings.credits_max_balance = 5000
+        try:
+            tx = await service.grant_credits(
+                user_id=str(test_user.id),
+                amount=300,
+                actor_id=str(admin_user.id),
+                reason="Already capped",
+            )
+        finally:
+            settings.credits_max_balance = original_max
+
+        assert tx.amount == 0
+        assert tx.balance_after == 5000
+        assert tx.meta.get("capped") is True
+        assert tx.meta.get("granted_amount") == 0
+
+    @pytest.mark.asyncio
+    async def test_grant_not_clamped_when_max_zero(self, db_session, test_user, admin_user):
+        """When max_balance is 0 (unlimited), grants are not clamped."""
+        from app.config import settings
+        from app.services.setting_service import SettingService
+
+        # Persist a 0 cap to the settings table so the live read sees unlimited.
+        await SettingService(db_session).set_max_balance(0)
+        original_max = settings.credits_max_balance
+        settings.credits_max_balance = 0
+        try:
+            service = CreditService(db_session)
+            tx = await service.grant_credits(
+                user_id=str(test_user.id),
+                amount=99999,
+                actor_id=str(admin_user.id),
+                reason="Unlimited",
+            )
+            assert tx.amount == 99999
+            assert tx.meta.get("capped") is None
+        finally:
+            settings.credits_max_balance = original_max
+            # restore default-backed row state
+            await SettingService(db_session).set_max_balance(original_max)
+
+    @pytest.mark.asyncio
+    async def test_grant_meta_has_standard_schema(self, db_session, test_user, admin_user):
+        """grant_credits meta should include `reason` and `source` keys."""
+        service = CreditService(db_session)
+        tx = await service.grant_credits(
+            user_id=str(test_user.id), amount=10, actor_id=str(admin_user.id), reason="Audit test"
+        )
+        assert tx.meta["reason"] == "Audit test"
+        assert tx.meta["source"] == "admin_panel"
+
+    @pytest.mark.asyncio
+    async def test_deduct_meta_has_standard_schema(self, db_session, test_user, admin_user):
+        """deduct_credits meta should include `reason` and `source` keys."""
+        service = CreditService(db_session)
+        test_user.nuke_balance = 500
+        await db_session.commit()
+
+        tx = await service.deduct_credits(
+            user_id=str(test_user.id), amount=50, actor_id=str(admin_user.id), reason="Penalty"
+        )
+        assert tx.meta["reason"] == "Penalty"
+        assert tx.meta["source"] == "admin_panel"
+
+    @pytest.mark.asyncio
+    async def test_daily_allowance_meta_source_is_auto_grant(self, db_session, test_user):
+        """grant_daily_allowance meta should mark source as auto_grant."""
+        service = CreditService(db_session)
+        tx = await service.grant_daily_allowance(str(test_user.id))
+        assert tx.type == "daily_allowance"
+        assert tx.meta.get("source") == "auto_grant"
+
+
+class TestSettingServiceMaxBalance:
+    """Tests for the DB-backed max-balance setting."""
+
+    @pytest.mark.asyncio
+    async def test_get_max_balance_falls_back_to_config(self, db_session):
+        """When no row exists, get_max_balance returns the config default."""
+        from app.config import settings
+
+        original = settings.credits_max_balance
+        settings.credits_max_balance = 4242
+        try:
+            from app.services.setting_service import SettingService
+
+            service = SettingService(db_session)
+            assert await service.get_max_balance() == 4242
+        finally:
+            settings.credits_max_balance = original
+
+    @pytest.mark.asyncio
+    async def test_set_then_get_max_balance_round_trip(self, db_session):
+        """set_max_balance should persist and refresh the config."""
+        from app.config import settings
+        from app.services.setting_service import SettingService
+
+        original = settings.credits_max_balance
+        service = SettingService(db_session)
+        try:
+            await service.set_max_balance(12345)
+            assert settings.credits_max_balance == 12345
+            assert await service.get_max_balance() == 12345
+        finally:
+            settings.credits_max_balance = original
+            await service.set_max_balance(original)

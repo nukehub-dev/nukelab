@@ -173,16 +173,42 @@ async def grant_credits_to_user(
         user_id=user_id, amount=request.amount, actor_id=str(current_user.id), reason=request.reason
     )
 
-    # Notify the user
+    # Audit log — link to the ledger row so the two records are clearly
+    # the same action rather than a duplicate; details carry the actual
+    # credited amount (which may be lower than requested when the cap
+    # applies).
+    from app.services.activity_service import ActivityService
+
+    activity_service = ActivityService(db)
+    await activity_service.log(
+        action="credits.grant",
+        target_type="user",
+        target_id=user_id,
+        actor_id=str(current_user.id),
+        details={
+            "transaction_id": str(transaction.id),
+            "requested_amount": request.amount,
+            "granted_amount": transaction.amount,
+            "reason": request.reason,
+        },
+    )
+
+    # Notify the user (use the actual credited amount so the toast
+    # matches the ledger, not the requested value)
     notif_service = NotificationService(db)
     await notif_service.credits_granted(
         user_id=user_id,
-        amount=request.amount,
+        amount=transaction.amount,
         new_balance=transaction.balance_after,
         reason=request.reason,
     )
 
-    return {"message": f"Granted {request.amount} credits", "transaction": transaction.to_dict()}
+    message = (
+        f"Granted {transaction.amount} credits"
+        if transaction.amount == request.amount
+        else f"Granted {transaction.amount} credits (capped from {request.amount})"
+    )
+    return {"message": message, "transaction": transaction.to_dict()}
 
 
 @router.post("/users/{user_id}/deduct")
@@ -197,6 +223,24 @@ async def deduct_credits_from_user(
     service = CreditService(db)
     transaction = await service.deduct_credits(
         user_id=user_id, amount=request.amount, actor_id=str(current_user.id), reason=request.reason
+    )
+
+    # Audit log — link to the ledger row so the activity log and the
+    # credit ledger are clearly the same action (transaction_id is the
+    # shared key), not two parallel records of it.
+    from app.services.activity_service import ActivityService
+
+    activity_service = ActivityService(db)
+    await activity_service.log(
+        action="credits.deduct",
+        target_type="user",
+        target_id=user_id,
+        actor_id=str(current_user.id),
+        details={
+            "transaction_id": str(transaction.id),
+            "amount": request.amount,
+            "reason": request.reason,
+        },
     )
 
     # Notify the user

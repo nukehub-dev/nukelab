@@ -55,6 +55,11 @@ class SettingService:
                     settings.credits_daily_allowance = int(row.value)
                 except ValueError:
                     logger.warning(f"Invalid credits_daily_allowance value: {row.value}")
+            elif row.key == "credits_max_balance":
+                try:
+                    settings.credits_max_balance = int(row.value)
+                except ValueError:
+                    logger.warning(f"Invalid credits_max_balance value: {row.value}")
 
     async def save_maintenance(self, enabled: bool, message: str | None = None) -> None:
         """Persist maintenance mode settings to the database and update global config."""
@@ -86,6 +91,29 @@ class SettingService:
         """Persist the system-wide default daily allowance and refresh config."""
         await self.set("credits_daily_allowance", str(amount))
         settings.credits_daily_allowance = amount
+
+    async def get_max_balance(self) -> int:
+        """Return the system-wide credit balance cap.
+
+        0 means unlimited. Always reads from the database (with a
+        fallback to the in-process config default) so changes made by
+        other worker processes are observed without requiring a restart.
+        """
+        value = await self.get("credits_max_balance")
+        if value is not None:
+            try:
+                return int(value)
+            except ValueError:
+                logger.warning(f"Invalid credits_max_balance value: {value}")
+        return settings.credits_max_balance
+
+    async def set_max_balance(self, amount: int) -> None:
+        """Persist the system-wide credit balance cap and refresh config.
+
+        Pass 0 to disable the cap (unlimited).
+        """
+        await self.set("credits_max_balance", str(amount))
+        settings.credits_max_balance = amount
 
     async def get_maintenance(self) -> dict:
         """Get current maintenance mode settings (from DB or fallback to config)."""

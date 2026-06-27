@@ -22,7 +22,6 @@ router = APIRouter(tags=["system"])
 class SystemConfigUpdate(BaseModel):
     maintenance_mode: bool | None = None
     maintenance_message: str | None = None
-    daily_allowance_default: int | None = None
 
 
 @router.get("/health")
@@ -77,9 +76,6 @@ async def update_system_config(
         updates["maintenance_mode"] = settings.maintenance_mode
         if config.maintenance_message is not None:
             updates["maintenance_message"] = config.maintenance_message
-
-    if config.daily_allowance_default is not None:
-        updates["daily_allowance_default"] = config.daily_allowance_default
 
     return {"success": True, "updates": updates, "message": "Configuration updated"}
 
