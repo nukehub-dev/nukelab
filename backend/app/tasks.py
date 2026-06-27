@@ -1,6 +1,8 @@
 import asyncio
 import threading
 
+from fastapi import HTTPException
+
 from app.config import settings
 from app.core.logging import get_logger
 from app.worker import celery_app
@@ -1201,3 +1203,70 @@ def update_prometheus_business_metrics(self):
         return _run_async(_update())
     except Exception as e:
         return f"Error updating business metrics: {e}"
+
+
+@celery_app.task(bind=True)
+def grant_daily_allowance_to_all(self):
+    """Auto-grant the daily credit allowance to every active user.
+
+    Idempotent per UTC day: the unique partial index
+    uq_credit_tx_daily_allowance_per_user_per_day guarantees a user
+    cannot receive more than one daily_allowance transaction per UTC day,
+    even if the beat schedule overlaps with a manual claim or a retried
+    worker run. Failures for individual users (already granted, inactive, etc.)
+    are logged and skipped so one user cannot block the batch.
+    """
+
+    async def _grant_all():
+        from sqlalchemy import select
+
+        from app.models.user import User
+        from app.services.credit_service import CreditService
+
+        async with AsyncSessionLocal() as db:
+            credit_service = CreditService(db)
+
+            result = await db.execute(
+                select(User.id, User.username).where(User.is_active.is_(True))
+            )
+            active_users = result.all()
+
+            granted = 0
+            already = 0
+            failed = 0
+
+            for user_id, username in active_users:
+                try:
+                    await credit_service.grant_daily_allowance(str(user_id))
+                    granted += 1
+                except HTTPException as exc:
+                    # 400 = already granted today; expected on retries / overlaps
+                    if exc.status_code == 400:
+                        already += 1
+                    else:
+                        logger.warning(
+                            "Daily allowance grant failed for user %s (%s): %s",
+                            username,
+                            user_id,
+                            exc.detail,
+                        )
+                        failed += 1
+                except Exception:
+                    logger.exception(
+                        "Unexpected error granting daily allowance to user %s (%s)",
+                        username,
+                        user_id,
+                    )
+                    failed += 1
+
+            return (
+                f"Daily allowance: granted={granted}, "
+                f"already_granted={already}, failed={failed}, "
+                f"total_active={len(active_users)}"
+            )
+
+    try:
+        return _run_async(_grant_all())
+    except Exception as e:
+        logger.exception("Fatal error in grant_daily_allowance_to_all: %s", e)
+        return f"Fatal error: {e}"

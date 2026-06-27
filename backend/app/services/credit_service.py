@@ -3,19 +3,26 @@ Credit service for managing user credits.
 """
 
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 from fastapi import HTTPException, status
 from sqlalchemy import and_, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
+from app.core.time_utils import utc_today_start
 from app.models.credit_transaction import CreditTransaction
 from app.models.user import User
 from app.services.notification_service import NotificationService
 
 logger = get_logger(__name__)
+
+# Transaction type used for daily-allowance grants. Kept as a constant so the
+# unique partial-index companion and the idempotency logic in
+# grant_daily_allowance stay in sync.
+DAILY_ALLOWANCE_TYPE = "daily_allowance"
 
 
 class CreditService:
@@ -95,10 +102,27 @@ class CreditService:
         server_id: str | None = None,
         meta: dict | None = None,
     ) -> CreditTransaction:
-        """Create a credit transaction and update user balance"""
+        """Create a credit transaction and update user balance.
 
-        # Get current balance
-        current_balance = await self.get_balance(user_id)
+        Locks the user row with SELECT ... FOR UPDATE so concurrent
+        transactions cannot both read the same balance and double-spend
+        / double-grant. The balance is re-read from the locked row
+        (authoritative) rather than from the unguarded get_balance().
+        """
+
+        # Lock the user row for the duration of this transaction so
+        # concurrent credits/debits serialize on the row lock.
+        result = await self.db.execute(
+            select(User).where(User.id == uuid.UUID(user_id)).with_for_update()
+        )
+        user = result.scalar_one_or_none()
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User {user_id} not found",
+            )
+
+        current_balance = user.nuke_balance or 0
         new_balance = current_balance + amount
 
         if new_balance < 0:
@@ -107,9 +131,7 @@ class CreditService:
                 detail=f"Insufficient credits. Current: {current_balance}, Required: {abs(amount)}",
             )
 
-        # Update user balance
-        result = await self.db.execute(select(User).where(User.id == uuid.UUID(user_id)))
-        user = result.scalar_one()
+        # Update user balance on the locked row
         user.nuke_balance = new_balance
 
         # Create transaction record
@@ -131,8 +153,21 @@ class CreditService:
         return transaction
 
     async def grant_daily_allowance(self, user_id: str) -> CreditTransaction:
-        """Grant daily allowance to a user"""
-        result = await self.db.execute(select(User).where(User.id == uuid.UUID(user_id)))
+        """Grant daily allowance to a user.
+
+        Idempotent per UTC day: races between concurrent callers (manual
+        endpoint + scheduled auto-grant job) are resolved by the unique
+        partial index uq_credit_tx_daily_allowance_per_user_per_day.
+        We first check cheaply, then rely on the index as the
+        authoritative guard: if two callers pass the check and try to
+        insert, the second raises IntegrityError which we map to the
+        existing "already granted today" 400 response.
+        """
+        # Lock the user row to serialize concurrent grant attempts in
+        # the same worker process (the unique index handles cross-process).
+        result = await self.db.execute(
+            select(User).where(User.id == uuid.UUID(user_id)).with_for_update()
+        )
         user = result.scalar_one_or_none()
 
         if not user or not user.is_active:
@@ -140,17 +175,13 @@ class CreditService:
                 status_code=status.HTTP_404_NOT_FOUND, detail="User not found or inactive"
             )
 
-        # Check if already granted today
-        today_start = (
-            datetime.now(UTC)
-            .replace(tzinfo=None)
-            .replace(hour=0, minute=0, second=0, microsecond=0)
-        )
+        # Cheap pre-check: already granted today?
+        today_start = utc_today_start()
         result = await self.db.execute(
             select(CreditTransaction).where(
                 and_(
                     CreditTransaction.user_id == uuid.UUID(user_id),
-                    CreditTransaction.type == "daily_allowance",
+                    CreditTransaction.type == DAILY_ALLOWANCE_TYPE,
                     CreditTransaction.created_at >= today_start,
                 )
             )
@@ -163,12 +194,25 @@ class CreditService:
                 detail="Daily allowance already granted today",
             )
 
-        transaction = await self._create_transaction(
-            user_id=user_id,
-            amount=user.daily_allowance,
-            transaction_type="daily_allowance",
-            description=f"Daily allowance: {user.daily_allowance} credits",
-        )
+        # Attempt the grant. The unique index is the last line of
+        # defense against cross-process races; if a concurrent insert
+        # wins, we surface the same 400 to the caller instead of 500.
+        try:
+            transaction = await self._create_transaction(
+                user_id=user_id,
+                amount=user.daily_allowance,
+                transaction_type=DAILY_ALLOWANCE_TYPE,
+                description=f"Daily allowance: {user.daily_allowance} credits",
+            )
+        except IntegrityError:
+            # The unique partial index fired — another worker just
+            # granted the allowance. Roll back the failed insert and
+            # return the canonical "already granted" response.
+            await self.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Daily allowance already granted today",
+            ) from None
 
         # Notify user
         notif_service = NotificationService(self.db)
@@ -346,11 +390,7 @@ class CreditService:
         balance = await self.get_balance(user_id)
 
         # Get today's consumption
-        today_start = (
-            datetime.now(UTC)
-            .replace(tzinfo=None)
-            .replace(hour=0, minute=0, second=0, microsecond=0)
-        )
+        today_start = utc_today_start()
         result = await self.db.execute(
             select(func.sum(CreditTransaction.amount)).where(
                 and_(

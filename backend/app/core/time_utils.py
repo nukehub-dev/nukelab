@@ -11,6 +11,16 @@ def utc_now():
     return datetime.now(UTC).replace(tzinfo=None)
 
 
+def utc_today_start():
+    """Return the start of the current UTC day (00:00:00) as a naive datetime.
+
+    Matches the calendar-day boundary used by the unique partial index
+    on credit_transactions (created_at::date) and the
+    grant_daily_allowance idempotency logic.
+    """
+    return utc_now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+
 def parse_duration(duration_str: str) -> int:
     """
     Parse a duration string into seconds.

@@ -429,3 +429,54 @@ class TestCreditServiceReconcile:
         await db_session.commit()
 
         assert await service.reconcile_server_billing(server, plan) == 0
+
+
+class TestGrantDailyAllowanceRaceResolution:
+    """Tests for the cross-process / concurrent-grant resolution path."""
+
+    @pytest.mark.asyncio
+    async def test_grant_daily_allowance_maps_integrity_error_to_400(self, db_session, test_user):
+        """If the unique index fires (concurrent insert won), surface 400 not 500."""
+        from sqlalchemy.exc import IntegrityError
+
+        service = CreditService(db_session)
+
+        async def _raise_integrity_error(*_args, **_kwargs):
+            raise IntegrityError("simulated", {}, Exception("unique violation"))
+
+        with patch.object(service, "_create_transaction", side_effect=_raise_integrity_error):
+            # Pre-check finds nothing, so we proceed to _create_transaction
+            # which raises IntegrityError (simulating the unique index).
+            with pytest.raises(Exception) as exc_info:
+                await service.grant_daily_allowance(str(test_user.id))
+
+        # Should be an HTTPException with 400, not a raw IntegrityError
+        assert "already granted" in str(exc_info.value.detail).lower()
+        assert exc_info.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_create_transaction_locks_user_row(self, db_session, test_user):
+        """_create_transaction should use SELECT...FOR UPDATE on the user row."""
+        service = CreditService(db_session)
+
+        # Spy on execute() to verify with_for_update is applied to the user lock query
+        original_execute = db_session.execute
+        lock_calls = []
+
+        async def _spy_execute(statement, *args, **kwargs):
+            compiled = str(statement)
+            if "FROM users" in compiled and "FOR UPDATE" in str(
+                statement.compile(compile_kwargs={"literal_binds": True})
+            ):
+                lock_calls.append(True)
+            return await original_execute(statement, *args, **kwargs)
+
+        with patch.object(db_session, "execute", _spy_execute):
+            await service.grant_credits(
+                user_id=str(test_user.id),
+                amount=50,
+                actor_id=str(test_user.id),
+                reason="unit test grant",
+            )
+
+        assert lock_calls, "Expected _create_transaction to issue SELECT...FOR UPDATE on users"
