@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
+import { useToast } from '../stores/toast-store'
 
 export interface SystemConfig {
   app_name: string
@@ -49,6 +50,37 @@ export function useToggleMaintenance() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['system-config'] })
       queryClient.invalidateQueries({ queryKey: ['health'] })
+    },
+  })
+}
+
+export function useSystemDailyAllowance() {
+  return useQuery({
+    queryKey: ['system-daily-allowance'],
+    queryFn: async () => {
+      return api.get<{ default_daily_allowance: number }>('/admin/credits/default-allowance')
+    },
+  })
+}
+
+export function useUpdateSystemDailyAllowance() {
+  const queryClient = useQueryClient()
+  const { success, error: showError } = useToast()
+
+  return useMutation({
+    mutationFn: async (amount: number) => {
+      return api.put<{ message: string }>('/admin/credits/default-allowance', { amount })
+    },
+    onSuccess: (_data, amount) => {
+      queryClient.invalidateQueries({ queryKey: ['system-daily-allowance'] })
+      queryClient.invalidateQueries({ queryKey: ['system-config'] })
+      success('System default updated', `Daily allowance set to ${amount.toLocaleString()} NUKE`)
+    },
+    onError: (err) => {
+      showError(
+        'Failed to update system default',
+        err instanceof Error ? err.message : 'Unknown error'
+      )
     },
   })
 }

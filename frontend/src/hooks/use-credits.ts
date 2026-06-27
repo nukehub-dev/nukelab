@@ -176,8 +176,27 @@ export function useCreditActions() {
     },
   })
 
+  const updateUserDailyAllowance = useMutation({
+    mutationFn: ({ userId, amount }: { userId: string; amount: number }) =>
+      api.put<{ message: string; user: { daily_allowance: number } }>(
+        `/credits/users/${userId}/daily-allowance`,
+        { amount }
+      ),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['credits'] })
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['credits', 'summary', variables.userId] })
+      success('Daily allowance updated', `Set to ${variables.amount.toLocaleString()} NUKE / day`)
+    },
+    onError: (err) => {
+      showError('Failed to update daily allowance', getErrorMessage(err))
+    },
+  })
+
   return {
     grantCredits,
     deductCredits,
+    updateUserDailyAllowance,
   }
 }

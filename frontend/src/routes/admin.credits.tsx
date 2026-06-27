@@ -11,9 +11,12 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowLeft,
+  Wallet,
+  RefreshCw,
 } from 'lucide-react'
 import { useUsers } from '../hooks/use-users'
 import { useLowBalanceUsers } from '../hooks/use-credits'
+import { useSystemDailyAllowance, useUpdateSystemDailyAllowance } from '../hooks/use-system-config'
 import { useDataTable } from '../hooks/use-data-table'
 import { useThemeStore } from '../stores/theme-store'
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store'
@@ -21,6 +24,7 @@ import { usePageGuard } from '../hooks/use-page-guard'
 import { cn } from '../lib/utils'
 import { CreditAdjustDialog } from '../components/admin/credit-adjust-dialog'
 import { CreditHistoryDialog } from '../components/admin/credit-history-dialog'
+import { DailyAllowanceDialog } from '../components/admin/daily-allowance-dialog'
 import { DataTable } from '../components/data/data-table'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { StatCard } from '../components/data/stat-card'
@@ -45,6 +49,18 @@ function CreditsAdminPage() {
   const canGrant = hasPermission(PERMISSIONS.CREDITS_GRANT)
   const canDeduct = hasPermission(PERMISSIONS.CREDITS_DEDUCT)
   const canManageCredits = canGrant || canDeduct
+  const canManageAllowance = canGrant
+  const canManageSystemAllowance = hasPermission(PERMISSIONS.ADMIN_ACCESS)
+
+  const {
+    data: systemAllowanceData,
+    isLoading: systemAllowanceLoading,
+    refetch: refetchSystemAllowance,
+  } = useSystemDailyAllowance()
+  const updateSystemAllowance = useUpdateSystemDailyAllowance()
+
+  const [systemAllowanceInput, setSystemAllowanceInput] = useState('')
+  const systemAllowanceValue = systemAllowanceData?.default_daily_allowance
 
   const searchParams = useSearch({ from: '/admin/credits' }) as { user?: string }
 
@@ -66,6 +82,7 @@ function CreditsAdminPage() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [adjustDialogOpen, setAdjustDialogOpen] = useState(false)
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false)
+  const [allowanceDialogOpen, setAllowanceDialogOpen] = useState(false)
 
   const {
     data: usersData,
@@ -88,6 +105,12 @@ function CreditsAdminPage() {
       if (user) queueMicrotask(() => setSelectedUser(user))
     }
   }, [searchParams.user, usersData])
+
+  useEffect(() => {
+    if (systemAllowanceValue !== undefined) {
+      setSystemAllowanceInput(String(systemAllowanceValue))
+    }
+  }, [systemAllowanceValue])
 
   const users = useMemo(() => usersData?.data || [], [usersData?.data])
   const pagination = usersData?.pagination
@@ -113,6 +136,18 @@ function CreditsAdminPage() {
     setSelectedUser(user)
     setHistoryDialogOpen(true)
   }, [])
+
+  const handleSetAllowance = useCallback((user: User) => {
+    setSelectedUser(user)
+    setAllowanceDialogOpen(true)
+  }, [])
+
+  const handleSaveSystemAllowance = () => {
+    const value = parseInt(systemAllowanceInput, 10)
+    if (Number.isNaN(value) || value < 0) return
+    if (value === systemAllowanceValue) return
+    updateSystemAllowance.mutate(value)
+  }
 
   const SortIcon = ({ columnId }: { columnId: string }) => {
     const sort = sorting.find((s) => s.id === columnId)
@@ -219,6 +254,32 @@ function CreditsAdminPage() {
       },
     },
     {
+      accessorKey: 'daily_allowance',
+      header: () => (
+        <button
+          onClick={() => {
+            const isAsc = sorting[0]?.id === 'daily_allowance' && !sorting[0]?.desc
+            setSorting([{ id: 'daily_allowance', desc: isAsc }])
+            setSort('daily_allowance', isAsc ? 'desc' : 'asc')
+          }}
+          className="flex items-center gap-1 hover:text-primary transition-colors"
+        >
+          Allowance
+          <SortIcon columnId="daily_allowance" />
+        </button>
+      ),
+      cell: ({ row }) => {
+        const allowance = row.getValue('daily_allowance') as number
+        return (
+          <div className="flex items-center gap-1.5 text-sm">
+            <Wallet className="w-3.5 h-3.5 text-muted-foreground" />
+            <span className="font-mono">{(allowance ?? 0).toLocaleString()}</span>
+            <span className="text-[10px] text-muted-foreground">/day</span>
+          </div>
+        )
+      },
+    },
+    {
       accessorKey: 'role',
       header: 'Role',
       cell: ({ row }) => (
@@ -249,6 +310,16 @@ function CreditsAdminPage() {
                   className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-colors inline-flex"
                 >
                   <CreditCard className="w-4 h-4" />
+                </button>
+              </Tooltip>
+            )}
+            {canManageAllowance && (
+              <Tooltip content="Set Daily Allowance">
+                <button
+                  onClick={() => handleSetAllowance(user)}
+                  className="p-1.5 rounded-lg hover:bg-violet-500/10 text-violet-400 transition-colors inline-flex"
+                >
+                  <Wallet className="w-4 h-4" />
                 </button>
               </Tooltip>
             )}
@@ -301,11 +372,16 @@ function CreditsAdminPage() {
             </div>
             <span className="text-xs text-muted-foreground">{user.email}</span>
           </div>
-          <div className="text-right">
+          <div className="text-right space-y-0.5">
             <div className={cn('font-mono font-semibold', isLow ? 'text-amber-400' : '')}>
               {user.nuke_balance.toLocaleString()}
             </div>
             <div className="text-[10px] text-muted-foreground">NUKE</div>
+            <div className="flex items-center justify-end gap-1 text-[11px] text-muted-foreground pt-0.5">
+              <Wallet className="w-3 h-3" />
+              <span className="font-mono">{(user.daily_allowance ?? 0).toLocaleString()}</span>
+              <span>/day</span>
+            </div>
           </div>
         </div>
         <div className="flex items-center justify-end gap-1">
@@ -324,6 +400,16 @@ function CreditsAdminPage() {
                 className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-colors inline-flex"
               >
                 <CreditCard className="w-4 h-4" />
+              </button>
+            </Tooltip>
+          )}
+          {canManageAllowance && (
+            <Tooltip content="Set Daily Allowance">
+              <button
+                onClick={() => handleSetAllowance(user)}
+                className="p-1.5 rounded-lg hover:bg-violet-500/10 text-violet-400 transition-colors inline-flex"
+              >
+                <Wallet className="w-4 h-4" />
               </button>
             </Tooltip>
           )}
@@ -456,6 +542,87 @@ function CreditsAdminPage() {
         </Card>
       </motion.div>
 
+      {/* System Default Daily Allowance */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.15 }}
+        className="bubble space-y-4 p-6"
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-violet-500/10 flex items-center justify-center">
+              <Wallet className="w-5 h-5 text-violet-400" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-base">System Default Daily Allowance</h3>
+              <p className="text-xs text-muted-foreground">
+                Default daily credit allowance applied to new users
+              </p>
+            </div>
+          </div>
+          <Tooltip content="Refresh">
+            <button
+              onClick={() => refetchSystemAllowance()}
+              className="p-1.5 rounded-lg hover:bg-accent transition-colors"
+            >
+              <RefreshCw
+                className={cn(
+                  'w-4 h-4 text-muted-foreground',
+                  systemAllowanceLoading && 'animate-spin'
+                )}
+              />
+            </button>
+          </Tooltip>
+        </div>
+
+        {systemAllowanceLoading && systemAllowanceValue === undefined ? (
+          <div className="h-12 bg-muted/50 rounded-xl animate-pulse" />
+        ) : canManageSystemAllowance ? (
+          <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3">
+            <div className="flex-1 w-full">
+              <label className="text-xs text-muted-foreground mb-1.5 block">
+                Default allowance (NUKE / day)
+              </label>
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={systemAllowanceInput}
+                onChange={(e) => setSystemAllowanceInput(e.target.value)}
+                disabled={updateSystemAllowance.isPending}
+                className="w-full h-9 px-3 text-sm bg-background border border-border/50 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
+              />
+            </div>
+            <Button
+              onClick={handleSaveSystemAllowance}
+              disabled={
+                updateSystemAllowance.isPending ||
+                Number.isNaN(parseInt(systemAllowanceInput, 10)) ||
+                parseInt(systemAllowanceInput, 10) < 0 ||
+                parseInt(systemAllowanceInput, 10) === systemAllowanceValue
+              }
+              className="h-9 shrink-0"
+            >
+              {updateSystemAllowance.isPending ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <Wallet className="w-4 h-4" />
+              )}
+              <span className="ml-2">Save Default</span>
+            </Button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-sm">
+            <Wallet className="w-4 h-4 text-muted-foreground" />
+            <span className="font-mono font-medium">
+              {(systemAllowanceValue ?? 0).toLocaleString()}
+            </span>
+            <span className="text-muted-foreground">NUKE / day</span>
+          </div>
+        )}
+      </motion.div>
+
       {/* DataTable */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -508,6 +675,11 @@ function CreditsAdminPage() {
         open={historyDialogOpen}
         onClose={() => setHistoryDialogOpen(false)}
         usersMap={usersMap}
+      />
+      <DailyAllowanceDialog
+        user={selectedUser}
+        open={allowanceDialogOpen}
+        onOpenChange={setAllowanceDialogOpen}
       />
     </div>
   )
