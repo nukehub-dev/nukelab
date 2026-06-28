@@ -52,6 +52,7 @@ _PARTITIONED_TABLES = {
     "activity_logs": "created_at",
     "server_metrics": "collected_at",
     "request_metrics": "created_at",
+    "credit_transactions": "created_at",
 }
 
 

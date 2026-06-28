@@ -9,7 +9,11 @@ from app.db.base import Base
 
 class CreditTransaction(Base):
     __tablename__ = "credit_transactions"
-    __table_args__ = (Index("ix_credit_transactions_created_at", "created_at"),)
+    __table_args__ = (
+        Index("ix_credit_transactions_created_at", "created_at"),
+        Index("ix_credit_transactions_user_id_created_at", "user_id", "created_at"),
+        {"postgresql_partition_by": "RANGE (created_at)"},
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(
@@ -27,7 +31,9 @@ class CreditTransaction(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     meta = Column(JSON, default=dict)
-    created_at = Column(DateTime, default=utc_now)
+    # Included in the primary key because PostgreSQL range-partitioned tables
+    # require the partition column in every unique index / primary key.
+    created_at = Column(DateTime, default=utc_now, nullable=False, primary_key=True)
 
     def to_dict(self):
         return {

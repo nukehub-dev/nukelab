@@ -800,6 +800,7 @@ def cleanup_expired_data(self):
         from app.db.session import AsyncSessionLocal
         from app.models.activity_log import ActivityLog
         from app.models.alert_history import AlertHistory
+        from app.models.credit_transaction import CreditTransaction
         from app.models.daily_server_metric import DailyServerMetric
         from app.models.health_check import HealthCheck
         from app.models.notification import Notification
@@ -831,6 +832,9 @@ def cleanup_expired_data(self):
             health_check_days = await get_retention_days("health_check_retention_days", 30)
             alert_history_days = await get_retention_days("alert_history_retention_days", 90)
             activity_log_days = await get_retention_days("activity_log_retention_days", 365)
+            credit_transaction_days = await get_retention_days(
+                "credit_transaction_retention_days", 730
+            )
             notification_days = await get_retention_days("notification_retention_days", 30)
             daily_rollup_days = await get_retention_days("daily_rollup_retention_days", 730)
             request_metrics_days = await get_retention_days("request_metrics_retention_days", 30)
@@ -866,6 +870,24 @@ def cleanup_expired_data(self):
             cutoff = now - timedelta(days=activity_log_days)
             result = await db.execute(delete(ActivityLog).where(ActivityLog.created_at < cutoff))
             deleted["activity_logs"] = result.rowcount
+
+            # Credit transactions (ledger). Kept longer than metrics because
+            # they are the financial audit trail; drop whole monthly partitions
+            # first, then delete any rows that landed in the DEFAULT partition.
+            from app.db.partitioning import PartitionManager
+
+            pm = PartitionManager(db)
+            dropped_partitions = await pm.drop_old_partitions(
+                "credit_transactions",
+                months_to_keep=max(1, credit_transaction_days // 30),
+            )
+            deleted["credit_transactions_partitions_dropped"] = len(dropped_partitions)
+
+            cutoff = now - timedelta(days=credit_transaction_days)
+            result = await db.execute(
+                delete(CreditTransaction).where(CreditTransaction.created_at < cutoff)
+            )
+            deleted["credit_transactions_rows_deleted"] = result.rowcount
 
             # Notifications
             cutoff = now - timedelta(days=notification_days)
@@ -1258,6 +1280,22 @@ def grant_daily_allowance_to_all(self):
                         user_id,
                     )
                     failed += 1
+
+            # One audit summary row per batch run keeps the activity log small
+            # while still recording that the job ran and what it did.
+            from app.services.activity_service import ActivityService
+
+            activity_service = ActivityService(db)
+            await activity_service.log(
+                action="credits.daily_allowance_batch",
+                target_type="system",
+                details={
+                    "granted": granted,
+                    "already_granted": already,
+                    "failed": failed,
+                    "total_active": len(active_users),
+                },
+            )
 
             return (
                 f"Daily allowance: granted={granted}, "

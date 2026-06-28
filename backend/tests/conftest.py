@@ -113,6 +113,7 @@ async def setup_test_database():
         "activity_logs": "created_at",
         "server_metrics": "collected_at",
         "request_metrics": "created_at",
+        "credit_transactions": "created_at",
     }
     async with test_engine.begin() as conn:
         for table in partitioned:

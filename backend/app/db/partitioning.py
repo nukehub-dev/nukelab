@@ -2,9 +2,10 @@
 PostgreSQL native partition management for time-series tables.
 
 Tables managed:
-  - activity_logs      (RANGE on created_at)
-  - server_metrics     (RANGE on collected_at)
-  - request_metrics    (RANGE on created_at)
+  - activity_logs       (RANGE on created_at)
+  - server_metrics      (RANGE on collected_at)
+  - request_metrics     (RANGE on created_at)
+  - credit_transactions (RANGE on created_at)
 
 Usage:
   from app.db.partitioning import PartitionManager
@@ -32,6 +33,10 @@ class PartitionManager:
             "granularity": "month",
         },
         "request_metrics": {
+            "column": "created_at",
+            "granularity": "month",
+        },
+        "credit_transactions": {
             "column": "created_at",
             "granularity": "month",
         },
