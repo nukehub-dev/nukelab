@@ -8,3 +8,7 @@ package-lock.json
 pnpm-lock.yaml
 yarn.lock
 e2e/test-results
+test-results
+playwright-report
+playwright/.cache
+.auth

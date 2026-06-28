@@ -99,3 +99,53 @@ export async function deleteServer(request: APIRequestContext, token: string, se
     headers: { Authorization: `Bearer ${token}` },
   })
 }
+
+export async function createUser(
+  request: APIRequestContext,
+  token: string,
+  data: {
+    username: string
+    email: string
+    password: string
+    role?: string
+    first_name?: string
+    last_name?: string
+  }
+): Promise<{ id: string; username: string; role: string }> {
+  const response = await request.post('/api/users/', {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    data: JSON.stringify(data),
+  })
+  if (!response.ok()) {
+    throw new Error(`Failed to create user: ${await response.text()}`)
+  }
+  const body = await response.json()
+  return body as { id: string; username: string; role: string }
+}
+
+export async function deleteUser(request: APIRequestContext, token: string, userId: string) {
+  await request.delete(`/api/users/${userId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+}
+
+export async function updateProfile(
+  request: APIRequestContext,
+  token: string,
+  data: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const response = await request.put('/api/users/me/profile', {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    data: JSON.stringify(data),
+  })
+  if (!response.ok()) {
+    throw new Error(`Failed to update profile: ${await response.text()}`)
+  }
+  return response.json()
+}
