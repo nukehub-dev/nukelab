@@ -35,7 +35,7 @@ cmd_restore() {
 }
 
 help_restore() {
-    cat <<-EOF
+    cat <<- EOF
 ${BOLD}Usage:${RESET} ./nukelabctl restore <backup-file>
 
 Restore the database from a backup file.
@@ -44,4 +44,3 @@ ${BOLD}Examples:${RESET}
   ./nukelabctl restore backups/nukelab_backup_20250607_120000.sql
 EOF
 }
-

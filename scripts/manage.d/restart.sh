@@ -16,7 +16,7 @@ parse_restart_args() {
                 START_WAIT=false
                 EXTRA_ARGS=("${EXTRA_ARGS[@]:1}")
                 ;;
-            --help|-h)
+            --help | -h)
                 help_restart
                 exit 0
                 ;;
@@ -42,7 +42,7 @@ cmd_restart() {
 }
 
 help_restart() {
-    cat <<-EOF
+    cat <<- EOF
 ${BOLD}Usage:${RESET} ./nukelabctl restart [target]
 
 Stop and then start services.
@@ -54,4 +54,3 @@ ${BOLD}Examples:${RESET}
   ./nukelabctl restart backend
 EOF
 }
-

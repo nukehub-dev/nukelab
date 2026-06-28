@@ -3,7 +3,7 @@
 STATUS_RUNNING_ONLY=false
 
 help_status() {
-    cat <<-EOF
+    cat <<- EOF
 ${BOLD}Usage:${RESET} ./nukelabctl status [options]
 
 Show the status of all containers managed by the stack.
@@ -25,7 +25,7 @@ parse_status_args() {
                 STATUS_RUNNING_ONLY=true
                 EXTRA_ARGS=("${EXTRA_ARGS[@]:1}")
                 ;;
-            --help|-h)
+            --help | -h)
                 help_status
                 exit 0
                 ;;

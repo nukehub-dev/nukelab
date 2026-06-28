@@ -4,7 +4,7 @@ cmd_test() {
         step "Running frontend tests..."
         cd "$DIR/frontend"
         [ -d "node_modules" ] || die "Run: ./nukelabctl install frontend"
-        npm run test 2>/dev/null || npm run lint || warn "No test script found"
+        npm run test 2> /dev/null || npm run lint || warn "No test script found"
     fi
 
     if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
@@ -30,7 +30,7 @@ cmd_test() {
         if is_backend_container_running; then
             _backend_was_running=true
             info "Stopping backend services for isolated test run..."
-            $COMPOSE "${COMPOSE_ARGS[@]}" stop backend celery-worker celery-beat >/dev/null 2>&1 || true
+            $COMPOSE "${COMPOSE_ARGS[@]}" stop backend celery-worker celery-beat > /dev/null 2>&1 || true
         fi
 
         # Run tests in the dedicated backend-test container. Dev/test
@@ -68,7 +68,7 @@ cmd_test() {
         # Restart backend services if they were running before.
         if $_backend_was_running; then
             info "Restarting backend services..."
-            $COMPOSE "${COMPOSE_ARGS[@]}" up -d backend celery-worker celery-beat >/dev/null 2>&1 || warn "Failed to restart backend services"
+            $COMPOSE "${COMPOSE_ARGS[@]}" up -d backend celery-worker celery-beat > /dev/null 2>&1 || warn "Failed to restart backend services"
         fi
 
         if [ $_test_exit -ne 0 ]; then
@@ -78,7 +78,7 @@ cmd_test() {
 }
 
 help_test() {
-    cat <<-EOF
+    cat <<- EOF
 ${BOLD}Usage:${RESET} ./nukelabctl test [target]
 
 Run tests.

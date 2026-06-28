@@ -26,8 +26,8 @@ RUN_PIP_AUDIT=true
 RUN_NPM_AUDIT=true
 FAIL_ON_HIGH=true
 SCAN_DEV_REQUIREMENTS=false
-BANDIT_SEVERITY="medium"   # low | medium | high
-BANDIT_CONFIDENCE="low"    # low | medium | high
+BANDIT_SEVERITY="medium" # low | medium | high
+BANDIT_CONFIDENCE="low"  # low | medium | high
 
 parse_security_args() {
     for arg in "${EXTRA_ARGS[@]}"; do
@@ -59,7 +59,7 @@ parse_security_args() {
             --with-dev)
                 SCAN_DEV_REQUIREMENTS=true
                 ;;
-            --help|-h)
+            --help | -h)
                 help_security
                 exit 0
                 ;;
@@ -69,7 +69,6 @@ parse_security_args() {
         esac
     done
 }
-
 
 # _ensure_dev_venv / _ensure_venv_tool / DEV_VENV are shared via lib.sh so
 # the lint and security commands cannot drift out of sync.
@@ -104,7 +103,7 @@ _run_bandit() {
     "$bandit_bin" -r "${DIR}/backend/app" \
         -f json \
         -o "$BANDIT_REPORT" \
-        $sev_flag $conf_flag 2>/dev/null || true
+        $sev_flag $conf_flag 2> /dev/null || true
 
     "$bandit_bin" -r "${DIR}/backend/app" \
         -f screen \
@@ -130,7 +129,7 @@ try:
 except Exception:
     with open(os.environ['BANDIT_COUNT_FILE'], 'w') as f:
         f.write('0')
-" 2>/dev/null
+" 2> /dev/null
 }
 
 _run_pip_audit() {
@@ -152,7 +151,7 @@ _run_pip_audit() {
         --format=json \
         --desc \
         --progress-spinner=off \
-        -o "$PIPAUDIT_REPORT" 2>/dev/null || true
+        -o "$PIPAUDIT_REPORT" 2> /dev/null || true
 
     "$pip_audit_bin" \
         "${req_args[@]}" \
@@ -177,7 +176,7 @@ try:
 except Exception:
     with open(os.environ['PIPAUDIT_COUNT_FILE'], 'w') as f:
         f.write('0')
-" 2>/dev/null
+" 2> /dev/null
 }
 
 _run_npm_audit() {
@@ -188,10 +187,10 @@ _run_npm_audit() {
         return
     fi
 
-    (cd "${DIR}/frontend" && npm audit --json > "$FRONTEND_AUDIT_REPORT" 2>/dev/null) || true
+    (cd "${DIR}/frontend" && npm audit --json > "$FRONTEND_AUDIT_REPORT" 2> /dev/null) || true
     (cd "${DIR}/frontend" && npm audit) >&2 || true
 
-    if [ -f "$FRONTEND_AUDIT_REPORT" ] && command -v node >/dev/null 2>&1; then
+    if [ -f "$FRONTEND_AUDIT_REPORT" ] && command -v node > /dev/null 2>&1; then
         node -e "
 const fs = require('fs');
 try {
@@ -210,7 +209,7 @@ try {
     fs.writeFileSync('$NPM_COUNT_FILE', '0');
     fs.writeFileSync('$NPM_TOTAL_COUNT_FILE', '0');
 }
-" 2>/dev/null
+" 2> /dev/null
     else
         echo 0 > "$NPM_COUNT_FILE"
         echo 0 > "$NPM_TOTAL_COUNT_FILE"
@@ -234,7 +233,7 @@ cmd_security() {
 
         if $RUN_BANDIT; then
             _run_bandit
-            _bandit_count=$(cat "$BANDIT_COUNT_FILE" 2>/dev/null || echo 0)
+            _bandit_count=$(cat "$BANDIT_COUNT_FILE" 2> /dev/null || echo 0)
             if [ "$_bandit_count" -gt 0 ]; then
                 log_warn "Bandit found $_bandit_count issue(s) at severity >= ${BANDIT_SEVERITY}. See ${BANDIT_REPORT}"
                 _overall_exit=1
@@ -245,7 +244,7 @@ cmd_security() {
 
         if $RUN_PIP_AUDIT; then
             _run_pip_audit
-            _pip_audit_count=$(cat "$PIPAUDIT_COUNT_FILE" 2>/dev/null || echo 0)
+            _pip_audit_count=$(cat "$PIPAUDIT_COUNT_FILE" 2> /dev/null || echo 0)
             if [ "$_pip_audit_count" -gt 0 ]; then
                 log_warn "pip-audit found $_pip_audit_count vulnerable Python package(s). See ${PIPAUDIT_REPORT}"
                 _overall_exit=1
@@ -260,8 +259,8 @@ cmd_security() {
 
         if $RUN_NPM_AUDIT; then
             _run_npm_audit
-            _npm_high_count=$(cat "$NPM_COUNT_FILE" 2>/dev/null || echo 0)
-            _npm_total_count=$(cat "$NPM_TOTAL_COUNT_FILE" 2>/dev/null || echo 0)
+            _npm_high_count=$(cat "$NPM_COUNT_FILE" 2> /dev/null || echo 0)
+            _npm_total_count=$(cat "$NPM_TOTAL_COUNT_FILE" 2> /dev/null || echo 0)
             if $FAIL_ON_HIGH && [ "$_npm_high_count" -gt 0 ]; then
                 log_warn "npm audit reported $_npm_high_count high/critical vulnerability(ies). See ${FRONTEND_AUDIT_REPORT}"
                 _overall_exit=1
@@ -293,7 +292,7 @@ cmd_security() {
 }
 
 help_security() {
-    cat <<-EOF
+    cat <<- EOF
 ${BOLD}Usage:${RESET} ./nukelabctl security [options]
 
 Run security scanners against the codebase and dependency manifests.

@@ -14,7 +14,7 @@ cmd_install() {
 }
 
 help_install() {
-    cat <<-EOF
+    cat <<- EOF
 ${BOLD}Usage:${RESET} ./nukelabctl install [target]
 
 Install local dependencies.
@@ -26,4 +26,3 @@ ${BOLD}Examples:${RESET}
   ./nukelabctl install
 EOF
 }
-

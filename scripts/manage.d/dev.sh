@@ -1,6 +1,6 @@
 #!/bin/bash
 help_dev() {
-    cat <<-EOF
+    cat <<- EOF
 ${BOLD}Usage:${RESET} ./nukelabctl dev [subcommand] [args...]
 
 Manage the development stack: backend containers with hot-reload plus a local
@@ -33,11 +33,11 @@ parse_dev_args() {
     fi
 
     case "${EXTRA_ARGS[0]}" in
-        start|restart|stop|logs|status)
+        start | restart | stop | logs | status)
             DEV_SUBCMD="${EXTRA_ARGS[0]}"
             EXTRA_ARGS=("${EXTRA_ARGS[@]:1}")
             ;;
-        --help|-h)
+        --help | -h)
             help_dev
             exit 0
             ;;
@@ -60,7 +60,7 @@ cmd_dev() {
     local _remaining_args=()
     for arg in "${EXTRA_ARGS[@]}"; do
         case "$arg" in
-            backend|frontend|all)
+            backend | frontend | all)
                 if [ -z "$TARGET" ] || [ "$TARGET" = "all" ]; then
                     TARGET="$arg"
                 else
@@ -83,13 +83,13 @@ cmd_dev() {
             setup_compose_args
             preflight_checks
             ;;
-        restart|stop)
+        restart | stop)
             _acquire_lock
             if ! restore_state; then
                 setup_compose_args
             fi
             ;;
-        logs|status)
+        logs | status)
             if ! restore_state; then
                 setup_compose_args
             fi

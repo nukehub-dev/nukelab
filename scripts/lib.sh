@@ -4,14 +4,17 @@
 # detection so the logic stays in one place.
 
 # Provide plain fallbacks if the sourcing script does not define these helpers.
-if ! type -t info | grep -q function 2>/dev/null; then
+if ! type -t info | grep -q function 2> /dev/null; then
     info() { echo "ℹ  $*" >&2; }
 fi
-if ! type -t warn | grep -q function 2>/dev/null; then
+if ! type -t warn | grep -q function 2> /dev/null; then
     warn() { echo "⚠  $*" >&2; }
 fi
-if ! type -t die | grep -q function 2>/dev/null; then
-    die() { echo "✗ $*" >&2; exit 1; }
+if ! type -t die | grep -q function 2> /dev/null; then
+    die() {
+        echo "✗ $*" >&2
+        exit 1
+    }
 fi
 
 # ─── Colors ────────────────────────────────────────────────────────────────
@@ -73,13 +76,16 @@ log_error() {
 }
 
 # Backwards-compatible wrappers used by existing command modules.
-log()   { log_info "$@"; }
-info()  { log_info "$@"; }
-ok()    { log_ok "$@"; }
-warn()  { log_warn "$@"; }
-err()   { log_error "$@"; }
-die()   { log_error "$@"; exit 1; }
-step()  {
+log() { log_info "$@"; }
+info() { log_info "$@"; }
+ok() { log_ok "$@"; }
+warn() { log_warn "$@"; }
+err() { log_error "$@"; }
+die() {
+    log_error "$@"
+    exit 1
+}
+step() {
     _log_should_print INFO || return 0
     echo -e "\n${BOLD}${MAGENTA}▸${RESET} ${BOLD}$*${RESET}"
 }
@@ -89,12 +95,12 @@ step()  {
 # a clear message when something goes wrong.
 
 _cleanup_trap() {
-    _release_lock 2>/dev/null || true
+    _release_lock 2> /dev/null || true
 }
 
 _interrupt_trap() {
     log_warn "Interrupted by user"
-    _release_lock 2>/dev/null || true
+    _release_lock 2> /dev/null || true
     exit 130
 }
 
@@ -103,7 +109,7 @@ _error_trap() {
     local line_no="${BASH_LINENO[0]}"
     local src="${BASH_SOURCE[1]:-unknown}"
     log_error "Command failed in ${src}:${line_no}: ${last_cmd}"
-    _release_lock 2>/dev/null || true
+    _release_lock 2> /dev/null || true
 }
 
 # ─── Environment Loading ───────────────────────────────────────────────────
@@ -130,7 +136,7 @@ load_env_file() {
         # Only export if the variable is not already set in the environment
         local key="${cleaned%%=*}"
         if [ -z "${!key:-}" ]; then
-            export "$cleaned" 2>/dev/null || true
+            export "$cleaned" 2> /dev/null || true
         fi
     done < "$env_file"
 }
@@ -216,7 +222,7 @@ setup_podman_socket() {
 
     # Auto-detect if not set
     if [ -z "${DOCKER_SOCKET:-}" ]; then
-        SOCK=$(podman info --format '{{.Host.RemoteSocket.Path}}' 2>/dev/null || true)
+        SOCK=$(podman info --format '{{.Host.RemoteSocket.Path}}' 2> /dev/null || true)
         if [ -n "$SOCK" ]; then
             export DOCKER_SOCKET="$SOCK"
         elif [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -S "$XDG_RUNTIME_DIR/podman/podman.sock" ]; then
@@ -371,7 +377,7 @@ clear_state() {
 _project_containers_running() {
     local _cmd="podman"
     [ "$CONTAINER_ENGINE" = "docker" ] && _cmd="docker"
-    $_cmd ps --format '{{.Names}}' 2>/dev/null | grep -qE '^nukelab-'
+    $_cmd ps --format '{{.Names}}' 2> /dev/null | grep -qE '^nukelab-'
 }
 
 # Warn when NukeLab containers are running but we have no state file. This
@@ -390,8 +396,8 @@ _warn_stale_containers() {
 
 # Return 0 if any service managed by the current COMPOSE_ARGS is running.
 _is_stack_running() {
-    $COMPOSE "${COMPOSE_ARGS[@]}" ps --format json 2>/dev/null | grep -q '"State": "running"' || \
-    $COMPOSE "${COMPOSE_ARGS[@]}" ps 2>/dev/null | grep -qE 'Up[[:space:]]+[a-z0-9-]+$'
+    $COMPOSE "${COMPOSE_ARGS[@]}" ps --format json 2> /dev/null | grep -q '"State": "running"' \
+        || $COMPOSE "${COMPOSE_ARGS[@]}" ps 2> /dev/null | grep -qE 'Up[[:space:]]+[a-z0-9-]+$'
 }
 
 # Return 0 if the opposite-mode stack is currently running.
@@ -586,10 +592,10 @@ EOF
 
 _preflight_port_in_use() {
     local port="$1"
-    if command -v ss >/dev/null 2>&1; then
-        ss -tln 2>/dev/null | grep -Eq ":${port}[[:space:]]" && return 0
-    elif command -v netstat >/dev/null 2>&1; then
-        netstat -tln 2>/dev/null | grep -Eq ":${port}[[:space:]]" && return 0
+    if command -v ss > /dev/null 2>&1; then
+        ss -tln 2> /dev/null | grep -Eq ":${port}[[:space:]]" && return 0
+    elif command -v netstat > /dev/null 2>&1; then
+        netstat -tln 2> /dev/null | grep -Eq ":${port}[[:space:]]" && return 0
     else
         # No tool available — warn once but do not block.
         return 1
@@ -636,10 +642,10 @@ preflight_checks() {
     fi
 
     # 2. Container engine and daemon/socket reachability
-    if ! command -v "$CONTAINER_ENGINE" >/dev/null 2>&1; then
+    if ! command -v "$CONTAINER_ENGINE" > /dev/null 2>&1; then
         die "Container engine '$CONTAINER_ENGINE' not found"
     fi
-    if ! "$CONTAINER_ENGINE" info >/dev/null 2>&1; then
+    if ! "$CONTAINER_ENGINE" info > /dev/null 2>&1; then
         die "Container engine '$CONTAINER_ENGINE' is not running or not reachable\n\nPodman: podman machine start\nDocker: sudo systemctl start docker"
     fi
 
@@ -692,10 +698,10 @@ _acquire_lock() {
     mkdir -p "$LOCK_DIR"
     if [ -f "$LOCK_FILE" ]; then
         local other_pid
-        other_pid=$(awk 'NR==1' "$LOCK_FILE" 2>/dev/null || true)
-        if [ -n "$other_pid" ] && kill -0 "$other_pid" 2>/dev/null; then
+        other_pid=$(awk 'NR==1' "$LOCK_FILE" 2> /dev/null || true)
+        if [ -n "$other_pid" ] && kill -0 "$other_pid" 2> /dev/null; then
             local other_cmd
-            other_cmd=$(sed -n '2p' "$LOCK_FILE" 2>/dev/null || true)
+            other_cmd=$(sed -n '2p' "$LOCK_FILE" 2> /dev/null || true)
             die "Another nukelabctl process is already running (PID $other_pid, command: ${other_cmd:-unknown}).\nWait for it to finish or remove $LOCK_FILE if it crashed."
         fi
         warn "Stale lock found (PID ${other_pid:-unknown}). Removing..."
@@ -707,7 +713,7 @@ _acquire_lock() {
 }
 
 _release_lock() {
-    if [ -f "$LOCK_FILE" ] && [ "$(awk 'NR==1' "$LOCK_FILE" 2>/dev/null || true)" = "$$" ]; then
+    if [ -f "$LOCK_FILE" ] && [ "$(awk 'NR==1' "$LOCK_FILE" 2> /dev/null || true)" = "$$" ]; then
         rm -f "$LOCK_FILE"
     fi
 }
@@ -751,7 +757,7 @@ _start_compose_up() {
 
 # ─── Service / Container Helpers ───────────────────────────────────────────
 is_frontend_running() {
-    [ -f "$FRONTEND_PID_FILE" ] && kill -0 "$(cat "$FRONTEND_PID_FILE")" 2>/dev/null
+    [ -f "$FRONTEND_PID_FILE" ] && kill -0 "$(cat "$FRONTEND_PID_FILE")" 2> /dev/null
 }
 
 kill_frontend() {
@@ -761,12 +767,12 @@ kill_frontend() {
         # Vite is spawned by npm/node; kill child processes first so the
         # dev server does not outlive the PID file.
         local children
-        children=$(pgrep -P "$pid" 2>/dev/null || true)
+        children=$(pgrep -P "$pid" 2> /dev/null || true)
         if [ -n "$children" ]; then
-            kill $children 2>/dev/null || true
+            kill $children 2> /dev/null || true
             sleep 0.2
         fi
-        kill "$pid" 2>/dev/null || true
+        kill "$pid" 2> /dev/null || true
         rm -f "$FRONTEND_PID_FILE"
         ok "Frontend stopped"
     fi
@@ -776,21 +782,21 @@ _container_exists() {
     local name="$1"
     local _cmd="podman"
     [ "$CONTAINER_ENGINE" = "docker" ] && _cmd="docker"
-    $_cmd ps -a --filter "name=^${name}$" --format "{{.Names}}" 2>/dev/null | grep -qx "$name"
+    $_cmd ps -a --filter "name=^${name}$" --format "{{.Names}}" 2> /dev/null | grep -qx "$name"
 }
 
 _container_running() {
     local name="$1"
     local _cmd="podman"
     [ "$CONTAINER_ENGINE" = "docker" ] && _cmd="docker"
-    $_cmd ps --filter "name=^${name}$" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -qx "$name"
+    $_cmd ps --filter "name=^${name}$" --filter "status=running" --format "{{.Names}}" 2> /dev/null | grep -qx "$name"
 }
 
 _stop_orphan_container() {
     local name="$1"
     local _cmd="podman"
     [ "$CONTAINER_ENGINE" = "docker" ] && _cmd="docker"
-    if $_cmd ps --filter "name=^${name}$" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -qx "$name"; then
+    if $_cmd ps --filter "name=^${name}$" --filter "status=running" --format "{{.Names}}" 2> /dev/null | grep -qx "$name"; then
         log "Stopping orphan container ${BOLD}$name${RESET}..."
         $_cmd stop -t 10 "$name" > /dev/null 2>&1 || true
     fi
@@ -813,7 +819,7 @@ is_backend_container_running() {
     # checking the container engine directly. This lets `nukelabctl test backend`
     # work even when the stack was started with a slightly different set of
     # overlays (e.g. dev mode) because the container name stays the same.
-    if $COMPOSE "${COMPOSE_ARGS[@]}" ps 2>/dev/null | grep -q 'Up .*nukelab-backend'; then
+    if $COMPOSE "${COMPOSE_ARGS[@]}" ps 2> /dev/null | grep -q 'Up .*nukelab-backend'; then
         return 0
     fi
 
@@ -821,7 +827,7 @@ is_backend_container_running() {
     if [ "$CONTAINER_ENGINE" = "docker" ]; then
         _container_cmd="docker"
     fi
-    $_container_cmd ps --filter "name=^nukelab-backend$" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -qx "nukelab-backend"
+    $_container_cmd ps --filter "name=^nukelab-backend$" --filter "status=running" --format "{{.Names}}" 2> /dev/null | grep -qx "nukelab-backend"
 }
 
 _has_overlay() {
@@ -863,7 +869,7 @@ _stop_dev_stack() {
     _stop_orphan_if_unmanaged "compose.pgbouncer.yml" nukelab-pgbouncer
     _stop_orphan_if_unmanaged "compose.tracing.yml" nukelab-otel-collector
     _stop_orphan_if_unmanaged "compose.tracing.yml" nukelab-jaeger
-    _release_lock 2>/dev/null || true
+    _release_lock 2> /dev/null || true
     ok "Goodbye!"
     exit 0
 }
@@ -894,7 +900,7 @@ setup_cpu_lib_volume() {
     local build_image="docker.io/library/gcc:latest"
 
     # Pull gcc image if not present
-    if ! $CONTAINER_ENGINE image exists "$build_image" 2>/dev/null; then
+    if ! $CONTAINER_ENGINE image exists "$build_image" 2> /dev/null; then
         log "Pulling $build_image..."
         $CONTAINER_ENGINE pull "$build_image" > /dev/null 2>&1 || {
             warn "Failed to pull $build_image"
@@ -944,7 +950,10 @@ wait_for_backend() {
     while ! curl -sf "$url" > /dev/null 2>&1; do
         sleep 2
         waited=$((waited + 2))
-        [ "$waited" -ge 60 ] && { warn "Timeout, continuing..."; return 1; }
+        [ "$waited" -ge 60 ] && {
+            warn "Timeout, continuing..."
+            return 1
+        }
         printf "."
     done
     echo ""
@@ -980,7 +989,7 @@ _ensure_dev_venv() {
 _ensure_venv_tool() {
     local tool_name="$1"
 
-    if command -v "$tool_name" >/dev/null 2>&1; then
+    if command -v "$tool_name" > /dev/null 2>&1; then
         command -v "$tool_name"
         return 0
     fi

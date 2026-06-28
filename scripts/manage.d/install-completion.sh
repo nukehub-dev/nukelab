@@ -1,6 +1,6 @@
 #!/bin/bash
 help_install_completion() {
-    cat <<-EOF
+    cat <<- EOF
 ${BOLD}Usage:${RESET} ./nukelabctl install-completion
 
 Install bash tab-completion for nukelabctl.
@@ -28,7 +28,7 @@ cmd_install_completion() {
     fi
 
     local source_line="source $completion_file  # NukeLab nukelabctl completion"
-    if [ -f "$shell_rc" ] && grep -Fxq "$source_line" "$shell_rc" 2>/dev/null; then
+    if [ -f "$shell_rc" ] && grep -Fxq "$source_line" "$shell_rc" 2> /dev/null; then
         info "Completion already installed in $shell_rc"
         return 0
     fi

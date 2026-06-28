@@ -4,7 +4,7 @@ START_BUILD=true
 START_WAIT=true
 
 help_start() {
-    cat <<-EOF
+    cat <<- EOF
 ${BOLD}Usage:${RESET} ./nukelabctl start [target] [options]
 
 Start the NukeLab stack.
@@ -38,7 +38,7 @@ parse_start_args() {
                 START_WAIT=false
                 EXTRA_ARGS=("${EXTRA_ARGS[@]:1}")
                 ;;
-            --help|-h)
+            --help | -h)
                 help_start
                 exit 0
                 ;;
@@ -70,10 +70,10 @@ cmd_start() {
         _env_file=".env.development"
     fi
     if [ -f "$DIR/scripts/generate-alertmanager-config.sh" ]; then
-        "$DIR/scripts/generate-alertmanager-config.sh" "$_env_file" >/dev/null
+        "$DIR/scripts/generate-alertmanager-config.sh" "$_env_file" > /dev/null
     fi
     if [ -f "$DIR/scripts/generate-prometheus-config.sh" ]; then
-        "$DIR/scripts/generate-prometheus-config.sh" "$_env_file" >/dev/null
+        "$DIR/scripts/generate-prometheus-config.sh" "$_env_file" > /dev/null
     fi
 
     if $USE_DEV_MODE; then

@@ -3,7 +3,7 @@
 STOP_TIMEOUT=10
 
 help_stop() {
-    cat <<-EOF
+    cat <<- EOF
 ${BOLD}Usage:${RESET} ./nukelabctl stop [target] [options]
 
 Stop running containers.
@@ -27,14 +27,14 @@ EOF
 parse_stop_args() {
     while [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; do
         case "${EXTRA_ARGS[0]}" in
-            --timeout|-t)
+            --timeout | -t)
                 if [[ ${#EXTRA_ARGS[@]} -lt 2 ]]; then
                     die "Option ${EXTRA_ARGS[0]} requires a value"
                 fi
                 STOP_TIMEOUT="${EXTRA_ARGS[1]}"
                 EXTRA_ARGS=("${EXTRA_ARGS[@]:2}")
                 ;;
-            --help|-h)
+            --help | -h)
                 help_stop
                 exit 0
                 ;;

@@ -1,6 +1,6 @@
 #!/bin/bash
 help_selftest() {
-    cat <<-EOF
+    cat <<- EOF
 ${BOLD}Usage:${RESET} ./nukelabctl selftest
 
 Run a quick sanity check on nukelabctl argument parsing and help output.
@@ -16,7 +16,7 @@ EOF
 _t() {
     local name="$1"
     shift
-    if "$@" >/dev/null 2>&1; then
+    if "$@" > /dev/null 2>&1; then
         ok "$name"
     else
         err "$name"
@@ -56,14 +56,14 @@ cmd_selftest() {
     _t "stop --timeout parses" bash -c './nukelabctl stop --timeout 5 2>&1 | grep -vq "Unexpected argument"' || _increment_failures
 
     # Invalid option values are rejected
-    if ./nukelabctl logs --tail abc --no-follow backend >/dev/null 2>&1; then
+    if ./nukelabctl logs --tail abc --no-follow backend > /dev/null 2>&1; then
         err "invalid --tail value not rejected"
         _increment_failures
     else
         ok "invalid --tail value rejected"
     fi
 
-    if ./nukelabctl stop --timeout abc >/dev/null 2>&1; then
+    if ./nukelabctl stop --timeout abc > /dev/null 2>&1; then
         err "invalid --timeout value not rejected"
         _increment_failures
     else
@@ -71,7 +71,7 @@ cmd_selftest() {
     fi
 
     # Unknown options are rejected
-    if ./nukelabctl logs --bogus >/dev/null 2>&1; then
+    if ./nukelabctl logs --bogus > /dev/null 2>&1; then
         err "unknown option not rejected"
         _increment_failures
     else
@@ -79,7 +79,7 @@ cmd_selftest() {
     fi
 
     # --dev global flag was removed; dev is now a meta-command
-    if ./nukelabctl start --dev >/dev/null 2>&1; then
+    if ./nukelabctl start --dev > /dev/null 2>&1; then
         err "removed --dev flag still accepted"
         _increment_failures
     else
@@ -127,6 +127,8 @@ cmd_selftest() {
 
     # Lint command help
     _t "command help: lint" bash -c './nukelabctl lint --help | grep -q "Run linters and format checks"' || _increment_failures
+    _t "lint --help lists shell target" bash -c './nukelabctl lint --help | grep -q "shell      Lint shell"' || _increment_failures
+    _t "lint shell passes (style + static analysis)" bash -c './nukelabctl lint shell >/dev/null 2>&1' || _increment_failures
 
     # Security command behaviors
     _t "security --help lists --no-fail-on-high" bash -c './nukelabctl security --help | grep -q -- "--no-fail-on-high"' || _increment_failures
@@ -148,7 +150,7 @@ cmd_selftest() {
 
     # The static-analysis tool is the strongest checker for shell scripts; warn
     # (not fail) when it is missing so CI can still run without it.
-    if command -v shellcheck >/dev/null 2>&1; then
+    if command -v shellcheck > /dev/null 2>&1; then
         local _sc_files=(nukelabctl scripts/lib.sh scripts/nukelabctl-completion.bash)
         for f in scripts/manage.d/*.sh; do
             _sc_files+=("$f")
@@ -166,11 +168,45 @@ cmd_selftest() {
         else
             err "shellcheck reported errors:"
             printf '%s\n' "$_sc_out" >&2
-            err "Run for full output: shellcheck -S warning ${_sc_files[*]}"
+            err "Run for details: shellcheck -S error nukelabctl scripts/"
             _increment_failures
         fi
     else
         warn "shellcheck not installed; skipping static analysis (install shellcheck for stronger checks)"
+    fi
+
+    # shfmt is the shell equivalent of ruff/prettier; it reads .editorconfig.
+    # Strict by default so format drift fails CI/local self-test just like a
+    # failing ruff check would. Set NUKELAB_STRICT_FMT=0 to downgrade to a
+    # warning (handy when prototyping).
+    if command -v shfmt > /dev/null 2>&1; then
+        local _fmt_files=(nukelabctl scripts/lib.sh scripts/nukelabctl-completion.bash)
+        for f in scripts/manage.d/*.sh; do
+            _fmt_files+=("$f")
+        done
+        local _fmt_diff
+        if _fmt_diff=$(shfmt -d "${_fmt_files[@]}" 2>&1); then
+            ok "shfmt clean (style matches .editorconfig)"
+        else
+            # `shfmt -l` returns non-zero when files need reformatting; that
+            # non-zero halts the script under `set -E`, so absorb with `|| true`.
+            local _fmt_count
+            _fmt_count=$(shfmt -l "${_fmt_files[@]}" 2> /dev/null | wc -l || true)
+            _fmt_count=${_fmt_count// /}
+            if [ "${NUKELAB_STRICT_FMT:-1}" = "1" ]; then
+                err "shfmt reports $_fmt_count file(s) needing format:"
+                # Truncate long diffs safely: `head` closing early can SIGPIPE
+                # the upstream `printf` and trip the ERR trap, so absorb it.
+                { printf '%s\n' "$_fmt_diff" | head -40 >&2 || true; }
+                err "Apply with: ./nukelabctl lint shell --fix"
+                _increment_failures
+            else
+                warn "shfmt reports $_fmt_count file(s) needing format (non-blocking; NUKELAB_STRICT_FMT=0)"
+                warn "Apply formatting with: shfmt -w ${_fmt_files[*]}"
+            fi
+        fi
+    else
+        warn "shfmt not installed; skipping style check (install shfmt for the shell equivalent of ruff/prettier)"
     fi
 
     echo ""

@@ -1,0 +1,47 @@
+# EditorConfig — https://editorconfig.org
+# Top-level defaults; language sections below refine them.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+max_line_length = 100
+
+# ─── Python ────────────────────────────────────────────────────────────────
+[*.py]
+indent_style = space
+indent_size = 4
+
+# ─── TypeScript / JavaScript / JSX ──────────────────────────────────────────
+[*.{ts,tsx,js,jsx,cjs,mjs,json,jsonc,css,html}]
+indent_style = space
+indent_size = 2
+
+# ─── YAML / Markdown / env files ───────────────────────────────────────────
+[*.{yml,yaml,md,env}]
+indent_style = space
+indent_size = 2
+
+# ─── Shell (bash) ──────────────────────────────────────────────────────────
+# Options are picked up by `shfmt`; see `man shfmt` for the full list.
+# These mirror the prior in-tree style: 4-space indent, case bodies indented,
+# binary ops (&&, ||) may begin a line, redirect operators followed by a
+# space (e.g. `> /dev/null`), POSIX ops not split to the next line.
+[*.sh]
+indent_style = space
+indent_size = 4
+shell_variant = bash
+binary_next_line = true
+switch_case_indent = true
+space_redirects = true
+
+# The dispatcher is bash but has no .sh extension; mirror the same rule.
+[nukelabctl]
+indent_style = space
+indent_size = 4
+shell_variant = bash
+binary_next_line = true
+switch_case_indent = true
+space_redirects = true

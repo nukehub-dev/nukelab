@@ -50,24 +50,24 @@ parse_args() {
     # Phase 1: consume global flags that may appear before the command.
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --help|-h)
+            --help | -h)
                 print_help
                 exit 0
                 ;;
             --coverage)
                 USE_COVERAGE=true
                 ;;
-            --verbose|-v)
+            --verbose | -v)
                 VERBOSE=true
                 QUIET=false
                 LOG_LEVEL=DEBUG
                 ;;
-            --quiet|-q)
+            --quiet | -q)
                 QUIET=true
                 VERBOSE=false
                 LOG_LEVEL=ERROR
                 ;;
-            --overlay|-o)
+            --overlay | -o)
                 shift
                 COMPOSE_OVERLAY_FILES+=("$1")
                 ;;
@@ -109,7 +109,7 @@ parse_args() {
 
     # Normalize top-level help requests.
     case "$CMD" in
-        help|--help|-h)
+        help | --help | -h)
             print_help
             exit 0
             ;;
@@ -118,7 +118,7 @@ parse_args() {
     # Phase 2: parse command arguments, targets, and per-command options.
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            backend|frontend|all)
+            backend | frontend | shell | all)
                 if [ "$CMD" = "dev" ]; then
                     # The dev meta-command parses subcommands/targets itself.
                     EXTRA_ARGS+=("$1")
@@ -129,17 +129,17 @@ parse_args() {
             --coverage)
                 USE_COVERAGE=true
                 ;;
-            --verbose|-v)
+            --verbose | -v)
                 VERBOSE=true
                 QUIET=false
                 LOG_LEVEL=DEBUG
                 ;;
-            --quiet|-q)
+            --quiet | -q)
                 QUIET=true
                 VERBOSE=false
                 LOG_LEVEL=ERROR
                 ;;
-            --overlay|-o)
+            --overlay | -o)
                 shift
                 COMPOSE_OVERLAY_FILES+=("$1")
                 ;;
@@ -152,7 +152,7 @@ parse_args() {
             --version)
                 # Ignore --version when it appears after the command.
                 ;;
-            --help|-h)
+            --help | -h)
                 SHOW_HELP=true
                 ;;
             -*)
@@ -194,7 +194,7 @@ parse_args() {
 
 # ─── Help ─────────────────────────────────────────────────────────────────-
 print_help() {
-    cat <<-EOF
+    cat <<- EOF
 ${BOLD}${CYAN}
  _   _       _        _           _
 | \\ | |     | |      | |         | |
@@ -315,12 +315,12 @@ _bootstrap() {
     local _do_lock=false _do_preflight=false _do_restore=false _do_setup=false _raw=false
     while [ $# -gt 0 ]; do
         case "$1" in
-            lock)      _do_lock=true;;
-            preflight) _do_preflight=true;;
-            restore)   _do_restore=true;;
-            setup)     _do_setup=true;;
-            raw)       _raw=true;;
-            *) die "_bootstrap: unknown flag '$1'";;
+            lock) _do_lock=true ;;
+            preflight) _do_preflight=true ;;
+            restore) _do_restore=true ;;
+            setup) _do_setup=true ;;
+            raw) _raw=true ;;
+            *) die "_bootstrap: unknown flag '$1'" ;;
         esac
         shift
     done
@@ -412,7 +412,7 @@ main() {
     fi
 
     case "$CMD" in
-        start|build|update|pull)
+        start | build | update | pull)
             _bootstrap lock setup preflight
             _dispatch_command "$CMD"
             ;;
@@ -431,14 +431,14 @@ main() {
             _bootstrap raw
             _dispatch_command "$CMD"
             ;;
-        stop|restart|remove|reset)
+        stop | restart | remove | reset)
             _bootstrap lock restore
             _dispatch_command "$CMD"
             ;;
         lint)
             _dispatch_command "$CMD"
             ;;
-        status|logs|shell|exec|db-migrate|db-shell|backup|restore|e2e|security|doctor|rotate-user-auth-key|cleanup-user-auth-keys)
+        status | logs | shell | exec | db-migrate | db-shell | backup | restore | e2e | security | doctor | rotate-user-auth-key | cleanup-user-auth-keys)
             _bootstrap restore
             _dispatch_command "$CMD"
             ;;
@@ -454,13 +454,13 @@ main() {
             detect_engine
             _dispatch_command "$CMD"
             ;;
-        install|test)
+        install | test)
             if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
                 _bootstrap lock restore preflight
             fi
             _dispatch_command "$CMD"
             ;;
-        install-completion|selftest)
+        install-completion | selftest)
             _dispatch_command "$CMD"
             ;;
         *)

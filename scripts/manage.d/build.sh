@@ -20,7 +20,7 @@ cmd_build() {
 }
 
 help_build() {
-    cat <<-EOF
+    cat <<- EOF
 ${BOLD}Usage:${RESET} ./nukelabctl build [target]
 
 Build container images.
@@ -33,4 +33,3 @@ ${BOLD}Examples:${RESET}
   ./nukelabctl build frontend
 EOF
 }
-

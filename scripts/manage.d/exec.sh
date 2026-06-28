@@ -13,7 +13,7 @@ cmd_exec() {
 }
 
 help_exec() {
-    cat <<-EOF
+    cat <<- EOF
 ${BOLD}Usage:${RESET} ./nukelabctl exec <service> <command> [args...]
 
 Execute a command inside a running container.
@@ -23,4 +23,3 @@ ${BOLD}Examples:${RESET}
   ./nukelabctl exec backend python -v
 EOF
 }
-

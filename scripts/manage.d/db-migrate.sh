@@ -20,7 +20,7 @@ cmd_db_migrate() {
 }
 
 help_db_migrate() {
-    cat <<-EOF
+    cat <<- EOF
 ${BOLD}Usage:${RESET} ./nukelabctl db-migrate
 
 Run Alembic database migrations inside the backend container.
@@ -29,4 +29,3 @@ ${BOLD}Examples:${RESET}
   ./nukelabctl db-migrate
 EOF
 }
-

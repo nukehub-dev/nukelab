@@ -10,7 +10,7 @@ parse_update_args() {
                 UPDATE_BUILD_ARGS=()
                 EXTRA_ARGS=("${EXTRA_ARGS[@]:1}")
                 ;;
-            --help|-h)
+            --help | -h)
                 help_update
                 exit 0
                 ;;
@@ -37,7 +37,7 @@ cmd_update() {
 }
 
 help_update() {
-    cat <<-EOF
+    cat <<- EOF
 ${BOLD}Usage:${RESET} ./nukelabctl update [--cache]
 
 Pull latest base images and rebuild all containers.
@@ -51,4 +51,3 @@ ${BOLD}Examples:${RESET}
   ./nukelabctl update --cache
 EOF
 }
-

@@ -7,12 +7,12 @@ cmd_remove() {
 
     if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
         kill_frontend
-        $COMPOSE "${COMPOSE_ARGS[@]}" rm -f frontend 2>/dev/null || true
+        $COMPOSE "${COMPOSE_ARGS[@]}" rm -f frontend 2> /dev/null || true
         ok "Frontend container removed"
     fi
 
     if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
-        $COMPOSE "${COMPOSE_ARGS[@]}" rm -f $_services 2>/dev/null || true
+        $COMPOSE "${COMPOSE_ARGS[@]}" rm -f $_services 2> /dev/null || true
         _stop_orphan_if_unmanaged "compose.pgbouncer.yml" nukelab-pgbouncer
         if ! _has_overlay "compose.pgbouncer.yml"; then
             local _cmd="podman"
@@ -29,7 +29,7 @@ cmd_remove() {
 parse_remove_args() {
     while [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; do
         case "${EXTRA_ARGS[0]}" in
-            --help|-h)
+            --help | -h)
                 help_remove
                 exit 0
                 ;;
@@ -49,7 +49,7 @@ parse_remove_args() {
 }
 
 help_remove() {
-    cat <<-EOF
+    cat <<- EOF
 ${BOLD}Usage:${RESET} ./nukelabctl remove [target]
 
 Remove containers while keeping volumes and data.
@@ -61,4 +61,3 @@ ${BOLD}Examples:${RESET}
   ./nukelabctl remove backend
 EOF
 }
-

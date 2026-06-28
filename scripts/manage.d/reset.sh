@@ -2,7 +2,10 @@
 cmd_reset() {
     step "${RED}${BOLD}WARNING:${RESET} This deletes ALL data and containers!"
     read -rp "Type 'yes' to confirm: " confirm
-    [[ "$confirm" = "yes" ]] || { info "Aborted."; exit 0; }
+    [[ "$confirm" = "yes" ]] || {
+        info "Aborted."
+        exit 0
+    }
 
     log "Stopping everything..."
     kill_frontend
@@ -17,7 +20,7 @@ cmd_reset() {
     # to the historical hardcoded list if `compose config --volumes` fails
     # (e.g. compose plugin missing on a partial install).
     local _volumes=()
-    if _vol_out=$($COMPOSE "${COMPOSE_ARGS[@]}" config --volumes 2>/dev/null); then
+    if _vol_out=$($COMPOSE "${COMPOSE_ARGS[@]}" config --volumes 2> /dev/null); then
         while IFS= read -r line; do
             [ -n "$line" ] && _volumes+=("$line")
         done <<< "$_vol_out"
@@ -31,11 +34,11 @@ cmd_reset() {
     # Both docker compose and podman-compose typically already prefix them, so
     # we try the reported name first and then the prefixed form.
     for vol in "${_volumes[@]}"; do
-        if $CONTAINER_ENGINE volume inspect "$vol" >/dev/null 2>&1; then
-            $CONTAINER_ENGINE volume rm "$vol" >/dev/null 2>&1 \
+        if $CONTAINER_ENGINE volume inspect "$vol" > /dev/null 2>&1; then
+            $CONTAINER_ENGINE volume rm "$vol" > /dev/null 2>&1 \
                 || log_debug "Could not remove volume: $vol"
-        elif $CONTAINER_ENGINE volume inspect "${COMPOSE_PROJECT_NAME:-nukelab}_$vol" >/dev/null 2>&1; then
-            $CONTAINER_ENGINE volume rm "${COMPOSE_PROJECT_NAME:-nukelab}_$vol" >/dev/null 2>&1 \
+        elif $CONTAINER_ENGINE volume inspect "${COMPOSE_PROJECT_NAME:-nukelab}_$vol" > /dev/null 2>&1; then
+            $CONTAINER_ENGINE volume rm "${COMPOSE_PROJECT_NAME:-nukelab}_$vol" > /dev/null 2>&1 \
                 || log_debug "Could not remove volume: ${COMPOSE_PROJECT_NAME:-nukelab}_$vol"
         fi
     done
@@ -45,7 +48,7 @@ cmd_reset() {
 }
 
 help_reset() {
-    cat <<-EOF
+    cat <<- EOF
 ${BOLD}Usage:${RESET} ./nukelabctl reset
 
 ⚠️  Delete ALL data, containers, and volumes. Requires confirmation.
@@ -54,4 +57,3 @@ ${BOLD}Examples:${RESET}
   ./nukelabctl reset
 EOF
 }
-

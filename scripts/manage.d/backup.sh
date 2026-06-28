@@ -17,7 +17,7 @@ cmd_backup() {
 }
 
 help_backup() {
-    cat <<-EOF
+    cat <<- EOF
 ${BOLD}Usage:${RESET} ./nukelabctl backup
 
 Create a database backup in backups/.
@@ -26,4 +26,3 @@ ${BOLD}Examples:${RESET}
   ./nukelabctl backup
 EOF
 }
-

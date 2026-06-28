@@ -1,6 +1,6 @@
 #!/bin/bash
 help_doctor() {
-    cat <<-EOF
+    cat <<- EOF
 ${BOLD}Usage:${RESET} ./nukelabctl doctor
 
 Run non-destructive checks and report whether the host environment is ready
@@ -17,19 +17,28 @@ _DOCTOR_PASS=0
 _DOCTOR_WARN=0
 _DOCTOR_FAIL=0
 
-_doctor_pass() { (( ++_DOCTOR_PASS )); ok "[PASS] $*"; }
-_doctor_warn() { (( ++_DOCTOR_WARN )); warn "[WARN] $*"; }
-_doctor_fail() { (( ++_DOCTOR_FAIL )); err "[FAIL] $*"; }
+_doctor_pass() {
+    ((++_DOCTOR_PASS))
+    ok "[PASS] $*"
+}
+_doctor_warn() {
+    ((++_DOCTOR_WARN))
+    warn "[WARN] $*"
+}
+_doctor_fail() {
+    ((++_DOCTOR_FAIL))
+    err "[FAIL] $*"
+}
 
 _doctor_check_engine() {
-    if command -v "$CONTAINER_ENGINE" >/dev/null 2>&1; then
+    if command -v "$CONTAINER_ENGINE" > /dev/null 2>&1; then
         _doctor_pass "Container engine found: $CONTAINER_ENGINE"
     else
         _doctor_fail "Container engine not found: install podman or docker"
         return
     fi
 
-    if "$CONTAINER_ENGINE" info >/dev/null 2>&1; then
+    if "$CONTAINER_ENGINE" info > /dev/null 2>&1; then
         _doctor_pass "Container engine daemon is reachable"
     else
         _doctor_fail "Container engine daemon is not reachable (podman machine start / systemctl start docker)"
@@ -41,7 +50,7 @@ _doctor_check_tools() {
     if $USE_DEV_MODE; then
         tools+=(npm)
     fi
-    if command -v ss >/dev/null 2>&1 || command -v netstat >/dev/null 2>&1; then
+    if command -v ss > /dev/null 2>&1 || command -v netstat > /dev/null 2>&1; then
         _doctor_pass "Port-check tool available (ss/netstat)"
     else
         _doctor_warn "No ss or netstat found; port checks will be skipped"
@@ -51,7 +60,7 @@ _doctor_check_tools() {
     for tool in "${tools[@]}"; do
         # Strip any subcommand (e.g. "podman compose" -> "podman").
         local bin="${tool%% *}"
-        command -v "$bin" >/dev/null 2>&1 || missing+=("$bin")
+        command -v "$bin" > /dev/null 2>&1 || missing+=("$bin")
     done
 
     if [ ${#missing[@]} -eq 0 ]; then
@@ -144,9 +153,9 @@ _doctor_check_ports() {
 _doctor_check_compose_files() {
     # Iterate by index so we can pair each -f with its value argument.
     local i
-    for (( i=0; i<${#COMPOSE_ARGS[@]}-1; i++ )); do
+    for ((i = 0; i < ${#COMPOSE_ARGS[@]} - 1; i++)); do
         if [[ "${COMPOSE_ARGS[$i]}" == -f ]]; then
-            local file="${COMPOSE_ARGS[$((i+1))]}"
+            local file="${COMPOSE_ARGS[$((i + 1))]}"
             if [ -f "$file" ]; then
                 _doctor_pass "Compose file exists: $file"
             else
@@ -176,8 +185,8 @@ _doctor_check_socket() {
 _doctor_check_disk() {
     local threshold_kb=$((5 * 1024 * 1024)) # 5 GB
     local avail_kb
-    if command -v df >/dev/null 2>&1; then
-        avail_kb=$(df -k "$DIR" 2>/dev/null | awk 'NR==2 {print $4}')
+    if command -v df > /dev/null 2>&1; then
+        avail_kb=$(df -k "$DIR" 2> /dev/null | awk 'NR==2 {print $4}')
         if [ -n "$avail_kb" ] && [ "$avail_kb" -lt "$threshold_kb" ]; then
             _doctor_warn "Low disk space on project filesystem: ${avail_kb}K free (< 5 GB)"
         else

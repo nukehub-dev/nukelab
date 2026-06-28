@@ -14,7 +14,7 @@ cmd_rotate_user_auth_key() {
 }
 
 help_rotate_user_auth_key() {
-    cat <<-EOF
+    cat <<- EOF
 ${BOLD}Usage:${RESET} ./nukelabctl rotate-user-auth-key [service]
 
 Rotate the active Ed25519 user-auth signing key inside the backend container.

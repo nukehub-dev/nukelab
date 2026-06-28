@@ -5,7 +5,7 @@ LOGS_FOLLOW=true
 LOGS_FOLLOW_EXPLICIT=false
 
 help_logs() {
-    cat <<-EOF
+    cat <<- EOF
 ${BOLD}Usage:${RESET} ./nukelabctl logs [service] [options]
 
 Stream container logs.
@@ -28,7 +28,7 @@ parse_logs_args() {
     local _tail_set=false
     while [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; do
         case "${EXTRA_ARGS[0]}" in
-            --tail|-n)
+            --tail | -n)
                 if [[ ${#EXTRA_ARGS[@]} -lt 2 ]]; then
                     die "Option ${EXTRA_ARGS[0]} requires a value"
                 fi
@@ -36,7 +36,7 @@ parse_logs_args() {
                 _tail_set=true
                 EXTRA_ARGS=("${EXTRA_ARGS[@]:2}")
                 ;;
-            --follow|-f)
+            --follow | -f)
                 LOGS_FOLLOW=true
                 LOGS_FOLLOW_EXPLICIT=true
                 EXTRA_ARGS=("${EXTRA_ARGS[@]:1}")
@@ -46,7 +46,7 @@ parse_logs_args() {
                 LOGS_FOLLOW_EXPLICIT=true
                 EXTRA_ARGS=("${EXTRA_ARGS[@]:1}")
                 ;;
-            --help|-h)
+            --help | -h)
                 help_logs
                 exit 0
                 ;;

@@ -14,7 +14,7 @@ cmd_cleanup_user_auth_keys() {
 }
 
 help_cleanup_user_auth_keys() {
-    cat <<-EOF
+    cat <<- EOF
 ${BOLD}Usage:${RESET} ./nukelabctl cleanup-user-auth-keys [service]
 
 Remove retired user-auth public keys whose grace period has expired.

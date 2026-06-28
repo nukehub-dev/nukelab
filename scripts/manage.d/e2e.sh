@@ -25,7 +25,7 @@ cmd_e2e() {
 }
 
 help_e2e() {
-    cat <<-EOF
+    cat <<- EOF
 ${BOLD}Usage:${RESET} ./nukelabctl e2e [playwright-args...]
 
 Run Playwright end-to-end tests. The backend must be running. Any arguments
@@ -38,4 +38,3 @@ ${BOLD}Examples:${RESET}
   ./nukelabctl e2e tests/login.spec.ts --workers 1
 EOF
 }
-

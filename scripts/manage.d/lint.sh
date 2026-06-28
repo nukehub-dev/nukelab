@@ -3,24 +3,26 @@
 LINT_FIX=false
 
 help_lint() {
-    cat <<-EOF
+    cat <<- EOF
 ${BOLD}Usage:${RESET} ./nukelabctl lint [target] [options]
 
 Run linters and format checks.
 
 ${BOLD}Targets:${RESET}
-  backend    Lint Python code with ruff ${DIM}(default if omitted)${RESET}
+  backend    Lint Python code with ruff
   frontend   Lint TypeScript/React code with eslint and prettier
-  all        Lint both backend and frontend
+  shell      Lint shell scripts with shellcheck and shfmt
+  all        Lint backend, frontend, and shell ${DIM}(default)${RESET}
 
 ${BOLD}Options:${RESET}
-  --fix, -f       Auto-fix issues where possible
+  --fix, -f       Auto-fix issues where possible (backend + frontend; shfmt -w for shell)
   --help, -h      Show this help
 
 ${BOLD}Examples:${RESET}
   ./nukelabctl lint
   ./nukelabctl lint backend --fix
   ./nukelabctl lint frontend
+  ./nukelabctl lint shell
   ./nukelabctl lint all
 EOF
 }
@@ -28,11 +30,11 @@ EOF
 parse_lint_args() {
     while [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; do
         case "${EXTRA_ARGS[0]}" in
-            --fix|-f)
+            --fix | -f)
                 LINT_FIX=true
                 EXTRA_ARGS=("${EXTRA_ARGS[@]:1}")
                 ;;
-            --help|-h)
+            --help | -h)
                 help_lint
                 exit 0
                 ;;
@@ -86,7 +88,7 @@ cmd_lint() {
     if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
         step "Linting frontend..."
 
-        if ! command -v npm >/dev/null 2>&1; then
+        if ! command -v npm > /dev/null 2>&1; then
             die "npm not found. Install Node.js first."
         fi
 
@@ -104,9 +106,86 @@ cmd_lint() {
         )
     fi
 
+    if [ "$TARGET" = "shell" ] || [ "$TARGET" = "all" ]; then
+        step "Linting shell..."
+        _lint_shell || _exit=$?
+    fi
+
     if [ $_exit -ne 0 ]; then
         die "Lint failed. Run './nukelabctl lint $TARGET --fix' to auto-fix where possible."
     fi
 
     ok "Lint passed"
+}
+
+# Lint all shell scripts under nukelabctl / scripts/ with shellcheck, and
+# verify shfmt formatting against .editorconfig. With --fix, applies shfmt -w
+# in place (shellcheck findings are reported but not auto-fixed — its
+# auto-fixer is opt-in per-rule and rarely safe to apply blindly).
+_lint_shell() {
+    local _exit=0
+    local _shell_files=(nukelabctl scripts/lib.sh scripts/nukelabctl-completion.bash)
+    local f
+    for f in scripts/manage.d/*.sh; do
+        _shell_files+=("$f")
+    done
+
+    # The static analyzer is run in two passes: errors fail the lint, warnings
+    # are surfaced but non-fatal because many are cross-file false positives
+    # (e.g. SC2034 "appears unused" for globals consumed by sourced modules).
+    if command -v shellcheck > /dev/null 2>&1; then
+        local _sc_out
+        if _sc_out=$(shellcheck -S error "${_shell_files[@]}" 2>&1); then
+            ok "shellcheck: no errors"
+        else
+            err "shellcheck: errors found"
+            printf '%s\n' "$_sc_out" >&2
+            err "Run for details: shellcheck -S error nukelabctl scripts/"
+            _exit=1
+        fi
+        # Surface warnings for review without failing.
+        local _sc_warns
+        if _sc_warns=$(shellcheck -S warning "${_shell_files[@]}" 2>&1); then
+            :
+        else
+            local _warn_count
+            _warn_count=$(printf '%s\n' "$_sc_warns" | grep -c '^In ' || true)
+            if [ "${_warn_count:-0}" -gt 0 ]; then
+                warn "shellcheck: $_warn_count warning(s) (non-blocking). Run to see: shellcheck -S warning nukelabctl scripts/"
+            fi
+        fi
+    else
+        warn "shellcheck not installed; skipping (install for stronger shell linting)"
+    fi
+
+    # shfmt — checks formatting against .editorconfig. --fix applies shfmt -w.
+    if command -v shfmt > /dev/null 2>&1; then
+        local _fmt_diff
+        if $LINT_FIX; then
+            shfmt -w "${_shell_files[@]}" && ok "shfmt: applied formatting"
+            # Re-check to make sure nothing remains.
+            if _fmt_diff=$(shfmt -d "${_shell_files[@]}" 2>&1); then
+                :
+            else
+                err "shfmt: still has diff after --fix (file a bug)"
+                _exit=1
+            fi
+        else
+            if _fmt_diff=$(shfmt -d "${_shell_files[@]}" 2>&1); then
+                ok "shfmt: style matches .editorconfig"
+            else
+                local _fmt_count
+                _fmt_count=$(shfmt -l "${_shell_files[@]}" 2> /dev/null | wc -l || true)
+                _fmt_count=${_fmt_count// /}
+                err "shfmt: $_fmt_count file(s) need formatting"
+                { printf '%s\n' "$_fmt_diff" | head -40 >&2 || true; }
+                err "Apply with: ./nukelabctl lint shell --fix"
+                _exit=1
+            fi
+        fi
+    else
+        warn "shfmt not installed; skipping (install for shell formatting)"
+    fi
+
+    return $_exit
 }
