@@ -12,7 +12,7 @@ cmd_remove() {
 
     if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
         $COMPOSE "${COMPOSE_ARGS[@]}" rm -f $_services 2>/dev/null || true
-        _stop_orphan_if_unmanaged nukelab-pgbouncer
+        _stop_orphan_if_unmanaged "compose.pgbouncer.yml" nukelab-pgbouncer
         if ! _has_overlay "compose.pgbouncer.yml"; then
             local _cmd="podman"
             [ "$CONTAINER_ENGINE" = "docker" ] && _cmd="docker"
@@ -20,6 +20,31 @@ cmd_remove() {
         fi
         ok "Backend containers removed"
     fi
+}
+
+# parse_remove_args validates flags so a typo (e.g. `rm --bogus`) is rejected
+# instead of silently executing a destructive remove against the current
+# target.
+parse_remove_args() {
+    while [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; do
+        case "${EXTRA_ARGS[0]}" in
+            --help|-h)
+                help_remove
+                exit 0
+                ;;
+            --*)
+                die "Unknown option for remove: ${EXTRA_ARGS[0]}"
+                ;;
+            *)
+                if [[ -z "${TARGET:-}" || "$TARGET" == "all" ]]; then
+                    TARGET="${EXTRA_ARGS[0]}"
+                    EXTRA_ARGS=("${EXTRA_ARGS[@]:1}")
+                else
+                    die "Unexpected argument: ${EXTRA_ARGS[0]}"
+                fi
+                ;;
+        esac
+    done
 }
 
 help_remove() {

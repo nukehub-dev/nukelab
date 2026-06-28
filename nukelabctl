@@ -104,6 +104,9 @@ parse_args() {
     CMD="${1:-help}"
     shift || true
 
+    # Normalize aliases early so the dispatcher never needs a special case.
+    [[ "$CMD" == "rm" ]] && CMD="remove"
+
     # Normalize top-level help requests.
     case "$CMD" in
         help|--help|-h)
@@ -300,6 +303,42 @@ ${BOLD}Examples:${RESET}
 EOF
 }
 
+# ─── Bootstrap helper ──────────────────────────────────────────────────────
+# Shared setup for commands that touch the container engine. Flags select
+# which steps run:
+#   lock       acquire the concurrency lock
+#   restore    try restore_state; fall back to setup_compose_args on failure
+#   setup      always run setup_compose_args (instead of restore)
+#   raw        skip compose-args setup entirely
+#   preflight  run preflight_checks at the end
+_bootstrap() {
+    local _do_lock=false _do_preflight=false _do_restore=false _do_setup=false _raw=false
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            lock)      _do_lock=true;;
+            preflight) _do_preflight=true;;
+            restore)   _do_restore=true;;
+            setup)     _do_setup=true;;
+            raw)       _raw=true;;
+            *) die "_bootstrap: unknown flag '$1'";;
+        esac
+        shift
+    done
+
+    if $_do_lock; then _acquire_lock; fi
+    init_env "$USE_DEV_MODE"
+    detect_engine
+    setup_podman_socket
+    if ! $_raw; then
+        if $_do_restore; then
+            if ! restore_state; then setup_compose_args; fi
+        elif $_do_setup; then
+            setup_compose_args
+        fi
+    fi
+    if $_do_preflight; then preflight_checks; fi
+}
+
 # ─── Command Loader ────────────────────────────────────────────────────────
 _dispatch_command() {
     local command="$1"
@@ -361,8 +400,7 @@ main() {
         return 0
     fi
 
-    # Tests and load tests don't need Alertmanager; skip its overlay unless
-    # the user explicitly requests it via --no-alertmanager is not set here.
+    # Tests and load tests don't need Alertmanager; auto-skip its overlay.
     if [ "$CMD" = "test" ] || [ "$CMD" = "loadtest" ]; then
         NO_ALERTMANAGER=true
     fi
@@ -375,21 +413,13 @@ main() {
 
     case "$CMD" in
         start|build|update|pull)
-            _acquire_lock
-            init_env "$USE_DEV_MODE"
-            detect_engine
-            setup_podman_socket
-            setup_compose_args
-            preflight_checks
+            _bootstrap lock setup preflight
             _dispatch_command "$CMD"
             ;;
         clean)
-            # Clean does not need the stack to be reachable or ports to be free;
-            # it just prunes stopped resources and clears local state files.
-            _acquire_lock
-            init_env "$USE_DEV_MODE"
-            detect_engine
-            setup_podman_socket
+            # Clean only prunes stopped resources and local state; it does not
+            # need the stack reachable or ports free.
+            _bootstrap lock raw
             _dispatch_command "$CMD"
             ;;
         dev)
@@ -398,31 +428,18 @@ main() {
             USE_DEV_MODE=true
             COMPOSE_PROJECT_NAME="$DEV_PROJECT_NAME"
             STATE_FILE="$DEV_STATE_FILE"
-            init_env "$USE_DEV_MODE"
-            detect_engine
-            setup_podman_socket
+            _bootstrap raw
             _dispatch_command "$CMD"
             ;;
         stop|restart|remove|reset)
-            _acquire_lock
-            init_env "$USE_DEV_MODE"
-            detect_engine
-            setup_podman_socket
-            if ! restore_state; then
-                setup_compose_args
-            fi
+            _bootstrap lock restore
             _dispatch_command "$CMD"
             ;;
         lint)
             _dispatch_command "$CMD"
             ;;
         status|logs|shell|exec|db-migrate|db-shell|backup|restore|e2e|security|doctor|rotate-user-auth-key|cleanup-user-auth-keys)
-            init_env "$USE_DEV_MODE"
-            detect_engine
-            setup_podman_socket
-            if ! restore_state; then
-                setup_compose_args
-            fi
+            _bootstrap restore
             _dispatch_command "$CMD"
             ;;
         loadtest)
@@ -430,12 +447,7 @@ main() {
             USE_DEV_MODE=false
             COMPOSE_PROJECT_NAME="$PROD_PROJECT_NAME"
             STATE_FILE="$PROD_STATE_FILE"
-            init_env "$USE_DEV_MODE"
-            detect_engine
-            setup_podman_socket
-            if ! restore_state; then
-                setup_compose_args
-            fi
+            _bootstrap restore
             _dispatch_command "$CMD"
             ;;
         version)
@@ -444,27 +456,9 @@ main() {
             ;;
         install|test)
             if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
-                _acquire_lock
-                init_env "$USE_DEV_MODE"
-                detect_engine
-                setup_podman_socket
-                if ! restore_state; then
-                    setup_compose_args
-                fi
-                preflight_checks
+                _bootstrap lock restore preflight
             fi
             _dispatch_command "$CMD"
-            ;;
-        rm)
-            CMD="remove"
-            _acquire_lock
-            init_env "$USE_DEV_MODE"
-            detect_engine
-            setup_podman_socket
-            if ! restore_state; then
-                setup_compose_args
-            fi
-            _dispatch_command "remove"
             ;;
         install-completion|selftest)
             _dispatch_command "$CMD"

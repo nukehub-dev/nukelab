@@ -23,9 +23,13 @@ _manage_sh_complete() {
         return
     fi
 
-    # Options that take a value — don't try to complete the value as an option.
+    # Options that take a value — complete the value, not an option name.
     case "$prev" in
-        --tail|-n|--timeout|-t|--overlay|-o)
+        --tail|-n|--timeout|-t)
+            return
+            ;;
+        --overlay|-o)
+            COMPREPLY=( $(compgen -f -- "$cur") )
             return
             ;;
     esac
@@ -34,7 +38,8 @@ _manage_sh_complete() {
     case "$cmd" in
         start|build|restart|remove|rm)
             local opts="backend frontend all ${global_flags[*]}"
-            if [[ "$cmd" == "start" ]]; then
+            # start and restart both honor --no-build / --no-wait.
+            if [[ "$cmd" == "start" || "$cmd" == "restart" ]]; then
                 opts="$opts --no-build --no-wait"
             fi
             COMPREPLY=( $(compgen -W "$opts" -- "$cur") )
@@ -58,7 +63,11 @@ _manage_sh_complete() {
             COMPREPLY=( $(compgen -W "smoke baseline stress spike endurance connection k6-smoke k6-baseline k6-stress k6-spike k6-endurance all ${global_flags[*]}" -- "$cur") )
             ;;
         lint)
-            COMPREPLY=( $(compgen -W "frontend backend all --fix ${global_flags[*]}" -- "$cur") )
+            COMPREPLY=( $(compgen -W "frontend backend all --fix -f ${global_flags[*]}" -- "$cur") )
+            ;;
+        restore)
+            # restore takes a backup file path.
+            COMPREPLY=( $(compgen -f -- "$cur") )
             ;;
         dev)
             if [[ "$COMP_CWORD" -eq 2 ]]; then
@@ -68,7 +77,9 @@ _manage_sh_complete() {
                 local sub="${COMP_WORDS[2]}"
                 case "$sub" in
                     start|restart|stop)
-                        COMPREPLY=( $(compgen -W "backend frontend all ${global_flags[*]}" -- "$cur") )
+                        local opts="backend frontend all ${global_flags[*]}"
+                        [[ "$sub" == "start" || "$sub" == "restart" ]] && opts="$opts --no-build --no-wait"
+                        COMPREPLY=( $(compgen -W "$opts" -- "$cur") )
                         ;;
                     logs)
                         COMPREPLY=( $(compgen -W "backend postgres redis traefik celery-worker celery-beat pgbouncer --tail -n --no-follow ${global_flags[*]}" -- "$cur") )
@@ -79,7 +90,7 @@ _manage_sh_complete() {
                 esac
             fi
             ;;
-        update|pull|clean|e2e|db-migrate|db-shell|backup|restore|reset|selftest|install-completion|help|security|rotate-user-auth-key|cleanup-user-auth-keys)
+        update|pull|clean|e2e|db-migrate|db-shell|backup|reset|selftest|install-completion|help|security|rotate-user-auth-key|cleanup-user-auth-keys)
             COMPREPLY=( $(compgen -W "${global_flags[*]}" -- "$cur") )
             ;;
         *)

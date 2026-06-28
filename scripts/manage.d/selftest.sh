@@ -33,7 +33,9 @@ cmd_selftest() {
     local failures=0
 
     # Help output
-    _t "top-level help" bash -c './nukelabctl help | grep -q "NukeLab"' || _increment_failures
+    # Help output (the ASCII banner spells lowercase "nukelab"; match the
+    # reliable "Usage:" header instead of a literal project name).
+    _t "top-level help" bash -c './nukelabctl help | grep -q "Usage:"' || _increment_failures
     _t "command help: start" bash -c './nukelabctl start --help | grep -q "Start the NukeLab stack"' || _increment_failures
     _t "command help: dev" bash -c './nukelabctl dev --help | grep -q "development stack"' || _increment_failures
     _t "command help: logs" bash -c './nukelabctl logs --help | grep -q "Stream container logs"' || _increment_failures
@@ -88,6 +90,22 @@ cmd_selftest() {
     _t "dev start help" bash -c './nukelabctl dev start --help | grep -q "Start the NukeLab stack"' || _increment_failures
     _t "dev restart help" bash -c './nukelabctl dev restart --help | grep -q "Stop and then start"' || _increment_failures
     _t "dev logs --tail parses" bash -c './nukelabctl dev logs --tail 5 --no-follow backend 2>&1 | grep -vq "Option --tail requires a value"' || _increment_failures
+
+    # restart must parse --no-build / --no-wait (start.sh resets the flags at
+    # source time, so restart needs its own parser to honor them).
+    _t "restart has parse_restart_args" bash -c 'DIR=.; source ./scripts/manage.d/restart.sh >/dev/null 2>&1; type -t parse_restart_args | grep -q function' || _increment_failures
+    _t "restart --no-build accepted" bash -c './nukelabctl restart --no-build --help >/dev/null 2>&1' || _increment_failures
+    _t "restart rejects unknown option" bash -c '! ./nukelabctl restart --bogus >/dev/null 2>&1' || _increment_failures
+
+    # rm is normalized to remove at parse time (no dedicated dispatch case).
+    _t "rm alias dispatches to remove" bash -c './nukelabctl rm --help | grep -q "Remove containers"' || _increment_failures
+    _t "rm rejects unknown option" bash -c '! ./nukelabctl rm --bogus >/dev/null 2>&1' || _increment_failures
+
+    # lint --fix / -f is accepted
+    _t "lint --help lists --fix" bash -c './nukelabctl lint --help | grep -q -- "--fix"' || _increment_failures
+
+    # loadtest help lists the k6 profiles
+    _t "loadtest help lists k6-stress" bash -c './nukelabctl loadtest --help | grep -q "k6-stress"' || _increment_failures
 
     # Diagnostics commands
     _t "version command" bash -c './nukelabctl version | grep -q "NukeLab v2.0"' || _increment_failures

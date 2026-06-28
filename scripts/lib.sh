@@ -15,15 +15,21 @@ if ! type -t die | grep -q function 2>/dev/null; then
 fi
 
 # ─── Colors ────────────────────────────────────────────────────────────────
-RED=$'\033[0;31m'
-GREEN=$'\033[0;32m'
-YELLOW=$'\033[1;33m'
-BLUE=$'\033[0;34m'
-MAGENTA=$'\033[0;35m'
-CYAN=$'\033[0;36m'
-BOLD=$'\033[1m'
-DIM=$'\033[2m'
-RESET=$'\033[0m'
+# Emit ANSI escapes only when writing to a terminal and NO_COLOR is unset, so
+# piped output (e.g. `./nukelabctl status | tee log`) stays clean.
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+    RED=$'\033[0;31m'
+    GREEN=$'\033[0;32m'
+    YELLOW=$'\033[1;33m'
+    BLUE=$'\033[0;34m'
+    MAGENTA=$'\033[0;35m'
+    CYAN=$'\033[0;36m'
+    BOLD=$'\033[1m'
+    DIM=$'\033[2m'
+    RESET=$'\033[0m'
+else
+    RED='' GREEN='' YELLOW='' BLUE='' MAGENTA='' CYAN='' BOLD='' DIM='' RESET=''
+fi
 
 # ─── Logging ───────────────────────────────────────────────────────────────
 # Levels: DEBUG < INFO < OK < WARN < ERROR. Default is INFO.
@@ -157,7 +163,13 @@ init_env() {
 # Sets CONTAINER_ENGINE (podman|docker) and COMPOSE (podman-compose,
 # docker-compose, or "<engine> compose").
 detect_engine() {
-    if command -v podman > /dev/null 2>&1; then
+    # A pre-set CONTAINER_ENGINE (docker|podman) wins over auto-detection so
+    # users with both runtimes installed are not forced into podman.
+    if [ "${CONTAINER_ENGINE:-}" = "docker" ] && command -v docker > /dev/null 2>&1; then
+        info "Docker detected (via CONTAINER_ENGINE)"
+    elif [ "${CONTAINER_ENGINE:-}" = "podman" ] && command -v podman > /dev/null 2>&1; then
+        info "Podman detected (via CONTAINER_ENGINE)"
+    elif command -v podman > /dev/null 2>&1; then
         CONTAINER_ENGINE=podman
         info "Podman detected"
     elif command -v docker > /dev/null 2>&1; then
