@@ -723,6 +723,32 @@ _run_quiet_unless_verbose() {
     fi
 }
 
+# Bring up services, suppressing the noisy "no container with name ..." warnings
+# compose prints on a fresh start/restart unless --verbose is requested. The
+# companion --build/--no-build flag is selected by START_BUILD which is set by
+# parse_start_args / parse_restart_args before this is called.
+_start_compose_up() {
+    local _up_args=(-d)
+    if ${START_BUILD:-true}; then
+        _up_args+=(--build)
+    else
+        _up_args+=(--no-build)
+    fi
+
+    if $VERBOSE; then
+        _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" up "${_up_args[@]}" "$@"
+    else
+        local _up_out
+        _up_out=$(mktemp)
+        if ! $COMPOSE "${COMPOSE_ARGS[@]}" up "${_up_args[@]}" "$@" > "$_up_out" 2>&1; then
+            cat "$_up_out" >&2
+            rm -f "$_up_out"
+            return 1
+        fi
+        rm -f "$_up_out"
+    fi
+}
+
 # ─── Service / Container Helpers ───────────────────────────────────────────
 is_frontend_running() {
     [ -f "$FRONTEND_PID_FILE" ] && kill -0 "$(cat "$FRONTEND_PID_FILE")" 2>/dev/null
@@ -923,4 +949,42 @@ wait_for_backend() {
     done
     echo ""
     ok "Backend ready (${waited}s)"
+}
+
+# ─── Shared Dev Virtualenv ─────────────────────────────────────────────────
+# A single project-local venv at backend/.venv-dev hosts the dev tools listed
+# in backend/requirements-dev.txt. Both `lint` (ruff) and `security` (bandit,
+# pip-audit) source this; keep it in lib.sh so there is exactly one copy.
+
+DEV_VENV="${DIR}/backend/.venv-dev"
+
+# Ensure the dev venv exists and contains the dev tools. Idempotent and fast:
+# once the binaries are present this is a no-op.
+_ensure_dev_venv() {
+    if [ -x "${DEV_VENV}/bin/ruff" ] && [ -x "${DEV_VENV}/bin/bandit" ] && [ -x "${DEV_VENV}/bin/pip-audit" ]; then
+        return 0
+    fi
+
+    log_warn "Dev tools not found; creating isolated venv at ${DEV_VENV}..."
+    python3 -m venv "$DEV_VENV"
+    "$DEV_VENV/bin/pip" install -q --upgrade pip
+    "$DEV_VENV/bin/pip" install -q -r "$DIR/backend/requirements-dev.txt"
+
+    if [ ! -x "${DEV_VENV}/bin/ruff" ] || [ ! -x "${DEV_VENV}/bin/bandit" ] || [ ! -x "${DEV_VENV}/bin/pip-audit" ]; then
+        die "Failed to install dev tools. Install manually or check network access."
+    fi
+}
+
+# Resolve a Python dev tool, preferring a global install and falling back to
+# the shared dev venv. Prints the absolute path of the binary on stdout.
+_ensure_venv_tool() {
+    local tool_name="$1"
+
+    if command -v "$tool_name" >/dev/null 2>&1; then
+        command -v "$tool_name"
+        return 0
+    fi
+
+    _ensure_dev_venv
+    echo "${DEV_VENV}/bin/${tool_name}"
 }

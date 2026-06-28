@@ -1,3 +1,4 @@
+#!/bin/bash
 cmd_build() {
     setup_cpu_lib_volume
 

@@ -1,3 +1,4 @@
+#!/bin/bash
 cmd_install() {
     if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
         step "Installing frontend dependencies..."

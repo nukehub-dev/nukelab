@@ -1,3 +1,4 @@
+#!/bin/bash
 cmd_cleanup_user_auth_keys() {
     local service="${TARGET:-backend}"
     if [[ "$service" = "all" ]]; then

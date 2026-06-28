@@ -9,7 +9,6 @@
 # polluting the host or production image.
 
 SECURITY_REPORT_DIR="${DIR}/backend/reports/security"
-DEV_VENV="${DIR}/backend/.venv-dev"
 BANDIT_REPORT="${SECURITY_REPORT_DIR}/bandit-report.json"
 PIPAUDIT_REPORT="${SECURITY_REPORT_DIR}/pip-audit-report.json"
 FRONTEND_AUDIT_REPORT="${SECURITY_REPORT_DIR}/npm-audit-report.json"
@@ -51,6 +50,9 @@ parse_security_args() {
             --fail-on-high=false)
                 FAIL_ON_HIGH=false
                 ;;
+            --no-fail-on-high)
+                FAIL_ON_HIGH=false
+                ;;
             --bandit-severity=*)
                 BANDIT_SEVERITY="${arg#*=}"
                 ;;
@@ -62,43 +64,15 @@ parse_security_args() {
                 exit 0
                 ;;
             *)
-                warn "Unknown option: $arg"
+                die "Unknown option for security: $arg\nRun './nukelabctl security --help' for usage."
                 ;;
         esac
     done
 }
 
 
-# Ensure the shared dev venv exists and contains the tools from
-# requirements-dev.txt. This venv is used by both `lint` and `security`.
-_ensure_dev_venv() {
-    if [ -x "${DEV_VENV}/bin/ruff" ] && [ -x "${DEV_VENV}/bin/bandit" ] && [ -x "${DEV_VENV}/bin/pip-audit" ]; then
-        return 0
-    fi
-
-    log_warn "Dev tools not found; creating isolated venv at ${DEV_VENV}..."
-    python3 -m venv "$DEV_VENV"
-    "$DEV_VENV/bin/pip" install -q --upgrade pip
-    "$DEV_VENV/bin/pip" install -q -r "$DIR/backend/requirements-dev.txt"
-
-    if [ ! -x "${DEV_VENV}/bin/bandit" ] || [ ! -x "${DEV_VENV}/bin/pip-audit" ]; then
-        die "Failed to install dev tools. Install manually or check network access."
-    fi
-}
-
-# Ensure a Python dev tool is available. Prefer global install, fall back to
-# the shared dev venv. Prints the absolute path to the tool on stdout.
-_ensure_venv_tool() {
-    local tool_name="$1"
-
-    if command -v "$tool_name" >/dev/null 2>&1; then
-        command -v "$tool_name"
-        return 0
-    fi
-
-    _ensure_dev_venv
-    echo "${DEV_VENV}/bin/${tool_name}"
-}
+# _ensure_dev_venv / _ensure_venv_tool / DEV_VENV are shared via lib.sh so
+# the lint and security commands cannot drift out of sync.
 
 _bandit_severity_flag() {
     case "$BANDIT_SEVERITY" in
@@ -137,20 +111,24 @@ _run_bandit() {
         $sev_flag $conf_flag >&2 || true
 
     # Count issues from JSON report, filtering by severity if requested.
-    python3 -c "
-import json, sys
+    # Paths are passed via argv (not interpolated into the script body) so a
+    # project path containing single quotes or other metacharacters is safe.
+    BANDIT_REPORT="$BANDIT_REPORT" BANDIT_COUNT_FILE="$BANDIT_COUNT_FILE" \
+        BANDIT_SEVERITY="$BANDIT_SEVERITY" python3 -c "
+import json, os
 try:
-    with open('$BANDIT_REPORT') as f:
+    with open(os.environ['BANDIT_REPORT']) as f:
         data = json.load(f)
     issues = data.get('results', [])
-    if '$BANDIT_SEVERITY' == 'high':
+    sev = os.environ['BANDIT_SEVERITY']
+    if sev == 'high':
         issues = [i for i in issues if i.get('issue_severity', 'LOW').upper() in ('HIGH',)]
-    elif '$BANDIT_SEVERITY' == 'medium':
+    elif sev == 'medium':
         issues = [i for i in issues if i.get('issue_severity', 'LOW').upper() in ('HIGH', 'MEDIUM')]
-    with open('$BANDIT_COUNT_FILE', 'w') as f:
+    with open(os.environ['BANDIT_COUNT_FILE'], 'w') as f:
         f.write(str(len(issues)))
 except Exception:
-    with open('$BANDIT_COUNT_FILE', 'w') as f:
+    with open(os.environ['BANDIT_COUNT_FILE'], 'w') as f:
         f.write('0')
 " 2>/dev/null
 }
@@ -182,20 +160,22 @@ _run_pip_audit() {
         --progress-spinner=off \
         >&2 || true
 
-    # Count total reported vulnerabilities.
-    python3 -c "
-import json, sys
+    # Count total reported vulnerabilities. Paths via env to be robust
+    # against metacharacters in DIR (e.g. single quotes).
+    PIPAUDIT_REPORT="$PIPAUDIT_REPORT" PIPAUDIT_COUNT_FILE="$PIPAUDIT_COUNT_FILE" \
+        python3 -c "
+import json, os
 try:
-    with open('$PIPAUDIT_REPORT') as f:
+    with open(os.environ['PIPAUDIT_REPORT']) as f:
         data = json.load(f)
     deps = data.get('dependencies', [])
     count = 0
     for dep in deps:
         count += len(dep.get('vulns', []))
-    with open('$PIPAUDIT_COUNT_FILE', 'w') as f:
+    with open(os.environ['PIPAUDIT_COUNT_FILE'], 'w') as f:
         f.write(str(count))
 except Exception:
-    with open('$PIPAUDIT_COUNT_FILE', 'w') as f:
+    with open(os.environ['PIPAUDIT_COUNT_FILE'], 'w') as f:
         f.write('0')
 " 2>/dev/null
 }
@@ -318,7 +298,7 @@ ${BOLD}Usage:${RESET} ./nukelabctl security [options]
 
 Run security scanners against the codebase and dependency manifests.
 If bandit/pip-audit are not installed, an isolated venv is created
-automatically at backend/.venv-security.
+automatically at backend/.venv-dev (shared with the lint command).
 
 ${BOLD}Scans:${RESET}
   Bandit       Static analysis for Python security issues
@@ -332,7 +312,8 @@ ${BOLD}Options:${RESET}
   --no-pip-audit          Skip pip-audit
   --no-npm-audit          Skip npm audit
   --with-dev              Also scan backend/requirements-dev.txt
-  --fail-on-high=false    Do not fail the command for npm high/critical findings
+  --no-fail-on-high       Do not fail the command for npm high/critical findings
+  --fail-on-high=false    Same as above (kept for backwards compatibility)
   --bandit-severity=low|medium|high
                           Minimum Bandit severity to report (default: medium)
 

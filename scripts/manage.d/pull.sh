@@ -1,3 +1,4 @@
+#!/bin/bash
 cmd_pull() {
     step "Pulling latest images..."
     $COMPOSE "${COMPOSE_ARGS[@]}" pull

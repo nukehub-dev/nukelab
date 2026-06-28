@@ -1,3 +1,4 @@
+#!/bin/bash
 cmd_test() {
     if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
         step "Running frontend tests..."
@@ -11,10 +12,15 @@ cmd_test() {
         # Stay in $DIR so relative compose overlay paths resolve correctly.
         # pytest itself runs inside the container at /app, so the host CWD
         # does not affect test discovery.
-        local pytest_args="${EXTRA_ARGS[*]:-}"
+        #
+        # Build the pytest argv as a real array. Declining into a flattened
+        # string would word-split paths/args containing spaces, parentheses
+        # or shell metacharacters (e.g. `tests/Some Dir/test_x.py`).
+        local _pytest_args=()
         if $USE_COVERAGE; then
-            pytest_args="--cov=app --cov-report=term --cov-report=html ${pytest_args}"
+            _pytest_args+=(--cov=app --cov-report=term --cov-report=html)
         fi
+        _pytest_args+=("${EXTRA_ARGS[@]:-}")
 
         # To avoid Postgres connection exhaustion from the live dev server
         # (uvicorn workers + Celery) while tests run, stop the backend services
@@ -34,7 +40,10 @@ cmd_test() {
         # DATABASE_URL is intentionally cleared so the backend derives the URL
         # from the component env vars. An old DATABASE_URL in .env.development
         # would otherwise take precedence and route tests to the wrong database.
-        local _test_run_cmd="python -m pytest ${pytest_args}"
+        #
+        # Args are forwarded through positional `$@` of an inline `sh -c`
+        # invocation so quoting/spaces survive intact (no `eval` of the
+        # flattened argv string).
         local _test_exit=0
         $COMPOSE --profile test "${COMPOSE_ARGS[@]}" run --rm \
             -v "${DIR}/backend:/app:Z" \
@@ -54,7 +63,7 @@ cmd_test() {
             -e "REQUEST_METRICS_STORE=prometheus" \
             -e "PGBOUNCER_ENABLED=false" \
             -e "TESTING=true" \
-            backend-test bash -c "${_test_run_cmd}" || _test_exit=$?
+            backend-test sh -c 'python -m pytest "$@"' _ "${_pytest_args[@]}" || _test_exit=$?
 
         # Restart backend services if they were running before.
         if $_backend_was_running; then
@@ -83,5 +92,11 @@ ${BOLD}Examples:${RESET}
   ./nukelabctl test
   ./nukelabctl test backend
   ./nukelabctl test backend --coverage
+  ./nukelabctl test backend tests/services/test_volume_service.py
+  ./nukelabctl test backend tests/services/ tests/tasks/test_tasks.py -x -v
+  ./nukelabctl test backend -k "quota and not integration"
+
+Any EXTRA_ARGS after the target are passed through to pytest (single file,
+directory, node id, or pytest flags like -k, -x, --lf, --ff).
 EOF
 }

@@ -1,3 +1,4 @@
+#!/bin/bash
 cmd_remove() {
     step "Removing containers..."
 

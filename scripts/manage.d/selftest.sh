@@ -1,3 +1,4 @@
+#!/bin/bash
 help_selftest() {
     cat <<-EOF
 ${BOLD}Usage:${RESET} ./nukelabctl selftest
@@ -126,6 +127,51 @@ cmd_selftest() {
 
     # Lint command help
     _t "command help: lint" bash -c './nukelabctl lint --help | grep -q "Run linters and format checks"' || _increment_failures
+
+    # Security command behaviors
+    _t "security --help lists --no-fail-on-high" bash -c './nukelabctl security --help | grep -q -- "--no-fail-on-high"' || _increment_failures
+    _t "security --help mentions .venv-dev" bash -c './nukelabctl security --help | grep -q ".venv-dev"' || _increment_failures
+    _t "security rejects unknown option" bash -c '! ./nukelabctl security --bogus >/dev/null 2>&1' || _increment_failures
+
+    # update --cache is accepted
+    _t "update --help mentions --cache" bash -c './nukelabctl update --help | grep -q -- "--cache"' || _increment_failures
+    _t "update rejects unknown option" bash -c '! ./nukelabctl update --bogus >/dev/null 2>&1' || _increment_failures
+
+    # e2e forwards argv (help text documents this)
+    _t "e2e --help documents playwright-args passthrough" bash -c './nukelabctl e2e --help | grep -q "playwright-args"' || _increment_failures
+
+    # Shared dev venv helper now lives in lib.sh (drift guard for lint/security)
+    _t "lib.sh exposes _ensure_venv_tool" bash -c 'DIR=.; source ./scripts/lib.sh >/dev/null 2>&1; type -t _ensure_venv_tool | grep -q function' || _increment_failures
+
+    # stale doctor logic tightened to require a real socket
+    _t "doctor --skip-port-check still runs" bash -c './nukelabctl doctor --skip-port-check >/dev/null 2>&1' || _increment_failures
+
+    # The static-analysis tool is the strongest checker for shell scripts; warn
+    # (not fail) when it is missing so CI can still run without it.
+    if command -v shellcheck >/dev/null 2>&1; then
+        local _sc_files=(nukelabctl scripts/lib.sh scripts/nukelabctl-completion.bash)
+        for f in scripts/manage.d/*.sh; do
+            _sc_files+=("$f")
+        done
+        # Only fail the self-test on ERROR-severity findings (e.g. SC2148
+        # missing shebang, unbound variables, parses failures). The repo has
+        # pre-existing warning/info-level notes — many are cross-file false
+        # positives (e.g. SC2034 "appears unused" for globals used in other
+        # sourced modules) or stylistic. Those are surfaced for review via
+        # `shellcheck <files>` directly but shouldn't gate CI.
+        local _sc_out _sc_rc
+        _sc_out=$(shellcheck -S error "${_sc_files[@]}" 2>&1) && _sc_rc=0 || _sc_rc=$?
+        if [ $_sc_rc -eq 0 ]; then
+            ok "shellcheck clean (no errors)"
+        else
+            err "shellcheck reported errors:"
+            printf '%s\n' "$_sc_out" >&2
+            err "Run for full output: shellcheck -S warning ${_sc_files[*]}"
+            _increment_failures
+        fi
+    else
+        warn "shellcheck not installed; skipping static analysis (install shellcheck for stronger checks)"
+    fi
 
     echo ""
     if [ "$failures" -eq 0 ]; then

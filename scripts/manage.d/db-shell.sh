@@ -1,4 +1,8 @@
+#!/bin/bash
 cmd_db_shell() {
+    if ! _container_running nukelab-postgres; then
+        die "Postgres container is not running. Start the backend first:\n  ./nukelabctl start backend"
+    fi
     step "Opening database shell..."
     $COMPOSE "${COMPOSE_ARGS[@]}" exec postgres psql -U "${DATABASE_USER:-nukelab}" -d "${DATABASE_NAME:-nukelab}"
 }

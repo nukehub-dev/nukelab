@@ -1,3 +1,4 @@
+#!/bin/bash
 # Default values for lint options.
 LINT_FIX=false
 
@@ -54,35 +55,11 @@ parse_lint_args() {
     fi
 }
 
-DEV_VENV="${DIR}/backend/.venv-dev"
-
-# Ensure the shared development venv exists and contains the tools from
-# requirements-dev.txt. This venv is used by both `lint` and `security`.
-_ensure_dev_venv() {
-    if [ -x "${DEV_VENV}/bin/ruff" ] && [ -x "${DEV_VENV}/bin/bandit" ] && [ -x "${DEV_VENV}/bin/pip-audit" ]; then
-        return 0
-    fi
-
-    log_warn "Dev tools not found; creating isolated venv at ${DEV_VENV}..."
-    python3 -m venv "$DEV_VENV"
-    "$DEV_VENV/bin/pip" install -q --upgrade pip
-    "$DEV_VENV/bin/pip" install -q -r "$DIR/backend/requirements-dev.txt"
-
-    if [ ! -x "${DEV_VENV}/bin/ruff" ]; then
-        die "Failed to install dev tools. Install manually or check network access."
-    fi
-}
-
-# Ensure ruff is available, installing it into the project-local dev venv if needed.
+# Ensure ruff is available via the shared dev venv. _ensure_venv_tool is
+# defined in lib.sh and prefers a global install before falling back.
 # Prints the absolute path to the ruff binary on stdout.
 _ensure_ruff() {
-    if command -v ruff >/dev/null 2>&1; then
-        command -v ruff
-        return 0
-    fi
-
-    _ensure_dev_venv
-    echo "${DEV_VENV}/bin/ruff"
+    _ensure_venv_tool ruff
 }
 
 cmd_lint() {

@@ -1,3 +1,4 @@
+#!/bin/bash
 # Default values for logs options.
 LOGS_TAIL=""
 LOGS_FOLLOW=true

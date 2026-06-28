@@ -1,3 +1,4 @@
+#!/bin/bash
 cmd_db_migrate() {
     step "Running database migrations..."
 

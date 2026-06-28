@@ -1,3 +1,4 @@
+#!/bin/bash
 cmd_shell() {
     local service="${TARGET:-backend}"
     if [[ "$service" = "all" ]]; then

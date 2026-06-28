@@ -1,3 +1,4 @@
+#!/bin/bash
 # Default values for status options.
 STATUS_RUNNING_ONLY=false
 

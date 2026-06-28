@@ -1,3 +1,4 @@
+#!/bin/bash
 # Default values for start options.
 START_BUILD=true
 START_WAIT=true
@@ -90,26 +91,10 @@ cmd_start() {
 
         if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
             log "Starting backend containers..."
-            local _up_args=(-d)
-            if $START_BUILD; then
-                _up_args+=(--build)
-            else
-                _up_args+=(--no-build)
-            fi
-            # Suppress noisy compose warnings about containers that do not
-            # yet exist; they are harmless on a fresh start/restart.
-            if $VERBOSE; then
-                _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" up "${_up_args[@]}" $_dev_backend_services
-            else
-                local _up_out
-                _up_out=$(mktemp)
-                if ! $COMPOSE "${COMPOSE_ARGS[@]}" up "${_up_args[@]}" $_dev_backend_services > "$_up_out" 2>&1; then
-                    cat "$_up_out" >&2
-                    rm -f "$_up_out"
-                    return 1
-                fi
-                rm -f "$_up_out"
-            fi
+            # _backend_services returns a space-separated list; intentionally
+            # unquoted so compose sees each service as a separate argument.
+            # shellcheck disable=SC2086
+            _start_compose_up $_dev_backend_services
             if $START_WAIT; then
                 wait_for_backend || true
             fi
@@ -147,46 +132,30 @@ cmd_start() {
         local _prod_backend_services
         _prod_backend_services=$(_backend_services)
 
-        local _up_args=(-d)
-        if $START_BUILD; then
-            _up_args+=(--build)
-        else
-            _up_args+=(--no-build)
-        fi
-
         if [ "$TARGET" = "all" ]; then
             # Start backend services first, then the frontend container.
             # Doing this in two calls lets podman-compose reconcile the
-            # backend services without the frontend container confusing it,
-            # while we suppress harmless "no container with name ..." warnings.
+            # backend services without the frontend container confusing it.
             log "Starting backend services..."
-            if $VERBOSE; then
-                _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" up "${_up_args[@]}" $_prod_backend_services
-            else
-                local _up_out
-                _up_out=$(mktemp)
-                if ! $COMPOSE "${COMPOSE_ARGS[@]}" up "${_up_args[@]}" $_prod_backend_services > "$_up_out" 2>&1; then
-                    cat "$_up_out" >&2
-                    rm -f "$_up_out"
-                    return 1
-                fi
-                rm -f "$_up_out"
-            fi
+            # Intentionally unquoted; see SC2086 note above.
+            # shellcheck disable=SC2086
+            _start_compose_up $_prod_backend_services
             if $START_WAIT; then
                 wait_for_backend || true
             fi
 
             log "Starting frontend container..."
-            _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" up "${_up_args[@]}" frontend
+            _start_compose_up frontend
         elif [ "$TARGET" = "backend" ]; then
             log "Starting backend services..."
-            _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" up "${_up_args[@]}" $_prod_backend_services
+            # shellcheck disable=SC2086
+            _start_compose_up $_prod_backend_services
             if $START_WAIT; then
                 wait_for_backend || true
             fi
         elif [ "$TARGET" = "frontend" ]; then
             log "Starting frontend container..."
-            _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" up "${_up_args[@]}" frontend
+            _start_compose_up frontend
         fi
 
         persist_state

@@ -1,3 +1,4 @@
+#!/bin/bash
 cmd_clean() {
     step "Cleaning up..."
 

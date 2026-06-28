@@ -1,3 +1,4 @@
+#!/bin/bash
 help_install_completion() {
     cat <<-EOF
 ${BOLD}Usage:${RESET} ./nukelabctl install-completion

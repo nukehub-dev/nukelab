@@ -1,3 +1,4 @@
+#!/bin/bash
 # Default values for stop options.
 STOP_TIMEOUT=10
 

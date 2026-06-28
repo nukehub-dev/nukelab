@@ -1,3 +1,4 @@
+#!/bin/bash
 cmd_rotate_user_auth_key() {
     local service="${TARGET:-backend}"
     if [[ "$service" = "all" ]]; then

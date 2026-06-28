@@ -1,3 +1,4 @@
+#!/bin/bash
 help_doctor() {
     cat <<-EOF
 ${BOLD}Usage:${RESET} ./nukelabctl doctor
@@ -141,15 +142,7 @@ _doctor_check_ports() {
 }
 
 _doctor_check_compose_files() {
-    local missing=()
-    for arg in "${COMPOSE_ARGS[@]}"; do
-        if [[ "$arg" == -f ]]; then
-            continue
-        fi
-        # Track the previous argument to know which value belongs to -f.
-    done
-
-    # Easier: iterate by index.
+    # Iterate by index so we can pair each -f with its value argument.
     local i
     for (( i=0; i<${#COMPOSE_ARGS[@]}-1; i++ )); do
         if [[ "${COMPOSE_ARGS[$i]}" == -f ]]; then
@@ -169,8 +162,12 @@ _doctor_check_socket() {
         _doctor_warn "DOCKER_SOCKET is not set"
         return
     fi
-    if [ -S "$sock" ] || [ -e "$sock" ]; then
+    # -S specifically tests for a socket; a plain -e would mask a broken
+    # setup where the path exists as a regular file but no listener is there.
+    if [ -S "$sock" ]; then
         _doctor_pass "Container socket exists: $sock"
+    elif [ -e "$sock" ]; then
+        _doctor_fail "DOCKER_SOCKET exists but is not a socket: $sock"
     else
         _doctor_warn "Container socket not found: $sock"
     fi

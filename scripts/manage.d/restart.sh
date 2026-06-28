@@ -1,3 +1,4 @@
+#!/bin/bash
 source "$DIR/scripts/manage.d/stop.sh"
 source "$DIR/scripts/manage.d/start.sh"
 

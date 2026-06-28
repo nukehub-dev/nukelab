@@ -1,3 +1,4 @@
+#!/bin/bash
 cmd_loadtest() {
     # Load tests always run against the prod stack because k6 needs multiple
     # uvicorn workers; the dev stack uses a single reload worker.

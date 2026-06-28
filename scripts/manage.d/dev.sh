@@ -1,3 +1,4 @@
+#!/bin/bash
 help_dev() {
     cat <<-EOF
 ${BOLD}Usage:${RESET} ./nukelabctl dev [subcommand] [args...]
