@@ -517,6 +517,12 @@ class TestAllowanceOverride:
             updated_by=admin_user,
         )
 
+        # Clear balance so the 5000-credit override is not clamped by the
+        # default max-balance cap.
+        test_user.nuke_balance = 0
+        await db_session.commit()
+        await db_session.refresh(test_user)
+
         from app.services.credit_service import CreditService
 
         service = CreditService(db_session)

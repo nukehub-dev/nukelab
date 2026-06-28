@@ -150,14 +150,9 @@ class CreditService:
                 detail=f"Insufficient credits. Current: {current_balance}, Required: {abs(amount)}",
             )
 
-        # Annotate meta with the standardized schema (reason + source +
-        # capped flag). Missing keys are filled so consumers can rely on
-        # the shape across all transaction types.
-        normalized_meta = {
-            "reason": (meta or {}).get("reason"),
-            "source": (meta or {}).get("source", "system"),
-            **(meta or {}),
-        }
+        # Preserve the caller's metadata as-is; only add clamping audit
+        # fields when the grant had to be reduced to fit the max-balance cap.
+        normalized_meta = dict(meta) if meta else {}
         if effective_amount != amount:
             normalized_meta["capped"] = True
             normalized_meta["requested_amount"] = amount
