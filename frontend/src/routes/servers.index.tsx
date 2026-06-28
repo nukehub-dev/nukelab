@@ -28,6 +28,7 @@ import {
 } from '@tanstack/react-table'
 import { ResourcePageLayout } from '../components/layout/resource-page-layout'
 import { DataTable } from '../components/data/data-table'
+import { EmptyState } from '../components/feedback/empty-state'
 import { StatusBadge } from '../components/data/status-badge'
 import { useServers, useServerActions, useBulkServerActions } from '../hooks/use-servers'
 import { useReasonDialog } from '../hooks/use-reason-dialog'
@@ -48,6 +49,7 @@ import {
   DialogClose,
 } from '../components/ui/dialog'
 import { Input } from '../components/ui/input'
+import { Label } from '../components/ui/label'
 import { Button } from '../components/ui/button'
 import { Select, SelectItem } from '../components/ui/select'
 import { useConfirmDialog } from '../components/ui/confirm-dialog'
@@ -800,6 +802,18 @@ function ServersPage() {
           searchable
           searchPlaceholder="Search by name or status..."
           mobileCardRenderer={mobileCardRenderer}
+          emptyState={
+            <EmptyState
+              icon={Server}
+              title="No servers yet"
+              description="Deploy your first simulation server to get started."
+              action={{
+                label: 'Deploy Server',
+                onClick: () => setDialogOpen(true),
+                icon: Plus,
+              }}
+            />
+          }
         />
       </ResourcePageLayout>
 
@@ -840,7 +854,7 @@ function ServersPage() {
               </div>
             )}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Server Name</label>
+              <Label>Server Name</Label>
               <Input
                 type="text"
                 value={editForm.name}
@@ -852,7 +866,7 @@ function ServersPage() {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Plan</label>
+              <Label>Plan</Label>
               <Select
                 value={editForm.plan_id}
                 onChange={(value) => {
@@ -870,7 +884,7 @@ function ServersPage() {
               </Select>
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Environment</label>
+              <Label>Environment</Label>
               <Select
                 value={editForm.environment_id}
                 onChange={(value) => {
@@ -888,10 +902,10 @@ function ServersPage() {
             </div>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <label className="text-sm font-medium flex items-center gap-1.5">
+                <Label className="flex items-center gap-1.5">
                   <HardDrive className="w-4 h-4" />
                   Volume Mounts
-                </label>
+                </Label>
                 <button
                   type="button"
                   onClick={addEditVolumeMount}

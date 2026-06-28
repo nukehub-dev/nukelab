@@ -14,6 +14,7 @@ import {
   ChevronDown,
 } from 'lucide-react'
 import { Tooltip } from '../components/ui/tooltip'
+import { Label } from '../components/ui/label'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -557,7 +558,7 @@ function IPRestrictionsPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Type</label>
+              <Label>Type</Label>
               <div className="flex gap-2">
                 <Button
                   type="button"
@@ -591,7 +592,7 @@ function IPRestrictionsPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">IP Range</label>
+              <Label>IP Range</Label>
               <Input
                 value={formData.ip_range}
                 onChange={(e) => setFormData({ ...formData, ip_range: e.target.value })}
@@ -604,7 +605,7 @@ function IPRestrictionsPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Note</label>
+              <Label>Note</Label>
               <Input
                 value={formData.note}
                 onChange={(e) => setFormData({ ...formData, note: e.target.value })}

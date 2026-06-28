@@ -53,6 +53,7 @@ import {
 import { Input } from '../components/ui/input'
 import { Button } from '../components/ui/button'
 import { Textarea } from '../components/ui/textarea'
+import { Label } from '../components/ui/label'
 import { Checkbox } from '../components/ui/checkbox'
 import { Combobox } from '../components/ui/combobox'
 import { motion } from 'framer-motion'
@@ -698,7 +699,7 @@ function PlansPage() {
             <form id="plans-form" onSubmit={handleSubmit} className="space-y-4 mt-4" noValidate>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Name *</label>
+                  <Label>Name *</Label>
                   <Input
                     type="text"
                     value={formData.name}
@@ -708,7 +709,7 @@ function PlansPage() {
                 </div>
                 {!editingPlan && (
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">Slug *</label>
+                    <Label>Slug *</Label>
                     <Input
                       type="text"
                       value={formData.slug}
@@ -719,7 +720,7 @@ function PlansPage() {
                 )}
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Description</label>
+                <Label>Description</Label>
                 <Textarea
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
@@ -729,7 +730,7 @@ function PlansPage() {
               </div>
               <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">CPU Limit</label>
+                  <Label>CPU Limit</Label>
                   <Input
                     type="number"
                     step="0.5"
@@ -741,7 +742,7 @@ function PlansPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Memory</label>
+                  <Label>Memory</Label>
                   <Input
                     type="text"
                     value={formData.memory_limit}
@@ -750,7 +751,7 @@ function PlansPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Disk</label>
+                  <Label>Disk</Label>
                   <Input
                     type="text"
                     value={formData.disk_limit}
@@ -761,7 +762,7 @@ function PlansPage() {
               </div>
               <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">GPU</label>
+                  <Label>GPU</Label>
                   <Input
                     type="number"
                     min={0}
@@ -772,7 +773,7 @@ function PlansPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Max Servers</label>
+                  <Label>Max Servers</Label>
                   <Input
                     type="number"
                     min={1}
@@ -786,7 +787,7 @@ function PlansPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Cost/hr</label>
+                  <Label>Cost/hr</Label>
                   <Input
                     type="number"
                     min={0}
@@ -799,7 +800,7 @@ function PlansPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Category</label>
+                  <Label>Category</Label>
                   <Input
                     type="text"
                     list="plan-categories"
@@ -814,7 +815,7 @@ function PlansPage() {
                   </datalist>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Priority</label>
+                  <Label>Priority</Label>
                   <Input
                     type="number"
                     value={formData.priority}
@@ -833,7 +834,7 @@ function PlansPage() {
               </label>
               {!formData.is_public && (
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Visible to Roles</label>
+                  <Label>Visible to Roles</Label>
                   <div className="flex flex-wrap gap-4">
                     {/* Admin always has access */}
                     <label className="flex items-center gap-2 cursor-not-allowed opacity-60">
@@ -1267,7 +1268,7 @@ function AccessManagementDialog({
               {/* Add User */}
               <div className="flex items-end gap-3">
                 <div className="flex-1">
-                  <label className="text-sm font-medium mb-1.5 block">Add User</label>
+                  <Label className="mb-1.5 block">Add User</Label>
                   <Combobox
                     value={selectedUserId}
                     onChange={setSelectedUserId}
@@ -1332,7 +1333,7 @@ function AccessManagementDialog({
               {/* Add Workspace */}
               <div className="flex items-end gap-3">
                 <div className="flex-1">
-                  <label className="text-sm font-medium mb-1.5 block">Add Workspace</label>
+                  <Label className="mb-1.5 block">Add Workspace</Label>
                   <Combobox
                     value={selectedWorkspaceId}
                     onChange={setSelectedWorkspaceId}

@@ -26,6 +26,7 @@ import {
 import { Input } from '../components/ui/input'
 import { Button } from '../components/ui/button'
 import { Tooltip } from '../components/ui/tooltip'
+import { Label } from '../components/ui/label'
 
 export const Route = createFileRoute('/admin/quotas')({
   component: QuotasPage,
@@ -395,7 +396,7 @@ function QuotasPage() {
             <form id="quotas-form" onSubmit={handleSubmit} className="space-y-4 mt-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Max Servers</label>
+                  <Label>Max Servers</Label>
                   <Input
                     type="number"
                     min={0}
@@ -406,7 +407,7 @@ function QuotasPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Max CPU (cores)</label>
+                  <Label>Max CPU (cores)</Label>
                   <Input
                     type="number"
                     min={0}
@@ -420,7 +421,7 @@ function QuotasPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Max Memory</label>
+                  <Label>Max Memory</Label>
                   <Input
                     type="text"
                     value={formData.max_memory_total}
@@ -429,7 +430,7 @@ function QuotasPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Max Disk</label>
+                  <Label>Max Disk</Label>
                   <Input
                     type="text"
                     value={formData.max_disk_total}
@@ -439,7 +440,7 @@ function QuotasPage() {
                 </div>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Max GPU</label>
+                <Label>Max GPU</Label>
                 <Input
                   type="number"
                   min={0}

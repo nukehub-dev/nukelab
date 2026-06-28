@@ -33,6 +33,7 @@ import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Select, SelectItem } from '../components/ui/select'
 import { Textarea } from '../components/ui/textarea'
+import { Label } from '../components/ui/label'
 import { Card, CardContent } from '../components/ui/card'
 import { SkeletonCard } from '../components/feedback/skeleton'
 import { EmptyState } from '../components/feedback/empty-state'
@@ -680,7 +681,7 @@ function WorkspacesListPage() {
 
             <form onSubmit={handleCreate} className="space-y-4 mt-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium">Name</label>
+                <Label>Name</Label>
                 <Input
                   value={newWorkspace.name}
                   onChange={(e) => setNewWorkspace({ ...newWorkspace, name: e.target.value })}
@@ -688,7 +689,7 @@ function WorkspacesListPage() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Description</label>
+                <Label>Description</Label>
                 <Textarea
                   value={newWorkspace.description}
                   onChange={(e) =>

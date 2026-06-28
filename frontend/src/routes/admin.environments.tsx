@@ -27,6 +27,7 @@ import {
   DialogClose,
 } from '../components/ui/dialog'
 import { Input } from '../components/ui/input'
+import { Label } from '../components/ui/label'
 import { Button } from '../components/ui/button'
 import { Select, SelectItem } from '../components/ui/select'
 import { Textarea } from '../components/ui/textarea'
@@ -615,7 +616,7 @@ function EnvironmentsPage() {
             </DialogHeader>
             <form id="env-form" onSubmit={handleSubmit} className="space-y-4 mt-4" noValidate>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Name *</label>
+                <Label>Name *</Label>
                 <Input
                   type="text"
                   value={formData.name}
@@ -625,7 +626,7 @@ function EnvironmentsPage() {
               </div>
               {!editingEnv && (
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Slug *</label>
+                  <Label>Slug *</Label>
                   <Input
                     type="text"
                     value={formData.slug}
@@ -635,7 +636,7 @@ function EnvironmentsPage() {
                 </div>
               )}
               <div className="space-y-2">
-                <label className="text-sm font-medium">Docker Image *</label>
+                <Label>Docker Image *</Label>
                 <Input
                   type="text"
                   value={formData.image}
@@ -644,7 +645,7 @@ function EnvironmentsPage() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Description</label>
+                <Label>Description</Label>
                 <Textarea
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
@@ -654,7 +655,7 @@ function EnvironmentsPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Category</label>
+                  <Label>Category</Label>
                   <Input
                     type="text"
                     list="env-categories"
@@ -669,7 +670,7 @@ function EnvironmentsPage() {
                   </datalist>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Visibility</label>
+                  <Label>Visibility</Label>
                   <Select
                     value={String(formData.is_public)}
                     onChange={(value) => setFormData({ ...formData, is_public: value === 'true' })}

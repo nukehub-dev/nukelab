@@ -30,6 +30,7 @@ import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Textarea } from '../components/ui/textarea'
 import { Switch } from '../components/ui/switch'
+import { Label } from '../components/ui/label'
 import {
   Dialog,
   DialogContent,
@@ -609,7 +610,7 @@ function MaintenanceWindowsPage() {
             }}
           >
             <div className="space-y-2">
-              <label className="text-sm font-medium">Title</label>
+              <Label>Title</Label>
               <Input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
@@ -619,7 +620,7 @@ function MaintenanceWindowsPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Message</label>
+              <Label>Message</Label>
               <Textarea
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
@@ -630,10 +631,10 @@ function MaintenanceWindowsPage() {
 
             {/* Start */}
             <div className="space-y-2">
-              <label className="text-sm font-medium inline-flex items-center gap-1.5">
+              <Label className="inline-flex items-center gap-1.5">
                 <CalendarIcon className="w-3.5 h-3.5 text-muted-foreground" />
                 Start
-              </label>
+              </Label>
               <div className="flex">
                 <button
                   ref={startDateRef}
@@ -695,10 +696,10 @@ function MaintenanceWindowsPage() {
 
             {/* End */}
             <div className="space-y-2">
-              <label className="text-sm font-medium inline-flex items-center gap-1.5">
+              <Label className="inline-flex items-center gap-1.5">
                 <CheckCircle2 className="w-3.5 h-3.5 text-muted-foreground" />
                 End
-              </label>
+              </Label>
               <div className="flex">
                 <button
                   ref={endDateRef}
@@ -758,10 +759,10 @@ function MaintenanceWindowsPage() {
 
             {/* Notification Reminders */}
             <div className="space-y-2">
-              <label className="text-sm font-medium inline-flex items-center gap-1.5">
+              <Label className="inline-flex items-center gap-1.5">
                 <Bell className="w-3.5 h-3.5 text-muted-foreground" />
                 Notification Reminders
-              </label>
+              </Label>
               {(() => {
                 const impossibleOffsets = notifyOffsets.filter((o) => o >= minutesUntilStart)
                 return (

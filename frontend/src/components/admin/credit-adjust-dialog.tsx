@@ -12,6 +12,7 @@ import {
 } from '../ui/dialog'
 import { Input } from '../ui/input'
 import { Button } from '../ui/button'
+import { Label } from '../ui/label'
 import { useCreditActions } from '../../hooks/use-credits'
 import { useAuthStore, PERMISSIONS } from '../../stores/auth-store'
 import { cn } from '../../lib/utils'
@@ -171,7 +172,7 @@ export function CreditAdjustDialog({ user, open, onOpenChange }: CreditAdjustDia
 
           {/* Amount */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Amount</label>
+            <Label>Amount</Label>
             <div className="relative">
               <Wallet className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
@@ -192,7 +193,7 @@ export function CreditAdjustDialog({ user, open, onOpenChange }: CreditAdjustDia
 
           {/* Reason */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Reason</label>
+            <Label>Reason</Label>
             <Input
               type="text"
               value={reason}

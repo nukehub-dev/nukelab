@@ -11,6 +11,7 @@ import {
 } from '../ui/dialog'
 import { Input } from '../ui/input'
 import { Button } from '../ui/button'
+import { Label } from '../ui/label'
 import { useBulkCreditActions } from '../../hooks/use-credits'
 
 type BulkMode = 'grant' | 'allowance'
@@ -105,9 +106,9 @@ export function BulkCreditDialog({ mode, userIds, open, onOpenChange }: BulkCred
 
         <form id="bulk-credit-form" onSubmit={handleSubmit} className="mt-4 space-y-4">
           <div className="space-y-2">
-            <label className="text-sm font-medium">
+            <Label>
               {mode === 'grant' ? 'Amount per user (NUKE)' : 'Daily allowance (NUKE / day)'}
-            </label>
+            </Label>
             <Input
               type="number"
               min={0}
@@ -126,7 +127,7 @@ export function BulkCreditDialog({ mode, userIds, open, onOpenChange }: BulkCred
 
           {mode === 'grant' && (
             <div className="space-y-2">
-              <label className="text-sm font-medium">Reason</label>
+              <Label>Reason</Label>
               <Input
                 type="text"
                 value={reason}

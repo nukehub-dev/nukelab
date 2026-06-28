@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { NukeLabLogo } from '../components/logo'
+import { Label } from '../components/ui/label'
 import { useAuthStore } from '../stores/auth-store'
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api'
@@ -458,9 +459,9 @@ function LoginCard({
             {hasLocal && (
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     Username
-                  </label>
+                  </Label>
                   <div className="relative group">
                     <input
                       type="text"
@@ -474,9 +475,9 @@ function LoginCard({
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     Password
-                  </label>
+                  </Label>
                   <div className="relative group">
                     <input
                       type={showPass ? 'text' : 'password'}

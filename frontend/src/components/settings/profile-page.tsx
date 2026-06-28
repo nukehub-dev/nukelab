@@ -39,6 +39,7 @@ import { Input } from '../ui/input'
 import { Textarea } from '../ui/textarea'
 import { Button } from '../ui/button'
 import { Switch } from '../ui/switch'
+import { Label } from '../ui/label'
 
 /* ------------------------------------------------------------------ */
 /*  Animation helpers                                                  */
@@ -324,7 +325,7 @@ function EditDialog({
           {!isOAuthManaged && (
             <>
               <div className="space-y-2">
-                <label className="text-sm font-medium">First Name</label>
+                <Label>First Name</Label>
                 <Input
                   value={form.first_name}
                   onChange={(e) => setForm((f) => ({ ...f, first_name: e.target.value }))}
@@ -332,7 +333,7 @@ function EditDialog({
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Last Name</label>
+                <Label>Last Name</Label>
                 <Input
                   value={form.last_name}
                   onChange={(e) => setForm((f) => ({ ...f, last_name: e.target.value }))}
@@ -340,7 +341,7 @@ function EditDialog({
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Email</label>
+                <Label>Email</Label>
                 <Input
                   type="email"
                   value={form.email}
@@ -351,7 +352,7 @@ function EditDialog({
             </>
           )}
           <div className="space-y-2">
-            <label className="text-sm font-medium">About</label>
+            <Label>About</Label>
             <Textarea
               value={form.about}
               onChange={(e) => setForm((f) => ({ ...f, about: e.target.value }))}
@@ -362,7 +363,7 @@ function EditDialog({
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Organization</label>
+              <Label>Organization</Label>
               <Input
                 value={form.organization}
                 onChange={(e) => setForm((f) => ({ ...f, organization: e.target.value }))}
@@ -372,7 +373,7 @@ function EditDialog({
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Department</label>
+              <Label>Department</Label>
               <Input
                 value={form.department}
                 onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))}
@@ -383,7 +384,7 @@ function EditDialog({
             </div>
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium">Occupation</label>
+            <Label>Occupation</Label>
             <Input
               value={form.occupation}
               onChange={(e) => setForm((f) => ({ ...f, occupation: e.target.value }))}

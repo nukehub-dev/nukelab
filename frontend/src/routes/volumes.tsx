@@ -24,6 +24,7 @@ import { SkeletonCard } from '../components/feedback/skeleton'
 import { EmptyState } from '../components/feedback/empty-state'
 import { Card, CardContent } from '../components/ui/card'
 import { Input } from '../components/ui/input'
+import { Label } from '../components/ui/label'
 import { Select, SelectItem } from '../components/ui/select'
 import { Textarea } from '../components/ui/textarea'
 import { Slider } from '../components/ui/slider'
@@ -644,7 +645,7 @@ function VolumesPage() {
               </div>
             )}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Display Name *</label>
+              <Label>Display Name *</Label>
               <Input
                 value={createForm.display_name}
                 onChange={(e) => setCreateForm({ ...createForm, display_name: e.target.value })}
@@ -652,7 +653,7 @@ function VolumesPage() {
               />
             </div>
             <div className="space-y-3">
-              <label className="text-sm font-medium">Size Limit</label>
+              <Label>Size Limit</Label>
               <div className="flex items-center gap-3">
                 <Slider
                   min={1}
@@ -682,7 +683,7 @@ function VolumesPage() {
               </p>
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Description</label>
+              <Label>Description</Label>
               <Textarea
                 value={createForm.description}
                 onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
@@ -717,7 +718,7 @@ function VolumesPage() {
               </div>
             )}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Display Name *</label>
+              <Label>Display Name *</Label>
               <Input
                 value={editForm.display_name}
                 onChange={(e) => setEditForm({ ...editForm, display_name: e.target.value })}
@@ -726,7 +727,7 @@ function VolumesPage() {
             </div>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <label className="text-sm font-medium">Size Limit</label>
+                <Label>Size Limit</Label>
                 <span className="text-xs text-muted-foreground">
                   Current: {formatBytes(editForm.current_size_bytes)}
                 </span>
@@ -763,7 +764,7 @@ function VolumesPage() {
               )}
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Description</label>
+              <Label>Description</Label>
               <Textarea
                 value={editForm.description}
                 onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}

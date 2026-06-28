@@ -11,6 +11,7 @@ import {
 } from '../ui/dialog'
 import { Input } from '../ui/input'
 import { Button } from '../ui/button'
+import { Label } from '../ui/label'
 import { useAllowanceOverride } from '../../hooks/use-credits'
 import type { User } from '../../types/api'
 
@@ -111,7 +112,7 @@ export function AllowanceOverrideDialog({
 
         <form id="allowance-override-form" onSubmit={handleSubmit} className="mt-4 space-y-4">
           <div className="space-y-2">
-            <label className="text-sm font-medium">Override amount (NUKE / day)</label>
+            <Label>Override amount (NUKE / day)</Label>
             <Input
               type="number"
               min={0}
@@ -133,10 +134,10 @@ export function AllowanceOverrideDialog({
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium flex items-center gap-1.5">
+            <Label className="flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5" />
               Duration
-            </label>
+            </Label>
             <div className="flex flex-wrap gap-2">
               {PRESET_WINDOWS.map((preset) => (
                 <button

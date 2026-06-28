@@ -946,8 +946,7 @@ a,
 [role='switch'],
 input[type='submit'],
 input[type='button'],
-input[type='reset'],
-label {
+input[type='reset'] {
   cursor: pointer;
 }
 

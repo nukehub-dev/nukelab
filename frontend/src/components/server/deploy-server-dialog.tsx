@@ -12,6 +12,7 @@ import {
 import { Input } from '../ui/input'
 import { Button } from '../ui/button'
 import { Select, SelectItem } from '../ui/select'
+import { Label } from '../ui/label'
 import { formatBytes, formatPlanResource, parseMemoryString } from '../../lib/utils'
 import type { Environment, Plan } from '../../types/api'
 import type { Volume } from '../../hooks/use-volumes'
@@ -192,7 +193,7 @@ export function DeployServerDialog({
             </div>
           )}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Server Name *</label>
+            <Label>Server Name *</Label>
             <Input
               type="text"
               data-testid="deploy-server-name"
@@ -205,7 +206,7 @@ export function DeployServerDialog({
             />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium">Plan *</label>
+            <Label>Plan *</Label>
             <Select
               value={deployForm.plan_id}
               data-testid="deploy-server-plan"
@@ -228,7 +229,7 @@ export function DeployServerDialog({
             </Select>
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium">Environment *</label>
+            <Label>Environment *</Label>
             <Select
               value={deployForm.environment_id}
               data-testid="deploy-server-environment"
@@ -251,10 +252,10 @@ export function DeployServerDialog({
           </div>
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium flex items-center gap-1.5">
+              <Label className="flex items-center gap-1.5">
                 <HardDrive className="w-4 h-4" />
                 Volume Mounts
-              </label>
+              </Label>
               <button
                 type="button"
                 onClick={addVolumeMount}

@@ -39,6 +39,7 @@ import {
   DialogClose,
 } from '../components/ui/dialog'
 import { Input } from '../components/ui/input'
+import { Label } from '../components/ui/label'
 import { Button } from '../components/ui/button'
 import { Select, SelectItem } from '../components/ui/select'
 import { motion } from 'framer-motion'
@@ -639,7 +640,7 @@ function UsersPage() {
             </DialogHeader>
             <form id="users-form" onSubmit={handleSubmit} className="space-y-4 mt-4" noValidate>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Username</label>
+                <Label>Username</Label>
                 <Input
                   type="text"
                   disabled={!!editingUser}
@@ -649,7 +650,7 @@ function UsersPage() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Email</label>
+                <Label>Email</Label>
                 <Input
                   type="email"
                   value={formData.email}
@@ -659,7 +660,7 @@ function UsersPage() {
               </div>
               {!editingUser && (
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Password</label>
+                  <Label>Password</Label>
                   <Input
                     type="password"
                     value={formData.password}
@@ -670,7 +671,7 @@ function UsersPage() {
               )}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">First Name</label>
+                  <Label>First Name</Label>
                   <Input
                     type="text"
                     value={formData.first_name}
@@ -678,7 +679,7 @@ function UsersPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Last Name</label>
+                  <Label>Last Name</Label>
                   <Input
                     type="text"
                     value={formData.last_name}
@@ -688,7 +689,7 @@ function UsersPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Role</label>
+                  <Label>Role</Label>
                   <Select
                     value={formData.role}
                     onChange={(value) => setFormData({ ...formData, role: value })}

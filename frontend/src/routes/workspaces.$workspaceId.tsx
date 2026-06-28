@@ -48,6 +48,7 @@ import { cn, formatBytes } from '../lib/utils'
 import { Button } from '../components/ui/button'
 import { StatCard } from '../components/data/stat-card'
 import { Input } from '../components/ui/input'
+import { Label } from '../components/ui/label'
 import { Textarea } from '../components/ui/textarea'
 import { Select, SelectItem } from '../components/ui/select'
 import { Combobox } from '../components/ui/combobox'
@@ -1210,7 +1211,7 @@ function WorkspaceDetailPage() {
             </DialogHeader>
             <div className="space-y-4 mt-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium">Name</label>
+                <Label>Name</Label>
                 <Input
                   value={editForm.name}
                   onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
@@ -1218,7 +1219,7 @@ function WorkspaceDetailPage() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Description</label>
+                <Label>Description</Label>
                 <Textarea
                   value={editForm.description}
                   onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
@@ -1264,7 +1265,7 @@ function WorkspaceDetailPage() {
             </DialogHeader>
             <form onSubmit={handleTransferOwnership} className="space-y-4 mt-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium">New Owner</label>
+                <Label>New Owner</Label>
                 <Combobox
                   value={transferTargetId}
                   onChange={setTransferTargetId}
@@ -1312,7 +1313,7 @@ function WorkspaceDetailPage() {
             </DialogHeader>
             <form onSubmit={handleInviteMember} className="space-y-4 mt-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium">User</label>
+                <Label>User</Label>
                 <Combobox
                   value={selectedUserId}
                   onChange={setSelectedUserId}
@@ -1322,7 +1323,7 @@ function WorkspaceDetailPage() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Role</label>
+                <Label>Role</Label>
                 <Select
                   value={selectedRole}
                   onChange={setSelectedRole}
@@ -1357,7 +1358,7 @@ function WorkspaceDetailPage() {
             </DialogHeader>
             <form onSubmit={handleAddVolume} className="space-y-4 mt-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium">Volume</label>
+                <Label>Volume</Label>
                 <Combobox
                   value={selectedVolumeId}
                   onChange={setSelectedVolumeId}
@@ -1367,7 +1368,7 @@ function WorkspaceDetailPage() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Access Role</label>
+                <Label>Access Role</Label>
                 <Select
                   value={selectedVolumeRole}
                   onChange={setSelectedVolumeRole}

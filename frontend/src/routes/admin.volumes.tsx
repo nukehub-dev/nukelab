@@ -36,6 +36,7 @@ import { Select, SelectItem } from '../components/ui/select'
 import { Button } from '../components/ui/button'
 import { Slider } from '../components/ui/slider'
 import { Tooltip } from '../components/ui/tooltip'
+import { Label } from '../components/ui/label'
 import { motion } from 'framer-motion'
 
 export const Route = createFileRoute('/admin/volumes')({
@@ -547,7 +548,7 @@ function VolumesAdminPage() {
             </DialogHeader>
             <form id="volume-form" onSubmit={handleSubmit} className="space-y-4 mt-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium">Display Name</label>
+                <Label>Display Name</Label>
                 <Input
                   value={formData.display_name}
                   onChange={(e) => setFormData({ ...formData, display_name: e.target.value })}
@@ -556,7 +557,7 @@ function VolumesAdminPage() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Description</label>
+                <Label>Description</Label>
                 <Textarea
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
@@ -566,7 +567,7 @@ function VolumesAdminPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Visibility</label>
+                  <Label>Visibility</Label>
                   <Select
                     value={formData.visibility}
                     onChange={(v) => setFormData({ ...formData, visibility: v })}
@@ -577,7 +578,7 @@ function VolumesAdminPage() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Status</label>
+                  <Label>Status</Label>
                   <Select
                     value={formData.status}
                     onChange={(v) => setFormData({ ...formData, status: v })}
@@ -591,7 +592,7 @@ function VolumesAdminPage() {
               </div>
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium">Size Limit</label>
+                  <Label>Size Limit</Label>
                   {editingVolume && editingVolume.size_bytes > 0 && (
                     <span className="text-xs text-muted-foreground">
                       Current: {formatBytes(editingVolume.size_bytes)}

@@ -37,6 +37,7 @@ import { Input } from '../ui/input'
 import { Button } from '../ui/button'
 import { Select, SelectItem } from '../ui/select'
 import { Checkbox } from '../ui/checkbox'
+import { Label } from '../ui/label'
 import { EmptyState } from '../feedback/empty-state'
 import type { ApiToken, ApiTokenWithValue } from '../../types/api'
 
@@ -436,7 +437,7 @@ function CreateTokenDialog({
         <form id="create-token-form" onSubmit={handleSubmit} className="mt-4 space-y-5">
           {/* Name */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Token Name</label>
+            <Label>Token Name</Label>
             <Input
               type="text"
               value={name}
@@ -455,7 +456,7 @@ function CreateTokenDialog({
 
           {/* Expiration */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Expiration</label>
+            <Label>Expiration</Label>
             <Select value={expiresDays} onChange={setExpiresDays} disabled={isCreating}>
               {EXPIRATION_OPTIONS.map((opt) => (
                 <SelectItem key={opt.value} value={opt.value}>
@@ -467,7 +468,7 @@ function CreateTokenDialog({
 
           {/* Scopes */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Scopes</label>
+            <Label>Scopes</Label>
             <p className="text-xs text-muted-foreground">
               Select the permissions this token will have.
             </p>

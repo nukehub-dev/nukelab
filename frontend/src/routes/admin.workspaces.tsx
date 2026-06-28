@@ -32,6 +32,7 @@ import {
 } from '../components/ui/dialog'
 import { Input } from '../components/ui/input'
 import { Textarea } from '../components/ui/textarea'
+import { Label } from '../components/ui/label'
 import { Button } from '../components/ui/button'
 import { Tooltip } from '../components/ui/tooltip'
 import { Checkbox } from '../components/ui/checkbox'
@@ -472,7 +473,7 @@ function WorkspacesAdminPage() {
             </DialogHeader>
             <form id="workspace-form" onSubmit={handleSubmit} className="space-y-4 mt-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium">Name</label>
+                <Label>Name</Label>
                 <Input
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -481,7 +482,7 @@ function WorkspacesAdminPage() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Description</label>
+                <Label>Description</Label>
                 <Textarea
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}

@@ -10,6 +10,7 @@ import {
   DialogClose,
 } from '../ui/dialog'
 import { Input } from '../ui/input'
+import { Label } from '../ui/label'
 import { Button } from '../ui/button'
 import { useCreditActions } from '../../hooks/use-credits'
 import type { User } from '../../types/api'
@@ -86,7 +87,7 @@ export function DailyAllowanceDialog({ user, open, onOpenChange }: DailyAllowanc
 
         <form id="daily-allowance-form" onSubmit={handleSubmit} className="mt-4 space-y-4">
           <div className="space-y-2">
-            <label className="text-sm font-medium">Amount (NUKE / day)</label>
+            <Label>Amount (NUKE / day)</Label>
             <Input
               type="number"
               min={0}
