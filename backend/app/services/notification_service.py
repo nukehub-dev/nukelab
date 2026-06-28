@@ -15,6 +15,7 @@ from app.config import settings
 from app.core.time_utils import utc_now
 from app.models.notification import Notification
 from app.models.user import User
+from app.tasks import send_notification_channels
 
 logger = logging.getLogger(__name__)
 
@@ -274,19 +275,21 @@ class NotificationService:
             # Push to WebSocket subscribers for instant delivery
             await self._publish_to_websocket(user_id, notification)
 
-        if should_email:
-            await self._send_email_for_notification(user_id, title, message, type)
-
-        if should_webhook:
-            await self._send_webhook_for_notification(
-                user_id=user_id,
-                event_key=event_key,
-                title=title,
-                message=message,
-                severity=severity,
-                notification_type=type,
-                extra_data=merged_extra,
-            )
+        # Offload slower channels so the request/transaction isn't held up
+        # by an external email server or webhook endpoint.
+        if should_email or should_webhook:
+            try:
+                send_notification_channels.delay(
+                    user_id=str(user_id),
+                    event_key=event_key,
+                    title=title,
+                    message=message,
+                    severity=severity,
+                    notification_type=type,
+                    extra_data=merged_extra,
+                )
+            except Exception:
+                logger.exception("Failed to enqueue notification channel task")
 
         return notification
 

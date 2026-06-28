@@ -514,7 +514,7 @@ class TestNotificationServiceCreateEmailOnly:
 
     @pytest.mark.asyncio
     async def test_create_email_only_no_in_app(self, db_session, test_user):
-        """Should send email but not create in-app notification."""
+        """Should enqueue async channels but not create in-app notification."""
         test_user.preferences = {
             "notifications": {
                 "events": [{"event": "server_start", "channels": {"in_app": False, "email": True}}]
@@ -524,9 +524,9 @@ class TestNotificationServiceCreateEmailOnly:
 
         service = NotificationService(db_session)
 
-        with mock.patch.object(
-            service, "_send_email_for_notification", new_callable=mock.AsyncMock
-        ) as mock_email:
+        with mock.patch(
+            "app.services.notification_service.send_notification_channels"
+        ) as mock_task:
             notif = await service.create(
                 user_id=test_user.id,
                 title="Server Started",
@@ -535,4 +535,4 @@ class TestNotificationServiceCreateEmailOnly:
             )
 
         assert notif is None  # in_app is False
-        mock_email.assert_awaited_once()
+        mock_task.delay.assert_called_once()

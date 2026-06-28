@@ -62,6 +62,70 @@ def example_task(self, message: str):
 
 
 @celery_app.task(bind=True)
+def send_notification_channels(
+    self,
+    user_id: str,
+    event_key: str,
+    title: str,
+    message: str,
+    severity: str,
+    notification_type: str,
+    extra_data: dict | None = None,
+):
+    """Send email/webhook notification channels asynchronously.
+
+    The in-app notification and real-time WebSocket push are handled in the
+    request path so the user gets immediate feedback. Slower outbound channels
+    (email + webhook) are offloaded to this task to avoid blocking the API.
+    """
+
+    async def _send():
+        from sqlalchemy import select
+
+        from app.models.user import User
+        from app.services.notification_service import NotificationService
+
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(select(User).where(User.id == user_id))
+            user = result.scalar_one_or_none()
+            if not user:
+                return "User not found"
+
+            service = NotificationService(db)
+            prefs = await service._get_user_notification_prefs(user.id)
+            should_email = service._should_send(prefs, event_key, "email")
+            should_webhook = service._should_send(prefs, event_key, "webhook")
+
+            channels = []
+
+            if should_email:
+                await service._send_email_for_notification(
+                    user.id, title, message, notification_type
+                )
+                channels.append("email")
+
+            if should_webhook:
+                await service._send_webhook_for_notification(
+                    user_id=user.id,
+                    event_key=event_key,
+                    title=title,
+                    message=message,
+                    severity=severity,
+                    notification_type=notification_type,
+                    extra_data=extra_data or {},
+                )
+                channels.append("webhook")
+
+            return f"Sent channels: {','.join(channels) if channels else 'none'} for {event_key}"
+
+    try:
+        return _run_async(_send())
+    except Exception as e:
+        logger.exception("Error sending notification channels: %s", e)
+        return f"Error: {e}"
+
+
+@celery_app.task(bind=True)
 def evaluate_maintenance_windows(self):
     """Evaluate scheduled maintenance windows: send notifications, enable/disable maintenance mode."""
 
