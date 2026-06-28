@@ -35,6 +35,7 @@ const EVENT_ICONS: Record<string, React.ElementType> = {
   server_backup_completed: Server,
   credit_low: CreditCard,
   credit_granted: CreditCard,
+  daily_allowance: CreditCard,
   queue_position: Users,
   schedule_run: Calendar,
   alert_fired: AlertTriangle,
@@ -100,6 +101,12 @@ const defaultEvents: EventPreference[] = [
     label: 'Credits Granted',
     description: 'When credits are added to your account',
     channels: { email: true, webhook: false, in_app: true },
+  },
+  {
+    event: 'daily_allowance',
+    label: 'Daily Allowance',
+    description: 'When your daily credit allowance is granted',
+    channels: { email: false, webhook: false, in_app: true },
   },
   {
     event: 'queue_position',

@@ -5,13 +5,18 @@ Respects user notification preferences from user.preferences.notifications.event
 """
 
 import json
+import logging
+from datetime import timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core.time_utils import utc_now
 from app.models.notification import Notification
 from app.models.user import User
+
+logger = logging.getLogger(__name__)
 
 # Maps backend method names to frontend event keys in user preferences
 EVENT_KEY_MAP = {
@@ -25,7 +30,7 @@ EVENT_KEY_MAP = {
     "server_backup_completed": "server_backup_completed",
     "credits_granted": "credit_granted",
     "credits_deducted": "credit_low",
-    "daily_allowance": "credit_granted",
+    "daily_allowance": "daily_allowance",
     "low_balance": "credit_low",
     "workspace_invitation": "workspace_invite",
     "workspace_member_added": "workspace_member_added",
@@ -45,15 +50,27 @@ EVENT_KEY_MAP = {
 # Default channel settings when user has no preference for an event
 DEFAULT_CHANNELS = {"email": False, "webhook": False, "in_app": True}
 
+# Shared Redis client for WebSocket pub/sub. Lazily initialized so
+# importing this module does not require a running Redis instance.
+_redis_client = None
+
+
+def _get_redis():
+    """Return a shared redis.asyncio client for publishing."""
+    global _redis_client
+    if _redis_client is None:
+        import redis.asyncio as redis_client_lib
+
+        _redis_client = redis_client_lib.from_url(settings.redis_url)
+    return _redis_client
+
 
 async def broadcast_server_status_change(
     user_id, server_id: str, status: str, extra_data: dict | None = None
 ):
     """Broadcast a server status change event to the user's WebSocket channel."""
     try:
-        import redis.asyncio as redis_client
-
-        r = redis_client.from_url(settings.redis_url)
+        r = _get_redis()
         await r.publish(
             f"user:{user_id}",
             json.dumps(
@@ -64,7 +81,6 @@ async def broadcast_server_status_change(
                 }
             ),
         )
-        await r.aclose()
     except Exception:
         pass
 
@@ -145,12 +161,57 @@ class NotificationService:
         except Exception as e:
             logger.warning(f"Failed to send email notification: {e}")
 
+    async def _send_webhook_for_notification(
+        self,
+        user_id,
+        event_key: str,
+        title: str,
+        message: str,
+        severity: str,
+        notification_type: str,
+        extra_data: dict,
+    ):
+        """Dispatch a signed webhook notification to the user's configured URL."""
+        try:
+            from app.services.webhook_service import WebhookService
+
+            result = await WebhookService().dispatch_to_user(
+                user_id=str(user_id),
+                event=event_key,
+                payload={
+                    "title": title,
+                    "message": message,
+                    "severity": severity,
+                    "type": notification_type,
+                    "extra_data": extra_data,
+                },
+                db=self.db,
+            )
+            if not result["success"]:
+                logger.debug("Webhook failed for user %s: %s", user_id, result.get("error"))
+        except Exception as e:
+            logger.warning("Failed to send webhook notification: %s", e)
+
+    async def _low_balance_notified_recently(
+        self, user_id, event_key: str = "credit_low", hours: int = 24
+    ) -> bool:
+        """Return True if a credit-low notification was already sent recently."""
+        cutoff = utc_now() - timedelta(hours=hours)
+        result = await self.db.execute(
+            select(Notification.id).where(
+                Notification.user_id == user_id,
+                Notification.type == "credit",
+                Notification.severity == "warning",
+                Notification.created_at >= cutoff,
+                Notification.extra_data["event_key"].as_string() == event_key,
+            )
+        )
+        return result.scalar_one_or_none() is not None
+
     async def _publish_to_websocket(self, user_id, notification: Notification):
         """Push notification to WebSocket subscribers via Redis pub/sub."""
         try:
-            import redis.asyncio as redis_client
-
-            r = redis_client.from_url(settings.redis_url)
+            r = _get_redis()
             await r.publish(
                 f"user:{user_id}",
                 json.dumps(
@@ -161,7 +222,6 @@ class NotificationService:
                     }
                 ),
             )
-            await r.aclose()
         except Exception:
             pass
 
@@ -178,13 +238,10 @@ class NotificationService:
     ) -> Notification | None:
         """Create a notification for a user, respecting their preferences.
 
-        If event_key is provided, checks user preferences for in_app and email channels.
-        If no event_key is provided, defaults to in_app only (no email).
+        If event_key is provided, checks user preferences for in_app, email,
+        and webhook channels. If no event_key is provided, defaults to in_app
+        only (no email/webhook).
         """
-        import logging
-
-        logger = logging.getLogger(__name__)
-
         # Determine effective event key
         if event_key is None:
             event_key = "system"
@@ -192,6 +249,10 @@ class NotificationService:
         prefs = await self._get_user_notification_prefs(user_id)
         should_in_app = self._should_send(prefs, event_key, "in_app")
         should_email = self._should_send(prefs, event_key, "email")
+        should_webhook = self._should_send(prefs, event_key, "webhook")
+
+        # Store the event key so we can throttle/audit later.
+        merged_extra = {"event_key": event_key, **(extra_data or {})}
 
         notification = None
 
@@ -203,18 +264,29 @@ class NotificationService:
                 type=type,
                 severity=severity,
                 action_url=action_url,
-                extra_data=extra_data or {},
+                extra_data=merged_extra,
             )
             self.db.add(notification)
             await self.db.commit()
             await self.db.refresh(notification)
-            logger.info(f"Notification created: id={notification.id} event={event_key}")
+            logger.info("Notification created: id=%s event=%s", notification.id, event_key)
 
             # Push to WebSocket subscribers for instant delivery
             await self._publish_to_websocket(user_id, notification)
 
         if should_email:
             await self._send_email_for_notification(user_id, title, message, type)
+
+        if should_webhook:
+            await self._send_webhook_for_notification(
+                user_id=user_id,
+                event_key=event_key,
+                title=title,
+                message=message,
+                severity=severity,
+                notification_type=type,
+                extra_data=merged_extra,
+            )
 
         return notification
 
@@ -346,11 +418,17 @@ class NotificationService:
             message=f"You received {amount} NUKE credits as your daily allowance. Balance: {new_balance}.",
             type="credit",
             severity="info",
-            event_key="credit_granted",
+            event_key="daily_allowance",
         )
 
     async def low_balance(self, user_id, balance: int, threshold: int = 50) -> Notification | None:
-        """Warn user about low credit balance."""
+        """Warn user about low credit balance.
+
+        Throttled to one notification per user per day so the 15-minute billing
+        tick does not spam the user while their balance stays low.
+        """
+        if await self._low_balance_notified_recently(user_id, event_key="credit_low"):
+            return None
         return await self.create(
             user_id=user_id,
             title="Low Credit Balance",

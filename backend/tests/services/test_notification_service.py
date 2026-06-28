@@ -87,7 +87,11 @@ class TestNotificationServiceCreate:
             message="Details",
             extra_data={"server_id": "abc", "cpu": 90},
         )
-        assert notif.extra_data == {"server_id": "abc", "cpu": 90}
+        assert notif.extra_data == {
+            "event_key": "system",
+            "server_id": "abc",
+            "cpu": 90,
+        }
 
     @pytest.mark.asyncio
     async def test_create_with_action_url(self, db_session, test_user):
