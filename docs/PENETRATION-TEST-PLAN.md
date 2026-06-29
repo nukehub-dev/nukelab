@@ -249,9 +249,12 @@ Phase 10: Remediation Support & Retest
 | CICD-01 | Dependency vulnerability scanning | `./nukelabctl security` | `pip-audit` and `npm audit` pass; no ignored criticals |
 | CICD-02 | Container image scanning in CI | `.github/workflows/security.yml` | Trivy/Grype gate on backend/frontend/env images |
 | CICD-03 | Secret scanning in repository | Gitleaks/TruffleHog scan | No active secrets in git history |
-| CICD-04 | Signed commits / artifact signing | Git config, GHCR images | Commits signed; images signed with Cosign (target state) |
+| CICD-04 | Signed commits / artifact signing | Git config, GHCR images | Commits signed; images signed with Cosign (target state). Implemented: signed-commits check warns until enforced; Cosign signing workflow in `.github/workflows/security.yml` |
+| CICD-04a | Git commit signing verification | `.github/workflows/security.yml` | CI runs `./nukelabctl security --signed-commits` on every push/PR; warns during transition, fails once branch protection requires signed commits |
+| CICD-04b | Container image signing with Cosign | `.github/workflows/security.yml` | Built backend/frontend/auth-sidecar images are signed with Cosign keyless signing using GitHub OIDC; signatures published to GHCR |
+| CICD-04c | Cosign signature verification | `.github/workflows/security.yml` / downstream consumers | Published image signatures can be verified with `cosign verify --certificate-identity-regexp` and policy enforced in deployment workflows |
 | CICD-05 | Workflow permissions | `.github/workflows/*.yml` | Minimal `permissions`, no `pull_request_target` abuse |
-| CICD-06 | Base image pinning | Dockerfiles | Images pinned by digest or stable tag with update policy |
+| CICD-06 | Base image pinning | Dockerfiles | All external base images pinned by digest; verified by `./nukelabctl security --check-base-images` |
 | CICD-07 | SBOM generation | CI artifacts | CycloneDX/SPDX SBOM produced per release |
 
 ### 5.9 Phase 9 — WebSocket & Real-Time Channel Testing
@@ -305,8 +308,8 @@ The following scripts should be created as part of the engagement to enable repe
 - `backend/tests/security/test_auth_tokens.py` — JWT manipulation and token-scope abuse.
 - `backend/tests/security/test_credit_race.py` — concurrent credit/spawn race tests.
 - `backend/tests/security/test_container_isolation.py` — runtime container escape/isolation checks.
-- `frontend/e2e/security/*.spec.ts` — Playwright tests for CSRF, XSS, and role-based UI hiding.
-- `scripts/run-pentest-scans.sh` — orchestrates Trivy, ZAP, Nuclei, and custom pytest suites.
+- `scripts/run-pentest-scans.sh` — orchestrates Trivy, ZAP, Nuclei, and custom pytest suites. Implemented.
+- `frontend/e2e/security/*.spec.ts` — Playwright tests for CSRF, XSS, and role-based UI hiding. Implemented (`frontend/e2e/security/frontend-security.spec.ts`).
 
 ---
 
