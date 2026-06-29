@@ -121,4 +121,4 @@ when the backend is running.
 
 ## License
 
-BSD-2-Clause
+[BSD-2-Clause](LICENSE)
