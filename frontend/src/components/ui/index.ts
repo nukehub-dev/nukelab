@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+// SPDX-License-Identifier: BSD-2-Clause
+
 export { Button } from './button'
 export type { ButtonProps } from './button'
 export { buttonVariants } from './button-variants'

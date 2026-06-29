@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 """Security regression tests for Broken Function Level Authorization (BFLA).
 
 These tests verify that low-privilege users cannot perform administrative or

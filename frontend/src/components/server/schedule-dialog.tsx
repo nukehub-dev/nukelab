@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+// SPDX-License-Identifier: BSD-2-Clause
+
 import { useState } from 'react'
 import { Calendar, Plus, Play, Square, RotateCcw, Trash2, Clock, X } from 'lucide-react'
 import { cn, formatDate } from '../../lib/utils'

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+// SPDX-License-Identifier: BSD-2-Clause
+
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { motion } from 'framer-motion'
 import { Server, ArrowLeft, Clock, Power, AlertTriangle, Box, Layers } from 'lucide-react'

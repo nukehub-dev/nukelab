@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+// SPDX-License-Identifier: BSD-2-Clause
+
 const daysOfWeek = [
   { value: 0, label: 'Sun', short: 'S' },
   { value: 1, label: 'Mon', short: 'M' },

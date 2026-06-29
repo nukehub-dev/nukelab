@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 """Coverage tests for model to_dict and property methods (in-memory, no DB)."""
 
 import uuid

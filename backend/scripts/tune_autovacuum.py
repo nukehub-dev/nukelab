@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 """
 Apply aggressive autovacuum settings to high-insert tables.
 

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 """Maintenance mode middleware — blocks non-admin requests during maintenance."""
 
 import time

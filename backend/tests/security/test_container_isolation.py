@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 """Container runtime security regression tests.
 
 These tests verify that user containers are spawned with appropriate security

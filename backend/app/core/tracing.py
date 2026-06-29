@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 """OpenTelemetry distributed tracing initialization and helpers.
 
 Provides a single idempotent `init_tracing()` entry point used by both the

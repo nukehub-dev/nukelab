@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+// SPDX-License-Identifier: BSD-2-Clause
+
 import { motion, AnimatePresence } from 'framer-motion'
 import { Check } from 'lucide-react'
 import { cn } from '../../lib/utils'

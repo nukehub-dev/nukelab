@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+// SPDX-License-Identifier: BSD-2-Clause
+
 import { useState, useRef, useCallback } from 'react'
 import Cropper from 'react-easy-crop'
 import { Upload, Trash2, Globe, ZoomIn, ZoomOut, Check } from 'lucide-react'

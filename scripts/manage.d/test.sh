@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 cmd_test() {
     if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
         step "Running frontend tests..."

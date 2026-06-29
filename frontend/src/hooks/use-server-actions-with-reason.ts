@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+// SPDX-License-Identifier: BSD-2-Clause
+
 import { useCallback } from 'react'
 import { useAuthStore } from '../stores/auth-store'
 import { useServerActions } from './use-servers'

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 """Security regression tests for authentication and token abuse.
 
 These tests verify JWT integrity, token scope enforcement, and that API tokens

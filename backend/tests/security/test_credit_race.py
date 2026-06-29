@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 """Security regression tests for NUKE credit business logic abuse.
 
 These tests verify that the credit system cannot be manipulated through

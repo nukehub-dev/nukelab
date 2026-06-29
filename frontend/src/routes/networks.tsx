@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+// SPDX-License-Identifier: BSD-2-Clause
+
 import { createFileRoute } from '@tanstack/react-router'
 import { Network, Globe, Shield, Activity, Construction } from 'lucide-react'
 import { ResourcePageLayout } from '../components/layout/resource-page-layout'

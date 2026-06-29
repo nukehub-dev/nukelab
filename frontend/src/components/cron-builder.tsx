@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+// SPDX-License-Identifier: BSD-2-Clause
+
 import { useState, useEffect, useMemo } from 'react'
 import { cn } from '../lib/utils'
 import { parseCron, humanizeSchedule } from '../lib/cron-utils'

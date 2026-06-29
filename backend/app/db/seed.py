@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 """
 Seed data for plans only.
 Environments are admin-created via the API/Admin panel, not hardcoded.

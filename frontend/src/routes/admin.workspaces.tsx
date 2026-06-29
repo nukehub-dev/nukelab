@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+// SPDX-License-Identifier: BSD-2-Clause
+
 import { createFileRoute } from '@tanstack/react-router'
 import { FolderOpen, Pencil, Trash2, Users, HardDrive, Play, Square } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'

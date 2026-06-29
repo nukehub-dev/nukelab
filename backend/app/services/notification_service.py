@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 """
 Notification service for creating user notifications.
 Centralizes notification creation to ensure consistency across the app.

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+// SPDX-License-Identifier: BSD-2-Clause
+
 import { useState, useMemo, useEffect } from 'react'
 import { Clock, Zap, AlertTriangle } from 'lucide-react'
 import {

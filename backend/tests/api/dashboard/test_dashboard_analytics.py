@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 """Extended tests for Dashboard and Analytics API endpoints."""
 
 from datetime import UTC, datetime, timedelta

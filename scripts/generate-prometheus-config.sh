@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 # Generate Prometheus config from template, conditionally adding PgBouncer scrape jobs.
 # Run automatically by nukelabctl before compose up.
 

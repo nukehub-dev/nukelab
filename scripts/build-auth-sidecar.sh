@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 
 # Build the NukeLab auth sidecar Docker image
 # This is a production-ready authentication sidecar for server containers.

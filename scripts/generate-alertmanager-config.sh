@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 # Generate Alertmanager config from template, substituting env vars.
 # Run automatically by nukelabctl before compose up.
 

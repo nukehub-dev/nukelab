@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 """Tests for IP allowlist/blocklist middleware and admin API."""
 
 from unittest.mock import patch

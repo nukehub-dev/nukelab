@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 # Generate CycloneDX SBOM artifacts for NukeLab.
 #
 # Uses Trivy when available (container engine required). Outputs are written to

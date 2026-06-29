@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 """CSRF double-submit cookie protection.
 
 Validates that state-changing requests include an X-CSRF-Token header

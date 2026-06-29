@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 """Prometheus metrics registry and helpers for NukeLab.
 
 Metrics are registered eagerly at import time so that /api/metrics always

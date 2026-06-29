@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 # Default: rebuild without the layer cache to always pick up changes from
 # base images. --cache lets users reuse layers when iterating.
 UPDATE_BUILD_ARGS=(--no-cache)

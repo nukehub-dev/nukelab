@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+// SPDX-License-Identifier: BSD-2-Clause
+
 import { createFileRoute, useSearch, Link } from '@tanstack/react-router'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { motion } from 'framer-motion'

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 """Security regression tests for WebSocket / real-time channels (Phase 9).
 
 These tests verify that unauthenticated connections are rejected, users cannot

@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 # NukeLab shared helper library for management scripts.
 # Source this from any script that needs environment loading or container-engine
 # detection so the logic stays in one place.

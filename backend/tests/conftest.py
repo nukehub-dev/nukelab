@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 """
 Test configuration and fixtures for NukeLab backend.
 Uses transactional test isolation: each test runs inside a savepoint that is

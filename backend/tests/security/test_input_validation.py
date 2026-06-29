@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 """Security regression tests for input validation and injection (Phase 5).
 
 These tests verify that user-controlled input is safely handled across the

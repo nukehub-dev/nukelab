@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+// SPDX-License-Identifier: BSD-2-Clause
+
 import { useEffect } from 'react'
 import { Outlet, useNavigate, useLocation } from '@tanstack/react-router'
 import { AlertTriangle } from 'lucide-react'

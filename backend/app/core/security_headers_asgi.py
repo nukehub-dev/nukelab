@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 """Exception-safe ASGI security headers middleware.
 
 Unlike BaseHTTPMiddleware, this wraps at the ASGI message layer,

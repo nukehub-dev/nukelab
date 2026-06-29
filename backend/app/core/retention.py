@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 """Default retention policies for data lifecycle management."""
 
 DEFAULT_RETENTION_POLICIES = {

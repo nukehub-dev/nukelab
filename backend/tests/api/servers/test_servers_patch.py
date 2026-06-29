@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 """Comprehensive tests for PATCH /api/servers/{server_id} (update_server)."""
 
 import uuid as uuid_mod

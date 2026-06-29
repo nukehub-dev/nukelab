@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 cmd_backup() {
     local backup_dir="$DIR/backups"
     local timestamp=$(date +%Y%m%d_%H%M%S)

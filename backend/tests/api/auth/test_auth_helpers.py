@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 """Additional auth coverage tests for easier endpoints and branches."""
 
 from datetime import UTC, datetime, timedelta

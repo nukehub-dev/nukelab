@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+// SPDX-License-Identifier: BSD-2-Clause
+
 import { motion } from 'framer-motion'
 import { ArrowDownLeft, Server, Gift, Clock, User, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '../../lib/utils'

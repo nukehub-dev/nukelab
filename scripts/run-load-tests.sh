@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 # NukeLab Load Test Runner
 # Convenience wrapper around Locust and k6 Docker containers.
 #

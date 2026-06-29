@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 cmd_e2e() {
     step "Running E2E tests..."
     cd "$DIR/frontend"

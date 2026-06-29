@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+// SPDX-License-Identifier: BSD-2-Clause
+
 import { type ReactNode } from 'react'
 import { useWebSocket } from '../hooks/use-websocket'
 import { useAuthStore } from '../stores/auth-store'

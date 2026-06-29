@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 """Production-ready server authentication service.
 
 Uses asymmetric cryptography (RS256) to issue short-lived, server-scoped

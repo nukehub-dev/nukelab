@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 import uuid
 
 from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Index, String, Text

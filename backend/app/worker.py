@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 from celery import Celery, Task
 from celery.schedules import crontab
 from celery.signals import before_task_publish, task_postrun, task_prerun

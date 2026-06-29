@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 """Shared async Redis client singleton.
 
 Replaces the ad-hoc ``redis.from_url()`` pattern scattered across the codebase

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+// SPDX-License-Identifier: BSD-2-Clause
+
 import type { LucideIcon } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { FloatingHeader } from './floating-header'

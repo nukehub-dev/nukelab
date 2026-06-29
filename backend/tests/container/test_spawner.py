@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 """Tests for Docker spawner volume mount mode enforcement.
 
 These tests verify that read-only volume mounts are actually enforced

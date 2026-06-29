@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 """Extended tests for auth.py — logout stop_on_logout, scope checks, verify branches."""
 
 from unittest import mock

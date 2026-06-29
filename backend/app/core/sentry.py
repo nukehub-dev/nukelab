@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 """Sentry error tracking initialization and helpers.
 
 Configured for FastAPI + Celery with correlation ID propagation,

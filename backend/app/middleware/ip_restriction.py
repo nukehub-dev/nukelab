@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 """IP allowlist/blocklist middleware.
 
 Runs before MaintenanceMiddleware so bad IPs are rejected at the edge.

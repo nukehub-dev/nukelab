@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 """OpenTelemetry tracing enrichment middleware.
 
 This middleware sits after authentication-dependent middleware so that

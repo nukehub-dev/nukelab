@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+// SPDX-License-Identifier: BSD-2-Clause
+
 import { useState } from 'react'
 import { Link, useLocation } from '@tanstack/react-router'
 import { AnimatePresence, motion } from 'framer-motion'

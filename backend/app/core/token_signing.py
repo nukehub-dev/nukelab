@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 """Asymmetric EdDSA (Ed25519) signing for user access tokens.
 
 The private key lives only on the backend. Consumers (sidecars, proxies,

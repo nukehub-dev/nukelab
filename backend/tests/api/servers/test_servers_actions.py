@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 """Tests for server action endpoints (start/stop/restart/delete) with mocked spawner."""
 
 from unittest import mock

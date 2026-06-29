@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 # Check that external base images in Dockerfiles are pinned by digest.
 #
 # Internal images (nukelab-*), build-arg references (FROM $BASE_IMAGE), and

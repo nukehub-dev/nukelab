@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+// SPDX-License-Identifier: BSD-2-Clause
+
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { cn } from '../lib/utils'
 import { Tooltip } from './ui/tooltip'

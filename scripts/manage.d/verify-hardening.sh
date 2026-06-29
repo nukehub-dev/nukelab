@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 # Verify container hardening settings for a spawned NukeLab server.
 # Checks the runtime configuration (User, CapDrop, ReadonlyRootfs, SecurityOpt)
 # and confirms capability sets are zeroed inside the container.

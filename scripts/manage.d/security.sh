@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 # NukeLab security scanning command.
 # Runs dependency (pip-audit, npm audit) and static (bandit) scans.
 # Produces machine-readable reports under backend/reports/security/.

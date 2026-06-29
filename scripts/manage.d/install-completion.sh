@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 help_install_completion() {
     cat <<- EOF
 ${BOLD}Usage:${RESET} ./nukelabctl install-completion

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 """Tests for Shared Workspace service and API with multi-volume support."""
 
 from unittest import mock

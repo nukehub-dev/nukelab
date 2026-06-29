@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 cmd_install() {
     if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
         step "Installing frontend dependencies..."

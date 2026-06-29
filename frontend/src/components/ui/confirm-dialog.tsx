@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+// SPDX-License-Identifier: BSD-2-Clause
+
 import { useState, useCallback, type ReactNode } from 'react'
 import { AlertTriangle, Trash2, Ban, RefreshCw, type LucideIcon } from 'lucide-react'
 import { Button } from './button'

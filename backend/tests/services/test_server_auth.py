@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 """Tests for server authentication service (RS256 tokens with IP binding)."""
 
 from datetime import UTC, datetime, timedelta

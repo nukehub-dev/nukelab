@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 """Integration-style tests for XFS quota service using mocked subprocess.
 
 These tests simulate the full xfs_quota command flow without requiring

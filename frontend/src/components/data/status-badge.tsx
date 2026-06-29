@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+// SPDX-License-Identifier: BSD-2-Clause
+
 import { cn } from '../../lib/utils'
 import { motion } from 'framer-motion'
 import { CheckCircle2, Square, Loader2, AlertCircle, AlertTriangle, Info } from 'lucide-react'

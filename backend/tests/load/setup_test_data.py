@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
 """Pre-seed the database with test users for load testing.
 
 Run this *before* starting Locust/k6 so the load tests can log in
