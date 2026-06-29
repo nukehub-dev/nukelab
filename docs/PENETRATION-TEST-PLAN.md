@@ -141,7 +141,7 @@ Phase 10: Remediation Support & Retest
 | CFG-06 | Review IP allowlist/blocklist middleware | `backend/app/middleware/ip_restriction.py` | CIDR support; self-block prevention; auth/health exempt |
 | CFG-07 | Review request size limits | `backend/app/middleware/request_size_limit.py` | 10 MB default; chunked-transfer abort |
 | CFG-08 | Review path traversal prevention | `backend/app/core/security.py::secure_path()` | `Path.resolve()` + `relative_to()` validation; whitelist for avatars |
-| CFG-09 | Review Docker spawner security options | `backend/app/docker/spawner.py` | Non-root user, read-only root fs, no new privileges, capability drop, seccomp |
+| CFG-09 | Review Docker spawner security options | `backend/app/container/spawner.py` | Non-root user, read-only root fs, no new privileges, capability drop, seccomp |
 | CFG-10 | Review Traefik TLS and middleware config | `infrastructure/traefik/traefik.yml`, `dynamic/*.yml` | TLS 1.3, no insecure dashboard, no browserXssFilter |
 | CFG-11 | Review environment variable and secret handling | `.env.example`, compose files, CI secrets | No hardcoded secrets; production validation refuses defaults |
 
@@ -411,7 +411,7 @@ Use CVSS 4.0 with the following mapping:
 | CSRF | `backend/app/middleware/csrf.py` | Validate double-submit on all state-changing routes |
 | Security Headers | `backend/app/core/security_headers_asgi.py` | Confirm headers on 200/400/500 responses |
 | Path Traversal | `backend/app/core/security.py::secure_path()` | Test traversal in file endpoints |
-| Container Security | `backend/app/docker/spawner.py` | Verify non-root, capability drop, no docker socket |
+| Container Security | `backend/app/container/spawner.py` | Verify non-root, capability drop, no docker socket |
 | Audit Logging | `backend/app/middleware/audit.py` | Confirm all privilege tests are logged |
 | Credit System | `backend/app/services/credit_service.py` | Race-condition and logic-abuse tests |
 | CORS | `backend/app/middleware/cors.py` / config | Verify production origin whitelist |

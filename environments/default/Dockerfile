@@ -2,7 +2,7 @@
 # Distributed under the terms of the BSD-2-Clause license.
 
 # Define the base image for the Dockerfile
-ARG BASE_IMAGE=debian:13
+ARG BASE_IMAGE=debian:13@sha256:3a953985c225a97dfb5a8f1ddc6a3ecefefc35ef51f537075e08941305045a1e
 
 # Define the Python version and JupyterHub version to be used
 ARG PYTHON_VERSION=3.12

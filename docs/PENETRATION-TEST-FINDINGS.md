@@ -29,7 +29,7 @@
 | PENT-NKL-003 | Container root filesystem is writable | Medium | Container Security | Closed | Security Eng | Backend Eng | 2026-06-28 | 2026-06-28 |
 | PENT-NKL-004 | NoNewPrivileges not enforced on containers | Medium | Container Security | Closed | Security Eng | Backend Eng | 2026-06-28 | 2026-06-28 |
 | PENT-NKL-005 | python-socketio DoS via withheld binary attachments | High | Supply Chain / Dependency | Closed | Security Eng | Backend Eng | 2026-06-28 | 2026-06-28 |
-| PENT-NKL-006 | External base images not pinned by digest | Medium | Supply Chain / Dependency | Open | Security Eng | Platform Eng | 2026-06-28 | |
+| PENT-NKL-006 | External base images not pinned by digest | Medium | Supply Chain / Dependency | Closed | Security Eng | Platform Eng | 2026-06-28 | 2026-06-29 |
 | PENT-NKL-007 | Commits are not cryptographically signed | Medium | Supply Chain / Source Integrity | Open | Security Eng | Platform Eng | 2026-06-28 | |
 | PENT-NKL-008 | Auth sidecar ships vulnerable Go runtime and JWT library | High | Supply Chain / Dependency | Closed | Security Eng | Backend Eng | 2026-06-28 | 2026-06-28 |
 | PENT-NKL-009 | Auth sidecar mounts wrong server-auth public key volume | High | Container Security / Authentication | Closed | Security Eng | Backend Eng | 2026-06-28 | 2026-06-28 |
@@ -92,7 +92,7 @@ Specific code-level or config fix.
 |----------|------|-------------|--------------|----------|--------|---------------|
 | Critical | 0 | 0 | 0 | 0 | 0 | 0 |
 | High | 0 | 0 | 0 | 0 | 2 | 0 |
-| Medium | 2 | 0 | 0 | 0 | 5 | 0 |
+| Medium | 1 | 0 | 0 | 0 | 6 | 0 |
 | Low | 0 | 0 | 0 | 0 | 0 | 0 |
 | Informational | 0 | 0 | 0 | 0 | 0 | 0 |
 

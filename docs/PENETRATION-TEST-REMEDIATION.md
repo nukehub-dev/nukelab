@@ -14,8 +14,8 @@
 | PENT-NKL-003 | Container root filesystem is writable | Backend Eng | 2026-06-28 | Closed | `backend/app/container/client.py`, `backend/app/config.py`, `environments/dev/nginx.conf` | `ReadonlyRootfs: true` with tmpfs mounts; live retest passed |
 | PENT-NKL-004 | NoNewPrivileges not enforced on containers | Backend Eng | 2026-06-28 | Closed | `backend/app/container/client.py`, `backend/app/config.py` | `SecurityOpt: ["no-new-privileges:true"]` applied when hardening enabled; live retest passed |
 | PENT-NKL-005 | python-socketio DoS via withheld binary attachments | Backend Eng | 2026-06-28 | Closed | `backend/requirements.txt` | Upgraded to `python-socketio==5.16.2`; `./nukelabctl security` passes |
-| PENT-NKL-006 | External base images not pinned by digest | Platform Eng | 2026-07-12 | Open | N/A | 5 unpinned external base images flagged by `check-base-image-pinning.sh` |
-| PENT-NKL-007 | Commits are not cryptographically signed | Platform Eng | 2026-07-12 | Open | N/A | 339 unsigned commits on current branch; enable branch-protection signed-commit requirement |
+| PENT-NKL-006 | External base images not pinned by digest | Platform Eng | 2026-06-29 | Closed | `backend/Dockerfile`, `environments/base/Dockerfile`, `environments/default/Dockerfile`, `frontend/Dockerfile`, `services/auth-sidecar/Dockerfile` | Pinned all external base images by digest; `./nukelabctl security --check-base-images` passes; `.github/workflows/security.yml` enforces pinning in CI |
+| PENT-NKL-007 | Commits are not cryptographically signed | Platform Eng | 2026-07-12 | Open | `.github/workflows/security.yml` | Enable GPG or SSH commit signing for all maintainers and turn on branch-protection "Require signed commits" for `main`; CI job `signed-commits-check` is included and set to warn-only until enforcement is enabled |
 | PENT-NKL-008 | Auth sidecar ships vulnerable Go runtime and JWT library | Backend Eng | 2026-06-28 | Closed | `services/auth-sidecar/Dockerfile`, `services/auth-sidecar/go.mod` | Upgraded builder to `golang:1.25-alpine` and `golang-jwt/jwt/v5` to v5.2.2; Trivy reports 0 HIGH/CRITICAL findings |
 | PENT-NKL-009 | Auth sidecar mounts wrong server-auth public key volume | Backend Eng | 2026-06-28 | Closed | `backend/app/container/spawner.py`, `backend/tests/container/test_spawner.py` | Mount `nukelab-server-secrets` at `/etc/nukelab/auth`; end-to-end terminal access verified |
 | PENT-NKL-010 | Server gateway page reloads instead of opening terminal | Frontend Eng | 2026-06-28 | Closed | `frontend/src/routes/user.$username.$serverName.tsx`, `frontend/public/sw.js`, `frontend/public/sw.js.tpl` | Open terminal in new tab; bypass `/user/` in service worker; frontend rebuilt and redeployed |
@@ -61,9 +61,50 @@ If a finding will not be remediated:
 | PENT-NKL-009 | 2026-06-28 | Security Eng | Pass | Rebuilt backend image; spawned `auth-fix-e2e-03`; `./nukelabctl verify-hardening` passed; server access token loaded terminal URL (ttyd HTML) with no 401; auth-sidecar logs show no signature errors |
 | PENT-NKL-010 | 2026-06-28 | Security Eng | Pass | Rebuilt frontend image; verified `sw.js` includes `/user/` bypass; verified minified gateway route chunk uses `window.open(..., "_blank", "noopener,noreferrer")`; `./nukelabctl lint all` passed; stack serving updated assets at `http://localhost:8080` |
 | PENT-NKL-011 | 2026-06-28 | Security Eng | Pass | Added readiness probe in `backend/app/container/client.py`; spawned `readiness-test`; backend log shows `Container nukelab-server-readinesse2e-readiness-test is ready` before API returns `running`; immediate curl to server URL with access token returns HTTP 200 ttyd HTML; `./nukelabctl lint backend`, `./nukelabctl build backend` pass; container readiness unit tests pass |
+| PENT-NKL-006 | 2026-06-29 | Security Eng | Pass | `./scripts/security/check-base-image-pinning.sh --strict` reports 0 unpinned images; `./nukelabctl security --check-base-images` passes; Dockerfiles updated with `@sha256:` digests |
+| PENT-NKL-007 | 2026-06-29 | Security Eng | N/A | Process change; created `.github/workflows/security.yml` with signed-commits check in warn-only mode pending team adoption of GPG/SSH signing and branch-protection enforcement |
+
+## Commit Signing Setup Guide
+
+To close PENT-NKL-007, every maintainer must sign commits and the `main` branch must require signed commits.
+
+### Option A — GPG signing
+
+1. Generate a GPG key:
+   ```bash
+   gpg --full-generate-key
+   ```
+2. Add the key to your GitHub account (`Settings → SSH and GPG keys → New GPG key`).
+3. Configure git locally:
+   ```bash
+   git config --global user.signingkey <KEY_ID>
+   git config --global commit.gpgsign true
+   ```
+4. Sign commits automatically:
+   ```bash
+   git commit -S -m "signed commit"
+   ```
+
+### Option B — SSH signing
+
+1. Add your SSH key to GitHub (`Settings → SSH and GPG keys → New SSH key`, type **Signing**).
+2. Configure git locally:
+   ```bash
+   git config --global gpg.format ssh
+   git config --global user.signingkey "$(cat ~/.ssh/id_ed25519.pub)"
+   git config --global commit.gpgsign true
+   ```
+
+### Repository enforcement
+
+1. In GitHub, go to `Settings → Branches → main → Edit`.
+2. Enable **Require signed commits**.
+3. Optional: enable **Require a pull request before merging** and **Require status checks to pass** including `dependency-and-sast-scans`.
+
+### Historical commits
+
+The 339 unsigned commits already on `main` cannot be re-signed without rewriting history. Once enforcement is enabled, only *new* commits pushed to `main` or merged via PR must be signed. The CI job `signed-commits-check` in `.github/workflows/security.yml` is configured with `continue-on-error: true` during the transition; remove that line once enforcement is active.
 
 ---
 
-**Last Updated:** 2026-06-28
-
-**Pending:** PENT-NKL-006 (base image digest pinning) and PENT-NKL-007 (commit signing). Both require process / registry changes rather than application code changes. PENT-NKL-008, PENT-NKL-009, and PENT-NKL-010 are closed.
+**Pending:** PENT-NKL-007 (commit signing). Enable GPG or SSH signing for all maintainers and turn on branch-protection "Require signed commits" for `main`. PENT-NKL-006 (base image digest pinning) is closed and enforced in `.github/workflows/security.yml`.
