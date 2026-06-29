@@ -547,71 +547,66 @@ function LoginCard({
 }
 
 /**
- * Animated background with layered ambient blobs. The shapes drift, breathe,
- * and rotate slowly to create a subtle "aurora" effect without distracting
- * from the login form. Pointer-events are disabled so interaction is never
- * blocked.
+ * Animated background with soft ambient blobs that drift and breathe. The
+ * motion is subtle so it never competes with the login form.
  */
 function AmbientBackground() {
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden">
       {/* Base gradient wash */}
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.05] via-background to-chart-2/[0.05]" />
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.10] via-background to-chart-2/[0.08]" />
 
       {/* Top-left primary blob */}
       <motion.div
-        className="absolute -top-[20%] -left-[15%] w-[60vw] h-[60vw] rounded-[40%_60%_70%_30%/40%_50%_60%_50%] bg-primary/[0.07] blur-[120px]"
+        className="absolute -top-[10%] -left-[10%] w-[60vw] h-[60vw] rounded-full bg-primary/[0.12] blur-[100px]"
         animate={{
           x: [0, 40, 0],
           y: [0, -30, 0],
-          rotate: [0, 15, 0],
           scale: [1, 1.08, 1],
         }}
-        transition={{ duration: 20, repeat: Infinity, ease: 'easeInOut' }}
+        transition={{ duration: 18, repeat: Infinity, ease: 'easeInOut' }}
       />
 
       {/* Bottom-right chart blob */}
       <motion.div
-        className="absolute -bottom-[20%] -right-[15%] w-[55vw] h-[55vw] rounded-[60%_40%_30%_70%/50%_60%_40%_50%] bg-chart-2/[0.06] blur-[120px]"
+        className="absolute -bottom-[10%] -right-[10%] w-[55vw] h-[55vw] rounded-full bg-chart-2/[0.10] blur-[100px]"
         animate={{
-          x: [0, -35, 0],
+          x: [0, -30, 0],
           y: [0, 40, 0],
-          rotate: [0, -12, 0],
-          scale: [1.05, 1, 1.05],
+          scale: [1.08, 1, 1.08],
         }}
-        transition={{ duration: 24, repeat: Infinity, ease: 'easeInOut', delay: 4 }}
+        transition={{ duration: 22, repeat: Infinity, ease: 'easeInOut', delay: 3 }}
       />
 
       {/* Center muted glow */}
       <motion.div
-        className="absolute top-[35%] left-[45%] w-[40vw] h-[40vw] rounded-full bg-primary/[0.03] blur-[140px]"
+        className="absolute top-[30%] left-[40%] w-[40vw] h-[40vw] rounded-full bg-primary/[0.07] blur-[110px]"
         animate={{
-          scale: [1, 1.15, 1],
-          opacity: [0.4, 0.7, 0.4],
           x: [0, 20, 0],
           y: [0, -15, 0],
+          scale: [1, 1.1, 1],
+          opacity: [0.6, 0.9, 0.6],
         }}
-        transition={{ duration: 16, repeat: Infinity, ease: 'easeInOut', delay: 2 }}
+        transition={{ duration: 16, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
       />
 
-      {/* Extra accent blob near the card */}
+      {/* Accent blob near the card */}
       <motion.div
-        className="absolute top-[55%] right-[10%] w-[25vw] h-[25vw] rounded-[45%_55%_65%_35%/55%_45%_55%_45%] bg-chart-2/[0.05] blur-[100px]"
+        className="absolute top-[55%] right-[5%] w-[25vw] h-[25vw] rounded-full bg-chart-2/[0.08] blur-[90px]"
         animate={{
-          x: [0, -25, 0],
+          x: [0, -20, 0],
           y: [0, 20, 0],
-          rotate: [0, 10, 0],
           scale: [1, 1.1, 1],
         }}
-        transition={{ duration: 18, repeat: Infinity, ease: 'easeInOut', delay: 6 }}
+        transition={{ duration: 20, repeat: Infinity, ease: 'easeInOut', delay: 5 }}
       />
 
       {/* Soft vignette to keep focus in the center */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,var(--background)_85%)] opacity-60" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,var(--background)_80%)] opacity-50" />
 
       {/* Dot grid pattern */}
       <div
-        className="absolute inset-0 opacity-[0.025]"
+        className="absolute inset-0 opacity-[0.04]"
         style={{
           backgroundImage: 'radial-gradient(circle, currentColor 1px, transparent 1px)',
           backgroundSize: '32px 32px',
