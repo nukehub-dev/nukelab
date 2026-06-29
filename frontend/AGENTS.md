@@ -17,11 +17,112 @@ All files under `frontend/` except generated artifacts (`node_modules/`, `dist/`
 
 ## Work Guidance
 
-- Use `npm` scripts for local workflow: `dev`, `build`, `lint`, `format`, `format:check`, `test` (Playwright e2e).
-- Run lint with `npm run lint`; run format check with `npm run format:check`.
-- Run e2e tests with `npm run test`. `nukelabctl test frontend` does **not** accept path passthrough; scope tests directly via `cd frontend && npm run test -- path/to/file.spec.ts`.
-- Keep TanStack Router file-based routes in `src/routes/` (if present) and regenerate the route tree after route changes.
-- Do not commit `dist/` or `test-results/`.
+### Project structure
+
+- `src/routes/` — TanStack Router file-based routes. Each route file exports a default component and may export `Route` metadata. The route tree is regenerated automatically on `npm run dev` or via `npx tsr generate`.
+- `src/components/` — reusable UI components. Prefer composition over large monolithic components.
+- `src/hooks/` — custom React hooks, especially data-fetching wrappers around TanStack Query.
+  - `src/hooks/use-page-guard.ts` — page-level RBAC guard hook that redirects unauthorized users.
+- `src/stores/` — Zustand stores for client-side state that does not belong in the URL or server cache.
+  - `src/stores/auth-store.ts` — auth store with user state, `PERMISSIONS` constants, and permission helpers.
+- `src/lib/` — pure utility functions and shared constants.
+- `src/api/` — generated or hand-written API client code and request/response types.
+
+### Adding a route
+
+1. Create a route file under `src/routes/` matching TanStack Router conventions (e.g., `servers.$serverId.tsx` for `/servers/:serverId`).
+2. Export `Route` from `@tanstack/react-router` with path, component, and loader/error boundaries as needed.
+3. Run `npx tsr generate` or restart `npm run dev` to regenerate `src/routeTree.gen.ts`.
+4. Add an e2e test in `e2e/` if the route is user-facing.
+
+### Fetching data
+
+- Use TanStack Query hooks for server state. Define queries in feature-specific hooks under `src/hooks/` rather than inlining them in components.
+- Keep query keys stable and predictable; include IDs and filter parameters.
+- Handle loading and error states explicitly; use skeletons or error boundaries instead of silent failures.
+
+### Role-based access control (RBAC)
+
+The frontend mirrors the backend permission model for UX purposes only. The backend remains the ultimate authority on every request.
+
+- **Permission constants**: `src/stores/auth-store.ts` exports `PERMISSIONS`. These strings must match `app/core/permissions.py` in the backend exactly.
+- **Checking permissions**: use `useAuthStore` selectors or the helpers it exposes:
+  - `hasPermission(permission)` — single permission.
+  - `hasAnyPermission([perm1, perm2])` — any of the listed permissions.
+  - `hasAllPermissions([perm1, perm2])` — all listed permissions.
+- **Page guards**: `usePageGuard` redirects unauthorized users. Use it at the top of route components:
+
+```tsx
+import { usePageGuard } from '../hooks/use-page-guard'
+import { PERMISSIONS, useAuthStore } from '../stores/auth-store'
+
+function AdminCreditsPage() {
+  const allowed = usePageGuard({ permission: PERMISSIONS.CREDITS_READ_ALL })
+  const canGrant = useAuthStore((state) => state.hasPermission(PERMISSIONS.CREDITS_GRANT))
+
+  if (!allowed) return null
+
+  return (
+    <div>
+      {canGrant && <GrantCreditsButton />}
+    </div>
+  )
+}
+```
+
+- **Route links**: in `admin.index.tsx` and other navigation lists, use `requiredPermission` to hide links the user cannot access.
+
+#### Adding or changing permissions
+
+1. Add the constant to `PERMISSIONS` in `src/stores/auth-store.ts`.
+2. Update the role fallback mapping in `checkPermission` if the permission should be derivable from a role when the backend has not sent an explicit permissions list.
+3. Update the admin permissions matrix UI (`src/routes/admin.permissions.tsx`) if the permission belongs to a new or existing category.
+4. Hide guarded UI behind `useAuthStore` permission checks; always expect the backend to enforce the same restriction.
+
+#### Important rules
+
+- Client-side permission checks are for UX only. Never trust the frontend to enforce authorization — the backend must validate every request.
+- Keep `PERMISSIONS` in sync with the backend `Permission` class. A mismatch will cause false denials or hidden features.
+- Do not hard-code role names like `role === 'admin'` for access decisions unless the semantic truly depends on role identity. Prefer permission checks so dynamic role overrides continue to work.
+
+### State management
+
+- Prefer URL state for page-level filters and selections.
+- Use Zustand for global UI state that should survive navigation (e.g., sidebar collapse, theme).
+- Avoid prop drilling more than two levels deep; use context or Zustand instead.
+
+### Styling
+
+- Use Tailwind CSS utility classes. Avoid arbitrary values; extend the theme in `tailwind.config.ts` when a value repeats.
+- Prefer `className` composition with `clsx` or `tailwind-merge` for conditional classes.
+
+### UI components
+
+- The project does **not** use a generic component library. Build custom components in `src/components/ui/` as needed.
+- Reuse existing `src/components/ui/*` components before writing new ones (e.g., `Tooltip`, `Button`, `Modal`, `Toast`).
+- Do **not** rely on browser-built-in UI for product UX. For example, use the project's own `Tooltip` component (`src/components/ui/tooltip.tsx`) instead of the native `title` attribute.
+- Keep components in `src/components/ui/` small, accessible, and styled consistently with Tailwind. Export a clear prop interface and avoid leaking layout concerns into reusable primitives.
+
+### Forms and validation
+
+- Use controlled inputs with React state or a form library consistent with the project.
+- Validate user input before submission; display field-level errors returned by the backend.
+
+### Tests
+
+- `npm run test` runs Playwright e2e tests. Write e2e specs for critical user flows.
+- Unit tests are not currently required unless the project adds a Vitest/Jest setup.
+
+### Build and service worker
+
+- `npm run build` produces `dist/`. The service worker is generated and cache injection runs automatically.
+- Do not manually edit generated files in `dist/` or `.tanstack/`.
+
+### Common pitfalls
+
+- `nukelabctl test frontend` does **not** accept path passthrough; scope tests directly via `cd frontend && npm run test -- path/to/file.spec.ts`.
+- Do not import route files directly; rely on the generated route tree.
+- Keep environment-specific values in `.env.*` files, not hard-coded in source.
 
 ## Verification
 

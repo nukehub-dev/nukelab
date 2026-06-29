@@ -228,4 +228,4 @@ These checks are off by default because they require process/registry changes
 - `resources/AGENTS.md` — Native/shared resources (`libnukelab_cpu`).
 - `scripts/AGENTS.md` — `nukelabctl`, shared library, build/security helpers.
 - `services/AGENTS.md` — Auxiliary services.
-- `services/auth-sidecar/AGENTS.md` — Go authentication sidecar.
+  - `services/auth-sidecar/AGENTS.md` — Go authentication sidecar.
