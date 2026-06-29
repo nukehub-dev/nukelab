@@ -11,8 +11,9 @@ const STATIC_ASSETS = [
 ];
 
 // Routes that must never be intercepted by the service worker.
-// These are served by Traefik (Grafana/Prometheus/Alertmanager/Jaeger) or are API/WebSocket paths.
-const BYPASS_PATHS = ['/api/', '/ws/', '/grafana', '/prometheus', '/alertmanager', '/jaeger'];
+// These are served by Traefik (Grafana/Prometheus/Alertmanager/Jaeger), API/WebSocket paths,
+// or per-server terminal routes that must reach the backend container directly.
+const BYPASS_PATHS = ['/api/', '/ws/', '/user/', '/grafana', '/prometheus', '/alertmanager', '/jaeger'];
 
 function shouldBypass(request, url) {
   if (request.method !== 'GET') return true;

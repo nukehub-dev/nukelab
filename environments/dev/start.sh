@@ -6,38 +6,49 @@ set -e
 USERNAME="${NUKELAB_USERNAME:-nukelab}"
 USER_ID="${NUKELAB_USER_ID:-1000}"
 
-# Create group and user with the provided username
-if ! id "$USERNAME" &> /dev/null; then
+RUN_AS_ROOT=false
+if [ "$(id -u)" -eq 0 ]; then
+    RUN_AS_ROOT=true
+fi
+
+# Create group and user with the provided username when running as root.
+# The hardened runtime starts the container as the pre-created nukelab user,
+# so the useradd path is skipped in that case.
+if $RUN_AS_ROOT && ! id "$USERNAME" &> /dev/null; then
     groupadd -r "$USERNAME" && \
     useradd -r -g "$USERNAME" -m -s /bin/bash -d "/home/$USERNAME" "$USERNAME"
     echo "Created user: $USERNAME (uid: $(id -u $USERNAME))"
 fi
 
 # Ensure home directory exists and is accessible.
-# We use chmod 777 on the mount point (non-recursive) instead of chown -R
-# to avoid two problems:
-#   1. Slow startup on large volumes (50GB / 100k files)
-#   2. Ownership fights when the same volume is shared across multiple users
+# When running as root we make the mount point world-writable (non-recursive)
+# to avoid slow recursive chown on large volumes and ownership fights when the
+# same volume is shared across multiple users. When running as non-root we
+# assume the backend/spawner has already arranged writable permissions.
 mkdir -p "/home/$USERNAME"
-chmod 777 "/home/$USERNAME"
+if $RUN_AS_ROOT; then
+    chmod 777 "/home/$USERNAME"
+fi
 
 # If the home directory is empty (e.g., fresh named volume), copy default
 # dotfiles from /etc/skel so the user has a functional shell environment.
 if [ -z "$(ls -A /home/$USERNAME 2>/dev/null)" ]; then
     cp -r /etc/skel/. /home/$USERNAME/ 2>/dev/null || true
-    chmod -R u+rw /home/$USERNAME 2>/dev/null || true
+    if $RUN_AS_ROOT; then
+        chmod -R u+rw /home/$USERNAME 2>/dev/null || true
+    fi
 fi
 
-# Start auth sidecar in background
-# This validates server access tokens locally using the public key
+# Start auth sidecar in background on an unprivileged port so nginx can bind
+# 8080 while the sidecar binds 8081.
 if [ "${NUKELAB_AUTH_ENABLED:-true}" = "true" ]; then
     echo "Starting auth sidecar..."
-    auth-sidecar &
+    NUKELAB_AUTH_LISTEN_ADDR="${NUKELAB_AUTH_LISTEN_ADDR:-:8081}" auth-sidecar &
     AUTH_PID=$!
-    
+
     # Wait for auth sidecar to be ready
     for i in {1..10}; do
-        if curl -sf http://localhost:8080/health > /dev/null 2>&1; then
+        if curl -sf "http://localhost:${NUKELAB_AUTH_LISTEN_ADDR##*:}/health" > /dev/null 2>&1; then
             echo "Auth sidecar is ready"
             break
         fi
@@ -45,8 +56,14 @@ if [ "${NUKELAB_AUTH_ENABLED:-true}" = "true" ]; then
     done
 fi
 
-# Start ttyd in background (running as the user)
-ttyd --writable -p 7681 su - "$USERNAME" &
+# Start ttyd in background.
+# Under the hardened non-root runtime we cannot use su, so run the shell
+# directly as the current user.
+if $RUN_AS_ROOT; then
+    ttyd --writable -p 7681 su - "$USERNAME" &
+else
+    ttyd --writable -p 7681 /bin/bash &
+fi
 
 # Start nginx in foreground
-nginx -g 'daemon off;'
+exec nginx -g 'daemon off;'

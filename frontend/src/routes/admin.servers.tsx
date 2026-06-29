@@ -283,14 +283,24 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
           const handleOpen = async (e: React.MouseEvent) => {
             e.preventDefault()
             if (!canAccessServer(server)) return
+            let shouldOpen = true
             if (server.status !== 'running') {
               const started = await startServerAsync(server)
-              if (!started) return
+              if (!started) shouldOpen = false
             } else {
               const reason = await promptAccessReason(server, 'open')
-              if (reason === null) return
+              if (reason === null) shouldOpen = false
             }
-            window.open(gatewayUrl, '_blank', 'noopener,noreferrer')
+            if (!shouldOpen) return
+            // Open synchronously inside the user gesture to avoid popup blockers.
+            const newWindow = window.open('about:blank', '_blank')
+            if (!newWindow) return
+            try {
+              newWindow.opener = null
+            } catch {
+              // ignore
+            }
+            newWindow.location.href = gatewayUrl
           }
 
           const anyPending = isOperationPending(server.id)
@@ -600,7 +610,16 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
               const gatewayUrl = server.username
                 ? `/user/${server.username}/${server.name}`
                 : server.external_url
-              window.open(gatewayUrl, '_blank', 'noopener,noreferrer')
+              if (!gatewayUrl) return
+              // Open synchronously inside the user gesture to avoid popup blockers.
+              const newWindow = window.open('about:blank', '_blank')
+              if (!newWindow) return
+              try {
+                newWindow.opener = null
+              } catch {
+                // ignore
+              }
+              newWindow.location.href = gatewayUrl
             }}
             disabled={isOperationPending(server.id)}
             className="inline-flex items-center gap-1 text-sm text-primary hover:underline disabled:opacity-50"

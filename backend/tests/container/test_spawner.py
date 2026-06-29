@@ -361,6 +361,7 @@ def mock_container_client():
     mock_container = MockContainer()
     client.create_container = mock.AsyncMock(return_value=mock_container)
     client.start_container = mock.AsyncMock()
+    client.wait_for_container_ready = mock.AsyncMock(return_value=True)
     client.stop_container = mock.AsyncMock()
     client.delete_container = mock.AsyncMock()
     client.get_container_info = mock.AsyncMock(
@@ -633,6 +634,8 @@ class TestSpawnSuccess:
     @pytest.mark.asyncio
     async def test_spawn_with_env_vars(self, fresh_spawner):
         """spawn should inject custom env_vars."""
+        from app.container.spawner import settings
+
         with mock.patch("app.container.spawner.settings.public_url", "http://test"):
             await fresh_spawner.spawn(
                 user_id=str(uuid_mod.uuid4()),
@@ -644,7 +647,10 @@ class TestSpawnSuccess:
         call_kwargs = fresh_spawner.container_client.create_container.await_args.kwargs
         env = call_kwargs["env"]
         assert env["FOO"] == "bar"
-        assert env["NUKELAB_USERNAME"] == "testuser"
+        expected_username = (
+            settings.container_user if settings.container_hardening_enabled else "testuser"
+        )
+        assert env["NUKELAB_USERNAME"] == expected_username
         assert env["NUKELAB_SERVER_NAME"] == "srv1"
 
     @pytest.mark.asyncio
@@ -693,6 +699,62 @@ class TestSpawnSuccess:
         assert server.allocated_cpu == 1.0
         assert server.allocated_memory == "2g"
         assert server.allocated_disk == "10g"
+
+    @pytest.mark.asyncio
+    async def test_spawn_waits_for_container_ready(self, fresh_spawner):
+        """spawn should wait for container readiness before returning."""
+        with mock.patch("app.container.spawner.settings.public_url", "http://test"):
+            await fresh_spawner.spawn(
+                user_id=str(uuid_mod.uuid4()),
+                username="testuser",
+                server_name="srv1",
+            )
+
+        fresh_spawner.container_client.wait_for_container_ready.assert_awaited_once_with(
+            "nukelab-server-testuser-srv1", "http://nukelab-server-testuser-srv1:8080/health"
+        )
+
+    @pytest.mark.asyncio
+    async def test_spawn_removes_existing_container_before_create(self, fresh_spawner):
+        """spawn should delete an existing container with the same name before creating a new one."""
+        mock_existing = mock.AsyncMock()
+        fresh_spawner.container_client.client.containers.get = mock.AsyncMock(
+            return_value=mock_existing
+        )
+
+        with mock.patch("app.container.spawner.settings.public_url", "http://test"):
+            with mock.patch("asyncio.sleep"):
+                await fresh_spawner.spawn(
+                    user_id=str(uuid_mod.uuid4()),
+                    username="testuser",
+                    server_name="srv1",
+                )
+
+        fresh_spawner.container_client.client.containers.get.assert_awaited_once_with(
+            "nukelab-server-testuser-srv1"
+        )
+        mock_existing.delete.assert_awaited_once_with(force=True)
+        fresh_spawner.container_client.create_container.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_spawn_ignores_missing_existing_container(self, fresh_spawner):
+        """spawn should proceed normally when no existing container is found."""
+        fresh_spawner.container_client.client.containers.get = mock.AsyncMock(
+            side_effect=Exception("not found")
+        )
+
+        with mock.patch("app.container.spawner.settings.public_url", "http://test"):
+            with mock.patch("asyncio.sleep"):
+                await fresh_spawner.spawn(
+                    user_id=str(uuid_mod.uuid4()),
+                    username="testuser",
+                    server_name="srv1",
+                )
+
+        fresh_spawner.container_client.client.containers.get.assert_awaited_once_with(
+            "nukelab-server-testuser-srv1"
+        )
+        fresh_spawner.container_client.create_container.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_spawn_with_server_id(self, fresh_spawner):
@@ -757,8 +819,10 @@ class TestSpawnSuccess:
                         volume_mounts=[{"mount_path": "/data", "mode": "read_write"}],
                     )
 
-        mock_warn.assert_called_once()
-        assert "Could not fix permissions" in mock_warn.call_args[0][0]
+        chmod_warnings = [
+            c for c in mock_warn.call_args_list if "Could not fix permissions" in c[0][0]
+        ]
+        assert len(chmod_warnings) == 1
 
     @pytest.mark.asyncio
     async def test_spawn_with_auth_volume(self, fresh_spawner):
@@ -779,9 +843,9 @@ class TestSpawnSuccess:
 
         call_kwargs = fresh_spawner.container_client.create_container.await_args.kwargs
         vols = call_kwargs["volumes"]
-        assert "nukelab-secrets" in vols
-        assert vols["nukelab-secrets"]["bind"] == "/etc/nukelab/auth"
-        assert vols["nukelab-secrets"]["mode"] == "ro"
+        assert "nukelab-server-secrets" in vols
+        assert vols["nukelab-server-secrets"]["bind"] == "/etc/nukelab/auth"
+        assert vols["nukelab-server-secrets"]["mode"] == "ro"
         mock_ensure.assert_called_once()
 
     @pytest.mark.asyncio
@@ -797,7 +861,7 @@ class TestSpawnSuccess:
 
         call_kwargs = fresh_spawner.container_client.create_container.await_args.kwargs
         vols = call_kwargs["volumes"]
-        assert "nukelab-secrets" not in vols
+        assert "nukelab-server-secrets" not in vols
 
 
 # ─────────────────────────────────────────────────────────────
@@ -829,7 +893,8 @@ class TestSpawnFailure:
                 )
 
         assert "Failed to spawn server" in str(exc_info.value)
-        mock_container.delete.assert_awaited_once_with(force=True)
+        mock_container.delete.assert_awaited_with(force=True)
+        assert mock_container.delete.await_count == 2
 
     @pytest.mark.asyncio
     async def test_spawn_cleanup_ignores_delete_failure(self, fresh_spawner):

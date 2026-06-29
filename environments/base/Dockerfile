@@ -22,5 +22,10 @@ RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash - \
 # Create app directory
 WORKDIR /opt/nukelab
 
+# Create non-root user used by hardened container runtime. Use a high UID/GID
+# to avoid collisions with distro default users (e.g. ubuntu:1000).
+RUN groupadd -r nukelab -g 65532 && \
+    useradd -r -g nukelab -u 65532 -m -s /bin/bash -d /home/nukelab nukelab
+
 # Default command
 CMD ["bash"]

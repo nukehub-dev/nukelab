@@ -2,191 +2,47 @@ name: Security Scans
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, master, develop]
   pull_request:
-    branches: [main, develop]
-  schedule:
-    # Run weekly on Mondays at 06:00 UTC
-    - cron: "0 6 * * 1"
-  workflow_dispatch:
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+    branches: [main, master, develop]
 
 permissions:
   contents: read
-  security-events: write
-  actions: read
+  actions: write
 
 jobs:
-  backend-bandit:
-    name: Bandit Static Analysis
+  security:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-
-      - name: Install dependencies
-        working-directory: ./backend
-        run: |
-          python -m pip install --upgrade pip
-          pip install 'bandit[toml]>=1.8.2,<2.0'
-
-      - name: Run Bandit
-        id: bandit
-        continue-on-error: true
-        working-directory: ./backend
-        run: |
-          bandit -r app -f json -o bandit-report.json -ii -ll
-          bandit -r app -f screen -ii -ll
-
-      - name: Upload Bandit report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: bandit-report
-          path: backend/bandit-report.json
-
-      - name: Fail on Bandit findings
-        if: steps.bandit.outcome == 'failure'
-        run: |
-          echo "Bandit found security issues. See uploaded artifact."
-          exit 1
-
-  backend-pip-audit:
-    name: pip-audit Python Dependencies
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install pip-audit
-        run: |
-          python -m pip install --upgrade pip
-          pip install pip-audit==2.7.3
-
-      - name: Run pip-audit on production dependencies
-        id: pip-audit
-        continue-on-error: true
-        working-directory: ./backend
-        run: |
-          pip-audit -r requirements.txt --format=json --desc --progress-spinner=off -o pip-audit-report.json
-          pip-audit -r requirements.txt --format=columns --progress-spinner=off
-
-      - name: Upload pip-audit report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: pip-audit-report
-          path: backend/pip-audit-report.json
-
-      - name: Fail on pip-audit findings
-        if: steps.pip-audit.outcome == 'failure'
-        run: |
-          echo "pip-audit found vulnerable Python dependencies. See uploaded artifact."
-          exit 1
-
-  backend-pip-audit-dev:
-    name: pip-audit Dev Dependencies
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install pip-audit
-        run: |
-          python -m pip install --upgrade pip
-          pip install pip-audit==2.7.3
-
-      - name: Run pip-audit on dev dependencies
-        id: pip-audit-dev
-        continue-on-error: true
-        working-directory: ./backend
-        run: |
-          # pytest-asyncio does not yet support pytest 9.x, so the local-only
-          # pytest tmpdir CVE (GHSA-6w46-j5rx-g56g) is accepted for dev builds.
-          pip-audit -r requirements.txt -r requirements-dev.txt --format=json --desc --progress-spinner=off -o pip-audit-dev-report.json --ignore-vuln GHSA-6w46-j5rx-g56g
-          pip-audit -r requirements.txt -r requirements-dev.txt --format=columns --progress-spinner=off --ignore-vuln GHSA-6w46-j5rx-g56g
-
-      - name: Upload pip-audit dev report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: pip-audit-dev-report
-          path: backend/pip-audit-dev-report.json
-
-      - name: Fail on dev pip-audit findings
-        if: steps.pip-audit-dev.outcome == 'failure'
-        run: |
-          echo "pip-audit found vulnerable dev dependencies. See uploaded artifact."
-          exit 1
-
-  frontend-npm-audit:
-    name: npm audit Frontend Dependencies
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+          python-version: '3.12'
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: '22'
 
-      - name: Install dependencies
-        working-directory: ./frontend
-        run: npm ci
-
-      - name: Run npm audit
-        id: npm-audit
-        continue-on-error: true
-        working-directory: ./frontend
+      - name: Install frontend dependencies
         run: |
-          npm audit --json > npm-audit-report.json
-          npm audit
+          cd frontend
+          npm ci
 
-      - name: Check for high/critical vulnerabilities
-        id: check-high
-        working-directory: ./frontend
-        run: |
-          count=$(node -e "
-            const fs = require('fs');
-            const data = JSON.parse(fs.readFileSync('npm-audit-report.json', 'utf8'));
-            const vulns = data.vulnerabilities || {};
-            let count = 0;
-            for (const [name, info] of Object.entries(vulns)) {
-              const sev = (info.severity || '').toLowerCase();
-              if (sev === 'high' || sev === 'critical') count++;
-            }
-            console.log(count);
-          " || echo 0)
-          echo "high-critical-count=$count" >> "$GITHUB_OUTPUT"
+      - name: Run dependency and static security scans
+        run: ./nukelabctl security --no-trivy
 
-      - name: Upload npm audit report
-        if: always()
+      - name: Generate SBOM artifacts
+        run: ./nukelabctl security --sbom --no-bandit --no-pip-audit --no-npm-audit --no-trivy
+
+      - name: Upload SBOM artifacts
         uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: npm-audit-report
-          path: frontend/npm-audit-report.json
-
-      - name: Fail on high/critical npm findings
-        if: steps.check-high.outputs.high-critical-count > 0
-        run: |
-          echo "npm audit found ${{ steps.check-high.outputs.high-critical-count }} high/critical vulnerability(ies). See uploaded artifact."
-          exit 1
+          name: sbom
+          path: backend/reports/security/sbom/*.json
+          if-no-files-found: ignore

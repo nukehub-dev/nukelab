@@ -135,6 +135,11 @@ cmd_selftest() {
     _t "security --help mentions .venv-dev" bash -c './nukelabctl security --help | grep -q ".venv-dev"' || _increment_failures
     _t "security rejects unknown option" bash -c '! ./nukelabctl security --bogus >/dev/null 2>&1' || _increment_failures
 
+    # verify-hardening command
+    _t "verify-hardening help" bash -c './nukelabctl verify-hardening --help | grep -q "Verify that a spawned NukeLab server container is hardened"' || _increment_failures
+    _t "verify-hardening rejects unknown option" bash -c '! ./nukelabctl verify-hardening --bogus >/dev/null 2>&1' || _increment_failures
+    _t "verify-hardening fails for missing container" bash -c '! ./nukelabctl verify-hardening definitely-not-a-real-container-12345 >/dev/null 2>&1' || _increment_failures
+
     # update --cache is accepted
     _t "update --help mentions --cache" bash -c './nukelabctl update --help | grep -q -- "--cache"' || _increment_failures
     _t "update rejects unknown option" bash -c '! ./nukelabctl update --bogus >/dev/null 2>&1' || _increment_failures

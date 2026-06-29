@@ -145,6 +145,22 @@ class Settings(BaseSettings):
     container_default_swap_limit: str = "4Gi"
     container_default_disk_limit: str = "50Gi"
 
+    # Container runtime hardening (defaults to enabled unless dev_mode is True)
+    container_hardening_enabled: bool | None = None
+    container_user: str = "nukelab"
+    container_uid: int = 65532
+    container_gid: int = 65532
+    container_drop_all_capabilities: bool = True
+    container_readonly_rootfs: bool = True
+    container_no_new_privileges: bool = True
+    container_readonly_tmpfs_paths: list[str] = [
+        "/tmp",  # nosec: B108  # intentional container tmpfs mount, not host temp
+        "/var/tmp",  # nosec: B108
+        "/var/run",  # nosec: B108
+        "/var/log/nginx",  # nosec: B108
+        "/var/cache/nginx",  # nosec: B108
+    ]
+
     log_level: str = "INFO"
     log_format: str = "json"
     log_file: str = "logs/nukelab.log"
@@ -166,6 +182,11 @@ class Settings(BaseSettings):
     server_auto_restart_enabled: bool = True
     server_auto_restart_max_attempts: int = 3
     server_auto_restart_window: int = 300  # seconds
+
+    # Container readiness: how long to wait for a spawned/started container's
+    # /health endpoint (and the Traefik route) before marking the server as running.
+    container_readiness_timeout: int = 60  # seconds
+    container_readiness_interval: float = 1.0  # seconds between probes
 
     registration_enabled: bool = True
     max_servers_per_user: int = 10
@@ -301,6 +322,13 @@ class Settings(BaseSettings):
                     "SESSION_SECRET is using a default/dev value. "
                     "Set a strong random secret before running in production."
                 )
+        return self
+
+    @model_validator(mode="after")
+    def set_container_hardening_defaults(self) -> "Settings":
+        """Default container hardening to enabled except in dev_mode."""
+        if self.container_hardening_enabled is None:
+            self.container_hardening_enabled = not self.dev_mode
         return self
 
     @model_validator(mode="after")

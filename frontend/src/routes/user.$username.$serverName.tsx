@@ -639,7 +639,9 @@ function ServerGatewayPage() {
       const getAccessTokenAndRedirect = async () => {
         try {
           await getServerAccessToken(server.id)
-          window.location.replace(server.external_url || window.location.href)
+          // Force a real navigation so the service worker bypass for /user/ routes
+          // sends the request to the terminal container instead of the SPA shell.
+          window.location.href = server.external_url || window.location.href
         } catch (err) {
           setTokenError(err instanceof Error ? err.message : 'Failed to get access token')
           setManualOpenReady(true)
@@ -672,12 +674,29 @@ function ServerGatewayPage() {
       if (entered === null) return
       reason = entered || undefined
     }
+
+    // Open a blank window synchronously while we are still inside the user
+    // gesture. Waiting for the async token request before calling window.open
+    // causes most browsers to block the popup.
+    const newWindow = window.open('about:blank', '_blank')
+    if (!newWindow) {
+      setTokenError('Popup blocked. Please allow popups for this site and try again.')
+      return
+    }
+    // Break the opener relationship for security once we have a reference.
+    try {
+      newWindow.opener = null
+    } catch {
+      // Ignore if the browser disallows mutating opener.
+    }
+
     try {
       if (server?.id) {
         await getServerAccessToken(server.id, reason)
       }
-      window.location.href = targetUrl
+      newWindow.location.href = targetUrl
     } catch (err) {
+      newWindow.close()
       setTokenError(err instanceof Error ? err.message : 'Failed to get access token')
     }
   }, [server, isOwnServer, promptAccessReason])

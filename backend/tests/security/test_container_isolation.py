@@ -30,6 +30,7 @@ def _make_mock_container_client(captured: dict):
     mock_container_client.pull_image = AsyncMock()
     mock_container_client.create_container = AsyncMock(side_effect=fake_create_container)
     mock_container_client.start_container = AsyncMock()
+    mock_container_client.wait_for_container_ready = AsyncMock(return_value=True)
     mock_container_client.get_container_info = AsyncMock(
         return_value={"State": {"Status": "running"}}
     )
@@ -170,29 +171,121 @@ class TestContainerHardening:
     the finding should be recorded in docs/PENETRATION-TEST-FINDINGS.md.
     """
 
-    @pytest.mark.skip(reason="Requires container hardening implementation")
+    @pytest.fixture
+    def hardened_settings(self):
+        """Patch settings to force container hardening on."""
+        from app.config import settings
+
+        original = {
+            "container_hardening_enabled": settings.container_hardening_enabled,
+            "container_user": settings.container_user,
+            "container_uid": settings.container_uid,
+            "container_gid": settings.container_gid,
+            "container_drop_all_capabilities": settings.container_drop_all_capabilities,
+            "container_readonly_rootfs": settings.container_readonly_rootfs,
+            "container_no_new_privileges": settings.container_no_new_privileges,
+            "container_readonly_tmpfs_paths": list(settings.container_readonly_tmpfs_paths),
+        }
+        settings.container_hardening_enabled = True
+        settings.container_user = "nukelab"
+        settings.container_uid = 1000
+        settings.container_gid = 1000
+        settings.container_drop_all_capabilities = True
+        settings.container_readonly_rootfs = True
+        settings.container_no_new_privileges = True
+        settings.container_readonly_tmpfs_paths = [
+            "/tmp",
+            "/var/tmp",
+            "/var/run",
+            "/var/log/nginx",
+            "/var/cache/nginx",
+        ]
+        yield settings
+        for key, value in original.items():
+            setattr(settings, key, value)
+
     @pytest.mark.asyncio
-    async def test_container_runs_as_non_root(self):
+    async def test_container_runs_as_non_root(self, hardened_settings):
         """User containers should run as a non-root user."""
-        pass
+        from app.container.client import ContainerClient
 
-    @pytest.mark.skip(reason="Requires container hardening implementation")
+        client = ContainerClient()
+        client.client = MagicMock()
+        client.client.containers = MagicMock()
+        client.client.containers.create = AsyncMock(return_value=MagicMock())
+        client._cpu_lib_volume_ready = False
+        client._lxcfs_support = False
+
+        await client.create_container(name="test", image="hello-world")
+
+        call_args = client.client.containers.create.call_args
+        config = call_args[0][0]
+        assert config["HostConfig"]["User"] == "1000:1000", (
+            f"Container not running as expected non-root user: {config['HostConfig'].get('User')}"
+        )
+
     @pytest.mark.asyncio
-    async def test_container_drops_all_capabilities(self):
+    async def test_container_drops_all_capabilities(self, hardened_settings):
         """User containers should drop all Linux capabilities."""
-        pass
+        from app.container.client import ContainerClient
 
-    @pytest.mark.skip(reason="Requires container hardening implementation")
+        client = ContainerClient()
+        client.client = MagicMock()
+        client.client.containers = MagicMock()
+        client.client.containers.create = AsyncMock(return_value=MagicMock())
+        client._cpu_lib_volume_ready = False
+        client._lxcfs_support = False
+
+        await client.create_container(name="test", image="hello-world")
+
+        call_args = client.client.containers.create.call_args
+        config = call_args[0][0]
+        assert config["HostConfig"].get("CapDrop") == ["ALL"], (
+            f"Container did not drop all capabilities: {config['HostConfig'].get('CapDrop')}"
+        )
+
     @pytest.mark.asyncio
-    async def test_container_has_read_only_root_filesystem(self):
+    async def test_container_has_read_only_root_filesystem(self, hardened_settings):
         """User containers should have a read-only root filesystem."""
-        pass
+        from app.container.client import ContainerClient
 
-    @pytest.mark.skip(reason="Requires container hardening implementation")
+        client = ContainerClient()
+        client.client = MagicMock()
+        client.client.containers = MagicMock()
+        client.client.containers.create = AsyncMock(return_value=MagicMock())
+        client._cpu_lib_volume_ready = False
+        client._lxcfs_support = False
+
+        await client.create_container(name="test", image="hello-world")
+
+        call_args = client.client.containers.create.call_args
+        config = call_args[0][0]
+        assert config["HostConfig"].get("ReadonlyRootfs") is True, (
+            "Container root filesystem is not read-only"
+        )
+        tmpfs = config["HostConfig"].get("Tmpfs", {})
+        for path in hardened_settings.container_readonly_tmpfs_paths:
+            assert path in tmpfs, f"Missing tmpfs mount for read-only rootfs: {path}"
+
     @pytest.mark.asyncio
-    async def test_container_has_no_new_privileges(self):
+    async def test_container_has_no_new_privileges(self, hardened_settings):
         """User containers should have NoNewPrivileges enabled."""
-        pass
+        from app.container.client import ContainerClient
+
+        client = ContainerClient()
+        client.client = MagicMock()
+        client.client.containers = MagicMock()
+        client.client.containers.create = AsyncMock(return_value=MagicMock())
+        client._cpu_lib_volume_ready = False
+        client._lxcfs_support = False
+
+        await client.create_container(name="test", image="hello-world")
+
+        call_args = client.client.containers.create.call_args
+        config = call_args[0][0]
+        assert "no-new-privileges:true" in config["HostConfig"].get("SecurityOpt", []), (
+            "Container does not have no-new-privileges security option"
+        )
 
 
 class TestContainerNetworkIsolation:

@@ -1,3 +1,4 @@
+import asyncio
 import io
 import logging
 import os
@@ -5,6 +6,7 @@ import tarfile
 import uuid
 
 import aiodocker
+import aiohttp
 
 from app.config import settings
 
@@ -366,6 +368,32 @@ class ContainerClient:
                 }
             )
 
+        # --- Container runtime hardening ---
+        if settings.container_hardening_enabled:
+            host_config = config["HostConfig"]
+            # Set both HostConfig.User (for internal verification/tests) and
+            # top-level Config.User (the Docker/Podman API field that actually
+            # controls the container process user).
+            host_config["User"] = f"{settings.container_uid}:{settings.container_gid}"
+            config["User"] = f"{settings.container_uid}:{settings.container_gid}"
+            if settings.container_drop_all_capabilities:
+                host_config["CapDrop"] = ["ALL"]
+            if settings.container_no_new_privileges:
+                host_config["SecurityOpt"] = ["no-new-privileges:true"]
+            if settings.container_readonly_rootfs:
+                host_config["ReadonlyRootfs"] = True
+                tmpfs_paths = settings.container_readonly_tmpfs_paths or []
+                if tmpfs_paths:
+                    host_config["Tmpfs"] = dict.fromkeys(tmpfs_paths, "mode=1777,size=100m")
+            logger.info(
+                "Applied container hardening: user=%s, cap_drop=%s, "
+                "no_new_privileges=%s, readonly_rootfs=%s",
+                host_config.get("User"),
+                settings.container_drop_all_capabilities,
+                settings.container_no_new_privileges,
+                settings.container_readonly_rootfs,
+            )
+
         container = await self.client.containers.create(config, name=name)
         await self._inject_cpu_files(container, cpu_limit)
         return container
@@ -374,6 +402,46 @@ class ContainerClient:
         """Start a container"""
         container = await self.client.containers.get(container_id)
         await container.start()
+
+    async def wait_for_container_ready(
+        self,
+        container_name: str,
+        health_url: str,
+        timeout: int | None = None,
+        interval: float | None = None,
+    ) -> bool:
+        """Wait until the container responds successfully on health_url.
+
+        The probe is issued from the backend container over the shared container
+        network (e.g. http://<container_name>:8080/health), so it verifies both
+        that the server process is up and that it is reachable on the internal
+        network before Traefik has picked up the route.
+        """
+        timeout = timeout if timeout is not None else settings.container_readiness_timeout
+        interval = interval if interval is not None else settings.container_readiness_interval
+        deadline = asyncio.get_event_loop().time() + timeout
+
+        logger.info(
+            "Waiting up to %ss for container %s to become ready at %s",
+            timeout,
+            container_name,
+            health_url,
+        )
+
+        while asyncio.get_event_loop().time() < deadline:
+            try:
+                timeout_obj = aiohttp.ClientTimeout(total=2)
+                async with aiohttp.ClientSession(timeout=timeout_obj) as session:
+                    async with session.get(health_url) as resp:
+                        if resp.status == 200:
+                            logger.info("Container %s is ready", container_name)
+                            return True
+            except Exception as e:
+                logger.debug("Container %s not ready yet: %s", container_name, e)
+            await asyncio.sleep(interval)
+
+        logger.warning("Container %s did not become ready within %ss", container_name, timeout)
+        return False
 
     async def stop_container(self, container_id: str, timeout: int = 30):
         """Stop a container"""

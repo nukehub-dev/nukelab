@@ -12,11 +12,13 @@ SECURITY_REPORT_DIR="${DIR}/backend/reports/security"
 BANDIT_REPORT="${SECURITY_REPORT_DIR}/bandit-report.json"
 PIPAUDIT_REPORT="${SECURITY_REPORT_DIR}/pip-audit-report.json"
 FRONTEND_AUDIT_REPORT="${SECURITY_REPORT_DIR}/npm-audit-report.json"
+TRIVY_REPORT="${SECURITY_REPORT_DIR}/trivy-report.json"
 
 BANDIT_COUNT_FILE="${SECURITY_REPORT_DIR}/.bandit-count"
 PIPAUDIT_COUNT_FILE="${SECURITY_REPORT_DIR}/.pip-audit-count"
 NPM_COUNT_FILE="${SECURITY_REPORT_DIR}/.npm-high-count"
 NPM_TOTAL_COUNT_FILE="${SECURITY_REPORT_DIR}/.npm-total-count"
+TRIVY_COUNT_FILE="${SECURITY_REPORT_DIR}/.trivy-count"
 
 # Defaults
 SCAN_BACKEND=true
@@ -24,10 +26,19 @@ SCAN_FRONTEND=true
 RUN_BANDIT=true
 RUN_PIP_AUDIT=true
 RUN_NPM_AUDIT=true
+RUN_TRIVY=true
 FAIL_ON_HIGH=true
 SCAN_DEV_REQUIREMENTS=false
 BANDIT_SEVERITY="medium" # low | medium | high
 BANDIT_CONFIDENCE="low"  # low | medium | high
+TRIVY_IMAGE="ghcr.io/aquasecurity/trivy:latest"
+
+# Optional CI/CD supply-chain checks (off by default so the standard scan keeps
+# working while these checks can be enabled in release pipelines).
+RUN_CHECK_BASE_IMAGES=false
+RUN_SIGNED_COMMITS=false
+RUN_SBOM=false
+SBOM_DIR="${SECURITY_REPORT_DIR}/sbom"
 
 parse_security_args() {
     for arg in "${EXTRA_ARGS[@]}"; do
@@ -46,6 +57,18 @@ parse_security_args() {
                 ;;
             --no-npm-audit)
                 RUN_NPM_AUDIT=false
+                ;;
+            --no-trivy)
+                RUN_TRIVY=false
+                ;;
+            --check-base-images)
+                RUN_CHECK_BASE_IMAGES=true
+                ;;
+            --signed-commits)
+                RUN_SIGNED_COMMITS=true
+                ;;
+            --sbom)
+                RUN_SBOM=true
                 ;;
             --fail-on-high=false)
                 FAIL_ON_HIGH=false
@@ -216,17 +239,133 @@ try {
     fi
 }
 
+_run_trivy() {
+    log_warn "Running Trivy filesystem and image scans..."
+
+    if [ -z "${CONTAINER_ENGINE:-}" ]; then
+        log_warn "Container engine not detected; skipping Trivy scan"
+        echo 0 > "$TRIVY_COUNT_FILE"
+        return
+    fi
+
+    if ! "$CONTAINER_ENGINE" info > /dev/null 2>&1; then
+        log_warn "Container engine '$CONTAINER_ENGINE' is not reachable; skipping Trivy scan"
+        echo 0 > "$TRIVY_COUNT_FILE"
+        return
+    fi
+
+    # Filesystem scan of the repository.
+    "$CONTAINER_ENGINE" run --rm \
+        -v "${DIR}:${DIR}:ro" \
+        -v "${SECURITY_REPORT_DIR}:${SECURITY_REPORT_DIR}:rw" \
+        "${TRIVY_IMAGE}" fs \
+        --scanners vuln,secret,misconfig \
+        --severity HIGH,CRITICAL \
+        --format json \
+        --output "${TRIVY_REPORT}" \
+        "${DIR}" 2> /dev/null || true
+
+    # Image scan for locally built NukeLab images when available.
+    local _images=(
+        "nukelab-backend:latest"
+        "nukelab-frontend:latest"
+        "nukelab-dev:latest"
+        "nukelab-base:latest"
+        "nukelab-auth-sidecar:latest"
+    )
+    for _image in "${_images[@]}"; do
+        local _image_exists=false
+        if [ "$CONTAINER_ENGINE" = "podman" ]; then
+            "$CONTAINER_ENGINE" image exists "$_image" 2> /dev/null && _image_exists=true || true
+        else
+            [ -n "$($CONTAINER_ENGINE images -q "$_image" 2> /dev/null)" ] && _image_exists=true || true
+        fi
+        if ! $_image_exists; then
+            continue
+        fi
+        local _image_report="${SECURITY_REPORT_DIR}/trivy-${_image//\//-}.json"
+        "$CONTAINER_ENGINE" run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock:ro \
+            -v "${SECURITY_REPORT_DIR}:${SECURITY_REPORT_DIR}:rw" \
+            "${TRIVY_IMAGE}" image \
+            --severity HIGH,CRITICAL \
+            --format json \
+            --output "${_image_report}" \
+            "$_image" 2> /dev/null || true
+    done
+
+    # Count HIGH/CRITICAL findings across all Trivy reports.
+    TRIVY_REPORT_DIR="$SECURITY_REPORT_DIR" TRIVY_COUNT_FILE="$TRIVY_COUNT_FILE" python3 -c "
+import json, os
+report_dir = os.environ['TRIVY_REPORT_DIR']
+count_file = os.environ['TRIVY_COUNT_FILE']
+total = 0
+for name in os.listdir(report_dir):
+    if not name.startswith('trivy-') or not name.endswith('.json'):
+        continue
+    path = os.path.join(report_dir, name)
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except Exception:
+        continue
+    results = data.get('Results', [])
+    for result in results:
+        for vuln in result.get('Vulnerabilities', []):
+            sev = vuln.get('Severity', 'UNKNOWN').upper()
+            if sev in ('HIGH', 'CRITICAL'):
+                total += 1
+with open(count_file, 'w') as f:
+    f.write(str(total))
+" 2> /dev/null
+}
+
+# ─── Supply-chain check helpers ─────────────────────────────────────────────
+
+_run_check_base_images() {
+    log_warn "Checking Dockerfile base image pinning..."
+    if "${DIR}/scripts/security/check-base-image-pinning.sh" --strict; then
+        log_ok "All external base images are pinned by digest"
+        return 0
+    else
+        log_warn "Unpinned external base images found. See output above."
+        return 1
+    fi
+}
+
+_run_signed_commits() {
+    log_warn "Checking commit signatures..."
+    if "${DIR}/scripts/security/check-signed-commits.sh" --strict; then
+        log_ok "All commits are signed"
+        return 0
+    else
+        log_warn "Unsigned commits found. See output above."
+        return 1
+    fi
+}
+
+_run_sbom() {
+    log_warn "Generating SBOM artifacts..."
+    mkdir -p "$SBOM_DIR"
+    if "${DIR}/scripts/security/generate-sbom.sh" > "${SBOM_DIR}/generate-sbom.log" 2>&1; then
+        log_ok "SBOM generation completed. Outputs in ${SBOM_DIR}"
+    else
+        log_warn "SBOM generation completed with warnings. See ${SBOM_DIR}/generate-sbom.log"
+    fi
+}
+
 # ─── Main command ───────────────────────────────────────────────────────────
 
 cmd_security() {
     mkdir -p "$SECURITY_REPORT_DIR"
-    rm -f "$BANDIT_COUNT_FILE" "$PIPAUDIT_COUNT_FILE" "$NPM_COUNT_FILE"
+    rm -f "$BANDIT_COUNT_FILE" "$PIPAUDIT_COUNT_FILE" "$NPM_COUNT_FILE" "$NPM_TOTAL_COUNT_FILE" "$TRIVY_COUNT_FILE"
 
     local _overall_exit=0
     local _bandit_count=0
     local _pip_audit_count=0
     local _npm_high_count=0
     local _npm_total_count=0
+    local _trivy_count=0
 
     if $SCAN_BACKEND; then
         step "Backend security scans"
@@ -252,6 +391,17 @@ cmd_security() {
                 log_ok "pip-audit scan passed"
             fi
         fi
+
+        if $RUN_TRIVY; then
+            _run_trivy
+            _trivy_count=$(cat "$TRIVY_COUNT_FILE" 2> /dev/null || echo 0)
+            if [ "$_trivy_count" -gt 0 ]; then
+                log_warn "Trivy found $_trivy_count HIGH/CRITICAL finding(s). See ${SECURITY_REPORT_DIR}/trivy-*.json"
+                _overall_exit=1
+            else
+                log_ok "Trivy scan passed"
+            fi
+        fi
     fi
 
     if $SCAN_FRONTEND; then
@@ -272,13 +422,30 @@ cmd_security() {
         fi
     fi
 
+    if $RUN_SBOM || $RUN_CHECK_BASE_IMAGES || $RUN_SIGNED_COMMITS; then
+        step "CI/CD supply-chain checks"
+
+        if $RUN_CHECK_BASE_IMAGES; then
+            _run_check_base_images || _overall_exit=1
+        fi
+
+        if $RUN_SIGNED_COMMITS; then
+            _run_signed_commits || _overall_exit=1
+        fi
+
+        if $RUN_SBOM; then
+            _run_sbom
+        fi
+    fi
+
     # Clean up transient count files; keep reports.
-    rm -f "$BANDIT_COUNT_FILE" "$PIPAUDIT_COUNT_FILE" "$NPM_COUNT_FILE" "$NPM_TOTAL_COUNT_FILE"
+    rm -f "$BANDIT_COUNT_FILE" "$PIPAUDIT_COUNT_FILE" "$NPM_COUNT_FILE" "$NPM_TOTAL_COUNT_FILE" "$TRIVY_COUNT_FILE"
 
     step "Security scan summary"
     echo "  Reports written to: ${SECURITY_REPORT_DIR}"
     echo "  Bandit issues (>= ${BANDIT_SEVERITY}):  ${_bandit_count}"
     echo "  pip-audit vulnerable packages:          ${_pip_audit_count}"
+    echo "  Trivy HIGH/CRITICAL findings:           ${_trivy_count}"
     echo "  npm total vulnerabilities:              ${_npm_total_count}"
     echo "  npm high/critical vulnerabilities:      ${_npm_high_count}"
 
@@ -303,6 +470,12 @@ ${BOLD}Scans:${RESET}
   Bandit       Static analysis for Python security issues
   pip-audit    Audit Python dependencies for known CVEs
   npm audit    Audit Node.js dependencies for known CVEs
+  Trivy        Filesystem and container image vulnerability scan
+
+${BOLD}Supply-chain checks (off by default):${RESET}
+  --check-base-images     Verify external Dockerfile base images are pinned by digest
+  --signed-commits        Verify all commits on the current branch are signed
+  --sbom                  Generate CycloneDX SBOM artifacts for the repo and images
 
 ${BOLD}Options:${RESET}
   --backend-only          Run only backend scanners
@@ -310,6 +483,7 @@ ${BOLD}Options:${RESET}
   --no-bandit             Skip Bandit
   --no-pip-audit          Skip pip-audit
   --no-npm-audit          Skip npm audit
+  --no-trivy              Skip Trivy filesystem/image scan
   --with-dev              Also scan backend/requirements-dev.txt
   --no-fail-on-high       Do not fail the command for npm high/critical findings
   --fail-on-high=false    Same as above (kept for backwards compatibility)
@@ -321,5 +495,7 @@ ${BOLD}Examples:${RESET}
   ./nukelabctl security --backend-only
   ./nukelabctl security --with-dev
   ./nukelabctl security --no-npm-audit --bandit-severity=high
+  ./nukelabctl security --no-trivy
+  ./nukelabctl security --check-base-images --signed-commits --sbom
 EOF
 }

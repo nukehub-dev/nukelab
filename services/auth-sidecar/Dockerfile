@@ -1,5 +1,5 @@
 # Multi-stage build for production-ready auth sidecar
-FROM golang:1.21-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # Install git and ca-certificates for fetching dependencies
 RUN apk add --no-cache git ca-certificates

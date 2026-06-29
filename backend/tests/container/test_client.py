@@ -2,6 +2,7 @@
 
 from unittest import mock
 
+import aiohttp
 import pytest
 
 from app.container.client import ContainerClient, get_container_client, get_fresh_container_client
@@ -501,6 +502,54 @@ class TestContainerLifecycle:
         client.client.containers.get = mock.AsyncMock(return_value=mock_container)
         await client.start_container("abc123")
         mock_container.start.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_wait_for_container_ready_succeeds(self, client):
+        class Resp:
+            status = 200
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+        mock_session = mock.AsyncMock(spec=aiohttp.ClientSession)
+        mock_session.get.return_value = Resp()
+        fake_cm = mock.AsyncMock()
+        fake_cm.__aenter__ = mock.AsyncMock(return_value=mock_session)
+        fake_cm.__aexit__ = mock.AsyncMock(return_value=False)
+
+        with mock.patch("app.container.client.aiohttp.ClientSession", return_value=fake_cm):
+            result = await client.wait_for_container_ready(
+                "srv", "http://srv:8080/health", timeout=1
+            )
+
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_wait_for_container_ready_times_out(self, client):
+        class Resp:
+            status = 503
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+        mock_session = mock.AsyncMock(spec=aiohttp.ClientSession)
+        mock_session.get.return_value = Resp()
+        fake_cm = mock.AsyncMock()
+        fake_cm.__aenter__ = mock.AsyncMock(return_value=mock_session)
+        fake_cm.__aexit__ = mock.AsyncMock(return_value=False)
+
+        with mock.patch("app.container.client.aiohttp.ClientSession", return_value=fake_cm):
+            result = await client.wait_for_container_ready(
+                "srv", "http://srv:8080/health", timeout=1
+            )
+
+        assert result is False
 
     @pytest.mark.asyncio
     async def test_stop_container(self, client):

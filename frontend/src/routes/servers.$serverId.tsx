@@ -138,16 +138,24 @@ function ExternalUrlLink({
   const handleOpen = async (e: React.MouseEvent) => {
     e.preventDefault()
     if (!canAccess) return
+    let shouldOpen = true
     if (server.status !== 'running') {
       const started = await onStart()
-      if (!started) return
+      if (!started) shouldOpen = false
     } else if (!isOwnServer) {
       const reason = await requestReason()
-      if (reason === null) return
+      if (reason === null) shouldOpen = false
     }
-    if (gatewayUrl) {
-      window.open(gatewayUrl, '_blank', 'noopener,noreferrer')
+    if (!shouldOpen || !gatewayUrl) return
+    // Open synchronously inside the user gesture to avoid popup blockers.
+    const newWindow = window.open('about:blank', '_blank')
+    if (!newWindow) return
+    try {
+      newWindow.opener = null
+    } catch {
+      // ignore
     }
+    newWindow.location.href = gatewayUrl
   }
 
   const anyPending = isOperationPending(server.id)

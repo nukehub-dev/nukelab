@@ -348,16 +348,30 @@ function ServersPage() {
 
           const handleOpen = async (e: React.MouseEvent) => {
             e.preventDefault()
+            let shouldOpen = true
             if (server.status !== 'running') {
-              await startServer.mutateAsync({ serverId: server.id })
+              try {
+                await startServer.mutateAsync({ serverId: server.id })
+              } catch {
+                shouldOpen = false
+              }
             } else if (server.user_id !== user?.id) {
               const reason = await prompt({
                 description: `You are about to open a server owned by ${server.username || 'another user'}. Please provide a reason.`,
                 actionLabel: 'Open',
               })
-              if (reason === null) return
+              if (reason === null) shouldOpen = false
             }
-            window.open(gatewayUrl, '_blank', 'noopener,noreferrer')
+            if (!shouldOpen) return
+            // Open synchronously inside the user gesture to avoid popup blockers.
+            const newWindow = window.open('about:blank', '_blank')
+            if (!newWindow) return
+            try {
+              newWindow.opener = null
+            } catch {
+              // ignore
+            }
+            newWindow.location.href = gatewayUrl
           }
 
           const anyPending = isOperationPending(server.id)
@@ -633,19 +647,34 @@ function ServersPage() {
           <button
             onClick={async (e) => {
               e.preventDefault()
+              let shouldOpen = true
               if (server.status !== 'running') {
-                await startServer.mutateAsync({ serverId: server.id })
+                try {
+                  await startServer.mutateAsync({ serverId: server.id })
+                } catch {
+                  shouldOpen = false
+                }
               } else if (server.user_id !== user?.id) {
                 const reason = await prompt({
                   description: `You are about to open a server owned by ${server.username || 'another user'}. Please provide a reason.`,
                   actionLabel: 'Open',
                 })
-                if (reason === null) return
+                if (reason === null) shouldOpen = false
               }
+              if (!shouldOpen) return
               const gatewayUrl = server.username
                 ? `/user/${server.username}/${server.name}`
                 : server.external_url
-              window.open(gatewayUrl, '_blank', 'noopener,noreferrer')
+              if (!gatewayUrl) return
+              // Open synchronously inside the user gesture to avoid popup blockers.
+              const newWindow = window.open('about:blank', '_blank')
+              if (!newWindow) return
+              try {
+                newWindow.opener = null
+              } catch {
+                // ignore
+              }
+              newWindow.location.href = gatewayUrl
             }}
             disabled={isOperationPending(server.id)}
             className="inline-flex items-center gap-1 text-sm text-primary hover:underline disabled:opacity-50"

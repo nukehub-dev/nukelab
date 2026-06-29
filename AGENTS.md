@@ -81,12 +81,81 @@ Notes:
 - **Frontend tests don't accept argv passthrough** through `nukelabctl test
   frontend`. If you need to scope a frontend test, invoke npm directly.
 
+## Security & penetration testing
+
+The project maintains a comprehensive penetration test plan in
+`docs/PENETRATION-TEST-PLAN.md`. When adding security features or addressing
+findings:
+
+- Keep `docs/PENETRATION-TEST-PLAN.md` in sync with implemented controls and
+current scope decisions.
+- Track individual findings in `docs/PENETRATION-TEST-FINDINGS.md` and
+remediation ownership in `docs/PENETRATION-TEST-REMEDIATION.md`.
+- Add regression tests for every confirmed finding under
+`backend/tests/security/` so it cannot silently regress.
+- Use `./nukelabctl security` as the canonical dependency/container scanning
+  checkpoint; extend it rather than adding one-off scanners.
+- Use `./nukelabctl verify-hardening [container]` to confirm spawned server
+  containers are hardened (non-root, no capabilities, read-only rootfs,
+  no-new-privileges).
+- Container escape, network pivoting, and daemon-level tests must run in an
+isolated environment or CI job, never against a shared production stack.
+
+### Verifying container hardening in a dev stack
+
+Container hardening is gated by `CONTAINER_HARDENING_ENABLED`. In production it
+defaults to **enabled**; in dev mode it defaults to **disabled** so local
+iteration is not blocked. To verify hardening against a local dev stack:
+
+1. Ensure `.env.development` contains `CONTAINER_HARDENING_ENABLED=true` (it
+   should already).
+2. Start the dev stack: `./nukelabctl up dev`.
+3. Create a server through the API/UI.
+4. Verify the running container:
+   ```bash
+   ./nukelabctl verify-hardening <container_name>
+   ```
+   Expected output: `User: 65532:65532`, `CapDrop: [ALL]`, `ReadonlyRootfs: true`,
+   `SecurityOpt: [no-new-privileges:true]`, `Container uid: uid=65532(nukelab)`,
+   and `Container capability sets are zeroed`.
+5. If you need the raw inspect values, the command is equivalent to:
+   ```bash
+   podman inspect <container_name> --format '{{.Config.User}} {{.HostConfig.CapDrop}} {{.HostConfig.ReadonlyRootfs}} {{.HostConfig.SecurityOpt}}'
+   ```
+   Expected: `65532:65532 [ALL] true [no-new-privileges:true]`.
+6. Inside the container, run `id` and `cat /proc/self/status | grep Cap`.
+   Expected: `uid=65532(nukelab)` and all capability sets zeroed.
+
+The regression test `backend/tests/security/test_container_isolation.py` mocks
+the Docker client directly; run it inside the backend test container with
+`--confcutdir=tests/security` to avoid the root `conftest.py` Postgres/Redis
+fixtures.
+
+### CI/CD supply-chain checks
+
+The security command now supports optional supply-chain checks. Enable them in
+release pipelines:
+
+- `./nukelabctl security --check-base-images` — fail if external Dockerfile
+  `FROM` images are not pinned by digest.
+- `./nukelabctl security --signed-commits` — fail if the current branch contains
+  unsigned commits.
+- `./nukelabctl security --sbom` — generate CycloneDX SBOMs under
+  `backend/reports/security/sbom/`.
+
+These checks are off by default because they require process/registry changes
+(commit signing and base-image pinning) that are not yet enforced.
+
 ## What NOT to do
 
 - Don't write a per-command parser that swallows unknown options as a
-  warning — use `die "Unknown option for <cmd>: $arg"` to match the rest of
-  the codebase.
+  warning — use `die "Unknown option for <cmd>: $arg"` to match the rest of the
+  codebase.
 - Don't hardcode the version string or names of named volumes / services —
   use `_nukelab_version` / `compose config --volumes` / `_backend_services`.
 - Don't duplicate venv/bootstrap helpers across modules — add them to
   `scripts/lib.sh` so there's one source of truth.
+- Don't add penetration-test findings as code comments; record them in
+  `docs/PENETRATION-TEST-FINDINGS.md` with a proper CVSS rating and retest
+  criteria.
+

@@ -62,14 +62,39 @@ class ServerSpawner:
         server_id = server_id or str(uuid.uuid4())
         container_name = f"nukelab-server-{username}-{server_name}"
 
+        # If a container with this name already exists (e.g., an orphaned container
+        # from a previous failed stop/start/restart), remove it before attempting to
+        # create a new one. This keeps the database and runtime state consistent and
+        # prevents DockerError(500, "name already in use").
+        try:
+            existing = await container_client.client.containers.get(container_name)
+            logger.warning("Found existing container %s before spawn; removing it", container_name)
+            await existing.delete(force=True)
+            # Wait briefly for container to release the name.
+            await asyncio.sleep(0.5)
+        except Exception:
+            pass
+
         # Build Docker volumes dict from multiple mounts
         volumes = {}
+
+        # Default username/path used for the home directory; overridden in
+        # hardened mode to match the fixed container user.
+        container_username = username
+        home_mount_path = f"/home/{username}"
 
         if volume_mounts:
             for mount in volume_mounts:
                 vol_id = mount.get("volume_id")
                 mount_path = mount.get("mount_path", "/data")
                 mode = mount.get("mode", "read_write")
+
+                # In hardened mode the container runs as a fixed non-root user.
+                # Remount any /home/{username} path to the container user's home
+                # so the named volume inherits the correct ownership from the image.
+                if settings.container_hardening_enabled and mount_path == f"/home/{username}":
+                    container_username = settings.container_user
+                    mount_path = f"/home/{settings.container_user}"
 
                 # Get volume name from database
                 if vol_id:
@@ -94,10 +119,18 @@ class ServerSpawner:
                 mount_mode = "ro" if mode == "read_only" else "rw"
                 volumes[volume_name] = {"bind": mount_path, "mode": mount_mode}
         else:
+            # In hardened mode the container runs as a fixed non-root user
+            # (nukelab) and the home volume must be mounted at that user's home
+            # directory so the named volume inherits the correct ownership from
+            # the image.
+            if settings.container_hardening_enabled:
+                container_username = settings.container_user
+                home_mount_path = f"/home/{settings.container_user}"
+
             # Default single volume for backward compatibility
             volume_name = f"nukelab-server-{username}-{server_name}-data"
             await self._ensure_volume(volume_name)
-            volumes[volume_name] = {"bind": f"/home/{username}", "mode": "rw"}
+            volumes[volume_name] = {"bind": home_mount_path, "mode": "rw"}
 
         # Determine image - use provided image or default to naming convention
         if not image:
@@ -111,19 +144,23 @@ class ServerSpawner:
             f"traefik.http.routers.server-{server_id}.rule": f"PathPrefix(`{route_prefix}`)",
             f"traefik.http.routers.server-{server_id}.service": f"server-{server_id}",
             f"traefik.http.routers.server-{server_id}.middlewares": f"server-{server_id}-strip@docker",
-            f"traefik.http.services.server-{server_id}.loadbalancer.server.port": "80",
             f"traefik.http.middlewares.server-{server_id}-strip.stripprefix.prefixes": route_prefix,
             "nukelab.server.id": server_id,
             "nukelab.user.id": user_id,
             "nukelab.user.name": username,
         }
 
+        # Internal port exposed by hardened dev/nginx images (unprivileged 8080).
+        # Images that already run their service on a different port must be matched
+        # by an environment-specific port override in future work.
+        labels[f"traefik.http.services.server-{server_id}.loadbalancer.server.port"] = "8080"
+
         # Environment variables
         # Note: We do NOT pass JWT_SECRET to containers anymore.
         # Containers validate server access tokens using the public key only.
         environment = {
             "NUKELAB_USER_ID": user_id,
-            "NUKELAB_USERNAME": username,
+            "NUKELAB_USERNAME": container_username,
             "NUKELAB_SERVER_ID": server_id,
             "NUKELAB_SERVER_NAME": server_name,
             # Auth sidecar configuration
@@ -140,9 +177,10 @@ class ServerSpawner:
 
             # Ensure keys exist (generates them if needed)
             server_auth_service._ensure_keys_exist()
-            # Share the nukelab-secrets named volume with spawned containers.
-            # The volume is mounted read-only at /etc/nukelab/auth.
-            volumes["nukelab-secrets"] = {"bind": "/etc/nukelab/auth", "mode": "ro"}
+            # Mount the same server-secrets named volume the backend uses so the
+            # auth sidecar validates tokens against the current public key. The
+            # volume is mounted read-only at /etc/nukelab/auth.
+            volumes["nukelab-server-secrets"] = {"bind": "/etc/nukelab/auth", "mode": "ro"}
 
         try:
             # Check if image exists locally first, then try to pull
@@ -185,6 +223,19 @@ class ServerSpawner:
 
             # Start container
             await container_client.start_container(container.id)
+
+            # Wait for the container's /health endpoint to be reachable before
+            # reporting the server as running. This avoids the UI showing "ready"
+            # while the auth sidecar/ttyd/nginx are still starting inside the
+            # container.
+            health_url = f"http://{container_name}:8080/health"
+            ready = await container_client.wait_for_container_ready(container_name, health_url)
+            if not ready:
+                logger.warning(
+                    "Container %s started but did not become ready within timeout; "
+                    "continuing with status=running",
+                    container_name,
+                )
 
             # Fix volume permissions inside the container.
             # Rootless Podman maps the host UID to container root, so named volumes

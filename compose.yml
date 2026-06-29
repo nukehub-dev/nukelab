@@ -167,6 +167,8 @@ services:
             - SERVER_AUTH_KEY_ROTATION_DAYS=${SERVER_AUTH_KEY_ROTATION_DAYS:-30}
             - SERVER_AUTH_MAX_TOKENS_PER_MINUTE=${SERVER_AUTH_MAX_TOKENS_PER_MINUTE:-10}
             - SERVER_AUTH_AUDIT_LOG=${SERVER_AUTH_AUDIT_LOG:-true}
+            # Container runtime hardening (dev_mode defaults this to false)
+            - CONTAINER_HARDENING_ENABLED=${CONTAINER_HARDENING_ENABLED:-}
             # Email / SMTP configuration
             - SMTP_HOST=${SMTP_HOST:-}
             - SMTP_PORT=${SMTP_PORT:-587}

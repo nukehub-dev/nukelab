@@ -256,6 +256,7 @@ ${BOLD}Code Quality:${RESET}
 
 ${BOLD}Security:${RESET}
   ${GREEN}security${RESET}   [options]                 Run Bandit, pip-audit, and npm audit
+  ${GREEN}verify-hardening${RESET} [container]         Verify spawned container hardening
 
 ${BOLD}Diagnostics:${RESET}
   ${GREEN}doctor${RESET}                               Check host environment readiness
@@ -294,6 +295,7 @@ ${BOLD}Examples:${RESET}
   ./nukelabctl test backend --coverage    # Run backend tests with coverage
   ./nukelabctl loadtest baseline          # Run Locust baseline load test
   ./nukelabctl security                   # Run all security scanners
+  ./nukelabctl verify-hardening           # Verify a running server container
   ./nukelabctl lint                       # Lint backend and frontend
   ./nukelabctl lint frontend --fix        # Auto-fix frontend issues
   ./nukelabctl clean                      # Clean up dangling resources
@@ -438,7 +440,7 @@ main() {
         lint)
             _dispatch_command "$CMD"
             ;;
-        status | logs | shell | exec | db-migrate | db-shell | backup | restore | e2e | security | doctor | rotate-user-auth-key | cleanup-user-auth-keys)
+        status | logs | shell | exec | db-migrate | db-shell | backup | restore | e2e | security | doctor | rotate-user-auth-key | cleanup-user-auth-keys | verify-hardening)
             _bootstrap restore
             _dispatch_command "$CMD"
             ;;
