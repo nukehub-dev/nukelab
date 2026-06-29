@@ -118,4 +118,52 @@ test.describe('Frontend security', () => {
     const html = await page.content()
     expect(html).not.toContain(token as string)
   })
+
+  test('state-changing cookie requests require CSRF token', async ({ page, request }) => {
+    const { access_token } = await apiLogin(
+      request,
+      process.env.TEST_ADMIN_USERNAME || 'admin',
+      process.env.TEST_ADMIN_PASSWORD || 'admin123'
+    )
+
+    const timestamp = Date.now()
+    const user = await createUser(request, access_token, {
+      username: `e2e-csrf-${timestamp}`,
+      email: `e2e-csrf-${timestamp}@example.com`,
+      password: 'UserPass123!',
+      role: 'user',
+    })
+
+    try {
+      await loginAs(page, user.username, 'UserPass123!')
+
+      const cookies = await page.context().cookies()
+      const csrfCookie = cookies.find((c) => c.name === 'nukelab_csrf_token')
+      expect(csrfCookie).toBeTruthy()
+      expect(csrfCookie?.httpOnly).toBe(true)
+      expect(csrfCookie?.sameSite).toBe('Lax')
+
+      const responseNoToken = await request.put('/api/users/me/profile', {
+        headers: { 'Content-Type': 'application/json' },
+        data: JSON.stringify({ first_name: 'CSRF', last_name: 'Attack' }),
+      })
+      expect(responseNoToken.status()).toBe(403)
+
+      const responseWrongToken = await request.put('/api/users/me/profile', {
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': 'invalid-token',
+        },
+        data: JSON.stringify({ first_name: 'CSRF', last_name: 'Attack' }),
+      })
+      expect(responseWrongToken.status()).toBe(403)
+    } finally {
+      const { access_token: adminToken } = await apiLogin(
+        request,
+        process.env.TEST_ADMIN_USERNAME || 'admin',
+        process.env.TEST_ADMIN_PASSWORD || 'admin123'
+      )
+      await deleteUser(request, adminToken, user.id)
+    }
+  })
 })
