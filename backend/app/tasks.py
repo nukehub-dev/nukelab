@@ -187,7 +187,7 @@ def shutdown_idle_servers(self):
                 if not prefs.get("idle_shutdown_enabled", True):
                     continue
 
-                timeout_mins = prefs.get("idle_shutdown_timeout", 30)
+                timeout_mins = prefs.get("idle_shutdown_timeout", 15)
                 cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=timeout_mins)
 
                 # Determine last activity time

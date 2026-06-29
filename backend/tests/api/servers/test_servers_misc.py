@@ -1,6 +1,7 @@
 """Tests for miscellaneous server API endpoints."""
 
 import uuid as uuid_mod
+from datetime import UTC, datetime, timedelta
 from unittest import mock
 
 import aiodocker
@@ -272,6 +273,35 @@ class TestServerAccessToken:
             )
 
         assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_access_token_refreshes_last_activity(
+        self, client, user_token, test_user, db_session
+    ):
+        """Requesting an access token should update server last_activity."""
+        old_activity = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1)
+        server = Server(
+            name="tok-srv",
+            user_id=test_user.id,
+            status="running",
+            last_activity=old_activity,
+        )
+        db_session.add(server)
+        await db_session.commit()
+
+        with mock.patch("app.services.server_auth_service.server_auth_service") as mock_svc:
+            mock_svc.is_enabled = True
+            mock_svc.generate_access_token = mock.AsyncMock(return_value="test-token")
+            response = await client.post(
+                f"/api/servers/{server.id}/access-token",
+                headers={"Authorization": f"Bearer {user_token}"},
+                json={},
+            )
+
+        assert response.status_code == 200
+        await db_session.refresh(server)
+        assert server.last_activity is not None
+        assert server.last_activity > old_activity
 
     @pytest.mark.asyncio
     async def test_access_token_rate_limit(self, client, user_token, test_user, db_session):

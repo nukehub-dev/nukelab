@@ -1974,6 +1974,10 @@ async def create_server_access_token(
         client_ip = request.client.host if request.client else None
         user_agent = request.headers.get("user-agent")
 
+        # Accessing a server is a strong activity signal; refresh idle timeout.
+        server.last_activity = datetime.now(UTC).replace(tzinfo=None)
+        await db.commit()
+
         token = await server_auth_service.generate_access_token(
             db=db,
             server_id=server.id,

@@ -27,8 +27,10 @@ import { Button } from '../components/ui/button'
 
 import { formatDate, cn } from '../lib/utils'
 import { useQueryClient } from '@tanstack/react-query'
+import { api } from '../lib/api'
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api'
+const ACTIVITY_HEARTBEAT_INTERVAL_MS = 30_000
 
 async function getServerAccessToken(serverId: string, reason?: string): Promise<void> {
   const token = localStorage.getItem('nukelab-token') || ''
@@ -44,6 +46,14 @@ async function getServerAccessToken(serverId: string, reason?: string): Promise<
   if (!response.ok) {
     const body = await response.text().catch(() => '')
     throw new Error(body || `Token request failed (${response.status})`)
+  }
+}
+
+async function pingServerActivity(serverId: string): Promise<void> {
+  try {
+    await api.post(`/servers/${serverId}/activity`, {})
+  } catch {
+    // Activity pings are best-effort; don't surface failures to the user.
   }
 }
 
@@ -615,6 +625,38 @@ function ServerGatewayPage() {
 
     return () => clearInterval(interval)
   }, [server, username, serverName, queryClient])
+
+  // Keep server last_activity fresh while this gateway page is open and visible.
+  // The terminal itself runs outside the SPA, so this complements the access-token
+  // refresh that happens each time the user opens/reloads the environment.
+  useEffect(() => {
+    if (!server || server.status !== 'running') {
+      return
+    }
+
+    const sendPing = () => {
+      if (document.visibilityState === 'visible') {
+        void pingServerActivity(server.id)
+      }
+    }
+
+    // Ping immediately so we refresh activity right away when the page becomes
+    // visible with a running server (e.g. returning to the manual-open state).
+    sendPing()
+
+    const interval = setInterval(sendPing, ACTIVITY_HEARTBEAT_INTERVAL_MS)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        sendPing()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [server])
 
   // When server transitions to running, get access token and redirect
   useEffect(() => {

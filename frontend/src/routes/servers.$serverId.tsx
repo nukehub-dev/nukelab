@@ -1,5 +1,5 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   ArrowLeft,
@@ -36,6 +36,17 @@ import { useServerMetrics } from '../hooks/use-server-metrics'
 import { formatDate, formatBytes, formatPlanResource, cn } from '../lib/utils'
 import { springs } from '../lib/animations'
 import { useConfirmDialog } from '../components/ui/confirm-dialog'
+import { api } from '../lib/api'
+
+const ACTIVITY_HEARTBEAT_INTERVAL_MS = 30_000
+
+async function pingServerActivity(serverId: string): Promise<void> {
+  try {
+    await api.post(`/servers/${serverId}/activity`, {})
+  } catch {
+    // Activity pings are best-effort; don't surface failures to the user.
+  }
+}
 
 export const Route = createFileRoute('/servers/$serverId')({
   component: ServerDetailPage,
@@ -216,6 +227,36 @@ function ServerDetailPage() {
   const [showScheduleDialog, setShowScheduleDialog] = useState(false)
 
   const server = servers.find((s) => s.id === serverId)
+
+  // Refresh server last_activity while the detail page is open, visible, and
+  // the server is running. This keeps the idle-shutdown window from expiring
+  // while the user is actively monitoring the server in the UI.
+  useEffect(() => {
+    if (!server || server.status !== 'running') {
+      return
+    }
+
+    const sendPing = () => {
+      if (document.visibilityState === 'visible') {
+        void pingServerActivity(server.id)
+      }
+    }
+
+    sendPing()
+
+    const interval = setInterval(sendPing, ACTIVITY_HEARTBEAT_INTERVAL_MS)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        sendPing()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [server])
 
   const chartData = useMemo(() => {
     return metrics.map((m) => ({

@@ -62,11 +62,7 @@ function AdminCreditsPage() {
 
   if (!allowed) return null
 
-  return (
-    <div>
-      {canGrant && <GrantCreditsButton />}
-    </div>
-  )
+  return <div>{canGrant && <GrantCreditsButton />}</div>
 }
 ```
 
