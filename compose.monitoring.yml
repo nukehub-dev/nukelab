@@ -60,7 +60,11 @@ services:
       - GF_AUTH_PROXY_HEADER_NAME=X-User-Name
       - GF_AUTH_PROXY_HEADER_PROPERTY=username
       - GF_AUTH_PROXY_AUTO_SIGN_UP=true
-      - GF_AUTH_PROXY_ENABLE_LOGIN_TOKEN=true
+      # Do not issue Grafana login tokens/cookies. With Traefik ForwardAuth in
+      # front of every request, the proxy header is enough; login tokens cause
+      # spurious "user token not found" /auth-tokens/rotate 401 loops that make
+      # Grafana reload continuously and fail to lazy-load chunks.
+      - GF_AUTH_PROXY_ENABLE_LOGIN_TOKEN=false
       - GF_AUTH_PROXY_HEADERS=Role:X-User-Role
       - GF_AUTH_PROXY_WHITELIST=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1/32
     volumes:
