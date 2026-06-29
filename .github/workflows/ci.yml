@@ -143,7 +143,7 @@ jobs:
         run: |
           # Use the pre-built test image; compose will start postgres/redis and
           # wait for them to be healthy before running tests.
-          docker compose -f compose.yml --profile test run --rm --no-build backend-test
+          docker compose --env-file .env.development -f compose.yml --profile test run --rm backend-test
 
       - name: Upload coverage report
         if: always()
@@ -155,7 +155,7 @@ jobs:
 
       - name: Stop backing services
         if: always()
-        run: docker compose -f compose.yml down -v
+        run: docker compose --env-file .env.development -f compose.yml down -v
 
   build-images:
     name: Build & push images
