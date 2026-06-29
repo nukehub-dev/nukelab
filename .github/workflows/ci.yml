@@ -126,24 +126,10 @@ jobs:
           cp .env.example .env.development
           mkdir -p /tmp/nukelab-volumes
           echo "VOLUME_STORAGE_PATH=/tmp/nukelab-volumes" >> .env.development
-
-      - name: Build backend test image with cache
-        uses: docker/build-push-action@v6
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile
-          target: test
-          push: false
-          load: true
-          tags: nukelab-backend-test:test
-          cache-from: type=gha,scope=backend-test
-          cache-to: type=gha,mode=max,scope=backend-test
+          chmod +x ./nukelabctl
 
       - name: Run backend tests
-        run: |
-          # Use the pre-built test image; compose will start postgres/redis and
-          # wait for them to be healthy before running tests.
-          docker compose --env-file .env.development -f compose.yml --profile test run --rm backend-test
+        run: ./nukelabctl test backend
 
       - name: Upload coverage report
         if: always()
@@ -155,7 +141,7 @@ jobs:
 
       - name: Stop backing services
         if: always()
-        run: docker compose --env-file .env.development -f compose.yml down -v
+        run: ./nukelabctl stop dev || true
 
   build-images:
     name: Build & push images
