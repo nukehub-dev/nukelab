@@ -24,23 +24,57 @@ interface AuthMethod {
   enabled: boolean
 }
 
-const features = [
-  {
-    icon: Cloud,
-    title: 'Cloud Simulations',
-    desc: 'Run nuclear physics simulations in your browser with zero setup.',
+/**
+ * All marketing copy and labels for the login page live here so they are easy
+ * to rewrite without touching component code.
+ */
+const loginContent = {
+  brand: {
+    name: 'NukeLab',
+    tagline: 'Your Nuclear Simulation Workspace',
   },
-  {
-    icon: Wrench,
-    title: 'Full Toolset',
-    desc: 'Geant4, OpenMC, PyNE, and more pre-installed and ready.',
+  hero: {
+    headline: ['Your Nuclear Simulation', 'Workspace'],
+    gradientWord: 'Workspace',
+    description:
+      'Access NukeIDE, run simulations in isolated containers, and collaborate with your team. Everything you need for computational nuclear engineering in one place.',
   },
-  {
-    icon: Users,
-    title: 'Collaboration',
-    desc: 'Share workspaces, co-edit notebooks, and publish results.',
+  featuresHeading: 'Platform Features',
+  features: [
+    {
+      icon: Cloud,
+      title: 'Cloud Simulations',
+      desc: 'Run nuclear physics simulations in your browser with zero setup.',
+    },
+    {
+      icon: Wrench,
+      title: 'Full Toolset',
+      desc: 'Geant4, OpenMC, PyNE, and more pre-installed and ready.',
+    },
+    {
+      icon: Users,
+      title: 'Collaboration',
+      desc: 'Share workspaces, co-edit notebooks, and publish results.',
+    },
+  ],
+  card: {
+    title: 'Sign In',
+    subtitle: 'Access your workspace',
+    oauthRedirectHint:
+      "You'll be redirected to your organization's login page to authenticate securely.",
+    divider: 'or continue with email',
+    usernameLabel: 'Username',
+    usernamePlaceholder: 'Enter your username',
+    passwordLabel: 'Password',
+    passwordPlaceholder: '••••••••',
+    submit: 'Sign In',
+    noAccount: "Don't have an account?",
+    contactAdmin: 'Contact your administrator',
   },
-]
+  loading: {
+    ariaLabel: 'Loading login page',
+  },
+}
 
 export const Route = createFileRoute('/login')({
   component: LoginPage,
@@ -128,7 +162,10 @@ function LoginPage() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div
+        className="min-h-screen flex items-center justify-center bg-background"
+        aria-label={loginContent.loading.ariaLabel}
+      >
         <motion.div
           animate={{ rotate: 360 }}
           transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
@@ -141,33 +178,7 @@ function LoginPage() {
 
   return (
     <div className="min-h-screen relative overflow-hidden bg-background">
-      {/* ── Ambient Background ── */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.03] via-transparent to-chart-2/[0.03]" />
-        <motion.div
-          className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-primary/[0.04] blur-[120px]"
-          animate={{ x: [0, 30, 0], y: [0, -20, 0], scale: [1, 1.1, 1] }}
-          transition={{ duration: 12, repeat: Infinity, ease: 'easeInOut' }}
-        />
-        <motion.div
-          className="absolute bottom-[-10%] right-[-10%] w-[40vw] h-[40vw] rounded-full bg-chart-2/[0.04] blur-[120px]"
-          animate={{ x: [0, -20, 0], y: [0, 30, 0], scale: [1.1, 1, 1.1] }}
-          transition={{ duration: 15, repeat: Infinity, ease: 'easeInOut', delay: 3 }}
-        />
-        <motion.div
-          className="absolute top-[40%] left-[50%] w-[30vw] h-[30vw] rounded-full bg-primary/[0.02] blur-[100px]"
-          animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.6, 0.3] }}
-          transition={{ duration: 10, repeat: Infinity, ease: 'easeInOut', delay: 5 }}
-        />
-        {/* Dot grid pattern */}
-        <div
-          className="absolute inset-0 opacity-[0.03]"
-          style={{
-            backgroundImage: 'radial-gradient(circle, currentColor 1px, transparent 1px)',
-            backgroundSize: '32px 32px',
-          }}
-        />
-      </div>
+      <AmbientBackground />
 
       {/* ── Mobile Layout: Centered Login ── */}
       <div className="lg:hidden relative z-10 flex flex-col items-center justify-center min-h-screen px-6 py-8">
@@ -181,8 +192,8 @@ function LoginPage() {
             <NukeLabLogo size={40} className="text-primary" />
           </div>
           <div className="text-center">
-            <h1 className="text-2xl font-bold tracking-tight">NukeLab</h1>
-            <p className="text-sm text-muted-foreground mt-1">Your Nuclear Simulation Workspace</p>
+            <h1 className="text-2xl font-bold tracking-tight">{loginContent.brand.name}</h1>
+            <p className="text-sm text-muted-foreground mt-1">{loginContent.brand.tagline}</p>
           </div>
         </motion.div>
 
@@ -217,9 +228,9 @@ function LoginPage() {
           className="w-full max-w-sm mt-8 space-y-3"
         >
           <p className="text-center text-xs text-muted-foreground uppercase tracking-wider font-medium mb-4">
-            Platform Features
+            {loginContent.featuresHeading}
           </p>
-          {features.map((f, i) => (
+          {loginContent.features.map((f, i) => (
             <motion.div
               key={f.title}
               initial={{ opacity: 0, y: 20 }}
@@ -262,7 +273,9 @@ function LoginPage() {
             <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center ring-1 ring-primary/20">
               <NukeLabLogo size={28} className="text-primary" />
             </div>
-            <h1 className="text-[28px] font-bold tracking-tight leading-none">NukeLab</h1>
+            <h1 className="text-[28px] font-bold tracking-tight leading-none">
+              {loginContent.brand.name}
+            </h1>
           </motion.div>
 
           <motion.h2
@@ -271,9 +284,9 @@ function LoginPage() {
             transition={{ delay: 0.3, duration: 0.6 }}
             className="text-5xl xl:text-6xl font-bold leading-[1.1] mb-6"
           >
-            Your Nuclear Simulation{' '}
+            {loginContent.hero.headline[0]}{' '}
             <span className="bg-gradient-to-r from-primary to-chart-2 bg-clip-text text-transparent">
-              Workspace
+              {loginContent.hero.gradientWord}
             </span>
           </motion.h2>
 
@@ -283,12 +296,11 @@ function LoginPage() {
             transition={{ delay: 0.4, duration: 0.6 }}
             className="text-lg text-muted-foreground mb-12 max-w-xl leading-relaxed"
           >
-            Access NukeIDE, run simulations in isolated containers, and collaborate with your team.
-            Everything you need for computational nuclear engineering in one place.
+            {loginContent.hero.description}
           </motion.p>
 
           <div className="space-y-3 max-w-lg">
-            {features.map((f, i) => (
+            {loginContent.features.map((f, i) => (
               <motion.div
                 key={f.title}
                 initial={{ opacity: 0, y: 20 }}
@@ -381,6 +393,8 @@ function LoginCard({
   loading,
 }: LoginCardProps) {
   const showBoth = hasLocal && hasOAuth
+  const oauthMethod = authMethods.find((m) => m.type === 'oauth')
+  const oauthName = oauthMethod?.name || 'OAuth'
 
   return (
     <div className="relative rounded-2xl border border-border/50 bg-card/60 backdrop-blur-xl shadow-2xl shadow-black/20 overflow-hidden">
@@ -391,8 +405,8 @@ function LoginCard({
       <div className="relative p-8 space-y-6">
         {/* Header */}
         <div className="text-center space-y-1">
-          <h2 className="text-xl font-bold">Sign In</h2>
-          <p className="text-sm text-muted-foreground">Access your workspace</p>
+          <h2 className="text-xl font-bold">{loginContent.card.title}</h2>
+          <p className="text-sm text-muted-foreground">{loginContent.card.subtitle}</p>
         </div>
 
         {/* Error */}
@@ -418,11 +432,11 @@ function LoginCard({
               className="w-full flex items-center justify-center gap-3 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-base hover:bg-primary/90 active:scale-[0.98] transition-all duration-150 shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 hover:-translate-y-0.5"
             >
               <ExternalLink className="w-5 h-5" />
-              Sign in with {authMethods.find((m) => m.type === 'oauth')?.name || 'OAuth'}
+              Sign in with {oauthName}
             </button>
 
             <p className="text-center text-xs text-muted-foreground/70 leading-relaxed">
-              You'll be redirected to your organization's login page to authenticate securely.
+              {loginContent.card.oauthRedirectHint}
             </p>
           </div>
         )}
@@ -437,7 +451,7 @@ function LoginCard({
                 className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-lg bg-secondary hover:bg-secondary/80 border border-border/50 text-secondary-foreground font-medium text-sm active:scale-[0.98] transition-all duration-150 hover:-translate-y-0.5"
               >
                 <ExternalLink className="w-4 h-4" />
-                Sign in with {authMethods.find((m) => m.type === 'oauth')?.name || 'OAuth'}
+                Sign in with {oauthName}
               </button>
             )}
 
@@ -449,7 +463,7 @@ function LoginCard({
                 </div>
                 <div className="relative flex justify-center text-[10px] uppercase tracking-wider">
                   <span className="bg-card px-3 text-muted-foreground font-medium">
-                    or continue with email
+                    {loginContent.card.divider}
                   </span>
                 </div>
               </div>
@@ -460,7 +474,7 @@ function LoginCard({
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-1.5">
                   <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Username
+                    {loginContent.card.usernameLabel}
                   </Label>
                   <div className="relative group">
                     <input
@@ -468,7 +482,7 @@ function LoginCard({
                       data-testid="login-username"
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
-                      placeholder="Enter your username"
+                      placeholder={loginContent.card.usernamePlaceholder}
                       className="w-full px-3.5 py-2.5 rounded-lg bg-input/60 border border-border/60 text-sm placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all group-hover:border-border"
                     />
                   </div>
@@ -476,7 +490,7 @@ function LoginCard({
 
                 <div className="space-y-1.5">
                   <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Password
+                    {loginContent.card.passwordLabel}
                   </Label>
                   <div className="relative group">
                     <input
@@ -484,7 +498,7 @@ function LoginCard({
                       data-testid="login-password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••"
+                      placeholder={loginContent.card.passwordPlaceholder}
                       className="w-full px-3.5 py-2.5 pr-10 rounded-lg bg-input/60 border border-border/60 text-sm placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all group-hover:border-border"
                     />
                     <button
@@ -509,7 +523,7 @@ function LoginCard({
                   ) : (
                     <>
                       <LogIn className="w-4 h-4" />
-                      Sign In
+                      {loginContent.card.submit}
                     </>
                   )}
                 </button>
@@ -519,15 +533,90 @@ function LoginCard({
             {/* Only show for local auth */}
             {hasLocal && (
               <p className="text-center text-xs text-muted-foreground pt-2">
-                Don't have an account?{' '}
+                {loginContent.card.noAccount}{' '}
                 <span className="text-primary font-medium hover:underline">
-                  Contact your administrator
+                  {loginContent.card.contactAdmin}
                 </span>
               </p>
             )}
           </>
         )}
       </div>
+    </div>
+  )
+}
+
+/**
+ * Animated background with layered ambient blobs. The shapes drift, breathe,
+ * and rotate slowly to create a subtle "aurora" effect without distracting
+ * from the login form. Pointer-events are disabled so interaction is never
+ * blocked.
+ */
+function AmbientBackground() {
+  return (
+    <div className="absolute inset-0 pointer-events-none overflow-hidden">
+      {/* Base gradient wash */}
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.05] via-background to-chart-2/[0.05]" />
+
+      {/* Top-left primary blob */}
+      <motion.div
+        className="absolute -top-[20%] -left-[15%] w-[60vw] h-[60vw] rounded-[40%_60%_70%_30%/40%_50%_60%_50%] bg-primary/[0.07] blur-[120px]"
+        animate={{
+          x: [0, 40, 0],
+          y: [0, -30, 0],
+          rotate: [0, 15, 0],
+          scale: [1, 1.08, 1],
+        }}
+        transition={{ duration: 20, repeat: Infinity, ease: 'easeInOut' }}
+      />
+
+      {/* Bottom-right chart blob */}
+      <motion.div
+        className="absolute -bottom-[20%] -right-[15%] w-[55vw] h-[55vw] rounded-[60%_40%_30%_70%/50%_60%_40%_50%] bg-chart-2/[0.06] blur-[120px]"
+        animate={{
+          x: [0, -35, 0],
+          y: [0, 40, 0],
+          rotate: [0, -12, 0],
+          scale: [1.05, 1, 1.05],
+        }}
+        transition={{ duration: 24, repeat: Infinity, ease: 'easeInOut', delay: 4 }}
+      />
+
+      {/* Center muted glow */}
+      <motion.div
+        className="absolute top-[35%] left-[45%] w-[40vw] h-[40vw] rounded-full bg-primary/[0.03] blur-[140px]"
+        animate={{
+          scale: [1, 1.15, 1],
+          opacity: [0.4, 0.7, 0.4],
+          x: [0, 20, 0],
+          y: [0, -15, 0],
+        }}
+        transition={{ duration: 16, repeat: Infinity, ease: 'easeInOut', delay: 2 }}
+      />
+
+      {/* Extra accent blob near the card */}
+      <motion.div
+        className="absolute top-[55%] right-[10%] w-[25vw] h-[25vw] rounded-[45%_55%_65%_35%/55%_45%_55%_45%] bg-chart-2/[0.05] blur-[100px]"
+        animate={{
+          x: [0, -25, 0],
+          y: [0, 20, 0],
+          rotate: [0, 10, 0],
+          scale: [1, 1.1, 1],
+        }}
+        transition={{ duration: 18, repeat: Infinity, ease: 'easeInOut', delay: 6 }}
+      />
+
+      {/* Soft vignette to keep focus in the center */}
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,var(--background)_85%)] opacity-60" />
+
+      {/* Dot grid pattern */}
+      <div
+        className="absolute inset-0 opacity-[0.025]"
+        style={{
+          backgroundImage: 'radial-gradient(circle, currentColor 1px, transparent 1px)',
+          backgroundSize: '32px 32px',
+        }}
+      />
     </div>
   )
 }
