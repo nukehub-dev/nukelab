@@ -12,7 +12,7 @@
 
 NukeLab v2.0 is a multi-user scientific-computing platform built on **Vite + React 19 SPA**, **FastAPI**, **PostgreSQL 18**, **Redis**, **Traefik v3**, and **Docker/Podman**. The platform manages user identity, role-based access control, resource quotas, containerized IDE environments (NukeIDE/Theia), credit billing, audit logging, real-time monitoring, and shared workspaces.
 
-An internal OWASP Top 10 audit (`docs/OWASP-AUDIT.md`) has already been performed and rates the platform as **Pass ✅** with one medium residual risk (A08 — signed commits / artifact signing). However, a formal, independent penetration test is required before production launch to validate:
+An internal OWASP Top 10 audit (`OWASP-AUDIT.md`) has already been performed and rates the platform as **Pass ✅** with one medium residual risk (A08 — signed commits / artifact signing). However, a formal, independent penetration test is required before production launch to validate:
 
 - Effectiveness of the RBAC and permission enforcement across all privilege levels.
 - API authorization boundaries (BOLA/BFLA) for user-owned servers, volumes, workspaces, and credits.
@@ -370,8 +370,8 @@ For each finding:
 
 ### 9.3 Supplementary Artifacts
 
-- `docs/PENETRATION-TEST-FINDINGS.md` — tracked list with status (Open / In Progress / Retested / Closed).
-- `docs/PENETRATION-TEST-REMEDIATION.md` — owner-assigned remediation tracker.
+- `PENETRATION-TEST-FINDINGS.md` — tracked list with status (Open / In Progress / Retested / Closed).
+- `PENETRATION-TEST-REMEDIATION.md` — owner-assigned remediation tracker.
 - `backend/reports/security/pentest/` — raw tool outputs (ZAP XML, Nuclei JSON, Trivy SARIF).
 - `scripts/run-pentest-scans.sh` — repeatable scan runner.
 - `backend/tests/security/` — pytest regression suite.

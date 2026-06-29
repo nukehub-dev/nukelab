@@ -252,7 +252,7 @@ ${BOLD}Testing:${RESET}
   ${GREEN}selftest${RESET}                             Quick nukelabctl sanity check
 
 ${BOLD}Code Quality:${RESET}
-  ${GREEN}lint${RESET}       [target] [--fix]          Lint backend/frontend code
+  ${GREEN}lint${RESET}       [target] [--fix]          Lint backend/frontend/shell/markdown code
 
 ${BOLD}Security:${RESET}
   ${GREEN}security${RESET}   [options]                 Run Bandit, pip-audit, and npm audit
@@ -268,6 +268,8 @@ ${BOLD}Other:${RESET}
 ${BOLD}Targets:${RESET} ${DIM}(optional, default: all)${RESET}
   backend    Backend services (api, workers, db, redis, traefik)
   frontend   Frontend unit/lint tests
+  shell      Shell scripts
+  markdown   Markdown lint and link check
   all        Everything ${DIM}(default)${RESET}
 
 ${BOLD}Flags:${RESET}
@@ -296,8 +298,9 @@ ${BOLD}Examples:${RESET}
   ./nukelabctl loadtest baseline          # Run Locust baseline load test
   ./nukelabctl security                   # Run all security scanners
   ./nukelabctl verify-hardening           # Verify a running server container
-  ./nukelabctl lint                       # Lint backend and frontend
+  ./nukelabctl lint                       # Lint backend, frontend, shell, and markdown
   ./nukelabctl lint frontend --fix        # Auto-fix frontend issues
+  ./nukelabctl lint markdown              # Lint markdown and check links
   ./nukelabctl clean                      # Clean up dangling resources
   ./nukelabctl rotate-user-auth-key       # Rotate the active user-auth key
   ./nukelabctl cleanup-user-auth-keys     # Prune expired retired public keys

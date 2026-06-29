@@ -12,7 +12,8 @@ ${BOLD}Targets:${RESET}
   backend    Lint Python code with ruff
   frontend   Lint TypeScript/React code with eslint and prettier
   shell      Lint shell scripts with shellcheck and shfmt
-  all        Lint backend, frontend, and shell ${DIM}(default)${RESET}
+  markdown   Lint Markdown and check links with markdownlint-cli2 and lychee
+  all        Lint backend, frontend, shell, and markdown ${DIM}(default)${RESET}
 
 ${BOLD}Options:${RESET}
   --fix, -f       Auto-fix issues where possible (backend + frontend; shfmt -w for shell)
@@ -23,6 +24,7 @@ ${BOLD}Examples:${RESET}
   ./nukelabctl lint backend --fix
   ./nukelabctl lint frontend
   ./nukelabctl lint shell
+  ./nukelabctl lint markdown
   ./nukelabctl lint all
 EOF
 }
@@ -111,11 +113,73 @@ cmd_lint() {
         _lint_shell || _exit=$?
     fi
 
+    if [ "$TARGET" = "markdown" ] || [ "$TARGET" = "all" ]; then
+        step "Linting markdown..."
+        _lint_markdown || _exit=$?
+    fi
+
     if [ $_exit -ne 0 ]; then
         die "Lint failed. Run './nukelabctl lint $TARGET --fix' to auto-fix where possible."
     fi
 
     ok "Lint passed"
+}
+
+# Lint markdown files with markdownlint-cli2 and check internal/external links
+# with lychee. When TARGET is "all", missing tools only warn so the default
+# lint flow does not require Node-based markdown tooling. When TARGET is
+# "markdown", missing tools are an error.
+_lint_markdown() {
+    local _exit=0
+    local _explicit=false
+    if [ "$TARGET" = "markdown" ]; then
+        _explicit=true
+    fi
+
+    if ! command -v npx > /dev/null 2>&1; then
+        if $_explicit; then
+            err "npx not found. Install Node.js first."
+            return 1
+        fi
+        warn "npx not found; skipping markdown lint (install Node.js to enable)"
+        return 0
+    fi
+
+    if ! npx --yes markdownlint-cli2 --version > /dev/null 2>&1; then
+        if $_explicit; then
+            err "markdownlint-cli2 not available. Install with: npm install -g markdownlint-cli2"
+            return 1
+        fi
+        warn "markdownlint-cli2 not available; skipping markdown lint"
+        return 0
+    fi
+
+    if $LINT_FIX; then
+        npx markdownlint-cli2 --fix '**/*.md' || _exit=$?
+    else
+        npx markdownlint-cli2 '**/*.md' || _exit=$?
+    fi
+
+    if ! command -v lychee > /dev/null 2>&1; then
+        if $_explicit; then
+            err "lychee not found. Install from https://lychee.cli.rs or use the docs CI workflow."
+            return 1
+        fi
+        warn "lychee not found; skipping link check (CI still runs it)"
+        return $_exit
+    fi
+
+    lychee --no-progress \
+        --exclude-loopback \
+        --exclude-path node_modules \
+        --exclude-path backend/.venv-dev \
+        --exclude-path backend/.venv \
+        --exclude-path frontend/node_modules \
+        --exclude-path frontend/test-results \
+        --exclude-path frontend/dist \
+        -- '*.md' 'docs/**/*.md' || _exit=$?
+
+    return $_exit
 }
 
 # Lint all shell scripts under nukelabctl / scripts/ with shellcheck, and

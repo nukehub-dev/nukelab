@@ -1,7 +1,8 @@
 # NukeLab Penetration Test Remediation Tracker
 
 > **Status:** Template — populate during engagement  
-> **Plan:** `docs/PENETRATION-TEST-PLAN.md`  > **Findings:** `docs/PENETRATION-TEST-FINDINGS.md`
+> **Plan:** `PENETRATION-TEST-PLAN.md`  
+> **Findings:** `PENETRATION-TEST-FINDINGS.md`
 
 ---
 
@@ -71,16 +72,21 @@ To close PENT-NKL-007, every maintainer must sign commits and the `main` branch 
 ### Option A — GPG signing
 
 1. Generate a GPG key:
+
    ```bash
    gpg --full-generate-key
    ```
+
 2. Add the key to your GitHub account (`Settings → SSH and GPG keys → New GPG key`).
 3. Configure git locally:
+
    ```bash
    git config --global user.signingkey <KEY_ID>
    git config --global commit.gpgsign true
    ```
+
 4. Sign commits automatically:
+
    ```bash
    git commit -S -m "signed commit"
    ```
@@ -89,6 +95,7 @@ To close PENT-NKL-007, every maintainer must sign commits and the `main` branch 
 
 1. Add your SSH key to GitHub (`Settings → SSH and GPG keys → New SSH key`, type **Signing**).
 2. Configure git locally:
+
    ```bash
    git config --global gpg.format ssh
    git config --global user.signingkey "$(cat ~/.ssh/id_ed25519.pub)"

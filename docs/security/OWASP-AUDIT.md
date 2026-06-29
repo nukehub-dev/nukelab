@@ -28,6 +28,7 @@ This document records the OWASP Top 10 audit performed against the NukeLab platf
 | Impersonation restricted to super_admin | ✅ Implemented | `users:impersonate` permission |
 
 **Residual Gaps / Notes:**
+
 - Periodic access-review workflow for admin roles is a procedural control outside the codebase.
 
 **Risk Rating:** Low
@@ -48,6 +49,7 @@ This document records the OWASP Top 10 audit performed against the NukeLab platf
 | Sensitive data not logged | ✅ Implemented | Sentry PII scrubbing, structured logging filters |
 
 **Residual Gaps / Notes:**
+
 - RS256 key rotation is not automated; manual procedure documented in operations guides.
 
 **Risk Rating:** Low
@@ -67,6 +69,7 @@ This document records the OWASP Top 10 audit performed against the NukeLab platf
 | Output encoding in frontend | ✅ Implemented | React 19 auto-escapes JSX output |
 
 **Residual Gaps / Notes:**
+
 - None identified.
 
 **Risk Rating:** Low
@@ -86,6 +89,7 @@ This document records the OWASP Top 10 audit performed against the NukeLab platf
 | Bulk operations limited to JWT session auth | ✅ Implemented | Prevents automation tokens from high-impact bulk actions |
 
 **Residual Gaps / Notes:**
+
 - Formal threat-modeling document is not yet written.
 
 **Risk Rating:** Low
@@ -106,6 +110,7 @@ This document records the OWASP Top 10 audit performed against the NukeLab platf
 | Permissions-Policy / CORP headers | ✅ Implemented | Security headers middleware |
 
 **Residual Gaps / Notes:**
+
 - None. CDN support is configurable via `VITE_CDN_URL`; actual CDN origin provisioning is an external deployment step.
 
 **Risk Rating:** Low
@@ -125,6 +130,7 @@ This document records the OWASP Top 10 audit performed against the NukeLab platf
 | python-jose replaced with PyJWT | ✅ Implemented | `backend/requirements.txt`; removes vulnerable `pyasn1` transitive dep |
 
 **Residual Gaps / Notes:**
+
 - pytest 8.3.5 in dev requirements has an accepted local-only tmpdir CVE (GHSA-6w46-j5rx-g56g); blocked from upgrade by pytest-asyncio compatibility. Ignored in CI via `--ignore-vuln`.
 - Container image scanning (Trivy/Grype) not yet integrated; recommended before production image builds.
 
@@ -145,6 +151,7 @@ This document records the OWASP Top 10 audit performed against the NukeLab platf
 | Secure cookie attributes | ✅ Implemented | HttpOnly, Secure, SameSite |
 
 **Residual Gaps / Notes:**
+
 - MFA/TOTP is not implemented.
 
 **Risk Rating:** Low
@@ -162,6 +169,7 @@ This document records the OWASP Top 10 audit performed against the NukeLab platf
 | Signed commits / artifact signing | ❌ Not implemented | Recommended for CI/CD hardening |
 
 **Residual Gaps / Notes:**
+
 - Signed commits and artifact signing are process/CI controls not yet implemented.
 
 **Risk Rating:** Medium (process-dependent)
@@ -181,6 +189,7 @@ This document records the OWASP Top 10 audit performed against the NukeLab platf
 | 30-day retention for request metrics | ✅ Implemented | Celery cleanup task |
 
 **Residual Gaps / Notes:**
+
 - Centralized log aggregator (Loki/ELK) not configured.
 
 **Risk Rating:** Low
@@ -198,6 +207,7 @@ This document records the OWASP Top 10 audit performed against the NukeLab platf
 | No user-controlled outbound webhooks | ✅ Implemented | Webhook URLs configured by admins only |
 
 **Residual Gaps / Notes:**
+
 - None identified.
 
 **Risk Rating:** Low

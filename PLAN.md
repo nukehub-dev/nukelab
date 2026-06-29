@@ -10,6 +10,7 @@
 ## Recent Updates (May 2026)
 
 ### New Features Implemented
+
 - **System Config API** (`/api/system/config`, `/api/system/stats`)
 - **Maintenance Mode** — Toggle platform on/off with 503 response
 - **Audit Log Export** — CSV/JSON export (`/api/admin/activity/export`)
@@ -47,11 +48,13 @@
 - **Redis maxmemory & Alert Hardening** — Redis defaults to `256mb` with `allkeys-lru`; Prometheus alert guards against division-by-zero when `maxmemory` is unset and warns when it is not configured
 
 ### Model Updates
+
 - **ServerPlan** — Added `max_runtime`, `idle_timeout`, `allow_scheduling`, `allow_snapshots`
 - **Server** — Added `health_status`, `health_check_config`, `last_health_check`, `status_reason`, `stopped_by`, `stop_reason`
 - **ServerQueue** — Added `requested_cpu`, `requested_memory`, `requested_disk`
 
 ### Tests
+
 - 500+ tests passing
 - Test files: `test_system.py`, `test_plans.py`, `test_credits.py`, `test_environments.py`, `test_auth.py`, `test_bulk.py`, `test_admin_workspaces.py`, `test_admin_volumes.py`, `test_ip_restrictions.py`, `test_volumes.py`, `test_security_headers.py`, `test_filesystem.py`, `test_config.py`, `test_csrf.py`, `test_maintenance_windows.py`, `test_shutdown.py`, `test_logging.py`, `test_request_size_limit.py`, `test_websocket_shutdown.py`, `test_cache.py`, `test_redis_client.py`, `test_roles_cache.py`
 
@@ -62,6 +65,7 @@
 NukeLab v2.0 is a ground-up rebuild of the multi-user scientific computing platform, replacing JupyterHub with a custom industrial-grade orchestration layer. The platform provides granular RBAC, real-time resource monitoring, multi-environment support, and a modern Vite + React 19 SPA management interface.
 
 **Key Improvements over v1.0:**
+
 - Granular role-based access control (6+ roles, 20+ permissions)
 - Real-time per-container resource monitoring (CPU, memory, disk)
 - Admin-configurable environment templates with Docker images, packages, env vars
@@ -127,6 +131,7 @@ Current infrastructure is limited and requires careful resource management:
 | **Total Available** | ~34 cores | ~68GB RAM | ~1.1TB | After system reservation |
 
 **Implications:**
+
 - Credit system required to prevent resource monopolization
 - Queue-based scheduling when resources unavailable
 - Auto-culling of idle servers essential
@@ -168,6 +173,7 @@ Current infrastructure is limited and requires careful resource management:
 **Why**: The platform is an authenticated, real-time dashboard heavily reliant on WebSockets and live Docker state. Server-Side Rendering (SSR) provides zero SEO benefit here and consumes valuable hardware resources. A Vite SPA compiles to static files, requiring no Node.js runtime, freeing up maximum RAM for the user simulation containers.
 
 **Key Benefits**:
+
 - **Zero Server Runtime**: Compiled static assets served by Nginx or Traefik directly — no Node.js process consuming RAM
 - **TanStack Query**: Robust polling, caching, and WebSocket state management without fighting Next.js's aggressive server caching
 - **TanStack Router**: Type-safe routing with first-class search params, layout routes, and data loading
@@ -557,6 +563,7 @@ User clicks "New Server":
 #### One-Click Spawn
 
 For power users:
+
 - "Quick Spawn" button uses saved defaults immediately
 - Keyboard shortcut: `Ctrl/Cmd + N` for instant spawn with defaults
 - Recent servers list for rapid restart
@@ -1033,6 +1040,7 @@ GET    /api/tokens/{id}/usage       # Get token usage statistics
 ```
 
 **Token Authentication:**
+
 ```
 Authorization: Token <api-token>
 ```
@@ -1641,7 +1649,7 @@ Then the server stops and the bulk API returns success
   - [x] Dedicated backend test image — `backend/Dockerfile` `target=test` with dev deps pre-installed; `./nukelabctl test backend` uses `backend-test` service
 
 - [ ] **Security**
-  - [x] OWASP Top 10 audit — documented in `docs/OWASP-AUDIT.md`; overall rating: Pass
+  - [x] OWASP Top 10 audit — documented in `docs/security/OWASP-AUDIT.md`; overall rating: Pass
   - [x] Dependency scanning — Dependabot configured (`.github/dependabot.yml`); `pip-audit`, `npm audit`, and `bandit` integrated via `./nukelabctl security`; production dependencies cleared of known CVEs
   - [ ] Secret management (HashiCorp Vault or Sealed Secrets)
   - [x] Security headers (HSTS, CSP, X-Frame-Options, CORP, Permissions-Policy) — exception-safe ASGI middleware
@@ -1791,7 +1799,8 @@ absolute RPS breaking point of individual endpoints.
 
 #### Deliverables
 
-**Infrastructure**
+##### Infrastructure
+
 - `backend/tests/load/locustfile.py` — Locust scenarios: AnonymousUser, RegularUser, AdminUser, ConnectionFloodUser
 - `backend/tests/load/k6/api-stress.js` — k6 scripts: smoke, baseline, stress, spike, endurance profiles
 - `backend/tests/load/setup_test_data.py` — Pre-seeds 100+ test users directly in DB (bypasses API rate limits)
@@ -1799,7 +1808,7 @@ absolute RPS breaking point of individual endpoints.
 - `scripts/run-load-tests.sh` — One-command runner for all profiles with automatic test-data verification
 - `backend/requirements-loadtest.txt` — Locust dependency (isolated from main requirements)
 
-**Test Profiles**
+##### Test Profiles
 
 | Tool | Profile | Load | Duration | Purpose |
 |------|---------|------|----------|---------|
@@ -1815,14 +1824,14 @@ absolute RPS breaking point of individual endpoints.
 | k6 | spike | 10→500 VUs | 5m | Instant surge capacity |
 | k6 | endurance | 100 VUs | 30m | Long-term stability |
 
-**Key Design Decisions**
+##### Key Design Decisions
 
 1. **`DATABASE_PGBOUNCER_URL` auto-detection** — Load tests go through Traefik just like real users, hitting the full stack including PgBouncer when enabled.
 2. **ConnectionFloodUser** — A special Locust class that logs in and then stays nearly idle, stress-testing PgBouncer's ability to handle thousands of concurrent idle client connections.
 3. **Self-seeding test data** — `setup_test_data.py` creates users directly via SQLAlchemy, avoiding the 5/min registration rate limit that would skew load test results.
 4. **Controlled spawn/stop rates** — Container lifecycle endpoints (spawn, start, stop) have low weights (1-2) to avoid overwhelming the Docker daemon, which is a separate bottleneck from API/DB throughput.
 
-**Operational Playbook**
+##### Operational Playbook
 
 During a load test, monitor these in parallel:
 
@@ -1841,7 +1850,7 @@ During a load test, monitor these in parallel:
 docker stats --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}"
 ```
 
-**Success Criteria**
+##### Success Criteria
 
 ```gherkin
 Given 500 concurrent simulated users
@@ -2141,14 +2150,16 @@ networks:
 
 ### 10.2 Production Deployment
 
-**Single Server (Docker Compose)**
+#### Single Server (Docker Compose)
+
 - Use `docker-compose.prod.yml`
 - Enable TLS via Let's Encrypt
 - Resource limits on all containers
 - Log rotation
 - Automated backups
 
-**Kubernetes (Future)**
+#### Kubernetes (Future)
+
 - Helm chart for easy deployment
 - Horizontal Pod Autoscaler for API
 - Persistent Volume Claims for user data

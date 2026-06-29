@@ -168,7 +168,7 @@ class TestContainerHardening:
     """Tests for container hardening controls.
 
     These tests document expected production-hardening controls. If they fail,
-    the finding should be recorded in docs/PENETRATION-TEST-FINDINGS.md.
+    the finding should be recorded in docs/security/PENETRATION-TEST-FINDINGS.md.
     """
 
     @pytest.fixture

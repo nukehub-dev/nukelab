@@ -39,8 +39,8 @@ faster.
 
    | Service     | URL                        | Default credentials          |
    |-------------|----------------------------|------------------------------|
-   | Prometheus  | http://localhost:9090      | —                            |
-   | Grafana     | http://localhost:3001      | admin / `GRAFANA_ADMIN_PASSWORD` |
+   | Prometheus  | <http://localhost:9090>      | —                            |
+   | Grafana     | <http://localhost:3001>      | admin / `GRAFANA_ADMIN_PASSWORD` |
 
 ---
 
@@ -139,8 +139,8 @@ OTEL_TRACES_ENABLED=true
 
 | Service | URL                     | Notes |
 |---------|-------------------------|-------|
-| Jaeger  | http://localhost:8080/jaeger | Traefik ForwardAuth (admin login) |
-| Grafana | http://localhost:3001    | Jaeger datasource provisioned automatically |
+| Jaeger  | <http://localhost:8080/jaeger> | Traefik ForwardAuth (admin login) |
+| Grafana | <http://localhost:3001>    | Jaeger datasource provisioned automatically |
 
 ### Trace context propagation
 
@@ -199,7 +199,7 @@ skewed earlier benchmarks.
 ## Verifying the Stack
 
 1. Check the Prometheus targets page:  
-   http://localhost:9090/targets  
+   <http://localhost:9090/targets>  
    `nukelab-backend` should be **UP**.
 
 2. Scrape the metrics endpoint directly:

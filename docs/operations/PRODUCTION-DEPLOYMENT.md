@@ -1,6 +1,6 @@
 # Production Deployment Guide
 
-**Multi-user resource isolation with cgroup limits, lxcfs, and storage quotas**
+## Multi-user resource isolation with cgroup limits, lxcfs, and storage quotas
 
 This guide covers configuring NukeLab for production environments where users must see and be constrained by their allocated resource plans (CPU, memory, disk).
 
@@ -54,6 +54,7 @@ cat /sys/fs/cgroup/cgroup.subtree_control
 ```
 
 **Expected output (all enabled):**
+
 ```
 cpuset cpu io memory hugetlb pids rdma misc dmem
 ```
@@ -78,6 +79,7 @@ sudo systemctl daemon-reload
 **Log out and log back in** for changes to take effect.
 
 **Verify:**
+
 ```bash
 cat /sys/fs/cgroup/cgroup.controllers
 # Should show: cpuset cpu io memory ...
@@ -92,6 +94,7 @@ lxcfs is a FUSE filesystem that makes `/proc` files inside containers return cgr
 ### Installation
 
 **Ubuntu/Debian:**
+
 ```bash
 sudo apt update
 sudo apt install lxcfs
@@ -99,12 +102,14 @@ sudo systemctl enable --now lxcfs
 ```
 
 **RHEL/CentOS/Fedora:**
+
 ```bash
 sudo dnf install lxcfs
 sudo systemctl enable --now lxcfs
 ```
 
 **Arch Linux:**
+
 ```bash
 sudo pacman -S lxcfs
 sudo systemctl enable --now lxcfs
@@ -147,6 +152,7 @@ services:
 ### Backend Logs
 
 When lxcfs is active, backend logs show:
+
 ```
 INFO:lxcfs detected. Cgroup-aware /proc will be mounted into containers.
 INFO:Mounted lxcfs /proc files: 7 files
@@ -169,6 +175,7 @@ INFO:Mounted lxcfs /proc files: 7 files
 ### XFS with Project Quotas (pquota)
 
 **1. Check current mount:**
+
 ```bash
 findmnt /var/lib/docker
 # or
@@ -176,16 +183,19 @@ findmnt /var/lib/containers
 ```
 
 **2. Remount with pquota (temporary):**
+
 ```bash
 sudo mount -o remount,prjquota /var/lib/docker
 ```
 
 **3. Make permanent in `/etc/fstab`:**
+
 ```
 /dev/mapper/vg-docker /var/lib/docker xfs defaults,prjquota 0 0
 ```
 
 **4. Enable in Docker daemon** (`/etc/docker/daemon.json`):
+
 ```json
 {
   "storage-driver": "overlay2",
@@ -197,6 +207,7 @@ sudo mount -o remount,prjquota /var/lib/docker
 ```
 
 **5. Restart Docker:**
+
 ```bash
 sudo systemctl restart docker
 ```
@@ -204,6 +215,7 @@ sudo systemctl restart docker
 ### ZFS
 
 **1. Set quota on dataset:**
+
 ```bash
 sudo zfs create -o mountpoint=/var/lib/docker tank/docker
 sudo zfs set quota=500G tank/docker
@@ -211,6 +223,7 @@ sudo zfs set refquota=500G tank/docker
 ```
 
 **2. Configure Docker for ZFS** (`/etc/docker/daemon.json`):
+
 ```json
 {
   "storage-driver": "zfs"
@@ -218,6 +231,7 @@ sudo zfs set refquota=500G tank/docker
 ```
 
 **3. Restart Docker:**
+
 ```bash
 sudo systemctl restart docker
 ```
@@ -286,12 +300,14 @@ cat /proc/cpuinfo | grep processor | wc -l
 ```
 
 **Check container config:**
+
 ```bash
 podman inspect nukelab-server-<username>-<servername> --format '{{json .HostConfig}}' | \
   python3 -m json.tool | grep -E "(NanoCpus|CpusetCpus|Memory|StorageOpt)"
 ```
 
 **Expected output:**
+
 ```json
 "CpusetCpus": "0,1",
 "Memory": 4294967296,
@@ -308,6 +324,7 @@ podman inspect nukelab-server-<username>-<servername> --format '{{json .HostConf
 **Cause:** lxcfs not installed or not mounted into backend.
 
 **Fix:**
+
 ```bash
 # Install lxcfs
 sudo apt install lxcfs && sudo systemctl enable --now lxcfs
@@ -324,6 +341,7 @@ sudo apt install lxcfs && sudo systemctl enable --now lxcfs
 **Cause:** `cpuset` cgroup controller not enabled.
 
 **Fix:**
+
 ```bash
 # Enable cgroup controllers (see section above)
 sudo mkdir -p /etc/systemd/system/user@.service.d/
@@ -358,6 +376,7 @@ xfs_quota -x -c 'report -p' /var/lib/docker
 **Cause:** `/var/lib/lxcfs` not mounted into backend container.
 
 **Fix:** Add volume mount to `compose.yml`:
+
 ```yaml
 backend:
   volumes:

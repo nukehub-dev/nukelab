@@ -128,7 +128,9 @@ cmd_selftest() {
     # Lint command help
     _t "command help: lint" bash -c './nukelabctl lint --help | grep -q "Run linters and format checks"' || _increment_failures
     _t "lint --help lists shell target" bash -c './nukelabctl lint --help | grep -q "shell      Lint shell"' || _increment_failures
+    _t "lint --help lists markdown target" bash -c './nukelabctl lint --help | grep -q "markdown   Lint Markdown"' || _increment_failures
     _t "lint shell passes (style + static analysis)" bash -c './nukelabctl lint shell >/dev/null 2>&1' || _increment_failures
+    _t "lint markdown passes when tools are present" bash -c './nukelabctl lint markdown >/dev/null 2>&1' || _increment_failures
 
     # Security command behaviors
     _t "security --help lists --no-fail-on-high" bash -c './nukelabctl security --help | grep -q -- "--no-fail-on-high"' || _increment_failures

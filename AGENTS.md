@@ -82,7 +82,7 @@ When the user requests a durable behavior change, record it here or in the relev
 
 ---
 
-# NukeLab Project Guidance
+## NukeLab Project Guidance
 
 ## Required tooling
 
@@ -143,7 +143,7 @@ Notes:
   `infrastructure/AGENTS.md`.
 - `monitoring/` — Prometheus, Grafana, Alertmanager, Jaeger, OTEL. See
   `monitoring/AGENTS.md`.
-- `docs/` — operational and security documentation. See `docs/AGENTS.md`.
+- `docs/` — architecture, operations, security, development, and reference documentation. See `docs/AGENTS.md`.
 
 ## Common pitfalls
 
@@ -155,13 +155,13 @@ Notes:
 ## Security & penetration testing
 
 The project maintains a comprehensive penetration test plan in
-`docs/PENETRATION-TEST-PLAN.md`. When adding security features or addressing
+`docs/security/PENETRATION-TEST-PLAN.md`. When adding security features or addressing
 findings:
 
-- Keep `docs/PENETRATION-TEST-PLAN.md` in sync with implemented controls and
+- Keep `docs/security/PENETRATION-TEST-PLAN.md` in sync with implemented controls and
   current scope decisions.
-- Track individual findings in `docs/PENETRATION-TEST-FINDINGS.md` and
-  remediation ownership in `docs/PENETRATION-TEST-REMEDIATION.md`.
+- Track individual findings in `docs/security/PENETRATION-TEST-FINDINGS.md` and
+  remediation ownership in `docs/security/PENETRATION-TEST-REMEDIATION.md`.
 - Add regression tests for every confirmed finding under
   `backend/tests/security/` so it cannot silently regress.
 - Use `./nukelabctl security` as the canonical dependency/container scanning
@@ -183,16 +183,20 @@ iteration is not blocked. To verify hardening against a local dev stack:
 2. Start the dev stack: `./nukelabctl up dev`.
 3. Create a server through the API/UI.
 4. Verify the running container:
+
    ```bash
    ./nukelabctl verify-hardening <container_name>
    ```
+
    Expected output: `User: 65532:65532`, `CapDrop: [ALL]`, `ReadonlyRootfs: true`,
    `SecurityOpt: [no-new-privileges:true]`, `Container uid: uid=65532(nukelab)`,
    and `Container capability sets are zeroed`.
 5. If you need the raw inspect values, the command is equivalent to:
+
    ```bash
    podman inspect <container_name> --format '{{.Config.User}} {{.HostConfig.CapDrop}} {{.HostConfig.ReadonlyRootfs}} {{.HostConfig.SecurityOpt}}'
    ```
+
    Expected: `65532:65532 [ALL] true [no-new-privileges:true]`.
 6. Inside the container, run `id` and `cat /proc/self/status | grep Cap`.
    Expected: `uid=65532(nukelab)` and all capability sets zeroed.
@@ -220,7 +224,7 @@ These checks are off by default because they require process/registry changes
 ## Child NAD Index
 
 - `backend/AGENTS.md` — Python FastAPI backend, models, migrations, tests.
-- `docs/AGENTS.md` — Project documentation and security records.
+- `docs/AGENTS.md` — Project documentation: architecture, operations, security, development, and reference guides.
 - `environments/AGENTS.md` — User environment Docker image definitions.
 - `frontend/AGENTS.md` — Vite + React 19 SPA and e2e tests.
 - `infrastructure/AGENTS.md` — Traefik reverse proxy and network config.

@@ -182,6 +182,7 @@ FROM pg_stat_replication;
 ### Consistency Model
 
 PostgreSQL streaming replication is **asynchronous** by default. This means:
+
 - A write on primary may not be immediately visible on the replica
 - **Lag is typically <1 second** on LAN
 - If your app requires read-after-write consistency, route those specific reads to the primary
@@ -189,6 +190,7 @@ PostgreSQL streaming replication is **asynchronous** by default. This means:
 ### Failover
 
 If primary fails:
+
 1. Promote replica: `pg_ctl promote`
 2. Update `DATABASE_HOST`/`DATABASE_PORT` (or set `DATABASE_URL`) to point to replica
 3. Rebuild new primary from promoted replica

@@ -41,6 +41,7 @@ docker exec -i nukelab-postgres pg_dump \
 **What `--clean --if-exists` does:** Adds `DROP IF EXISTS` before `CREATE`, so restore is idempotent.
 
 **Verification:**
+
 ```bash
 # Check file size
 ls -lh nukelab-backup-*.sql

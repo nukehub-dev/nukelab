@@ -117,6 +117,7 @@ docker compose -f compose.loadtest.yml run --rm \
 ```
 
 Key columns:
+
 - `cl_active` — clients currently executing
 - `cl_waiting` — clients waiting for a backend connection (should be 0)
 - `sv_active` — active backend connections to Postgres
@@ -143,6 +144,7 @@ If `cl_waiting` > 0, your backend pool is saturated. Increase
 ### 3. Application Metrics
 
 The Locust Web UI shows:
+
 - Requests per second (RPS)
 - Response time percentiles (p50, p95, p99)
 - Error rate

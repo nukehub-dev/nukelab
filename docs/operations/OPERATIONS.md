@@ -47,6 +47,7 @@ Partitions are auto-created on startup and via Celery Beat daily, but you can ma
 ```
 
 **Operational notes:**
+
 - The baseline migration creates a `DEFAULT` partition + the current month's partition automatically.
 - A `DEFAULT` partition acts as a safety net for rows outside explicit partitions.
 - Run `ensure-partitions` monthly (via Celery Beat) to create upcoming partitions ahead of time.
@@ -132,6 +133,7 @@ SELECT count(*) FROM pg_stat_activity WHERE state = 'active';
 ```
 
 **Enable PgBouncer when:**
+
 - You consistently use >80% of `max_connections` (400+ out of 500)
 - You're getting `FATAL: sorry, too many clients already`
 - You need to scale beyond what direct Postgres connections allow
@@ -156,6 +158,7 @@ PGBOUNCER_ENABLED=true
 ```
 
 Or one-off:
+
 ```bash
 ./nukelabctl start --overlay compose.pgbouncer.yml
 ```
@@ -171,6 +174,7 @@ App → PgBouncer → PostgreSQL
 Your app opens thousands of "fake" connections to PgBouncer. PgBouncer keeps a bounded pool of **real** connections open to Postgres and reuses them. Postgres never sees more than `MAX_DB_CONNECTIONS` (default 400) connections, even with 100k users.
 
 When `PGBOUNCER_ENABLED=true`:
+
 - SQLAlchemy client-side pooling is disabled (`NullPool`)
 - asyncpg prepared statement caching is disabled
 - PgBouncer becomes the single source of truth for connection pooling
@@ -189,6 +193,7 @@ This avoids **double-pooling**, which causes connection storms and starvation at
 ```
 
 **Sizing for 100k users.** Defaults in `.env.example` are tuned for `max_connections=500`:
+
 - `DEFAULT_POOL_SIZE=100` + `RESERVE_POOL_SIZE=25` = 125 active backend connections
 - `MAX_DB_CONNECTIONS=400` hard ceiling per database
 - `MAX_CLIENT_CONN=20000` accepts 20k app-side connections
