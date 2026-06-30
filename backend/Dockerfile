@@ -10,7 +10,9 @@ RUN apt-get update && apt-get install -y \
 
 # Install production Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt && \
+    rm -rf /usr/local/lib/python*/site-packages/jaraco.context* && \
+    rm -rf /usr/local/lib/python*/site-packages/wheel*
 
 # Copy application code explicitly
 # This ensures only necessary code enters the image.

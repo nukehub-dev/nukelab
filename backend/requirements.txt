@@ -26,12 +26,12 @@ sentry-sdk[fastapi]==2.19.0
 prometheus-client==0.21.0
 
 # OpenTelemetry distributed tracing
-setuptools==78.1.1  # pinned for opentelemetry pkg_resources compatibility
-opentelemetry-api==1.27.0
-opentelemetry-sdk==1.27.0
-opentelemetry-exporter-otlp==1.27.0
-opentelemetry-instrumentation-fastapi==0.48b0
-opentelemetry-instrumentation-celery==0.48b0
-opentelemetry-instrumentation-sqlalchemy==0.48b0
-opentelemetry-instrumentation-redis==0.48b0
-opentelemetry-instrumentation-asyncpg==0.48b0
+setuptools>=80.0.0  # pinned for opentelemetry pkg_resources compatibility; vendors patched wheel/jaraco.context
+opentelemetry-api==1.32.1
+opentelemetry-sdk==1.32.1
+opentelemetry-exporter-otlp==1.32.1
+opentelemetry-instrumentation-fastapi==0.53b1
+opentelemetry-instrumentation-celery==0.53b1
+opentelemetry-instrumentation-sqlalchemy==0.53b1
+opentelemetry-instrumentation-redis==0.53b1
+opentelemetry-instrumentation-asyncpg==0.53b1
