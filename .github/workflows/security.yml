@@ -181,6 +181,7 @@ jobs:
 
       - name: Check for unsigned commits
         run: |
+          cp .env.example .env.development
           chmod +x ./nukelabctl
           ./nukelabctl security --signed-commits --no-bandit --no-pip-audit --no-npm-audit --no-trivy
         continue-on-error: true
