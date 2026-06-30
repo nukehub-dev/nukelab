@@ -1,7 +1,7 @@
-FROM ubuntu:24.04@sha256:c4a8d5503dfb2a3eb8ab5f807da5bc69a85730fb49b5cfca2330194ebcc41c7b
+FROM debian:13@sha256:3a953985c225a97dfb5a8f1ddc6a3ecefefc35ef51f537075e08941305045a1e
 
 ENV DEBIAN_FRONTEND=noninteractive
-ENV NODE_VERSION=22
+ENV NODE_VERSION=24
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -23,7 +23,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash - \
 WORKDIR /opt/nukelab
 
 # Create non-root user used by hardened container runtime. Use a high UID/GID
-# to avoid collisions with distro default users (e.g. ubuntu:1000).
+# to avoid collisions with distro default users.
 RUN groupadd -r nukelab -g 65532 && \
     useradd -r -g nukelab -u 65532 -m -s /bin/bash -d /home/nukelab nukelab
 

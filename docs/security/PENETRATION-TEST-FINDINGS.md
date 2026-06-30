@@ -327,9 +327,9 @@ External base images are referenced by floating tags instead of by digest. A mal
 **Evidence:**
 
 - `./scripts/security/check-base-image-pinning.sh --strict` reports 5 unpinned external base images:
-  - `python:3.12-slim`
-  - `ubuntu:24.04`
-  - `node:22-alpine`
+  - `python:3.13-slim`
+  - `debian:13`
+  - `node:24-alpine`
   - `docker.io/library/nginx:alpine`
   - `golang:1.25-alpine`
 - Internal multi-stage aliases (`base`) and internal `nukelab-*` images are correctly skipped.
@@ -338,7 +338,7 @@ External base images are referenced by floating tags instead of by digest. A mal
 Build reproducibility and supply-chain integrity are weakened. A tag rollback or registry compromise can silently change the contents of production images.
 
 **Remediation:**
-Pin each external base image by digest (e.g., `ubuntu:24.04@sha256:<digest>`) and update via an automated dependency update workflow. Alternatively, mirror images to an internal registry and pin to mirrored digests.
+Pin each external base image by digest (e.g., `debian:13@sha256:<digest>`) and update via an automated dependency update workflow. Alternatively, mirror images to an internal registry and pin to mirrored digests.
 
 **Retest Criteria:**
 
