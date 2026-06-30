@@ -41,6 +41,7 @@ jobs:
 
       - name: Run NukeLab security scans
         run: |
+          cp .env.example .env.development
           chmod +x ./nukelabctl
           ./nukelabctl security --check-base-images --sbom --with-dev
 
@@ -77,6 +78,7 @@ jobs:
 
       - name: Build core images
         run: |
+          chmod +x ./nukelabctl
           ./nukelabctl build all
 
       - name: Run Trivy image scans
@@ -137,6 +139,7 @@ jobs:
 
       - name: Check for unsigned commits
         run: |
+          chmod +x ./nukelabctl
           ./nukelabctl security --signed-commits --no-bandit --no-pip-audit --no-npm-audit --no-trivy
         continue-on-error: true
 

@@ -142,7 +142,9 @@ jobs:
 
       - name: Stop backing services
         if: always()
-        run: ./nukelabctl stop dev || true
+        run: |
+          chmod +x ./nukelabctl
+          ./nukelabctl stop dev || true
 
   build-images:
     name: Build & push images
