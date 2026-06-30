@@ -143,11 +143,6 @@ class Settings(BaseSettings):
     docker_pull_policy: str = "if-not-present"
     volume_storage_path: str = ""
 
-    container_default_cpu_limit: float = 2.0
-    container_default_memory_limit: str = "4Gi"
-    container_default_swap_limit: str = "4Gi"
-    container_default_disk_limit: str = "50Gi"
-
     # Container runtime hardening (defaults to enabled unless dev_mode is True)
     container_hardening_enabled: bool | None = None
     container_user: str = "nukelab"

@@ -115,7 +115,6 @@ Both `.env` and `.env.development` are gitignored. `.env.example` is the only en
 | `VOLUME_STORAGE_PATH` | Host path for volume file operations |
 | `XFS_QUOTA_ENABLED` | Enable kernel-enforced XFS project quotas |
 | `UPLOAD_DIR` | Container path for uploads |
-| `CONTAINER_DEFAULT_*_LIMIT` | Default container resource limits |
 
 ### Server container authentication
 
