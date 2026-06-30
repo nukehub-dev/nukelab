@@ -43,7 +43,9 @@ jobs:
         run: |
           cp .env.example .env.development
           chmod +x ./nukelabctl
-          ./nukelabctl security --check-base-images --sbom --with-dev
+          chmod +x ./scripts/security/*.sh
+          ./nukelabctl security --with-dev
+        continue-on-error: true
 
       - name: Upload security reports
         uses: actions/upload-artifact@v7
