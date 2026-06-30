@@ -78,10 +78,13 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Build core images
+      - name: Set up environment
         run: |
+          cp .env.example .env.development
           chmod +x ./nukelabctl
-          ./nukelabctl build all
+
+      - name: Build core images
+        run: ./nukelabctl build all
 
       - name: Run Trivy image scans
         uses: aquasecurity/trivy-action@v0.36.0
@@ -102,7 +105,7 @@ jobs:
           exit-code: '1'
 
       - name: Upload Trivy SARIF
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: .
