@@ -41,6 +41,7 @@ jobs:
 
       - name: Run NukeLab security scans
         run: |
+          chmod +x ./nukelabctl
           ./nukelabctl security --check-base-images --sbom --with-dev
 
       - name: Upload security reports
