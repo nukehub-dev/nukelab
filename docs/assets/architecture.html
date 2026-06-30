@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NukeLab Architecture</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style type="text/tailwindcss">
+      @layer utilities {
+        .bg-dots {
+          background-image: radial-gradient(circle at center, #cbd5e1 1px, transparent 1px);
+          background-size: 20px 20px;
+        }
+      }
+
+      @layer components {
+        /* Base Card Styling */
+        .nuke-card {
+          @apply relative flex flex-col items-center text-center p-5 bg-white rounded-2xl border border-slate-200 shadow-sm transition-all duration-300 hover:shadow-md hover:-translate-y-1 h-full z-10;
+        }
+
+        .nuke-icon-box {
+          @apply w-12 h-12 flex items-center justify-center rounded-xl mb-3 shadow-inner transition-transform duration-300;
+        }
+
+        .nuke-card:hover .nuke-icon-box {
+          @apply scale-110;
+        }
+
+        .nuke-title {
+          @apply font-bold text-sm text-slate-800 mb-1 leading-tight;
+        }
+
+        .nuke-desc {
+          @apply text-[11px] text-slate-500 leading-snug flex-grow;
+        }
+
+        .nuke-badge {
+          @apply mt-3 inline-block text-[10px] font-mono bg-slate-50 text-slate-600 px-2 py-1 rounded-md border border-slate-200 w-max mx-auto shadow-sm;
+        }
+
+        /* Specific Card Theme Colors */
+        .theme-proxy .nuke-icon-box {
+          @apply bg-sky-50 text-sky-500 border border-sky-100;
+        }
+        .theme-proxy.nuke-card {
+          @apply border-t-4 border-t-sky-400;
+        }
+
+        .theme-web .nuke-icon-box {
+          @apply bg-teal-50 text-teal-500 border border-teal-100;
+        }
+        .theme-web.nuke-card {
+          @apply border-t-4 border-t-teal-400;
+        }
+
+        .theme-api .nuke-icon-box {
+          @apply bg-emerald-50 text-emerald-500 border border-emerald-100;
+        }
+        .theme-api.nuke-card {
+          @apply border-t-4 border-t-emerald-400;
+        }
+
+        .theme-ide .nuke-icon-box {
+          @apply bg-violet-50 text-violet-500 border border-violet-100;
+        }
+        .theme-ide.nuke-card {
+          @apply border-t-4 border-t-violet-400;
+        }
+
+        .theme-data .nuke-icon-box {
+          @apply bg-orange-50 text-orange-500 border border-orange-100;
+        }
+        .theme-data.nuke-card {
+          @apply border-t-4 border-t-orange-400;
+        }
+
+        .theme-runtime .nuke-icon-box {
+          @apply bg-blue-50 text-blue-500 border border-blue-100;
+        }
+        .theme-runtime.nuke-card {
+          @apply border-t-4 border-t-blue-400;
+        }
+
+        .theme-obs {
+          @apply p-4;
+        }
+        .theme-obs .nuke-icon-box {
+          @apply w-10 h-10 bg-indigo-50 text-indigo-500 border border-indigo-100 mb-2;
+        }
+        .theme-obs .nuke-title {
+          @apply text-[12px];
+        }
+        .theme-obs .nuke-desc {
+          @apply text-[10px];
+        }
+        .theme-obs.nuke-card {
+          @apply border-l-4 border-l-indigo-400 border-t-transparent hover:-translate-y-0.5 hover:translate-x-0.5;
+        }
+
+        /* Connectors */
+        .arrow-down-head {
+          @apply absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-[2px] border-l-[5px] border-r-[5px] border-t-[6px] border-transparent border-t-slate-400;
+        }
+        .arrow-right-head {
+          @apply absolute right-0 top-1/2 -translate-y-1/2 translate-x-[2px] border-t-[5px] border-b-[5px] border-l-[6px] border-transparent border-l-slate-400;
+        }
+      }
+
+      @media print {
+        body {
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+          background: white !important;
+        }
+        .bg-dots {
+          background-image: none !important;
+        }
+        .nuke-card {
+          box-shadow: none !important;
+          border: 1px solid #cbd5e1 !important;
+          border-top-width: 4px !important;
+        }
+      }
+    </style>
+  </head>
+  <body
+    class="bg-slate-50 text-slate-800 bg-dots min-h-screen py-10 px-4 font-sans selection:bg-sky-200"
+  >
+    <div class="w-full max-w-[1100px] mx-auto">
+      <!-- Header -->
+      <header
+        class="text-center mb-10 bg-white/80 backdrop-blur-sm py-4 px-8 rounded-2xl border border-slate-200 shadow-sm inline-block min-w-[300px] left-1/2 relative -translate-x-1/2"
+      >
+        <h1
+          class="text-2xl font-extrabold tracking-tight text-slate-800 mb-1 flex items-center justify-center gap-2"
+        >
+          <img src="logos/nukelab.svg" alt="NukeLab" class="w-7 h-7" />
+          NukeLab Architecture
+        </h1>
+        <p class="text-xs font-medium text-slate-500 uppercase tracking-widest">
+          Multi-user scientific computing platform
+        </p>
+      </header>
+
+      <!-- Main Layout: Central Flow + Sidebar -->
+      <div
+        class="flex flex-col xl:flex-row items-center xl:items-start justify-center gap-8 lg:gap-12 w-full"
+      >
+        <!-- LEFT: Main Application Flow -->
+        <div class="flex-1 w-full max-w-[850px] flex flex-col items-center">
+          <!-- Entry Row: Browser -> Traefik -->
+          <div class="flex items-stretch justify-center gap-3 md:gap-6 w-full max-w-[500px]">
+            <div class="nuke-card theme-runtime flex-1">
+              <div class="nuke-icon-box">
+                <img
+                  src="https://cdn.simpleicons.org/googlechrome/4285F4"
+                  alt="Browser"
+                  class="w-7 h-7"
+                />
+              </div>
+              <div class="nuke-title">Browser</div>
+              <div class="nuke-desc">Dashboard, IDE, API client</div>
+            </div>
+
+            <div class="flex flex-col items-center justify-center w-24 md:w-32">
+              <span
+                class="text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-2 bg-slate-50/80 px-2 rounded backdrop-blur"
+                >HTTPS / WS</span
+              >
+              <div class="w-full h-[2px] bg-slate-300 relative">
+                <div class="arrow-right-head"></div>
+              </div>
+            </div>
+
+            <div class="nuke-card theme-proxy flex-1">
+              <div class="nuke-icon-box">
+                <img
+                  src="https://cdn.simpleicons.org/traefikproxy/24A1C1"
+                  alt="Traefik"
+                  class="w-7 h-7"
+                />
+              </div>
+              <div class="nuke-title">Traefik v3</div>
+              <div class="nuke-desc">Reverse proxy, TLS, routing</div>
+            </div>
+          </div>
+
+          <!-- Structural Routing Split (Hidden on Mobile) -->
+          <div class="hidden md:grid grid-cols-3 gap-6 w-full mt-4 mb-2 h-16 relative">
+            <!-- Left Leg (to Vite) -->
+            <div class="relative w-full h-full">
+              <div class="absolute top-0 right-0 w-1/2 border-t-2 border-slate-300"></div>
+              <div class="absolute top-0 left-1/2 h-full border-l-2 border-slate-300"></div>
+              <div class="arrow-down-head"></div>
+            </div>
+            <!-- Center Leg (to FastAPI) -->
+            <div class="relative w-full h-full flex justify-center">
+              <div class="absolute top-0 left-0 w-full border-t-2 border-slate-300"></div>
+              <div
+                class="absolute bottom-full left-1/2 h-4 border-l-2 border-slate-300 border-dashed"
+              ></div>
+              <div
+                class="absolute -top-3 bg-slate-50 px-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest z-10 border border-slate-200 rounded-full shadow-sm"
+              >
+                routes
+              </div>
+              <div class="absolute top-0 left-1/2 h-full border-l-2 border-slate-300"></div>
+              <div class="arrow-down-head"></div>
+            </div>
+            <!-- Right Leg (to Theia) -->
+            <div class="relative w-full h-full">
+              <div class="absolute top-0 left-0 w-1/2 border-t-2 border-slate-300"></div>
+              <div class="absolute top-0 left-1/2 h-full border-l-2 border-slate-300"></div>
+              <div class="arrow-down-head"></div>
+            </div>
+          </div>
+
+          <!-- Mobile-only downward arrows -->
+          <div class="md:hidden flex justify-center w-full my-4">
+            <div class="h-8 border-l-2 border-slate-300 relative border-dashed">
+              <div class="arrow-down-head"></div>
+            </div>
+          </div>
+
+          <!-- Application Layer (3 Columns) -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6 w-full z-10">
+            <div class="nuke-card theme-web">
+              <div class="nuke-icon-box">
+                <img src="https://cdn.simpleicons.org/react/14b8a6" alt="React" class="w-8 h-8" />
+              </div>
+              <div class="nuke-title">Vite + React 19 SPA</div>
+              <div class="nuke-desc">Management dashboard & user portal</div>
+              <div class="nuke-badge">/*</div>
+            </div>
+
+            <div class="nuke-card theme-api">
+              <div class="nuke-icon-box">
+                <img
+                  src="https://cdn.simpleicons.org/fastapi/10b981"
+                  alt="FastAPI"
+                  class="w-8 h-8"
+                />
+              </div>
+              <div class="nuke-title">FastAPI Backend</div>
+              <div class="nuke-desc">Auth, RBAC, orchestration, billing, metrics</div>
+              <div class="nuke-badge">/api/*</div>
+            </div>
+
+            <div class="nuke-card theme-ide">
+              <div class="nuke-icon-box">
+                <img
+                  src="https://cdn.simpleicons.org/eclipseide/8b5cf6"
+                  alt="Theia"
+                  class="w-8 h-8"
+                />
+              </div>
+              <div class="nuke-title">NukeIDE Container</div>
+              <div class="nuke-desc">Per-user environment (nginx + Theia IDE)</div>
+              <div class="nuke-badge">/user/{name}/*</div>
+            </div>
+          </div>
+
+          <!-- Cross-talk & Orchestration Connections (Hidden on Mobile) -->
+          <div class="hidden md:grid grid-cols-3 gap-6 w-full h-14 relative mt-2">
+            <!-- API & Websocket connection (Cols 1 to 2) -->
+            <div class="col-span-2 relative flex items-center justify-center h-full">
+              <div class="absolute w-[60%] border-t-2 border-slate-300 border-dashed top-6"></div>
+              <div
+                class="absolute top-6 left-[20%] -translate-x-[2px] -translate-y-1/2 border-t-[5px] border-b-[5px] border-r-[6px] border-transparent border-r-slate-400"
+              ></div>
+              <div
+                class="absolute top-6 right-[20%] translate-x-[2px] -translate-y-1/2 border-t-[5px] border-b-[5px] border-l-[6px] border-transparent border-l-slate-400"
+              ></div>
+              <div
+                class="bg-slate-50/90 px-3 py-0.5 rounded-full text-[9px] font-bold text-slate-500 uppercase tracking-widest z-10 mt-1 border border-slate-200"
+              >
+                REST / WebSocket
+              </div>
+            </div>
+            <!-- Docker orchestrates connection (Col 3) -->
+            <div class="col-span-1 relative w-full h-full">
+              <div
+                class="absolute top-0 left-1/2 h-full border-l-2 border-slate-300 border-dashed"
+              ></div>
+              <div class="arrow-down-head"></div>
+            </div>
+            <!-- FastAPI to Data down connection -->
+            <div
+              class="absolute top-0 left-1/2 h-full border-l-2 border-slate-300 border-dashed"
+            ></div>
+            <div
+              class="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-[2px] border-l-[5px] border-r-[5px] border-t-[6px] border-transparent border-t-slate-400"
+            ></div>
+            <div
+              class="absolute top-1/2 left-1/2 -translate-y-1/2 -translate-x-1/2 bg-slate-50/90 px-2 py-0.5 rounded-full text-[9px] font-bold text-slate-500 uppercase tracking-widest z-10 border border-slate-200 whitespace-nowrap"
+            >
+              orchestrates
+            </div>
+          </div>
+
+          <!-- Mobile-only gaps -->
+          <div class="md:hidden h-8"></div>
+
+          <!-- Bottom Row: Data/State & Runtime -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6 w-full z-10">
+            <!-- Data Box (Spans under Vite & FastAPI) -->
+            <div
+              class="md:col-span-2 rounded-2xl border-2 border-dashed border-slate-300 bg-slate-100/50 p-5 relative mt-4 md:mt-0"
+            >
+              <div
+                class="absolute -top-3 left-1/2 -translate-x-1/2 bg-slate-100 px-3 py-1 rounded-full text-[9px] font-bold text-slate-500 uppercase tracking-widest border border-slate-300 shadow-sm whitespace-nowrap"
+              >
+                Data, State & Background Work
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-3">
+                <div class="nuke-card theme-data">
+                  <div class="nuke-icon-box">
+                    <img
+                      src="https://cdn.simpleicons.org/postgresql/f97316"
+                      alt="PostgreSQL"
+                      class="w-7 h-7"
+                    />
+                  </div>
+                  <div class="nuke-title">PostgreSQL 17</div>
+                  <div class="nuke-desc">Users, roles, servers, audit, metrics</div>
+                </div>
+
+                <div class="nuke-card theme-data">
+                  <div class="nuke-icon-box">
+                    <img
+                      src="https://cdn.simpleicons.org/redis/f97316"
+                      alt="Redis"
+                      class="w-7 h-7"
+                    />
+                  </div>
+                  <div class="nuke-title">Redis</div>
+                  <div class="nuke-desc">Sessions, pub/sub, broker, cache</div>
+                </div>
+
+                <div class="nuke-card theme-data">
+                  <div class="nuke-icon-box">
+                    <img
+                      src="https://cdn.simpleicons.org/celery/f97316"
+                      alt="Celery"
+                      class="w-7 h-7"
+                    />
+                  </div>
+                  <div class="nuke-title">Celery + Beat</div>
+                  <div class="nuke-desc">Billing, cleanup, tasks, notifications</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Docker Runtime (Aligns under IDE) -->
+            <div class="md:col-span-1 flex flex-col justify-center mt-4 md:mt-0">
+              <div class="nuke-card theme-runtime">
+                <div class="nuke-icon-box">
+                  <img
+                    src="https://cdn.simpleicons.org/docker/3b82f6"
+                    alt="Docker"
+                    class="w-8 h-8"
+                  />
+                </div>
+                <div class="nuke-title text-base">Docker / Podman</div>
+                <div class="nuke-desc mt-2">
+                  Container engine for user environments and platform isolated services
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT: Observability Sidebar -->
+        <div class="w-full xl:w-[280px] flex-shrink-0 mt-8 xl:mt-0">
+          <div
+            class="rounded-2xl border-2 border-dashed border-indigo-200 bg-indigo-50/30 p-5 relative h-full"
+          >
+            <div
+              class="absolute -top-3 left-1/2 -translate-x-1/2 bg-white px-3 py-1 rounded-full text-[9px] font-bold text-indigo-500 uppercase tracking-widest border border-indigo-200 shadow-sm whitespace-nowrap"
+            >
+              Observability (Optional)
+            </div>
+
+            <div class="grid grid-cols-2 xl:grid-cols-1 gap-4 mt-3">
+              <div class="nuke-card theme-obs">
+                <div class="nuke-icon-box">
+                  <img
+                    src="https://cdn.simpleicons.org/prometheus/6366f1"
+                    alt="Prometheus"
+                    class="w-6 h-6"
+                  />
+                </div>
+                <div class="nuke-title">Prometheus</div>
+                <div class="nuke-desc">Metrics scraping & storage</div>
+              </div>
+
+              <div class="nuke-card theme-obs">
+                <div class="nuke-icon-box">
+                  <img
+                    src="https://cdn.simpleicons.org/grafana/6366f1"
+                    alt="Grafana"
+                    class="w-6 h-6"
+                  />
+                </div>
+                <div class="nuke-title">Grafana</div>
+                <div class="nuke-desc">Dashboards, alerts, Jaeger UI</div>
+              </div>
+
+              <div class="nuke-card theme-obs">
+                <div class="nuke-icon-box">
+                  <img
+                    src="https://cdn.simpleicons.org/sentry/6366f1"
+                    alt="Sentry"
+                    class="w-6 h-6"
+                  />
+                </div>
+                <div class="nuke-title">Sentry / GlitchTip</div>
+                <div class="nuke-desc">Error tracking & PII scrubbing</div>
+              </div>
+
+              <div class="nuke-card theme-obs">
+                <div class="nuke-icon-box">
+                  <img
+                    src="https://cdn.simpleicons.org/opentelemetry/6366f1"
+                    alt="OTel"
+                    class="w-6 h-6"
+                  />
+                </div>
+                <div class="nuke-title">OTel + Jaeger</div>
+                <div class="nuke-desc">Distributed tracing across services</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

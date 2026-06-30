@@ -25,6 +25,7 @@ All files under `docs/`. The `docs/AGENTS.md` owns the docs structure; each subf
 | `development/` | Contributors | Local development setup, contributing workflow |
 | `plan/` | Product owners, leads, contributors | Roadmap, implementation status, decision log |
 | `reference/` | Everyone | Environment variable and CLI command quick reference |
+| `assets/` | Everyone | Shared documentation assets: diagrams, logos, and generated images |
 
 ## Work guidance
 

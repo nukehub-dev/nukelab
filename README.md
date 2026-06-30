@@ -42,26 +42,7 @@ For hot-reload development:
 
 ## Architecture at a Glance
 
-```text
-                              Traefik v3
-                    ┌───────────┬───────────┐
-                    │           │           │
-               /*   │      /api/*    /user/{username}/*
-                    │           │           │
-                    ▼           ▼           ▼
-              ┌─────────┐  ┌─────────┐  ┌─────────────────┐
-              │  Vite   │  │ FastAPI │  │  NukeIDE user   │
-              │  React  │  │ Backend │  │  containers     │
-              │   SPA   │  │         │  │  (nginx + IDE)  │
-              └────┬────┘  └────┬────┘  └─────────────────┘
-                   │            │
-                   └────────────┼────────────┐
-                                ▼            ▼
-                         ┌──────────┐   ┌──────────┐
-                         │PostgreSQL│   │  Redis   │
-                         │   17     │   │  Celery  │
-                         └──────────┘   └──────────┘
-```
+![NukeLab architecture](docs/assets/architecture.png)
 
 See [docs/architecture/OVERVIEW.md](docs/architecture/OVERVIEW.md) for the full
 system overview and [docs/architecture/COMPONENTS.md](docs/architecture/COMPONENTS.md)
