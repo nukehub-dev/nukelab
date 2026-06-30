@@ -3,8 +3,24 @@ name: CI/CD
 on:
   push:
     branches: [main, develop]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'services/auth-sidecar/**'
+      - 'compose*.yml'
+      - 'scripts/**'
+      - 'infrastructure/**'
+      - '.github/workflows/ci.yml'
   pull_request:
     branches: [main, develop]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'services/auth-sidecar/**'
+      - 'compose*.yml'
+      - 'scripts/**'
+      - 'infrastructure/**'
+      - '.github/workflows/ci.yml'
   workflow_dispatch:
 
 concurrency:

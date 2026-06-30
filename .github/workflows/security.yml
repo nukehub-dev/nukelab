@@ -3,8 +3,26 @@ name: Security
 on:
   push:
     branches: [main, master]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'services/**'
+      - 'environments/**'
+      - 'compose*.yml'
+      - 'scripts/**'
+      - 'infrastructure/**'
+      - '.github/workflows/security.yml'
   pull_request:
     branches: [main, master]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'services/**'
+      - 'environments/**'
+      - 'compose*.yml'
+      - 'scripts/**'
+      - 'infrastructure/**'
+      - '.github/workflows/security.yml'
   schedule:
     # Run weekly on Sundays at 06:00 UTC.
     - cron: '0 6 * * 0'
