@@ -224,7 +224,7 @@ These checks are off by default because they require process/registry changes
 ## Child NAD Index
 
 - `backend/AGENTS.md` — Python FastAPI backend, models, migrations, tests.
-- `docs/AGENTS.md` — Project documentation: architecture, operations, security, development, and reference guides.
+- `docs/AGENTS.md` — Project documentation: architecture, operations, security, development, reference guides, and planning.
 - `environments/AGENTS.md` — User environment Docker image definitions.
 - `frontend/AGENTS.md` — Vite + React 19 SPA and e2e tests.
 - `infrastructure/AGENTS.md` — Traefik reverse proxy and network config.

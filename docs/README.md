@@ -11,6 +11,14 @@ This directory contains all durable documentation for the NukeLab platform. Docu
 
 ## Documentation structure
 
+### Plan
+
+| Document | Purpose |
+|---|---|
+| [plan/ROADMAP.md](plan/ROADMAP.md) | Current platform status, recent milestones, and upcoming priorities |
+| [plan/IMPLEMENTATION-PHASES.md](plan/IMPLEMENTATION-PHASES.md) | Phase-by-phase delivery record with remaining work |
+| [plan/DECISION-LOG.md](plan/DECISION-LOG.md) | Architecture and process decisions with rationale |
+
 ### Architecture
 
 | Document | Purpose |

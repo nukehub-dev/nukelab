@@ -23,6 +23,7 @@ All files under `docs/`. The `docs/AGENTS.md` owns the docs structure; each subf
 | `operations/` | Operators | Day-to-day operations, production deployment, backup/restore, scaling reference |
 | `security/` | Security reviewers, auditors | Penetration test plans, findings, remediation, OWASP audit, auth key management |
 | `development/` | Contributors | Local development setup, contributing workflow |
+| `plan/` | Product owners, leads, contributors | Roadmap, implementation status, decision log |
 | `reference/` | Everyone | Environment variable and CLI command quick reference |
 
 ## Work guidance
@@ -47,6 +48,6 @@ All files under `docs/`. The `docs/AGENTS.md` owns the docs structure; each subf
 - `operations/AGENTS.md` — future subfolder contract if operations docs grow
 - `security/AGENTS.md` — future subfolder contract if security docs grow
 - `development/AGENTS.md` — future subfolder contract if development docs grow
-- `reference/AGENTS.md` — future subfolder contract if reference docs grow
+- `plan/AGENTS.md` — roadmap, implementation phases, and decision log
 
-Currently these subfolders do not have dedicated `AGENTS.md` files; this document owns them.
+Currently these subfolders do not have dedicated `AGENTS.md` files except `plan/`; this document owns the remainder.
