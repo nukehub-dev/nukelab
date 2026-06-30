@@ -67,7 +67,9 @@ jobs:
           python-version: "3.13"
 
       - name: Lint backend
-        run: ./nukelabctl lint backend
+        run: |
+          chmod +x ./nukelabctl
+          ./nukelabctl lint backend
 
   lint-frontend:
     name: Lint Frontend
