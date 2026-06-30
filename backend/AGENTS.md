@@ -10,7 +10,7 @@ All files under `backend/` except generated artifacts (`.venv-dev`, `__pycache__
 
 ## Local Contracts
 
-- Python 3.12+; formatting and linting configured in `pyproject.toml`.
+- Python 3.13; formatting and linting configured in `pyproject.toml`.
 - `app/main.py` is the ASGI entry point.
 - `app/api/` owns route definitions; `app/services/` owns business logic; `app/models/` owns SQLAlchemy models; `app/db/` owns session/connection logic; `app/core/` owns cross-cutting utilities; `app/middleware/` owns ASGI middleware; `app/container/` owns Docker orchestration; `app/tasks.py` and `app/worker.py` own Celery.
 - `alembic/` owns database migrations; use Alembic commands to generate and test upgrades/downgrades.

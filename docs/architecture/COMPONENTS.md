@@ -8,7 +8,7 @@ This document describes the major runtime components, their responsibilities, an
 |---|---|---|
 | Reverse proxy | Traefik v3 | Dynamic routing, TLS termination, WebSocket proxying, rate limiting |
 | Frontend | Vite + React 19 SPA | Dashboard, user portal, real-time monitoring UI |
-| Backend API | FastAPI (Python 3.12) | Auth, user/server/environment/plan management, Docker orchestration, metrics |
+| Backend API | FastAPI (Python 3.13) | Auth, user/server/environment/plan management, Docker orchestration, metrics |
 | Container client | Docker SDK via `ContainerClient` | Low-level container operations: create, start, stop, delete, logs, stats |
 | Server spawner | `ServerSpawner` | High-level server lifecycle coordination: volumes, images, labels, readiness |
 | Database | PostgreSQL 17 | Relational data, audit logs, metrics history with partitioning |

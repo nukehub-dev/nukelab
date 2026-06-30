@@ -107,7 +107,7 @@ command reference.
 
 - **Reverse Proxy**: Traefik v3
 - **Frontend**: Vite + React 19 SPA, Tailwind CSS, TanStack Router, TanStack Query
-- **Backend**: FastAPI (Python 3.12), Pydantic v2, SQLAlchemy 2, asyncpg
+- **Backend**: FastAPI (Python 3.13), Pydantic v2, SQLAlchemy 2, asyncpg
 - **Database**: PostgreSQL 17 with partitioned time-series tables
 - **Cache / Queue**: Redis (sessions, pub/sub, Celery broker, caching)
 - **Task Queue**: Celery with Celery Beat

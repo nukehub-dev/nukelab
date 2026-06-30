@@ -38,7 +38,7 @@ Thank you for contributing to NukeLab. This document describes the workflow, con
 
 ### Backend (Python)
 
-- Python 3.12+
+- Python 3.13
 - Format with `ruff format`
 - Lint with `ruff check`
 - Use type hints where practical
