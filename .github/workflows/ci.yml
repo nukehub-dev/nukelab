@@ -66,13 +66,8 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Ruff check
-        working-directory: ./backend
-        run: ruff check --output-format=github app tests
-
-      - name: Ruff format check
-        working-directory: ./backend
-        run: ruff format --check app tests
+      - name: Lint backend
+        run: ./nukelabctl lint backend
 
   lint-frontend:
     name: Lint Frontend
