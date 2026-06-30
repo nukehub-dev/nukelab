@@ -1,24 +1,16 @@
 FROM nukelab-base:latest
 
-# Install nginx and ttyd (web terminal)
-RUN apt-get update && apt-get install -y nginx ttyd \
-    && rm -rf /var/lib/apt/lists/*
+# Install ttyd (web terminal) used by the dev/test environment.
+# ttyd is not packaged in Debian trixie, so fetch the upstream static binary.
+ARG TTYD_VERSION=1.7.7
+ARG TTYD_SHA256=8a217c968aba172e0dbf3f34447218dc015bc4d5e59bf51db2f2cd12b7be4f55
+RUN curl -fsSL "https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION}/ttyd.x86_64" -o /tmp/ttyd \
+    && echo "${TTYD_SHA256}  /tmp/ttyd" | sha256sum -c - \
+    && install -m 755 /tmp/ttyd /usr/local/bin/ttyd \
+    && rm -f /tmp/ttyd
 
-# Copy auth sidecar binary from services build and make it executable by all
-# users so the hardened non-root runtime can still launch it.
-COPY --from=nukelab-auth-sidecar:latest --chmod=755 /auth-sidecar /usr/local/bin/auth-sidecar
-
-# Copy nginx config
-COPY nginx.conf /etc/nginx/nginx.conf
-
-# Prepare directories so nginx can run as the non-root nukelab user.
-# When the backend enables ReadonlyRootfs, these paths are mounted as tmpfs.
-RUN mkdir -p /var/cache/nginx /var/log/nginx /var/run \
-    && chown -R nukelab:nukelab /var/cache/nginx /var/log/nginx /var/run /etc/nginx \
-    && chmod 755 /var/cache/nginx /var/log/nginx /var/run /etc/nginx
-
-# Expose the unprivileged port nginx listens on (matches nginx.conf)
-EXPOSE 8080
+# Add the terminal location block; the base nginx.conf includes conf.d/*.conf.
+COPY terminal.conf /etc/nginx/conf.d/terminal.conf
 
 # Start nginx and ttyd (writable)
 COPY --chmod=755 start.sh /start.sh

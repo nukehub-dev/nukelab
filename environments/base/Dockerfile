@@ -27,5 +27,23 @@ WORKDIR /opt/nukelab
 RUN groupadd -r nukelab -g 65532 && \
     useradd -r -g nukelab -u 65532 -m -s /bin/bash -d /home/nukelab nukelab
 
+# Copy auth sidecar binary from services build and make it executable by all
+# users so the hardened non-root runtime can still launch it.
+COPY --from=nukelab-auth-sidecar:latest --chmod=755 /auth-sidecar /usr/local/bin/auth-sidecar
+
+# Copy shared nginx config
+COPY nginx.conf /etc/nginx/nginx.conf
+
+# Prepare directories so nginx can run as the non-root nukelab user.
+# When the backend enables ReadonlyRootfs, these paths are mounted as tmpfs.
+# Drop-in config directory lets child environments add location blocks without
+# duplicating the shared auth/sidecar boilerplate.
+RUN mkdir -p /var/cache/nginx /var/log/nginx /var/run /etc/nginx/conf.d \
+    && chown -R nukelab:nukelab /var/cache/nginx /var/log/nginx /var/run /etc/nginx \
+    && chmod 755 /var/cache/nginx /var/log/nginx /var/run /etc/nginx /etc/nginx/conf.d
+
+# Expose the unprivileged port nginx listens on (matches nginx.conf)
+EXPOSE 8080
+
 # Default command
 CMD ["bash"]
