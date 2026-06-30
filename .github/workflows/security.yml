@@ -126,9 +126,18 @@ jobs:
         run: |
           python3 -c "
           import json, glob
-          merged = {'\$schema': 'https://json.schemastore.org/sarif-2.1.0.json', 'version': '2.1.0', 'runs': []}
+          runs = []
           for f in glob.glob('trivy-*.sarif'):
-              merged['runs'].extend(json.load(open(f)).get('runs', []))
+              runs.extend(json.load(open(f)).get('runs', []))
+          if not runs:
+              merged = {'\$schema': 'https://json.schemastore.org/sarif-2.1.0.json', 'version': '2.1.0', 'runs': []}
+          else:
+              merged = {'\$schema': 'https://json.schemastore.org/sarif-2.1.0.json', 'version': '2.1.0', 'runs': [{
+                  'tool': runs[0]['tool'],
+                  'results': [],
+              }]}
+              for run in runs:
+                  merged['runs'][0]['results'].extend(run.get('results', []))
           json.dump(merged, open('trivy-merged.sarif', 'w'), indent=2)
           "
 
