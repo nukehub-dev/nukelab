@@ -30,7 +30,7 @@ jobs:
           python-version: '3.13'
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '24'
 
@@ -67,7 +67,7 @@ jobs:
           python-version: '3.13'
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '24'
 
@@ -114,6 +114,7 @@ jobs:
       - name: Run Gitleaks
         uses: gitleaks/gitleaks-action@v3
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
 
       - name: Run TruffleHog
