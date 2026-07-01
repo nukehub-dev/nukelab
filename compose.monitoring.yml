@@ -124,12 +124,8 @@ services:
     depends_on:
       - redis
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9121/"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+    # NOTE: No container healthcheck is defined because the redis_exporter image
+    # is distroless and does not include wget, curl, or a shell.
 
   node-exporter:
     image: docker.io/prom/node-exporter:v1.8.2
@@ -162,12 +158,9 @@ services:
     depends_on:
       - redis
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9808/metrics"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
+    # NOTE: No container healthcheck is defined because the celery-exporter
+    # image does not include wget, curl, or nc, and there is no reliable
+    # built-in HTTP probe available.
 
 volumes:
   prometheus-data:
