@@ -125,14 +125,14 @@ User-facing server containers are spawned without an explicit non-root `User` di
 - Regression test `test_container_runs_as_non_root` passes.
 - `ContainerClient.create_container` sets both `HostConfig["User"]` and `Config["User"] = "65532:65532"` when `container_hardening_enabled` is true.
 - `environments/base/Dockerfile` pre-creates the `nukelab` user/group with uid/gid 65532.
-- `environments/dev/Dockerfile` and `environments/dev/start.sh` support starting as the non-root user.
+- `environments/dev/Dockerfile` and `environments/base/start.sh` support starting as the non-root user.
 - Live retest (2026-06-28): spawned `hardened-retest-a` via the API; `podman inspect` shows `Config.User=65532:65532` and `id` inside the container reports `uid=65532(nukelab)`.
 
 **Impact:**
 A vulnerability in a user workload (e.g., RCE via uploaded notebook) executes as root, increasing blast radius and simplifying container-escape exploits.
 
 **Remediation:**
-Set `config["User"]` in `create_container`, create a matching user inside environment images, and ensure `/home/{username}` is owned by that user. The dev image now runs nginx on unprivileged port 8080 and starts services as the container user.
+Set `config["User"]` in `create_container`, create a matching user inside environment images, and ensure `/home/{username}` is owned by that user. The base image runs nginx on unprivileged port 8080 and starts services as the container user.
 
 **Retest Criteria:**
 
@@ -198,7 +198,7 @@ Add `"CapDrop": ["ALL"]` to `HostConfig` and explicitly allow only the minimal s
 **Closed:** 2026-06-28  
 **Reporter:** Security Eng  
 **Owner:** Backend Eng  
-**Component:** `backend/app/container/client.py`, `environments/dev/nginx.conf`, `environments/dev/start.sh`
+**Component:** `backend/app/container/client.py`, `environments/base/nginx.conf`, `environments/base/start.sh`
 
 **Description:**
 Containers are started with a writable root filesystem. Malware or accidental writes can modify system binaries, install persistence, or corrupt the image.
@@ -207,7 +207,7 @@ Containers are started with a writable root filesystem. Malware or accidental wr
 
 - Regression test `test_container_has_read_only_root_filesystem` passes.
 - `ContainerClient.create_container` sets `"ReadonlyRootfs": True` and mounts writable tmpfs on `/tmp`, `/var/tmp`, `/var/run`, `/var/log/nginx`, and `/var/cache/nginx` when hardening is enabled.
-- `environments/dev/nginx.conf` logs to stderr and uses tmpfs-backed temp paths.
+- `environments/base/nginx.conf` logs to stderr and uses tmpfs-backed temp paths.
 - Live retest (2026-06-28): `podman inspect` shows `HostConfig.ReadonlyRootfs=true`; `touch /etc/testfile` inside the container fails with a read-only filesystem, while `touch /home/nukelab/testfile` succeeds.
 
 **Impact:**

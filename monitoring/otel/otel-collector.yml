@@ -25,8 +25,8 @@ processors:
         action: upsert
 
 exporters:
-  jaeger:
-    endpoint: jaeger:14250
+  otlp/jaeger:
+    endpoint: jaeger:4317
     tls:
       insecure: true
 
@@ -40,4 +40,4 @@ service:
     traces:
       receivers: [otlp]
       processors: [resource, batch]
-      exporters: [jaeger]
+      exporters: [otlp/jaeger]

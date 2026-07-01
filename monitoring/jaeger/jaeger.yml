@@ -4,7 +4,7 @@
 # Serves the Jaeger Query UI under the /jaeger sub-path so that Traefik can
 # expose it at http://localhost:8080/jaeger without stripping the prefix.
 # Memory storage is used; traces are received via OTLP and the legacy Jaeger
-# gRPC protocol (used by the OpenTelemetry Collector jaeger exporter).
+# gRPC protocol.
 # =============================================================================
 
 service:

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Docker image definitions for user-facing scientific computing environments (base, default, and development templates).
+Docker image definitions for user-facing scientific computing environments (base, workspace, default, and development templates).
 
 ## Ownership
 
@@ -11,8 +11,13 @@ All files under `environments/`.
 ## Local Contracts
 
 - Each subdirectory contains a `Dockerfile` defining one environment image.
-- `base/` is the shared base layer; `default/` and `dev/` extend it.
-- Images are built via `scripts/build-base.sh` / `scripts/build-dev.sh` or the CI/CD pipeline.
+- `base/` is the shared runtime base layer (nginx + auth-sidecar + non-root user + health endpoint).
+- `workspace/` extends `base/` with the IDE foundation (Node.js, Miniforge, nuke-ide).
+- `default/` extends `workspace/` with the full nuclear simulation stack.
+- `dev/` is a minimal terminal environment extending `base/` with `ttyd` for dev/test.
+- Child environments add drop-in nginx configs via `/etc/nginx/conf.d/` and set `NUKELAB_START_COMMAND` to launch their service behind the shared nginx.
+- Images are built via `scripts/build-base.sh`, `scripts/build-workspace.sh`, `scripts/build-default.sh`, and `scripts/build-dev.sh` or the CI/CD pipeline.
+- `scripts/build-all.sh` builds the whole set.
 
 ## Work Guidance
 
@@ -24,8 +29,7 @@ All files under `environments/`.
 ## Verification
 
 ```bash
-./scripts/build-base.sh
-./scripts/build-dev.sh
+./scripts/build-all.sh
 ```
 
 ## Child NAD Index

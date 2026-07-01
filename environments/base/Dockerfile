@@ -1,26 +1,15 @@
 FROM debian:13@sha256:3a953985c225a97dfb5a8f1ddc6a3ecefefc35ef51f537075e08941305045a1e
 
+LABEL maintainer="NukeLab <nukehub.org>"
+
 ENV DEBIAN_FRONTEND=noninteractive
-ENV NODE_VERSION=24
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     curl \
-    git \
-    build-essential \
-    python3 \
-    python3-pip \
-    nginx \
     ca-certificates \
+    nginx \
     && rm -rf /var/lib/apt/lists/*
-
-# Install Node.js 22
-RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash - \
-    && apt-get install -y nodejs \
-    && npm install -g yarn
-
-# Create app directory
-WORKDIR /opt/nukelab
 
 # Create non-root user used by hardened container runtime. Use a high UID/GID
 # to avoid collisions with distro default users.
@@ -45,5 +34,6 @@ RUN mkdir -p /var/cache/nginx /var/log/nginx /var/run /etc/nginx/conf.d \
 # Expose the unprivileged port nginx listens on (matches nginx.conf)
 EXPOSE 8080
 
-# Default command
-CMD ["bash"]
+# Start nginx and the configured application command
+COPY --chmod=755 start.sh /start.sh
+CMD ["/start.sh"]

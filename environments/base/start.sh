@@ -2,12 +2,10 @@
 # SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
 # SPDX-License-Identifier: BSD-2-Clause
 
-
 set -e
 
 # Create user dynamically based on NUKELAB_USERNAME env var
 USERNAME="${NUKELAB_USERNAME:-nukelab}"
-USER_ID="${NUKELAB_USER_ID:-1000}"
 
 RUN_AS_ROOT=false
 if [ "$(id -u)" -eq 0 ]; then
@@ -20,7 +18,7 @@ fi
 if $RUN_AS_ROOT && ! id "$USERNAME" &> /dev/null; then
     groupadd -r "$USERNAME" && \
     useradd -r -g "$USERNAME" -m -s /bin/bash -d "/home/$USERNAME" "$USERNAME"
-    echo "Created user: $USERNAME (uid: $(id -u $USERNAME))"
+    echo "Created user: $USERNAME (uid: $(id -u "$USERNAME"))"
 fi
 
 # Ensure home directory exists and is accessible.
@@ -35,10 +33,10 @@ fi
 
 # If the home directory is empty (e.g., fresh named volume), copy default
 # dotfiles from /etc/skel so the user has a functional shell environment.
-if [ -z "$(ls -A /home/$USERNAME 2>/dev/null)" ]; then
-    cp -r /etc/skel/. /home/$USERNAME/ 2>/dev/null || true
+if [ -z "$(ls -A /home/"$USERNAME" 2>/dev/null)" ]; then
+    cp -r /etc/skel/. /home/"$USERNAME"/ 2>/dev/null || true
     if $RUN_AS_ROOT; then
-        chmod -R u+rw /home/$USERNAME 2>/dev/null || true
+        chmod -R u+rw /home/"$USERNAME" 2>/dev/null || true
     fi
 fi
 
@@ -50,7 +48,7 @@ if [ "${NUKELAB_AUTH_ENABLED:-true}" = "true" ]; then
     AUTH_PID=$!
 
     # Wait for auth sidecar to be ready
-    for i in {1..10}; do
+    for _ in {1..10}; do
         if curl -sf "http://localhost:${NUKELAB_AUTH_LISTEN_ADDR##*:}/health" > /dev/null 2>&1; then
             echo "Auth sidecar is ready"
             break
@@ -59,13 +57,11 @@ if [ "${NUKELAB_AUTH_ENABLED:-true}" = "true" ]; then
     done
 fi
 
-# Start ttyd in background.
-# Under the hardened non-root runtime we cannot use su, so run the shell
-# directly as the current user.
-if $RUN_AS_ROOT; then
-    ttyd --writable -p 7681 su - "$USERNAME" &
-else
-    ttyd --writable -p 7681 /bin/bash &
+# Start the user-provided application command in the background.
+# Child environments set NUKELAB_START_COMMAND to launch their service
+if [ -n "${NUKELAB_START_COMMAND:-}" ]; then
+    echo "Starting application: $NUKELAB_START_COMMAND"
+    eval "$NUKELAB_START_COMMAND" &
 fi
 
 # Start nginx in foreground

@@ -272,8 +272,9 @@ _run_trivy() {
     local _images=(
         "nukelab-backend:latest"
         "nukelab-frontend:latest"
-        "nukelab-dev:latest"
         "nukelab-base:latest"
+        "nukelab-workspace:latest"
+        "nukelab-default:latest"
         "nukelab-auth-sidecar:latest"
     )
     for _image in "${_images[@]}"; do

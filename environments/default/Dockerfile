@@ -2,7 +2,7 @@
 # Distributed under the terms of the BSD-2-Clause license.
 
 # Define the base image for the Dockerfile
-ARG BASE_IMAGE=debian:13@sha256:3a953985c225a97dfb5a8f1ddc6a3ecefefc35ef51f537075e08941305045a1e
+ARG BASE_IMAGE=nukelab-workspace:latest
 
 # Define the Python version and JupyterHub version to be used
 ARG PYTHON_VERSION=3.12
@@ -96,44 +96,6 @@ ENV CONDA_DIR=/opt/conda \
     LANG=en_US.UTF-8 \
     LANGUAGE=en_US.UTF-8
 ENV PATH=${CONDA_DIR}/bin:${PATH}
-
-# Install Miniforge to manage Python environments
-RUN wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh -O Miniforge3.sh && \
-    bash Miniforge3.sh -b -p $CONDA_DIR && \
-    echo ". $CONDA_DIR/etc/profile.d/conda.sh" >> /etc/profile.d/conda.sh && \
-    rm Miniforge3.sh
-
-# Install Jupyter ecosystem packages into the base Conda environment
-ARG JUPYTERHUB_VERSION
-RUN mamba install --yes \
-        "jupyterhub==${JUPYTERHUB_VERSION}" \
-        jupyterlab \
-        jupyter-server-proxy \
-        nodejs && \
-    # Use npm to install yarn globally
-    npm install -g yarn && \
-    jupyter server --generate-config && \
-    # Clean up mamba and npm caches to reduce image size
-    mamba clean --all -f -y && \
-    npm cache clean --force
-
-# Copy Jupyter server configuration
-COPY jupyter_server_config.py /etc/jupyter/
-
-# Expose the Jupyter server port and set environment variables
-ENV JUPYTER_PORT=8888
-EXPOSE $JUPYTER_PORT
-
-# Install and build the nuke-ide extension
-RUN cd /opt && \
-    git clone https://github.com/nukehub-dev/nuke-ide.git && \
-    cd nuke-ide && \
-    yarn && \
-    yarn download:plugins && \
-    yarn build:browser
-
-# Set the Theia webview endpoint for rendering notebook outputs
-ENV THEIA_WEBVIEW_EXTERNAL_ENDPOINT={{hostname}}
 
 ###########################################################################
 #                              Nuclear Pack                               #
@@ -317,34 +279,14 @@ RUN pip install --no-cache-dir \
 #                     Final User and Permission Setup                     #
 ###########################################################################
 
-# Create the non-root user and set its home directory
+# Ensure the non-root user and its home directory still exist.
 ENV HOME=/home/${LAB_USER}
-RUN useradd --no-log-init --create-home --shell ${SHELL} \
-        --uid ${LAB_UID} \
-        --gid ${LAB_GID} \
-        --no-user-group \
-        ${LAB_USER} && \
-    # Remove the temporary root home directory
-    rm -rf /root && \
-    # Create a working directory for the user
-    mkdir -p ${HOME}/work && \
-    # Grant user ownership of its home directory and nuke-ide plugins
-    chown -R ${LAB_UID}:${LAB_GID} ${HOME} /opt/nuke-ide/plugins
-
-# Copy and set permissions for the container entrypoint
-COPY entrypoint.sh /etc/entrypoint.sh
-RUN chmod +x /etc/entrypoint.sh
-
-###########################################################################
-#                                Execution                                #
-###########################################################################
+RUN mkdir -p ${HOME}/work && \
+    chown -R ${LAB_UID}:${LAB_GID} ${HOME}
 
 # Switch to the non-root user for security
 USER ${LAB_UID}
 WORKDIR ${HOME}/work
-
-# Set the entrypoint script to initialize the environment
-ENTRYPOINT ["/etc/entrypoint.sh"]
 
 # Set the default command to start the Jupyter single-user server
 CMD ["jupyterhub-singleuser"]

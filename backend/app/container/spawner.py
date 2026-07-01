@@ -195,9 +195,9 @@ class ServerSpawner:
                 try:
                     await container_client.pull_image(image)
                 except Exception:
-                    # Fallback to dev image if specific env not built
-                    # (nukelab-dev has nginx and stays running)
-                    image = "nukelab-dev:latest"
+                    # Fallback to base image if specific env not built
+                    # (nukelab-base has nginx and stays running)
+                    image = "nukelab-base:latest"
 
             # Convert volumes dict to Docker bind mounts format
             # Handle both simple string format and dict format
