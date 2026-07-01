@@ -25,20 +25,11 @@ services:
         ports:
             - "4317:4317" # OTLP gRPC receiver (host access for local dev)
             - "4318:4318" # OTLP HTTP receiver (host access for local dev)
-        healthcheck:
-            test:
-                [
-                    "CMD",
-                    "wget",
-                    "--no-verbose",
-                    "--tries=1",
-                    "--spider",
-                    "http://localhost:13133/",
-                ]
-            interval: 10s
-            timeout: 5s
-            retries: 3
-            start_period: 10s
+        # NOTE: No container healthcheck is defined because the official
+        # otel/opentelemetry-collector-contrib image is distroless and does not
+        # include wget, curl, or a shell. The collector exposes its own health
+        # endpoint on port 13133, but it can only be probed from outside the
+        # container or from a sidecar that has shell tooling.
         restart: unless-stopped
         deploy:
             resources:
