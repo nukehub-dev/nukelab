@@ -93,12 +93,22 @@ function LoginPage() {
   const [authLoading, setAuthLoading] = useState(true)
   const navigate = useNavigate()
 
+  const getSafeNextPath = (): string | null => {
+    const params = new URLSearchParams(window.location.search)
+    const next = params.get('next')
+    if (next && next.startsWith('/') && !next.startsWith('//')) {
+      return next
+    }
+    return null
+  }
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const token = params.get('token')
     const refresh = params.get('refresh')
     const errMsg = params.get('error')
     const signedOut = params.get('signed_out') === '1'
+    const nextPath = getSafeNextPath()
     if (signedOut) {
       localStorage.removeItem('nukelab-token')
       localStorage.removeItem('nukelab-refresh')
@@ -115,7 +125,7 @@ function LoginPage() {
       localStorage.setItem('nukelab-token', token)
       if (refresh) localStorage.setItem('nukelab-refresh', refresh)
       document.cookie = `nukelab_token=${token}; path=/; Domain=localhost; SameSite=Lax`
-      navigate({ to: '/' })
+      navigate({ to: nextPath || '/' })
     }
   }, [navigate])
 
@@ -149,7 +159,7 @@ function LoginPage() {
       localStorage.setItem('nukelab-token', data.access_token)
       if (data.refresh_token) localStorage.setItem('nukelab-refresh', data.refresh_token)
       document.cookie = `nukelab_token=${data.access_token}; path=/; SameSite=Lax`
-      navigate({ to: '/' })
+      navigate({ to: getSafeNextPath() || '/' })
     } catch (err) {
       setError((err instanceof Error ? err.message : String(err)) || 'Login failed')
     } finally {

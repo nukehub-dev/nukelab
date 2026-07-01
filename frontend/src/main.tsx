@@ -84,6 +84,30 @@ declare module '@tanstack/react-router' {
   }
 }
 
+// Handle deep-link redirects from server containers that returned 401.
+// Server nginx redirects browser page loads to /?next=<original-path> so the
+// SPA can run the gateway flow, acquire a server access token, and redirect
+// back to the original server URL. Unauthenticated users are sent to login
+// with the same next parameter preserved.
+const searchParams = new URLSearchParams(window.location.search)
+const nextPath = searchParams.get('next')
+if (nextPath && nextPath.startsWith('/') && !nextPath.startsWith('//')) {
+  const cleanUrl = new URL(window.location.href)
+  cleanUrl.searchParams.delete('next')
+  window.history.replaceState({}, '', cleanUrl.toString())
+
+  const token = localStorage.getItem('nukelab-token')
+  if (token) {
+    router.navigate({ to: nextPath }).catch(() => {
+      // Navigation failures fall through to RouterProvider's route matching.
+    })
+  } else {
+    router.navigate({ to: '/login', search: { next: nextPath } }).catch(() => {
+      // Fall through to the login route if navigation fails.
+    })
+  }
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
