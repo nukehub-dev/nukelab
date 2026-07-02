@@ -217,6 +217,7 @@ def shutdown_idle_servers(self):
                     server.status = "stopped"
                     server.stopped_at = datetime.now(UTC).replace(tzinfo=None)
                     server.stop_reason = "idle_timeout"
+                    server.expires_at = None
 
                     # Reconcile billing
                     if server.plan_id:
@@ -501,6 +502,7 @@ def enforce_auto_stop(self):
                         server.status = "stopped"
                         server.stopped_at = now
                         server.stop_reason = stop_reason
+                        server.expires_at = None
                         await broadcast_server_status_change(
                             server.user_id, str(server.id), "stopped", {"stop_reason": stop_reason}
                         )

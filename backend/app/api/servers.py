@@ -26,6 +26,7 @@ from app.core.cache import (
 )
 from app.core.permissions import Permission
 from app.core.security import has_any_permission
+from app.core.time_utils import parse_duration
 from app.db.session import get_db
 from app.dependencies import PermissionChecker, require_permissions
 from app.models.server import Server
@@ -55,6 +56,21 @@ async def _invalidate_server_list_cache(user_id: str) -> None:
     """Invalidate cached server lists for a specific user and all admin lists."""
     await cache_delete(_server_list_cache_key(user_id))
     await cache_delete_tracked("servers:list:admin:keys")
+
+
+def _set_server_expiry(server: Server, plan) -> None:
+    """Set or clear server.expires_at based on the plan's max_runtime."""
+    if plan and plan.max_runtime:
+        try:
+            max_runtime_seconds = parse_duration(plan.max_runtime)
+            if max_runtime_seconds > 0:
+                server.expires_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(
+                    seconds=max_runtime_seconds
+                )
+                return
+        except Exception:
+            logger.exception("Failed to parse plan max_runtime '%s'", plan.max_runtime)
+    server.expires_at = None
 
 
 class VolumeMountRequest(BaseModel):
@@ -849,6 +865,7 @@ async def _perform_server_start(
     from app.services.volume_service import VolumeService
 
     # Check plan access — user may have lost access since creation
+    plan = None
     if server.plan_id:
         plan_service = PlanService(db)
         can_use = await plan_service.can_user_use_plan(
@@ -856,37 +873,32 @@ async def _perform_server_start(
         )
         if not can_use:
             raise HTTPException(status_code=403, detail="Plan no longer available for your account")
+        plan = await plan_service.get_by_id(str(server.plan_id))
 
     # Check NUKE credits before starting
-    if settings.credits_enabled and server.plan_id:
-        plan_service = PlanService(db)
-        plan = await plan_service.get_by_id(str(server.plan_id))
-        if plan and plan.cost_per_hour > 0:
-            credit_service = CreditService(db)
-            has_credits = await credit_service.check_sufficient_credits(
-                user_id=str(server.user_id), required=plan.cost_per_hour
+    if settings.credits_enabled and plan and plan.cost_per_hour > 0:
+        credit_service = CreditService(db)
+        has_credits = await credit_service.check_sufficient_credits(
+            user_id=str(server.user_id), required=plan.cost_per_hour
+        )
+        if not has_credits:
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail=f"Insufficient NUKE credits. Required: {plan.cost_per_hour} for 1 hour",
             )
-            if not has_credits:
-                raise HTTPException(
-                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                    detail=f"Insufficient NUKE credits. Required: {plan.cost_per_hour} for 1 hour",
-                )
 
     # Load volume mounts
     volume_mounts = await _load_server_volume_mounts(db, str(server.id))
 
     # Check volume quota before starting
-    if volume_mounts and server.plan_id:
+    if volume_mounts and plan:
         volume_service = VolumeService(db)
-        plan_service = PlanService(db)
-        plan = await plan_service.get_by_id(str(server.plan_id))
-        if plan:
-            all_volume_ids = [vm["volume_id"] for vm in volume_mounts]
-            quota_check = await volume_service.check_volumes_quota(all_volume_ids, plan.disk_limit)
-            if not quota_check["allowed"]:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST, detail=quota_check["reason"]
-                )
+        all_volume_ids = [vm["volume_id"] for vm in volume_mounts]
+        quota_check = await volume_service.check_volumes_quota(all_volume_ids, plan.disk_limit)
+        if not quota_check["allowed"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=quota_check["reason"]
+            )
 
     if server.container_id:
         try:
@@ -946,6 +958,7 @@ async def _perform_server_start(
                 server.external_url = new_server.external_url
                 server.stop_reason = None
                 server.stopped_at = None
+                _set_server_expiry(server, plan)
 
                 await db.commit()
                 await broadcast_server_status_change(server.user_id, server_id, "running")
@@ -963,6 +976,7 @@ async def _perform_server_start(
             server.started_at = datetime.now(UTC).replace(tzinfo=None)
             server.stop_reason = None
             server.stopped_at = None
+            _set_server_expiry(server, plan)
 
             if volume_mounts:
                 volume_service = VolumeService(db)
@@ -1033,6 +1047,7 @@ async def _perform_server_start(
             server.stopped_at = None
             server.allocated_cpu = new_server.allocated_cpu
             server.allocated_memory = new_server.allocated_memory
+            _set_server_expiry(server, plan)
             await db.commit()
 
             if volume_mounts:
@@ -1078,6 +1093,7 @@ async def _perform_server_stop(
             if actual_status == "stopped" or actual_status == "unknown":
                 server.status = "stopped"
                 server.container_id = None
+                server.expires_at = None
                 await db.commit()
                 await broadcast_server_status_change(server.user_id, server_id, "stopped")
                 return {
@@ -1090,6 +1106,7 @@ async def _perform_server_stop(
             server.container_id = None
             server.status = "stopped"
             server.stopped_at = datetime.now(UTC).replace(tzinfo=None)
+            server.expires_at = None
 
             if server.plan_id:
                 credit_service = CreditService(db)
@@ -1125,6 +1142,7 @@ async def _perform_server_stop(
             )
 
     server.status = "stopped"
+    server.expires_at = None
     await db.commit()
 
     notif_service = NotificationService(db)
@@ -1151,6 +1169,7 @@ async def _perform_server_restart(
     from app.services.plan_service import PlanService
     from app.services.volume_service import VolumeService
 
+    plan = None
     if server.plan_id:
         plan_service = PlanService(db)
         can_use = await plan_service.can_user_use_plan(
@@ -1158,34 +1177,29 @@ async def _perform_server_restart(
         )
         if not can_use:
             raise HTTPException(status_code=403, detail="Plan no longer available for your account")
-
-    if settings.credits_enabled and server.plan_id:
-        plan_service = PlanService(db)
         plan = await plan_service.get_by_id(str(server.plan_id))
-        if plan and plan.cost_per_hour > 0:
-            credit_service = CreditService(db)
-            has_credits = await credit_service.check_sufficient_credits(
-                user_id=str(server.user_id), required=plan.cost_per_hour
+
+    if settings.credits_enabled and plan and plan.cost_per_hour > 0:
+        credit_service = CreditService(db)
+        has_credits = await credit_service.check_sufficient_credits(
+            user_id=str(server.user_id), required=plan.cost_per_hour
+        )
+        if not has_credits:
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail=f"Insufficient NUKE credits. Required: {plan.cost_per_hour} for 1 hour",
             )
-            if not has_credits:
-                raise HTTPException(
-                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                    detail=f"Insufficient NUKE credits. Required: {plan.cost_per_hour} for 1 hour",
-                )
 
     volume_mounts = await _load_server_volume_mounts(db, str(server.id))
 
-    if volume_mounts and server.plan_id:
+    if volume_mounts and plan:
         volume_service = VolumeService(db)
-        plan_service = PlanService(db)
-        plan = await plan_service.get_by_id(str(server.plan_id))
-        if plan:
-            all_volume_ids = [vm["volume_id"] for vm in volume_mounts]
-            quota_check = await volume_service.check_volumes_quota(all_volume_ids, plan.disk_limit)
-            if not quota_check["allowed"]:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST, detail=quota_check["reason"]
-                )
+        all_volume_ids = [vm["volume_id"] for vm in volume_mounts]
+        quota_check = await volume_service.check_volumes_quota(all_volume_ids, plan.disk_limit)
+        if not quota_check["allowed"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=quota_check["reason"]
+            )
 
     if server.container_id:
         try:
@@ -1226,6 +1240,7 @@ async def _perform_server_restart(
                 server.external_url = new_server.external_url
                 server.stop_reason = None
                 server.stopped_at = None
+                _set_server_expiry(server, plan)
                 await db.commit()
 
                 notif_service = NotificationService(db)
@@ -1248,6 +1263,7 @@ async def _perform_server_restart(
             server.started_at = datetime.now(UTC).replace(tzinfo=None)
             server.stop_reason = None
             server.stopped_at = None
+            _set_server_expiry(server, plan)
             await db.commit()
 
             notif_service = NotificationService(db)
