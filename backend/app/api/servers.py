@@ -1097,13 +1097,19 @@ async def _perform_server_stop(
         try:
             actual_status = await spawner.get_status(server.container_id)
             if actual_status == "stopped" or actual_status == "unknown":
+                # Ensure the stale container is removed even if it is already stopped.
+                try:
+                    await spawner.delete(server.container_id)
+                except Exception:
+                    logger.exception("Warning: failed to delete stale container")
+
                 server.status = "stopped"
                 server.container_id = None
                 server.expires_at = None
                 await db.commit()
                 await broadcast_server_status_change(server.user_id, server_id, "stopped")
                 return {
-                    "message": "Server already stopped",
+                    "message": "Server stopped",
                     "server_id": server_id,
                     "status": "stopped",
                 }

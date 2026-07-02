@@ -284,30 +284,36 @@ class TestServerStop:
         action_server.status = "running"
         await db_session.commit()
 
-        with mock.patch("app.api.servers.spawner.get_status", return_value="stopped"):
+        with (
+            mock.patch("app.api.servers.spawner.get_status", return_value="stopped"),
+            mock.patch("app.api.servers.spawner.delete", return_value=True),
+        ):
             response = await client.post(
                 f"/api/servers/{action_server.id}/stop",
                 headers={"Authorization": f"Bearer {user_token}"},
             )
         assert response.status_code == 200
         data = response.json()
-        assert "already stopped" in data["message"].lower()
+        assert "stopped" in data["message"].lower()
 
     @pytest.mark.asyncio
     async def test_stop_container_unknown(self, client, user_token, action_server, db_session):
-        """Stopping server with unknown container status should return already stopped."""
+        """Stopping server with unknown container status should remove the container."""
         action_server.container_id = "unknown-cid"
         action_server.status = "running"
         await db_session.commit()
 
-        with mock.patch("app.api.servers.spawner.get_status", return_value="unknown"):
+        with (
+            mock.patch("app.api.servers.spawner.get_status", return_value="unknown"),
+            mock.patch("app.api.servers.spawner.delete", return_value=True),
+        ):
             response = await client.post(
                 f"/api/servers/{action_server.id}/stop",
                 headers={"Authorization": f"Bearer {user_token}"},
             )
         assert response.status_code == 200
         data = response.json()
-        assert "already stopped" in data["message"].lower()
+        assert "stopped" in data["message"].lower()
 
     @pytest.mark.asyncio
     async def test_stop_server_clears_expires_at(
