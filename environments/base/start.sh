@@ -44,7 +44,38 @@ export PS1="\[\e[0;32m\]${USERNAME}@\[\e[0;36m\]NukeLab\[\e[0m\]:\w\$ "
 if [ -z "$(ls -A /home/"$USERNAME" 2>/dev/null)" ]; then
     cp -r /etc/skel/. /home/"$USERNAME"/ 2>/dev/null || true
     if $RUN_AS_ROOT; then
+        # Ensure the copied files are owned by the container UID so the
+        # hardened (non-root) runtime can read/write its own home later.
+        chown -R nukelab:nukelab /home/"$USERNAME" 2>/dev/null || true
         chmod -R u+rw /home/"$USERNAME" 2>/dev/null || true
+    fi
+fi
+
+# Make sure existing (or copied) .bashrc shows the human username in the prompt.
+# The hardened runtime runs the container as the fixed nukelab UID, so bash
+# would otherwise display "nukelab" even though the real user is $USERNAME.
+BASHRC="/home/$USERNAME/.bashrc"
+PROMPT_MARKER="# NukeLab: show the human username"
+if [ -f "$BASHRC" ] && ! grep -q "$PROMPT_MARKER" "$BASHRC" 2>/dev/null; then
+    PROMPT_SNIPPET='
+# NukeLab: show the human username in the prompt
+if [ -n "${NUKELAB_USERNAME:-}" ]; then
+    export USER="$NUKELAB_USERNAME"
+    export HOME="/home/$NUKELAB_USERNAME"
+    export PS1="\[\e[0;32m\]${NUKELAB_USERNAME}@\[\e[0;36m\]NukeLab\[\e[0m\]:\w\$ "
+fi
+'
+    if [ -w "$BASHRC" ]; then
+        printf '%s' "$PROMPT_SNIPPET" >> "$BASHRC"
+    else
+        # The existing .bashrc is root-owned (e.g., from an earlier non-hardened
+        # run). The home directory is world-writable, so we can replace it with
+        # a version the container user owns.
+        TMP_RC="/home/$USERNAME/.bashrc.new.$$"
+        if cp "$BASHRC" "$TMP_RC" 2>/dev/null; then
+            printf '%s' "$PROMPT_SNIPPET" >> "$TMP_RC"
+            mv -f "$TMP_RC" "$BASHRC" 2>/dev/null || rm -f "$TMP_RC"
+        fi
     fi
 fi
 

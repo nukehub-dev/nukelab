@@ -6,7 +6,6 @@ ARG BASE_IMAGE=nukelab-workspace:latest
 
 # Define the Python version and JupyterHub version to be used
 ARG PYTHON_VERSION=3.12
-ARG JUPYTERHUB_VERSION=5.3.0
 
 # Define the number of parallel jobs for builds
 ARG CI_JOBS=14
@@ -14,7 +13,7 @@ ARG CI_JOBS=14
 # Define branches for each project to ensure reproducibility
 ARG MOAB_BRANCH="5.5.1"
 ARG DOUBLE_DOWN_BRANCH="v1.1.0"
-ARG GEANT4_BRANCH="v11.3.0"
+ARG GEANT4_BRANCH="v11.4.2"
 ARG DAGMC_BRANCH="v3.2.4"
 ARG LIBMESH_BRANCH="v1.8.1"
 ARG NJOY2016_BRANCH="2016.78"
@@ -33,20 +32,6 @@ ARG DOWNLOAD_CROSS_SECTION_DATA=ON
 # Set the base image for the Dockerfile
 FROM $BASE_IMAGE
 
-# Image Metadata and Build-time Arguments
-LABEL maintainer="NukeLab <nukehub.org>"
-ARG LAB_USER="nukelab"
-ARG LAB_UID="1000"
-ARG LAB_GID="100"
-
-# Work as root for system-wide installations
-USER root
-WORKDIR /root
-ENV HOME=/root
-
-# Use non-interactive mode for automated builds
-ENV DEBIAN_FRONTEND=noninteractive
-
 # Install all OS dependencies
 RUN apt-get update && \
     apt-get upgrade -y && \
@@ -59,10 +44,7 @@ RUN apt-get update && \
         pkg-config \
         m4 \
         # Core Utilities
-        git \
         wget \
-        ca-certificates \
-        locales \
         # Scientific and Numerical Libraries
         libblas-dev \
         liblapack-dev \
@@ -78,24 +60,12 @@ RUN apt-get update && \
         libxext-dev \
         libglu1-mesa-dev \
         # Supporting Applications and Runtimes
-        ffmpeg \
         gmsh && \
     # Remove downloaded package files to reduce the final image size.
     apt-get clean && rm -rf /var/lib/apt/lists/* && \
     # Configure the system's locale to en_US.UTF-8.
     echo "en_US.UTF-8 UTF-8" > /etc/locale.gen && \
     locale-gen
-
-# Configure core environment variables for Conda and the user
-ENV CONDA_DIR=/opt/conda \
-    SHELL=/bin/bash \
-    LAB_USER=${LAB_USER} \
-    LAB_UID=${LAB_UID} \
-    LAB_GID=${LAB_GID} \
-    LC_ALL=en_US.UTF-8 \
-    LANG=en_US.UTF-8 \
-    LANGUAGE=en_US.UTF-8
-ENV PATH=${CONDA_DIR}/bin:${PATH}
 
 ###########################################################################
 #                              Nuclear Pack                               #
@@ -273,20 +243,3 @@ RUN pip install --no-cache-dir \
         geant4-pybind \
         vmecpp \
         git+https://github.com/svalinn/pydagmc
-
-
-###########################################################################
-#                     Final User and Permission Setup                     #
-###########################################################################
-
-# Ensure the non-root user and its home directory still exist.
-ENV HOME=/home/${LAB_USER}
-RUN mkdir -p ${HOME}/work && \
-    chown -R ${LAB_UID}:${LAB_GID} ${HOME}
-
-# Switch to the non-root user for security
-USER ${LAB_UID}
-WORKDIR ${HOME}/work
-
-# Set the default command to start the Jupyter single-user server
-CMD ["jupyterhub-singleuser"]

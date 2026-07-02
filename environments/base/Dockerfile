@@ -35,6 +35,14 @@ RUN mkdir -p /var/cache/nginx /var/log/nginx /var/run /etc/nginx/conf.d \
 # Expose the unprivileged port nginx listens on (matches nginx.conf)
 EXPOSE 8080
 
+# Make login and interactive shells show the human username instead of the
+# fixed hardened-runtime account in the prompt and $USER/$HOME.
+COPY nukelab-prompt.sh /etc/profile.d/nukelab-prompt.sh
+COPY skel-bashrc-snippet.sh /tmp/skel-bashrc-snippet.sh
+RUN chmod 644 /etc/profile.d/nukelab-prompt.sh && \
+    cat /tmp/skel-bashrc-snippet.sh >> /etc/skel/.bashrc && \
+    rm /tmp/skel-bashrc-snippet.sh
+
 # Start nginx and the configured application command
 COPY --chmod=755 start.sh /start.sh
 CMD ["/start.sh"]

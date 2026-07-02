@@ -252,12 +252,15 @@ class ServerSpawner:
             #   - Slow recursive chown on large volumes (50GB / 100k files)
             #   - Ownership fights when a volume is shared across multiple users
             #     (each container would otherwise chown to its own user)
-            # /home/{username} is already handled by the container's /start.sh.
+            # The home directory also needs this in hardened mode because /start.sh
+            # runs as the non-root container user and cannot chmod it itself.
+            mount_paths_to_fix = [home_mount_path]
             for mount in volume_mounts or []:
                 mount_path = mount.get("mount_path", "/data")
-                # Skip the home directory — /start.sh manages that
-                if mount_path == f"/home/{username}":
-                    continue
+                if mount_path and mount_path not in mount_paths_to_fix:
+                    mount_paths_to_fix.append(mount_path)
+
+            for mount_path in mount_paths_to_fix:
                 try:
                     exec_instance = await container.exec(["chmod", "777", mount_path])
                     await exec_instance.start(detach=True)
