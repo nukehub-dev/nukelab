@@ -5,30 +5,30 @@ NukeLab is a multi-user scientific computing platform. It exposes a web manageme
 ## High-level request flow
 
 ```
-                         ┌───────────────────────────────────────┐
-                         │           Traefik v3                  │
-                         │  Reverse proxy + TLS + routing        │
-                         │                                       │
-                         │   /*        /api/*      /user/{u}/*   │
-                         └──────┬──────────┬──────────────┬──────┘
-                                │          │              │
-                                ▼          ▼             ▼
-                         ┌──────────┐  ┌──────────┐  ┌──────────────┐
-                         │  Vite    │  │ FastAPI  │  │ NukeIDE      │
-                         │  React   │  │ Backend  │  │ Container    │
-                         │  SPA     │  │          │  │ (nginx +     │
-                         │          │  │          │  │  Theia IDE)  │
-                         └────┬─────┘  └────┬─────┘  └──────┬───────┘
-                              │             │               │
-                              │             │               │
-                              └─────────────┼───────────────┘
-                                            │
-                              ┌─────────────┼─────────────┐
-                              ▼             ▼            ▼
-                        ┌──────────┐  ┌──────────┐  ┌──────────┐
-                        │PostgreSQL│  │  Redis   │  │  Celery  │
-                        │   18     │  │          │  │ Workers  │
-                        └──────────┘  └──────────┘  └──────────┘
+                         +--------------------------------+
+                         |          Traefik v3            |
+                         |  Reverse proxy + TLS + routing |
+                         |                                |
+                         |   /*      /api/*    /user/{u}/*|
+                         +------+--------+-------------+--+
+                                |        |             |
+                                v        v             v
+                         +----------+  +----------+  +--------------+
+                         |  Vite    |  | FastAPI  |  |   NukeIDE    |
+                         |  React   |  | Backend  |  |  Container   |
+                         |   SPA    |  |          |  | (nginx +     |
+                         |          |  |          |  |  Theia IDE)  |
+                         +-----+----+  +-----+----+  +------+-------+
+                               |             |              |
+                               |             |              |
+                               +-------------+--------------+
+                                             |
+                          +------------------+------------------+
+                          v                  v                  v
+                    +----------+      +----------+      +----------+
+                    |PostgreSQL|      |  Redis   |      |  Celery  |
+                    |    18    |      |          |      | Workers  |
+                    +----------+      +----------+      +----------+
 ```
 
 ## What each path is for

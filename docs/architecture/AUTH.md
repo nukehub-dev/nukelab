@@ -6,24 +6,24 @@ NukeLab uses a dual authentication strategy: **local username/password** for dev
 
 ```
 Browser
-  │
-  ▼
+  |
+  v
 React login form
-  │
-  ▼
+  |
+  v
 POST /api/auth/login
-  │
-  ▼
+  |
+  v
 FastAPI
-  │
-  ├──► bcrypt password verification
-  │
-  └──► Generate EdDSA-signed JWT
-        │
-        ▼
+  |
+  +---> bcrypt password verification
+  |
+  +---> Generate EdDSA-signed JWT
+        |
+        v
       Client stores access token + refresh token
-        │
-        ▼
+        |
+        v
       Subsequent requests send Authorization: Bearer <token>
 ```
 
@@ -33,23 +33,23 @@ Local auth is controlled by `AUTH_MODE=local` or `AUTH_MODE=both`. The dev admin
 
 ```
 Browser
-  │
-  ▼
+  |
+  v
 React app redirects to OAuth provider
-  │
-  ▼
+  |
+  v
 OAuth provider (Keycloak, Auth0, Okta, Authentik, etc.)
-  │
-  ▼
+  |
+  v
 Provider redirects to /api/auth/oauth/callback
-  │
-  ▼
+  |
+  v
 FastAPI validates authorization code + PKCE
-  │
-  ▼
+  |
+  v
 FastAPI fetches user info and issues local JWT
-  │
-  ▼
+  |
+  v
 Client stores tokens and uses them for API calls
 ```
 
@@ -99,20 +99,20 @@ system:config         - Modify platform configuration
 Each user container runs an nginx proxy that validates a short-lived, server-scoped token before forwarding to the Theia IDE.
 
 ```
-User Request ──► Traefik ──► NukeIDE Container :80
-                                     │
-                                     ▼
-                             ┌───────────────┐
-                             │  nginx proxy  │
-                             │  auth_request │
-                             │  /auth        │
-                             └───────┬───────┘
-                                     │
-                                     ▼
-                             ┌───────────────┐
-                             │    NukeIDE    │
-                             │   port 3000   │
-                             └───────────────┘
+User Request ---> Traefik ---> NukeIDE Container :80
+                                     |
+                                     v
+                             +---------------+
+                             |  nginx proxy  |
+                             |  auth_request |
+                             |  /auth        |
+                             +-------+-------+
+                                     |
+                                     v
+                             +---------------+
+                             |    NukeIDE    |
+                             |   port 3000   |
+                             +---------------+
 ```
 
 The nginx `auth_request` subrequest calls `/api/auth/verify` on the FastAPI backend. The backend validates the server token and confirms that the requesting user is authorized to access that specific container.

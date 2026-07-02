@@ -21,20 +21,20 @@ This document describes the major runtime components, their responsibilities, an
 
 ```
 Browser
-  │
-  ├──► Traefik ──► Frontend SPA (static files)
-  │
-  ├──► Traefik ──► FastAPI ──► PostgreSQL
-  │                  │    │
-  │                  │    ├──► Redis
-  │                  │    │
-  │                  │    └──► Celery workers
-  │                  │
-  │                  └──► Docker/Podman daemon
-  │                         │
-  │                         └──► ContainerClient / ServerSpawner
-  │
-  └──► Traefik ──► NukeIDE container ──► nginx auth proxy ──► Theia
+  |
+  +---> Traefik ---> Frontend SPA (static files)
+  |
+  +---> Traefik ---> FastAPI ---> PostgreSQL
+  |                   |    |
+  |                   |    +---> Redis
+  |                   |    |
+  |                   |    +---> Celery workers
+  |                   |
+  |                   +---> Docker/Podman daemon
+  |                          |
+  |                          +---> ContainerClient / ServerSpawner
+  |
+  +---> Traefik ---> NukeIDE container ---> nginx auth proxy ---> Theia
 ```
 
 ## Per-component responsibilities

@@ -240,16 +240,16 @@ Only implement when query profiling proves reads are the bottleneck. For most wo
 
 ```
 Slow queries?
-  └── Yes → Add indexes? (check EXPLAIN ANALYZE)
-      └── Already indexed? → Check dead tuples (autovacuum)
-          └── Still slow? → Check if reads dominate (>70%)
-              └── Yes → Consider read replicas
+  +---> Yes ---> Add indexes? (check EXPLAIN ANALYZE)
+      +---> Already indexed? ---> Check dead tuples (autovacuum)
+          +---> Still slow? ---> Check if reads dominate (>70%)
+              +---> Yes ---> Consider read replicas
 
 Too many connections?
-  └── Yes → Enable PgBouncer overlay
+  +---> Yes ---> Enable PgBouncer overlay
 
 Disk filling up?
-  └── Yes → Run db_profiler.py drop-old
+  +---> Yes ---> Run db_profiler.py drop-old
 ```
 
 ---

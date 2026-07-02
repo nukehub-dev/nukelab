@@ -19,41 +19,41 @@ A server can be in one of these states:
 
 ```
 User clicks "Spawn"
-        │
-        ▼
+        |
+        v
 POST /api/servers
-        │
-        ▼
+        |
+        v
 FastAPI validates auth, permissions, quota, credits
-        │
-        ▼
+        |
+        v
 ResourcePoolService checks available CPU, memory, disk
-        │
-        ├──► Insufficient resources ──► Queue server request
-        │
-        └──► Resources available
-                │
-                ▼
+        |
+        +---> Insufficient resources ---> Queue server request
+        |
+        +---> Resources available
+                |
+                v
         ServerSpawner.spawn()
-                │
-                ├──► Ensure persistent volume exists
-                │
-                ├──► Pull environment image if missing
-                │
-                ├──► Create container with plan limits
-                │     (NanoCpus, Memory, Cpuset, StorageOpt)
-                │
-                ├──► Attach Traefik routing labels
-                │     traefik.http.routers.{name}.rule=Host(...) && PathPrefix(/user/{username}/{server_id})
-                │
-                ├──► Start container
-                │
-                └──► Wait for readiness via HTTP health check
-                │
-                ▼
+                |
+                +---> Ensure persistent volume exists
+                |
+                +---> Pull environment image if missing
+                |
+                +---> Create container with plan limits
+                |     (NanoCpus, Memory, Cpuset, StorageOpt)
+                |
+                +---> Attach Traefik routing labels
+                |     traefik.http.routers.{name}.rule=Host(...) && PathPrefix(/user/{username}/{server_id})
+                |
+                +---> Start container
+                |
+                +---> Wait for readiness via HTTP health check
+                |
+                v
         Update server status to running
-                │
-                ▼
+                |
+                v
         Publish WebSocket event server.status_changed
 ```
 
@@ -63,21 +63,21 @@ Starting a stopped server reuses the existing container if possible. If the cont
 
 ```
 POST /api/servers/{id}/start
-        │
-        ▼
+        |
+        v
 Validate credits and quota
-        │
-        ▼
+        |
+        v
 Check existing container
-        │
-        ├──► Container exists ──► Start it
-        │
-        └──► Container missing ──► Recreate from server record
-                │
-                ▼
+        |
+        +---> Container exists ---> Start it
+        |
+        +---> Container missing ---> Recreate from server record
+                |
+                v
         Wait for readiness
-                │
-                ▼
+                |
+                v
         Update status and emit event
 ```
 
@@ -85,21 +85,21 @@ Check existing container
 
 ```
 POST /api/servers/{id}/stop
-        │
-        ▼
+        |
+        v
 FastAPI records actor and reason
-        │
-        ▼
+        |
+        v
 ContainerClient.stop_container()
-        │
-        ├──► Send SIGTERM with configurable timeout
-        │
-        └──► Force kill if timeout exceeded
-        │
-        ▼
+        |
+        +---> Send SIGTERM with configurable timeout
+        |
+        +---> Force kill if timeout exceeded
+        |
+        v
 Update server status to stopped
-        │
-        ▼
+        |
+        v
 Emit server.status_changed event
 ```
 
@@ -111,23 +111,23 @@ Restart is implemented as a stop followed by a start, preserving the same server
 
 ```
 DELETE /api/servers/{id}
-        │
-        ▼
+        |
+        v
 Validate delete permission
-        │
-        ▼
+        |
+        v
 Stop container if running
-        │
-        ▼
+        |
+        v
 Delete container
-        │
-        ▼
+        |
+        v
 Optionally delete associated volumes (admin-only bulk action)
-        │
-        ▼
+        |
+        v
 Mark server as deleted or remove record
-        │
-        ▼
+        |
+        v
 Emit server.status_changed event
 ```
 

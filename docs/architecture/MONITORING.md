@@ -47,17 +47,17 @@ faster.
 ## Architecture
 
 ```
-┌─────────────┐  scrape  ┌─────────────┐  query  ┌─────────┐
-│  FastAPI    │─────────►│  Prometheus │◄────────│ Grafana │
-│ /api/metrics│  15s     │   :9090     │         │  :3001  │
-└─────────────┘          └─────────────┘         └─────────┘
-        ▲                        ▲
-        │ scrape                 │ scrape
-        ▼                        ▼
-┌─────────────┐          ┌─────────────┐
-│ postgres-   │          │ redis-      │
-│ exporter    │          │ exporter    │
-└─────────────┘          └─────────────┘
++-------------+  scrape  +-------------+  query  +---------+
+|  FastAPI    |--------->|  Prometheus |<--------| Grafana |
+| /api/metrics|   15s    |   :9090     |         |  :3001  |
++-------------+          +-------------+         +---------+
+        ^                        ^
+        | scrape                 | scrape
+        v                        v
++-------------+          +-------------+
+| postgres-   |          | redis-      |
+| exporter    |          | exporter    |
++-------------+          +-------------+
 ```
 
 When `PGBOUNCER_ENABLED=true`, `nukelabctl` also adds the PgBouncer exporter
@@ -91,11 +91,11 @@ refreshed every 60 seconds by the Celery Beat task
 
 Two dashboards are provisioned automatically:
 
-- **NukeLab API Performance** (`nukelab-api`)  
+- **NukeLab API Performance** (`nukelab-api`)
   RPS, error rate, p50/p95/p99 latency, status-code breakdown, top slowest
   endpoints, WebSocket connections, Redis cache hit ratio.
 
-- **NukeLab Infrastructure** (`nukelab-infrastructure`)  
+- **NukeLab Infrastructure** (`nukelab-infrastructure`)
   Backend memory, Postgres connections/transactions, Redis memory/clients,
   business metrics, Celery throughput.
 
@@ -122,17 +122,17 @@ OTEL_TRACES_ENABLED=true
 ### Architecture
 
 ```
-┌──────────┐  OTLP/gRPC   ┌───────────────┐  OTLP/gRPC   ┌─────────┐
-│ FastAPI  │─────────────►│ OTel Collector│─────────────►│ Jaeger  │
-│ Celery   │              │ :4317 / :4318 │              │ :16686  │
-└──────────┘              └───────────────┘              └─────────┘
-                                                                  │
-                                                                  ▼
-                                                            ┌─────────┐
-                                                            │ Grafana │
-                                                            │ (Jaeger │
-                                                            │  ds)    │
-                                                            └─────────┘
++----------+  OTLP/gRPC   +---------------+  OTLP/gRPC   +---------+
+| FastAPI  |------------->| OTel Collector|------------->| Jaeger  |
+| Celery   |              | :4317 / :4318 |              | :16686  |
++----------+              +---------------+              +---------+
+                                                               |
+                                                               v
+                                                         +---------+
+                                                         | Grafana |
+                                                         | (Jaeger |
+                                                         |  ds)    |
+                                                         +---------+
 ```
 
 ### Access the UIs
@@ -198,8 +198,8 @@ skewed earlier benchmarks.
 
 ## Verifying the Stack
 
-1. Check the Prometheus targets page:  
-   <http://localhost:9090/targets>  
+1. Check the Prometheus targets page:
+   <http://localhost:9090/targets>
    `nukelab-backend` should be **UP**.
 
 2. Scrape the metrics endpoint directly:
