@@ -2,7 +2,6 @@
 # SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
 # SPDX-License-Identifier: BSD-2-Clause
 
-
 # Build the NukeLab auth sidecar Docker image
 # This is a production-ready authentication sidecar for server containers.
 #
@@ -35,7 +34,7 @@ while [[ $# -gt 0 ]]; do
             REGISTRY="$2"
             shift 2
             ;;
-        --help|-h)
+        --help | -h)
             echo "Usage: $0 [OPTIONS]"
             echo ""
             echo "Options:"

@@ -107,14 +107,14 @@ process_files() {
             fi
         done < <(find "$dir" \
             -type d \( \
-                -name '.venv' -o \
-                -name '.venv-dev' -o \
-                -name 'node_modules' -o \
-                -name '__pycache__' -o \
-                -name '.git' -o \
-                -name 'dist' -o \
-                -name 'build' -o \
-                -name 'test-results' \
+            -name '.venv' -o \
+            -name '.venv-dev' -o \
+            -name 'node_modules' -o \
+            -name '__pycache__' -o \
+            -name '.git' -o \
+            -name 'dist' -o \
+            -name 'build' -o \
+            -name 'test-results' \
             \) -prune -o \
             -type f -name "$pattern" -print0)
     done

@@ -14,21 +14,21 @@ ENV_FILE="${1:-$PROJECT_ROOT/.env}"
 # Read a single KEY=VALUE line from the env file safely.
 # Falls back to the current environment value or an empty string.
 read_env() {
-  local key="$1"
-  local value=""
-  if [ -f "$ENV_FILE" ]; then
-    value="$(grep "^${key}=" "$ENV_FILE" | tail -n1 | cut -d= -f2-)"
-  fi
-  printf '%s' "$value"
+    local key="$1"
+    local value=""
+    if [ -f "$ENV_FILE" ]; then
+        value="$(grep "^${key}=" "$ENV_FILE" | tail -n1 | cut -d= -f2-)"
+    fi
+    printf '%s' "$value"
 }
 
 # Resolve a value: environment variable wins, then env file, then default.
 resolve() {
-  local key="$1"
-  local default_value="$2"
-  local env_value=""
-  env_value="$(read_env "$key")"
-  printf '%s' "${!key:-${env_value:-$default_value}}"
+    local key="$1"
+    local default_value="$2"
+    local env_value=""
+    env_value="$(read_env "$key")"
+    printf '%s' "${!key:-${env_value:-$default_value}}"
 }
 
 export SMTP_HOST="$(resolve SMTP_HOST localhost)"
@@ -45,19 +45,19 @@ export ALERTMANAGER_DEADMAN_URL="$(resolve ALERTMANAGER_DEADMAN_URL http://local
 
 mkdir -p "$PROJECT_ROOT/monitoring/alertmanager"
 
-if ! command -v envsubst >/dev/null 2>&1; then
-  echo "envsubst not found. Install gettext or add it to the PATH." >&2
-  exit 1
+if ! command -v envsubst > /dev/null 2>&1; then
+    echo "envsubst not found. Install gettext or add it to the PATH." >&2
+    exit 1
 fi
 
 envsubst < "$PROJECT_ROOT/monitoring/alertmanager/alertmanager.yml.tpl" \
-  > "$PROJECT_ROOT/monitoring/alertmanager/alertmanager.generated.yml"
+    > "$PROJECT_ROOT/monitoring/alertmanager/alertmanager.generated.yml"
 
 # If no SMTP user is configured, drop the auth lines so Alertmanager does not
 # try to authenticate against a local/open relay.
 if [ -z "$SMTP_USER" ]; then
-  sed -i '/^  smtp_auth_username:/d; /^  smtp_auth_password:/d' \
-    "$PROJECT_ROOT/monitoring/alertmanager/alertmanager.generated.yml"
+    sed -i '/^  smtp_auth_username:/d; /^  smtp_auth_password:/d' \
+        "$PROJECT_ROOT/monitoring/alertmanager/alertmanager.generated.yml"
 fi
 
 echo "Generated $PROJECT_ROOT/monitoring/alertmanager/alertmanager.generated.yml"

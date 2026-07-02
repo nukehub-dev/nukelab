@@ -185,17 +185,20 @@ _lint_markdown() {
     return $_exit
 }
 
-# Lint all shell scripts under nukelabctl / scripts/ with shellcheck, and
-# verify shfmt formatting against .editorconfig. With --fix, applies shfmt -w
+# Lint all shell scripts under nukelabctl / scripts/ / environments/ and
+# check shfmt formatting against .editorconfig. With --fix, applies shfmt -w
 # in place (shellcheck findings are reported but not auto-fixed — its
 # auto-fixer is opt-in per-rule and rarely safe to apply blindly).
 _lint_shell() {
     local _exit=0
     local _shell_files=(nukelabctl scripts/lib.sh scripts/nukelabctl-completion.bash)
     local f
-    for f in scripts/manage.d/*.sh; do
+
+    # Collect every .sh under scripts/ and environments/ so new subdirectories
+    # (e.g. scripts/environments, scripts/services) are linted automatically.
+    while IFS= read -r -d '' f; do
         _shell_files+=("$f")
-    done
+    done < <(find scripts environments -type f -name '*.sh' -print0 | sort -z)
 
     # The static analyzer is run in two passes: errors fail the lint, warnings
     # are surfaced but non-fatal because many are cross-file false positives

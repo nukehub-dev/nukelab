@@ -2,7 +2,6 @@
 # SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
 # SPDX-License-Identifier: BSD-2-Clause
 
-
 # Assign command line arguments to variables
 download_cross_section_data=$1
 cross_section_data_lib=$2

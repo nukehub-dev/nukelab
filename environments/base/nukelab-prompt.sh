@@ -1,5 +1,6 @@
 # SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
 # SPDX-License-Identifier: BSD-2-Clause
+# shellcheck shell=bash
 
 # Use the real human username for the shell identity and prompt, even though
 # the hardened runtime runs every container as the fixed nukelab UID.

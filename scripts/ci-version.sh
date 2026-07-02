@@ -22,7 +22,7 @@
 set -euo pipefail
 
 _ref="${GITHUB_REF:-refs/heads/main}"
-_sha="${GITHUB_SHA:-$(git rev-parse HEAD 2>/dev/null || echo unknown)}"
+_sha="${GITHUB_SHA:-$(git rev-parse HEAD 2> /dev/null || echo unknown)}"
 _short_sha="${_sha:0:7}"
 
 _tags=()

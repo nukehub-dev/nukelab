@@ -17,8 +17,8 @@ CONTAINER_USER="${NUKELAB_CONTAINER_USER:-nukelab}"
 # terminals spawned by Theia) sees the real username.
 NSS_WRAPPER_SO=""
 for path in /usr/lib/x86_64-linux-gnu/libnss_wrapper.so \
-            /usr/lib/libnss_wrapper.so \
-            /lib/x86_64-linux-gnu/libnss_wrapper.so; do
+    /usr/lib/libnss_wrapper.so \
+    /lib/x86_64-linux-gnu/libnss_wrapper.so; do
     if [ -f "$path" ]; then
         NSS_WRAPPER_SO="$path"
         break
@@ -48,8 +48,8 @@ fi
 # The hardened runtime starts the container as the pre-created container user,
 # so the useradd path is skipped in that case.
 if $RUN_AS_ROOT && ! id "$USERNAME" &> /dev/null; then
-    groupadd -r "$USERNAME" && \
-    useradd -r -g "$USERNAME" -m -s /bin/bash -d "/home/$USERNAME" "$USERNAME"
+    groupadd -r "$USERNAME" \
+        && useradd -r -g "$USERNAME" -m -s /bin/bash -d "/home/$USERNAME" "$USERNAME"
     echo "Created user: $USERNAME (uid: $(id -u "$USERNAME"))"
 fi
 
@@ -70,13 +70,13 @@ export PS1="\[\e[0;32m\]${USERNAME}@\[\e[0;36m\]NukeLab\[\e[0m\]:\w\$ "
 
 # If the home directory is empty (e.g., fresh named volume), copy default
 # dotfiles from /etc/skel so the user has a functional shell environment.
-if [ -z "$(ls -A /home/"$USERNAME" 2>/dev/null)" ]; then
-    cp -r /etc/skel/. /home/"$USERNAME"/ 2>/dev/null || true
+if [ -z "$(ls -A /home/"$USERNAME" 2> /dev/null)" ]; then
+    cp -r /etc/skel/. /home/"$USERNAME"/ 2> /dev/null || true
     if $RUN_AS_ROOT; then
         # Ensure the copied files are owned by the container UID so the
         # hardened (non-root) runtime can read/write its own home later.
-        chown -R nukelab:nukelab /home/"$USERNAME" 2>/dev/null || true
-        chmod -R u+rw /home/"$USERNAME" 2>/dev/null || true
+        chown -R nukelab:nukelab /home/"$USERNAME" 2> /dev/null || true
+        chmod -R u+rw /home/"$USERNAME" 2> /dev/null || true
     fi
 fi
 
@@ -85,7 +85,7 @@ fi
 # would otherwise display "nukelab" even though the real user is $USERNAME.
 BASHRC="/home/$USERNAME/.bashrc"
 PROMPT_MARKER="# NukeLab: show the human username"
-if [ -f "$BASHRC" ] && ! grep -q "$PROMPT_MARKER" "$BASHRC" 2>/dev/null; then
+if [ -f "$BASHRC" ] && ! grep -q "$PROMPT_MARKER" "$BASHRC" 2> /dev/null; then
     PROMPT_SNIPPET='
 # NukeLab: show the human username in the prompt
 if [ -n "${NUKELAB_USERNAME:-}" ]; then
@@ -101,9 +101,9 @@ fi
         # run). The home directory is world-writable, so we can replace it with
         # a version the container user owns.
         TMP_RC="/home/$USERNAME/.bashrc.new.$$"
-        if cp "$BASHRC" "$TMP_RC" 2>/dev/null; then
+        if cp "$BASHRC" "$TMP_RC" 2> /dev/null; then
             printf '%s' "$PROMPT_SNIPPET" >> "$TMP_RC"
-            mv -f "$TMP_RC" "$BASHRC" 2>/dev/null || rm -f "$TMP_RC"
+            mv -f "$TMP_RC" "$BASHRC" 2> /dev/null || rm -f "$TMP_RC"
         fi
     fi
 fi
