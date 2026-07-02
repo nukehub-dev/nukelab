@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 import asyncio
+import re
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -146,7 +147,12 @@ class ServerSpawner:
             "traefik.enable": "true",
             f"traefik.http.routers.server-{server_id}.rule": f"PathPrefix(`{route_prefix}`)",
             f"traefik.http.routers.server-{server_id}.service": f"server-{server_id}",
-            f"traefik.http.routers.server-{server_id}.middlewares": f"server-{server_id}-strip@docker",
+            # Redirect prefix without trailing slash to prefix/ so relative
+            # asset URLs in the IDE index resolve under the strip prefix.
+            f"traefik.http.routers.server-{server_id}.middlewares": f"server-{server_id}-slash@docker,server-{server_id}-strip@docker",
+            f"traefik.http.middlewares.server-{server_id}-slash.redirectregex.regex": f"^(https?://[^/]+){re.escape(route_prefix)}($|\\?.*$)",
+            f"traefik.http.middlewares.server-{server_id}-slash.redirectregex.replacement": f"$1{route_prefix}/$2",
+            f"traefik.http.middlewares.server-{server_id}-slash.redirectregex.permanent": "true",
             f"traefik.http.middlewares.server-{server_id}-strip.stripprefix.prefixes": route_prefix,
             "nukelab.server.id": server_id,
             "nukelab.user.id": user_id,

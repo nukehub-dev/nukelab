@@ -58,4 +58,7 @@ ENV THEIA_WEBVIEW_EXTERNAL_ENDPOINT={{hostname}}
 COPY ide.conf /etc/nginx/conf.d/ide.conf
 
 # Start nginx and proxy authenticated requests to the IDE.
-ENV NUKELAB_START_COMMAND="yarn --cwd /opt/nuke-ide start:browser"
+# --hostname :: makes Theia listen on the IPv6 any-address (which also
+# accepts IPv4 connections), so nginx can reach it via localhost even when
+# the container resolver prefers ::1 for localhost.
+ENV NUKELAB_START_COMMAND="yarn --cwd /opt/nuke-ide/applications/browser theia start --hostname :: --plugins=local-dir:../../plugins"

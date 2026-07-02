@@ -109,6 +109,12 @@ func extractClientIP(r *http.Request) string {
 	return host
 }
 
+// isLoopback reports whether ip is a loopback address.
+func isLoopback(ip string) bool {
+	parsed := net.ParseIP(ip)
+	return parsed != nil && parsed.IsLoopback()
+}
+
 // AuthSidecar is the main authentication sidecar instance.
 type AuthSidecar struct {
 	config     *Config
@@ -387,13 +393,16 @@ func (a *AuthSidecar) HealthHandler(w http.ResponseWriter, r *http.Request) {
 
 // ValidateHandler handles token validation requests.
 func (a *AuthSidecar) ValidateHandler(w http.ResponseWriter, r *http.Request) {
-	// Rate limiting
+	// Rate limiting uses the real client IP when forwarded by the reverse proxy.
+	// Requests originating from loopback (e.g. nginx auth_request inside the same
+	// container) are exempt so that shared 127.0.0.1 traffic does not exhaust the
+	// bucket and break IDE asset loading.
 	if a.rateLimiter != nil {
-		clientIP, _, _ := net.SplitHostPort(r.RemoteAddr)
+		clientIP := extractClientIP(r)
 		if clientIP == "" {
 			clientIP = r.RemoteAddr
 		}
-		if !a.rateLimiter.Allow(clientIP) {
+		if !isLoopback(clientIP) && !a.rateLimiter.Allow(clientIP) {
 			a.logger.Printf("WARN: Rate limit exceeded for IP: %s", clientIP)
 			http.Error(w, `{"error":"rate_limit_exceeded"}`, http.StatusTooManyRequests)
 			return
