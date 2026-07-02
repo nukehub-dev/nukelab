@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
 # SPDX-License-Identifier: BSD-2-Clause
 
-# Build the NukeLab auth sidecar Docker image
+# Build the NukeLab auth sidecar container image
 # This is a production-ready authentication sidecar for server containers.
 #
 # Usage:
@@ -10,16 +10,22 @@
 #   ./scripts/services/build-auth-sidecar.sh --push    # Build and push to registry
 #   ./scripts/services/build-auth-sidecar.sh --tag v1.0.0
 
-set -e
+set -euo pipefail
 
-SCRIPT_DIR="$(dirname "$0")"
-PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" > /dev/null 2>&1 && pwd)"
+# shellcheck source=scripts/lib.sh
+source "$DIR/../../scripts/lib.sh"
+
+if [ -z "${CONTAINER_ENGINE:-}" ]; then
+    detect_engine
+fi
+
+PROJECT_DIR="$DIR/../.."
 REGISTRY="${DOCKER_REGISTRY:-}"
 IMAGE_NAME="${AUTH_SIDECAR_IMAGE:-nukelab-auth-sidecar}"
-TAG="${1:-latest}"
+TAG="latest"
 PUSH=false
 
-# Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
         --push)
@@ -35,67 +41,53 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --help | -h)
-            echo "Usage: $0 [OPTIONS]"
-            echo ""
-            echo "Options:"
-            echo "  --push              Push image to registry after build"
-            echo "  --tag TAG           Set image tag (default: latest)"
-            echo "  --registry URL      Set Docker registry URL"
-            echo "  --help, -h          Show this help message"
-            echo ""
-            echo "Environment variables:"
-            echo "  DOCKER_REGISTRY     Docker registry URL"
-            echo "  AUTH_SIDECAR_IMAGE  Image name (default: nukelab-auth-sidecar)"
+            cat << EOF
+Usage: $0 [OPTIONS]
+
+Options:
+  --push              Push image to registry after build
+  --tag TAG           Set image tag (default: latest)
+  --registry URL      Set Docker registry URL
+  --help, -h          Show this help message
+
+Environment variables:
+  DOCKER_REGISTRY     Docker registry URL
+  AUTH_SIDECAR_IMAGE  Image name (default: nukelab-auth-sidecar)
+  CONTAINER_ENGINE    Container engine to use (podman|docker)
+EOF
             exit 0
             ;;
         *)
-            echo "Unknown option: $1"
-            exit 1
+            die "Unknown option: $1"
             ;;
     esac
 done
 
-# Full image name
 if [[ -n "$REGISTRY" ]]; then
     FULL_IMAGE="${REGISTRY}/${IMAGE_NAME}:${TAG}"
 else
     FULL_IMAGE="${IMAGE_NAME}:${TAG}"
 fi
 
-echo "Building NukeLab auth sidecar..."
-echo "  Image: ${FULL_IMAGE}"
-echo "  Context: ${PROJECT_DIR}/services/auth-sidecar"
+log "Building NukeLab auth sidecar..."
+log "  Image: ${FULL_IMAGE}"
+log "  Context: ${PROJECT_DIR}/services/auth-sidecar"
+log "  Builder: ${CONTAINER_ENGINE}"
 
-# Build the Docker image
 cd "${PROJECT_DIR}/services/auth-sidecar"
 
-if ! command -v docker &> /dev/null && ! command -v podman &> /dev/null; then
-    echo "Error: Neither Docker nor Podman is installed"
-    exit 1
-fi
-
-BUILDER="docker"
-if ! command -v docker &> /dev/null; then
-    BUILDER="podman"
-fi
-
-echo "Using builder: ${BUILDER}"
-
-${BUILDER} build \
+$CONTAINER_ENGINE build \
     --tag "${FULL_IMAGE}" \
     --file Dockerfile \
     .
 
-echo "Auth sidecar built successfully: ${FULL_IMAGE}"
+log_ok "Auth sidecar built successfully: ${FULL_IMAGE}"
 
-# Push if requested
 if [[ "$PUSH" == true ]]; then
-    echo "Pushing image to registry..."
-    ${BUILDER} push "${FULL_IMAGE}"
-    echo "Image pushed successfully"
+    log "Pushing image to registry..."
+    $CONTAINER_ENGINE push "${FULL_IMAGE}"
+    log_ok "Image pushed successfully"
 fi
 
-# Generate checksum for verification
-echo ""
-echo "Image details:"
-${BUILDER} images "${FULL_IMAGE}" --format "table {{.Repository}}:{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}"
+log "Image details:"
+$CONTAINER_ENGINE images "${FULL_IMAGE}" --format "table {{.Repository}}:{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}"

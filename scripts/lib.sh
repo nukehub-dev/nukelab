@@ -147,6 +147,7 @@ load_env_file() {
 # Usage: init_env [dev_mode]
 # Loads .env as base defaults, then .env.development when dev_mode is true or
 # when .env is missing and .env.development exists.
+# Exports NUKELAB_ENV_FILE so compose services can reference the active env file.
 init_env() {
     local dev_mode="${1:-false}"
 
@@ -154,14 +155,17 @@ init_env() {
     if [ -f .env ]; then
         log "Loading ${BOLD}.env${RESET}"
         load_env_file .env
+        export NUKELAB_ENV_FILE=".env"
     fi
     # In dev mode, overlay .env.development on top so dev values win
     if $dev_mode && [ -f .env.development ]; then
         log "Loading ${BOLD}.env.development${RESET} (dev overrides)"
         load_env_file .env.development
+        export NUKELAB_ENV_FILE=".env.development"
     elif [ ! -f .env ] && [ -f .env.development ]; then
         log "Loading ${BOLD}.env.development${RESET}"
         load_env_file .env.development
+        export NUKELAB_ENV_FILE=".env.development"
     elif [ ! -f .env ] && [ ! -f .env.development ]; then
         die "No environment file found.\n\n  cp .env.example .env.development"
     fi
@@ -197,6 +201,28 @@ detect_engine() {
     else
         die "No compose command found"
     fi
+}
+
+# Usage: build_environment_image <caller_script_dir> <name> <env_dir> <tag>
+# Builds an environment image using the detected container engine.
+# <caller_script_dir> is the directory containing the invoking build-*.sh script.
+build_environment_image() {
+    local caller_dir="$1"
+    local name="$2"
+    local env_dir="$3"
+    local tag="$4"
+    local root
+    root="$(cd "$caller_dir/../.." > /dev/null 2>&1 && pwd)"
+
+    if [ -z "${CONTAINER_ENGINE:-}" ]; then
+        detect_engine
+    fi
+
+    log "Building NukeLab $name..."
+    cd "$root/environments/$env_dir"
+    $CONTAINER_ENGINE build -t "$tag" .
+
+    log_ok "$name built successfully!"
 }
 
 # Usage: setup_podman_socket
