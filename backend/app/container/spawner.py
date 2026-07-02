@@ -82,9 +82,10 @@ class ServerSpawner:
         # Build Docker volumes dict from multiple mounts
         volumes = {}
 
-        # Default username/path used for the home directory; overridden in
-        # hardened mode to match the fixed container user.
-        container_username = username
+        # Mount the home directory at /home/{username}. The container runtime
+        # creates the directory with ownership matching the parent (/home is
+        # owned by the container UID in the image), so this works in both
+        # hardened (non-root) and non-hardened modes.
         home_mount_path = f"/home/{username}"
 
         if volume_mounts:
@@ -93,12 +94,13 @@ class ServerSpawner:
                 mount_path = mount.get("mount_path", "/data")
                 mode = mount.get("mode", "read_write")
 
-                # In hardened mode the container runs as a fixed non-root user.
-                # Remount any /home/{username} path to the container user's home
-                # so the named volume inherits the correct ownership from the image.
-                if settings.container_hardening_enabled and mount_path == f"/home/{username}":
-                    container_username = settings.container_user
-                    mount_path = f"/home/{settings.container_user}"
+                # Home directory volumes should use /home/{username} so the
+                # user sees their own name instead of the fixed system user.
+                if (
+                    mount_path == f"/home/{username}"
+                    or mount_path == f"/home/{settings.container_user}"
+                ):
+                    mount_path = home_mount_path
 
                 # Get volume name from database
                 if vol_id:
@@ -123,15 +125,7 @@ class ServerSpawner:
                 mount_mode = "ro" if mode == "read_only" else "rw"
                 volumes[volume_name] = {"bind": mount_path, "mode": mount_mode}
         else:
-            # In hardened mode the container runs as a fixed non-root user
-            # (nukelab) and the home volume must be mounted at that user's home
-            # directory so the named volume inherits the correct ownership from
-            # the image.
-            if settings.container_hardening_enabled:
-                container_username = settings.container_user
-                home_mount_path = f"/home/{settings.container_user}"
-
-            # Default single volume for backward compatibility
+            # Default single volume mounted at the user's home directory
             volume_name = f"nukelab-server-{username}-{server_name}-data"
             await self._ensure_volume(volume_name)
             volumes[volume_name] = {"bind": home_mount_path, "mode": "rw"}
@@ -169,9 +163,12 @@ class ServerSpawner:
         # Containers validate server access tokens using the public key only.
         environment = {
             "NUKELAB_USER_ID": user_id,
-            "NUKELAB_USERNAME": container_username,
+            "NUKELAB_USERNAME": username,
+            "NUKELAB_CONTAINER_USER": settings.container_user,
             "NUKELAB_SERVER_ID": server_id,
             "NUKELAB_SERVER_NAME": server_name,
+            "HOME": home_mount_path,
+            "USER": username,
             # Auth sidecar configuration
             "NUKELAB_AUTH_ENABLED": "true" if settings.server_auth_enabled else "false",
             "NUKELAB_AUTH_PUBLIC_KEY_PATH": "/etc/nukelab/auth/server-auth-public.pem",
@@ -221,6 +218,7 @@ class ServerSpawner:
             container = await container_client.create_container(
                 name=container_name,
                 image=image,
+                command="/start.sh",
                 env=environment,
                 labels=labels,
                 network=settings.docker_network,
@@ -228,6 +226,7 @@ class ServerSpawner:
                 memory_limit=memory,
                 disk_limit=disk,
                 volumes=volumes,
+                hostname="NukeLab",
             )
 
             # Start container

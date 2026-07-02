@@ -244,6 +244,7 @@ class ContainerClient:
         cpu_limit: float | None = None,
         memory_limit: str | None = None,
         disk_limit: str | None = None,
+        hostname: str | None = None,
     ):
         """Create a new container with graceful cgroup fallback"""
         config = {
@@ -257,6 +258,9 @@ class ContainerClient:
                 "PublishAllPorts": False,
             },
         }
+
+        if hostname:
+            config["Hostname"] = hostname
 
         if ports:
             config["ExposedPorts"] = {f"{k}/tcp": {} for k in ports}

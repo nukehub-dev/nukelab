@@ -14,7 +14,8 @@ RUN apt-get update && apt-get install -y \
 # Create non-root user used by hardened container runtime. Use a high UID/GID
 # to avoid collisions with distro default users.
 RUN groupadd -r nukelab -g 65532 && \
-    useradd -r -g nukelab -u 65532 -m -s /bin/bash -d /home/nukelab nukelab
+    useradd -r -g nukelab -u 65532 -m -s /bin/bash -d /home/nukelab nukelab && \
+    chown nukelab:nukelab /home && chmod 755 /home
 
 # Copy auth sidecar binary from services build and make it executable by all
 # users so the hardened non-root runtime can still launch it.

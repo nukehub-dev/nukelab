@@ -580,6 +580,8 @@ class TestSpawnSuccess:
         fresh_spawner.container_client.create_container.assert_awaited_once()
         call_kwargs = fresh_spawner.container_client.create_container.await_args.kwargs
         assert "nukelab-server-testuser-srv1-data" in call_kwargs["volumes"]
+        assert call_kwargs["command"] == "/start.sh"
+        assert call_kwargs["hostname"] == "NukeLab"
 
     @pytest.mark.asyncio
     async def test_spawn_with_provided_image(self, fresh_spawner):
@@ -650,11 +652,11 @@ class TestSpawnSuccess:
         call_kwargs = fresh_spawner.container_client.create_container.await_args.kwargs
         env = call_kwargs["env"]
         assert env["FOO"] == "bar"
-        expected_username = (
-            settings.container_user if settings.container_hardening_enabled else "testuser"
-        )
-        assert env["NUKELAB_USERNAME"] == expected_username
+        assert env["NUKELAB_USERNAME"] == "testuser"
+        assert env["NUKELAB_CONTAINER_USER"] == settings.container_user
         assert env["NUKELAB_SERVER_NAME"] == "srv1"
+        assert env["HOME"] == "/home/testuser"
+        assert env["USER"] == "testuser"
 
     @pytest.mark.asyncio
     async def test_spawn_with_volume_mounts_no_vol_id(self, fresh_spawner):

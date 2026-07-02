@@ -4,8 +4,11 @@
 
 set -e
 
-# Create user dynamically based on NUKELAB_USERNAME env var
+# The actual user this server is for. NUKELAB_USERNAME is the human username
+# (e.g. admin). NUKELAB_CONTAINER_USER is the fixed system account the
+# hardened runtime uses to run processes (nukelab, UID/GID 65532).
 USERNAME="${NUKELAB_USERNAME:-nukelab}"
+CONTAINER_USER="${NUKELAB_CONTAINER_USER:-nukelab}"
 
 RUN_AS_ROOT=false
 if [ "$(id -u)" -eq 0 ]; then
@@ -13,7 +16,7 @@ if [ "$(id -u)" -eq 0 ]; then
 fi
 
 # Create group and user with the provided username when running as root.
-# The hardened runtime starts the container as the pre-created nukelab user,
+# The hardened runtime starts the container as the pre-created container user,
 # so the useradd path is skipped in that case.
 if $RUN_AS_ROOT && ! id "$USERNAME" &> /dev/null; then
     groupadd -r "$USERNAME" && \
@@ -30,6 +33,11 @@ mkdir -p "/home/$USERNAME"
 if $RUN_AS_ROOT; then
     chmod 777 "/home/$USERNAME"
 fi
+
+# Export a friendly shell prompt and identity.
+export HOME="/home/$USERNAME"
+export USER="$USERNAME"
+export PS1="\[\e[0;32m\]${USERNAME}@\[\e[0;36m\]NukeLab\[\e[0m\]:\w\$ "
 
 # If the home directory is empty (e.g., fresh named volume), copy default
 # dotfiles from /etc/skel so the user has a functional shell environment.
