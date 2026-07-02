@@ -963,6 +963,7 @@ async def _perform_server_start(
                 server.volume_id = new_server.volume_id
                 server.status = "running"
                 server.started_at = datetime.now(UTC).replace(tzinfo=None)
+                server.last_activity = datetime.now(UTC).replace(tzinfo=None)
                 server.external_url = new_server.external_url
                 server.stop_reason = None
                 server.stopped_at = None
@@ -982,6 +983,7 @@ async def _perform_server_start(
 
             server.status = "running"
             server.started_at = datetime.now(UTC).replace(tzinfo=None)
+            server.last_activity = datetime.now(UTC).replace(tzinfo=None)
             server.stop_reason = None
             server.stopped_at = None
             _set_server_expiry(server, server_owner)
@@ -1049,6 +1051,7 @@ async def _perform_server_start(
             server.status = "running"
             server.external_url = new_server.external_url
             server.started_at = datetime.now(UTC).replace(tzinfo=None)
+            server.last_activity = datetime.now(UTC).replace(tzinfo=None)
             server.stop_reason = None
             server.stopped_at = None
             server.allocated_cpu = new_server.allocated_cpu
@@ -1251,6 +1254,7 @@ async def _perform_server_restart(
                 server.volume_id = new_server.volume_id
                 server.status = "running"
                 server.started_at = datetime.now(UTC).replace(tzinfo=None)
+                server.last_activity = datetime.now(UTC).replace(tzinfo=None)
                 server.external_url = new_server.external_url
                 server.stop_reason = None
                 server.stopped_at = None
@@ -1275,6 +1279,7 @@ async def _perform_server_restart(
             await spawner.start(server.container_id)
             server.status = "running"
             server.started_at = datetime.now(UTC).replace(tzinfo=None)
+            server.last_activity = datetime.now(UTC).replace(tzinfo=None)
             server.stop_reason = None
             server.stopped_at = None
             _set_server_expiry(server, server_owner)
@@ -1717,6 +1722,7 @@ async def update_server(
             server.volume_id = new_server_container.volume_id
             server.status = "running"
             server.started_at = datetime.now(UTC).replace(tzinfo=None)
+            server.last_activity = datetime.now(UTC).replace(tzinfo=None)
             server.external_url = new_server_container.external_url
             server.stop_reason = None
             server.stopped_at = None

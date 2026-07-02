@@ -10,6 +10,35 @@ set -e
 USERNAME="${NUKELAB_USERNAME:-nukelab}"
 CONTAINER_USER="${NUKELAB_CONTAINER_USER:-nukelab}"
 
+# Make system tools (whoami, id, ls -l) report the human username instead of
+# the fixed hardened-runtime account. libnss-wrapper intercepts passwd/group
+# lookups. This is needed because the container is locked to UID/GID 65532.
+# The backend may also set these via container env so every process (including
+# terminals spawned by Theia) sees the real username.
+NSS_WRAPPER_SO=""
+for path in /usr/lib/x86_64-linux-gnu/libnss_wrapper.so \
+            /usr/lib/libnss_wrapper.so \
+            /lib/x86_64-linux-gnu/libnss_wrapper.so; do
+    if [ -f "$path" ]; then
+        NSS_WRAPPER_SO="$path"
+        break
+    fi
+done
+
+if [ -n "$NSS_WRAPPER_SO" ]; then
+    NSS_WRAPPER_PASSWD="${NSS_WRAPPER_PASSWD:-/tmp/nukelab-passwd}"
+    NSS_WRAPPER_GROUP="${NSS_WRAPPER_GROUP:-/tmp/nukelab-group}"
+    echo "${USERNAME}:x:65532:65532:${USERNAME}:/home/${USERNAME}:/bin/bash" > "$NSS_WRAPPER_PASSWD"
+    echo "${USERNAME}:x:65532:" > "$NSS_WRAPPER_GROUP"
+    export NSS_WRAPPER_PASSWD
+    export NSS_WRAPPER_GROUP
+    # Prepend nss-wrapper to any existing LD_PRELOAD (e.g. libnukelab_cpu.so).
+    case ":${LD_PRELOAD}:" in
+        *:"$NSS_WRAPPER_SO":*) ;;
+        *) export LD_PRELOAD="${NSS_WRAPPER_SO}${LD_PRELOAD:+:${LD_PRELOAD}}" ;;
+    esac
+fi
+
 RUN_AS_ROOT=false
 if [ "$(id -u)" -eq 0 ]; then
     RUN_AS_ROOT=true

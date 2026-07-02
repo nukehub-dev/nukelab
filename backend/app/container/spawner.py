@@ -174,6 +174,12 @@ class ServerSpawner:
             "NUKELAB_AUTH_PUBLIC_KEY_PATH": "/etc/nukelab/auth/server-auth-public.pem",
             "NUKELAB_AUTH_ALGORITHM": settings.server_auth_key_algorithm,
             "NUKELAB_AUTH_SERVER_ID": server_id,
+            # nss-wrapper: every process, including Theia terminals, should see
+            # the human username in whoami/id/ls instead of the fixed nukelab
+            # account. start.sh writes the actual passwd/group files at runtime.
+            "LD_PRELOAD": "/usr/lib/x86_64-linux-gnu/libnss_wrapper.so",
+            "NSS_WRAPPER_PASSWD": "/tmp/nukelab-passwd",
+            "NSS_WRAPPER_GROUP": "/tmp/nukelab-group",
             **(env_vars or {}),
         }
 

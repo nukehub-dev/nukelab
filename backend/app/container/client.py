@@ -143,8 +143,10 @@ class ContainerClient:
         ld_preload = f"{preload_path}\n"
 
         # /etc/profile.d/nukelab-cpu.sh — env vars for login shells
+        # Preserve an existing LD_PRELOAD (e.g. libnss_wrapper.so) by appending
+        # the CPU mask library instead of replacing it.
         profile_script = (
-            f"export LD_PRELOAD={preload_path}\n"
+            f'export LD_PRELOAD="${{LD_PRELOAD:+${{LD_PRELOAD}}:}}{preload_path}"\n'
             f"export NUKELAB_CPU_COUNT={n}\n"
             f"export OMP_NUM_THREADS={n}\n"
             f"export MKL_NUM_THREADS={n}\n"
@@ -247,12 +249,19 @@ class ContainerClient:
         hostname: str | None = None,
     ):
         """Create a new container with graceful cgroup fallback"""
+        env_vars = dict(env or {})
+        cpu_env = self._get_cpu_env(cpu_limit)
+        # Combine LD_PRELOAD so both nss-wrapper and the CPU-mask library load.
+        if "LD_PRELOAD" in env_vars and "LD_PRELOAD" in cpu_env:
+            env_vars["LD_PRELOAD"] = f"{env_vars['LD_PRELOAD']}:{cpu_env['LD_PRELOAD']}"
+            del cpu_env["LD_PRELOAD"]
+
         config = {
             "Image": image,
             "Cmd": command.split() if command else None,
             "Labels": labels or {},
-            "Env": [f"{k}={v}" for k, v in (env or {}).items()]
-            + [f"{k}={v}" for k, v in self._get_cpu_env(cpu_limit).items()],
+            "Env": [f"{k}={v}" for k, v in env_vars.items()]
+            + [f"{k}={v}" for k, v in cpu_env.items()],
             "HostConfig": {
                 "NetworkMode": network or settings.docker_network,
                 "PublishAllPorts": False,

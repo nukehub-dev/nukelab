@@ -9,13 +9,15 @@ RUN apt-get update && apt-get install -y \
     curl \
     ca-certificates \
     nginx \
+    libnss-wrapper \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user used by hardened container runtime. Use a high UID/GID
-# to avoid collisions with distro default users.
+# to avoid collisions with distro default users. Do not create /home/nukelab;
+# the runtime mounts the real user's home at /home/<username>.
 RUN groupadd -r nukelab -g 65532 && \
-    useradd -r -g nukelab -u 65532 -m -s /bin/bash -d /home/nukelab nukelab && \
-    chown nukelab:nukelab /home && chmod 755 /home
+    useradd -r -g nukelab -u 65532 -M -s /bin/bash nukelab && \
+    mkdir -p /home && chown nukelab:nukelab /home && chmod 755 /home
 
 # Copy auth sidecar binary from services build and make it executable by all
 # users so the hardened non-root runtime can still launch it.
