@@ -4,8 +4,8 @@
 # Define the base image for the Dockerfile
 ARG BASE_IMAGE=nukelab-workspace:latest
 
-# Define the Python version and JupyterHub version to be used
-ARG PYTHON_VERSION=3.12
+# Define the Python version
+ARG PYTHON_VERSION=3.13
 
 # Define the number of parallel jobs for builds
 ARG CI_JOBS=14
@@ -62,10 +62,7 @@ RUN apt-get update && \
         # Supporting Applications and Runtimes
         gmsh && \
     # Remove downloaded package files to reduce the final image size.
-    apt-get clean && rm -rf /var/lib/apt/lists/* && \
-    # Configure the system's locale to en_US.UTF-8.
-    echo "en_US.UTF-8 UTF-8" > /etc/locale.gen && \
-    locale-gen
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 ###########################################################################
 #                              Nuclear Pack                               #
@@ -93,7 +90,9 @@ ARG PYTHON_VERSION
 RUN conda create --yes -p ${NUKE_DIR} \
         python=${PYTHON_VERSION} \
         ipykernel \
-        xeus-cling && \
+        xeus-cling \
+        paraview \
+        ocp && \
     conda clean --all -f -y
 
 # Activate the nuclear conda environment in login shells (terminals).
@@ -236,13 +235,14 @@ RUN git clone -b ${KDSOURCE_BRANCH} --recurse-submodules https://github.com/KDSo
 
 # Install remaining Python packages from PyPI and GitHub
 RUN pip install --no-cache-dir \
-        --extra-index-url https://shimwell.github.io/wheels moab \
+        --extra-index-url https://shimwell.github.io/wheels \
+        trame \
+        moab \
         montepy \
         mcpl \
         ncrystal \
         paramak \
         plasmapy \
-        cad_to_dagmc \
         geant4-pybind \
         vmecpp \
         git+https://github.com/svalinn/pydagmc
