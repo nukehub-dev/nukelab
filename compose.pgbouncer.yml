@@ -1,0 +1,132 @@
+# PgBouncer overlay for connection pooling at scale.
+# Use when approaching Postgres max_connections limits.
+#
+# Usage:
+#   Set PGBOUNCER_ENABLED=true in your .env and run:
+#     ./nukelabctl start
+#   The overlay is injected automatically by nukelabctl. You can also set
+#   DATABASE_PGBOUNCER_URL explicitly to override the generated URL.
+#
+# Or one-off:
+#   ./nukelabctl start --overlay compose.pgbouncer.yml
+#
+# Then update .env:
+#   DATABASE_HOST=postgres
+#   DATABASE_PORT=5432
+#   PGBOUNCER_ENABLED=true
+#   # Optional explicit URL (defaults to pgbouncer:6432 with the same credentials)
+#   DATABASE_PGBOUNCER_URL=postgresql+asyncpg://${DATABASE_USER}:${DATABASE_PASSWORD}@pgbouncer:6432/${DATABASE_NAME}
+#
+# IMPORTANT: Keep DATABASE_HOST=postgres and DATABASE_PORT=5432 so migrations
+# and DDL bypass PgBouncer automatically. When PgBouncer is enabled, SQLAlchemy
+# client-side pooling is disabled (NullPool) to avoid double-pooling and
+# connection storms at scale. PgBouncer becomes the single source of truth.
+
+services:
+    pgbouncer:
+        image: docker.io/edoburu/pgbouncer:v1.25.2-p0
+        container_name: nukelab-pgbouncer
+        environment:
+            # Target database. The edoburu/pgbouncer image parses a postgres:// URL
+            # to generate the [databases] section and the auth userlist.
+            DATABASE_URL: postgres://${DATABASE_USER:-nukelab}:${DATABASE_PASSWORD:-nukelab123}@${DATABASE_HOST:-postgres}:${DATABASE_PORT:-5432}/${DATABASE_NAME:-nukelab}
+
+            # Pool mode: transaction is REQUIRED for asyncpg/SQLAlchemy async.
+            # Do not change this unless you know exactly what you are doing.
+            POOL_MODE: ${PGBOUNCER_POOL_MODE:-transaction}
+
+            # PgBouncer listens on 6432 in this overlay (maps to host port 6432).
+            LISTEN_PORT: 6432
+
+            # Postgres 17+ defaults to SCRAM-SHA-256. The edoburu image stores the
+            # plaintext password in userlist.txt when this auth type is selected.
+            AUTH_TYPE: ${PGBOUNCER_AUTH_TYPE:-scram-sha-256}
+
+            # ── Client-facing limits (scale to 100k users) ─────────────────────────
+            # Max "fake" connections PgBouncer accepts from apps. 20k is safe with
+            # raised ulimits. Each app connection to PgBouncer is cheap (just a TCP
+            # socket). The real Postgres connections are bounded below.
+            MAX_CLIENT_CONN: ${PGBOUNCER_MAX_CLIENT_CONN:-20000}
+            LISTEN_BACKLOG: ${PGBOUNCER_LISTEN_BACKLOG:-4096}
+
+            # ── Backend pool sizing (tuned for Postgres max_connections=500) ───────
+            # DEFAULT_POOL_SIZE: real Postgres connections per pool.
+            # MIN_POOL_SIZE: keep this many warm connections ready.
+            # RESERVE_POOL_SIZE: emergency connections for login bursts.
+            # MAX_DB_CONNECTIONS: hard ceiling per database (all pools combined).
+            #
+            # Rule of thumb: DEFAULT_POOL_SIZE + RESERVE_POOL_SIZE should stay
+            # under ~80% of Postgres max_connections, leaving headroom for direct
+            # connections (migrations, monitoring, pg_dump, etc.).
+            DEFAULT_POOL_SIZE: ${PGBOUNCER_DEFAULT_POOL_SIZE:-100}
+            MIN_POOL_SIZE: ${PGBOUNCER_MIN_POOL_SIZE:-25}
+            RESERVE_POOL_SIZE: ${PGBOUNCER_RESERVE_POOL_SIZE:-25}
+            MAX_DB_CONNECTIONS: ${PGBOUNCER_MAX_DB_CONNECTIONS:-400}
+
+            # ── Fail-fast timeouts (critical at scale) ────────────────────────────
+            # QUERY_WAIT_TIMEOUT: how long a client waits for a backend connection.
+            #   At 100k users this MUST be short so requests queue in the app / LB
+            #   instead of hanging inside PgBouncer indefinitely.
+            QUERY_WAIT_TIMEOUT: ${PGBOUNCER_QUERY_WAIT_TIMEOUT:-15}
+            QUERY_TIMEOUT: ${PGBOUNCER_QUERY_TIMEOUT:-0}
+            CLIENT_IDLE_TIMEOUT: ${PGBOUNCER_CLIENT_IDLE_TIMEOUT:-600}
+            CLIENT_LOGIN_TIMEOUT: ${PGBOUNCER_CLIENT_LOGIN_TIMEOUT:-10}
+            IDLE_TRANSACTION_TIMEOUT: ${PGBOUNCER_IDLE_TRANSACTION_TIMEOUT:-0}
+
+            # ── Server connection lifecycle ───────────────────────────────────────
+            SERVER_IDLE_TIMEOUT: ${PGBOUNCER_SERVER_IDLE_TIMEOUT:-600}
+            SERVER_LIFETIME: ${PGBOUNCER_SERVER_LIFETIME:-3600}
+            SERVER_RESET_QUERY: ${PGBOUNCER_SERVER_RESET_QUERY:-DISCARD ALL}
+
+            # ── TCP keepalive (detect dead peers at scale) ────────────────────────
+            TCP_KEEPALIVE: ${PGBOUNCER_TCP_KEEPALIVE:-1}
+            TCP_KEEPIDLE: ${PGBOUNCER_TCP_KEEPIDLE:-30}
+            TCP_KEEPINTVL: ${PGBOUNCER_TCP_KEEPINTVL:-10}
+            TCP_KEEPCNT: ${PGBOUNCER_TCP_KEEPCNT:-3}
+
+            # ── Observability & ops ───────────────────────────────────────────────
+            # Append client hostname to application_name in pg_stat_activity.
+            # Essential for tracing which app instance owns a backend connection.
+            APPLICATION_NAME_ADD_HOST: ${PGBOUNCER_APPLICATION_NAME_ADD_HOST:-1}
+            ADMIN_USERS: ${PGBOUNCER_ADMIN_USERS:-${DATABASE_USER:-nukelab}}
+            STATS_USERS: ${PGBOUNCER_STATS_USERS:-${DATABASE_USER:-nukelab}}
+            LOG_CONNECTIONS: ${PGBOUNCER_LOG_CONNECTIONS:-0}
+            LOG_DISCONNECTIONS: ${PGBOUNCER_LOG_DISCONNECTIONS:-0}
+            STATS_PERIOD: ${PGBOUNCER_STATS_PERIOD:-300}
+        ports:
+            - "${PGBOUNCER_PORT:-6432}:6432"
+        networks:
+            - nukelab-network
+        depends_on:
+            postgres:
+                condition: service_healthy
+        restart: unless-stopped
+        # Critical for >10k client connections: raise file descriptor limits.
+        # Docker defaults (1024) will cause "too many open files" under load.
+        ulimits:
+            nofile:
+                soft: 65536
+                hard: 65536
+        deploy:
+            resources:
+                limits:
+                    cpus: "${PGBOUNCER_CPU_LIMIT:-1}"
+                    memory: "${PGBOUNCER_MEMORY_LIMIT:-512M}"
+                reservations:
+                    cpus: "${PGBOUNCER_CPU_RESERVATION:-0.25}"
+                    memory: "${PGBOUNCER_MEMORY_RESERVATION:-128M}"
+        healthcheck:
+            # Actually verify the service is listening, not just that the binary exists.
+            test: ["CMD-SHELL", "nc -z -w 2 127.0.0.1 6432 || exit 1"]
+            interval: 10s
+            timeout: 5s
+            retries: 3
+            start_period: 10s
+
+    # Ensure the backend waits for PgBouncer to be healthy before starting.
+    # Without this, the first connection attempt to pgbouncer:6432 can fail
+    # because the backend and PgBouncer were started in parallel.
+    backend:
+        depends_on:
+            pgbouncer:
+                condition: service_healthy

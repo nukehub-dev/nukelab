@@ -1,0 +1,170 @@
+# =============================================================================
+# NukeLab Traefik Dynamic Middleware Configuration
+# =============================================================================
+# These middlewares are loaded dynamically by Traefik via the file provider.
+# They are referenced in Docker labels using the @file provider syntax:
+#   traefik.http.routers.backend.middlewares=ddos-protect@file
+#
+# IMPORTANT: Traefik rate limits are IP-based. With 100M users behind
+# institutional NATs, IP-based limits CANNOT be used for user throttling.
+# Traefik limits here are DDoS-protection ONLY (very high thresholds).
+# Per-user throttling is handled by FastAPI + Redis (see backend/app/core/rate_limiter.py).
+# =============================================================================
+
+http:
+  middlewares:
+    # -------------------------------------------------------------------------
+    # DDoS Protection — General API
+    #   10,000 requests per minute per IP with burst of 5,000
+    #   Only catches bot floods / DDoS. Legitimate institutional traffic
+    #   (thousands of users behind one NAT IP) will never hit this.
+    # -------------------------------------------------------------------------
+    ddos-protect:
+      rateLimit:
+        average: 10000
+        burst: 5000
+        period: 1m
+
+    # -------------------------------------------------------------------------
+    # DDoS Protection — WebSocket
+    #   5,000 connections / messages per minute per IP with burst of 2,000
+    # -------------------------------------------------------------------------
+    ddos-protect-ws:
+      rateLimit:
+        average: 5000
+        burst: 2000
+        period: 1m
+
+    # -------------------------------------------------------------------------
+    # Security Headers
+    #   HSTS, CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy
+    # -------------------------------------------------------------------------
+    security-headers:
+      headers:
+        frameDeny: true
+        contentTypeNosniff: true
+        referrerPolicy: "strict-origin-when-cross-origin"
+        customFrameOptionsValue: "SAMEORIGIN"
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: true
+        forceSTSHeader: true
+        customRequestHeaders:
+          X-Forwarded-Proto: "https"
+        customResponseHeaders:
+          Server: "NukeLab"
+
+    permissions-policy:
+      headers:
+        customResponseHeaders:
+          Permissions-Policy: "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"
+
+    # -------------------------------------------------------------------------
+    # Content Security Policy (CSP)
+    #   Strict default-src with allowances for inline styles/scripts and ws:
+    # -------------------------------------------------------------------------
+    csp-header:
+      headers:
+        contentSecurityPolicy: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' ws: wss:; frame-ancestors 'self'; base-uri 'self'; form-action 'self';"
+
+    # Strict CSP for production builds (no unsafe-eval).
+    # Switch frontend-chain / api-chain to use this after verifying your
+    # production build does not require eval() or inline scripts beyond styles.
+    csp-header-strict:
+      headers:
+        contentSecurityPolicy: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' ws: wss:; frame-ancestors 'self'; base-uri 'self'; form-action 'self';"
+
+    # -------------------------------------------------------------------------
+    # CORS Headers (fallback when backend CORS is bypassed or unavailable)
+    # -------------------------------------------------------------------------
+    cors-headers:
+      headers:
+        accessControlAllowMethods:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
+          - OPTIONS
+        accessControlAllowHeaders:
+          - Authorization
+          - Content-Type
+          - X-Request-ID
+        accessControlMaxAge: 86400
+
+    # -------------------------------------------------------------------------
+    # IP Allowlist — Admin Panel Restriction
+    #   Restrict /admin and /api/admin/* to specific source ranges
+    #   Usage: add traefik.http.routers.X.middlewares=admin-allowlist@file
+    #   Override ranges via env or by editing this file before deploy
+    # -------------------------------------------------------------------------
+    admin-allowlist:
+      ipAllowList:
+        sourceRange:
+          - "127.0.0.1/32"
+          - "10.0.0.0/8"
+          - "172.16.0.0/12"
+          - "192.168.0.0/16"
+
+    # -------------------------------------------------------------------------
+    # Combined Chains — Convenience middleware groups
+    # -------------------------------------------------------------------------
+    api-chain:
+      chain:
+        middlewares:
+          - ddos-protect
+          - security-headers
+          - csp-header
+
+    auth-chain:
+      chain:
+        middlewares:
+          - ddos-protect
+          - security-headers
+          - csp-header
+
+    ws-chain:
+      chain:
+        middlewares:
+          - ddos-protect-ws
+          - security-headers
+          - csp-header
+
+    frontend-chain:
+      chain:
+        middlewares:
+          - security-headers
+          - csp-header
+          - permissions-policy
+
+    # -------------------------------------------------------------------------
+    # Monitoring Authentication — ForwardAuth to backend session/JWT verifier
+    #   Reuses the app's existing login (including OAuth providers). Users must
+    #   be authenticated in the app before accessing /prometheus or /grafana.
+    # -------------------------------------------------------------------------
+    monitoring-auth:
+      forwardAuth:
+        address: "http://backend:8000/api/auth/verify-admin"
+        trustForwardHeader: true
+        authRequestHeaders:
+          - "Authorization"
+          - "Cookie"
+          - "X-Forwarded-Host"
+          - "X-Forwarded-Proto"
+          - "X-Forwarded-For"
+        authResponseHeaders:
+          - "X-User-Id"
+          - "X-User-Name"
+          - "X-User-Role"
+
+    # Strip /prometheus before forwarding to Prometheus container
+    strip-prometheus:
+      stripPrefix:
+        prefixes:
+          - "/prometheus"
+
+    strip-alertmanager:
+      stripPrefix:
+        prefixes:
+          - "/alertmanager"
+

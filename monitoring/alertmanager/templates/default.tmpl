@@ -1,0 +1,41 @@
+{{ define "nukelab.alert.subject" -}}
+[{{ .Status | toUpper }}] {{ .GroupLabels.alertname }}{{ if .GroupLabels.severity }} ({{ .GroupLabels.severity }}){{ end }}
+{{- end }}
+
+{{ define "nukelab.alert.title" -}}
+{{ .GroupLabels.alertname }}{{ if .GroupLabels.severity }} — {{ .GroupLabels.severity | toUpper }}{{ end }}
+{{- end }}
+
+{{ define "nukelab.alert.text" -}}
+{{ range .Alerts }}
+{{ if .Annotations.summary }}*{{ .Annotations.summary }}*
+{{ else }}*{{ .Labels.alertname }}*
+{{ end }}
+{{ if .Annotations.description }}{{ .Annotations.description }}{{ end }}
+{{ if .Labels.instance }}Instance: {{ .Labels.instance }}{{ end }}
+{{ if .Labels.job }}Job: {{ .Labels.job }}{{ end }}
+{{ end }}
+{{- end }}
+
+{{ define "nukelab.email.html" -}}
+<!DOCTYPE html>
+<html>
+<head><title>{{ template "nukelab.alert.subject" . }}</title></head>
+<body>
+<h2>{{ template "nukelab.alert.title" . }}</h2>
+<ul>
+{{ range .Alerts }}
+  <li>
+    {{ if .Annotations.summary }}<strong>{{ .Annotations.summary }}</strong><br>
+    {{ else }}<strong>{{ .Labels.alertname }}</strong><br>
+    {{ end }}
+    {{ if .Annotations.description }}{{ .Annotations.description }}<br>{{ end }}
+    {{ if .Labels.instance }}Instance: {{ .Labels.instance }}<br>{{ end }}
+    {{ if .Labels.job }}Job: {{ .Labels.job }}<br>{{ end }}
+    Status: {{ .Status }}
+  </li>
+{{ end }}
+</ul>
+</body>
+</html>
+{{- end }}

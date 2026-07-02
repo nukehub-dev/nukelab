@@ -1,0 +1,12 @@
+# Development / formatting dependencies
+ruff==0.15.19
+
+# Security scanning
+bandit[toml]>=1.8.2,<2.0
+pip-audit==2.7.3
+
+# Testing
+pytest==9.0.3
+pytest-asyncio==1.4.0
+pytest-cov==7.1.0
+httpx==0.27.0

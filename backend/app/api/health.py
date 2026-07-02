@@ -1,0 +1,213 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
+"""
+Health and Status API endpoints.
+"""
+
+import contextlib
+import time
+
+import psutil
+import redis.asyncio as redis
+from fastapi import APIRouter, Depends
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.auth import require_jwt_auth
+from app.config import settings
+from app.core.permissions import Permission
+from app.db.session import get_db
+from app.dependencies import require_permissions
+
+router = APIRouter()
+
+
+@router.get("/")
+async def health_check():
+    """Basic health check"""
+    return {"status": "healthy", "timestamp": time.time()}
+
+
+@router.get("/detailed")
+async def detailed_health_check(
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_permissions(Permission.ADMIN_ACCESS)),
+):
+    """Detailed health check with service status"""
+
+    health_data = {"status": "healthy", "timestamp": time.time(), "services": {}, "resources": {}}
+
+    # Database check
+    try:
+        start = time.time()
+        await db.execute(text("SELECT 1"))
+        db_latency = (time.time() - start) * 1000
+        health_data["services"]["database"] = {
+            "status": "healthy",
+            "latency_ms": round(db_latency, 2),
+        }
+    except Exception as e:
+        health_data["services"]["database"] = {"status": "unhealthy", "error": str(e)}
+        health_data["status"] = "degraded"
+
+    # Redis check
+    try:
+        start = time.time()
+        redis_client = redis.from_url(settings.redis_url)
+        await redis_client.ping()
+        redis_latency = (time.time() - start) * 1000
+        await redis_client.aclose()
+        health_data["services"]["redis"] = {
+            "status": "healthy",
+            "latency_ms": round(redis_latency, 2),
+        }
+    except Exception as e:
+        health_data["services"]["redis"] = {"status": "unhealthy", "error": str(e)}
+        health_data["status"] = "degraded"
+
+    # Container runtime check
+    try:
+        from app.container.client import container_client
+
+        await container_client.connect()
+        version = await container_client.version()
+        runtime_name = "Containers"
+        components = version.get("Components", [])
+        if components and isinstance(components, list):
+            runtime_name = components[0].get("Name", "Containers").replace(" Engine", "")
+        health_data["services"]["containers"] = {
+            "status": "healthy",
+            "version": version.get("Version", "unknown"),
+            "runtime": runtime_name,
+        }
+    except Exception as e:
+        health_data["services"]["containers"] = {"status": "unhealthy", "error": str(e)}
+        health_data["status"] = "degraded"
+
+    # SMTP check
+    try:
+        from app.services.email_service import EmailService
+
+        email_service = EmailService()
+        if email_service.enabled:
+            import aiosmtplib
+
+            smtp = aiosmtplib.SMTP(
+                hostname=email_service.smtp_host,
+                port=email_service.smtp_port,
+                timeout=3,
+                start_tls=False,
+                validate_certs=email_service.verify_certs,
+            )
+            await smtp.connect()
+            if email_service.use_tls:
+                await smtp.starttls(validate_certs=email_service.verify_certs)
+            await smtp.quit()
+            health_data["services"]["smtp"] = {
+                "status": "healthy",
+                "host": email_service.smtp_host,
+                "port": email_service.smtp_port,
+            }
+        else:
+            health_data["services"]["smtp"] = {
+                "status": "disabled",
+                "message": "SMTP not configured",
+            }
+    except Exception as e:
+        health_data["services"]["smtp"] = {"status": "unhealthy", "error": str(e)}
+        health_data["status"] = "degraded"
+
+    # System resources
+    try:
+
+        def get_disk_info(path: str):
+            usage = psutil.disk_usage(path)
+            return {
+                "path": path,
+                "percent": usage.percent,
+                "total_bytes": usage.total,
+                "used_bytes": usage.used,
+                "free_bytes": usage.free,
+            }
+
+        disk_info = get_disk_info("/")
+        container_disk_info = None
+        if settings.volume_storage_path:
+            with contextlib.suppress(Exception):
+                container_disk_info = get_disk_info(settings.volume_storage_path)
+
+        fs_type = None
+        try:
+            for part in psutil.disk_partitions(all=False):
+                if part.mountpoint == "/":
+                    fs_type = part.fstype
+                    break
+        except Exception:
+            pass
+
+        health_data["resources"] = {
+            "cpu_percent": psutil.cpu_percent(interval=0.1),
+            "memory_percent": psutil.virtual_memory().percent,
+            "disk": {**disk_info, "fstype": fs_type},
+            "load_average": psutil.getloadavg(),
+        }
+        if container_disk_info:
+            container_fs_type = None
+            try:
+                for part in psutil.disk_partitions(all=False):
+                    if part.mountpoint == settings.volume_storage_path:
+                        container_fs_type = part.fstype
+                        break
+            except Exception:
+                pass
+            health_data["resources"]["container_disk"] = {
+                **container_disk_info,
+                "fstype": container_fs_type,
+            }
+    except Exception:
+        health_data["resources"] = {
+            "cpu_percent": 0,
+            "memory_percent": 0,
+            "disk": {
+                "path": "/",
+                "percent": 0,
+                "total_bytes": 0,
+                "used_bytes": 0,
+                "free_bytes": 0,
+                "fstype": None,
+            },
+            "load_average": (0, 0, 0),
+        }
+
+    return health_data
+
+
+@router.get("/status")
+async def platform_status():
+    """Get platform status and feature flags"""
+    from app.services.oauth_service import oauth_service
+
+    return {
+        "version": "2.0.0",
+        "features": {
+            "auth_mode": settings.auth_mode,
+            "oauth_enabled": oauth_service.is_configured
+            and settings.auth_mode in ("oauth", "both"),
+            "oauth_provider_name": settings.oauth_provider_name
+            if oauth_service.is_configured
+            else None,
+            "registration_enabled": settings.registration_enabled,
+            "credit_system_enabled": True,
+            "websocket_enabled": True,
+            "gravatar_enabled": True,
+            "themes_enabled": True,
+            "notifications_enabled": True,
+        },
+        "limits": {
+            "max_servers_per_user": settings.max_servers_per_user,
+            "max_file_upload_size": 10485760,  # 10MB
+            "api_rate_limit": 1000,  # requests per hour
+        },
+    }

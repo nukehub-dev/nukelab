@@ -1,1 +1,99 @@
+# Environment files (all local configs)
 .env
+.env.local
+.env.production
+.env.development
+
+# But allow example template
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+eggs/
+.eggs/
+parts/
+sdist/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.next/
+out/
+dist/
+
+# Tanstack Tmp
+.tanstack/
+
+# Coverage
+.coverage
+htmlcov/
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database
+*.sqlite
+*.sqlite3
+postgres-data/
+celerybeat-schedule
+
+# Logs
+logs/
+*.log
+
+# SSL Certificates (self-signed)
+certs/*.pem
+certs/*.key
+!certs/.gitkeep
+
+# Runtime PID files
+.frontend.pid
+
+# Load test artifacts
+backend/tests/load/reports/
+backend/tests/load/tokens.json
+
+# Security scan reports
+backend/reports/
+backend/.venv-security/
+
+# Pytest cache
+.pytest_cache/
+
+# Local dev tooling virtualenv
+backend/.venv-dev/
+
+# Docker volumes / runtime state
+volumes/
+.nukelab-dev-compose.yml
+.nukelab-state.sh
+.nukelab-state-dev.sh
+
+# Generated files
+monitoring/alertmanager/alertmanager.generated.yml
+monitoring/prometheus/prometheus.generated.yml

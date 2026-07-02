@@ -1,0 +1,243 @@
+# SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+# SPDX-License-Identifier: BSD-2-Clause
+
+"""
+Server Plan API endpoints.
+"""
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.auth import require_jwt_auth
+from app.core.permissions import Permission
+from app.core.security import has_permission
+from app.db.session import get_db
+from app.dependencies import get_current_user, require_permissions
+from app.services.plan_service import PlanService
+
+router = APIRouter(tags=["plans"])
+
+
+@router.get("/")
+async def list_plans(
+    category: str | None = None,
+    is_active: bool | None = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=100),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List server plans.
+
+    Users with 'plan:read' permission see all plans.
+    Other authenticated users only see plans visible to them (public, role-based, or direct access).
+    """
+    can_read_all = has_permission(current_user, Permission.PLAN_READ)
+    service = PlanService(db)
+    result = await service.list_plans(
+        category=category,
+        is_active=is_active if can_read_all else True,
+        user_role=current_user.role,
+        user_id=str(current_user.id),
+        page=page,
+        limit=limit,
+    )
+    return {"success": True, "data": result}
+
+
+@router.get("/{plan_id}")
+async def get_plan(
+    plan_id: str, current_user=Depends(get_current_user), db: AsyncSession = Depends(get_db)
+):
+    """Get plan details.
+
+    Users with 'plan:read' permission can view any plan.
+    Other authenticated users can only view plans visible to them.
+    """
+    service = PlanService(db)
+    plan = await service.get_by_id(plan_id)
+    if not plan:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")
+
+    plan_dict = plan.to_dict()
+    can_read_all = has_permission(current_user, Permission.PLAN_READ)
+
+    if not can_read_all:
+        is_visible = await service.check_plan_access(
+            plan_id, current_user.role, str(current_user.id)
+        )
+        if not is_visible:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+
+    return {"success": True, "data": plan_dict}
+
+
+@router.post("/", status_code=status.HTTP_201_CREATED)
+async def create_plan(
+    data: dict,
+    current_user=Depends(require_permissions(Permission.PLAN_CREATE)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create new server plan (admin only)"""
+    service = PlanService(db)
+    plan = await service.create_plan(
+        name=data["name"],
+        slug=data["slug"],
+        description=data.get("description"),
+        category=data.get("category", "cpu"),
+        cpu_limit=data.get("cpu_limit", 1.0),
+        memory_limit=data.get("memory_limit", "2g"),
+        disk_limit=data.get("disk_limit", "10g"),
+        gpu_limit=data.get("gpu_limit", 0),
+        max_servers_per_user=data.get("max_servers_per_user", 3),
+        cost_per_hour=data.get("cost_per_hour", 10),
+        cooldown_seconds=data.get("cooldown_seconds", 0),
+        is_public=data.get("is_public", False),
+        visible_to_roles=data.get("visible_to_roles"),
+        priority=data.get("priority", 0),
+    )
+    return {"success": True, "data": plan.to_dict(), "message": "Plan created"}
+
+
+@router.put("/{plan_id}")
+async def update_plan(
+    plan_id: str,
+    data: dict,
+    current_user=Depends(require_permissions(Permission.PLAN_UPDATE)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update server plan (admin only)"""
+    service = PlanService(db)
+    plan = await service.update_plan(plan_id, **data)
+    return {"success": True, "data": plan.to_dict(), "message": "Plan updated"}
+
+
+@router.delete("/{plan_id}")
+async def deactivate_plan(
+    plan_id: str,
+    current_user=Depends(require_permissions(Permission.PLAN_DELETE)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Deactivate server plan (admin only)"""
+    service = PlanService(db)
+    plan = await service.deactivate_plan(plan_id)
+    return {"success": True, "data": plan.to_dict(), "message": "Plan deactivated"}
+
+
+@router.delete("/{plan_id}/permanent")
+async def delete_plan(
+    plan_id: str,
+    current_user=Depends(require_permissions(Permission.PLAN_DELETE)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Permanently delete server plan (admin only)"""
+    service = PlanService(db)
+    await service.delete_plan(plan_id)
+    return {"success": True, "message": "Plan permanently deleted"}
+
+
+@router.post("/{plan_id}/activate")
+async def activate_plan(
+    plan_id: str,
+    current_user=Depends(require_permissions(Permission.PLAN_UPDATE)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Activate server plan (admin only)"""
+    service = PlanService(db)
+    plan = await service.activate_plan(plan_id)
+    return {"success": True, "data": plan.to_dict(), "message": "Plan activated"}
+
+
+# ─── User Plan Access Endpoints ───
+
+
+@router.get("/{plan_id}/users")
+async def list_plan_users(
+    plan_id: str,
+    current_user=Depends(require_permissions(Permission.PLAN_UPDATE)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """List users with direct access to a plan (admin only)"""
+    service = PlanService(db)
+    data = await service.list_plan_users(plan_id)
+    return {"success": True, "data": data}
+
+
+@router.post("/{plan_id}/users/{user_id}")
+async def grant_user_access(
+    plan_id: str,
+    user_id: str,
+    current_user=Depends(require_permissions(Permission.PLAN_UPDATE)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Grant a user access to a plan (admin only)"""
+    service = PlanService(db)
+    access = await service.grant_user_access(plan_id, user_id, granted_by=str(current_user.id))
+    return {"success": True, "data": access.to_dict(), "message": "User access granted"}
+
+
+@router.delete("/{plan_id}/users/{user_id}")
+async def revoke_user_access(
+    plan_id: str,
+    user_id: str,
+    current_user=Depends(require_permissions(Permission.PLAN_UPDATE)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Revoke a user's access to a plan (admin only)"""
+    service = PlanService(db)
+    await service.revoke_user_access(plan_id, user_id)
+    return {"success": True, "message": "User access revoked"}
+
+
+# ─── Workspace Plan Access Endpoints ───
+
+
+@router.get("/{plan_id}/workspaces")
+async def list_plan_workspaces(
+    plan_id: str,
+    current_user=Depends(require_permissions(Permission.PLAN_UPDATE)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """List workspaces with access to a plan (admin only)"""
+    service = PlanService(db)
+    data = await service.list_plan_workspaces(plan_id)
+    return {"success": True, "data": data}
+
+
+@router.post("/{plan_id}/workspaces/{workspace_id}")
+async def grant_workspace_access(
+    plan_id: str,
+    workspace_id: str,
+    current_user=Depends(require_permissions(Permission.PLAN_UPDATE)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Grant a workspace access to a plan (admin only)"""
+    service = PlanService(db)
+    access = await service.grant_workspace_access(
+        plan_id, workspace_id, granted_by=str(current_user.id)
+    )
+    return {"success": True, "data": access.to_dict(), "message": "Workspace access granted"}
+
+
+@router.delete("/{plan_id}/workspaces/{workspace_id}")
+async def revoke_workspace_access(
+    plan_id: str,
+    workspace_id: str,
+    current_user=Depends(require_permissions(Permission.PLAN_UPDATE)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Revoke a workspace's access to a plan (admin only)"""
+    service = PlanService(db)
+    await service.revoke_workspace_access(plan_id, workspace_id)
+    return {"success": True, "message": "Workspace access revoked"}

@@ -1,0 +1,14 @@
+# PgBouncer Prometheus exporter — only useful when PgBouncer overlay is active.
+# Auto-added by nukelabctl when PGBOUNCER_ENABLED=true.
+
+services:
+  pgbouncer-exporter:
+    image: docker.io/prometheuscommunity/pgbouncer-exporter:v0.7.0
+    container_name: nukelab-pgbouncer-exporter
+    environment:
+      - PGBOUNCER_EXPORTER_CONNECTION_STRING=postgres://${DATABASE_USER:-nukelab}:${DATABASE_PASSWORD:-nukelab123}@pgbouncer:6432/pgbouncer?sslmode=disable
+    networks:
+      - nukelab-network
+    depends_on:
+      - pgbouncer
+    restart: unless-stopped

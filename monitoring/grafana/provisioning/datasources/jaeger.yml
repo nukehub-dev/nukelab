@@ -1,0 +1,19 @@
+apiVersion: 1
+
+datasources:
+  - name: Jaeger
+    type: jaeger
+    access: proxy
+    url: http://jaeger:16686
+    isDefault: false
+    editable: false
+    jsonData:
+      tracesToLogs:
+        datasourceUid: prometheus
+        tags: [service.name, enduser.id]
+        mappedTags: [{ key: service.name, value: nukelab-backend }]
+        mapTagNamesToLog: false
+        spanStartTimeShift: "1h"
+        spanEndTimeShift: "1h"
+        filterByTraceID: true
+        filterBySpanID: false

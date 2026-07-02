@@ -1,0 +1,58 @@
+*.pem
+*.key
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Local data
+backups/
+logs/
+*.log
+celerybeat-schedule
+celerybeat.pid
+
+# Alembic - will be generated at runtime if needed
+# But we DO want to include alembic/ directory for migrations
+# Only exclude local SQLite DBs
+*.db
+*.sqlite
+*.sqlite3
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Documentation (not needed in image)
+docs/
+*.md
+
+# Docker files themselves
+Dockerfile*
+docker-compose*.yml
+.dockerignore

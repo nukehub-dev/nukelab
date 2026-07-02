@@ -1,0 +1,50 @@
+# =============================================================================
+# Jaeger v2 All-in-One Configuration
+# =============================================================================
+# Serves the Jaeger Query UI under the /jaeger sub-path so that Traefik can
+# expose it at http://localhost:8080/jaeger without stripping the prefix.
+# Memory storage is used; traces are received via OTLP and the legacy Jaeger
+# gRPC protocol.
+# =============================================================================
+
+service:
+  extensions: [jaeger_storage, jaeger_query]
+  pipelines:
+    traces:
+      receivers: [otlp, jaeger]
+      processors: [batch]
+      exporters: [jaeger_storage_exporter]
+
+extensions:
+  jaeger_query:
+    # Internal route prefix that Jaeger registers its UI and REST API under.
+    # Traefik forwards the external /jaeger prefix unchanged, so this must
+    # match the path the container sees.
+    base_path: /jaeger
+    storage:
+      traces: mem_store
+
+  jaeger_storage:
+    backends:
+      mem_store:
+        memory:
+          max_traces: 100000
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+  jaeger:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:14250
+
+processors:
+  batch:
+
+exporters:
+  jaeger_storage_exporter:
+    trace_storage: mem_store
