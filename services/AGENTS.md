@@ -11,7 +11,7 @@ All directories under `services/`.
 ## Local Contracts
 
 - Each service is a self-contained runtime with its own `Dockerfile`, source, and README.
-- Services are built via `scripts/build-*.sh` helpers or the CI/CD pipeline.
+- Services are built via `scripts/services/build-*.sh` helpers or the CI/CD pipeline.
 - Service-specific language conventions are owned by the child `AGENTS.md`.
 
 ## Work Guidance

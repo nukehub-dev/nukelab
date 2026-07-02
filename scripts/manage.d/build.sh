@@ -7,6 +7,12 @@ cmd_build() {
 
     step "Building..."
 
+    if [ "$TARGET" = "env" ]; then
+        _build_environments
+        ok "Environment build complete"
+        return
+    fi
+
     if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
         log "Building backend containers..."
         _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" build backend celery-worker celery-beat
@@ -22,17 +28,56 @@ cmd_build() {
     ok "Build complete"
 }
 
+_build_environments() {
+    local _envs=()
+
+    if [ ${#EXTRA_ARGS[@]} -eq 0 ]; then
+        die "No environment specified. Usage: ./nukelabctl build env <name> [name...]"
+    fi
+
+    for _env in "${EXTRA_ARGS[@]}"; do
+        case "$_env" in
+            -*)
+                # Stop at the first flag; positional environment names are done.
+                break
+                ;;
+            *)
+                _envs+=("$_env")
+                ;;
+        esac
+    done
+
+    if [ ${#_envs[@]} -eq 0 ]; then
+        die "No environment specified. Usage: ./nukelabctl build env <name> [name...]"
+    fi
+
+    for _env in "${_envs[@]}"; do
+        local _script="$DIR/scripts/environments/build-$_env.sh"
+        if [ ! -f "$_script" ]; then
+            die "Unknown environment: $_env (no $_script)"
+        fi
+        log "Building environment: $_env"
+        _run_quiet_unless_verbose bash "$_script"
+    done
+}
+
 help_build() {
     cat <<- EOF
 ${BOLD}Usage:${RESET} ./nukelabctl build [target]
+       ./nukelabctl build env <name> [name...]
 
 Build container images.
 
-${BOLD}Targets:${RESET} backend | frontend | all
+${BOLD}Targets:${RESET} backend | frontend | all | env <name>
+
+${BOLD}Environment names:${RESET} base | workspace | radiation-transport | dev
 
 ${BOLD}Examples:${RESET}
   ./nukelabctl build
   ./nukelabctl build backend
   ./nukelabctl build frontend
+  ./nukelabctl build env base
+  ./nukelabctl build env radiation-transport
+  ./nukelabctl build env base workspace radiation-transport
 EOF
 }

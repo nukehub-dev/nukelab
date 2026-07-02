@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Docker image definitions for user-facing scientific computing environments (base, workspace, default, and development templates).
+Docker image definitions for user-facing scientific computing environments (base, workspace, radiation-transport, and development templates).
 
 ## Ownership
 
@@ -16,7 +16,7 @@ All files under `environments/`.
 - `radiation-transport/` extends `workspace/` with the full nuclear simulation stack (MOAB, OpenMC, DAGMC, Geant4, PyNE, etc.).
 - `dev/` is a minimal terminal environment extending `base/` with `ttyd` for dev/test.
 - Child environments add drop-in nginx configs via `/etc/nginx/conf.d/` and set `NUKELAB_START_COMMAND` to launch their service behind the shared nginx.
-- Images are built via `scripts/build-base.sh`, `scripts/build-workspace.sh`, `scripts/build-radiation-transport.sh`, and `scripts/build-dev.sh` or the CI/CD pipeline.
+- Images are built via `scripts/environments/build-base.sh`, `scripts/environments/build-workspace.sh`, `scripts/environments/build-radiation-transport.sh`, and `scripts/environments/build-dev.sh` or the CI/CD pipeline.
 - `scripts/build-all.sh` builds the whole set.
 
 ## Work Guidance

@@ -11,7 +11,7 @@ All files under `services/auth-sidecar/`.
 ## Local Contracts
 
 - Go modules (`go.mod` / `go.sum`); single binary built from `main.go`.
-- `Dockerfile` defines the container image; built via `scripts/build-auth-sidecar.sh` or CI.
+- `Dockerfile` defines the container image; built via `scripts/services/build-auth-sidecar.sh` or CI.
 
 ## Work Guidance
 

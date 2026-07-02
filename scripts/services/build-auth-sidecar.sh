@@ -7,14 +7,14 @@
 # This is a production-ready authentication sidecar for server containers.
 #
 # Usage:
-#   ./scripts/build-auth-sidecar.sh
-#   ./scripts/build-auth-sidecar.sh --push    # Build and push to registry
-#   ./scripts/build-auth-sidecar.sh --tag v1.0.0
+#   ./scripts/services/build-auth-sidecar.sh
+#   ./scripts/services/build-auth-sidecar.sh --push    # Build and push to registry
+#   ./scripts/services/build-auth-sidecar.sh --tag v1.0.0
 
 set -e
 
 SCRIPT_DIR="$(dirname "$0")"
-PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 REGISTRY="${DOCKER_REGISTRY:-}"
 IMAGE_NAME="${AUTH_SIDECAR_IMAGE:-nukelab-auth-sidecar}"
 TAG="${1:-latest}"

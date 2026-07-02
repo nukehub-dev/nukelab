@@ -36,13 +36,22 @@ _manage_sh_complete() {
 
 	# Command-specific completions.
 	case "$cmd" in
-	start | build | restart | remove | rm)
+	start | restart | remove | rm)
 		local opts="backend frontend all ${global_flags[*]}"
 		# start and restart both honor --no-build / --no-wait.
 		if [[ "$cmd" == "start" || "$cmd" == "restart" ]]; then
 			opts="$opts --no-build --no-wait"
 		fi
 		COMPREPLY=($(compgen -W "$opts" -- "$cur"))
+		;;
+	build)
+		if [[ "$COMP_CWORD" -eq 2 ]]; then
+			COMPREPLY=($(compgen -W "backend frontend all env ${global_flags[*]}" -- "$cur"))
+		elif [[ "${COMP_WORDS[2]}" == "env" ]]; then
+			COMPREPLY=($(compgen -W "base workspace radiation-transport dev ${global_flags[*]}" -- "$cur"))
+		else
+			COMPREPLY=($(compgen -W "${global_flags[*]}" -- "$cur"))
+		fi
 		;;
 	stop)
 		COMPREPLY=($(compgen -W "backend frontend all --timeout -t ${global_flags[*]}" -- "$cur"))

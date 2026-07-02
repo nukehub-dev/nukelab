@@ -7,7 +7,7 @@
 set -e
 
 echo "Building NukeLab workspace environment..."
-cd "$(dirname "$0")/../environments/workspace"
+cd "$(dirname "$0")/../../environments/workspace"
 podman build -t nukelab-workspace:latest .
 
 echo "Workspace environment built successfully!"

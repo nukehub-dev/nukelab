@@ -7,7 +7,7 @@
 set -e
 
 echo "Building NukeLab radiation-transport environment..."
-cd "$(dirname "$0")/../environments/radiation-transport"
+cd "$(dirname "$0")/../../environments/radiation-transport"
 podman build -t nukelab-radiation-transport:latest .
 
 echo "Radiation-transport environment built successfully!"
