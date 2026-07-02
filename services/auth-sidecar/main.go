@@ -448,13 +448,15 @@ func (a *AuthSidecar) ValidateHandler(w http.ResponseWriter, r *http.Request) {
 
 // AuthRequestHandler handles nginx auth_request subrequests.
 func (a *AuthSidecar) AuthRequestHandler(w http.ResponseWriter, r *http.Request) {
-	// Rate limiting
+	// Rate limiting. Loopback traffic from nginx auth_request inside the same
+	// container is exempt so shared 127.0.0.1 traffic does not exhaust the
+	// bucket and break IDE asset loading.
 	if a.rateLimiter != nil {
 		clientIP, _, _ := net.SplitHostPort(r.RemoteAddr)
 		if clientIP == "" {
 			clientIP = r.RemoteAddr
 		}
-		if !a.rateLimiter.Allow(clientIP) {
+		if !isLoopback(clientIP) && !a.rateLimiter.Allow(clientIP) {
 			a.logger.Printf("WARN: Rate limit exceeded for IP: %s", clientIP)
 			w.WriteHeader(http.StatusTooManyRequests)
 			return
