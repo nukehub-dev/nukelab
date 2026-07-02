@@ -166,8 +166,11 @@ jobs:
         uses: trufflesecurity/trufflehog@main
         with:
           path: ./
-          base: main
-          head: HEAD
+          # PR: scan from the PR base commit to the PR head commit.
+          # Push: scan the just-pushed range (before..after).
+          # Schedule / manual dispatch: scan the full history (empty base).
+          base: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
+          head: ${{ github.event.pull_request.head.sha || github.event.after || 'HEAD' }}
           extra_args: --debug --only-verified
 
   signed-commits-check:
