@@ -17,7 +17,10 @@ RUN apt-get update && apt-get install -y \
 # the runtime mounts the real user's home at /home/<username>.
 RUN groupadd -r nukelab -g 65532 && \
     useradd -r -g nukelab -u 65532 -M -s /bin/bash nukelab && \
-    mkdir -p /home && chown nukelab:nukelab /home && chmod 755 /home
+    mkdir -p /home && chown nukelab:nukelab /home && chmod 755 /home && \
+    # Some base packages or tools create a /home/nukelab directory; remove it so
+    # the runtime-mounted /home/<username> is the only home users see.
+    rm -rf /home/nukelab
 
 # Copy auth sidecar binary from services build and make it executable by all
 # users so the hardened non-root runtime can still launch it.

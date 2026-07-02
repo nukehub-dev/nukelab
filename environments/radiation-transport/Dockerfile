@@ -15,10 +15,10 @@ ARG MOAB_BRANCH="5.5.1"
 ARG DOUBLE_DOWN_BRANCH="v1.1.0"
 ARG GEANT4_BRANCH="v11.4.2"
 ARG DAGMC_BRANCH="v3.2.4"
-ARG LIBMESH_BRANCH="v1.8.1"
-ARG NJOY2016_BRANCH="2016.78"
-ARG OPENMC_BRANCH="v0.15.2"
-ARG KDSOURCE_BRANCH="v0.1.0"
+ARG LIBMESH_BRANCH="v1.8.4"
+ARG NJOY2016_BRANCH="2016.79"
+ARG OPENMC_BRANCH="v0.15.3"
+ARG KDSOURCE_BRANCH="v0.2.2"
 ARG PYNE_BRANCH="scikit-build-core"
 
 # Define whether to download Geant4 data and cross-section data
@@ -94,8 +94,10 @@ RUN conda create --yes -p ${NUKE_DIR} \
         python=${PYTHON_VERSION} \
         ipykernel \
         xeus-cling && \
-    conda clean --all -f -y && \
-    echo "conda activate ${NUKE_DIR}" >> /etc/profile.d/conda.sh
+    conda clean --all -f -y
+
+# Activate the nuclear conda environment in login shells (terminals).
+COPY nuke-env.sh /etc/profile.d/nukelab-nuke-env.sh
 
 # Install MOAB
 ARG MOAB_BRANCH
@@ -235,6 +237,7 @@ RUN git clone -b ${KDSOURCE_BRANCH} --recurse-submodules https://github.com/KDSo
 # Install remaining Python packages from PyPI and GitHub
 RUN pip install --no-cache-dir \
         --extra-index-url https://shimwell.github.io/wheels moab \
+        montepy \
         mcpl \
         ncrystal \
         paramak \

@@ -13,6 +13,6 @@ echo "Building all NukeLab components..."
 "$SCRIPT_DIR"/build-base.sh
 "$SCRIPT_DIR"/build-dev.sh
 "$SCRIPT_DIR"/build-workspace.sh
-"$SCRIPT_DIR"/build-default.sh
+"$SCRIPT_DIR"/build-radiation-transport.sh
 
 echo "All components built successfully!"

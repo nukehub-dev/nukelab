@@ -22,12 +22,6 @@ RUN apt-get update && \
     echo "en_US.UTF-8 UTF-8" > /etc/locale.gen && \
     locale-gen
 
-# Install Node.js
-ARG NODE_VERSION=24
-RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash - \
-    && apt-get install -y nodejs \
-    && npm install -g yarn
-
 # Configure core environment variables for Conda and the user
 ENV CONDA_DIR=/opt/conda \
     SHELL=/bin/bash \
@@ -41,6 +35,16 @@ RUN wget https://github.com/conda-forge/miniforge/releases/latest/download/Minif
     bash Miniforge3.sh -b -p $CONDA_DIR && \
     echo ". $CONDA_DIR/etc/profile.d/conda.sh" >> /etc/profile.d/conda.sh && \
     rm Miniforge3.sh
+
+# Install Node.js and Yarn from conda-forge instead of NodeSource apt,
+# because the NodeSource package hard-depends on system python3.
+ARG NODE_VERSION=24
+RUN conda install -y -c conda-forge nodejs=${NODE_VERSION} yarn=1.22.22 && \
+    conda clean -afy
+
+# Activate the conda base environment in login shells (e.g. Theia terminals)
+# so node/yarn/python from /opt/conda/bin are on PATH.
+COPY conda-base.sh /etc/profile.d/nukelab-conda-base.sh
 
 # Install and build the nuke-ide extension
 RUN cd /opt && \
