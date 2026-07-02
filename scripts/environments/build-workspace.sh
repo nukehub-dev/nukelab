@@ -3,10 +3,10 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 # Build NukeLab workspace environment
-set -e
+set -euo pipefail
 
-echo "Building NukeLab workspace environment..."
-cd "$(dirname "$0")/../../environments/workspace"
-podman build -t nukelab-workspace:latest .
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" > /dev/null 2>&1 && pwd)"
+# shellcheck source=scripts/lib.sh
+source "$DIR/../../scripts/lib.sh"
 
-echo "Workspace environment built successfully!"
+build_environment_image "$DIR" "workspace environment" "workspace" "nukelab-workspace:latest"

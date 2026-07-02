@@ -3,10 +3,10 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 # Build NukeLab radiation-transport environment
-set -e
+set -euo pipefail
 
-echo "Building NukeLab radiation-transport environment..."
-cd "$(dirname "$0")/../../environments/radiation-transport"
-podman build -t nukelab-radiation-transport:latest .
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" > /dev/null 2>&1 && pwd)"
+# shellcheck source=scripts/lib.sh
+source "$DIR/../../scripts/lib.sh"
 
-echo "Radiation-transport environment built successfully!"
+build_environment_image "$DIR" "radiation-transport environment" "radiation-transport" "nukelab-radiation-transport:latest"

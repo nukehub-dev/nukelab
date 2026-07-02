@@ -240,14 +240,14 @@ services:
         image: nukelab-backend-test:test
         container_name: nukelab-backend-test
         env_file:
-            - .env.development
+            - ${NUKELAB_ENV_FILE:-.env.development}
         environment:
             - DATABASE_USER=${DATABASE_USER:-nukelab}
             - DATABASE_PASSWORD=${DATABASE_PASSWORD:-nukelab123}
             - DATABASE_NAME=${DATABASE_NAME:-nukelab}_test
             - DATABASE_HOST=${DATABASE_HOST:-postgres}
             - DATABASE_PORT=${DATABASE_PORT:-5432}
-            # Ensure URL is derived from component env vars, not an old DATABASE_URL in .env.development.
+            # Ensure URL is derived from component env vars, not an old DATABASE_URL in the env file.
             - DATABASE_URL=
             - REDIS_URL=redis://redis:6379/1
             - RATE_LIMIT_ENABLED=false
