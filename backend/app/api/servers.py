@@ -26,7 +26,6 @@ from app.core.cache import (
 )
 from app.core.permissions import Permission
 from app.core.security import has_any_permission
-from app.core.time_utils import parse_duration
 from app.db.session import get_db
 from app.dependencies import PermissionChecker, require_permissions
 from app.models.server import Server
@@ -58,19 +57,30 @@ async def _invalidate_server_list_cache(user_id: str) -> None:
     await cache_delete_tracked("servers:list:admin:keys")
 
 
-def _set_server_expiry(server: Server, plan) -> None:
-    """Set or clear server.expires_at based on the plan's max_runtime."""
-    if plan and plan.max_runtime:
+def _set_server_expiry(server: Server, user: User) -> None:
+    """Set or clear server.expires_at based on the user's max_server_runtime preference."""
+    prefs = user.preferences or {}
+
+    # If the user has disabled the runtime limit, clear any existing expiry.
+    if not prefs.get("max_server_runtime_enabled", True):
+        server.expires_at = None
+        return
+
+    max_runtime_minutes = prefs.get("max_server_runtime")
+    if max_runtime_minutes is None:
+        max_runtime_seconds = settings.server_max_runtime
+    else:
         try:
-            max_runtime_seconds = parse_duration(plan.max_runtime)
-            if max_runtime_seconds > 0:
-                server.expires_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(
-                    seconds=max_runtime_seconds
-                )
-                return
-        except Exception:
-            logger.exception("Failed to parse plan max_runtime '%s'", plan.max_runtime)
-    server.expires_at = None
+            max_runtime_seconds = int(max_runtime_minutes) * 60
+        except (TypeError, ValueError):
+            max_runtime_seconds = settings.server_max_runtime
+
+    if max_runtime_seconds > 0:
+        server.expires_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(
+            seconds=max_runtime_seconds
+        )
+    else:
+        server.expires_at = None
 
 
 class VolumeMountRequest(BaseModel):
@@ -498,14 +508,8 @@ async def create_server(
         server.plan_id = uuid.UUID(body.plan_id)
         server.last_activity = datetime.now(UTC).replace(tzinfo=None)
 
-        # Set expiration based on max_runtime
-        from app.core.time_utils import parse_duration
-
-        max_runtime_seconds = parse_duration(plan.max_runtime)
-        if max_runtime_seconds > 0:
-            server.expires_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(
-                seconds=max_runtime_seconds
-            )
+        # Set expiration based on user's max_server_runtime preference
+        _set_server_expiry(server, current_user)
 
         # Save to database
         db.add(server)
@@ -900,6 +904,10 @@ async def _perform_server_start(
                 status_code=status.HTTP_400_BAD_REQUEST, detail=quota_check["reason"]
             )
 
+    # Load server owner for preferences and username
+    result = await db.execute(sa_select(User).where(User.id == server.user_id))
+    server_owner = result.scalar_one_or_none()
+
     if server.container_id:
         try:
             actual_status = await spawner.get_status(server.container_id)
@@ -958,7 +966,7 @@ async def _perform_server_start(
                 server.external_url = new_server.external_url
                 server.stop_reason = None
                 server.stopped_at = None
-                _set_server_expiry(server, plan)
+                _set_server_expiry(server, server_owner)
 
                 await db.commit()
                 await broadcast_server_status_change(server.user_id, server_id, "running")
@@ -976,7 +984,7 @@ async def _perform_server_start(
             server.started_at = datetime.now(UTC).replace(tzinfo=None)
             server.stop_reason = None
             server.stopped_at = None
-            _set_server_expiry(server, plan)
+            _set_server_expiry(server, server_owner)
 
             if volume_mounts:
                 volume_service = VolumeService(db)
@@ -1019,8 +1027,6 @@ async def _perform_server_start(
             raise HTTPException(status_code=404, detail="Plan not found")
 
         try:
-            result = await db.execute(sa_select(User).where(User.id == server.user_id))
-            server_owner = result.scalar_one_or_none()
             owner_username = server_owner.username if server_owner else current_user.username
 
             new_server = await spawner.spawn(
@@ -1047,7 +1053,7 @@ async def _perform_server_start(
             server.stopped_at = None
             server.allocated_cpu = new_server.allocated_cpu
             server.allocated_memory = new_server.allocated_memory
-            _set_server_expiry(server, plan)
+            _set_server_expiry(server, server_owner)
             await db.commit()
 
             if volume_mounts:
@@ -1201,6 +1207,10 @@ async def _perform_server_restart(
                 status_code=status.HTTP_400_BAD_REQUEST, detail=quota_check["reason"]
             )
 
+    # Load server owner for preferences and username
+    result = await db.execute(sa_select(User).where(User.id == server.user_id))
+    server_owner = result.scalar_one_or_none()
+
     if server.container_id:
         try:
             actual_status = await spawner.get_status(server.container_id)
@@ -1214,8 +1224,6 @@ async def _perform_server_restart(
                 plan_service = PlanService(db)
                 plan = await plan_service.get_by_id(str(server.plan_id)) if server.plan_id else None
 
-                result = await db.execute(sa_select(User).where(User.id == server.user_id))
-                server_owner = result.scalar_one_or_none()
                 owner_username = server_owner.username if server_owner else current_user.username
 
                 new_server = await spawner.spawn(
@@ -1240,7 +1248,7 @@ async def _perform_server_restart(
                 server.external_url = new_server.external_url
                 server.stop_reason = None
                 server.stopped_at = None
-                _set_server_expiry(server, plan)
+                _set_server_expiry(server, server_owner)
                 await db.commit()
 
                 notif_service = NotificationService(db)
@@ -1263,7 +1271,7 @@ async def _perform_server_restart(
             server.started_at = datetime.now(UTC).replace(tzinfo=None)
             server.stop_reason = None
             server.stopped_at = None
-            _set_server_expiry(server, plan)
+            _set_server_expiry(server, server_owner)
             await db.commit()
 
             notif_service = NotificationService(db)

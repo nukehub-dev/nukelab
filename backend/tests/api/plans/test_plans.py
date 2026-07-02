@@ -54,17 +54,12 @@ class TestPlanCRUD:
                 "gpu_limit": 0,
                 "max_servers_per_user": 3,
                 "cost_per_hour": 2,
-                "max_runtime": "2h",
-                "idle_timeout": "30m",
                 "visible_to_roles": ["user", "moderator"],
                 "priority": 0,
             },
         )
 
         assert response.status_code == 201
-        data = response.json()["data"]
-        assert data["max_runtime"] == "2h"
-        assert data["idle_timeout"] == "30m"
 
     @pytest.mark.asyncio
     async def test_create_plan_as_user_forbidden(self, client, user_token):

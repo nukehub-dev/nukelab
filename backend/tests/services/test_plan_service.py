@@ -204,21 +204,6 @@ class TestPlanServiceCRUD:
         assert plan.name == "New Plan"
         assert plan.slug == "new-plan"
         assert plan.cpu_limit == 4
-        assert plan.max_runtime == "24h"
-        assert plan.idle_timeout == "1h"
-
-    @pytest.mark.asyncio
-    async def test_create_plan_with_runtime_fields(self, db_session):
-        """create_plan should persist max_runtime and idle_timeout."""
-        service = PlanService(db_session)
-        plan = await service.create_plan(
-            name="Runtime Plan",
-            slug="runtime-plan",
-            max_runtime="2h",
-            idle_timeout="30m",
-        )
-        assert plan.max_runtime == "2h"
-        assert plan.idle_timeout == "30m"
 
     @pytest.mark.asyncio
     async def test_create_plan_duplicate_slug(self, db_session):

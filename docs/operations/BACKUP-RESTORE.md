@@ -116,7 +116,7 @@ For point-in-time recovery (PITR), enable WAL archiving in `compose.yml`:
 docker exec -i nukelab-postgres psql -U nukelab -d nukelab < nukelab-backup-YYYYMMDD.sql
 
 # 4. Stamp alembic version so migrations don't try to re-run
-./nukelabctl exec backend python -m alembic stamp 281a4c5d5529
+./nukelabctl exec backend python -m alembic stamp 8298b4bb8ada
 
 # 5. Restart services
 ./nukelabctl start
@@ -149,7 +149,7 @@ docker exec -i nukelab-postgres psql -U nukelab -d nukelab < nukelab-backup-YYYY
 ./nukelabctl exec backend python scripts/db_profiler.py ensure-partitions --months-ahead 3
 
 # 6. Stamp alembic
-./nukelabctl exec backend python -m alembic stamp 281a4c5d5529
+./nukelabctl exec backend python -m alembic stamp 8298b4bb8ada
 ```
 
 ### 2.3 Partial Restore (Single Table Recovery)
@@ -264,7 +264,7 @@ After any restore, verify:
 - [ ] `./nukelabctl exec backend python scripts/db_profiler.py table-sizes` shows expected tables
 - [ ] `./nukelabctl exec backend python scripts/db_profiler.py partitions --table activity_logs` shows partitions
 - [ ] Admin monitoring endpoint shows healthy partitions: `curl -s -H "Authorization: Bearer $ADMIN_TOKEN" http://localhost:8080/api/admin/health/monitoring | jq '.system.services.partitions.status'`
-- [ ] `./nukelabctl exec backend alembic current` shows `281a4c5d5529 (head)`
+- [ ] `./nukelabctl exec backend alembic current` shows `8298b4bb8ada (head)`
 - [ ] Application starts without errors
 - [ ] Login works (verifies users table)
 - [ ] Server list loads (verifies servers + cache)

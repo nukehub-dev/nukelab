@@ -28,7 +28,6 @@ async def patch_server(db_session, test_user):
         is_active=True,
         cost_per_hour=0,
         priority=0,
-        max_runtime="1h",
         visible_to_roles=["user"],
     )
     env = EnvironmentTemplate(name="patch-env", slug="patch-env", image="test:latest")
@@ -113,7 +112,6 @@ class TestPatchPlanChange:
             is_active=True,
             cost_per_hour=0,
             priority=0,
-            max_runtime="1h",
             visible_to_roles=["user"],
         )
         db_session.add(new_plan)

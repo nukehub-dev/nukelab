@@ -149,7 +149,6 @@ function PlansPage() {
     max_servers_per_user: 3,
     cost_per_hour: 10,
     cooldown_seconds: 0,
-    max_runtime: '24h',
     is_public: false,
     visible_to_roles: ['user'] as string[],
     priority: 0,
@@ -176,7 +175,6 @@ function PlansPage() {
       max_servers_per_user: 3,
       cost_per_hour: 10,
       cooldown_seconds: 0,
-      max_runtime: '24h',
       is_public: false,
       visible_to_roles: ['user'],
       priority: 0,
@@ -198,7 +196,6 @@ function PlansPage() {
       max_servers_per_user: plan.max_servers_per_user,
       cost_per_hour: plan.cost_per_hour,
       cooldown_seconds: plan.cooldown_seconds,
-      max_runtime: plan.max_runtime,
       is_public: plan.is_public,
       visible_to_roles: plan.visible_to_roles || ['user'],
       priority: plan.priority,
@@ -227,7 +224,6 @@ function PlansPage() {
           max_servers_per_user: formData.max_servers_per_user,
           cost_per_hour: formData.cost_per_hour,
           cooldown_seconds: formData.cooldown_seconds,
-          max_runtime: formData.max_runtime,
           is_public: formData.is_public,
           visible_to_roles: formData.visible_to_roles,
           priority: formData.priority,
@@ -246,7 +242,6 @@ function PlansPage() {
         max_servers_per_user: formData.max_servers_per_user,
         cost_per_hour: formData.cost_per_hour,
         cooldown_seconds: formData.cooldown_seconds,
-        max_runtime: formData.max_runtime,
         is_public: formData.is_public,
         visible_to_roles: formData.visible_to_roles,
         priority: formData.priority,
@@ -833,19 +828,7 @@ function PlansPage() {
                   />
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label>Max Runtime</Label>
-                <Input
-                  type="text"
-                  value={formData.max_runtime}
-                  onChange={(e) => setFormData({ ...formData, max_runtime: e.target.value })}
-                  placeholder="24h"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Maximum session length per start (e.g. 24h, 30m). Restarting or starting again
-                  resets the timer.
-                </p>
-              </div>
+
               <label className="flex items-center gap-3 cursor-pointer group">
                 <Checkbox
                   checked={formData.is_public}

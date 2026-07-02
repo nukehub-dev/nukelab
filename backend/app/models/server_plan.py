@@ -33,11 +33,6 @@ class ServerPlan(Base):
     cost_per_hour = Column(Integer, default=1)
     cooldown_seconds = Column(Integer, default=0)
 
-    # Usage limits
-    max_servers_per_user = Column(Integer, default=3)
-    max_runtime = Column(String(20), default="24h")
-    idle_timeout = Column(String(20), default="1h")
-
     # Features
     allow_scheduling = Column(Boolean, default=True)
     allow_snapshots = Column(Boolean, default=False)
@@ -76,8 +71,6 @@ class ServerPlan(Base):
             "disk_limit": self.disk_limit,
             "gpu_limit": self.gpu_limit,
             "max_servers_per_user": self.max_servers_per_user,
-            "max_runtime": self.max_runtime,
-            "idle_timeout": self.idle_timeout,
             "cost_per_hour": self.cost_per_hour,
             "cooldown_seconds": self.cooldown_seconds,
             "allow_scheduling": self.allow_scheduling,

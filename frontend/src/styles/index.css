@@ -110,6 +110,22 @@
     --glass-tint: var(--primary);
     --glass-shadow-color: oklch(0 0 0 / 0.32);
     --glass-noise-opacity: 0.03;
+
+    /* Warning tip colors — dark mode (default) */
+    --warning-amber-bg: oklch(0.65 0.12 80 / 0.12);
+    --warning-amber-border: oklch(0.65 0.12 80 / 0.22);
+    --warning-amber-text: oklch(0.85 0.08 80);
+    --warning-amber-icon: oklch(0.75 0.1 80);
+
+    --warning-emerald-bg: oklch(0.6 0.12 160 / 0.12);
+    --warning-emerald-border: oklch(0.6 0.12 160 / 0.22);
+    --warning-emerald-text: oklch(0.85 0.08 160);
+    --warning-emerald-icon: oklch(0.75 0.1 160);
+
+    --warning-rose-bg: oklch(0.6 0.15 25 / 0.12);
+    --warning-rose-border: oklch(0.6 0.15 25 / 0.22);
+    --warning-rose-text: oklch(0.85 0.08 25);
+    --warning-rose-icon: oklch(0.75 0.1 25);
   }
 
   html {
@@ -169,6 +185,41 @@
 }
 
 @layer utilities {
+  /* Theme-adaptive warning tips (default = dark mode, html.light = light mode) */
+  .warning-tip {
+    @apply flex items-start gap-3 p-4 rounded-xl;
+  }
+
+  .warning-tip-amber {
+    background-color: var(--warning-amber-bg);
+    border: 1px solid var(--warning-amber-border);
+    color: var(--warning-amber-text);
+  }
+
+  .warning-tip-amber > svg {
+    color: var(--warning-amber-icon);
+  }
+
+  .warning-tip-emerald {
+    background-color: var(--warning-emerald-bg);
+    border: 1px solid var(--warning-emerald-border);
+    color: var(--warning-emerald-text);
+  }
+
+  .warning-tip-emerald > svg {
+    color: var(--warning-emerald-icon);
+  }
+
+  .warning-tip-rose {
+    background-color: var(--warning-rose-bg);
+    border: 1px solid var(--warning-rose-border);
+    color: var(--warning-rose-text);
+  }
+
+  .warning-tip-rose > svg {
+    color: var(--warning-rose-icon);
+  }
+
   .bubble {
     background:
       radial-gradient(
@@ -601,6 +652,22 @@ html.light {
   --glass-tint: var(--primary);
   --glass-shadow-color: oklch(0 0 0 / 0.08);
   --glass-noise-opacity: 0.015;
+
+  /* Warning tip colors — light mode */
+  --warning-amber-bg: oklch(0.75 0.12 80 / 0.18);
+  --warning-amber-border: oklch(0.65 0.12 80 / 0.3);
+  --warning-amber-text: oklch(0.4 0.1 80);
+  --warning-amber-icon: oklch(0.55 0.12 80);
+
+  --warning-emerald-bg: oklch(0.7 0.12 160 / 0.18);
+  --warning-emerald-border: oklch(0.6 0.12 160 / 0.3);
+  --warning-emerald-text: oklch(0.35 0.1 160);
+  --warning-emerald-icon: oklch(0.5 0.12 160);
+
+  --warning-rose-bg: oklch(0.7 0.15 25 / 0.18);
+  --warning-rose-border: oklch(0.6 0.15 25 / 0.3);
+  --warning-rose-text: oklch(0.4 0.12 25);
+  --warning-rose-icon: oklch(0.55 0.15 25);
 }
 
 /* ============================================

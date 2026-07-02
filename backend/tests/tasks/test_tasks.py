@@ -419,7 +419,7 @@ class TestEnforceAutoStop:
 
     def test_enforce_auto_stop_no_running(self):
         async def _mock_enforce():
-            return "Stopped 0 servers, warned 0 servers"
+            return "Stopped 0 servers"
 
         with (
             mock.patch(
@@ -430,7 +430,7 @@ class TestEnforceAutoStop:
         ):
             mock_db = mock.AsyncMock()
             mock_result = mock.Mock()
-            mock_result.all.return_value = []
+            mock_result.scalars.return_value.all.return_value = []
             mock_db.execute.return_value = mock_result
             mock_session.return_value.__aenter__ = mock.AsyncMock(return_value=mock_db)
             mock_session.return_value.__aexit__ = mock.AsyncMock(return_value=False)
@@ -884,7 +884,7 @@ class TestEnforceAutoStopBranches:
     def _make_db(self, rows):
         db = _make_async_mock_db()
         res = mock.Mock()
-        res.all.return_value = rows
+        res.scalars.return_value.all.return_value = rows
         db.execute = mock.AsyncMock(return_value=res)
         return db
 
@@ -895,11 +895,8 @@ class TestEnforceAutoStopBranches:
         server.status = "running"
         server.name = "test-srv"
         server.expires_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=5)
-        server.last_activity = None
-        plan = mock.Mock()
-        plan.idle_timeout = None
 
-        db = self._make_db([(server, plan)])
+        db = self._make_db([server])
         with (
             mock.patch(
                 "app.container.spawner.spawner.delete", new=mock.AsyncMock(return_value=True)
@@ -917,80 +914,16 @@ class TestEnforceAutoStopBranches:
                     result = _run_with_mock_db(enforce_auto_stop, db)
         assert "Stopped 1 servers" in result
 
-    def test_idle_timeout_warning(self):
+    def test_no_expiry_does_not_stop(self):
         server = mock.Mock()
         server.user_id = uuid_mod.uuid4()
         server.container_id = "cid-123"
         server.status = "running"
         server.name = "test-srv"
         server.expires_at = None
-        server.last_activity = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=25)
-        plan = mock.Mock()
-        plan.idle_timeout = "30m"
 
-        db = self._make_db([(server, plan)])
-        with (
-            mock.patch(
-                "app.container.spawner.spawner.delete", new=mock.AsyncMock(return_value=True)
-            ),
-            mock.patch("app.services.notification_service.NotificationService") as mock_notif,
-        ):
-            mock_notif.return_value.server_idle_warning = mock.AsyncMock()
-            with (
-                mock.patch(
-                    "app.tasks.broadcast_server_status_change", new=mock.AsyncMock(), create=True
-                ),
-                mock.patch("app.config.settings.server_warn_before_stop", 300),
-            ):
-                result = _run_with_mock_db(enforce_auto_stop, db)
-        assert "warned 1 servers" in result
-
-    def test_idle_timeout_exceeded(self):
-        server = mock.Mock()
-        server.user_id = uuid_mod.uuid4()
-        server.container_id = "cid-123"
-        server.status = "running"
-        server.name = "test-srv"
-        server.expires_at = None
-        server.last_activity = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=35)
-        plan = mock.Mock()
-        plan.idle_timeout = "30m"
-
-        db = self._make_db([(server, plan)])
-        with (
-            mock.patch(
-                "app.container.spawner.spawner.delete", new=mock.AsyncMock(return_value=True)
-            ),
-            mock.patch("app.services.quota_service.QuotaService") as mock_quota,
-        ):
-            mock_quota.return_value.decrement_usage = mock.AsyncMock()
-            with mock.patch("app.services.notification_service.NotificationService") as mock_notif:
-                mock_notif.return_value.server_stopped = mock.AsyncMock()
-                with (
-                    mock.patch(
-                        "app.tasks.broadcast_server_status_change",
-                        new=mock.AsyncMock(),
-                        create=True,
-                    ),
-                    mock.patch("app.config.settings.server_warn_before_stop", 300),
-                ):
-                    result = _run_with_mock_db(enforce_auto_stop, db)
-        assert "Stopped 1 servers" in result
-
-    def test_parse_duration_exception(self):
-        server = mock.Mock()
-        server.user_id = uuid_mod.uuid4()
-        server.container_id = "cid-123"
-        server.status = "running"
-        server.name = "test-srv"
-        server.expires_at = None
-        server.last_activity = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=35)
-        plan = mock.Mock()
-        plan.idle_timeout = "invalid"
-
-        db = self._make_db([(server, plan)])
-        with mock.patch("app.core.time_utils.parse_duration", side_effect=Exception("bad format")):
-            result = _run_with_mock_db(enforce_auto_stop, db)
+        db = self._make_db([server])
+        result = _run_with_mock_db(enforce_auto_stop, db)
         assert "Stopped 0 servers" in result
 
 
@@ -1143,10 +1076,10 @@ class TestProcessServerQueueBranches:
         plan.cpu_limit = 1
         plan.memory_limit = "1g"
         plan.disk_limit = "10g"
-        plan.max_runtime = "1h"
         user = mock.Mock()
         user.is_active = True
         user.username = "testuser"
+        user.preferences = {}
 
         env = mock.Mock()
         env.slug = "dev"

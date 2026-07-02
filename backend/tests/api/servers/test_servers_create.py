@@ -28,7 +28,6 @@ async def test_plan_env(db_session):
         cpu_limit=1.0,
         memory_limit="1g",
         disk_limit="10g",
-        max_runtime="1h",
         cost_per_hour=0,
         is_active=True,
         is_public=True,

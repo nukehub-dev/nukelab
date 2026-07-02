@@ -991,7 +991,6 @@ class TestCreateServerHappyPath:
             disk_limit="10g",
             is_active=True,
             visible_to_roles=["user"],
-            max_runtime="1h",
         )
         db_session.add(plan)
         await db_session.commit()
@@ -1078,7 +1077,6 @@ class TestCreateServerHappyPath:
             disk_limit="10g",
             is_active=True,
             visible_to_roles=["user"],
-            max_runtime="1h",
         )
         db_session.add(plan)
 
@@ -1319,7 +1317,6 @@ class TestCreateServerException:
             disk_limit="10g",
             is_active=True,
             visible_to_roles=["user"],
-            max_runtime="1h",
         )
         db_session.add(plan)
         await db_session.commit()

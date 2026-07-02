@@ -32,7 +32,7 @@ cmd_restore() {
     _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" exec -T postgres psql -U "$db_user" -d "$db_name" < "$backup_file"
 
     log "Stamping alembic version..."
-    _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" exec backend python -m alembic stamp 281a4c5d5529
+    _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" exec backend python -m alembic stamp 8298b4bb8ada
 
     ok "Restore complete"
 }

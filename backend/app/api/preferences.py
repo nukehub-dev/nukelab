@@ -42,6 +42,12 @@ class PreferencesUpdateRequest(BaseModel):
     idle_shutdown_timeout: int | None = Field(
         None, description="Minutes of inactivity before shutdown (5-240)"
     )
+    max_server_runtime_enabled: bool | None = Field(
+        None, description="Enable maximum server runtime limit"
+    )
+    max_server_runtime: int | None = Field(
+        None, description="Maximum server runtime in minutes per session (30-4320)"
+    )
     stop_on_logout: bool | None = Field(None, description="Stop all servers on explicit logout")
 
 
@@ -62,6 +68,8 @@ class PreferencesResponse(BaseModel):
     pinned_workspace_ids: list
     idle_shutdown_enabled: bool
     idle_shutdown_timeout: int
+    max_server_runtime_enabled: bool
+    max_server_runtime: int
     stop_on_logout: bool
 
 
@@ -101,6 +109,8 @@ def get_default_preferences() -> dict:
         },
         "idle_shutdown_enabled": True,
         "idle_shutdown_timeout": 15,
+        "max_server_runtime_enabled": True,
+        "max_server_runtime": 1440,
         "stop_on_logout": False,
     }
 
@@ -166,6 +176,11 @@ async def update_preferences(
     if request.idle_shutdown_timeout is not None:
         # Clamp between 5 and 240 minutes
         update_data["idle_shutdown_timeout"] = max(5, min(request.idle_shutdown_timeout, 240))
+    if request.max_server_runtime_enabled is not None:
+        update_data["max_server_runtime_enabled"] = request.max_server_runtime_enabled
+    if request.max_server_runtime is not None:
+        # Clamp between 30 minutes and 72 hours
+        update_data["max_server_runtime"] = max(30, min(request.max_server_runtime, 4320))
     if request.stop_on_logout is not None:
         update_data["stop_on_logout"] = request.stop_on_logout
 

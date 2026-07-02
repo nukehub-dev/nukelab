@@ -9,7 +9,7 @@ from unittest import mock
 import pytest
 import pytest_asyncio
 
-from app.core.time_utils import parse_duration
+from app.config import settings
 from app.models.environment_template import EnvironmentTemplate
 from app.models.server import Server
 from app.models.server_plan import ServerPlan
@@ -95,7 +95,7 @@ class TestServerStart:
     async def test_start_server_sets_expires_at(
         self, client, user_token, action_server, db_session
     ):
-        """Starting a stopped server should set expires_at from the plan max_runtime."""
+        """Starting a stopped server should set expires_at from user preferences."""
         action_server.status = "stopped"
         action_server.container_id = None
         action_server.expires_at = None
@@ -119,8 +119,45 @@ class TestServerStart:
 
         await db_session.refresh(action_server)
         assert action_server.expires_at is not None
-        expected = datetime.now(UTC).replace(tzinfo=None) + timedelta(seconds=parse_duration("24h"))
+        expected = datetime.now(UTC).replace(tzinfo=None) + timedelta(
+            seconds=settings.server_max_runtime
+        )
         assert abs((action_server.expires_at - expected).total_seconds()) < 5
+
+    @pytest.mark.asyncio
+    async def test_start_server_disabled_runtime_limit_clears_expires_at(
+        self, client, user_token, action_server, db_session
+    ):
+        """Starting a server when max_server_runtime is disabled should not set expires_at."""
+        from app.models.user import User
+
+        user = await db_session.get(User, action_server.user_id)
+        user.preferences = {"max_server_runtime_enabled": False}
+        await db_session.commit()
+
+        action_server.status = "stopped"
+        action_server.container_id = None
+        action_server.expires_at = None
+        await db_session.commit()
+
+        mock_spawn = mock.AsyncMock()
+        mock_spawn.container_id = "new-cid"
+        mock_spawn.image = "test:latest"
+        mock_spawn.volume_id = None
+        mock_spawn.external_url = "http://test"
+        mock_spawn.allocated_cpu = 1.0
+        mock_spawn.allocated_memory = "1g"
+
+        with mock.patch("app.api.servers.settings.credits_enabled", False):
+            with mock.patch("app.api.servers.spawner.spawn", return_value=mock_spawn):
+                response = await client.post(
+                    f"/api/servers/{action_server.id}/start",
+                    headers={"Authorization": f"Bearer {user_token}"},
+                )
+        assert response.status_code == 200
+
+        await db_session.refresh(action_server)
+        assert action_server.expires_at is None
 
 
 class TestServerStartNoContainerBranches:
@@ -347,7 +384,7 @@ class TestServerRestart:
     async def test_restart_server_resets_expires_at(
         self, client, user_token, action_server, db_session
     ):
-        """Restarting a running server should reset expires_at from the plan."""
+        """Restarting a running server should reset expires_at from user preferences."""
         action_server.container_id = "restart-cid"
         action_server.status = "running"
         action_server.expires_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=5)
@@ -365,7 +402,9 @@ class TestServerRestart:
 
         await db_session.refresh(action_server)
         assert action_server.expires_at is not None
-        expected = datetime.now(UTC).replace(tzinfo=None) + timedelta(seconds=parse_duration("24h"))
+        expected = datetime.now(UTC).replace(tzinfo=None) + timedelta(
+            seconds=settings.server_max_runtime
+        )
         assert abs((action_server.expires_at - expected).total_seconds()) < 5
 
 

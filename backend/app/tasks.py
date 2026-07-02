@@ -431,18 +431,15 @@ def process_nuke_billing(self):
 
 @celery_app.task(bind=True)
 def enforce_auto_stop(self):
-    """Enforce idle timeout and max runtime limits on running servers"""
+    """Enforce max runtime limits on running servers"""
 
     async def _enforce():
         from datetime import UTC, datetime
 
         from sqlalchemy import select
 
-        from app.config import settings
         from app.container.spawner import spawner
-        from app.core.time_utils import parse_duration
         from app.models.server import Server
-        from app.models.server_plan import ServerPlan
         from app.services.notification_service import (
             NotificationService,
             broadcast_server_status_change,
@@ -452,84 +449,50 @@ def enforce_auto_stop(self):
         async with AsyncSessionLocal() as db:
             quota_service = QuotaService(db)
             stopped_count = 0
-            warned_count = 0
 
-            result = await db.execute(
-                select(Server, ServerPlan)
-                .join(ServerPlan, Server.plan_id == ServerPlan.id)
-                .where(Server.status == "running")
-            )
-            servers = result.all()
+            result = await db.execute(select(Server).where(Server.status == "running"))
+            servers = result.scalars().all()
 
-            for server, plan in servers:
+            for server in servers:
                 now = datetime.now(UTC).replace(tzinfo=None)
-                should_stop = False
-                stop_reason = ""
 
                 # Check max runtime
-                if server.expires_at and now >= server.expires_at:
-                    should_stop = True
-                    stop_reason = "max_runtime_exceeded"
+                if not (server.expires_at and now >= server.expires_at):
+                    continue
 
-                # Check idle timeout
-                if not should_stop and server.last_activity and plan.idle_timeout:
-                    try:
-                        idle_timeout_seconds = parse_duration(plan.idle_timeout)
-                        if idle_timeout_seconds > 0:
-                            idle_duration = (now - server.last_activity).total_seconds()
+                try:
+                    await spawner.delete(server.container_id)
+                    server.container_id = None
+                    server.status = "stopped"
+                    server.stopped_at = now
+                    server.stop_reason = "max_runtime_exceeded"
+                    server.expires_at = None
+                    await broadcast_server_status_change(
+                        server.user_id,
+                        str(server.id),
+                        "stopped",
+                        {"stop_reason": "max_runtime_exceeded"},
+                    )
 
-                            if idle_duration >= idle_timeout_seconds:
-                                should_stop = True
-                                stop_reason = "idle_timeout"
-                            elif idle_duration >= (
-                                idle_timeout_seconds - settings.server_warn_before_stop
-                            ):
-                                # Send warning notification
-                                notif_service = NotificationService(db)
-                                await notif_service.server_idle_warning(
-                                    user_id=server.user_id,
-                                    server_name=server.name,
-                                    idle_minutes=int(idle_duration / 60),
-                                )
-                                warned_count += 1
-                    except Exception:
-                        logger.exception("Error checking idle timeout for server %s", server.id)
-
-                if should_stop:
-                    try:
-                        await spawner.delete(server.container_id)
-                        server.container_id = None
-                        server.status = "stopped"
-                        server.stopped_at = now
-                        server.stop_reason = stop_reason
-                        server.expires_at = None
-                        await broadcast_server_status_change(
-                            server.user_id, str(server.id), "stopped", {"stop_reason": stop_reason}
+                    # Decrement quota usage
+                    if server.plan_id:
+                        await quota_service.decrement_usage(
+                            user_id=str(server.user_id), plan_id=str(server.plan_id)
                         )
 
-                        # Decrement quota usage
-                        if server.plan_id:
-                            await quota_service.decrement_usage(
-                                user_id=str(server.user_id), plan_id=str(server.plan_id)
-                            )
-
-                        # Notify user
-                        notif_service = NotificationService(db)
-                        reason_messages = {
-                            "max_runtime_exceeded": "exceeded the maximum runtime limit",
-                            "idle_timeout": "inactivity",
-                        }
-                        await notif_service.server_stopped(
-                            user_id=server.user_id,
-                            server_name=server.name,
-                            reason=reason_messages.get(stop_reason, "automatic stop"),
-                        )
-                        stopped_count += 1
-                    except Exception:
-                        logger.exception("Error auto-stopping server %s", server.id)
+                    # Notify user
+                    notif_service = NotificationService(db)
+                    await notif_service.server_stopped(
+                        user_id=server.user_id,
+                        server_name=server.name,
+                        reason="exceeded the maximum runtime limit",
+                    )
+                    stopped_count += 1
+                except Exception:
+                    logger.exception("Error auto-stopping server %s", server.id)
 
             await db.commit()
-            return f"Stopped {stopped_count} servers, warned {warned_count} servers"
+            return f"Stopped {stopped_count} servers"
 
     try:
         return _run_async(_enforce())
@@ -548,7 +511,6 @@ def process_server_queue(self):
 
         from app.config import settings
         from app.container.spawner import spawner
-        from app.core.time_utils import parse_duration
         from app.models.server_plan import ServerPlan
         from app.models.server_queue import ServerQueue
         from app.models.user import User
@@ -667,12 +629,22 @@ def process_server_queue(self):
                     server.plan_id = next_entry.plan_id
                     server.last_activity = datetime.now(UTC).replace(tzinfo=None)
 
-                    # Set expiration
-                    max_runtime_seconds = parse_duration(plan.max_runtime)
-                    if max_runtime_seconds > 0:
-                        server.expires_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(
-                            seconds=max_runtime_seconds
-                        )
+                    # Set expiration based on user's max_server_runtime preference
+                    prefs = user.preferences or {}
+                    if prefs.get("max_server_runtime_enabled", True):
+                        max_runtime_minutes = prefs.get("max_server_runtime")
+                        if max_runtime_minutes is None:
+                            max_runtime_seconds = settings.server_max_runtime
+                        else:
+                            try:
+                                max_runtime_seconds = int(max_runtime_minutes) * 60
+                            except (TypeError, ValueError):
+                                max_runtime_seconds = settings.server_max_runtime
+
+                        if max_runtime_seconds > 0:
+                            server.expires_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(
+                                seconds=max_runtime_seconds
+                            )
 
                     db.add(server)
                     await db.commit()

@@ -425,7 +425,6 @@ class TestGetPlanUsage:
             memory_limit="1g",
             disk_limit="10g",
             cost_per_hour=0,
-            max_runtime="1h",
         )
         db_session.add(plan)
         await db_session.commit()

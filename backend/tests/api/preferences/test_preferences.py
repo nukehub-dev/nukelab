@@ -91,6 +91,46 @@ class TestPreferencesUpdate:
         assert response.json()["idle_shutdown_timeout"] == 240
 
     @pytest.mark.asyncio
+    async def test_update_max_server_runtime_clamped(self, client, user_token):
+        """max_server_runtime should be clamped between 30 and 4320 minutes."""
+        response = await client.put(
+            "/api/preferences/",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"max_server_runtime": 5},
+        )
+        assert response.status_code == 200
+        assert response.json()["max_server_runtime"] == 30
+
+        response = await client.put(
+            "/api/preferences/",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"max_server_runtime": 9999},
+        )
+        assert response.status_code == 200
+        assert response.json()["max_server_runtime"] == 4320
+
+    @pytest.mark.asyncio
+    async def test_update_max_server_runtime_enabled(self, client, user_token):
+        """max_server_runtime_enabled should toggle the runtime limit."""
+        response = await client.put(
+            "/api/preferences/",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"max_server_runtime_enabled": False},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["max_server_runtime_enabled"] is False
+        assert "max_server_runtime" in data
+
+        response = await client.put(
+            "/api/preferences/",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"max_server_runtime_enabled": True},
+        )
+        assert response.status_code == 200
+        assert response.json()["max_server_runtime_enabled"] is True
+
+    @pytest.mark.asyncio
     async def test_partial_update(self, client, user_token):
         """Updating only some fields should preserve others."""
         response = await client.put(
@@ -136,3 +176,4 @@ class TestPreferencesDefaultsEndpoint:
         data = response.json()
         assert data["theme"] == "default"
         assert data["idle_shutdown_enabled"] is True
+        assert data["max_server_runtime_enabled"] is True

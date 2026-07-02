@@ -13,6 +13,7 @@ import { api } from '../lib/api'
 import { useToast } from '../stores/toast-store'
 import { cn } from '../lib/utils'
 import { Switch } from '../components/ui/switch'
+import { Slider } from '../components/ui/slider'
 import { Select, SelectItem } from '../components/ui/select'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 
@@ -27,6 +28,21 @@ const TIMEOUT_OPTIONS = [
   { value: 120, label: '2 hours' },
 ]
 
+const MAX_RUNTIME_MIN = 30
+const MAX_RUNTIME_MAX = 4320 // 72 hours
+
+function formatRuntimeMinutes(minutes: number): string {
+  if (minutes < 60) return `${minutes} minutes`
+  if (minutes === 60) return '1 hour'
+  if (minutes < 1440) return `${minutes / 60} hours`
+  if (minutes === 1440) return '1 day'
+  const days = Math.floor(minutes / 1440)
+  const remainder = minutes % 1440
+  if (remainder === 0) return `${days} days`
+  const hours = remainder / 60
+  return `${days} day${days > 1 ? 's' : ''} ${hours} hours`
+}
+
 function ServerBehaviorSettingsPage() {
   const { data: user } = useCurrentUser()
   const queryClient = useQueryClient()
@@ -34,6 +50,8 @@ function ServerBehaviorSettingsPage() {
 
   const [idleEnabled, setIdleEnabled] = useState(true)
   const [idleTimeout, setIdleTimeout] = useState(15)
+  const [maxRuntimeEnabled, setMaxRuntimeEnabled] = useState(true)
+  const [maxRuntime, setMaxRuntime] = useState(1440)
   const [stopOnLogout, setStopOnLogout] = useState(false)
   const [defaultPlan, setDefaultPlan] = useState('')
   const [defaultEnvironment, setDefaultEnvironment] = useState('')
@@ -54,6 +72,12 @@ function ServerBehaviorSettingsPage() {
         }
         if (typeof prefs.idle_shutdown_timeout === 'number') {
           setIdleTimeout(prefs.idle_shutdown_timeout)
+        }
+        if (typeof prefs.max_server_runtime_enabled === 'boolean') {
+          setMaxRuntimeEnabled(prefs.max_server_runtime_enabled)
+        }
+        if (typeof prefs.max_server_runtime === 'number') {
+          setMaxRuntime(prefs.max_server_runtime)
         }
         if (typeof prefs.stop_on_logout === 'boolean') {
           setStopOnLogout(prefs.stop_on_logout)
@@ -103,13 +127,24 @@ function ServerBehaviorSettingsPage() {
         saveMutation.mutate({
           idle_shutdown_enabled: updates.idle_shutdown_enabled ?? idleEnabled,
           idle_shutdown_timeout: updates.idle_shutdown_timeout ?? idleTimeout,
+          max_server_runtime_enabled: updates.max_server_runtime_enabled ?? maxRuntimeEnabled,
+          max_server_runtime: updates.max_server_runtime ?? maxRuntime,
           stop_on_logout: updates.stop_on_logout ?? stopOnLogout,
           default_plan: updates.default_plan ?? defaultPlan,
           default_environment: updates.default_environment ?? defaultEnvironment,
         })
       }, 400)
     },
-    [idleEnabled, idleTimeout, stopOnLogout, defaultPlan, defaultEnvironment, saveMutation]
+    [
+      idleEnabled,
+      idleTimeout,
+      maxRuntimeEnabled,
+      maxRuntime,
+      stopOnLogout,
+      defaultPlan,
+      defaultEnvironment,
+      saveMutation,
+    ]
   )
 
   const handleIdleToggle = (checked: boolean) => {
@@ -120,6 +155,16 @@ function ServerBehaviorSettingsPage() {
   const handleTimeoutChange = (value: number) => {
     setIdleTimeout(value)
     triggerSave({ idle_shutdown_timeout: value })
+  }
+
+  const handleRuntimeEnabledToggle = (checked: boolean) => {
+    setMaxRuntimeEnabled(checked)
+    triggerSave({ max_server_runtime_enabled: checked })
+  }
+
+  const handleRuntimeChange = (value: number) => {
+    setMaxRuntime(value)
+    triggerSave({ max_server_runtime: value })
   }
 
   const handleLogoutToggle = (checked: boolean) => {
@@ -234,11 +279,80 @@ function ServerBehaviorSettingsPage() {
               </motion.div>
 
               {/* Warning */}
-              <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-500/5 border border-amber-500/10">
-                <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                <p className="text-sm text-amber-500/80">
+              <div className="warning-tip warning-tip-amber">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <p className="text-sm">
                   Unsaved work may be lost when servers auto-stop. Make sure to save your work
                   regularly.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        {/* Max Server Runtime */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.05 }}
+        >
+          <Card>
+            <CardHeader>
+              <CardTitle>Maximum Server Runtime</CardTitle>
+              <CardDescription>
+                Automatically stop servers after this much continuous runtime. Starting or
+                restarting a server resets the timer.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Toggle */}
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-muted-foreground" />
+                    <h3 className="text-base font-semibold">Enable Runtime Limit</h3>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Cap how long a server can run before auto-stopping
+                  </p>
+                </div>
+                <Switch checked={maxRuntimeEnabled} onCheckedChange={handleRuntimeEnabledToggle} />
+              </div>
+
+              {/* Slider */}
+              <motion.div
+                animate={{
+                  opacity: maxRuntimeEnabled ? 1 : 0.5,
+                  pointerEvents: maxRuntimeEnabled ? 'auto' : 'none',
+                }}
+                transition={{ duration: 0.2 }}
+              >
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium">Runtime limit per session</label>
+                    <span className="text-sm font-semibold text-primary">
+                      {formatRuntimeMinutes(maxRuntime)}
+                    </span>
+                  </div>
+                  <Slider
+                    min={MAX_RUNTIME_MIN}
+                    max={MAX_RUNTIME_MAX}
+                    step={30}
+                    value={maxRuntime}
+                    onChange={handleRuntimeChange}
+                  />
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>{formatRuntimeMinutes(MAX_RUNTIME_MIN)}</span>
+                    <span>{formatRuntimeMinutes(MAX_RUNTIME_MAX)}</span>
+                  </div>
+                </div>
+              </motion.div>
+
+              <div className="warning-tip warning-tip-amber">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <p className="text-sm">
+                  When the runtime limit is reached, the server will be stopped automatically. Save
+                  your work before the timer expires.
                 </p>
               </div>
             </CardContent>
@@ -303,9 +417,9 @@ function ServerBehaviorSettingsPage() {
                 </p>
               </div>
 
-              <div className="flex items-start gap-3 p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/10">
-                <AlertTriangle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                <p className="text-sm text-emerald-400/80">
+              <div className="warning-tip warning-tip-emerald">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <p className="text-sm">
                   When both defaults are set, press Ctrl+N anywhere to instantly create a server.
                   Otherwise, the deploy dialog will open.
                 </p>
@@ -341,9 +455,9 @@ function ServerBehaviorSettingsPage() {
                 <Switch checked={stopOnLogout} onCheckedChange={handleLogoutToggle} />
               </div>
 
-              <div className="flex items-start gap-3 p-4 rounded-xl bg-rose-500/5 border border-rose-500/10">
-                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                <p className="text-sm text-rose-400/80">
+              <div className="warning-tip warning-tip-rose">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <p className="text-sm">
                   This is an aggressive setting. Any background jobs or unsaved work will be lost
                   when you log out.
                 </p>
