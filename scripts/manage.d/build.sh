@@ -51,6 +51,19 @@ _build_environments() {
         die "No environment specified. Usage: ./nukelabctl build env <name> [name...]"
     fi
 
+    # Expand "all" to the full environment build set in dependency order.
+    local _expanded=()
+    local _has_all=false
+    for _env in "${_envs[@]}"; do
+        if [ "$_env" = "all" ]; then
+            _has_all=true
+            break
+        fi
+    done
+    if $_has_all; then
+        _envs=(base workspace radiation-transport dev)
+    fi
+
     for _env in "${_envs[@]}"; do
         local _script="$DIR/scripts/environments/build-$_env.sh"
         if [ ! -f "$_script" ]; then
@@ -70,7 +83,7 @@ Build container images.
 
 ${BOLD}Targets:${RESET} backend | frontend | all | env <name>
 
-${BOLD}Environment names:${RESET} base | workspace | radiation-transport | dev
+${BOLD}Environment names:${RESET} base | workspace | radiation-transport | dev | all
 
 ${BOLD}Examples:${RESET}
   ./nukelabctl build
@@ -79,5 +92,8 @@ ${BOLD}Examples:${RESET}
   ./nukelabctl build env base
   ./nukelabctl build env radiation-transport
   ./nukelabctl build env base workspace radiation-transport
+
+${BOLD}Note:${RESET} The default ./nukelabctl build (and all) only builds backend/frontend
+compose images. Environment images are built separately with env NAME.
 EOF
 }

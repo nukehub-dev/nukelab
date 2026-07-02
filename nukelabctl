@@ -124,8 +124,12 @@ parse_args() {
                 if [ "$CMD" = "dev" ]; then
                     # The dev meta-command parses subcommands/targets itself.
                     EXTRA_ARGS+=("$1")
-                else
+                elif [ -z "$TARGET" ]; then
                     TARGET="$1"
+                else
+                    # A target was already fixed; treat this token as a command
+                    # argument (e.g. `build env all`).
+                    EXTRA_ARGS+=("$1")
                 fi
                 ;;
             --coverage)

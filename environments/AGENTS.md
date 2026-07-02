@@ -17,6 +17,7 @@ All files under `environments/`.
 - `dev/` is a minimal terminal environment extending `base/` with `ttyd` for dev/test.
 - Child environments add drop-in nginx configs via `/etc/nginx/conf.d/` and set `NUKELAB_START_COMMAND` to launch their service behind the shared nginx.
 - Images are built via `scripts/environments/build-base.sh`, `scripts/environments/build-workspace.sh`, `scripts/environments/build-radiation-transport.sh`, and `scripts/environments/build-dev.sh` or the CI/CD pipeline.
+- `./nukelabctl build` only builds backend/frontend compose images. To build an environment image, use `./nukelabctl build env <name>` (e.g. `./nukelabctl build env radiation-transport`).
 - `scripts/build-all.sh` builds the whole set.
 
 ## Work Guidance

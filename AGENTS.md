@@ -126,31 +126,23 @@ Notes:
 
 ## Architecture pointer
 
-- `nukelabctl` — top-level dispatcher; argument parsing, command bootstrap,
-  and trap/cleanup setup.
-- `scripts/lib.sh` — shared helpers: env loading, engine detection, state
-  persistence, logging, concurrency lock, preflight, dev venv. New helpers
-  that >1 command needs go here.
-- `scripts/manage.d/*.sh` — one file per command. Sourced on demand. See
-  `scripts/AGENTS.md` for shell conventions and module rules.
-- `backend/` — Python FastAPI backend, models, migrations, tests. See
-  `backend/AGENTS.md`.
-- `frontend/` — Vite + React 19 SPA and Playwright e2e tests. See
-  `frontend/AGENTS.md`.
-- `services/` — auxiliary services such as the Go auth-sidecar. See
-  `services/AGENTS.md` and per-service child docs.
-- `infrastructure/traefik/` — reverse proxy and network config. See
-  `infrastructure/AGENTS.md`.
-- `monitoring/` — Prometheus, Grafana, Alertmanager, Jaeger, OTEL. See
-  `monitoring/AGENTS.md`.
-- `docs/` — architecture, operations, security, development, and reference documentation. See `docs/AGENTS.md`.
+High-level layout; see the Child NAD Index below for domain-specific details.
+
+- `nukelabctl` + `scripts/` — top-level dispatcher, shared shell library,
+  command modules, build helpers, and security scanners.
+- `backend/` — Python FastAPI backend, models, migrations, tests.
+- `frontend/` — Vite + React 19 SPA and Playwright e2e tests.
+- `services/` — auxiliary services (e.g., Go auth-sidecar).
+- `environments/` — user environment Docker image definitions.
+- `infrastructure/traefik/` — reverse proxy and network config.
+- `monitoring/` — Prometheus, Grafana, Alertmanager, Jaeger, OTEL.
+- `docs/` — architecture, operations, security, development, and reference
+  documentation.
 
 ## Common pitfalls
 
 - **Dev and prod share container names**; only one stack may run at a time.
   `_require_other_stack_stopped` enforces this.
-- Shell-specific conventions and pitfalls (ERR trap, `_backend_services`
-  word-splitting, parser rules) are documented in `scripts/AGENTS.md`.
 
 ## Security & penetration testing
 

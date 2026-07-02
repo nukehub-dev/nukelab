@@ -24,6 +24,8 @@ All files under `scripts/`, plus the top-level `nukelabctl` dispatcher.
 - `set -E` ERR trap is active; append `|| true` when invoking tools that legitimately return non-zero (e.g., `shfmt -l`, `git describe`).
 - Do not hardcode the version string or names of named volumes/services; use `_nukelab_version`, `compose config --volumes`, and `_backend_services`.
 - `_backend_services` returns a space-separated string meant to word-split; do not quote it at the call site (`# shellcheck disable=SC2086`).
+- When adding or changing `nukelabctl` commands, targets, or flags, update
+  `scripts/nukelabctl-completion.bash` so bash tab-completion stays in sync.
 
 ## Verification
 
