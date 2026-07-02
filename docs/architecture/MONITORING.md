@@ -191,8 +191,6 @@ skewed earlier benchmarks.
 | `GRAFANA_ADMIN_PASSWORD` | `admin` | Grafana admin password |
 | `REQUEST_METRICS_ENABLED` | `true` | Enable the request metrics middleware |
 | `REQUEST_METRICS_STORE` | `both` | `db` \| `prometheus` \| `both` |
-| `POSTGRES_EXPORTER_ENABLED` | `true` | Enable postgres-exporter (when monitoring active) |
-| `REDIS_EXPORTER_ENABLED` | `true` | Enable redis-exporter (when monitoring active) |
 
 ---
 

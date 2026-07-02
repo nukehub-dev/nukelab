@@ -41,9 +41,11 @@ Both `.env` and `.env.development` are gitignored. `.env.example` is the only en
 | `CSRF_PROTECTION_ENABLED` | Enable double-submit CSRF protection |
 | `CORS_ORIGINS` | Comma-separated allowed origins |
 | `CORS_ALLOW_CREDENTIALS` | Allow cookies across origins |
-| `RATE_LIMIT_ENABLED` | Enable rate limiting |
-| `RATE_LIMIT_REQUESTS` | Requests per rate limit window |
-| `RATE_LIMIT_WINDOW` | Rate limit window in seconds |
+
+### Rate Limiting
+
+See `.env.example` for per-role RPM limits (`RATE_LIMIT_*_RPM`) and the master
+`RATE_LIMIT_ENABLED` switch used by WebSocket message throttling.
 
 ### Authentication
 
