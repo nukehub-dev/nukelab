@@ -11,7 +11,7 @@ _manage_sh_complete() {
 		start stop restart status logs build update pull remove rm clean
 		shell exec install test e2e loadtest db-migrate db-shell
 		backup restore reset dev lint security
-		rotate-user-auth-key cleanup-user-auth-keys
+		init-user-auth-keys rotate-user-auth-key cleanup-user-auth-keys
 		doctor version install-completion selftest help
 	)
 
@@ -99,7 +99,7 @@ _manage_sh_complete() {
 			esac
 		fi
 		;;
-	update | pull | clean | e2e | db-migrate | db-shell | backup | reset | selftest | install-completion | help | security | rotate-user-auth-key | cleanup-user-auth-keys)
+	update | pull | clean | e2e | db-migrate | db-shell | backup | reset | selftest | install-completion | help | security | init-user-auth-keys | rotate-user-auth-key | cleanup-user-auth-keys)
 		COMPREPLY=($(compgen -W "${global_flags[*]}" -- "$cur"))
 		;;
 	*)
