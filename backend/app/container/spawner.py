@@ -271,7 +271,10 @@ class ServerSpawner:
 
             for mount_path in mount_paths_to_fix:
                 try:
-                    exec_instance = await container.exec(["chmod", "777", mount_path])
+                    # Run as root so this works in hardened mode, where the
+                    # container user is 65532 and cannot chmod a root-owned
+                    # named volume that was initialized by an earlier run.
+                    exec_instance = await container.exec(["chmod", "777", mount_path], user="root")
                     await exec_instance.start(detach=True)
                     await asyncio.sleep(0.2)
                 except Exception as e:
