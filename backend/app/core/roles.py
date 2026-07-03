@@ -130,6 +130,9 @@ ROLE_PERMISSIONS = {
         Permission.VOLUMES_WRITE_OWN,
         Permission.WORKSPACES_READ_OWN,
         Permission.WORKSPACES_WRITE_OWN,
+        # Catalogs (view public environments/plans)
+        Permission.ENVIRONMENT_READ,
+        Permission.PLAN_READ,
         # Credits (view own)
         Permission.CREDITS_READ_OWN,
         # Analytics (view own)
