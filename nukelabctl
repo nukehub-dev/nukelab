@@ -237,6 +237,7 @@ ${BOLD}Maintenance:${RESET}
   ${GREEN}clean${RESET}                                Remove dangling images/volumes
   ${GREEN}remove${RESET}     [target]                  Remove containers (keep data)
   ${GREEN}reset${RESET}                                ⚠️ Delete ALL data & containers
+  ${GREEN}init-user-auth-keys${RESET}                  Generate initial user-auth Ed25519 keys
   ${GREEN}rotate-user-auth-key${RESET}                 Rotate the active user-auth Ed25519 key
   ${GREEN}cleanup-user-auth-keys${RESET}               Remove expired retired user-auth keys
 
@@ -308,6 +309,7 @@ ${BOLD}Examples:${RESET}
   ./nukelabctl lint frontend --fix        # Auto-fix frontend issues
   ./nukelabctl lint markdown              # Lint markdown and check links
   ./nukelabctl clean                      # Clean up dangling resources
+  ./nukelabctl init-user-auth-keys        # Generate initial user-auth keys (production setup)
   ./nukelabctl rotate-user-auth-key       # Rotate the active user-auth key
   ./nukelabctl cleanup-user-auth-keys     # Prune expired retired public keys
 
