@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
+from sqlalchemy import text
 
 from app.config import settings
 from app.core.logging import configure_logging, get_logger
@@ -49,9 +50,13 @@ async def startup():
     init_tracing()
     init_sentry()
 
-    # Create tables
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    # Create tables unless disabled (production should use Alembic migrations).
+    # When enabled, use a Postgres advisory lock so multiple uvicorn workers
+    # starting in parallel don't race to create the same tables/types.
+    if settings.auto_create_tables:
+        async with engine.begin() as conn:
+            await conn.execute(text("SELECT pg_advisory_xact_lock(5742761)"))
+            await conn.run_sync(Base.metadata.create_all)
 
     # Ensure partitions exist for time-series tables (safety net if Celery Beat is down)
     try:
