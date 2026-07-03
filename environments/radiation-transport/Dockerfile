@@ -235,6 +235,11 @@ RUN git clone -b ${PYNE_BRANCH} https://github.com/pyne/pyne.git && \
     nuc_data_make && \
     cd .. && rm -rf pyne
 
+# KDSource's CMake invokes `mcpl-config --show cmakedir` to locate MCPL, so
+# install the MCPL Python package (which provides the utility and CMake files)
+# before building KDSource.
+RUN pip install --no-cache-dir mcpl
+
 # Install KDSource
 ARG KDSOURCE_BRANCH
 RUN git clone -b ${KDSOURCE_BRANCH} --recurse-submodules https://github.com/KDSource/KDSource.git && \
@@ -261,7 +266,6 @@ RUN pip install --no-cache-dir \
         trame \
         moab \
         montepy \
-        mcpl \
         ncrystal \
         paramak \
         plasmapy \
