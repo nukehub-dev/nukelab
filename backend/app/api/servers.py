@@ -1112,7 +1112,7 @@ async def _perform_server_stop(
                 await db.commit()
                 await broadcast_server_status_change(server.user_id, server_id, "stopped")
                 return {
-                    "message": "Server stopped",
+                    "message": "Server already stopped",
                     "server_id": server_id,
                     "status": "stopped",
                 }
@@ -2010,7 +2010,9 @@ async def create_server_access_token(
         )
 
     try:
-        client_ip = request.client.host if request.client else None
+        from app.middleware.ip_restriction import _get_client_ip
+
+        client_ip = _get_client_ip(request)
         user_agent = request.headers.get("user-agent")
 
         # Accessing a server is a strong activity signal; refresh idle timeout.

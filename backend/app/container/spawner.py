@@ -148,7 +148,7 @@ class ServerSpawner:
             # when Traefik sits behind an external SSL-terminating reverse proxy.
             f"traefik.http.routers.server-{server_id}.middlewares": f"server-{server_id}-slash@docker,server-{server_id}-strip@docker",
             f"traefik.http.middlewares.server-{server_id}-slash.redirectregex.regex": f"^https?://[^/]+({re.escape(route_prefix)})($|\\?.*$)",
-            f"traefik.http.middlewares.server-{server_id}-slash.redirectregex.replacement": f"$1/$2",
+            f"traefik.http.middlewares.server-{server_id}-slash.redirectregex.replacement": "$1/$2",
             f"traefik.http.middlewares.server-{server_id}-slash.redirectregex.permanent": "true",
             f"traefik.http.middlewares.server-{server_id}-strip.stripprefix.prefixes": route_prefix,
             "nukelab.server.id": server_id,

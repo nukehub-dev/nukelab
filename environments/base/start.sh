@@ -60,7 +60,7 @@ fi
 # runtimes: the hardened user (UID 65532) owns /home and must be able to write
 # its own home directory.
 mkdir -p "/home/$USERNAME"
-chmod 777 "/home/$USERNAME" 2>/dev/null || true
+chmod 777 "/home/$USERNAME" 2> /dev/null || true
 
 # Export a friendly shell prompt and identity.
 export HOME="/home/$USERNAME"
