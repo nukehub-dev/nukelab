@@ -973,7 +973,10 @@ _direct_database_url() {
 }
 
 wait_for_backend() {
-    local url="${APP_URL:-http://localhost:8080}/api/health"
+    # Always check the local Traefik-exposed backend, not APP_URL. APP_URL may
+    # point to an external hostname (e.g., https://lab.nukehub.org) that isn't
+    # reachable from the host running nukelabctl during initial startup.
+    local url="http://localhost:8080/api/health"
     local waited=0
     step "Waiting for backend..."
     while ! curl -sf "$url" > /dev/null 2>&1; do
