@@ -62,6 +62,24 @@ fi
 mkdir -p "/home/$USERNAME"
 chmod 777 "/home/$USERNAME" 2> /dev/null || true
 
+# In hardened mode the container user (65532) cannot chmod a root-owned named
+# volume that was initialized by an earlier non-hardened run. The backend
+# spawner will run an explicit chmod as root shortly after the container starts,
+# so wait briefly for the mount point to become writable before launching the
+# user application. This prevents Theia/IDE from crashing on EACCES.
+if [ ! -w "/home/$USERNAME" ]; then
+    for _ in {1..10}; do
+        sleep 1
+        if [ -w "/home/$USERNAME" ]; then
+            break
+        fi
+    done
+    if [ ! -w "/home/$USERNAME" ]; then
+        echo "ERROR: /home/$USERNAME is not writable after waiting; aborting start." >&2
+        exit 1
+    fi
+fi
+
 # Export a friendly shell prompt and identity.
 export HOME="/home/$USERNAME"
 export USER="$USERNAME"
