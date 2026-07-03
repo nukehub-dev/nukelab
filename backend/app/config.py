@@ -129,6 +129,11 @@ class Settings(BaseSettings):
     database_query_timeout_seconds: int = 30  # asyncpg command_timeout (seconds)
     database_echo: bool = False
 
+    # When false, skip SQLAlchemy Base.metadata.create_all() on startup.
+    # Recommended for production: run Alembic migrations (./nukelabctl db-migrate)
+    # instead of relying on auto-create.
+    auto_create_tables: bool = True
+
     # Observability — Query Performance Monitoring
     observability_slow_query_threshold_ms: int = 100
     observability_pg_stat_statements_enabled: bool = True
