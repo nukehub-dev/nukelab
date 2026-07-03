@@ -1200,6 +1200,11 @@ async def oauth_callback(
         security["oauth_login"] = True
         user.security = security
 
+        # Flush so a newly-created OAuth user gets an id before we record the
+        # login event and create refresh tokens.
+        await db.flush()
+        await db.refresh(user)
+
         # Record login event
         db.add(
             LoginEvent(
@@ -1212,7 +1217,6 @@ async def oauth_callback(
         )
 
         await db.commit()
-        await db.refresh(user)
 
         # Create JWT token
         access_token_jwt = create_access_token(data={"sub": user.username, "role": user.role})
