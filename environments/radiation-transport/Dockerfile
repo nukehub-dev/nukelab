@@ -20,6 +20,11 @@ ARG NJOY2016_BRANCH="2016.79"
 ARG OPENMC_BRANCH="v0.15.3"
 ARG KDSOURCE_BRANCH="v0.2.2"
 ARG PYNE_BRANCH="scikit-build-core"
+ARG ALARA_BRANCH="master"
+ARG OPENMOC_BRANCH="develop"
+ARG FUDGE_VERSION="6.11.0"
+ARG PREPRO_BRANCH="master"
+ARG ONIX_BRANCH="master"
 
 # Define whether to download Geant4 data and cross-section data
 ARG DOWNLOAD_GEANT4_DATA=ON
@@ -31,6 +36,8 @@ ARG DOWNLOAD_CROSS_SECTION_DATA=ON
 
 # Set the base image for the Dockerfile
 FROM $BASE_IMAGE
+
+WORKDIR /tmp
 
 # Install all OS dependencies
 RUN apt-get update && \
@@ -79,10 +86,11 @@ ENV NUKE_DIR=/opt/nuke \
     LIBMESH_ROOT=/opt/libmesh \
     NJOY2016_ROOT=/opt/njoy2016 \
     OPENMC_ROOT=/opt/openmc \
-    KDSOURCE_ROOT=/opt/kdsource
+    KDSOURCE_ROOT=/opt/kdsource \
+    ALARA_ROOT=/opt/alara
 
 # Configure search paths for compilers and the dynamic linker
-ENV PATH="${NUKE_DIR}/bin:${MOAB_ROOT}/bin:${DOUBLE_DOWN_ROOT}/lib:${GEANT4_ROOT}/bin:${DAGMC_ROOT}/bin:${LIBMESH_ROOT}/bin:${NJOY2016_ROOT}/bin:${OPENMC_ROOT}/bin:${KDSOURCE_ROOT}/bin:${PATH}"
+ENV PATH="${NUKE_DIR}/bin:${MOAB_ROOT}/bin:${DOUBLE_DOWN_ROOT}/lib:${GEANT4_ROOT}/bin:${DAGMC_ROOT}/bin:${LIBMESH_ROOT}/bin:${NJOY2016_ROOT}/bin:${OPENMC_ROOT}/bin:${KDSOURCE_ROOT}/bin:${ALARA_ROOT}/bin:${PATH}"
 ENV LD_LIBRARY_PATH="${MOAB_ROOT}/lib:${DOUBLE_DOWN_ROOT}/lib:${GEANT4_ROOT}/lib:${DAGMC_ROOT}/lib:${LIBMESH_ROOT}/lib:${NJOY2016_ROOT}/lib:${OPENMC_ROOT}/lib:${KDSOURCE_ROOT}/lib"
 
 # Create the dedicated Conda environment for the nuclear codes
@@ -113,7 +121,7 @@ RUN git clone -b ${MOAB_BRANCH} --depth 1 https://bitbucket.org/fathomteam/moab 
         -DENABLE_PYMOAB=OFF && \
     make -j${CI_JOBS} && make install && \
     pip uninstall --yes cython && \
-    rm -rf ${HOME}/moab
+    rm -rf /tmp/moab
 
 # Install Double-Down
 ARG DOUBLE_DOWN_BRANCH
@@ -124,7 +132,7 @@ RUN git clone -b ${DOUBLE_DOWN_BRANCH} https://github.com/pshriwise/double-down.
         -DCMAKE_INSTALL_PREFIX=${DOUBLE_DOWN_ROOT} \
         -DMOAB_DIR=${MOAB_ROOT} && \
     make -j${CI_JOBS} && make install && \
-    rm -rf ${HOME}/double-down
+    rm -rf /tmp/double-down
 
 # Install Geant4
 ARG GEANT4_BRANCH
@@ -147,7 +155,7 @@ RUN mkdir geant4 && cd geant4 && \
         -DGEANT4_INSTALL_DATADIR=${GEANT4_DATA_DIR} \
         -DGEANT4_INSTALL_DATA_TIMEOUT=0 && \
     make -j${CI_JOBS} && make install && \
-    rm -rf ${HOME}/geant4
+    rm -rf /tmp/geant4
 
 # Install DAGMC
 ARG DAGMC_BRANCH
@@ -162,7 +170,7 @@ RUN git clone -b ${DAGMC_BRANCH} https://github.com/svalinn/DAGMC.git && \
         -DDOUBLE_DOWN=ON \
         -Ddd_ROOT=${DOUBLE_DOWN_ROOT} && \
     make -j${CI_JOBS} && make install && \
-    rm -rf ${HOME}/DAGMC
+    rm -rf /tmp/DAGMC
 
 # Install LibMesh
 ARG LIBMESH_BRANCH
@@ -174,7 +182,7 @@ RUN git clone --depth 1 -b ${LIBMESH_BRANCH} https://github.com/libMesh/libmesh.
         --prefix=${LIBMESH_ROOT} \
         --disable-mpi && \
     make -j${CI_JOBS} && make install && \
-    rm -rf ${HOME}/libmesh
+    rm -rf /tmp/libmesh
 
 # Install NJOY2016
 ARG NJOY2016_BRANCH
@@ -186,7 +194,7 @@ RUN git clone --depth 1 -b ${NJOY2016_BRANCH} https://github.com/njoy/NJOY2016.g
     make -j${CI_JOBS} && \
     mkdir -p ${NJOY2016_ROOT}/bin && \
     cp njoy ${NJOY2016_ROOT}/bin/ && \
-    cd .. && rm -rf ${HOME}/NJOY2016
+    cd .. && rm -rf /tmp/NJOY2016
 
 # Install OpenMC
 ARG OPENMC_BRANCH
@@ -200,14 +208,15 @@ RUN git clone -b ${OPENMC_BRANCH} https://github.com/openmc-dev/openmc.git && \
         -DCMAKE_PREFIX_PATH=${LIBMESH_ROOT} && \
     make -j${CI_JOBS} && make install && \
     cd .. && pip install --no-cache-dir . && \
-    rm -rf ${HOME}/openmc
+    rm -rf /tmp/openmc
 
 # Download cross-section data using the system shell
 ARG DOWNLOAD_CROSS_SECTION_DATA
 ENV OPENMC_DATA_DIR=/opt/openmc_data
 ENV OPENMC_CROSS_SECTIONS=${OPENMC_DATA_DIR}/lib80x_hdf5/cross_sections.xml
 COPY download_cross_sections.sh .
-RUN ./download_cross_sections.sh ${DOWNLOAD_CROSS_SECTION_DATA} ${OPENMC_DATA_DIR} && \
+RUN chmod +x download_cross_sections.sh && \
+    ./download_cross_sections.sh ${DOWNLOAD_CROSS_SECTION_DATA} ${OPENMC_DATA_DIR} && \
     rm download_cross_sections.sh
 
 # Install PyNE
@@ -233,7 +242,18 @@ RUN git clone -b ${KDSOURCE_BRANCH} --recurse-submodules https://github.com/KDSo
     cmake ../ \
         -DCMAKE_INSTALL_PREFIX=${KDSOURCE_ROOT} && \
     make -j${CI_JOBS} && make install && \
-    rm -rf ${HOME}/KDSource
+    rm -rf /tmp/KDSource
+
+# Install ALARA
+ARG ALARA_BRANCH
+RUN git clone -b ${ALARA_BRANCH} --depth 1 https://github.com/svalinn/ALARA && \
+    cd ALARA && \
+    mkdir build && cd build && \
+    cmake ../ \
+        -DCMAKE_INSTALL_PREFIX=${ALARA_ROOT} && \
+    make -j${CI_JOBS} && make install && \
+    rm -rf /tmp/ALARA
+
 
 # Install remaining Python packages from PyPI and GitHub
 RUN pip install --no-cache-dir \
