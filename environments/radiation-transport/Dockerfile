@@ -92,7 +92,7 @@ RUN conda create --yes -p ${NUKE_DIR} \
         ipykernel \
         xeus-cling \
         paraview \
-        ocp && \
+        pythonocc-core && \
     conda clean --all -f -y
 
 # Activate the nuclear conda environment in login shells (terminals).
