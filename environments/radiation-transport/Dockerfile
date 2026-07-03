@@ -20,11 +20,7 @@ ARG NJOY2016_BRANCH="2016.79"
 ARG OPENMC_BRANCH="v0.15.3"
 ARG KDSOURCE_BRANCH="v0.2.2"
 ARG PYNE_BRANCH="scikit-build-core"
-ARG ALARA_BRANCH="master"
-ARG OPENMOC_BRANCH="develop"
-ARG FUDGE_VERSION="6.11.0"
-ARG PREPRO_BRANCH="master"
-ARG ONIX_BRANCH="master"
+ARG ALARA_BRANCH="main"
 
 # Define whether to download Geant4 data and cross-section data
 ARG DOWNLOAD_GEANT4_DATA=ON
