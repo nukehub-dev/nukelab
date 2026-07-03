@@ -182,9 +182,11 @@ RUN git clone --depth 1 -b ${NJOY2016_BRANCH} https://github.com/njoy/NJOY2016.g
     cd NJOY2016 && \
     mkdir build && cd build && \
     cmake ../ \
-        -DCMAKE_INSTALL_PREFIX=${NJOY2016_ROOT} && \
-    make -j${CI_JOBS} && make install && \
-    rm -rf ${HOME}/NJOY2016
+        -DCMAKE_BUILD_TYPE=Release && \
+    make -j${CI_JOBS} && \
+    mkdir -p ${NJOY2016_ROOT}/bin && \
+    cp njoy ${NJOY2016_ROOT}/bin/ && \
+    cd .. && rm -rf ${HOME}/NJOY2016
 
 # Install OpenMC
 ARG OPENMC_BRANCH
