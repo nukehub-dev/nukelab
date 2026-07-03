@@ -451,7 +451,7 @@ main() {
         lint)
             _dispatch_command "$CMD"
             ;;
-        status | logs | shell | exec | db-migrate | db-shell | backup | restore | e2e | security | doctor | rotate-user-auth-key | cleanup-user-auth-keys | verify-hardening)
+        status | logs | shell | exec | db-migrate | db-shell | backup | restore | e2e | security | doctor | init-user-auth-keys | rotate-user-auth-key | cleanup-user-auth-keys | verify-hardening)
             _bootstrap restore
             _dispatch_command "$CMD"
             ;;
