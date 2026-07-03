@@ -54,14 +54,13 @@ if $RUN_AS_ROOT && ! id "$USERNAME" &> /dev/null; then
 fi
 
 # Ensure home directory exists and is accessible.
-# When running as root we make the mount point world-writable (non-recursive)
-# to avoid slow recursive chown on large volumes and ownership fights when the
-# same volume is shared across multiple users. When running as non-root we
-# assume the backend/spawner has already arranged writable permissions.
+# Make the mount point world-writable (non-recursive) to avoid slow recursive
+# chown on large volumes and ownership fights when the same volume is shared
+# across multiple users. This is required both for root and hardened (non-root)
+# runtimes: the hardened user (UID 65532) owns /home and must be able to write
+# its own home directory.
 mkdir -p "/home/$USERNAME"
-if $RUN_AS_ROOT; then
-    chmod 777 "/home/$USERNAME"
-fi
+chmod 777 "/home/$USERNAME" 2>/dev/null || true
 
 # Export a friendly shell prompt and identity.
 export HOME="/home/$USERNAME"
