@@ -776,8 +776,8 @@ class TestSpawnSuccess:
         assert str(server.id) == sid
 
     @pytest.mark.asyncio
-    async def test_spawn_permission_fix_skips_home(self, fresh_spawner):
-        """spawn should skip chmod on /home/{username}."""
+    async def test_spawn_permission_fix_includes_home(self, fresh_spawner):
+        """spawn should chmod /home/{username} and extra volume mounts."""
         mock_exec = MockExec()
         mock_container = mock.AsyncMock()
         mock_container.id = str(uuid_mod.uuid4())
@@ -798,10 +798,11 @@ class TestSpawnSuccess:
                     ],
                 )
 
-        # Only /data should get chmod, not /home/testuser
+        # Home directory and extra mounts are both chmod-ed so the non-root
+        # container user can write to them in hardened mode.
         exec_calls = mock_container.exec.call_args_list
         paths = [c[0][0][2] for c in exec_calls]
-        assert "/home/testuser" not in paths
+        assert "/home/testuser" in paths
         assert "/data" in paths
 
     @pytest.mark.asyncio
@@ -827,7 +828,8 @@ class TestSpawnSuccess:
         chmod_warnings = [
             c for c in mock_warn.call_args_list if "Could not fix permissions" in c[0][0]
         ]
-        assert len(chmod_warnings) == 1
+        # Home directory is always fixed, plus the supplied /data mount.
+        assert len(chmod_warnings) == 2
 
     @pytest.mark.asyncio
     async def test_spawn_with_auth_volume(self, fresh_spawner):

@@ -1154,7 +1154,11 @@ async def oauth_callback(
                 profile.update(user_data["extra_profile"])
                 user.profile = profile
         else:
-            # Create new user
+            # Create new user with system default daily allowance
+            from app.services.setting_service import SettingService
+
+            setting_service = SettingService(db)
+            default_allowance = await setting_service.get_daily_allowance()
             user = User(
                 username=user_data["username"],
                 email=user_data["email"],
@@ -1165,6 +1169,8 @@ async def oauth_callback(
                 role="user",
                 is_active=True,
                 is_verified=True,
+                nuke_balance=default_allowance,
+                daily_allowance=default_allowance,
                 profile=user_data.get("extra_profile") or {},
             )
             db.add(user)

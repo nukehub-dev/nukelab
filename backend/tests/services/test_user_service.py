@@ -150,10 +150,44 @@ class TestUserServiceCreate:
             first_name="New",
             last_name="User",
             credits=1000,
+            daily_allowance=250,
         )
         assert user.username == "newuser"
         assert user.nuke_balance == 1000
-        assert user.daily_allowance == 1000
+        assert user.daily_allowance == 250
+
+    @pytest.mark.asyncio
+    async def test_create_user_uses_system_default_daily_allowance(self, db_session):
+        """create_user should use the persisted system default daily allowance."""
+        from app.models.system_setting import SystemSetting
+
+        db_session.add(SystemSetting(key="credits_daily_allowance", value="10"))
+        await db_session.commit()
+
+        service = UserService(db_session)
+        user = await service.create_user(
+            username="newuser",
+            email="new@example.com",
+            password="password123",
+        )
+        assert user.daily_allowance == 10
+
+    @pytest.mark.asyncio
+    async def test_create_user_override_daily_allowance(self, db_session):
+        """create_user should allow caller to override the system default."""
+        from app.models.system_setting import SystemSetting
+
+        db_session.add(SystemSetting(key="credits_daily_allowance", value="10"))
+        await db_session.commit()
+
+        service = UserService(db_session)
+        user = await service.create_user(
+            username="newuser",
+            email="new@example.com",
+            password="password123",
+            daily_allowance=50,
+        )
+        assert user.daily_allowance == 50
 
     @pytest.mark.asyncio
     async def test_create_user_invalid_role(self, db_session):

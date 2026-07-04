@@ -118,6 +118,51 @@ class SettingService:
         await self.set("credits_max_balance", str(amount))
         settings.credits_max_balance = amount
 
+    async def get_quota_defaults(self) -> dict[str, float | int | str]:
+        """Return system-wide default resource quota limits.
+
+        Reads from the database and falls back to the in-process config
+        defaults so values written by other workers are observed.
+        """
+        defaults = {
+            "max_cpu_total": 8.0,
+            "max_memory_total": "16g",
+            "max_disk_total": "100g",
+            "max_gpu_total": 0,
+            "max_servers_total": 5,
+        }
+        for key in defaults:
+            value = await self.get(f"quota_default_{key}")
+            if value is None:
+                continue
+            if key in ("max_cpu_total",):
+                try:
+                    defaults[key] = float(value)
+                except ValueError:
+                    logger.warning(f"Invalid {key} value: {value}")
+            elif key in ("max_gpu_total", "max_servers_total"):
+                try:
+                    defaults[key] = int(value)
+                except ValueError:
+                    logger.warning(f"Invalid {key} value: {value}")
+            else:
+                defaults[key] = value
+        return defaults
+
+    async def set_quota_defaults(self, defaults: dict[str, float | int | str]) -> None:
+        """Persist system-wide default resource quota limits."""
+        valid_keys = {
+            "max_cpu_total",
+            "max_memory_total",
+            "max_disk_total",
+            "max_gpu_total",
+            "max_servers_total",
+        }
+        for key, value in defaults.items():
+            if key not in valid_keys:
+                continue
+            await self.set(f"quota_default_{key}", str(value))
+
     async def get_maintenance(self) -> dict:
         """Get current maintenance mode settings (from DB or fallback to config)."""
         mode_str = await self.get("maintenance_mode")

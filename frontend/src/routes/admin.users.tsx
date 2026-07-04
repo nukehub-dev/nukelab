@@ -20,6 +20,7 @@ import { ResourcePageLayout } from '../components/layout/resource-page-layout'
 import { DataTable } from '../components/data/data-table'
 import { StatusBadge } from '../components/data/status-badge'
 import { useUsers, useUserActions } from '../hooks/use-users'
+import { useSystemDailyAllowance } from '../hooks/use-system-config'
 import { useDataTable } from '../hooks/use-data-table'
 import { useThemeStore } from '../stores/theme-store'
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store'
@@ -115,6 +116,8 @@ function UsersPage() {
 
   const { createUser, updateUser, disableUser, deleteUser } = useUserActions()
   const { confirm, dialog } = useConfirmDialog()
+  const { data: systemAllowanceData } = useSystemDailyAllowance()
+  const systemAllowance = systemAllowanceData?.default_daily_allowance ?? 500
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<UserType | null>(null)
@@ -127,7 +130,18 @@ function UsersPage() {
     role: 'user',
     first_name: '',
     last_name: '',
+    credits: 500,
+    daily_allowance: systemAllowance,
   })
+
+  useEffect(() => {
+    if (!editingUser) {
+      setFormData((prev) => ({
+        ...prev,
+        daily_allowance: systemAllowance,
+      }))
+    }
+  }, [systemAllowance, editingUser])
 
   const users = data?.data || []
   const pagination = data?.pagination
@@ -141,6 +155,8 @@ function UsersPage() {
       role: 'user',
       first_name: '',
       last_name: '',
+      credits: 500,
+      daily_allowance: systemAllowance,
     })
     setDialogOpen(true)
   }
@@ -154,6 +170,8 @@ function UsersPage() {
       role: user.role,
       first_name: user.first_name || '',
       last_name: user.last_name || '',
+      credits: 500,
+      daily_allowance: user.daily_allowance ?? systemAllowance,
     })
     setDialogOpen(true)
   }
@@ -192,7 +210,8 @@ function UsersPage() {
           role: formData.role,
           first_name: formData.first_name || undefined,
           last_name: formData.last_name || undefined,
-          credits: 500,
+          credits: formData.credits,
+          daily_allowance: formData.daily_allowance,
         },
         {
           onSuccess: () => setDialogOpen(false),
@@ -705,7 +724,40 @@ function UsersPage() {
                     {canDeleteUsers && <SelectItem value="super_admin">Super Admin</SelectItem>}
                   </Select>
                 </div>
+                {!editingUser && (
+                  <div className="space-y-2">
+                    <Label>Starting Credits</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={formData.credits}
+                      onChange={(e) =>
+                        setFormData({ ...formData, credits: parseInt(e.target.value) || 0 })
+                      }
+                    />
+                  </div>
+                )}
               </div>
+              {!editingUser && (
+                <div className="space-y-2">
+                  <Label>Daily Allowance (NUKE / day)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={formData.daily_allowance}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        daily_allowance: parseInt(e.target.value) || 0,
+                      })
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Defaults to the system setting ({systemAllowance.toLocaleString()} NUKE / day)
+                  </p>
+                </div>
+              )}
             </form>
             <DialogFooter>
               <Button variant="outline" type="button" onClick={() => setDialogOpen(false)}>

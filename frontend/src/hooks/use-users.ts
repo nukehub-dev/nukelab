@@ -56,6 +56,7 @@ interface CreateUserData {
   first_name?: string
   last_name?: string
   credits?: number
+  daily_allowance?: number
 }
 
 interface UpdateUserData {

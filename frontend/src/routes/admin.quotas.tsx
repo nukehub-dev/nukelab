@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react'
 import { ResourcePageLayout } from '../components/layout/resource-page-layout'
 import { DataTable } from '../components/data/data-table'
 import { useQuotas, useQuotaActions, type UserQuota } from '../hooks/use-quotas'
+import { QuotaDefaultsCard } from '../components/admin/quota-defaults-card'
 import { useDataTable } from '../hooks/use-data-table'
 import { useThemeStore } from '../stores/theme-store'
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store'
@@ -40,6 +41,7 @@ function QuotasPage() {
   const density = useThemeStore((state) => state.density)
   const hasPermission = useAuthStore((state) => state.hasPermission)
   const canUpdateQuotas = hasPermission(PERMISSIONS.QUOTA_UPDATE)
+  const canManageDefaults = hasPermission(PERMISSIONS.ADMIN_ACCESS)
 
   const {
     state: tableState,
@@ -354,6 +356,7 @@ function QuotasPage() {
         backTo="/admin"
         stats={stats}
       >
+        <QuotaDefaultsCard canManage={canManageDefaults} />
         <DataTable
           columns={columns}
           data={quotas}
