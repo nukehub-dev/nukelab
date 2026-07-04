@@ -3,11 +3,13 @@
 
 import asyncio
 import hashlib
+import ipaddress
 import logging
 import secrets
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from urllib.parse import urlparse
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -860,6 +862,24 @@ async def verify_admin_auth(request: Request, db: AsyncSession = Depends(get_db)
     )
 
 
+def _cookie_domain_from_url(url: str) -> str | None:
+    """Return a usable cookie domain from a URL, or None for IPs/empty hosts.
+
+    Browsers reject cookies whose ``Domain`` attribute is an IP address, so
+    this helper falls back to host-only cookies (no Domain attribute) for IPs.
+    For proper hostnames it returns the hostname verbatim, which lets the
+    cookie be shared across sub-paths such as ``/api`` and ``/grafana``.
+    """
+    hostname = urlparse(url).hostname
+    if not hostname:
+        return None
+    try:
+        ipaddress.ip_address(hostname)
+    except ValueError:
+        return hostname
+    return None
+
+
 @router.get("/monitoring")
 async def monitoring_auth_redirect(
     request: Request,
@@ -872,7 +892,7 @@ async def monitoring_auth_redirect(
     scoped to the site where they were set. Logging in on localhost:5173 and
     then navigating to localhost:8080 can fail because the cookie is not sent.
     This endpoint validates the token and explicitly sets the cookie on the
-    backend domain, then redirects to Prometheus/Grafana.
+    configured public domain, then redirects to Prometheus/Grafana.
     """
     token = _extract_token_from_request(request)
     user = await _resolve_user_from_token(token, db)
@@ -891,7 +911,7 @@ async def monitoring_auth_redirect(
     response.set_cookie(
         key="nukelab_token",
         value=token,
-        domain="localhost",
+        domain=_cookie_domain_from_url(settings.public_url),
         path="/",
         max_age=settings.session_max_age,
         httponly=settings.session_httponly,
