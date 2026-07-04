@@ -12,10 +12,10 @@ Requirements:
     - xfsprogs installed inside the backend container (xfs_quota, xfs_io)
     - Container must have CAP_SYS_ADMIN to run xfs_quota
 
-Setup on host:
-    mount -o remount,prjquota /var/lib/docker/volumes
+Setup on host (replace /data/docker with your Docker data-root):
+    mount -o remount,prjquota /data/docker
     # or in fstab:
-    /dev/sdXn /var/lib/docker/volumes xfs defaults,prjquota 0 0
+    /dev/sdXn /data/docker xfs defaults,prjquota 0 0
 """
 
 import hashlib

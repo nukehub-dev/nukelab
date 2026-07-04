@@ -174,24 +174,26 @@ INFO:Mounted lxcfs /proc files: 7 files
 
 ### XFS with Project Quotas (pquota)
 
+The examples below use `/data/docker` as the Docker `data-root`. Replace it with your actual path (e.g., `/var/lib/docker`, `/var/lib/containers/storage`, or wherever `VOLUME_STORAGE_PATH` points).
+
 **1. Check current mount:**
 
 ```bash
-findmnt /var/lib/docker
+findmnt /data/docker
 # or
-findmnt /var/lib/containers
+findmnt /var/lib/docker
 ```
 
 **2. Remount with pquota (temporary):**
 
 ```bash
-sudo mount -o remount,prjquota /var/lib/docker
+sudo mount -o remount,prjquota /data/docker
 ```
 
 **3. Make permanent in `/etc/fstab`:**
 
 ```
-/dev/mapper/vg-docker /var/lib/docker xfs defaults,prjquota 0 0
+/dev/mapper/your-vg-data /data/docker xfs defaults,prjquota 0 0
 ```
 
 **4. Restart Docker:**
@@ -202,14 +204,31 @@ sudo systemctl restart docker
 
 Modern Docker's `overlay2` driver automatically uses XFS project quotas for per-container writable-layer size limits when the backing filesystem is mounted with `pquota`.
 
-**5. Rebuild the backend image:**
+**5. Expose the XFS block device to the backend container:**
+
+`xfs_quota` needs the underlying block device node visible inside the container, even though it only performs filesystem-level quota ioctls. Find the device for your volume storage path:
+
+```bash
+sudo df -P "$VOLUME_STORAGE_PATH" | tail -1 | awk '{print $1}'
+# → /dev/mapper/your-vg-data
+```
+
+Set it in `.env`:
+
+```env
+XFS_QUOTA_DEVICE_PATH=/dev/mapper/your-vg-data
+```
+
+The device is mounted read-only into the backend and celery-worker containers via `compose.yml`.
+
+**6. Rebuild and restart:**
 
 NukeLab's XFS project quota service needs `xfsprogs` (`xfs_quota`, `xfs_io`) inside the backend container. The backend `Dockerfile` installs it; rebuild the image after pulling the change:
 
 ```bash
 ./nukelabctl down
 ./nukelabctl build backend
-./nukelabctl start
+./nukelabctl up prod
 ```
 
 ### ZFS
