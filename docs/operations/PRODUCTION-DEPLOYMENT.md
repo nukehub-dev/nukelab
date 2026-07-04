@@ -269,6 +269,86 @@ Common in rootless dev environments (overlayfs).
 Expected in production with XFS(pquota)/ZFS/Btrfs.
 ```
 
+### Hide host storage size from containers
+
+By default, Docker bind-mounts per-container metadata files (`/etc/hosts`, `/etc/hostname`, `/etc/resolv.conf`) from `/data/docker/containers/<id>/`. Because that directory lives on the host's XFS data partition, `df` inside a server container leaks the full host storage size:
+
+```text
+/dev/mapper/your-vg-data  500G   50G  450G  10% /etc/hosts
+```
+
+To hide this, move Docker's container metadata onto a small dedicated loopback filesystem and enable Docker log rotation so the metadata volume does not fill up.
+
+**1. Stop Docker:**
+
+```bash
+sudo systemctl stop docker
+```
+
+**2. Create a loopback filesystem for container metadata:**
+
+```bash
+# Move existing metadata aside
+sudo mv /data/docker/containers /data/docker/containers-under
+
+# Create a 10 GiB loopback file (adjust size to your needs)
+sudo mkdir -p /data/docker-meta
+sudo dd if=/dev/zero of=/data/docker-meta/containers.img bs=1M count=10240
+sudo mkfs.ext4 -L docker-containers /data/docker-meta/containers.img
+
+# Mount it at the original path
+sudo mkdir -p /data/docker/containers
+sudo mount -o loop /data/docker-meta/containers.img /data/docker/containers
+```
+
+**3. Copy the original metadata back:**
+
+```bash
+sudo rsync -a --delete /data/docker/containers-under/ /data/docker/containers/
+sudo rm -rf /data/docker/containers-under
+```
+
+**4. Make it permanent in `/etc/fstab`:**
+
+```fstab
+/data/docker-meta/containers.img /data/docker/containers ext4 loop 0 0
+```
+
+**5. Enable Docker log rotation in `/etc/docker/daemon.json`:**
+
+```json
+{
+  "data-root": "/data/docker",
+  "storage-driver": "overlay2",
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  }
+}
+```
+
+**6. Restart Docker:**
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl start docker
+```
+
+**7. Verify:**
+
+Start a new server and run inside it:
+
+```bash
+df -h /etc/hosts
+```
+
+Expected output shows the loop device size (10G), not the host's data partition:
+
+```text
+/dev/loop0                  10G   24K   10G   1% /etc/hosts
+```
+
 ---
 
 ## Docker vs Podman
