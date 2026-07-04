@@ -179,8 +179,8 @@ class ServerSpawner:
             "NUKELAB_AUTH_SERVER_ID": server_id,
             # nss-wrapper: every process, including Theia terminals, should see
             # the human username in whoami/id/ls instead of the fixed nukelab
-            # account. start.sh writes the actual passwd/group files at runtime.
-            "LD_PRELOAD": "/usr/lib/x86_64-linux-gnu/libnss_wrapper.so",
+            # account. start.sh creates the passwd/group files and then sets
+            # LD_PRELOAD itself, so we only pass the target paths here.
             "NSS_WRAPPER_PASSWD": "/tmp/nukelab-passwd",
             "NSS_WRAPPER_GROUP": "/tmp/nukelab-group",
             **(env_vars or {}),
