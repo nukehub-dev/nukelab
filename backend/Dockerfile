@@ -6,6 +6,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     gcc \
     libpq-dev \
+    xfsprogs \
     && rm -rf /var/lib/apt/lists/*
 
 # Install production Python dependencies

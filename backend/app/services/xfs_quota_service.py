@@ -8,9 +8,9 @@ volume directory and setting a hard byte limit. Works alongside the periodic
 du-based enforcement task (which serves as fallback on non-XFS filesystems).
 
 Requirements:
-    - Host filesystem must be XFS mounted with prjquota
-    - xfsprogs installed on host (xfs_quota, xfs_io)
-    - Container must have CAP_SYS_ADMIN or run privileged to run xfs_quota
+    - Host filesystem must be XFS mounted with prjquota/pquota
+    - xfsprogs installed inside the backend container (xfs_quota, xfs_io)
+    - Container must have CAP_SYS_ADMIN to run xfs_quota
 
 Setup on host:
     mount -o remount,prjquota /var/lib/docker/volumes

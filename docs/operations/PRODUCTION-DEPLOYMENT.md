@@ -194,22 +194,22 @@ sudo mount -o remount,prjquota /var/lib/docker
 /dev/mapper/vg-docker /var/lib/docker xfs defaults,prjquota 0 0
 ```
 
-**4. Enable in Docker daemon** (`/etc/docker/daemon.json`):
-
-```json
-{
-  "storage-driver": "overlay2",
-  "storage-opts": [
-    "overlay2.override_kernel_check=true",
-    "xfs.pquota=true"
-  ]
-}
-```
-
-**5. Restart Docker:**
+**4. Restart Docker:**
 
 ```bash
 sudo systemctl restart docker
+```
+
+Modern Docker's `overlay2` driver automatically uses XFS project quotas for per-container writable-layer size limits when the backing filesystem is mounted with `pquota`.
+
+**5. Rebuild the backend image:**
+
+NukeLab's XFS project quota service needs `xfsprogs` (`xfs_quota`, `xfs_io`) inside the backend container. The backend `Dockerfile` installs it; rebuild the image after pulling the change:
+
+```bash
+./nukelabctl down
+./nukelabctl build backend
+./nukelabctl start
 ```
 
 ### ZFS
