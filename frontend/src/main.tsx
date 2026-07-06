@@ -28,7 +28,7 @@ if (SENTRY_DSN) {
         maskAllInputs: true,
       }),
     ],
-    tracesSampleRate: 0.1,
+    tracesSampleRate: 0.01,
     replaysSessionSampleRate: 0.0,
     replaysOnErrorSampleRate: 1.0,
     beforeSend(event: Sentry.ErrorEvent) {

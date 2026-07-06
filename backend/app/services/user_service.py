@@ -115,11 +115,14 @@ class UserService:
         last_name: str | None = None,
         avatar_url: str | None = None,
         use_gravatar: bool = True,
-        credits: int = 500,
+        credits: int | None = None,
         daily_allowance: int | None = None,
         created_by: User | None = None,
     ) -> User:
         """Create a new user.
+
+        ``credits`` defaults to the persisted system signup initial balance
+        (``credits_initial_balance``). Pass an explicit value to override it.
 
         ``daily_allowance`` defaults to the persisted system default
         (``credits_daily_allowance``). Pass an explicit value to override it.
@@ -144,11 +147,14 @@ class UserService:
         if existing:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already exists")
 
-        # Resolve daily allowance default from system settings when not provided
-        if daily_allowance is None:
-            from app.services.setting_service import SettingService
+        # Resolve credits and daily allowance defaults from system settings
+        # when not explicitly provided so all new users start consistently.
+        from app.services.setting_service import SettingService
 
-            setting_service = SettingService(self.db)
+        setting_service = SettingService(self.db)
+        if credits is None:
+            credits = await setting_service.get_initial_balance()
+        if daily_allowance is None:
             daily_allowance = await setting_service.get_daily_allowance()
 
         # Create user

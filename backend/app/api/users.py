@@ -34,7 +34,7 @@ class UserCreateRequest(BaseModel):
     first_name: str | None = Field(default=None, max_length=255)
     last_name: str | None = Field(default=None, max_length=255)
     avatar_url: str | None = Field(default=None, max_length=500)
-    credits: int = Field(default=500, ge=0)
+    credits: int | None = Field(default=None, ge=0)
     daily_allowance: int | None = Field(default=None, ge=0)
 
 
