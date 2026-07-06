@@ -396,7 +396,7 @@ async def create_server(
     try:
         from app.models.server_volume import ServerVolume
         from app.services.volume_access_service import VolumeAccessService
-        from app.services.volume_service import VolumeService, make_docker_volume_name
+        from app.services.volume_service import VolumeService, make_docker_resource_name
 
         volume_service = VolumeService(db)
         volume_access = VolumeAccessService(db)
@@ -419,9 +419,9 @@ async def create_server(
                 # Auto-create volume for empty volume_id mounts
                 if not vm.volume_id:
                     suffix = "data" if idx == 0 else f"data-{idx}"
-                    volume_name = make_docker_volume_name(
+                    volume_name = make_docker_resource_name(
                         prefix="nukelab-server",
-                        username=current_user.username,
+                        user_identifier=str(current_user.id),
                         server_name=body.name,
                         suffix=suffix,
                     )
@@ -447,9 +447,9 @@ async def create_server(
 
         # Auto-create primary volume if none provided
         if not volume_mounts:
-            volume_name = make_docker_volume_name(
+            volume_name = make_docker_resource_name(
                 prefix="nukelab-server",
-                username=current_user.username,
+                user_identifier=str(current_user.id),
                 server_name=body.name,
                 suffix="data",
             )
@@ -626,9 +626,9 @@ async def create_server(
             from app.container.client import get_container_client
 
             container_client = await get_container_client()
-            container_name = make_docker_volume_name(
+            container_name = make_docker_resource_name(
                 prefix="nukelab-server",
-                username=current_user.username,
+                user_identifier=str(current_user.id),
                 server_name=body.name,
                 suffix=None,
                 max_len=240,
@@ -1523,7 +1523,7 @@ async def update_server(
     from app.services.plan_service import PlanService
     from app.services.quota_service import QuotaService
     from app.services.volume_access_service import VolumeAccessService
-    from app.services.volume_service import VolumeService, make_docker_volume_name
+    from app.services.volume_service import VolumeService, make_docker_resource_name
 
     volume_service = VolumeService(db)
     volume_access = VolumeAccessService(db)
@@ -1593,9 +1593,9 @@ async def update_server(
             # Auto-create volume for empty volume_id mounts
             if not vm.volume_id:
                 suffix = "data" if idx == 0 else f"data-{idx}"
-                volume_name = make_docker_volume_name(
+                volume_name = make_docker_resource_name(
                     prefix="nukelab-server",
-                    username=current_user.username,
+                    user_identifier=str(current_user.id),
                     server_name=server.name,
                     suffix=suffix,
                 )

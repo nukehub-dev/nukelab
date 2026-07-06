@@ -11,7 +11,7 @@ from app.config import settings
 from app.container.client import ContainerClient, get_container_client
 from app.core.logging import get_logger
 from app.models.server import Server
-from app.services.volume_service import make_docker_volume_name
+from app.services.volume_service import make_docker_resource_name
 
 logger = get_logger(__name__)
 
@@ -65,9 +65,9 @@ class ServerSpawner:
 
         # Use existing server ID or generate new one
         server_id = server_id or str(uuid.uuid4())
-        container_name = make_docker_volume_name(
+        container_name = make_docker_resource_name(
             prefix="nukelab-server",
-            username=username,
+            user_identifier=user_id,
             server_name=server_name,
             suffix=None,
             max_len=240,
@@ -125,7 +125,12 @@ class ServerSpawner:
                             # Fallback: generate name from id
                             volume_name = f"nukelab-vol-{vol_id[:8]}"
                 else:
-                    volume_name = f"nukelab-server-{username}-{server_name}-data"
+                    volume_name = make_docker_resource_name(
+                        prefix="nukelab-server",
+                        user_identifier=user_id,
+                        server_name=server_name,
+                        suffix="data",
+                    )
 
                 await self._ensure_volume(volume_name)
 
@@ -133,7 +138,12 @@ class ServerSpawner:
                 volumes[volume_name] = {"bind": mount_path, "mode": mount_mode}
         else:
             # Default single volume mounted at the user's home directory
-            volume_name = f"nukelab-server-{username}-{server_name}-data"
+            volume_name = make_docker_resource_name(
+                prefix="nukelab-server",
+                user_identifier=user_id,
+                server_name=server_name,
+                suffix="data",
+            )
             await self._ensure_volume(volume_name)
             volumes[volume_name] = {"bind": home_mount_path, "mode": "rw"}
 

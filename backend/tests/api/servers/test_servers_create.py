@@ -232,7 +232,7 @@ class TestCreateServerExceptionCleanup:
                         mock_vol = mock_vol_cls.return_value
                         auto_vol = mock.Mock()
                         auto_vol.id = uuid_mod.uuid4()
-                        auto_vol.name = f"nukelab-server-{test_user.username}-cleanup-server-data"
+                        auto_vol.name = f"nukelab-server-{str(test_user.id)}-cleanup-server-data"
 
                         mock_vol.create_volume = mock.AsyncMock(return_value=auto_vol)
                         mock_vol.record_mount = mock.AsyncMock()

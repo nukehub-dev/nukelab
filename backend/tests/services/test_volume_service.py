@@ -15,7 +15,7 @@ from app.models.shared_workspace import SharedWorkspace
 from app.models.user import User
 from app.models.volume import Volume
 from app.models.workspace_volume import WorkspaceVolume
-from app.services.volume_service import VolumeService, make_docker_volume_name
+from app.services.volume_service import VolumeService, make_docker_resource_name
 
 
 @pytest.fixture
@@ -58,19 +58,19 @@ class TestVolumeServiceHelpers:
         assert len(paths) > 0
         assert any("test-vol" in p for p in paths)
 
-    def test_make_docker_volume_name_basic(self):
-        name = make_docker_volume_name(
+    def test_make_docker_resource_name_basic(self):
+        name = make_docker_resource_name(
             prefix="nukelab-server",
-            username="testuser",
+            user_identifier="user-uuid-1234",
             server_name="my-server",
             suffix="data",
         )
-        assert name == "nukelab-server-testuser-my-server-data"
+        assert name == "nukelab-server-user-uuid-1234-my-server-data"
 
-    def test_make_docker_volume_name_sanitizes_username(self):
-        name = make_docker_volume_name(
+    def test_make_docker_resource_name_sanitizes_user_identifier(self):
+        name = make_docker_resource_name(
             prefix="nukelab-server",
-            username="user@example.com",
+            user_identifier="user@example.com",
             server_name="server",
             suffix="data",
         )
@@ -78,27 +78,43 @@ class TestVolumeServiceHelpers:
         assert name[0].isalnum()
         assert "@" not in name
 
-    def test_make_docker_volume_name_sanitizes_server_name(self):
-        name = make_docker_volume_name(
+    def test_make_docker_resource_name_sanitizes_server_name(self):
+        name = make_docker_resource_name(
             prefix="nukelab-server",
-            username="user",
+            user_identifier="user-uuid",
             server_name="--weird.server--name--",
             suffix="data",
         )
-        assert name == "nukelab-server-user-weird.server--name-data"
+        assert name == "nukelab-server-user-uuid-weird.server--name-data"
         assert name[0].isalnum()
 
-    def test_make_docker_volume_name_truncates_long_names(self):
-        name = make_docker_volume_name(
+    def test_make_docker_resource_name_truncates_long_names(self):
+        name = make_docker_resource_name(
             prefix="nukelab-server",
-            username="user",
+            user_identifier="user-uuid",
             server_name="a" * 300,
             suffix="data",
             max_len=100,
         )
         assert len(name) <= 100
-        assert name.startswith("nukelab-server-user-")
+        assert name.startswith("nukelab-server-user-uuid-")
         assert name.endswith("-data")
+
+    def test_make_docker_resource_name_unique_per_user(self):
+        """Distinct users that sanitize to the same string still get distinct names."""
+        name1 = make_docker_resource_name(
+            prefix="nukelab-server",
+            user_identifier="uuid-1",
+            server_name="server",
+            suffix="data",
+        )
+        name2 = make_docker_resource_name(
+            prefix="nukelab-server",
+            user_identifier="uuid-2",
+            server_name="server",
+            suffix="data",
+        )
+        assert name1 != name2
 
 
 class TestVolumeServiceCreate:

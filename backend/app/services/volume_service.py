@@ -43,42 +43,45 @@ def _sanitize_docker_name_component(value: str) -> str:
     return value
 
 
-def make_docker_volume_name(
+def make_docker_resource_name(
     prefix: str,
-    username: str,
+    user_identifier: str,
     server_name: str,
     suffix: str | None = "data",
     max_len: int = 240,
 ) -> str:
-    """Build a Docker-compatible volume name from components.
+    """Build a Docker-compatible resource name from components.
 
     Each component is sanitized and lowercased. The resulting name always
     starts with an alphanumeric character and only contains characters
-    allowed in Docker volume names. It is truncated if it exceeds `max_len`.
+    allowed in Docker names. It is truncated if it exceeds `max_len`.
+
+    ``user_identifier`` should be the user's UUID so that two users whose
+    sanitized usernames collide still get distinct Docker resource names.
 
     Pass ``suffix=None`` to omit the suffix segment (useful for container
-    names that follow the ``nukelab-server-{username}-{server_name}`` pattern).
+    names that follow the ``nukelab-server-{user_id}-{server_name}`` pattern).
     """
     safe_prefix = _sanitize_docker_name_component(prefix) or "nukelab"
-    safe_username = _sanitize_docker_name_component(username) or "user"
+    safe_user = _sanitize_docker_name_component(user_identifier) or "user"
     safe_server_name = _sanitize_docker_name_component(server_name) or "server"
     safe_suffix = _sanitize_docker_name_component(suffix) if suffix else None
 
     if safe_suffix:
-        base = f"{safe_prefix}-{safe_username}-{safe_server_name}-{safe_suffix}"
-        reserved_len = len(f"{safe_prefix}-{safe_username}--{safe_suffix}")
+        base = f"{safe_prefix}-{safe_user}-{safe_server_name}-{safe_suffix}"
+        reserved_len = len(f"{safe_prefix}-{safe_user}--{safe_suffix}")
     else:
-        base = f"{safe_prefix}-{safe_username}-{safe_server_name}"
-        reserved_len = len(f"{safe_prefix}-{safe_username}-")
+        base = f"{safe_prefix}-{safe_user}-{safe_server_name}"
+        reserved_len = len(f"{safe_prefix}-{safe_user}-")
 
     if len(base) > max_len:
         # Truncate the server-name component while preserving prefix and suffix.
         allowed_server_len = max_len - reserved_len
         safe_server_name = safe_server_name[: max(1, allowed_server_len)]
         if safe_suffix:
-            base = f"{safe_prefix}-{safe_username}-{safe_server_name}-{safe_suffix}"
+            base = f"{safe_prefix}-{safe_user}-{safe_server_name}-{safe_suffix}"
         else:
-            base = f"{safe_prefix}-{safe_username}-{safe_server_name}"
+            base = f"{safe_prefix}-{safe_user}-{safe_server_name}"
     return base
 
 
