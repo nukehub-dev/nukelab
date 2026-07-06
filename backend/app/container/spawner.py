@@ -11,6 +11,7 @@ from app.config import settings
 from app.container.client import ContainerClient, get_container_client
 from app.core.logging import get_logger
 from app.models.server import Server
+from app.services.volume_service import make_docker_volume_name
 
 logger = get_logger(__name__)
 
@@ -64,7 +65,13 @@ class ServerSpawner:
 
         # Use existing server ID or generate new one
         server_id = server_id or str(uuid.uuid4())
-        container_name = f"nukelab-server-{username}-{server_name}"
+        container_name = make_docker_volume_name(
+            prefix="nukelab-server",
+            username=username,
+            server_name=server_name,
+            suffix=None,
+            max_len=240,
+        )
 
         # If a container with this name already exists (e.g., an orphaned container
         # from a previous failed stop/start/restart), remove it before attempting to

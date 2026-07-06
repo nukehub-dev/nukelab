@@ -15,7 +15,7 @@ from app.models.shared_workspace import SharedWorkspace
 from app.models.user import User
 from app.models.volume import Volume
 from app.models.workspace_volume import WorkspaceVolume
-from app.services.volume_service import VolumeService
+from app.services.volume_service import VolumeService, make_docker_volume_name
 
 
 @pytest.fixture
@@ -57,6 +57,48 @@ class TestVolumeServiceHelpers:
         assert isinstance(paths, list)
         assert len(paths) > 0
         assert any("test-vol" in p for p in paths)
+
+    def test_make_docker_volume_name_basic(self):
+        name = make_docker_volume_name(
+            prefix="nukelab-server",
+            username="testuser",
+            server_name="my-server",
+            suffix="data",
+        )
+        assert name == "nukelab-server-testuser-my-server-data"
+
+    def test_make_docker_volume_name_sanitizes_username(self):
+        name = make_docker_volume_name(
+            prefix="nukelab-server",
+            username="user@example.com",
+            server_name="server",
+            suffix="data",
+        )
+        assert name == "nukelab-server-user-example.com-server-data"
+        assert name[0].isalnum()
+        assert "@" not in name
+
+    def test_make_docker_volume_name_sanitizes_server_name(self):
+        name = make_docker_volume_name(
+            prefix="nukelab-server",
+            username="user",
+            server_name="--weird.server--name--",
+            suffix="data",
+        )
+        assert name == "nukelab-server-user-weird.server--name-data"
+        assert name[0].isalnum()
+
+    def test_make_docker_volume_name_truncates_long_names(self):
+        name = make_docker_volume_name(
+            prefix="nukelab-server",
+            username="user",
+            server_name="a" * 300,
+            suffix="data",
+            max_len=100,
+        )
+        assert len(name) <= 100
+        assert name.startswith("nukelab-server-user-")
+        assert name.endswith("-data")
 
 
 class TestVolumeServiceCreate:
@@ -100,6 +142,19 @@ class TestVolumeServiceCreate:
             )
 
         assert volume.visibility == "public"
+
+    @pytest.mark.asyncio
+    async def test_create_volume_rejects_invalid_name(self, db_session, vol_service, test_user):
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException) as exc_info:
+            await vol_service.create_volume(
+                name="invalid@name",
+                display_name="Invalid Volume",
+                owner_id=str(test_user.id),
+            )
+        assert exc_info.value.status_code == 400
+        assert "invalid docker volume name" in exc_info.value.detail.lower()
 
 
 class TestVolumeServiceGet:
