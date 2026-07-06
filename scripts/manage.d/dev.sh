@@ -11,6 +11,7 @@ Vite dev server on http://localhost:5173.
 
 ${BOLD}Subcommands:${RESET}
   start    [target] [options]   Start the dev stack ${DIM}(default)${RESET}
+  build    [target]             Build dev stack images
   restart  [target]             Restart dev stack services
   stop     [target]             Stop dev stack services
   logs     [service] [options]  Stream dev stack logs
@@ -23,6 +24,7 @@ ${BOLD}Start Options:${RESET}
 ${BOLD}Examples:${RESET}
   ./nukelabctl dev
   ./nukelabctl dev start backend --no-build
+  ./nukelabctl dev build backend
   ./nukelabctl dev restart backend
   ./nukelabctl dev logs backend -f
   ./nukelabctl dev stop
@@ -36,7 +38,7 @@ parse_dev_args() {
     fi
 
     case "${EXTRA_ARGS[0]}" in
-        start | restart | stop | logs | status)
+        start | build | restart | stop | logs | status)
             DEV_SUBCMD="${EXTRA_ARGS[0]}"
             EXTRA_ARGS=("${EXTRA_ARGS[@]:1}")
             ;;
@@ -85,6 +87,10 @@ cmd_dev() {
             _warn_stale_containers
             setup_compose_args
             preflight_checks
+            ;;
+        build)
+            _acquire_lock
+            setup_compose_args
             ;;
         restart | stop)
             _acquire_lock

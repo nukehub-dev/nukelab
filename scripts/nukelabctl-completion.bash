@@ -54,7 +54,7 @@ _manage_sh_complete() {
 		fi
 		;;
 	stop)
-		COMPREPLY=($(compgen -W "backend frontend all --timeout -t ${global_flags[*]}" -- "$cur"))
+		COMPREPLY=($(compgen -W "backend frontend all --include-servers --timeout -t ${global_flags[*]}" -- "$cur"))
 		;;
 	status)
 		COMPREPLY=($(compgen -W "--running ${global_flags[*]}" -- "$cur"))
@@ -80,7 +80,7 @@ _manage_sh_complete() {
 		;;
 	dev)
 		if [[ "$COMP_CWORD" -eq 2 ]]; then
-			COMPREPLY=($(compgen -W "start restart stop logs status ${global_flags[*]}" -- "$cur"))
+			COMPREPLY=($(compgen -W "start build restart stop logs status ${global_flags[*]}" -- "$cur"))
 		else
 			# After `dev <sub>` offer targets/flags matching each subcommand.
 			local sub="${COMP_WORDS[2]}"
@@ -88,7 +88,11 @@ _manage_sh_complete() {
 			start | restart | stop)
 				local opts="backend frontend all ${global_flags[*]}"
 				[[ "$sub" == "start" || "$sub" == "restart" ]] && opts="$opts --no-build --no-wait"
+				[[ "$sub" == "stop" ]] && opts="$opts --include-servers"
 				COMPREPLY=($(compgen -W "$opts" -- "$cur"))
+				;;
+			build)
+				COMPREPLY=($(compgen -W "backend frontend all ${global_flags[*]}" -- "$cur"))
 				;;
 			logs)
 				COMPREPLY=($(compgen -W "backend postgres redis traefik celery-worker celery-beat pgbouncer --tail -n --no-follow ${global_flags[*]}" -- "$cur"))
