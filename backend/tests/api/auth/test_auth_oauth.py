@@ -8,8 +8,10 @@ from unittest import mock
 
 import pytest
 
+from app.config import settings
 from app.models.api_token import ApiToken
 from app.models.refresh_token import RefreshToken
+from app.models.user import User
 
 
 def _make_oauth_mock():
@@ -165,6 +167,16 @@ class TestOAuthCallbackHappyPaths:
                     )
                     assert response.status_code == 307
                     assert "token=" in response.headers["location"]
+
+        # The OAuth signup path should seed the user with the configured
+        # initial balance, not reuse the daily allowance as the starting
+        # balance.
+        from sqlalchemy import select
+
+        result = await db_session.execute(select(User).where(User.email == "oauth_new@example.com"))
+        user = result.scalar_one()
+        assert user.nuke_balance == settings.credits_initial_balance
+        assert user.daily_allowance == settings.credits_daily_allowance
 
     @pytest.mark.asyncio
     async def test_oauth_callback_link_existing_user_by_email(self, client, test_user, db_session):

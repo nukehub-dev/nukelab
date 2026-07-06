@@ -171,9 +171,11 @@ class Settings(BaseSettings):
     log_backup_count: int = 5
 
     credits_enabled: bool = True
-    credits_daily_allowance: int = 500
+    credits_initial_balance: int = 100
+    credits_daily_allowance: int = 10
     credits_max_balance: int = 5000
     credits_rollover: bool = False
+    credits_daily_allowance_login_window_hours: int = 48
 
     upload_dir: str = "/data/uploads"
     max_avatar_size_mb: int = 2

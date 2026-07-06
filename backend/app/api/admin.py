@@ -535,6 +535,94 @@ async def update_system_max_balance(
     return {"message": f"System max balance updated to {request.amount}"}
 
 
+class UpdateSystemInitialBalanceRequest(BaseModel):
+    amount: int = Field(..., ge=0, description="Balance granted to new users on signup")
+
+
+@router.get("/credits/initial-balance")
+async def get_system_initial_balance(
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get the signup initial balance"""
+    from app.services.setting_service import SettingService
+
+    service = SettingService(db)
+    return {"initial_balance": await service.get_initial_balance()}
+
+
+@router.put("/credits/initial-balance")
+async def update_system_initial_balance(
+    request: UpdateSystemInitialBalanceRequest,
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update the signup initial balance"""
+    from app.services.activity_service import ActivityService
+    from app.services.setting_service import SettingService
+
+    service = SettingService(db)
+    await service.set_initial_balance(request.amount)
+
+    activity_service = ActivityService(db)
+    await activity_service.log(
+        action="credits.update_system_initial_balance",
+        target_type="system",
+        actor_id=str(current_user.id),
+        details={"amount": request.amount},
+    )
+
+    return {"message": f"Signup initial balance updated to {request.amount}"}
+
+
+class UpdateSystemAllowanceWindowRequest(BaseModel):
+    hours: int = Field(
+        ...,
+        ge=0,
+        description="Hours within which a user must have logged in to receive the daily allowance",
+    )
+
+
+@router.get("/credits/allowance-login-window")
+async def get_system_allowance_login_window(
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get the daily allowance login activity window in hours"""
+    from app.services.setting_service import SettingService
+
+    service = SettingService(db)
+    return {"login_window_hours": await service.get_daily_allowance_login_window_hours()}
+
+
+@router.put("/credits/allowance-login-window")
+async def update_system_allowance_login_window(
+    request: UpdateSystemAllowanceWindowRequest,
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update the daily allowance login activity window in hours"""
+    from app.services.activity_service import ActivityService
+    from app.services.setting_service import SettingService
+
+    service = SettingService(db)
+    await service.set_daily_allowance_login_window_hours(request.hours)
+
+    activity_service = ActivityService(db)
+    await activity_service.log(
+        action="credits.update_system_allowance_login_window",
+        target_type="system",
+        actor_id=str(current_user.id),
+        details={"hours": request.hours},
+    )
+
+    return {"message": f"Daily allowance login window updated to {request.hours} hours"}
+
+
 # ========== Default Resource Quotas (Admin) ==========
 class DefaultQuotaLimitsRequest(BaseModel):
     max_cpu_total: float = Field(..., ge=0, description="Default CPU cores per user")

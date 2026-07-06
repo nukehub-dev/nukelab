@@ -562,3 +562,75 @@ class TestAllowanceOverride:
         # Effective = base daily_allowance since override expired
         assert tx.amount == test_user.daily_allowance
         assert tx.meta.get("override_active") is False
+
+
+class TestSystemCreditSettings:
+    """System-wide credit setting endpoints."""
+
+    @pytest.mark.asyncio
+    async def test_get_and_update_initial_balance(self, client, admin_token):
+        """Admin should be able to read and update the signup initial balance."""
+        response = await client.get(
+            "/api/admin/credits/initial-balance",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        assert response.status_code == 200
+        assert "initial_balance" in response.json()
+
+        response = await client.put(
+            "/api/admin/credits/initial-balance",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"amount": 999},
+        )
+        assert response.status_code == 200
+        assert "999" in response.json()["message"]
+
+        response = await client.get(
+            "/api/admin/credits/initial-balance",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        assert response.json()["initial_balance"] == 999
+
+    @pytest.mark.asyncio
+    async def test_update_initial_balance_requires_admin(self, client, user_token):
+        """Non-admin should not update the signup initial balance."""
+        response = await client.put(
+            "/api/admin/credits/initial-balance",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"amount": 999},
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_get_and_update_allowance_login_window(self, client, admin_token):
+        """Admin should be able to read and update the allowance login window."""
+        response = await client.get(
+            "/api/admin/credits/allowance-login-window",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        assert response.status_code == 200
+        assert "login_window_hours" in response.json()
+
+        response = await client.put(
+            "/api/admin/credits/allowance-login-window",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"hours": 12},
+        )
+        assert response.status_code == 200
+        assert "12" in response.json()["message"]
+
+        response = await client.get(
+            "/api/admin/credits/allowance-login-window",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        assert response.json()["login_window_hours"] == 12
+
+    @pytest.mark.asyncio
+    async def test_update_allowance_login_window_requires_admin(self, client, user_token):
+        """Non-admin should not update the allowance login window."""
+        response = await client.put(
+            "/api/admin/credits/allowance-login-window",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"hours": 12},
+        )
+        assert response.status_code == 403

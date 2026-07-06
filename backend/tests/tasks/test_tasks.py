@@ -4,6 +4,7 @@
 """Tests for Celery background tasks."""
 
 import asyncio
+import uuid
 from unittest import mock
 
 import pytest
@@ -29,6 +30,7 @@ from app.tasks import (
     evaluate_alert_rules,
     evaluate_maintenance_windows,
     example_task,
+    grant_daily_allowance_to_all,
 )
 
 
@@ -174,6 +176,64 @@ class TestCheckContainerHealth:
         ):
             result = check_container_health.run()
             assert "Error" in result
+
+
+class TestGrantDailyAllowanceToAll:
+    """grant_daily_allowance_to_all Celery task tests."""
+
+    def test_grant_daily_allowance_to_all_skips_inactive_users(self):
+        from datetime import timedelta
+
+        from app.core.time_utils import utc_now
+        from app.services.credit_service import CreditService
+        from app.services.setting_service import SettingService
+
+        now = utc_now()
+        recent_user = (uuid.uuid4(), "recent", now - timedelta(hours=1))
+        old_user = (uuid.uuid4(), "old", now - timedelta(days=7))
+        never_user = (uuid.uuid4(), "never", None)
+
+        mock_db = mock.AsyncMock()
+        mock_result = mock.Mock()
+        mock_result.all.return_value = [recent_user, old_user, never_user]
+        mock_db.execute.return_value = mock_result
+
+        with (
+            mock.patch(
+                "app.tasks._run_async",
+                side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
+            ),
+            mock.patch("app.tasks.AsyncSessionLocal") as mock_session,
+            mock.patch.object(
+                SettingService,
+                "get_daily_allowance_login_window_hours",
+                new_callable=mock.AsyncMock,
+                return_value=48,
+            ),
+            mock.patch.object(
+                CreditService, "grant_daily_allowance", new_callable=mock.AsyncMock
+            ) as mock_grant,
+            mock.patch(
+                "app.services.activity_service.ActivityService.log",
+                new_callable=mock.AsyncMock,
+            ),
+        ):
+            mock_session.return_value.__aenter__ = mock.AsyncMock(return_value=mock_db)
+            mock_session.return_value.__aexit__ = mock.AsyncMock(return_value=False)
+
+            result = grant_daily_allowance_to_all.run()
+
+        assert "granted=1" in result
+        assert "skipped_inactive=2" in result
+        assert mock_grant.call_count == 1
+        assert mock_grant.await_args.args[0] == str(recent_user[0])
+
+    def test_grant_daily_allowance_to_all_error(self):
+        with mock.patch(
+            "app.tasks._run_async", side_effect=_run_async_raises(Exception("db fail"))
+        ):
+            result = grant_daily_allowance_to_all.run()
+            assert "Fatal error" in result
 
 
 class TestEvaluateAlertRules:

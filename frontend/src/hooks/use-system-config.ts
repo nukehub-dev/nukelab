@@ -87,3 +87,100 @@ export function useUpdateSystemDailyAllowance() {
     },
   })
 }
+
+export function useSystemMaxBalance() {
+  return useQuery({
+    queryKey: ['system-max-balance'],
+    queryFn: async () => {
+      return api.get<{ max_balance: number }>('/admin/credits/max-balance')
+    },
+  })
+}
+
+export function useUpdateSystemMaxBalance() {
+  const queryClient = useQueryClient()
+  const { success, error: showError } = useToast()
+
+  return useMutation({
+    mutationFn: async (amount: number) => {
+      return api.put<{ message: string }>('/admin/credits/max-balance', { amount })
+    },
+    onSuccess: (_data, amount) => {
+      queryClient.invalidateQueries({ queryKey: ['system-max-balance'] })
+      queryClient.invalidateQueries({ queryKey: ['system-config'] })
+      const label = amount === 0 ? 'unlimited' : `${amount.toLocaleString()} NUKE`
+      success('Max balance updated', `Credit cap set to ${label}`)
+    },
+    onError: (err) => {
+      showError(
+        'Failed to update max balance',
+        err instanceof Error ? err.message : 'Unknown error'
+      )
+    },
+  })
+}
+
+export function useSystemInitialBalance() {
+  return useQuery({
+    queryKey: ['system-initial-balance'],
+    queryFn: async () => {
+      return api.get<{ initial_balance: number }>('/admin/credits/initial-balance')
+    },
+  })
+}
+
+export function useUpdateSystemInitialBalance() {
+  const queryClient = useQueryClient()
+  const { success, error: showError } = useToast()
+
+  return useMutation({
+    mutationFn: async (amount: number) => {
+      return api.put<{ message: string }>('/admin/credits/initial-balance', { amount })
+    },
+    onSuccess: (_data, amount) => {
+      queryClient.invalidateQueries({ queryKey: ['system-initial-balance'] })
+      queryClient.invalidateQueries({ queryKey: ['system-config'] })
+      success('Signup balance updated', `New users start with ${amount.toLocaleString()} NUKE`)
+    },
+    onError: (err) => {
+      showError(
+        'Failed to update signup balance',
+        err instanceof Error ? err.message : 'Unknown error'
+      )
+    },
+  })
+}
+
+export function useSystemAllowanceLoginWindow() {
+  return useQuery({
+    queryKey: ['system-allowance-login-window'],
+    queryFn: async () => {
+      return api.get<{ login_window_hours: number }>('/admin/credits/allowance-login-window')
+    },
+  })
+}
+
+export function useUpdateSystemAllowanceLoginWindow() {
+  const queryClient = useQueryClient()
+  const { success, error: showError } = useToast()
+
+  return useMutation({
+    mutationFn: async (hours: number) => {
+      return api.put<{ message: string }>('/admin/credits/allowance-login-window', { hours })
+    },
+    onSuccess: (_data, hours) => {
+      queryClient.invalidateQueries({ queryKey: ['system-allowance-login-window'] })
+      queryClient.invalidateQueries({ queryKey: ['system-config'] })
+      success(
+        'Login window updated',
+        `Daily allowance requires a login within ${hours.toLocaleString()} hours`
+      )
+    },
+    onError: (err) => {
+      showError(
+        'Failed to update login window',
+        err instanceof Error ? err.message : 'Unknown error'
+      )
+    },
+  })
+}

@@ -3,11 +3,13 @@
 
 import asyncio
 import threading
+from datetime import timedelta
 
 from fastapi import HTTPException
 
 from app.config import settings
 from app.core.logging import get_logger
+from app.core.time_utils import utc_now
 from app.worker import celery_app
 
 logger = get_logger(__name__)
@@ -1270,7 +1272,12 @@ def update_prometheus_business_metrics(self):
 
 @celery_app.task(bind=True)
 def grant_daily_allowance_to_all(self):
-    """Auto-grant the daily credit allowance to every active user.
+    """Auto-grant the daily credit allowance to recently-active users.
+
+    Only users who have logged in within the configured activity window
+    (``credits_daily_allowance_login_window_hours``, default 48h) are
+    eligible. This prevents dormant accounts from accumulating credits
+    every day.
 
     Idempotent per UTC day: the unique partial index
     uq_credit_tx_daily_allowance_per_user_per_day guarantees a user
@@ -1285,20 +1292,33 @@ def grant_daily_allowance_to_all(self):
 
         from app.models.user import User
         from app.services.credit_service import CreditService
+        from app.services.setting_service import SettingService
 
         async with AsyncSessionLocal() as db:
             credit_service = CreditService(db)
+            setting_service = SettingService(db)
+            window_hours = await setting_service.get_daily_allowance_login_window_hours()
+            cutoff = utc_now() - timedelta(hours=window_hours)
 
             result = await db.execute(
-                select(User.id, User.username).where(User.is_active.is_(True))
+                select(User.id, User.username, User.last_login).where(User.is_active.is_(True))
             )
             active_users = result.all()
 
             granted = 0
             already = 0
             failed = 0
+            skipped_inactive = 0
 
-            for user_id, username in active_users:
+            for user_id, username, last_login in active_users:
+                # Only grant to users who have logged in recently. None/NULL
+                # last_login means the account has never been used, so it is
+                # skipped. This turns the daily allowance into a login reward
+                # rather than an accrual for dormant accounts.
+                if last_login is None or last_login < cutoff:
+                    skipped_inactive += 1
+                    continue
+
                 try:
                     await credit_service.grant_daily_allowance(str(user_id))
                     granted += 1
@@ -1334,13 +1354,16 @@ def grant_daily_allowance_to_all(self):
                     "granted": granted,
                     "already_granted": already,
                     "failed": failed,
+                    "skipped_inactive": skipped_inactive,
                     "total_active": len(active_users),
+                    "login_window_hours": window_hours,
                 },
             )
 
             return (
                 f"Daily allowance: granted={granted}, "
                 f"already_granted={already}, failed={failed}, "
+                f"skipped_inactive={skipped_inactive}, "
                 f"total_active={len(active_users)}"
             )
 

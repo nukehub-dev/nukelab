@@ -107,6 +107,30 @@ class TestSettingServiceLoadIntoConfig:
         await service.load_into_config()
         assert settings.credits_daily_allowance == original
 
+    @pytest.mark.asyncio
+    async def test_load_initial_balance(self, db_session):
+        """Should load credits_initial_balance into global settings."""
+        original = settings.credits_initial_balance
+        db_session.add(SystemSetting(key="credits_initial_balance", value="750"))
+        await db_session.commit()
+
+        service = SettingService(db_session)
+        await service.load_into_config()
+        assert settings.credits_initial_balance == 750
+        settings.credits_initial_balance = original
+
+    @pytest.mark.asyncio
+    async def test_load_daily_allowance_login_window_hours(self, db_session):
+        """Should load credits_daily_allowance_login_window_hours into global settings."""
+        original = settings.credits_daily_allowance_login_window_hours
+        db_session.add(SystemSetting(key="credits_daily_allowance_login_window_hours", value="24"))
+        await db_session.commit()
+
+        service = SettingService(db_session)
+        await service.load_into_config()
+        assert settings.credits_daily_allowance_login_window_hours == 24
+        settings.credits_daily_allowance_login_window_hours = original
+
 
 class TestSettingServiceMaintenance:
     """Tests for maintenance mode helpers."""
@@ -193,3 +217,44 @@ class TestSettingServiceQuotaDefaults:
         assert result["max_disk_total"] == "50g"
         assert result["max_gpu_total"] == 0
         assert result["max_servers_total"] == 3
+
+
+class TestSettingServiceCreditSettings:
+    """Tests for credit-related setting helpers."""
+
+    @pytest.mark.asyncio
+    async def test_get_and_set_initial_balance(self, db_session):
+        """Should persist and read the signup initial balance."""
+        original = settings.credits_initial_balance
+        service = SettingService(db_session)
+        await service.set_initial_balance(1234)
+
+        assert settings.credits_initial_balance == 1234
+        assert await service.get_initial_balance() == 1234
+        settings.credits_initial_balance = original
+
+    @pytest.mark.asyncio
+    async def test_get_initial_balance_fallback(self, db_session):
+        """Should fall back to config when no DB value exists."""
+        service = SettingService(db_session)
+        assert await service.get_initial_balance() == settings.credits_initial_balance
+
+    @pytest.mark.asyncio
+    async def test_get_and_set_daily_allowance_login_window_hours(self, db_session):
+        """Should persist and read the daily allowance activity window."""
+        original = settings.credits_daily_allowance_login_window_hours
+        service = SettingService(db_session)
+        await service.set_daily_allowance_login_window_hours(12)
+
+        assert settings.credits_daily_allowance_login_window_hours == 12
+        assert await service.get_daily_allowance_login_window_hours() == 12
+        settings.credits_daily_allowance_login_window_hours = original
+
+    @pytest.mark.asyncio
+    async def test_get_daily_allowance_login_window_hours_fallback(self, db_session):
+        """Should fall back to config when no DB value exists."""
+        service = SettingService(db_session)
+        assert (
+            await service.get_daily_allowance_login_window_hours()
+            == settings.credits_daily_allowance_login_window_hours
+        )
