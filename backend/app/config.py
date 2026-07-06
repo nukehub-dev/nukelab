@@ -202,6 +202,9 @@ class Settings(BaseSettings):
     sentry_dsn: str = ""
     sentry_release: str = ""
 
+    # Sentry-compatible security endpoint for CSP reports (GlitchTip, Sentry, etc.)
+    sentry_security_endpoint: str = ""
+
     # OpenTelemetry Distributed Tracing
     otel_traces_enabled: bool = False
     otel_exporter_otlp_endpoint: str = "http://otel-collector:4317"
