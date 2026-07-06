@@ -24,6 +24,13 @@ class QuotaService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    async def get_default_limits(self) -> dict[str, float | int | str]:
+        """Return system-wide default quota limits."""
+        from app.services.setting_service import SettingService
+
+        service = SettingService(self.db)
+        return await service.get_quota_defaults()
+
     async def get_user_quota(self, user_id: str) -> ResourceQuota | None:
         """Get quota for a user"""
         result = await self.db.execute(
@@ -35,7 +42,15 @@ class QuotaService:
         """Get or create quota for a user"""
         quota = await self.get_user_quota(user_id)
         if not quota:
-            quota = ResourceQuota(user_id=uuid.UUID(user_id))
+            defaults = await self.get_default_limits()
+            quota = ResourceQuota(
+                user_id=uuid.UUID(user_id),
+                max_cpu_total=defaults["max_cpu_total"],
+                max_memory_total=defaults["max_memory_total"],
+                max_disk_total=defaults["max_disk_total"],
+                max_gpu_total=defaults["max_gpu_total"],
+                max_servers_total=defaults["max_servers_total"],
+            )
             self.db.add(quota)
             await self.db.commit()
             await self.db.refresh(quota)
@@ -84,13 +99,7 @@ class QuotaService:
         rows = result.all()
 
         items = []
-        default_limits = {
-            "max_cpu_total": 8.0,
-            "max_memory_total": "16g",
-            "max_disk_total": "100g",
-            "max_gpu_total": 0,
-            "max_servers_total": 5,
-        }
+        default_limits = await self.get_default_limits()
 
         for user, quota in rows:
             limits = quota.to_dict()["limits"] if quota else default_limits

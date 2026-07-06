@@ -143,3 +143,53 @@ class TestSettingServiceMaintenance:
         result = await service.get_maintenance()
         assert result["maintenance_mode"] == settings.maintenance_mode
         assert result["maintenance_message"] == settings.maintenance_message
+
+
+class TestSettingServiceQuotaDefaults:
+    """Tests for default resource quota settings."""
+
+    @pytest.mark.asyncio
+    async def test_get_quota_defaults_fallback(self, db_session):
+        """Should return hardcoded defaults when no settings exist."""
+        service = SettingService(db_session)
+        result = await service.get_quota_defaults()
+        assert result["max_cpu_total"] == 8.0
+        assert result["max_memory_total"] == "16g"
+        assert result["max_disk_total"] == "100g"
+        assert result["max_gpu_total"] == 0
+        assert result["max_servers_total"] == 5
+
+    @pytest.mark.asyncio
+    async def test_get_quota_defaults_from_db(self, db_session):
+        """Should read defaults from system settings."""
+        db_session.add(SystemSetting(key="quota_default_max_cpu_total", value="16"))
+        db_session.add(SystemSetting(key="quota_default_max_memory_total", value="32g"))
+        db_session.add(SystemSetting(key="quota_default_max_servers_total", value="10"))
+        await db_session.commit()
+
+        service = SettingService(db_session)
+        result = await service.get_quota_defaults()
+        assert result["max_cpu_total"] == 16.0
+        assert result["max_memory_total"] == "32g"
+        assert result["max_servers_total"] == 10
+
+    @pytest.mark.asyncio
+    async def test_set_quota_defaults(self, db_session):
+        """Should persist default quota settings."""
+        service = SettingService(db_session)
+        await service.set_quota_defaults(
+            {
+                "max_cpu_total": 4.0,
+                "max_memory_total": "8g",
+                "max_disk_total": "50g",
+                "max_gpu_total": 0,
+                "max_servers_total": 3,
+            }
+        )
+
+        result = await service.get_quota_defaults()
+        assert result["max_cpu_total"] == 4.0
+        assert result["max_memory_total"] == "8g"
+        assert result["max_disk_total"] == "50g"
+        assert result["max_gpu_total"] == 0
+        assert result["max_servers_total"] == 3

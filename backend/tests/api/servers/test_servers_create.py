@@ -232,7 +232,7 @@ class TestCreateServerExceptionCleanup:
                         mock_vol = mock_vol_cls.return_value
                         auto_vol = mock.Mock()
                         auto_vol.id = uuid_mod.uuid4()
-                        auto_vol.name = f"nukelab-server-{test_user.username}-cleanup-server-data"
+                        auto_vol.name = f"nukelab-server-{str(test_user.id)}-cleanup-server-data"
 
                         mock_vol.create_volume = mock.AsyncMock(return_value=auto_vol)
                         mock_vol.record_mount = mock.AsyncMock()
@@ -280,3 +280,56 @@ class TestCreateServerExceptionCleanup:
             "try again" in response.json()["detail"].lower()
             or "contact support" in response.json()["detail"].lower()
         )
+
+    @pytest.mark.asyncio
+    async def test_create_server_volume_mount_auto_create_cleanup(
+        self, client, user_token, test_user, db_session, test_plan_env
+    ):
+        """Auto-created volume failure in volume_mounts must not raise UnboundLocalError."""
+        plan, env = test_plan_env
+
+        with mock.patch("app.services.quota_service.QuotaService") as mock_quota_cls:
+            mock_quota = mock_quota_cls.return_value
+            mock_quota.check_spawn_allowed = mock.AsyncMock(return_value={"allowed": True})
+            with mock.patch(
+                "app.services.resource_pool_service.ResourcePoolService"
+            ) as mock_pool_cls:
+                mock_pool = mock_pool_cls.return_value
+                mock_pool.can_fit = mock.AsyncMock(return_value=True)
+                with mock.patch("app.services.credit_service.CreditService") as mock_credit_cls:
+                    mock_credit = mock_credit_cls.return_value
+                    mock_credit.check_sufficient_credits = mock.AsyncMock(return_value=True)
+                    with mock.patch("app.services.volume_service.VolumeService") as mock_vol_cls:
+                        mock_vol = mock_vol_cls.return_value
+                        mock_vol.create_volume = mock.AsyncMock(
+                            side_effect=Exception("volume create failed")
+                        )
+                        mock_vol.check_volumes_quota = mock.AsyncMock(
+                            return_value={"allowed": True}
+                        )
+                        mock_vol._parse_memory = mock.Mock(return_value=10737418240)
+                        with mock.patch(
+                            "app.services.volume_access_service.VolumeAccessService"
+                        ) as mock_access_cls:
+                            mock_access = mock_access_cls.return_value
+                            mock_access.can_access_volume = mock.AsyncMock(return_value=True)
+
+                            response = await client.post(
+                                "/api/servers/",
+                                headers={"Authorization": f"Bearer {user_token}"},
+                                json={
+                                    "name": "cleanup-server",
+                                    "plan_id": str(plan.id),
+                                    "environment_id": str(env.id),
+                                    "volume_mounts": [
+                                        {
+                                            "volume_id": "",
+                                            "mount_path": "/data",
+                                            "mode": "read_write",
+                                        }
+                                    ],
+                                },
+                            )
+
+        assert response.status_code == 500
+        assert "try again" in response.json()["detail"].lower()

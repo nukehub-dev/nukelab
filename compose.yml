@@ -202,6 +202,8 @@ services:
             - user-secrets:${USER_AUTH_SECRETS_DIR:-/run/user-secrets}
             - server-secrets:${SERVER_AUTH_SECRETS_DIR:-/run/server-secrets}
             - xfs-projects:/data/xfs
+        devices:
+            - ${XFS_QUOTA_DEVICE_PATH:-/dev/null}:${XFS_QUOTA_DEVICE_PATH:-/dev/null}:r
         cap_add:
             - SYS_ADMIN
         networks:
@@ -364,6 +366,8 @@ services:
             - user-secrets:${USER_AUTH_SECRETS_DIR:-/run/user-secrets}
             - server-secrets:${SERVER_AUTH_SECRETS_DIR:-/run/server-secrets}
             - xfs-projects:/data/xfs
+        devices:
+            - ${XFS_QUOTA_DEVICE_PATH:-/dev/null}:${XFS_QUOTA_DEVICE_PATH:-/dev/null}:r
         cap_add:
             - SYS_ADMIN
         networks:

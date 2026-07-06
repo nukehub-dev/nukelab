@@ -11,6 +11,7 @@ from app.config import settings
 from app.container.client import ContainerClient, get_container_client
 from app.core.logging import get_logger
 from app.models.server import Server
+from app.services.volume_service import make_docker_resource_name
 
 logger = get_logger(__name__)
 
@@ -64,7 +65,13 @@ class ServerSpawner:
 
         # Use existing server ID or generate new one
         server_id = server_id or str(uuid.uuid4())
-        container_name = f"nukelab-server-{username}-{server_name}"
+        container_name = make_docker_resource_name(
+            prefix="nukelab-server",
+            user_identifier=user_id,
+            server_name=server_name,
+            suffix=None,
+            max_len=240,
+        )
 
         # If a container with this name already exists (e.g., an orphaned container
         # from a previous failed stop/start/restart), remove it before attempting to
@@ -118,7 +125,12 @@ class ServerSpawner:
                             # Fallback: generate name from id
                             volume_name = f"nukelab-vol-{vol_id[:8]}"
                 else:
-                    volume_name = f"nukelab-server-{username}-{server_name}-data"
+                    volume_name = make_docker_resource_name(
+                        prefix="nukelab-server",
+                        user_identifier=user_id,
+                        server_name=server_name,
+                        suffix="data",
+                    )
 
                 await self._ensure_volume(volume_name)
 
@@ -126,7 +138,12 @@ class ServerSpawner:
                 volumes[volume_name] = {"bind": mount_path, "mode": mount_mode}
         else:
             # Default single volume mounted at the user's home directory
-            volume_name = f"nukelab-server-{username}-{server_name}-data"
+            volume_name = make_docker_resource_name(
+                prefix="nukelab-server",
+                user_identifier=user_id,
+                server_name=server_name,
+                suffix="data",
+            )
             await self._ensure_volume(volume_name)
             volumes[volume_name] = {"bind": home_mount_path, "mode": "rw"}
 
@@ -148,7 +165,7 @@ class ServerSpawner:
             # when Traefik sits behind an external SSL-terminating reverse proxy.
             f"traefik.http.routers.server-{server_id}.middlewares": f"server-{server_id}-slash@docker,server-{server_id}-strip@docker",
             f"traefik.http.middlewares.server-{server_id}-slash.redirectregex.regex": f"^https?://[^/]+({re.escape(route_prefix)})($|\\?.*$)",
-            f"traefik.http.middlewares.server-{server_id}-slash.redirectregex.replacement": f"$1/$2",
+            f"traefik.http.middlewares.server-{server_id}-slash.redirectregex.replacement": "$1/$2",
             f"traefik.http.middlewares.server-{server_id}-slash.redirectregex.permanent": "true",
             f"traefik.http.middlewares.server-{server_id}-strip.stripprefix.prefixes": route_prefix,
             "nukelab.server.id": server_id,
@@ -179,8 +196,8 @@ class ServerSpawner:
             "NUKELAB_AUTH_SERVER_ID": server_id,
             # nss-wrapper: every process, including Theia terminals, should see
             # the human username in whoami/id/ls instead of the fixed nukelab
-            # account. start.sh writes the actual passwd/group files at runtime.
-            "LD_PRELOAD": "/usr/lib/x86_64-linux-gnu/libnss_wrapper.so",
+            # account. start.sh creates the passwd/group files and then sets
+            # LD_PRELOAD itself, so we only pass the target paths here.
             "NSS_WRAPPER_PASSWD": "/tmp/nukelab-passwd",
             "NSS_WRAPPER_GROUP": "/tmp/nukelab-group",
             **(env_vars or {}),
@@ -271,7 +288,10 @@ class ServerSpawner:
 
             for mount_path in mount_paths_to_fix:
                 try:
-                    exec_instance = await container.exec(["chmod", "777", mount_path])
+                    # Run as root so this works in hardened mode, where the
+                    # container user is 65532 and cannot chmod a root-owned
+                    # named volume that was initialized by an earlier run.
+                    exec_instance = await container.exec(["chmod", "777", mount_path], user="root")
                     await exec_instance.start(detach=True)
                     await asyncio.sleep(0.2)
                 except Exception as e:

@@ -566,9 +566,10 @@ class TestSpawnSuccess:
     @pytest.mark.asyncio
     async def test_spawn_default_volume(self, fresh_spawner):
         """spawn with no volume_mounts should use default volume."""
+        user_id = str(uuid_mod.uuid4())
         with mock.patch("app.container.spawner.settings.public_url", "http://test"):
             server = await fresh_spawner.spawn(
-                user_id=str(uuid_mod.uuid4()),
+                user_id=user_id,
                 username="testuser",
                 server_name="srv1",
                 environment="dev",
@@ -579,7 +580,7 @@ class TestSpawnSuccess:
         assert server.status == "running"
         fresh_spawner.container_client.create_container.assert_awaited_once()
         call_kwargs = fresh_spawner.container_client.create_container.await_args.kwargs
-        assert "nukelab-server-testuser-srv1-data" in call_kwargs["volumes"]
+        assert f"nukelab-server-{user_id}-srv1-data" in call_kwargs["volumes"]
         assert call_kwargs["command"] == "/start.sh"
         assert call_kwargs["hostname"] == "NukeLab"
 
@@ -661,9 +662,10 @@ class TestSpawnSuccess:
     @pytest.mark.asyncio
     async def test_spawn_with_volume_mounts_no_vol_id(self, fresh_spawner):
         """spawn with volume_mounts lacking volume_id should generate default volume name."""
+        user_id = str(uuid_mod.uuid4())
         with mock.patch("app.container.spawner.settings.public_url", "http://test"):
             await fresh_spawner.spawn(
-                user_id=str(uuid_mod.uuid4()),
+                user_id=user_id,
                 username="testuser",
                 server_name="srv1",
                 volume_mounts=[{"mount_path": "/data", "mode": "read_write"}],
@@ -671,14 +673,15 @@ class TestSpawnSuccess:
 
         call_kwargs = fresh_spawner.container_client.create_container.await_args.kwargs
         vols = call_kwargs["volumes"]
-        assert any("testuser-srv1-data" in k for k in vols)
+        assert any(f"{user_id}-srv1-data" in k for k in vols)
 
     @pytest.mark.asyncio
     async def test_spawn_with_volume_mounts_read_only(self, fresh_spawner):
         """spawn with read_only mode should use 'ro' bind mode."""
+        user_id = str(uuid_mod.uuid4())
         with mock.patch("app.container.spawner.settings.public_url", "http://test"):
             await fresh_spawner.spawn(
-                user_id=str(uuid_mod.uuid4()),
+                user_id=user_id,
                 username="testuser",
                 server_name="srv1",
                 volume_mounts=[{"mount_path": "/data", "mode": "read_only"}],
@@ -686,7 +689,7 @@ class TestSpawnSuccess:
 
         call_kwargs = fresh_spawner.container_client.create_container.await_args.kwargs
         vols = call_kwargs["volumes"]
-        mount_info = next(v for k, v in vols.items() if "testuser-srv1-data" in k)
+        mount_info = next(v for k, v in vols.items() if f"{user_id}-srv1-data" in k)
         assert mount_info["mode"] == "ro"
 
     @pytest.mark.asyncio
@@ -708,20 +711,23 @@ class TestSpawnSuccess:
     @pytest.mark.asyncio
     async def test_spawn_waits_for_container_ready(self, fresh_spawner):
         """spawn should wait for container readiness before returning."""
+        user_id = str(uuid_mod.uuid4())
         with mock.patch("app.container.spawner.settings.public_url", "http://test"):
             await fresh_spawner.spawn(
-                user_id=str(uuid_mod.uuid4()),
+                user_id=user_id,
                 username="testuser",
                 server_name="srv1",
             )
 
         fresh_spawner.container_client.wait_for_container_ready.assert_awaited_once_with(
-            "nukelab-server-testuser-srv1", "http://nukelab-server-testuser-srv1:8080/health"
+            f"nukelab-server-{user_id}-srv1",
+            f"http://nukelab-server-{user_id}-srv1:8080/health",
         )
 
     @pytest.mark.asyncio
     async def test_spawn_removes_existing_container_before_create(self, fresh_spawner):
         """spawn should delete an existing container with the same name before creating a new one."""
+        user_id = str(uuid_mod.uuid4())
         mock_existing = mock.AsyncMock()
         fresh_spawner.container_client.client.containers.get = mock.AsyncMock(
             return_value=mock_existing
@@ -730,13 +736,13 @@ class TestSpawnSuccess:
         with mock.patch("app.container.spawner.settings.public_url", "http://test"):
             with mock.patch("asyncio.sleep"):
                 await fresh_spawner.spawn(
-                    user_id=str(uuid_mod.uuid4()),
+                    user_id=user_id,
                     username="testuser",
                     server_name="srv1",
                 )
 
         fresh_spawner.container_client.client.containers.get.assert_awaited_once_with(
-            "nukelab-server-testuser-srv1"
+            f"nukelab-server-{user_id}-srv1"
         )
         mock_existing.delete.assert_awaited_once_with(force=True)
         fresh_spawner.container_client.create_container.assert_awaited_once()
@@ -744,6 +750,7 @@ class TestSpawnSuccess:
     @pytest.mark.asyncio
     async def test_spawn_ignores_missing_existing_container(self, fresh_spawner):
         """spawn should proceed normally when no existing container is found."""
+        user_id = str(uuid_mod.uuid4())
         fresh_spawner.container_client.client.containers.get = mock.AsyncMock(
             side_effect=Exception("not found")
         )
@@ -751,13 +758,13 @@ class TestSpawnSuccess:
         with mock.patch("app.container.spawner.settings.public_url", "http://test"):
             with mock.patch("asyncio.sleep"):
                 await fresh_spawner.spawn(
-                    user_id=str(uuid_mod.uuid4()),
+                    user_id=user_id,
                     username="testuser",
                     server_name="srv1",
                 )
 
         fresh_spawner.container_client.client.containers.get.assert_awaited_once_with(
-            "nukelab-server-testuser-srv1"
+            f"nukelab-server-{user_id}-srv1"
         )
         fresh_spawner.container_client.create_container.assert_awaited_once()
 
@@ -776,8 +783,8 @@ class TestSpawnSuccess:
         assert str(server.id) == sid
 
     @pytest.mark.asyncio
-    async def test_spawn_permission_fix_skips_home(self, fresh_spawner):
-        """spawn should skip chmod on /home/{username}."""
+    async def test_spawn_permission_fix_includes_home(self, fresh_spawner):
+        """spawn should chmod /home/{username} and extra volume mounts."""
         mock_exec = MockExec()
         mock_container = mock.AsyncMock()
         mock_container.id = str(uuid_mod.uuid4())
@@ -798,10 +805,11 @@ class TestSpawnSuccess:
                     ],
                 )
 
-        # Only /data should get chmod, not /home/testuser
+        # Home directory and extra mounts are both chmod-ed so the non-root
+        # container user can write to them in hardened mode.
         exec_calls = mock_container.exec.call_args_list
         paths = [c[0][0][2] for c in exec_calls]
-        assert "/home/testuser" not in paths
+        assert "/home/testuser" in paths
         assert "/data" in paths
 
     @pytest.mark.asyncio
@@ -827,7 +835,8 @@ class TestSpawnSuccess:
         chmod_warnings = [
             c for c in mock_warn.call_args_list if "Could not fix permissions" in c[0][0]
         ]
-        assert len(chmod_warnings) == 1
+        # Home directory is always fixed, plus the supplied /data mount.
+        assert len(chmod_warnings) == 2
 
     @pytest.mark.asyncio
     async def test_spawn_with_auth_volume(self, fresh_spawner):

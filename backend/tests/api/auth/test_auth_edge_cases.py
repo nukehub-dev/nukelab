@@ -333,3 +333,73 @@ class TestCleanupExpiredRefreshTokens:
 
         count = await cleanup_expired_refresh_tokens(db_session)
         assert count >= 1
+
+
+class TestMonitoringRedirect:
+    """Tests for /api/auth/monitoring redirect shim."""
+
+    @pytest.mark.asyncio
+    async def test_monitoring_redirect_requires_admin(self, client, admin_token, user_token):
+        """Admin tokens get a redirect cookie; regular user tokens get 403."""
+        response = await client.get(
+            "/api/auth/monitoring?redirect=/grafana",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            follow_redirects=False,
+        )
+        assert response.status_code == 307
+        assert response.headers["location"] == "/grafana"
+        assert "nukelab_token=" in response.headers.get("set-cookie", "")
+
+        response = await client.get(
+            "/api/auth/monitoring?redirect=/grafana",
+            headers={"Authorization": f"Bearer {user_token}"},
+            follow_redirects=False,
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_monitoring_redirect_invalid_token(self, client):
+        """Invalid or missing tokens are rejected before redirect."""
+        response = await client.get(
+            "/api/auth/monitoring?redirect=/grafana",
+            headers={"Authorization": "Bearer invalid-token"},
+            follow_redirects=False,
+        )
+        assert response.status_code == 401
+        assert response.json()["detail"] == "Invalid token"
+
+    @pytest.mark.asyncio
+    async def test_monitoring_redirect_sanitizes_open_redirect(self, client, admin_token):
+        """Only known monitoring paths are allowed as redirect targets."""
+        response = await client.get(
+            "/api/auth/monitoring?redirect=https://evil.example.com",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            follow_redirects=False,
+        )
+        assert response.status_code == 307
+        assert response.headers["location"] == "/grafana"
+
+    @pytest.mark.asyncio
+    async def test_monitoring_cookie_domain_follows_public_url(self, client, admin_token):
+        """Cookie domain is derived from settings.public_url, not hardcoded localhost."""
+        from app.api.auth import _cookie_domain_from_url
+
+        original_public_url = settings.public_url
+        try:
+            settings.public_url = "https://lab.nukehub.org"
+            response = await client.get(
+                "/api/auth/monitoring?redirect=/grafana",
+                headers={"Authorization": f"Bearer {admin_token}"},
+                follow_redirects=False,
+            )
+            assert response.status_code == 307
+            set_cookie = response.headers.get("set-cookie", "")
+            assert "nukelab_token=" in set_cookie
+            assert "Domain=lab.nukehub.org" in set_cookie
+        finally:
+            settings.public_url = original_public_url
+
+        assert _cookie_domain_from_url("http://localhost:8080") == "localhost"
+        assert _cookie_domain_from_url("https://lab.nukehub.org") == "lab.nukehub.org"
+        assert _cookie_domain_from_url("http://192.168.1.100") is None
+        assert _cookie_domain_from_url("") is None

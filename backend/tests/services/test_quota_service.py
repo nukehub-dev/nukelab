@@ -44,6 +44,22 @@ class TestQuotaServiceGet:
         assert result.user_id == test_user.id
 
     @pytest.mark.asyncio
+    async def test_get_or_create_user_quota_uses_system_defaults(self, db_session, test_user):
+        """get_or_create_user_quota should apply system default limits."""
+        from app.models.system_setting import SystemSetting
+
+        db_session.add(SystemSetting(key="quota_default_max_cpu_total", value="16"))
+        db_session.add(SystemSetting(key="quota_default_max_memory_total", value="32g"))
+        db_session.add(SystemSetting(key="quota_default_max_servers_total", value="10"))
+        await db_session.commit()
+
+        service = QuotaService(db_session)
+        result = await service.get_or_create_user_quota(str(test_user.id))
+        assert result.max_cpu_total == 16.0
+        assert result.max_memory_total == "32g"
+        assert result.max_servers_total == 10
+
+    @pytest.mark.asyncio
     async def test_get_or_create_user_quota_returns_existing(self, db_session, test_user):
         """get_or_create_user_quota should return existing."""
         quota = ResourceQuota(user_id=test_user.id, max_cpu_total=32)

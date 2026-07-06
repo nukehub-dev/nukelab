@@ -5,9 +5,12 @@
 Volume management service with quota enforcement.
 """
 
+import re
 from datetime import UTC, datetime
 from typing import Any
 
+import aiodocker
+from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -21,6 +24,65 @@ from app.models.workspace_volume import WorkspaceVolume
 from app.services.xfs_quota_service import xfs_quota_service
 
 logger = get_logger(__name__)
+
+# Docker volume names must start with an alphanumeric character and contain
+# only letters, numbers, underscores, dots, and hyphens.
+_DOCKER_VOLUME_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]*$")
+_MAX_VOLUME_NAME_LEN = 255
+
+
+def _sanitize_docker_name_component(value: str) -> str:
+    """Sanitize a string for use as a Docker volume name component.
+
+    Lowercases the value, replaces invalid characters with hyphens, and
+    strips leading/trailing separators so joined names remain valid.
+    """
+    value = value.lower()
+    value = re.sub(r"[^a-z0-9_.-]+", "-", value)
+    value = re.sub(r"^[_.-]+|[_.-]+$", "", value)
+    return value
+
+
+def make_docker_resource_name(
+    prefix: str,
+    user_identifier: str,
+    server_name: str,
+    suffix: str | None = "data",
+    max_len: int = 240,
+) -> str:
+    """Build a Docker-compatible resource name from components.
+
+    Each component is sanitized and lowercased. The resulting name always
+    starts with an alphanumeric character and only contains characters
+    allowed in Docker names. It is truncated if it exceeds `max_len`.
+
+    ``user_identifier`` should be the user's UUID so that two users whose
+    sanitized usernames collide still get distinct Docker resource names.
+
+    Pass ``suffix=None`` to omit the suffix segment (useful for container
+    names that follow the ``nukelab-server-{user_id}-{server_name}`` pattern).
+    """
+    safe_prefix = _sanitize_docker_name_component(prefix) or "nukelab"
+    safe_user = _sanitize_docker_name_component(user_identifier) or "user"
+    safe_server_name = _sanitize_docker_name_component(server_name) or "server"
+    safe_suffix = _sanitize_docker_name_component(suffix) if suffix else None
+
+    if safe_suffix:
+        base = f"{safe_prefix}-{safe_user}-{safe_server_name}-{safe_suffix}"
+        reserved_len = len(f"{safe_prefix}-{safe_user}--{safe_suffix}")
+    else:
+        base = f"{safe_prefix}-{safe_user}-{safe_server_name}"
+        reserved_len = len(f"{safe_prefix}-{safe_user}-")
+
+    if len(base) > max_len:
+        # Truncate the server-name component while preserving prefix and suffix.
+        allowed_server_len = max_len - reserved_len
+        safe_server_name = safe_server_name[: max(1, allowed_server_len)]
+        if safe_suffix:
+            base = f"{safe_prefix}-{safe_user}-{safe_server_name}-{safe_suffix}"
+        else:
+            base = f"{safe_prefix}-{safe_user}-{safe_server_name}"
+    return base
 
 
 class VolumeService:
@@ -59,18 +121,38 @@ class VolumeService:
         visibility: str = "private",
     ) -> Volume:
         """Create a new volume record and Docker volume"""
+        if (
+            not name
+            or len(name) > _MAX_VOLUME_NAME_LEN
+            or not _DOCKER_VOLUME_NAME_PATTERN.match(name)
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid Docker volume name: {name!r}",
+            )
+
         container_client = await get_container_client()
 
         # Create Docker volume
-        await container_client.client.volumes.create(
-            {
-                "Name": name,
-                "Labels": {
-                    "nukelab.managed": "true",
-                    "nukelab.user.id": owner_id,
-                },
-            }
-        )
+        try:
+            await container_client.client.volumes.create(
+                {
+                    "Name": name,
+                    "Labels": {
+                        "nukelab.managed": "true",
+                        "nukelab.user.id": owner_id,
+                    },
+                }
+            )
+        except aiodocker.DockerError as e:
+            logger.warning(
+                "Docker volume creation failed",
+                extra={"volume_name": name, "error": e.message},
+            )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to create Docker volume: {e.message}",
+            ) from e
 
         # Create database record
         volume = Volume(

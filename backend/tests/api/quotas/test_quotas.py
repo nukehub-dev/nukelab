@@ -156,6 +156,68 @@ class TestQuotaAdminEndpoints:
         )
         assert response.status_code == 403
 
+    @pytest.mark.asyncio
+    async def test_update_user_quota_persists(self, client, admin_token, test_user, db_session):
+        """Admin update should persist and be reflected in the list endpoint."""
+        response = await client.put(
+            f"/api/quotas/{test_user.id}",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={
+                "max_cpu_total": 4.0,
+                "max_memory_total": "32g",
+                "max_disk_total": "200g",
+                "max_gpu_total": 1,
+                "max_servers_total": 10,
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["data"]["limits"]["max_cpu_total"] == 4.0
+        assert data["data"]["limits"]["max_servers_total"] == 10
+
+        # Verify the list endpoint reflects the change
+        list_response = await client.get(
+            "/api/quotas/all", headers={"Authorization": f"Bearer {admin_token}"}
+        )
+        assert list_response.status_code == 200
+        items = list_response.json()["data"]["items"]
+        user_item = next((i for i in items if i["user_id"] == str(test_user.id)), None)
+        assert user_item is not None
+        assert user_item["limits"]["max_cpu_total"] == 4.0
+        assert user_item["limits"]["max_memory_total"] == "32g"
+        assert user_item["limits"]["max_servers_total"] == 10
+
+    @pytest.mark.asyncio
+    async def test_get_default_quota_limits_as_admin(self, client, admin_token):
+        """Admin should get system default quota limits."""
+        response = await client.get(
+            "/api/admin/quotas/default-limits", headers={"Authorization": f"Bearer {admin_token}"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "default_limits" in data
+        assert data["default_limits"]["max_cpu_total"] == 8.0
+
+    @pytest.mark.asyncio
+    async def test_update_default_quota_limits_as_admin(self, client, admin_token):
+        """Admin should update system default quota limits."""
+        response = await client.put(
+            "/api/admin/quotas/default-limits",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={
+                "max_cpu_total": 4.0,
+                "max_memory_total": "8g",
+                "max_disk_total": "50g",
+                "max_gpu_total": 0,
+                "max_servers_total": 3,
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["default_limits"]["max_cpu_total"] == 4.0
+        assert data["default_limits"]["max_servers_total"] == 3
+
 
 """Coverage tests for smaller API modules: health, system, quotas, ip_restriction."""
 

@@ -174,42 +174,61 @@ INFO:Mounted lxcfs /proc files: 7 files
 
 ### XFS with Project Quotas (pquota)
 
+The examples below use `/data/docker` as the Docker `data-root`. Replace it with your actual path (e.g., `/var/lib/docker`, `/var/lib/containers/storage`, or wherever `VOLUME_STORAGE_PATH` points).
+
 **1. Check current mount:**
 
 ```bash
-findmnt /var/lib/docker
+findmnt /data/docker
 # or
-findmnt /var/lib/containers
+findmnt /var/lib/docker
 ```
 
 **2. Remount with pquota (temporary):**
 
 ```bash
-sudo mount -o remount,prjquota /var/lib/docker
+sudo mount -o remount,prjquota /data/docker
 ```
 
 **3. Make permanent in `/etc/fstab`:**
 
 ```
-/dev/mapper/vg-docker /var/lib/docker xfs defaults,prjquota 0 0
+/dev/mapper/your-vg-data /data/docker xfs defaults,prjquota 0 0
 ```
 
-**4. Enable in Docker daemon** (`/etc/docker/daemon.json`):
-
-```json
-{
-  "storage-driver": "overlay2",
-  "storage-opts": [
-    "overlay2.override_kernel_check=true",
-    "xfs.pquota=true"
-  ]
-}
-```
-
-**5. Restart Docker:**
+**4. Restart Docker:**
 
 ```bash
 sudo systemctl restart docker
+```
+
+Modern Docker's `overlay2` driver automatically uses XFS project quotas for per-container writable-layer size limits when the backing filesystem is mounted with `pquota`.
+
+**5. Expose the XFS block device to the backend container:**
+
+`xfs_quota` needs the underlying block device node visible inside the container, even though it only performs filesystem-level quota ioctls. Find the device for your volume storage path:
+
+```bash
+sudo df -P "$VOLUME_STORAGE_PATH" | tail -1 | awk '{print $1}'
+# → /dev/mapper/your-vg-data
+```
+
+Set it in `.env`:
+
+```env
+XFS_QUOTA_DEVICE_PATH=/dev/mapper/your-vg-data
+```
+
+The device is mounted read-only into the backend and celery-worker containers via `compose.yml`.
+
+**6. Rebuild and restart:**
+
+NukeLab's XFS project quota service needs `xfsprogs` (`xfs_quota`, `xfs_io`) inside the backend container. The backend `Dockerfile` installs it; rebuild the image after pulling the change:
+
+```bash
+./nukelabctl down
+./nukelabctl build backend
+./nukelabctl up prod
 ```
 
 ### ZFS
@@ -248,6 +267,86 @@ INFO:Storage limits are supported by the current driver.
 WARNING:Storage limits not supported: DockerError(...)
 Common in rootless dev environments (overlayfs).
 Expected in production with XFS(pquota)/ZFS/Btrfs.
+```
+
+### Hide host storage size from containers
+
+By default, Docker bind-mounts per-container metadata files (`/etc/hosts`, `/etc/hostname`, `/etc/resolv.conf`) from `/data/docker/containers/<id>/`. Because that directory lives on the host's XFS data partition, `df` inside a server container leaks the full host storage size:
+
+```text
+/dev/mapper/your-vg-data  500G   50G  450G  10% /etc/hosts
+```
+
+To hide this, move Docker's container metadata onto a small dedicated loopback filesystem and enable Docker log rotation so the metadata volume does not fill up.
+
+**1. Stop Docker:**
+
+```bash
+sudo systemctl stop docker
+```
+
+**2. Create a loopback filesystem for container metadata:**
+
+```bash
+# Move existing metadata aside
+sudo mv /data/docker/containers /data/docker/containers-under
+
+# Create a 10 GiB loopback file (adjust size to your needs)
+sudo mkdir -p /data/docker-meta
+sudo dd if=/dev/zero of=/data/docker-meta/containers.img bs=1M count=10240
+sudo mkfs.ext4 -L docker-containers /data/docker-meta/containers.img
+
+# Mount it at the original path
+sudo mkdir -p /data/docker/containers
+sudo mount -o loop /data/docker-meta/containers.img /data/docker/containers
+```
+
+**3. Copy the original metadata back:**
+
+```bash
+sudo rsync -a --delete /data/docker/containers-under/ /data/docker/containers/
+sudo rm -rf /data/docker/containers-under
+```
+
+**4. Make it permanent in `/etc/fstab`:**
+
+```fstab
+/data/docker-meta/containers.img /data/docker/containers ext4 loop 0 0
+```
+
+**5. Enable Docker log rotation in `/etc/docker/daemon.json`:**
+
+```json
+{
+  "data-root": "/data/docker",
+  "storage-driver": "overlay2",
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  }
+}
+```
+
+**6. Restart Docker:**
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl start docker
+```
+
+**7. Verify:**
+
+Start a new server and run inside it:
+
+```bash
+df -h /etc/hosts
+```
+
+Expected output shows the loop device size (10G), not the host's data partition:
+
+```text
+/dev/loop0                  10G   24K   10G   1% /etc/hosts
 ```
 
 ---

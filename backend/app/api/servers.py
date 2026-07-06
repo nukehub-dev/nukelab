@@ -396,10 +396,14 @@ async def create_server(
     try:
         from app.models.server_volume import ServerVolume
         from app.services.volume_access_service import VolumeAccessService
-        from app.services.volume_service import VolumeService
+        from app.services.volume_service import VolumeService, make_docker_resource_name
 
         volume_service = VolumeService(db)
         volume_access = VolumeAccessService(db)
+
+        # Track auto-created volumes so we can clean them up if server creation fails.
+        auto_created_volume = None
+        auto_created_volume_names: list[str] = []
 
         # Build volume_mounts list from new or legacy format
         volume_mounts = []
@@ -414,9 +418,14 @@ async def create_server(
                 }
                 # Auto-create volume for empty volume_id mounts
                 if not vm.volume_id:
-                    safe_name = re.sub(r"[^a-zA-Z0-9_.-]", "-", body.name).lower()
                     suffix = "data" if idx == 0 else f"data-{idx}"
-                    volume_name = f"nukelab-server-{current_user.username}-{safe_name}-{suffix}"
+                    volume_name = make_docker_resource_name(
+                        prefix="nukelab-server",
+                        user_identifier=str(current_user.id),
+                        server_name=body.name,
+                        suffix=suffix,
+                    )
+                    auto_created_volume_names.append(volume_name)
                     new_vol = await volume_service.create_volume(
                         name=volume_name,
                         display_name=f"{body.name} {suffix.title()}",
@@ -437,13 +446,14 @@ async def create_server(
             )
 
         # Auto-create primary volume if none provided
-        auto_created_volume = None
-        auto_created_volume_name = None
         if not volume_mounts:
-            # Sanitize volume name to ensure Docker compatibility
-            safe_name = re.sub(r"[^a-zA-Z0-9_.-]", "-", body.name).lower()
-            volume_name = f"nukelab-server-{current_user.username}-{safe_name}-data"
-            auto_created_volume_name = volume_name
+            volume_name = make_docker_resource_name(
+                prefix="nukelab-server",
+                user_identifier=str(current_user.id),
+                server_name=body.name,
+                suffix="data",
+            )
+            auto_created_volume_names.append(volume_name)
             auto_created_volume = await volume_service.create_volume(
                 name=volume_name,
                 display_name=f"{body.name} Data",
@@ -577,48 +587,52 @@ async def create_server(
     except Exception:
         await db.rollback()
 
-        # Clean up auto-created Docker volume on failure to allow retries.
-        # DB record is rolled back automatically by db.rollback() above.
-        if auto_created_volume_name:
+        # Clean up auto-created Docker volumes on failure to allow retries.
+        # DB records are rolled back automatically by db.rollback() above,
+        # but some drivers may commit before the rollback, so clean up defensively.
+        for volume_name in auto_created_volume_names:
             try:
                 from app.container.client import get_container_client
 
                 container_client = await get_container_client()
                 try:
-                    vol = await container_client.client.volumes.get(auto_created_volume_name)
+                    vol = await container_client.client.volumes.get(volume_name)
                     await vol.delete()
-                    logger.info(f"Cleaned up Docker volume: {auto_created_volume_name}")
+                    logger.info(f"Cleaned up Docker volume: {volume_name}")
                 except Exception as e:
-                    logger.warning(
-                        f"Failed to delete Docker volume {auto_created_volume_name}: {e}"
-                    )
+                    logger.warning(f"Failed to delete Docker volume {volume_name}: {e}")
             except Exception as e:
-                logger.warning(f"Failed to clean up auto-created volume: {e}")
+                logger.warning(f"Failed to clean up auto-created volume {volume_name}: {e}")
 
-        # Delete orphaned DB volume record using a fresh session to avoid greenlet issues
-        if auto_created_volume_name:
+            # Delete orphaned DB volume record using a fresh session to avoid greenlet issues
             try:
                 from app.db.session import async_session
                 from app.models.volume import Volume
 
                 async with async_session() as cleanup_db:
                     result = await cleanup_db.execute(
-                        select(Volume).where(Volume.name == auto_created_volume_name)
+                        select(Volume).where(Volume.name == volume_name)
                     )
                     vol = result.scalar_one_or_none()
                     if vol:
                         await cleanup_db.delete(vol)
                         await cleanup_db.commit()
-                        logger.info(f"Cleaned up DB volume record: {auto_created_volume_name}")
+                        logger.info(f"Cleaned up DB volume record: {volume_name}")
             except Exception as e:
-                logger.warning(f"Failed to clean up DB volume record: {e}")
+                logger.warning(f"Failed to clean up DB volume record for {volume_name}: {e}")
 
         # Also clean up any container that may have been created
         try:
             from app.container.client import get_container_client
 
             container_client = await get_container_client()
-            container_name = f"nukelab-server-{current_user.username}-{body.name}"
+            container_name = make_docker_resource_name(
+                prefix="nukelab-server",
+                user_identifier=str(current_user.id),
+                server_name=body.name,
+                suffix=None,
+                max_len=240,
+            )
             try:
                 container = await container_client.client.containers.get(container_name)
                 await container.delete(force=True)
@@ -1112,7 +1126,7 @@ async def _perform_server_stop(
                 await db.commit()
                 await broadcast_server_status_change(server.user_id, server_id, "stopped")
                 return {
-                    "message": "Server stopped",
+                    "message": "Server already stopped",
                     "server_id": server_id,
                     "status": "stopped",
                 }
@@ -1509,7 +1523,7 @@ async def update_server(
     from app.services.plan_service import PlanService
     from app.services.quota_service import QuotaService
     from app.services.volume_access_service import VolumeAccessService
-    from app.services.volume_service import VolumeService
+    from app.services.volume_service import VolumeService, make_docker_resource_name
 
     volume_service = VolumeService(db)
     volume_access = VolumeAccessService(db)
@@ -1578,9 +1592,13 @@ async def update_server(
 
             # Auto-create volume for empty volume_id mounts
             if not vm.volume_id:
-                safe_name = re.sub(r"[^a-zA-Z0-9_.-]", "-", server.name).lower()
                 suffix = "data" if idx == 0 else f"data-{idx}"
-                volume_name = f"nukelab-server-{current_user.username}-{safe_name}-{suffix}"
+                volume_name = make_docker_resource_name(
+                    prefix="nukelab-server",
+                    user_identifier=str(current_user.id),
+                    server_name=server.name,
+                    suffix=suffix,
+                )
                 new_vol = await volume_service.create_volume(
                     name=volume_name,
                     display_name=f"{server.name} {suffix.title()}",
@@ -2010,7 +2028,9 @@ async def create_server_access_token(
         )
 
     try:
-        client_ip = request.client.host if request.client else None
+        from app.middleware.ip_restriction import _get_client_ip
+
+        client_ip = _get_client_ip(request)
         user_agent = request.headers.get("user-agent")
 
         # Accessing a server is a strong activity signal; refresh idle timeout.

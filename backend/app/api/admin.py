@@ -535,6 +535,56 @@ async def update_system_max_balance(
     return {"message": f"System max balance updated to {request.amount}"}
 
 
+# ========== Default Resource Quotas (Admin) ==========
+class DefaultQuotaLimitsRequest(BaseModel):
+    max_cpu_total: float = Field(..., ge=0, description="Default CPU cores per user")
+    max_memory_total: str = Field(..., min_length=1, description="Default memory limit (e.g. 16g)")
+    max_disk_total: str = Field(..., min_length=1, description="Default disk limit (e.g. 100g)")
+    max_gpu_total: int = Field(..., ge=0, description="Default GPUs per user")
+    max_servers_total: int = Field(..., ge=0, description="Default servers per user")
+
+
+@router.get("/quotas/default-limits")
+async def get_default_quota_limits(
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get the system-wide default resource quota limits applied to new users."""
+    from app.services.setting_service import SettingService
+
+    service = SettingService(db)
+    return {"default_limits": await service.get_quota_defaults()}
+
+
+@router.put("/quotas/default-limits")
+async def update_default_quota_limits(
+    request: DefaultQuotaLimitsRequest,
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update the system-wide default resource quota limits applied to new users."""
+    from app.services.activity_service import ActivityService
+    from app.services.setting_service import SettingService
+
+    service = SettingService(db)
+    await service.set_quota_defaults(request.model_dump())
+
+    activity_service = ActivityService(db)
+    await activity_service.log(
+        action="quotas.update_default_limits",
+        target_type="system",
+        actor_id=str(current_user.id),
+        details=request.model_dump(),
+    )
+
+    return {
+        "message": "System default quota limits updated",
+        "default_limits": await service.get_quota_defaults(),
+    }
+
+
 class BulkSetAllowanceRequest(BaseModel):
     user_ids: list[str] = Field(..., min_length=1, description="Users to update")
     amount: int = Field(..., ge=0, description="New daily allowance (NUKE / day)")

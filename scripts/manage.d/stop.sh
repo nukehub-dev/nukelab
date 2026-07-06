@@ -2,8 +2,11 @@
 # SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
 # SPDX-License-Identifier: BSD-2-Clause
 
+: "${CONTAINER_ENGINE:=podman}"
+
 # Default values for stop options.
 STOP_TIMEOUT=10
+STOP_SERVERS=false
 
 help_stop() {
     cat <<- EOF
@@ -17,6 +20,7 @@ ${BOLD}Targets:${RESET}
   all        Stop everything ${DIM}(default)${RESET}
 
 ${BOLD}Options:${RESET}
+  --include-servers   Also stop spawned user server containers (nukelab-server-*)
   --timeout N, -t N   Seconds to wait before killing a container ${DIM}(default: 10)${RESET}
   --help, -h          Show this help
 
@@ -24,12 +28,17 @@ ${BOLD}Examples:${RESET}
   ./nukelabctl stop
   ./nukelabctl stop backend
   ./nukelabctl stop backend --timeout 5
+  ./nukelabctl stop --include-servers
 EOF
 }
 
 parse_stop_args() {
     while [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; do
         case "${EXTRA_ARGS[0]}" in
+            --include-servers)
+                STOP_SERVERS=true
+                EXTRA_ARGS=("${EXTRA_ARGS[@]:1}")
+                ;;
             --timeout | -t)
                 if [[ ${#EXTRA_ARGS[@]} -lt 2 ]]; then
                     die "Option ${EXTRA_ARGS[0]} requires a value"
@@ -82,6 +91,17 @@ cmd_stop() {
     _stop_orphan_if_unmanaged "compose.pgbouncer.yml" nukelab-pgbouncer
     _stop_orphan_if_unmanaged "compose.tracing.yml" nukelab-otel-collector
     _stop_orphan_if_unmanaged "compose.tracing.yml" nukelab-jaeger
+
+    # Stop spawned user server containers on request so they don't become ghost
+    # containers after the platform stack is down.
+    if $STOP_SERVERS; then
+        local _server_ids
+        _server_ids=$($CONTAINER_ENGINE ps -q --filter name=^nukelab-server- 2> /dev/null) || true
+        if [ -n "$_server_ids" ]; then
+            log "Stopping spawned server containers..."
+            $CONTAINER_ENGINE stop -t "$STOP_TIMEOUT" $_server_ids > /dev/null 2>&1 || true
+        fi
+    fi
 
     ok "Stopped"
 }

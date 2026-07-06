@@ -35,6 +35,7 @@ class UserCreateRequest(BaseModel):
     last_name: str | None = Field(default=None, max_length=255)
     avatar_url: str | None = Field(default=None, max_length=500)
     credits: int = Field(default=500, ge=0)
+    daily_allowance: int | None = Field(default=None, ge=0)
 
 
 class UserUpdateRequest(BaseModel):
@@ -440,6 +441,7 @@ async def create_user(
         last_name=request.last_name,
         avatar_url=request.avatar_url,
         credits=request.credits,
+        daily_allowance=request.daily_allowance,
         created_by=current_user,
     )
 

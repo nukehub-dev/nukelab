@@ -116,9 +116,14 @@ class UserService:
         avatar_url: str | None = None,
         use_gravatar: bool = True,
         credits: int = 500,
+        daily_allowance: int | None = None,
         created_by: User | None = None,
     ) -> User:
-        """Create a new user"""
+        """Create a new user.
+
+        ``daily_allowance`` defaults to the persisted system default
+        (``credits_daily_allowance``). Pass an explicit value to override it.
+        """
 
         # Validate role
         if not is_valid_role(role):
@@ -139,6 +144,13 @@ class UserService:
         if existing:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already exists")
 
+        # Resolve daily allowance default from system settings when not provided
+        if daily_allowance is None:
+            from app.services.setting_service import SettingService
+
+            setting_service = SettingService(self.db)
+            daily_allowance = await setting_service.get_daily_allowance()
+
         # Create user
         user = User(
             username=username,
@@ -149,7 +161,7 @@ class UserService:
             last_name=last_name,
             avatar_url=avatar_url,
             nuke_balance=credits,
-            daily_allowance=credits,
+            daily_allowance=daily_allowance,
             is_active=True,
             is_verified=True,
             preferences={"use_gravatar": use_gravatar},

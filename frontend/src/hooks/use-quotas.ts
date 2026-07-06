@@ -96,3 +96,38 @@ export function useQuotaActions() {
 
   return { updateQuota }
 }
+
+export function useSystemQuotaDefaults() {
+  return useQuery({
+    queryKey: ['system-quota-defaults'],
+    queryFn: async () => {
+      const response = await api.get<{ default_limits: QuotaLimits }>(
+        '/admin/quotas/default-limits'
+      )
+      return response.default_limits
+    },
+  })
+}
+
+type UpdateSystemQuotaDefaultsData = QuotaLimits
+
+export function useUpdateSystemQuotaDefaults() {
+  const queryClient = useQueryClient()
+  const { success, error: showError } = useToast()
+
+  return useMutation({
+    mutationFn: (limits: UpdateSystemQuotaDefaultsData) =>
+      api.put<{ message: string; default_limits: QuotaLimits }>(
+        '/admin/quotas/default-limits',
+        limits
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['system-quota-defaults'] })
+      queryClient.invalidateQueries({ queryKey: ['quotas'] })
+      success('Default quotas updated', 'New users will receive these limits')
+    },
+    onError: (err) => {
+      showError('Failed to update default quotas', getErrorMessage(err))
+    },
+  })
+}
