@@ -258,19 +258,6 @@ class ServerSpawner:
             # Start container
             await container_client.start_container(container.id)
 
-            # Wait for the container's /health endpoint to be reachable before
-            # reporting the server as running. This avoids the UI showing "ready"
-            # while the auth sidecar/ttyd/nginx are still starting inside the
-            # container.
-            health_url = f"http://{container_name}:8080/health"
-            ready = await container_client.wait_for_container_ready(container_name, health_url)
-            if not ready:
-                logger.warning(
-                    "Container %s started but did not become ready within timeout; "
-                    "continuing with status=running",
-                    container_name,
-                )
-
             # Fix volume permissions inside the container.
             # Rootless Podman maps the host UID to container root, so named volumes
             # appear as root-owned. We make the mount point itself world-writable
@@ -280,6 +267,9 @@ class ServerSpawner:
             #     (each container would otherwise chown to its own user)
             # The home directory also needs this in hardened mode because /start.sh
             # runs as the non-root container user and cannot chmod it itself.
+            # This MUST run before waiting for the health endpoint: /start.sh
+            # aborts if /home/{username} is not writable within ~10s, so nginx
+            # never starts and the health probe never succeeds in time.
             mount_paths_to_fix = [home_mount_path]
             for mount in volume_mounts or []:
                 mount_path = mount.get("mount_path", "/data")
@@ -292,13 +282,27 @@ class ServerSpawner:
                     # container user is 65532 and cannot chmod a root-owned
                     # named volume that was initialized by an earlier run.
                     exec_instance = await container.exec(["chmod", "777", mount_path], user="root")
-                    await exec_instance.start(detach=True)
-                    await asyncio.sleep(0.2)
+                    # Wait for the chmod to finish so /start.sh sees a writable
+                    # home directory before its own short timeout expires.
+                    await exec_instance.start(detach=False)
                 except Exception as e:
                     logger.warning(
                         f"Could not fix permissions for {mount_path} in container "
                         f"{container_name}: {e}"
                     )
+
+            # Wait for the container's /health endpoint to be reachable before
+            # reporting the server as running. This avoids the UI showing "ready"
+            # while the auth sidecar/ttyd/nginx are still starting inside the
+            # container.
+            health_url = f"http://{container_name}:8080/health"
+            ready = await container_client.wait_for_container_ready(container_name, health_url)
+            if not ready:
+                logger.warning(
+                    "Container %s started but did not become ready within timeout; "
+                    "continuing with status=running",
+                    container_name,
+                )
 
             # Determine primary volume_id from volume_mounts if provided
             primary_volume_id = None
