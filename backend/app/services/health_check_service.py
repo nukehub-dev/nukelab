@@ -88,6 +88,11 @@ class HealthCheckService:
                 output=(last_check.get("Output", "") or "")[:1000],
             )
 
+            # Persist the latest health status on the server record so API
+            # consumers see a current summary without querying HealthCheck rows.
+            server.health_status = health_status
+            server.last_health_check = datetime.now(UTC).replace(tzinfo=None)
+
             # Track consecutive failures
             if health_status == "unhealthy":
                 last_check_result = await self.db.execute(
@@ -118,6 +123,8 @@ class HealthCheckService:
                 status="unknown",
                 output=str(e)[:1000],
             )
+            server.health_status = "unknown"
+            server.last_health_check = datetime.now(UTC).replace(tzinfo=None)
             self.db.add(health_check)
             await self.db.commit()
         finally:

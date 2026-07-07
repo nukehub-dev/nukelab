@@ -320,7 +320,9 @@ class ServerSpawner:
                 primary = next((m for m in volume_mounts if m.get("is_primary")), volume_mounts[0])
                 primary_volume_id = primary.get("volume_id")
 
-            # Create server record
+            # Create server record. Reflect the result of the readiness probe in
+            # health_status so the API shows an accurate initial state instead of
+            # the model default "unknown".
             server = Server(
                 id=uuid.UUID(server_id),
                 name=server_name,
@@ -330,6 +332,7 @@ class ServerSpawner:
                 image=image,
                 volume_id=uuid.UUID(primary_volume_id) if primary_volume_id else None,
                 status="running",
+                health_status="healthy" if ready else "unhealthy",
                 allocated_cpu=cpu,
                 allocated_memory=memory,
                 allocated_disk=disk,
