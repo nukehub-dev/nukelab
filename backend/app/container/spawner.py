@@ -282,9 +282,12 @@ class ServerSpawner:
                     # container user is 65532 and cannot chmod a root-owned
                     # named volume that was initialized by an earlier run.
                     exec_instance = await container.exec(["chmod", "777", mount_path], user="root")
-                    # Wait for the chmod to finish so /start.sh sees a writable
-                    # home directory before its own short timeout expires.
-                    await exec_instance.start(detach=False)
+                    # Start the chmod in the background; /start.sh polls for up to
+                    # ~10s, so the short delay below is enough for the runtime to
+                    # schedule the exec while avoiding an unawaitable Stream object
+                    # that aiodocker returns with detach=False.
+                    await exec_instance.start(detach=True)
+                    await asyncio.sleep(0.5)
                 except Exception as e:
                     logger.warning(
                         f"Could not fix permissions for {mount_path} in container "
