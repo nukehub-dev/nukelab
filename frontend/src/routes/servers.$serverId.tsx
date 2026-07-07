@@ -7,6 +7,7 @@ import { motion } from 'framer-motion'
 import {
   ArrowLeft,
   Activity,
+  HeartPulse,
   Cpu,
   HardDrive,
   Network,
@@ -452,6 +453,19 @@ function ServerDetailPage() {
             <div>
               <p className="text-xs text-muted-foreground mb-1">Status</p>
               <StatusBadge status={server.status} pulse={server.status === 'running'} />
+            </div>
+          </div>
+
+          {/* Health Card */}
+          <div className="flex items-start gap-4 p-4 rounded-xl bg-surface/50 border border-border/50">
+            <div className="p-2.5 rounded-lg bg-chart-3/10">
+              <HeartPulse className="w-4 h-4 text-chart-3" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Health</p>
+              <StatusBadge
+                status={(server.health_status || 'unknown') as 'healthy' | 'unhealthy' | 'unknown'}
+              />
             </div>
           </div>
 

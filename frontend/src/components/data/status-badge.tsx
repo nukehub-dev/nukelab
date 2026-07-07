@@ -6,7 +6,16 @@ import { motion } from 'framer-motion'
 import { CheckCircle2, Square, Loader2, AlertCircle, AlertTriangle, Info } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
-type StatusType = 'running' | 'stopped' | 'pending' | 'error' | 'warning' | 'info'
+type StatusType =
+  | 'running'
+  | 'stopped'
+  | 'pending'
+  | 'error'
+  | 'warning'
+  | 'info'
+  | 'healthy'
+  | 'unhealthy'
+  | 'unknown'
 
 interface StatusBadgeProps {
   status: StatusType
@@ -67,6 +76,27 @@ const statusConfig: Record<
     textColor: 'text-sky-400',
     borderColor: 'border-sky-500/20',
     defaultLabel: 'Info',
+  },
+  healthy: {
+    icon: CheckCircle2,
+    bgColor: 'bg-emerald-500/10',
+    textColor: 'text-emerald-400',
+    borderColor: 'border-emerald-500/20',
+    defaultLabel: 'Healthy',
+  },
+  unhealthy: {
+    icon: AlertCircle,
+    bgColor: 'bg-red-500/10',
+    textColor: 'text-red-400',
+    borderColor: 'border-red-500/20',
+    defaultLabel: 'Unhealthy',
+  },
+  unknown: {
+    icon: Info,
+    bgColor: 'bg-gray-500/10',
+    textColor: 'text-gray-400',
+    borderColor: 'border-gray-500/20',
+    defaultLabel: 'Unknown',
   },
 }
 
