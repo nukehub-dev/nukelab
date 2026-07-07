@@ -247,6 +247,7 @@ class ContainerClient:
         memory_limit: str | None = None,
         disk_limit: str | None = None,
         hostname: str | None = None,
+        network_aliases: list[str] | None = None,
     ):
         """Create a new container with graceful cgroup fallback"""
         env_vars = dict(env or {})
@@ -267,6 +268,20 @@ class ContainerClient:
                 "PublishAllPorts": False,
             },
         }
+
+        # Add a short network alias so the backend health probe can use a
+        # DNS-safe hostname instead of the potentially very long container name.
+        # Container names can exceed the 63-byte DNS label limit, causing
+        # getaddrinfo to fail with "label too long".
+        net_name = network or settings.docker_network
+        if network_aliases:
+            config["NetworkingConfig"] = {
+                "EndpointsConfig": {
+                    net_name: {
+                        "Aliases": list(network_aliases),
+                    }
+                }
+            }
 
         if hostname:
             config["Hostname"] = hostname

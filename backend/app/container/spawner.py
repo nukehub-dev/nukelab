@@ -73,6 +73,10 @@ class ServerSpawner:
             max_len=240,
         )
 
+        # Short DNS-safe alias for the backend health probe. Container names can
+        # exceed the 63-byte DNS label limit, so resolving the full name fails.
+        health_alias = f"srv-{server_id[:8]}"
+
         # If a container with this name already exists (e.g., an orphaned container
         # from a previous failed stop/start/restart), remove it before attempting to
         # create a new one. This keeps the database and runtime state consistent and
@@ -253,6 +257,7 @@ class ServerSpawner:
                 disk_limit=disk,
                 volumes=volumes,
                 hostname="NukeLab",
+                network_aliases=[health_alias],
             )
 
             # Start container
@@ -297,9 +302,10 @@ class ServerSpawner:
             # Wait for the container's /health endpoint to be reachable before
             # reporting the server as running. This avoids the UI showing "ready"
             # while the auth sidecar/ttyd/nginx are still starting inside the
-            # container.
-            health_url = f"http://{container_name}:8080/health"
-            ready = await container_client.wait_for_container_ready(container_name, health_url)
+            # container. Use the short DNS alias instead of the long container
+            # name so the probe hostname stays within the DNS label limit.
+            health_url = f"http://{health_alias}:8080/health"
+            ready = await container_client.wait_for_container_ready(health_alias, health_url)
             if not ready:
                 logger.warning(
                     "Container %s started but did not become ready within timeout; "

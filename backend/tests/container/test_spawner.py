@@ -583,6 +583,7 @@ class TestSpawnSuccess:
         assert f"nukelab-server-{user_id}-srv1-data" in call_kwargs["volumes"]
         assert call_kwargs["command"] == "/start.sh"
         assert call_kwargs["hostname"] == "NukeLab"
+        assert call_kwargs["network_aliases"] == [f"srv-{str(server.id)[:8]}"]
 
     @pytest.mark.asyncio
     async def test_spawn_with_provided_image(self, fresh_spawner):
@@ -713,15 +714,16 @@ class TestSpawnSuccess:
         """spawn should wait for container readiness before returning."""
         user_id = str(uuid_mod.uuid4())
         with mock.patch("app.container.spawner.settings.public_url", "http://test"):
-            await fresh_spawner.spawn(
+            server = await fresh_spawner.spawn(
                 user_id=user_id,
                 username="testuser",
                 server_name="srv1",
             )
 
+        health_alias = f"srv-{str(server.id)[:8]}"
         fresh_spawner.container_client.wait_for_container_ready.assert_awaited_once_with(
-            f"nukelab-server-{user_id}-srv1",
-            f"http://nukelab-server-{user_id}-srv1:8080/health",
+            health_alias,
+            f"http://{health_alias}:8080/health",
         )
 
     @pytest.mark.asyncio
