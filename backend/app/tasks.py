@@ -207,7 +207,19 @@ def shutdown_idle_servers(self):
                 try:
                     if server.container_id:
                         actual_status = await spawner.get_status(server.container_id)
-                        if actual_status in ("stopped", "unknown"):
+                        if actual_status == "unknown":
+                            # Runtime lookup failed (e.g. socket timeout). Do not
+                            # mark the server stopped: the container may still be
+                            # running. Retry on the next task cycle.
+                            logger.warning(
+                                "Could not determine runtime status of idle server "
+                                "%s (container %s); skipping shutdown",
+                                server.id,
+                                server.container_id,
+                            )
+                            continue
+
+                        if actual_status == "stopped":
                             server.status = "stopped"
                             server.container_id = None
                             await db.commit()

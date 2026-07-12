@@ -626,7 +626,19 @@ async def logout_endpoint(
                 if server.container_id:
                     try:
                         actual_status = await spawner.get_status(server.container_id)
-                        if actual_status in ("stopped", "unknown"):
+                        if actual_status == "unknown":
+                            # Runtime lookup failed (e.g. socket timeout). Do not
+                            # mark the server stopped: the container may still be
+                            # running.
+                            logger.warning(
+                                "Could not determine runtime status of server "
+                                "%s (container %s) on logout; skipping stop",
+                                server.id,
+                                server.container_id,
+                            )
+                            continue
+
+                        if actual_status == "stopped":
                             server.status = "stopped"
                             server.container_id = None
                             continue

@@ -858,6 +858,29 @@ class TestShutdownIdleServersBranches:
             result = _run_with_mock_db(shutdown_idle_servers, db)
         assert "Stopped 0 idle servers" in result
 
+    def test_unknown_status_skips(self):
+        user = mock.Mock()
+        user.id = uuid_mod.uuid4()
+        user.preferences = {"idle_shutdown_timeout": 30}
+        server = mock.Mock()
+        server.container_id = "cid-123"
+        server.last_activity = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1)
+        server.started_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=2)
+        server.plan_id = None
+        db = self._make_db([(server, user)])
+        with (
+            mock.patch(
+                "app.container.spawner.spawner.get_status",
+                new=mock.AsyncMock(return_value="unknown"),
+            ),
+            mock.patch(
+                "app.container.spawner.spawner.delete", new=mock.AsyncMock(return_value=True)
+            ) as mock_delete,
+        ):
+            result = _run_with_mock_db(shutdown_idle_servers, db)
+        assert "Stopped 0 idle servers" in result
+        mock_delete.assert_not_called()
+
 
 # ── process_nuke_billing ─────────────────────────────────────
 
