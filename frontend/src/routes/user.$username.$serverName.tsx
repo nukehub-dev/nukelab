@@ -312,6 +312,7 @@ function ManualOpenState({
   server,
   username,
   onOpen,
+  isOpening,
   tokenError,
 }: {
   server: {
@@ -325,6 +326,7 @@ function ManualOpenState({
   }
   username: string
   onOpen: () => void
+  isOpening?: boolean
   tokenError?: string | null
 }) {
   return (
@@ -350,9 +352,13 @@ function ManualOpenState({
                 </p>
               </div>
 
-              <Button onClick={onOpen} className="w-full gap-2" size="lg">
-                <ExternalLink className="w-4 h-4" />
-                Open Environment
+              <Button onClick={onOpen} disabled={isOpening} className="w-full gap-2" size="lg">
+                {isOpening ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <ExternalLink className="w-4 h-4" />
+                )}
+                {isOpening ? 'Opening...' : 'Open Environment'}
               </Button>
 
               {tokenError && (
@@ -596,6 +602,7 @@ function ServerGatewayPage() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [manualOpenReady, setManualOpenReady] = useState(false)
   const [tokenError, setTokenError] = useState<string | null>(null)
+  const [isOpening, setIsOpening] = useState(false)
 
   useEffect(() => {
     if (server?.status === 'pending' && startTimeRef.current === null) {
@@ -720,28 +727,19 @@ function ServerGatewayPage() {
       reason = entered || undefined
     }
 
-    // Open a blank window synchronously while we are still inside the user
-    // gesture. Waiting for the async token request before calling window.open
-    // causes most browsers to block the popup.
-    const newWindow = window.open('about:blank', '_blank')
-    if (!newWindow) {
-      setTokenError('Popup blocked. Please allow popups for this site and try again.')
-      return
-    }
-    // Break the opener relationship for security once we have a reference.
-    try {
-      newWindow.opener = null
-    } catch {
-      // Ignore if the browser disallows mutating opener.
-    }
+    setIsOpening(true)
+    setTokenError(null)
 
     try {
       if (server?.id) {
         await getServerAccessToken(server.id, reason)
       }
-      newWindow.location.href = targetUrl
+      // Same-tab navigation avoids popup blockers and is consistent with the
+      // auto-redirect flow. The /user/ route is bypassed by the service worker
+      // so the request reaches the terminal container directly.
+      window.location.href = targetUrl
     } catch (err) {
-      newWindow.close()
+      setIsOpening(false)
       setTokenError(err instanceof Error ? err.message : 'Failed to get access token')
     }
   }, [server, isOwnServer, promptAccessReason])
@@ -773,6 +771,7 @@ function ServerGatewayPage() {
             server={server}
             username={username}
             onOpen={handleManualOpen}
+            isOpening={isOpening}
             tokenError={tokenError}
           />
           {reasonDialog}
