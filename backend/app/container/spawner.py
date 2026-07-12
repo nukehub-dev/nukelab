@@ -7,6 +7,10 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+import aiodocker
+from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
+
 from app.config import settings
 from app.container.client import ContainerClient, get_container_client
 from app.core.logging import get_logger
@@ -383,7 +387,12 @@ class ServerSpawner:
             return False
 
     async def get_status(self, container_id: str) -> str:
-        """Get container status"""
+        """Get container status.
+
+        Returns "unknown" when the runtime lookup fails. Errors are logged and
+        emitted to Sentry/tracing/metrics so operators can distinguish a
+        transient API failure from a genuinely missing container.
+        """
         container_client = await self._get_container_client()
         try:
             info = await container_client.get_container_info(container_id)
@@ -394,8 +403,55 @@ class ServerSpawner:
                 return "paused"
             else:
                 return "stopped"
-        except Exception:
+        except aiodocker.DockerError as exc:
+            reason = "not_found" if exc.status == 404 else "api_error"
+            if reason == "not_found":
+                logger.debug("Container %s not found during status lookup", container_id)
+            else:
+                logger.warning(
+                    "Container runtime API error looking up status of %s: %s %s",
+                    container_id,
+                    exc.status,
+                    exc.message,
+                    exc_info=exc,
+                )
+                self._record_status_lookup_failure(container_id, exc, reason)
             return "unknown"
+        except Exception as exc:
+            logger.warning(
+                "Unexpected error looking up status of container %s: %s",
+                container_id,
+                exc,
+                exc_info=exc,
+            )
+            self._record_status_lookup_failure(container_id, exc, "error")
+            return "unknown"
+
+    def _record_status_lookup_failure(self, container_id: str, exc: Exception, reason: str) -> None:
+        """Emit diagnostics for a container status lookup failure.
+
+        Sends the exception to Sentry (when configured), records it on the
+        current OpenTelemetry span, and increments a Prometheus counter that
+        can drive Alertmanager notifications.
+        """
+        from app.core.prometheus_metrics import CONTAINER_STATUS_LOOKUP_FAILURES_TOTAL
+
+        if settings.prometheus_enabled:
+            CONTAINER_STATUS_LOOKUP_FAILURES_TOTAL.labels(reason=reason).inc()
+
+        if settings.sentry_dsn:
+            import sentry_sdk
+
+            sentry_sdk.set_tag("container_id", container_id)
+            sentry_sdk.set_tag("failure_reason", reason)
+            sentry_sdk.capture_exception(exc)
+
+        span = trace.get_current_span()
+        if span and span.is_recording():
+            span.set_attribute("container.id", container_id)
+            span.set_attribute("failure_reason", reason)
+            span.record_exception(exc)
+            span.set_status(Status(StatusCode.ERROR, "container status lookup failed"))
 
 
 # Singleton instance

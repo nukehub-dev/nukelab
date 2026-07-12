@@ -37,6 +37,16 @@ groups:
           summary: "NukeLab backend target is down"
           description: "Prometheus has been unable to scrape the NukeLab backend for more than 1 minute."
 
+      - alert: NukeLabContainerStatusLookupFailures
+        expr: |
+          sum(rate(nukelab_container_status_lookup_failures_total[5m])) by (reason) > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container runtime status lookups are failing"
+          description: "NukeLab cannot reliably query container status (reason={{ $labels.reason }}). This can cause servers to appear stopped while containers are still running."
+
   - name: nukelab-infrastructure
     rules:
       - alert: NukeLabPostgresConnectionsHigh
