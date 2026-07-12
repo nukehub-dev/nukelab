@@ -60,6 +60,24 @@ async function pingServerActivity(serverId: string): Promise<void> {
   }
 }
 
+async function ensureServiceWorkerUpdated(): Promise<void> {
+  // Browsers with a stale service worker may serve the cached SPA shell for
+  // /user/ routes instead of letting the request reach the terminal container.
+  // Force an update and activate any waiting worker before we navigate.
+  if (!('serviceWorker' in navigator)) return
+  try {
+    const registration = await navigator.serviceWorker.ready
+    await registration.update()
+    if (registration.waiting) {
+      registration.waiting.postMessage({ type: 'SKIP_WAITING' })
+      // Give the new worker a moment to activate and claim this client.
+      await new Promise((resolve) => setTimeout(resolve, 300))
+    }
+  } catch {
+    // Best-effort; don't block navigation if the SW API misbehaves.
+  }
+}
+
 export const Route = createFileRoute('/user/$username/$serverName')({
   component: ServerGatewayPage,
 })
@@ -693,6 +711,7 @@ function ServerGatewayPage() {
           await getServerAccessToken(server.id)
           // Force a real navigation so the service worker bypass for /user/ routes
           // sends the request to the terminal container instead of the SPA shell.
+          await ensureServiceWorkerUpdated()
           window.location.href = server.external_url || window.location.href
         } catch (err) {
           setTokenError(err instanceof Error ? err.message : 'Failed to get access token')
@@ -735,8 +754,9 @@ function ServerGatewayPage() {
         await getServerAccessToken(server.id, reason)
       }
       // Same-tab navigation avoids popup blockers and is consistent with the
-      // auto-redirect flow. The /user/ route is bypassed by the service worker
-      // so the request reaches the terminal container directly.
+      // auto-redirect flow. Update the service worker first so a stale SW does
+      // not serve the cached SPA shell for /user/ routes.
+      await ensureServiceWorkerUpdated()
       window.location.href = targetUrl
     } catch (err) {
       setIsOpening(false)
