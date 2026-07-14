@@ -500,9 +500,9 @@ export function Sidebar() {
 
       {/* Mobile Bottom Dock */}
       <nav className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 lg:hidden">
-        <div className="relative flex items-center justify-between bg-background/80 backdrop-blur-xl border border-border/50 rounded-full shadow-lg shadow-black/20 px-2 h-14 min-w-64 overflow-visible">
+        <div className="flex items-center bg-background/80 backdrop-blur-xl border border-border/50 rounded-full shadow-lg shadow-black/20 px-2 h-14 overflow-visible">
           {/* Left items */}
-          <div className="flex items-center h-full">
+          <div className="flex flex-1 items-center h-full">
             {visibleDockItems.map((item) => (
               <Link
                 key={item.href}
@@ -517,6 +517,7 @@ export function Sidebar() {
                 <item.icon
                   className={cn('w-5 h-5', item.label === 'Environments' && 'opacity-80')}
                 />
+                <span className="text-[10px] font-medium hidden sm:inline">{item.label}</span>
               </Link>
             ))}
           </div>
@@ -524,7 +525,7 @@ export function Sidebar() {
           {/* Center menu button - extends above dock */}
           <button
             onClick={() => setShowMore(true)}
-            className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center w-15 h-15 rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/40 transition-shadow duration-200 hover:shadow-primary/60 hover:shadow-xl"
+            className="relative mx-1 flex items-center justify-center w-15 h-15 rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/40 transition-shadow duration-200 hover:shadow-primary/60 hover:shadow-xl"
           >
             <NukeLabLogo size={35} className="text-primary-foreground" />
             {/* Glow effect */}
@@ -532,12 +533,13 @@ export function Sidebar() {
           </button>
 
           {/* Right items */}
-          <div className="flex items-center h-full">
+          <div className="flex flex-1 items-center justify-end h-full">
             <button
               onClick={() => window.dispatchEvent(new CustomEvent('show-search'))}
               className="flex items-center gap-1.5 px-3 h-full rounded-full transition-colors duration-150 text-muted-foreground hover:text-foreground"
             >
               <Search className="w-5 h-5" />
+              <span className="text-[10px] font-medium hidden sm:inline">Search</span>
             </button>
             <NotificationCenter variant="dock" />
           </div>
