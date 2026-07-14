@@ -5,13 +5,17 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import {
   Activity,
+  BarChart3,
+  Bell,
   Boxes,
   CreditCard,
   FolderOpen,
   HardDrive,
+  KeyRound,
   LayoutDashboard,
   LifeBuoy,
   Loader2,
+  Palette,
   Search,
   Server,
   Settings,
@@ -20,6 +24,7 @@ import {
   X,
 } from 'lucide-react'
 import { useSearch } from '../../hooks/use-search'
+import { refreshAccessToken } from '../../lib/api'
 import { cn, formatBytes } from '../../lib/utils'
 import { PERMISSIONS, useAuthStore } from '../../stores/auth-store'
 import type { SearchScope } from '../../types/api'
@@ -35,6 +40,10 @@ interface PaletteItem {
   icon: React.ElementType
   /** Static page commands only; entity results route by type + id. */
   to?: string
+  /** Extra lowercase terms the client-side filter matches (static commands). */
+  keywords?: string[]
+  /** Static commands may run an async action instead of navigating. */
+  action?: () => void | Promise<void>
 }
 
 interface RecentEntry {
@@ -124,6 +133,26 @@ function focusSearchInput() {
   document.querySelector<HTMLInputElement>('[data-search-input]')?.focus()
 }
 
+// Open a monitoring tool (Grafana) through the auth-sidecar redirect, same
+// flow as admin.index.tsx: refresh the token, then open in a new tab.
+async function openMonitoringTool(redirect: string) {
+  const refreshed = await refreshAccessToken()
+  if (!refreshed) {
+    window.location.href = '/login'
+    return
+  }
+  const base = import.meta.env.VITE_MONITORING_BASE_URL || import.meta.env.VITE_API_URL || '/api'
+  const token = localStorage.getItem('nukelab-token')
+  const url = `${base.replace(/\/$/, '')}/auth/monitoring?redirect=${encodeURIComponent(redirect)}&token=${encodeURIComponent(token || '')}`
+  const a = document.createElement('a')
+  a.href = url
+  a.target = '_blank'
+  a.rel = 'noopener noreferrer'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+}
+
 export function CommandPalette() {
   const [isOpen, setIsOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -176,13 +205,28 @@ export function CommandPalette() {
 
   // Static "Go to" page commands, gated exactly like the sidebar nav items
   const pageCommands = useMemo<PaletteItem[]>(() => {
-    const page = (label: string, to: string, icon: React.ElementType): PaletteItem => ({
+    const page = (
+      label: string,
+      to: string,
+      icon: React.ElementType,
+      keywords?: string[]
+    ): PaletteItem => ({
       type: 'page',
       id: to,
       label,
       to,
       icon,
+      keywords,
     })
+    // Grafana opens through the monitoring auth redirect, not the router
+    const grafana: PaletteItem = {
+      type: 'page',
+      id: 'grafana',
+      label: 'Grafana',
+      icon: BarChart3,
+      keywords: ['monitoring', 'metrics', 'dashboards'],
+      action: () => openMonitoringTool('/grafana'),
+    }
     return [
       page('Dashboard', '/', LayoutDashboard),
       page('Servers', '/servers', Server),
@@ -194,8 +238,19 @@ export function CommandPalette() {
       page('Workspaces', '/workspaces', FolderOpen),
       ...(hasPermission(PERMISSIONS.PLAN_READ) ? [page('Plans', '/plans', CreditCard)] : []),
       page('Settings', '/settings', Settings),
-      ...(canAccessAdmin() ? [page('Administration', '/admin', Shield)] : []),
-      page('Support', '/support', LifeBuoy),
+      page('Profile', '/settings/profile', UserCircle, ['account']),
+      page('Themes', '/settings/appearance', Palette, [
+        'appearance',
+        'theme',
+        'dark mode',
+        'light mode',
+      ]),
+      page('Notifications', '/settings/notifications', Bell, ['alerts']),
+      page('Server Settings', '/settings/servers', Server, ['defaults']),
+      page('API Tokens', '/settings/tokens', KeyRound, ['api', 'token']),
+      page('Credits', '/settings/credits', CreditCard, ['balance']),
+      ...(canAccessAdmin() ? [page('Administration', '/admin', Shield), grafana] : []),
+      page('Help & FAQ', '/support', LifeBuoy, ['help', 'questions', 'support', 'faq']),
     ]
   }, [hasPermission, canAccessAdmin])
 
@@ -221,7 +276,11 @@ export function CommandPalette() {
           items: recents.map((r) => ({ ...r, icon: entityIcons[r.type] })),
         })
       }
-      const commands = pageCommands.filter((c) => c.label.toLowerCase().includes(filter))
+      const commands = pageCommands.filter(
+        (c) =>
+          c.label.toLowerCase().includes(filter) ||
+          c.keywords?.some((keyword) => keyword.includes(filter))
+      )
       if (commands.length > 0) result.push({ title: 'Go to', items: commands })
       return result
     }
@@ -352,7 +411,11 @@ export function CommandPalette() {
         navigate({ to: '/admin/users' })
         break
       case 'page':
-        if (item.to) navigate({ to: item.to })
+        if (item.action) {
+          void item.action()
+        } else if (item.to) {
+          navigate({ to: item.to })
+        }
         break
     }
     if (item.type !== 'page') {
