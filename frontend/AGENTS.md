@@ -87,6 +87,12 @@ function AdminCreditsPage() {
 - Use Zustand for global UI state that should survive navigation (e.g., sidebar collapse, theme).
 - Avoid prop drilling more than two levels deep; use context or Zustand instead.
 
+### WebSocket
+
+- One shared connection per app, owned by `src/contexts/websocket-provider.tsx` (`useWebSocket`); consumers use `useSharedWebSocket` and room scopes (`global`, `server:<id>`, `user:<id>`).
+- The connection lifecycle is self-healing: it reconnects on `visibilitychange`/`online`, forces a reconnect when a socket looks open but has been silent past the zombie threshold, and refreshes an expired token on auth failure (4001) instead of dying permanently. Do not add per-feature reconnect logic — fix the shared hook.
+- Live dashboard metrics (`useDashboardMetrics`) depend on the `global` room; system metrics publish every 60s, container metrics every 5s.
+
 ### Styling
 
 - Use Tailwind CSS utility classes. Avoid arbitrary values; extend the theme in `tailwind.config.ts` when a value repeats.
