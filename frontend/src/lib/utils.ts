@@ -82,13 +82,52 @@ export function parseMemoryString(memoryStr: string): number {
   return parseInt(str, 10) || 0
 }
 
+/**
+ * Backend timestamps are naive UTC (ISO 8601 without Z/offset), and
+ * new Date() parses offset-less date-time strings as local time.
+ * Normalize naive strings to UTC before parsing; strings that already
+ * carry a timezone designator (Z or ±HH:MM) and Date objects pass through.
+ */
+export function parseUtcDate(date: Date | string): Date {
+  if (date instanceof Date) return date
+  if (date.includes('T') && !date.endsWith('Z') && !/[+-]\d{2}:?\d{2}$/.test(date)) {
+    return new Date(date + 'Z')
+  }
+  return new Date(date)
+}
+
 export function formatDate(date: Date | string): string {
-  const d = typeof date === 'string' ? new Date(date) : date
   return new Intl.DateTimeFormat('en-US', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
-  }).format(d)
+  }).format(parseUtcDate(date))
+}
+
+export function formatRelativeTime(dateStr: string): string {
+  const date = parseUtcDate(dateStr)
+  const now = new Date()
+  const diffMs = date.getTime() - now.getTime()
+  const diffSec = Math.round(diffMs / 1000)
+  const diffMin = Math.round(diffSec / 60)
+  const diffHour = Math.round(diffMin / 60)
+  const diffDay = Math.round(diffHour / 24)
+
+  const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
+
+  if (Math.abs(diffDay) >= 365) {
+    return formatDate(dateStr)
+  }
+  if (Math.abs(diffDay) >= 1) {
+    return rtf.format(diffDay, 'day')
+  }
+  if (Math.abs(diffHour) >= 1) {
+    return rtf.format(diffHour, 'hour')
+  }
+  if (Math.abs(diffMin) >= 1) {
+    return rtf.format(diffMin, 'minute')
+  }
+  return rtf.format(diffSec, 'second')
 }

@@ -28,6 +28,7 @@ All files under `frontend/` except generated artifacts (`node_modules/`, `dist/`
   - `src/stores/auth-store.ts` — auth store with user state, `PERMISSIONS` constants, and permission helpers.
 - `src/lib/` — pure utility functions and shared constants.
   - `src/lib/external-links.ts` — single source of truth for external destinations (NukeTalk community, contact page, blog). Import `EXTERNAL_LINKS`; never hard-code these URLs.
+  - `src/lib/utils.ts` — backend timestamps are naive UTC (ISO 8601 without Z/offset). Parse and format every API timestamp through `parseUtcDate` / `formatDate` / `formatRelativeTime` from this module; never call `new Date(apiString)` directly.
 - `src/api/` — generated or hand-written API client code and request/response types.
 
 ### Adding a route
@@ -115,7 +116,7 @@ function AdminCreditsPage() {
 ### Tests
 
 - `npm run test` runs Playwright e2e tests. Write e2e specs for critical user flows.
-- Unit tests are not currently required unless the project adds a Vitest/Jest setup.
+- `npm run test:unit` runs Vitest unit tests (colocated `*.test.ts` under `src/`). Add unit tests for pure helpers in `src/lib/` and `src/hooks/`.
 
 ### Build and service worker
 

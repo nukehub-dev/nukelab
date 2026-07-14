@@ -26,7 +26,7 @@ import { useTokens, useTokenActions } from '../../hooks/use-tokens'
 import { useToast } from '../../stores/toast-store'
 import { useConfirmDialog } from '../ui/confirm-dialog'
 import { Tooltip } from '../ui/tooltip'
-import { cn } from '../../lib/utils'
+import { cn, formatDate, formatRelativeTime } from '../../lib/utils'
 import {
   Dialog,
   DialogContent,
@@ -891,45 +891,4 @@ function TokenListSkeleton() {
       ))}
     </div>
   )
-}
-
-/* ------------------------------------------------------------------ */
-/* Utilities                                                           */
-/* ------------------------------------------------------------------ */
-
-function formatDate(dateStr: string): string {
-  const date = new Date(dateStr)
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
-function formatRelativeTime(dateStr: string): string {
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diffMs = date.getTime() - now.getTime()
-  const diffSec = Math.round(diffMs / 1000)
-  const diffMin = Math.round(diffSec / 60)
-  const diffHour = Math.round(diffMin / 60)
-  const diffDay = Math.round(diffHour / 24)
-
-  const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
-
-  if (Math.abs(diffDay) >= 365) {
-    return formatDate(dateStr)
-  }
-  if (Math.abs(diffDay) >= 1) {
-    return rtf.format(diffDay, 'day')
-  }
-  if (Math.abs(diffHour) >= 1) {
-    return rtf.format(diffHour, 'hour')
-  }
-  if (Math.abs(diffMin) >= 1) {
-    return rtf.format(diffMin, 'minute')
-  }
-  return rtf.format(diffSec, 'second')
 }

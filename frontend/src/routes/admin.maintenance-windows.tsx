@@ -46,7 +46,7 @@ import { useToast } from '../stores/toast-store'
 import { usePageGuard } from '../hooks/use-page-guard'
 import { PERMISSIONS } from '../stores/auth-store'
 import { useConfirmDialog } from '../components/ui/confirm-dialog'
-import { cn } from '../lib/utils'
+import { cn, parseUtcDate } from '../lib/utils'
 import { Calendar } from '../components/ui/calendar'
 import { TimePicker } from '../components/ui/time-picker'
 
@@ -55,7 +55,7 @@ export const Route = createFileRoute('/admin/maintenance-windows')({
 })
 
 function formatDateTime(iso: string): string {
-  const d = new Date(iso)
+  const d = parseUtcDate(iso)
   return d.toLocaleString('en-US', {
     month: 'short',
     day: 'numeric',
@@ -66,7 +66,7 @@ function formatDateTime(iso: string): string {
 }
 
 function toLocalDatetimeInputValue(iso: string): string {
-  const d = new Date(iso)
+  const d = parseUtcDate(iso)
   const pad = (n: number) => n.toString().padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }

@@ -27,7 +27,7 @@ import {
   type Workspace,
 } from '../hooks/use-workspaces'
 import { springs } from '../lib/animations'
-import { cn } from '../lib/utils'
+import { cn, parseUtcDate } from '../lib/utils'
 import { useAuthStore } from '../stores/auth-store'
 import { useThemeStore } from '../stores/theme-store'
 import { useWorkspacePins } from '../hooks/use-workspace-pins'
@@ -59,7 +59,7 @@ export const Route = createFileRoute('/workspaces/')({
 
 function formatDate(dateString?: string) {
   if (!dateString) return ''
-  const date = new Date(dateString)
+  const date = parseUtcDate(dateString)
   return date.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
@@ -347,9 +347,15 @@ function WorkspacesListPage() {
         case 'name_desc':
           return b.name.localeCompare(a.name)
         case 'newest':
-          return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+          return (
+            (b.created_at ? parseUtcDate(b.created_at) : new Date(0)).getTime() -
+            (a.created_at ? parseUtcDate(a.created_at) : new Date(0)).getTime()
+          )
         case 'oldest':
-          return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
+          return (
+            (a.created_at ? parseUtcDate(a.created_at) : new Date(0)).getTime() -
+            (b.created_at ? parseUtcDate(b.created_at) : new Date(0)).getTime()
+          )
         case 'members':
           return (b.member_count || 0) - (a.member_count || 0)
         default:

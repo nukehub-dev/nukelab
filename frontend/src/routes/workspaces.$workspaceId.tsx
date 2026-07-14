@@ -47,7 +47,7 @@ import { useVolumes } from '../hooks/use-volumes'
 import { useDiscoverUsers, usePublicProfile } from '../hooks/use-users'
 import { useAuthStore } from '../stores/auth-store'
 import { springs } from '../lib/animations'
-import { cn, formatBytes } from '../lib/utils'
+import { cn, formatBytes, parseUtcDate } from '../lib/utils'
 import { Button } from '../components/ui/button'
 import { StatCard } from '../components/data/stat-card'
 import { Input } from '../components/ui/input'
@@ -359,7 +359,7 @@ function WorkspaceDetailPage() {
       roleLabels[workspace.my_invitation?.role as keyof typeof roleLabels] ||
       workspace.my_invitation?.role
     const invitedAt = workspace.my_invitation?.created_at
-      ? new Date(workspace.my_invitation.created_at).toLocaleDateString('en-US', {
+      ? parseUtcDate(workspace.my_invitation.created_at).toLocaleDateString('en-US', {
           month: 'long',
           day: 'numeric',
           year: 'numeric',
@@ -1144,7 +1144,7 @@ function WorkspaceDetailPage() {
                   <span className="text-xs text-muted-foreground">
                     {invitation.expires_at
                       ? (() => {
-                          const expires = new Date(invitation.expires_at)
+                          const expires = parseUtcDate(invitation.expires_at)
                           const now = new Date()
                           const diffDays = Math.ceil(
                             (expires.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
@@ -1159,7 +1159,7 @@ function WorkspaceDetailPage() {
                             return <span className="text-amber-400">Expires today</span>
                           return `Expires in ${diffDays} day${diffDays > 1 ? 's' : ''}`
                         })()
-                      : `Sent ${invitation.created_at ? new Date(invitation.created_at).toLocaleDateString() : ''}`}
+                      : `Sent ${invitation.created_at ? parseUtcDate(invitation.created_at).toLocaleDateString() : ''}`}
                   </span>
                   <Tooltip content="Cancel invitation">
                     <button
@@ -1639,7 +1639,7 @@ function WorkspaceActivityTable({ workspaceId }: { workspaceId: string }) {
         return (
           <span className="text-xs text-muted-foreground">
             {item.created_at
-              ? new Date(item.created_at).toLocaleString('en-US', {
+              ? parseUtcDate(item.created_at).toLocaleString('en-US', {
                   month: 'short',
                   day: 'numeric',
                   hour: '2-digit',
@@ -1675,7 +1675,7 @@ function WorkspaceActivityTable({ workspaceId }: { workspaceId: string }) {
             </p>
             <p className="text-xs text-muted-foreground">
               {item.created_at
-                ? new Date(item.created_at).toLocaleString('en-US', {
+                ? parseUtcDate(item.created_at).toLocaleString('en-US', {
                     month: 'short',
                     day: 'numeric',
                     hour: '2-digit',
@@ -1740,7 +1740,7 @@ function UserProfileDialog({
   const { data: profile, isLoading } = usePublicProfile(member?.user_id || undefined)
 
   const formatDateTime = (date: string) =>
-    new Date(date).toLocaleString('en-US', {
+    parseUtcDate(date).toLocaleString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -1840,7 +1840,7 @@ function VolumeDetailDialog({
   const owner = vol?.owner
 
   const formatDateTime = (date: string) =>
-    new Date(date).toLocaleString('en-US', {
+    parseUtcDate(date).toLocaleString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',

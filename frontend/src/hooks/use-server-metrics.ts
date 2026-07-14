@@ -4,6 +4,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
+import { parseUtcDate } from '../lib/utils'
 import { useSharedWebSocket } from './use-shared-websocket'
 
 export interface ServerMetricPoint {
@@ -34,7 +35,7 @@ interface MetricApiResponse {
 const MAX_POINTS = 60
 
 function parseApiMetric(metric: MetricApiResponse['metrics'][number]): ServerMetricPoint {
-  const date = new Date(metric.collected_at)
+  const date = parseUtcDate(metric.collected_at)
   const timestamp = date.toLocaleTimeString('en-US', {
     hour: '2-digit',
     minute: '2-digit',

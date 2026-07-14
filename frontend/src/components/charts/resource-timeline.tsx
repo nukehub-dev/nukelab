@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 import { useMemo } from 'react'
+import { parseUtcDate } from '../../lib/utils'
 import {
   BarChart,
   Bar,
@@ -71,8 +72,8 @@ function CustomTooltip({ active, payload }: TooltipProps<number, string>) {
 export function ResourceTimeline({ resources, height = 300, className }: ResourceTimelineProps) {
   const { data } = useMemo(() => {
     const allEvents = resources.flatMap((r) => r.events)
-    const allStarts = allEvents.map((e) => new Date(e.start).getTime())
-    const allEnds = allEvents.map((e) => new Date(e.end).getTime())
+    const allStarts = allEvents.map((e) => parseUtcDate(e.start).getTime())
+    const allEnds = allEvents.map((e) => parseUtcDate(e.end).getTime())
 
     const minTime = Math.min(...allStarts)
     const maxTime = Math.max(...allEnds)
@@ -81,8 +82,8 @@ export function ResourceTimeline({ resources, height = 300, className }: Resourc
     const chartData = resources
       .map((resource) => {
         return resource.events.map((event, index) => {
-          const start = new Date(event.start).getTime()
-          const end = new Date(event.end).getTime()
+          const start = parseUtcDate(event.start).getTime()
+          const end = parseUtcDate(event.end).getTime()
           const duration = end - start
           const durationStr =
             duration < 60000
@@ -95,8 +96,8 @@ export function ResourceTimeline({ resources, height = 300, className }: Resourc
             name: resource.name,
             eventIndex: index,
             status: event.status,
-            start: new Date(event.start).toLocaleTimeString(),
-            end: new Date(event.end).toLocaleTimeString(),
+            start: parseUtcDate(event.start).toLocaleTimeString(),
+            end: parseUtcDate(event.end).toLocaleTimeString(),
             duration: durationStr,
             startOffset: ((start - minTime) / range) * 100,
             width: (duration / range) * 100,

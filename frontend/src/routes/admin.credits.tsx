@@ -38,7 +38,7 @@ import { useDataTable } from '../hooks/use-data-table'
 import { useThemeStore } from '../stores/theme-store'
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store'
 import { usePageGuard } from '../hooks/use-page-guard'
-import { cn } from '../lib/utils'
+import { cn, parseUtcDate } from '../lib/utils'
 import { CreditAdjustDialog } from '../components/admin/credit-adjust-dialog'
 import { CreditHistoryDialog } from '../components/admin/credit-history-dialog'
 import { DailyAllowanceDialog } from '../components/admin/daily-allowance-dialog'
@@ -395,7 +395,7 @@ function CreditsAdminPage() {
             <span className="text-[10px] text-muted-foreground">/day</span>
             {overrideActive && (
               <Tooltip
-                content={`Override active: ${user.daily_allowance_override} / day until ${user.daily_allowance_override_until ? new Date(user.daily_allowance_override_until).toLocaleString() : 'soon'}`}
+                content={`Override active: ${user.daily_allowance_override} / day until ${user.daily_allowance_override_until ? parseUtcDate(user.daily_allowance_override_until).toLocaleString() : 'soon'}`}
               >
                 <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 cursor-help">
                   <Clock className="w-2.5 h-2.5" />

@@ -22,7 +22,7 @@ import {
   useMarkAllAsRead,
   useDeleteNotification,
 } from '../hooks/use-notifications'
-import { cn } from '../lib/utils'
+import { cn, parseUtcDate } from '../lib/utils'
 import { springs } from '../lib/animations'
 import { Tooltip } from '../components/ui/tooltip'
 
@@ -189,7 +189,7 @@ function NotificationsPage() {
                           </p>
                           <div className="flex items-center gap-3 mt-2">
                             <span className="text-xs text-muted-foreground">
-                              {new Date(notification.created_at).toLocaleDateString(undefined, {
+                              {parseUtcDate(notification.created_at).toLocaleDateString(undefined, {
                                 month: 'short',
                                 day: 'numeric',
                                 hour: '2-digit',

@@ -25,7 +25,7 @@ import {
 import { AvatarEditDialog } from './avatar-edit-dialog'
 import { useAuthStore } from '../../stores/auth-store'
 import { useToast } from '../../stores/toast-store'
-import { cn } from '../../lib/utils'
+import { cn, parseUtcDate } from '../../lib/utils'
 import { api } from '../../lib/api'
 import type { User } from '../../types/api'
 import { Card } from '../ui/card'
@@ -478,7 +478,11 @@ export function ProfilePage() {
 
   const fmtDate = (d?: string) =>
     d
-      ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+      ? parseUtcDate(d).toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        })
       : 'Never'
 
   const handleSaved = (updated: Partial<User>) => setUser({ ...user, ...updated })

@@ -7,6 +7,7 @@ cmd_test() {
         step "Running frontend tests..."
         cd "$DIR/frontend"
         [ -d "node_modules" ] || die "Run: ./nukelabctl install frontend"
+        npm run test:unit || warn "Frontend unit tests failed"
         npm run test 2> /dev/null || npm run lint || warn "No test script found"
     fi
 
