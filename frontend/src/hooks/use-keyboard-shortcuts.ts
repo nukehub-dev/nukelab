@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
 // SPDX-License-Identifier: BSD-2-Clause
 
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from '@tanstack/react-router'
+import { PERMISSIONS, useAuthStore } from '../stores/auth-store'
 
 interface Shortcut {
   key: string
@@ -10,6 +11,8 @@ interface Shortcut {
   description: string
   action: () => void
   preventDefault?: boolean
+  /** Permission required to see/use the shortcut; omit for shortcuts available to everyone. */
+  permission?: string
 }
 
 export function useKeyboardShortcuts(shortcuts: Shortcut[]) {
@@ -58,125 +61,85 @@ export function useKeyboardShortcuts(shortcuts: Shortcut[]) {
   }, [handleKeyDown])
 }
 
-// Global shortcuts for the app
-export function useGlobalShortcuts() {
+/**
+ * Single source of truth for global shortcuts. Both the keydown handlers and
+ * the shortcuts help modal use this list, filtered by the current user's
+ * permissions so RBAC-gated destinations (e.g. user administration) are only
+ * offered to users who can actually open them.
+ */
+function useAppShortcuts(): Shortcut[] {
   const navigate = useNavigate()
+  const hasPermission = useAuthStore((s) => s.hasPermission)
 
-  useKeyboardShortcuts([
-    {
-      key: '?',
-      description: 'Show keyboard shortcuts help',
-      action: () => {
-        // Dispatch custom event to show shortcuts modal
-        window.dispatchEvent(new CustomEvent('show-shortcuts'))
+  return useMemo(() => {
+    const shortcuts: Shortcut[] = [
+      {
+        key: '?',
+        description: 'Show keyboard shortcuts help',
+        action: () => {
+          // Dispatch custom event to show shortcuts modal
+          window.dispatchEvent(new CustomEvent('show-shortcuts'))
+        },
       },
-    },
-    {
-      key: '/',
-      description: 'Focus search',
-      action: () => {
-        const searchInput = document.querySelector('[data-search-input]') as HTMLInputElement
-        searchInput?.focus()
+      {
+        key: 'Escape',
+        description: 'Close modal/drawer',
+        action: () => {
+          // Close any open modals/drawers
+          const closeButtons = document.querySelectorAll('[data-modal-close], [data-drawer-close]')
+          closeButtons.forEach((btn) => (btn as HTMLButtonElement).click())
+        },
       },
-    },
-    {
-      key: 'Escape',
-      description: 'Close modal/drawer',
-      action: () => {
-        // Close any open modals/drawers
-        const closeButtons = document.querySelectorAll('[data-modal-close], [data-drawer-close]')
-        closeButtons.forEach((btn) => (btn as HTMLButtonElement).click())
+      {
+        key: 'd',
+        modifiers: ['ctrl'],
+        description: 'Go to Dashboard',
+        action: () => navigate({ to: '/' }),
       },
-    },
-    {
-      key: 'd',
-      modifiers: ['ctrl'],
-      description: 'Go to Dashboard',
-      action: () => navigate({ to: '/' }),
-    },
-    {
-      key: 's',
-      modifiers: ['ctrl'],
-      description: 'Go to Servers',
-      action: () => navigate({ to: '/servers' }),
-    },
-    {
-      key: 'e',
-      modifiers: ['ctrl'],
-      description: 'Go to Environments',
-      action: () => navigate({ to: '/environments' }),
-    },
-    {
-      key: 'u',
-      modifiers: ['ctrl'],
-      description: 'Go to Users',
-      action: () => navigate({ to: '/users' }),
-    },
-    {
-      key: 'n',
-      modifiers: ['alt'],
-      description: 'New Server',
-      action: () => {
-        if (window.location.pathname === '/servers') {
-          window.dispatchEvent(new CustomEvent('new-server'))
-        } else {
-          sessionStorage.setItem('nukelab-new-server', 'true')
-          navigate({ to: '/servers' })
-        }
+      {
+        key: 's',
+        modifiers: ['ctrl'],
+        description: 'Go to Servers',
+        action: () => navigate({ to: '/servers' }),
       },
-    },
-  ])
+      {
+        key: 'e',
+        modifiers: ['ctrl'],
+        description: 'Go to Environments',
+        action: () => navigate({ to: '/environments' }),
+      },
+      {
+        key: 'u',
+        modifiers: ['ctrl'],
+        description: 'Go to Users',
+        action: () => navigate({ to: '/users' }),
+        permission: PERMISSIONS.USERS_READ,
+      },
+      {
+        key: 'n',
+        modifiers: ['alt'],
+        description: 'New Server',
+        action: () => {
+          if (window.location.pathname === '/servers') {
+            window.dispatchEvent(new CustomEvent('new-server'))
+          } else {
+            sessionStorage.setItem('nukelab-new-server', 'true')
+            navigate({ to: '/servers' })
+          }
+        },
+      },
+    ]
+
+    return shortcuts.filter((s) => !s.permission || hasPermission(s.permission))
+  }, [navigate, hasPermission])
 }
 
-// Hook to get all available shortcuts
-export function useShortcutsList(): Shortcut[] {
-  const navigate = useNavigate()
+// Global shortcuts for the app
+export function useGlobalShortcuts() {
+  useKeyboardShortcuts(useAppShortcuts())
+}
 
-  return [
-    {
-      key: '?',
-      description: 'Show keyboard shortcuts help',
-      action: () => {},
-    },
-    {
-      key: '/',
-      description: 'Focus search',
-      action: () => {},
-    },
-    {
-      key: 'Escape',
-      description: 'Close modal/drawer',
-      action: () => {},
-    },
-    {
-      key: 'd',
-      modifiers: ['ctrl'],
-      description: 'Go to Dashboard',
-      action: () => navigate({ to: '/' }),
-    },
-    {
-      key: 's',
-      modifiers: ['ctrl'],
-      description: 'Go to Servers',
-      action: () => navigate({ to: '/servers' }),
-    },
-    {
-      key: 'e',
-      modifiers: ['ctrl'],
-      description: 'Go to Environments',
-      action: () => navigate({ to: '/environments' }),
-    },
-    {
-      key: 'u',
-      modifiers: ['ctrl'],
-      description: 'Go to Users',
-      action: () => navigate({ to: '/users' }),
-    },
-    {
-      key: 'n',
-      modifiers: ['alt'],
-      description: 'New Server',
-      action: () => {},
-    },
-  ]
+// Hook to get all shortcuts the current user may use (for the help modal)
+export function useShortcutsList(): Shortcut[] {
+  return useAppShortcuts()
 }
