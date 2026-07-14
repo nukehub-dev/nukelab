@@ -8,9 +8,14 @@ import {
   BarChart3,
   Bell,
   Boxes,
+  Clock,
   CreditCard,
+  FileText,
   FolderOpen,
+  Gauge,
+  GlobeLock,
   HardDrive,
+  HeartPulse,
   KeyRound,
   LayoutDashboard,
   LifeBuoy,
@@ -21,6 +26,8 @@ import {
   Settings,
   Shield,
   UserCircle,
+  Users,
+  Wrench,
   X,
 } from 'lucide-react'
 import { useSearch } from '../../hooks/use-search'
@@ -106,6 +113,14 @@ function parseScopePrefix(input: string): { scope: SearchScope; rest: string } |
 const kbdClass =
   'px-2 py-0.5 text-xs font-medium rounded bg-muted border border-border text-muted-foreground'
 
+// Static commands match on label plus optional lowercase keyword aliases
+function matchesCommand(command: PaletteItem, filter: string): boolean {
+  return (
+    command.label.toLowerCase().includes(filter) ||
+    (command.keywords?.some((keyword) => keyword.includes(filter)) ?? false)
+  )
+}
+
 function loadRecents(): RecentEntry[] {
   try {
     const parsed: unknown = JSON.parse(localStorage.getItem(RECENTS_KEY) ?? '[]')
@@ -163,6 +178,7 @@ export function CommandPalette() {
   const listRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
   const hasPermission = useAuthStore((state) => state.hasPermission)
+  const hasAnyPermission = useAuthStore((state) => state.hasAnyPermission)
   const canAccessAdmin = useAuthStore((state) => state.canAccessAdmin)
 
   // Open on the global `show-search` event (same pattern as ShortcutsModal)
@@ -203,7 +219,8 @@ export function CommandPalette() {
     [hasPermission]
   )
 
-  // Static "Go to" page commands, gated exactly like the sidebar nav items
+  // Static "Go to" page commands; gated entries mirror the sidebar nav items,
+  // admin pages mirror the exact permission of each route's page guard
   const pageCommands = useMemo<PaletteItem[]>(() => {
     const page = (
       label: string,
@@ -218,6 +235,14 @@ export function CommandPalette() {
       icon,
       keywords,
     })
+    // One command per admin route, gated by that route's own page guard
+    const adminPage = (
+      name: string,
+      to: string,
+      icon: React.ElementType,
+      keywords: string[],
+      allowed: boolean
+    ): PaletteItem[] => (allowed ? [page(`Admin → ${name}`, to, icon, keywords)] : [])
     // Grafana opens through the monitoring auth redirect, not the router
     const grafana: PaletteItem = {
       type: 'page',
@@ -231,6 +256,7 @@ export function CommandPalette() {
       page('Dashboard', '/', LayoutDashboard),
       page('Servers', '/servers', Server),
       page('Usage', '/usage', Activity),
+      page('Activity', '/activity', Clock, ['history', 'events']),
       ...(hasPermission(PERMISSIONS.ENVIRONMENT_READ)
         ? [page('Environments', '/environments', Boxes)]
         : []),
@@ -249,10 +275,124 @@ export function CommandPalette() {
       page('Server Settings', '/settings/servers', Server, ['defaults']),
       page('API Tokens', '/settings/tokens', KeyRound, ['api', 'token']),
       page('Credits', '/settings/credits', CreditCard, ['balance']),
-      ...(canAccessAdmin() ? [page('Administration', '/admin', Shield), grafana] : []),
+      ...(canAccessAdmin() ? [page('Administration', '/admin', Shield)] : []),
+      ...adminPage(
+        'Users',
+        '/admin/users',
+        Users,
+        ['users', 'accounts'],
+        hasPermission(PERMISSIONS.USERS_READ)
+      ),
+      ...adminPage(
+        'Servers',
+        '/admin/servers',
+        Server,
+        ['servers', 'containers'],
+        hasPermission(PERMISSIONS.SERVERS_READ_ALL)
+      ),
+      ...adminPage(
+        'Health',
+        '/admin/health',
+        HeartPulse,
+        ['health', 'status'],
+        hasPermission(PERMISSIONS.ADMIN_ACCESS)
+      ),
+      ...adminPage(
+        'Analytics',
+        '/admin/analytics',
+        BarChart3,
+        ['analytics', 'stats'],
+        hasPermission(PERMISSIONS.ANALYTICS_READ)
+      ),
+      ...adminPage(
+        'Audit Logs',
+        '/admin/audit-logs',
+        FileText,
+        ['audit', 'logs'],
+        hasPermission(PERMISSIONS.AUDIT_READ)
+      ),
+      ...adminPage(
+        'Credits',
+        '/admin/credits',
+        CreditCard,
+        ['credits', 'allowance'],
+        hasPermission(PERMISSIONS.CREDITS_READ_ALL)
+      ),
+      ...adminPage(
+        'Environments',
+        '/admin/environments',
+        Boxes,
+        ['environments', 'images'],
+        hasAnyPermission([
+          PERMISSIONS.ENVIRONMENT_CREATE,
+          PERMISSIONS.ENVIRONMENT_UPDATE,
+          PERMISSIONS.ENVIRONMENT_DELETE,
+        ])
+      ),
+      ...adminPage(
+        'Plans',
+        '/admin/plans',
+        CreditCard,
+        ['plans', 'pricing'],
+        hasAnyPermission([
+          PERMISSIONS.PLAN_CREATE,
+          PERMISSIONS.PLAN_UPDATE,
+          PERMISSIONS.PLAN_DELETE,
+        ])
+      ),
+      ...adminPage(
+        'Quotas',
+        '/admin/quotas',
+        Gauge,
+        ['quotas', 'limits'],
+        hasPermission(PERMISSIONS.QUOTA_READ)
+      ),
+      ...adminPage(
+        'Workspaces',
+        '/admin/workspaces',
+        FolderOpen,
+        ['workspaces'],
+        hasPermission(PERMISSIONS.ADMIN_ACCESS)
+      ),
+      ...adminPage(
+        'Volumes',
+        '/admin/volumes',
+        HardDrive,
+        ['volumes', 'storage'],
+        hasPermission(PERMISSIONS.ADMIN_ACCESS)
+      ),
+      ...adminPage(
+        'Permissions',
+        '/admin/permissions',
+        Shield,
+        ['permissions', 'roles'],
+        hasPermission(PERMISSIONS.ADMIN_ACCESS)
+      ),
+      ...adminPage(
+        'IP Restrictions',
+        '/admin/ip-restrictions',
+        GlobeLock,
+        ['ip', 'restrictions'],
+        hasPermission(PERMISSIONS.ADMIN_ACCESS)
+      ),
+      ...adminPage(
+        'Maintenance Windows',
+        '/admin/maintenance-windows',
+        Wrench,
+        ['maintenance', 'windows'],
+        hasPermission(PERMISSIONS.ADMIN_ACCESS)
+      ),
+      ...adminPage(
+        'Settings',
+        '/admin/settings',
+        Settings,
+        ['settings', 'system'],
+        hasPermission(PERMISSIONS.ADMIN_ACCESS)
+      ),
+      ...(canAccessAdmin() ? [grafana] : []),
       page('Help & FAQ', '/support', LifeBuoy, ['help', 'questions', 'support', 'faq']),
     ]
-  }, [hasPermission, canAccessAdmin])
+  }, [hasPermission, hasAnyPermission, canAccessAdmin])
 
   const sections = useMemo<Section[]>(() => {
     if (isSlashMode) {
@@ -276,16 +416,16 @@ export function CommandPalette() {
           items: recents.map((r) => ({ ...r, icon: entityIcons[r.type] })),
         })
       }
-      const commands = pageCommands.filter(
-        (c) =>
-          c.label.toLowerCase().includes(filter) ||
-          c.keywords?.some((keyword) => keyword.includes(filter))
-      )
+      const commands = pageCommands.filter((c) => matchesCommand(c, filter))
       if (commands.length > 0) result.push({ title: 'Go to', items: commands })
       return result
     }
-    if (!data) return []
+    // With a query, matching pages rank above the API result groups
     const result: Section[] = []
+    const filter = query.trim().toLowerCase()
+    const matchingPages = pageCommands.filter((c) => matchesCommand(c, filter))
+    if (matchingPages.length > 0) result.push({ title: 'Pages', items: matchingPages })
+    if (!data) return result
     if (data.servers?.length) {
       result.push({
         title: 'Servers',

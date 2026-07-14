@@ -425,7 +425,6 @@ export function NotificationCenter({ variant = 'default' }: NotificationCenterPr
               </span>
             )}
           </span>
-          <span className="text-[10px] font-medium hidden sm:inline">Alerts</span>
         </button>
       ) : isOpen ? (
         <button
