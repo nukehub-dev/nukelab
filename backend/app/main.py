@@ -30,6 +30,7 @@ from app.api import (
     preferences,
     quotas,
     schedules,
+    search,
     servers,
     system,
     tokens,
@@ -275,6 +276,7 @@ app.include_router(schedules.router, prefix="/schedules", tags=["schedules"])
 app.include_router(volumes.router, prefix="/volumes", tags=["volumes"])
 app.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
 app.include_router(workspaces.router, prefix="/workspaces", tags=["workspaces"])
+app.include_router(search.router, prefix="/search", tags=["search"])
 app.include_router(ip_restriction.router, prefix="/admin", tags=["admin"])
 
 

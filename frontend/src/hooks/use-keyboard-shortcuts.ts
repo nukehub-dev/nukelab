@@ -7,7 +7,7 @@ import { PERMISSIONS, useAuthStore } from '../stores/auth-store'
 
 interface Shortcut {
   key: string
-  modifiers?: ('ctrl' | 'alt' | 'shift' | 'meta')[]
+  modifiers?: ('ctrl' | 'alt' | 'shift' | 'meta' | 'mod')[]
   description: string
   action: () => void
   preventDefault?: boolean
@@ -38,6 +38,8 @@ export function useKeyboardShortcuts(shortcuts: Shortcut[]) {
               return event.shiftKey
             case 'meta':
               return event.metaKey
+            case 'mod':
+              return event.ctrlKey || event.metaKey
             default:
               return false
           }
@@ -82,6 +84,21 @@ function useAppShortcuts(): Shortcut[] {
         },
       },
       {
+        key: 'k',
+        modifiers: ['mod'],
+        description: 'Search',
+        action: () => {
+          window.dispatchEvent(new CustomEvent('show-search'))
+        },
+      },
+      {
+        key: '/',
+        description: 'Search',
+        action: () => {
+          window.dispatchEvent(new CustomEvent('show-search'))
+        },
+      },
+      {
         key: 'Escape',
         description: 'Close modal/drawer',
         action: () => {
@@ -107,6 +124,7 @@ function useAppShortcuts(): Shortcut[] {
         modifiers: ['ctrl'],
         description: 'Go to Environments',
         action: () => navigate({ to: '/environments' }),
+        permission: PERMISSIONS.ENVIRONMENT_READ,
       },
       {
         key: 'u',

@@ -25,6 +25,7 @@ import {
   UserCircle,
   Clock,
   LifeBuoy,
+  Search,
 } from 'lucide-react'
 import { NukeLabLogo } from '../logo'
 import { useSidebarStore } from '../../stores/sidebar-store'
@@ -234,6 +235,51 @@ export function Sidebar() {
               {mode === 'collapsed' && <ArrowRightFromLine className="w-4 h-4" />}
             </button>
           </Tooltip>
+        </div>
+
+        {/* Search */}
+        <div className={cn('pt-3 shrink-0', isOpen && 'px-1')}>
+          {isOpen ? (
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent('show-search'))}
+              className={cn(
+                'flex items-center w-full py-2 rounded-lg text-sm font-medium transition-all duration-300',
+                'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                'text-sidebar-foreground/80'
+              )}
+              style={{ paddingLeft: 11, paddingRight: 11 }}
+            >
+              <Search className="w-5 h-5 shrink-0" />
+              <span
+                className="truncate whitespace-nowrap overflow-hidden transition-all duration-300"
+                style={{ maxWidth: 200, opacity: 1, marginLeft: 12 }}
+              >
+                Search
+              </span>
+              <kbd
+                className={cn(
+                  'ml-auto px-2 py-0.5 text-xs font-medium rounded',
+                  'bg-muted border border-border text-muted-foreground uppercase'
+                )}
+              >
+                Ctrl K
+              </kbd>
+            </button>
+          ) : (
+            <Tooltip content="Search (Ctrl+K)" position="right">
+              <button
+                onClick={() => window.dispatchEvent(new CustomEvent('show-search'))}
+                className={cn(
+                  'flex items-center py-2 rounded-lg text-sm font-medium transition-all duration-300',
+                  'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                  'text-sidebar-foreground/80'
+                )}
+                style={{ paddingLeft: 11, paddingRight: 11, marginLeft: 10, marginRight: 10 }}
+              >
+                <Search className="w-5 h-5 shrink-0" />
+              </button>
+            </Tooltip>
+          )}
         </div>
 
         {/* Navigation */}
@@ -513,6 +559,12 @@ export function Sidebar() {
               </Link>
             ))}
           <NotificationCenter variant="dock" />
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent('show-search'))}
+            className="flex items-center gap-1.5 px-3 h-full rounded-full transition-colors duration-150 text-muted-foreground hover:text-foreground"
+          >
+            <Search className="w-5 h-5" />
+          </button>
         </div>
       </nav>
 

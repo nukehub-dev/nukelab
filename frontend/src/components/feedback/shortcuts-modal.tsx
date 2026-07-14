@@ -11,6 +11,10 @@ import { Modal } from '../ui/modal'
 export function ShortcutsModal() {
   const [isOpen, setIsOpen] = useState(false)
   const shortcuts = useShortcutsList()
+  const isMac = /mac/i.test(navigator.platform)
+
+  // 'mod' is ctrl-or-meta; render the label matching the user's platform
+  const modifierLabel = (mod: string) => (mod === 'mod' ? (isMac ? '⌘' : 'Ctrl') : mod)
 
   useEffect(() => {
     const handleShow = () => setIsOpen(true)
@@ -45,7 +49,7 @@ export function ShortcutsModal() {
                     'text-muted-foreground uppercase'
                   )}
                 >
-                  {mod}
+                  {modifierLabel(mod)}
                 </kbd>
               ))}
               <kbd

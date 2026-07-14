@@ -15,6 +15,7 @@ import { useHealth } from '../../hooks/use-health'
 import { Sidebar } from './sidebar'
 import { ToastProvider } from '../feedback/toast'
 import { ShortcutsModal } from '../feedback/shortcuts-modal'
+import { CommandPalette } from '../search/command-palette'
 import { AmbientBackground } from '../animations/ambient-background'
 import { ErrorBoundary } from '../error-boundary'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -70,6 +71,7 @@ export function AppShell() {
       <>
         <ToastProvider />
         <ShortcutsModal />
+        <CommandPalette />
         <AnimatePresence mode="wait">
           <motion.div
             key={location.pathname}
@@ -91,6 +93,7 @@ export function AppShell() {
       <AmbientBackground variant={isDashboard ? 'dashboard' : 'default'} />
       <ToastProvider />
       <ShortcutsModal />
+      <CommandPalette />
 
       {/* Maintenance banner */}
       {isMaintenance && (
