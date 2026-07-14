@@ -18,6 +18,8 @@ import { useState, useEffect } from 'react'
 import { NukeLabLogo } from '../components/logo'
 import { Label } from '../components/ui/label'
 import { useAuthStore } from '../stores/auth-store'
+import { useIsDesktopViewport } from '../hooks/use-is-desktop'
+import { EXTERNAL_LINKS } from '../lib/external-links'
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
@@ -547,13 +549,35 @@ function LoginCard({
             {hasLocal && (
               <p className="text-center text-xs text-muted-foreground pt-2">
                 {loginContent.card.noAccount}{' '}
-                <span className="text-primary font-medium hover:underline">
+                <a
+                  href={EXTERNAL_LINKS.contact.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary font-medium hover:underline"
+                >
                   {loginContent.card.contactAdmin}
-                </span>
+                </a>
               </p>
             )}
           </>
         )}
+
+        {/* Support links */}
+        <div className="flex items-center justify-center gap-4 pt-3 border-t border-border/30">
+          {([EXTERNAL_LINKS.community, EXTERNAL_LINKS.contact, EXTERNAL_LINKS.blog] as const).map(
+            (link) => (
+              <a
+                key={link.url}
+                href={link.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[11px] text-muted-foreground/70 hover:text-primary transition-colors"
+              >
+                {link.shortLabel}
+              </a>
+            )
+          )}
+        </div>
       </div>
     </div>
   )
@@ -561,58 +585,66 @@ function LoginCard({
 
 /**
  * Animated background with soft ambient blobs that drift and breathe. The
- * motion is subtle so it never competes with the login form.
+ * motion is subtle so it never competes with the login form. The animated
+ * blur blobs are desktop-only: large animated `filter: blur()` layers force
+ * continuous GPU compositing, which causes jank and battery drain on mobile.
  */
 function AmbientBackground() {
+  const isDesktop = useIsDesktopViewport()
+
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden">
       {/* Base gradient wash */}
       <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.10] via-background to-chart-2/[0.08]" />
 
-      {/* Top-left primary blob */}
-      <motion.div
-        className="absolute -top-[10%] -left-[10%] w-[60vw] h-[60vw] rounded-full bg-primary/[0.12] blur-[100px]"
-        animate={{
-          x: [0, 40, 0],
-          y: [0, -30, 0],
-          scale: [1, 1.08, 1],
-        }}
-        transition={{ duration: 18, repeat: Infinity, ease: 'easeInOut' }}
-      />
+      {isDesktop && (
+        <>
+          {/* Top-left primary blob */}
+          <motion.div
+            className="absolute -top-[10%] -left-[10%] w-[60vw] h-[60vw] rounded-full bg-primary/[0.12] blur-[100px]"
+            animate={{
+              x: [0, 40, 0],
+              y: [0, -30, 0],
+              scale: [1, 1.08, 1],
+            }}
+            transition={{ duration: 18, repeat: Infinity, ease: 'easeInOut' }}
+          />
 
-      {/* Bottom-right chart blob */}
-      <motion.div
-        className="absolute -bottom-[10%] -right-[10%] w-[55vw] h-[55vw] rounded-full bg-chart-2/[0.10] blur-[100px]"
-        animate={{
-          x: [0, -30, 0],
-          y: [0, 40, 0],
-          scale: [1.08, 1, 1.08],
-        }}
-        transition={{ duration: 22, repeat: Infinity, ease: 'easeInOut', delay: 3 }}
-      />
+          {/* Bottom-right chart blob */}
+          <motion.div
+            className="absolute -bottom-[10%] -right-[10%] w-[55vw] h-[55vw] rounded-full bg-chart-2/[0.10] blur-[100px]"
+            animate={{
+              x: [0, -30, 0],
+              y: [0, 40, 0],
+              scale: [1.08, 1, 1.08],
+            }}
+            transition={{ duration: 22, repeat: Infinity, ease: 'easeInOut', delay: 3 }}
+          />
 
-      {/* Center muted glow */}
-      <motion.div
-        className="absolute top-[30%] left-[40%] w-[40vw] h-[40vw] rounded-full bg-primary/[0.07] blur-[110px]"
-        animate={{
-          x: [0, 20, 0],
-          y: [0, -15, 0],
-          scale: [1, 1.1, 1],
-          opacity: [0.6, 0.9, 0.6],
-        }}
-        transition={{ duration: 16, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
-      />
+          {/* Center muted glow */}
+          <motion.div
+            className="absolute top-[30%] left-[40%] w-[40vw] h-[40vw] rounded-full bg-primary/[0.07] blur-[110px]"
+            animate={{
+              x: [0, 20, 0],
+              y: [0, -15, 0],
+              scale: [1, 1.1, 1],
+              opacity: [0.6, 0.9, 0.6],
+            }}
+            transition={{ duration: 16, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
+          />
 
-      {/* Accent blob near the card */}
-      <motion.div
-        className="absolute top-[55%] right-[5%] w-[25vw] h-[25vw] rounded-full bg-chart-2/[0.08] blur-[90px]"
-        animate={{
-          x: [0, -20, 0],
-          y: [0, 20, 0],
-          scale: [1, 1.1, 1],
-        }}
-        transition={{ duration: 20, repeat: Infinity, ease: 'easeInOut', delay: 5 }}
-      />
+          {/* Accent blob near the card */}
+          <motion.div
+            className="absolute top-[55%] right-[5%] w-[25vw] h-[25vw] rounded-full bg-chart-2/[0.08] blur-[90px]"
+            animate={{
+              x: [0, -20, 0],
+              y: [0, 20, 0],
+              scale: [1, 1.1, 1],
+            }}
+            transition={{ duration: 20, repeat: Infinity, ease: 'easeInOut', delay: 5 }}
+          />
+        </>
+      )}
 
       {/* Soft vignette to keep focus in the center */}
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,var(--background)_80%)] opacity-50" />

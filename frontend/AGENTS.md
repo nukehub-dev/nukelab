@@ -23,9 +23,11 @@ All files under `frontend/` except generated artifacts (`node_modules/`, `dist/`
 - `src/components/` — reusable UI components. Prefer composition over large monolithic components.
 - `src/hooks/` — custom React hooks, especially data-fetching wrappers around TanStack Query.
   - `src/hooks/use-page-guard.ts` — page-level RBAC guard hook that redirects unauthorized users.
+  - `src/hooks/use-is-desktop.ts` — viewport ≥lg (1024px) check for gating expensive visual effects off mobile.
 - `src/stores/` — Zustand stores for client-side state that does not belong in the URL or server cache.
   - `src/stores/auth-store.ts` — auth store with user state, `PERMISSIONS` constants, and permission helpers.
 - `src/lib/` — pure utility functions and shared constants.
+  - `src/lib/external-links.ts` — single source of truth for external destinations (NukeTalk community, contact page, blog). Import `EXTERNAL_LINKS`; never hard-code these URLs.
 - `src/api/` — generated or hand-written API client code and request/response types.
 
 ### Adding a route

@@ -13,6 +13,7 @@ import { Route as WorkspacesRouteImport } from './routes/workspaces'
 import { Route as VolumesRouteImport } from './routes/volumes'
 import { Route as UsersRouteImport } from './routes/users'
 import { Route as UsageRouteImport } from './routes/usage'
+import { Route as SupportRouteImport } from './routes/support'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ServersRouteImport } from './routes/servers'
 import { Route as PlansRouteImport } from './routes/plans'
@@ -75,6 +76,11 @@ const UsersRoute = UsersRouteImport.update({
 const UsageRoute = UsageRouteImport.update({
   id: '/usage',
   path: '/usage',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SupportRoute = SupportRouteImport.update({
+  id: '/support',
+  path: '/support',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsRoute = SettingsRouteImport.update({
@@ -308,6 +314,7 @@ export interface FileRoutesByFullPath {
   '/plans': typeof PlansRoute
   '/servers': typeof ServersRouteWithChildren
   '/settings': typeof SettingsRouteWithChildren
+  '/support': typeof SupportRoute
   '/usage': typeof UsageRoute
   '/users': typeof UsersRoute
   '/volumes': typeof VolumesRoute
@@ -354,6 +361,7 @@ export interface FileRoutesByTo {
   '/networks': typeof NetworksRoute
   '/notifications': typeof NotificationsRoute
   '/plans': typeof PlansRoute
+  '/support': typeof SupportRoute
   '/usage': typeof UsageRoute
   '/users': typeof UsersRoute
   '/volumes': typeof VolumesRoute
@@ -403,6 +411,7 @@ export interface FileRoutesById {
   '/plans': typeof PlansRoute
   '/servers': typeof ServersRouteWithChildren
   '/settings': typeof SettingsRouteWithChildren
+  '/support': typeof SupportRoute
   '/usage': typeof UsageRoute
   '/users': typeof UsersRoute
   '/volumes': typeof VolumesRoute
@@ -454,6 +463,7 @@ export interface FileRouteTypes {
     | '/plans'
     | '/servers'
     | '/settings'
+    | '/support'
     | '/usage'
     | '/users'
     | '/volumes'
@@ -500,6 +510,7 @@ export interface FileRouteTypes {
     | '/networks'
     | '/notifications'
     | '/plans'
+    | '/support'
     | '/usage'
     | '/users'
     | '/volumes'
@@ -548,6 +559,7 @@ export interface FileRouteTypes {
     | '/plans'
     | '/servers'
     | '/settings'
+    | '/support'
     | '/usage'
     | '/users'
     | '/volumes'
@@ -598,6 +610,7 @@ export interface RootRouteChildren {
   PlansRoute: typeof PlansRoute
   ServersRoute: typeof ServersRouteWithChildren
   SettingsRoute: typeof SettingsRouteWithChildren
+  SupportRoute: typeof SupportRoute
   UsageRoute: typeof UsageRoute
   UsersRoute: typeof UsersRoute
   VolumesRoute: typeof VolumesRoute
@@ -633,6 +646,13 @@ declare module '@tanstack/react-router' {
       path: '/usage'
       fullPath: '/usage'
       preLoaderRoute: typeof UsageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/support': {
+      id: '/support'
+      path: '/support'
+      fullPath: '/support'
+      preLoaderRoute: typeof SupportRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings': {
@@ -1057,6 +1077,7 @@ const rootRouteChildren: RootRouteChildren = {
   PlansRoute: PlansRoute,
   ServersRoute: ServersRouteWithChildren,
   SettingsRoute: SettingsRouteWithChildren,
+  SupportRoute: SupportRoute,
   UsageRoute: UsageRoute,
   UsersRoute: UsersRoute,
   VolumesRoute: VolumesRoute,

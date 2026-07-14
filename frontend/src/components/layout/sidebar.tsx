@@ -24,6 +24,7 @@ import {
   ArrowRightFromLine,
   UserCircle,
   Clock,
+  LifeBuoy,
 } from 'lucide-react'
 import { NukeLabLogo } from '../logo'
 import { useSidebarStore } from '../../stores/sidebar-store'
@@ -80,6 +81,7 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'Settings', icon: Settings, href: '/settings' },
       { label: 'Administration', icon: Shield, href: '/admin' },
+      { label: 'Support', icon: LifeBuoy, href: '/support' },
     ],
   },
 ]
