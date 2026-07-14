@@ -3,7 +3,7 @@
 
 import { useMemo, useState, useCallback, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { cn } from '../../lib/utils'
+import { cn, parseLocalDate } from '../../lib/utils'
 
 export interface CalendarHeatmapData {
   date: string
@@ -42,11 +42,6 @@ function normalizeDate(dateStr: string): string {
   return dateStr.length > 10 ? dateStr.slice(0, 10) : dateStr
 }
 
-function parseLocal(dateStr: string): Date {
-  const [y, m, d] = dateStr.split('-').map(Number)
-  return new Date(y, m - 1, d)
-}
-
 function formatISOLocal(d: Date): string {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
@@ -55,7 +50,7 @@ function formatISOLocal(d: Date): string {
 }
 
 function formatDateLabel(dateStr: string): string {
-  const d = parseLocal(dateStr)
+  const d = parseLocalDate(dateStr)
   return d.toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
@@ -139,8 +134,8 @@ export function CalendarHeatmap({
     const valueMap = new Map<string, number>()
     data.forEach((d) => valueMap.set(normalizeDate(d.date), d.value))
 
-    const fromDate = parseLocal(from)
-    const toDate = parseLocal(to)
+    const fromDate = parseLocalDate(from)
+    const toDate = parseLocalDate(to)
 
     const fromDay = fromDate.getDay()
     const daysBack = fromDay === 0 ? 6 : fromDay - 1

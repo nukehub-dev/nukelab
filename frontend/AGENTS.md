@@ -26,9 +26,10 @@ All files under `frontend/` except generated artifacts (`node_modules/`, `dist/`
   - `src/hooks/use-is-desktop.ts` — viewport ≥lg (1024px) check for gating expensive visual effects off mobile.
 - `src/stores/` — Zustand stores for client-side state that does not belong in the URL or server cache.
   - `src/stores/auth-store.ts` — auth store with user state, `PERMISSIONS` constants, and permission helpers.
+  - `src/stores/timezone-store.ts` — non-persisted mirror of the backend `timezone` preference (`'auto'` or an IANA zone → `effectiveZone`), synced by `src/hooks/use-timezone-sync.ts`. Keep it self-contained; `lib/utils.ts` imports the store, never the reverse.
 - `src/lib/` — pure utility functions and shared constants.
   - `src/lib/external-links.ts` — single source of truth for external destinations (NukeTalk community, contact page, blog). Import `EXTERNAL_LINKS`; never hard-code these URLs.
-  - `src/lib/utils.ts` — backend timestamps are naive UTC (ISO 8601 without Z/offset). Parse and format every API timestamp through `parseUtcDate` / `formatDate` / `formatRelativeTime` from this module; never call `new Date(apiString)` directly.
+  - `src/lib/utils.ts` — backend timestamps are naive UTC (ISO 8601 without Z/offset). Parse and format every API timestamp through `parseUtcDate` / `formatDate` / `formatRelativeTime` from this module; never call `new Date(apiString)` directly. Formatters apply the user's timezone preference (default auto/browser, stored in the backend `timezone` preference) and use the browser locale; date-only `YYYY-MM-DD` strings go through `parseLocalDate` / `formatDateOnly`.
 - `src/api/` — generated or hand-written API client code and request/response types.
 
 ### Adding a route

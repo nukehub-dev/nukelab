@@ -46,24 +46,13 @@ import { useToast } from '../stores/toast-store'
 import { usePageGuard } from '../hooks/use-page-guard'
 import { PERMISSIONS } from '../stores/auth-store'
 import { useConfirmDialog } from '../components/ui/confirm-dialog'
-import { cn, parseUtcDate } from '../lib/utils'
+import { cn, formatDate, parseUtcDate } from '../lib/utils'
 import { Calendar } from '../components/ui/calendar'
 import { TimePicker } from '../components/ui/time-picker'
 
 export const Route = createFileRoute('/admin/maintenance-windows')({
   component: MaintenanceWindowsPage,
 })
-
-function formatDateTime(iso: string): string {
-  const d = parseUtcDate(iso)
-  return d.toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
 
 function toLocalDatetimeInputValue(iso: string): string {
   const d = parseUtcDate(iso)
@@ -300,7 +289,7 @@ function MaintenanceWindowsPage() {
       header: 'Start',
       cell: ({ row }) => (
         <span className="text-sm text-muted-foreground whitespace-nowrap">
-          {formatDateTime(row.original.start_at)}
+          {formatDate(row.original.start_at)}
         </span>
       ),
     },
@@ -309,7 +298,7 @@ function MaintenanceWindowsPage() {
       header: 'End',
       cell: ({ row }) => (
         <span className="text-sm text-muted-foreground whitespace-nowrap">
-          {formatDateTime(row.original.end_at)}
+          {formatDate(row.original.end_at)}
         </span>
       ),
     },
@@ -382,11 +371,11 @@ function MaintenanceWindowsPage() {
         <div className="flex flex-col gap-1 text-xs text-muted-foreground">
           <span className="inline-flex items-center gap-1.5">
             <Clock className="w-3.5 h-3.5" />
-            {formatDateTime(w.start_at)}
+            {formatDate(w.start_at)}
           </span>
           <span className="inline-flex items-center gap-1.5">
             <CheckCircle2 className="w-3.5 h-3.5" />
-            {formatDateTime(w.end_at)}
+            {formatDate(w.end_at)}
           </span>
         </div>
         <div className="flex items-center justify-end gap-1 pt-1">

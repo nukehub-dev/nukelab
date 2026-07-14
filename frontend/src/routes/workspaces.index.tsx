@@ -27,7 +27,7 @@ import {
   type Workspace,
 } from '../hooks/use-workspaces'
 import { springs } from '../lib/animations'
-import { cn, parseUtcDate } from '../lib/utils'
+import { cn, formatDateOnly, parseUtcDate } from '../lib/utils'
 import { useAuthStore } from '../stores/auth-store'
 import { useThemeStore } from '../stores/theme-store'
 import { useWorkspacePins } from '../hooks/use-workspace-pins'
@@ -59,12 +59,7 @@ export const Route = createFileRoute('/workspaces/')({
 
 function formatDate(dateString?: string) {
   if (!dateString) return ''
-  const date = parseUtcDate(dateString)
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  })
+  return formatDateOnly(dateString)
 }
 
 // Workspace Card Component

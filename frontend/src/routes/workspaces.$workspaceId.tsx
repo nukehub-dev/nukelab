@@ -47,7 +47,7 @@ import { useVolumes } from '../hooks/use-volumes'
 import { useDiscoverUsers, usePublicProfile } from '../hooks/use-users'
 import { useAuthStore } from '../stores/auth-store'
 import { springs } from '../lib/animations'
-import { cn, formatBytes, parseUtcDate } from '../lib/utils'
+import { cn, formatBytes, formatDate, parseUtcDate } from '../lib/utils'
 import { Button } from '../components/ui/button'
 import { StatCard } from '../components/data/stat-card'
 import { Input } from '../components/ui/input'
@@ -1739,16 +1739,6 @@ function UserProfileDialog({
 }) {
   const { data: profile, isLoading } = usePublicProfile(member?.user_id || undefined)
 
-  const formatDateTime = (date: string) =>
-    parseUtcDate(date).toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    })
-
   return (
     <Dialog open={!!member} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="relative overflow-hidden">
@@ -1807,13 +1797,13 @@ function UserProfileDialog({
               {member.joined_at && (
                 <div className="flex items-center justify-between py-2.5">
                   <span className="text-xs text-muted-foreground">Joined</span>
-                  <span className="text-sm font-medium">{formatDateTime(member.joined_at)}</span>
+                  <span className="text-sm font-medium">{formatDate(member.joined_at)}</span>
                 </div>
               )}
               {profile?.created_at && (
                 <div className="flex items-center justify-between py-2.5">
                   <span className="text-xs text-muted-foreground">Member Since</span>
-                  <span className="text-sm font-medium">{formatDateTime(profile.created_at)}</span>
+                  <span className="text-sm font-medium">{formatDate(profile.created_at)}</span>
                 </div>
               )}
             </div>
@@ -1838,16 +1828,6 @@ function VolumeDetailDialog({
 }) {
   const vol = volume?.volume
   const owner = vol?.owner
-
-  const formatDateTime = (date: string) =>
-    parseUtcDate(date).toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    })
 
   return (
     <Dialog open={!!volume} onOpenChange={(open) => !open && onClose()}>
@@ -1924,19 +1904,19 @@ function VolumeDetailDialog({
               {vol?.created_at && (
                 <div className="flex items-center justify-between py-2.5">
                   <span className="text-xs text-muted-foreground">Created</span>
-                  <span className="text-sm font-medium">{formatDateTime(vol.created_at)}</span>
+                  <span className="text-sm font-medium">{formatDate(vol.created_at)}</span>
                 </div>
               )}
               {volume.added_at && (
                 <div className="flex items-center justify-between py-2.5">
                   <span className="text-xs text-muted-foreground">Added to Workspace</span>
-                  <span className="text-sm font-medium">{formatDateTime(volume.added_at)}</span>
+                  <span className="text-sm font-medium">{formatDate(volume.added_at)}</span>
                 </div>
               )}
               {vol?.last_mounted_at && (
                 <div className="flex items-center justify-between py-2.5">
                   <span className="text-xs text-muted-foreground">Last Mounted</span>
-                  <span className="text-sm font-medium">{formatDateTime(vol.last_mounted_at)}</span>
+                  <span className="text-sm font-medium">{formatDate(vol.last_mounted_at)}</span>
                 </div>
               )}
               {vol?.labels && Object.keys(vol.labels).length > 0 && (

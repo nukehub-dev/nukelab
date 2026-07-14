@@ -43,7 +43,7 @@ import {
   DialogFooter,
   DialogClose,
 } from '../components/ui/dialog'
-import { formatBytes, parseUtcDate } from '../lib/utils'
+import { formatBytes, formatDateOnly, parseUtcDate } from '../lib/utils'
 import { springs } from '../lib/animations'
 import { cn } from '../lib/utils'
 import type { Volume } from '../hooks/use-volumes'
@@ -239,11 +239,7 @@ function VolumeCard({
             </div>
             {volume.created_at && (
               <span className="text-muted-foreground shrink-0">
-                {parseUtcDate(volume.created_at).toLocaleDateString(undefined, {
-                  year: 'numeric',
-                  month: 'short',
-                  day: 'numeric',
-                })}
+                {formatDateOnly(volume.created_at)}
               </span>
             )}
           </div>

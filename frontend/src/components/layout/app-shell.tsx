@@ -7,6 +7,7 @@ import { AlertTriangle } from 'lucide-react'
 import { useThemeStore } from '../../stores/theme-store'
 import { useSidebarStore } from '../../stores/sidebar-store'
 import { useCurrentUser } from '../../hooks/use-current-user'
+import { useTimezoneSync } from '../../hooks/use-timezone-sync'
 import { useGlobalShortcuts } from '../../hooks/use-keyboard-shortcuts'
 import { useFavicon } from '../../lib/favicon'
 import { useNotificationToasts } from '../notifications/notification-toast-provider'
@@ -39,6 +40,9 @@ export function AppShell() {
   // Fetch current user when authenticated (skip on login page)
   const hasToken = !!localStorage.getItem('nukelab-token')
   useCurrentUser({ enabled: hasToken && !isLoginPage })
+
+  // Keep the timezone store in sync with the backend preference
+  useTimezoneSync()
 
   // Global notification toast watcher
   useNotificationToasts()

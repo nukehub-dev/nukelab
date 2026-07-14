@@ -3,6 +3,7 @@
 
 import { useMemo } from 'react'
 import { parseUtcDate } from '../../lib/utils'
+import { useTimezoneStore } from '../../stores/timezone-store'
 import {
   BarChart,
   Bar,
@@ -71,6 +72,7 @@ function CustomTooltip({ active, payload }: TooltipProps<number, string>) {
 
 export function ResourceTimeline({ resources, height = 300, className }: ResourceTimelineProps) {
   const { data } = useMemo(() => {
+    const timeZone = useTimezoneStore.getState().effectiveZone
     const allEvents = resources.flatMap((r) => r.events)
     const allStarts = allEvents.map((e) => parseUtcDate(e.start).getTime())
     const allEnds = allEvents.map((e) => parseUtcDate(e.end).getTime())
@@ -96,8 +98,8 @@ export function ResourceTimeline({ resources, height = 300, className }: Resourc
             name: resource.name,
             eventIndex: index,
             status: event.status,
-            start: parseUtcDate(event.start).toLocaleTimeString(),
-            end: parseUtcDate(event.end).toLocaleTimeString(),
+            start: parseUtcDate(event.start).toLocaleTimeString(undefined, { timeZone }),
+            end: parseUtcDate(event.end).toLocaleTimeString(undefined, { timeZone }),
             duration: durationStr,
             startOffset: ((start - minTime) / range) * 100,
             width: (duration / range) * 100,

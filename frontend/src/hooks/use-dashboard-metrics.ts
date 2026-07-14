@@ -5,6 +5,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { parseUtcDate } from '../lib/utils'
+import { useTimezoneStore } from '../stores/timezone-store'
 import { useSharedWebSocket } from './use-shared-websocket'
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store'
 
@@ -64,7 +65,8 @@ const MAX_POINTS = 60
 
 function parseApiMetric(metric: SystemMetricApiResponse['metrics'][number]): DashboardMetricPoint {
   const date = parseUtcDate(metric.collected_at)
-  const timestamp = date.toLocaleTimeString('en-US', {
+  const timestamp = date.toLocaleTimeString(undefined, {
+    timeZone: useTimezoneStore.getState().effectiveZone,
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
@@ -104,7 +106,8 @@ function parseWsMetric(data: {
   network_rx_bytes?: number
   network_tx_bytes?: number
 }): DashboardMetricPoint {
-  const timestamp = new Date().toLocaleTimeString('en-US', {
+  const timestamp = new Date().toLocaleTimeString(undefined, {
+    timeZone: useTimezoneStore.getState().effectiveZone,
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',

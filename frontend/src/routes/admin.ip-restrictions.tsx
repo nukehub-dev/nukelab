@@ -29,7 +29,7 @@ import { useThemeStore } from '../stores/theme-store'
 import { usePageGuard } from '../hooks/use-page-guard'
 import { useConfirmDialog } from '../components/ui/confirm-dialog'
 import { useToast } from '../stores/toast-store'
-import { parseUtcDate } from '../lib/utils'
+import { formatDateOnly } from '../lib/utils'
 import {
   Dialog,
   DialogContent,
@@ -356,7 +356,7 @@ function IPRestrictionsPage() {
       </div>
       {item.note && <div className="text-sm text-muted-foreground">{item.note}</div>}
       <div className="text-sm text-muted-foreground">
-        Created: {parseUtcDate(item.created_at).toLocaleDateString()}
+        Created: {formatDateOnly(item.created_at)}
       </div>
       <div className="flex items-center justify-end pt-1">
         <Tooltip content="Delete">
@@ -423,7 +423,7 @@ function IPRestrictionsPage() {
       header: 'Created',
       cell: ({ row }) => (
         <span className="text-muted-foreground text-sm">
-          {parseUtcDate(row.original.created_at).toLocaleDateString()}
+          {formatDateOnly(row.original.created_at)}
         </span>
       ),
     },

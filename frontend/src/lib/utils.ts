@@ -3,6 +3,7 @@
 
 import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
+import { useTimezoneStore } from '../stores/timezone-store'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -96,14 +97,41 @@ export function parseUtcDate(date: Date | string): Date {
   return new Date(date)
 }
 
+/**
+ * Format an API timestamp as date + time in the user's effective timezone
+ * (preference from the timezone store, default browser zone) using the
+ * browser locale, with a short zone label (e.g. "Jan 1, 2026, 4:30 PM GMT+5:30").
+ */
 export function formatDate(date: Date | string): string {
-  return new Intl.DateTimeFormat('en-US', {
+  return new Intl.DateTimeFormat(undefined, {
+    timeZone: useTimezoneStore.getState().effectiveZone,
     year: 'numeric',
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    timeZoneName: 'short',
   }).format(parseUtcDate(date))
+}
+
+/** Date-only variant of formatDate (no time fields, no zone label). */
+export function formatDateOnly(date: Date | string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    timeZone: useTimezoneStore.getState().effectiveZone,
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  }).format(parseUtcDate(date))
+}
+
+/**
+ * Parse a date-only `YYYY-MM-DD` string (e.g. an analytics day bucket) as a
+ * LOCAL date. `new Date('YYYY-MM-DD')` parses as UTC midnight and shifts the
+ * calendar day for users west of UTC; local construction keeps the day stable.
+ */
+export function parseLocalDate(date: string): Date {
+  const [year, month, day] = date.slice(0, 10).split('-').map(Number)
+  return new Date(year, month - 1, day)
 }
 
 export function formatRelativeTime(dateStr: string): string {
@@ -115,7 +143,7 @@ export function formatRelativeTime(dateStr: string): string {
   const diffHour = Math.round(diffMin / 60)
   const diffDay = Math.round(diffHour / 24)
 
-  const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
+  const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
 
   if (Math.abs(diffDay) >= 365) {
     return formatDate(dateStr)
