@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
 // SPDX-License-Identifier: BSD-2-Clause
 
-import { motion } from 'framer-motion'
+import { useEffect, useState } from 'react'
+import { motion, useReducedMotion } from 'framer-motion'
 import { cn } from '../../lib/utils'
 
 interface AmbientBackgroundProps {
@@ -9,8 +10,29 @@ interface AmbientBackgroundProps {
   className?: string
 }
 
+// Below the lg breakpoint the animated blur blobs are not rendered at all:
+// large animated `filter: blur()` layers force continuous GPU compositing,
+// which is a major source of scroll jank and battery drain on mobile.
+const DESKTOP_QUERY = '(min-width: 1024px)'
+
+function useIsDesktopViewport() {
+  const [isDesktop, setIsDesktop] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia(DESKTOP_QUERY).matches
+  )
+  useEffect(() => {
+    const mq = window.matchMedia(DESKTOP_QUERY)
+    const onChange = () => setIsDesktop(mq.matches)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+  return isDesktop
+}
+
 export function AmbientBackground({ variant = 'default', className }: AmbientBackgroundProps) {
-  if (variant === 'subtle') return null
+  const shouldReduceMotion = useReducedMotion()
+  const isDesktop = useIsDesktopViewport()
+
+  if (variant === 'subtle' || shouldReduceMotion || !isDesktop) return null
 
   return (
     <div className={cn('fixed inset-0 overflow-hidden pointer-events-none z-0', className)}>

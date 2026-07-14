@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 import { QueryClient } from '@tanstack/react-query'
-import * as Sentry from '@sentry/react'
+import { captureException } from './sentry'
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
@@ -151,7 +151,7 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
     const error = new ApiError(detail, response.status, retryAfter)
     // Capture server errors (5xx) in Sentry
     if (response.status >= 500) {
-      Sentry.captureException(error, {
+      captureException(error, {
         tags: { api_endpoint: path, api_status: String(response.status) },
         extra: { response_detail: detail },
       })
@@ -227,7 +227,7 @@ export const api = {
       const error = new ApiError(detail, response.status, retryAfter)
       // Capture server errors (5xx) in Sentry
       if (response.status >= 500) {
-        Sentry.captureException(error, {
+        captureException(error, {
           tags: { api_endpoint: path, api_status: String(response.status) },
           extra: { response_detail: detail },
         })

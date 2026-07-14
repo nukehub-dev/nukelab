@@ -47,12 +47,12 @@ import { Route as AdminServersRouteImport } from './routes/admin.servers'
 import { Route as AdminQuotasRouteImport } from './routes/admin.quotas'
 import { Route as AdminPlansRouteImport } from './routes/admin.plans'
 import { Route as AdminPermissionsRouteImport } from './routes/admin.permissions'
+import { Route as AdminMaintenanceWindowsRouteImport } from './routes/admin.maintenance-windows'
+import { Route as AdminIpRestrictionsRouteImport } from './routes/admin.ip-restrictions'
+import { Route as AdminHealthRouteImport } from './routes/admin.health'
 import { Route as AdminEnvironmentsRouteImport } from './routes/admin.environments'
 import { Route as AdminCreditsRouteImport } from './routes/admin.credits'
 import { Route as AdminAuditLogsRouteImport } from './routes/admin.audit-logs'
-import { Route as AdminHealthRouteImport } from './routes/admin.health'
-import { Route as AdminIpRestrictionsRouteImport } from './routes/admin.ip-restrictions'
-import { Route as AdminMaintenanceWindowsRouteImport } from './routes/admin.maintenance-windows'
 import { Route as AdminAnalyticsRouteImport } from './routes/admin.analytics'
 import { Route as UserUsernameServerNameRouteImport } from './routes/user.$username.$serverName'
 import { Route as ServersServerIdMetricsRouteImport } from './routes/servers.$serverId.metrics'
@@ -247,6 +247,21 @@ const AdminPermissionsRoute = AdminPermissionsRouteImport.update({
   path: '/permissions',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminMaintenanceWindowsRoute = AdminMaintenanceWindowsRouteImport.update({
+  id: '/maintenance-windows',
+  path: '/maintenance-windows',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminIpRestrictionsRoute = AdminIpRestrictionsRouteImport.update({
+  id: '/ip-restrictions',
+  path: '/ip-restrictions',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminHealthRoute = AdminHealthRouteImport.update({
+  id: '/health',
+  path: '/health',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminEnvironmentsRoute = AdminEnvironmentsRouteImport.update({
   id: '/environments',
   path: '/environments',
@@ -260,21 +275,6 @@ const AdminCreditsRoute = AdminCreditsRouteImport.update({
 const AdminAuditLogsRoute = AdminAuditLogsRouteImport.update({
   id: '/audit-logs',
   path: '/audit-logs',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminHealthRoute = AdminHealthRouteImport.update({
-  id: '/health',
-  path: '/health',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminIpRestrictionsRoute = AdminIpRestrictionsRouteImport.update({
-  id: '/ip-restrictions',
-  path: '/ip-restrictions',
-  getParentRoute: () => AdminRoute,
-} as any)
-const AdminMaintenanceWindowsRoute = AdminMaintenanceWindowsRouteImport.update({
-  id: '/maintenance-windows',
-  path: '/maintenance-windows',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminAnalyticsRoute = AdminAnalyticsRouteImport.update({
@@ -463,6 +463,8 @@ export interface FileRouteTypes {
     | '/admin/credits'
     | '/admin/environments'
     | '/admin/health'
+    | '/admin/ip-restrictions'
+    | '/admin/maintenance-windows'
     | '/admin/permissions'
     | '/admin/plans'
     | '/admin/quotas'
@@ -506,6 +508,8 @@ export interface FileRouteTypes {
     | '/admin/credits'
     | '/admin/environments'
     | '/admin/health'
+    | '/admin/ip-restrictions'
+    | '/admin/maintenance-windows'
     | '/admin/permissions'
     | '/admin/plans'
     | '/admin/quotas'
@@ -553,6 +557,8 @@ export interface FileRouteTypes {
     | '/admin/credits'
     | '/admin/environments'
     | '/admin/health'
+    | '/admin/ip-restrictions'
+    | '/admin/maintenance-windows'
     | '/admin/permissions'
     | '/admin/plans'
     | '/admin/quotas'
@@ -867,18 +873,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminPermissionsRouteImport
       parentRoute: typeof AdminRoute
     }
-    '/admin/environments': {
-      id: '/admin/environments'
-      path: '/environments'
-      fullPath: '/admin/environments'
-      preLoaderRoute: typeof AdminEnvironmentsRouteImport
-      parentRoute: typeof AdminRoute
-    }
-    '/admin/health': {
-      id: '/admin/health'
-      path: '/health'
-      fullPath: '/admin/health'
-      preLoaderRoute: typeof AdminHealthRouteImport
+    '/admin/maintenance-windows': {
+      id: '/admin/maintenance-windows'
+      path: '/maintenance-windows'
+      fullPath: '/admin/maintenance-windows'
+      preLoaderRoute: typeof AdminMaintenanceWindowsRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/ip-restrictions': {
@@ -888,11 +887,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminIpRestrictionsRouteImport
       parentRoute: typeof AdminRoute
     }
-    '/admin/maintenance-windows': {
-      id: '/admin/maintenance-windows'
-      path: '/maintenance-windows'
-      fullPath: '/admin/maintenance-windows'
-      preLoaderRoute: typeof AdminMaintenanceWindowsRouteImport
+    '/admin/health': {
+      id: '/admin/health'
+      path: '/health'
+      fullPath: '/admin/health'
+      preLoaderRoute: typeof AdminHealthRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/environments': {
+      id: '/admin/environments'
+      path: '/environments'
+      fullPath: '/admin/environments'
+      preLoaderRoute: typeof AdminEnvironmentsRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/credits': {
@@ -982,7 +988,7 @@ const ServersServerIdRouteChildren: ServersServerIdRouteChildren = {
 }
 
 const ServersServerIdRouteWithChildren = ServersServerIdRoute._addFileChildren(
-  ServersServerIdRouteChildren
+  ServersServerIdRouteChildren,
 )
 
 interface ServersRouteChildren {
@@ -995,7 +1001,8 @@ const ServersRouteChildren: ServersRouteChildren = {
   ServersIndexRoute: ServersIndexRoute,
 }
 
-const ServersRouteWithChildren = ServersRoute._addFileChildren(ServersRouteChildren)
+const ServersRouteWithChildren =
+  ServersRoute._addFileChildren(ServersRouteChildren)
 
 interface SettingsRouteChildren {
   SettingsAppearanceRoute: typeof SettingsAppearanceRoute
@@ -1017,7 +1024,9 @@ const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsIndexRoute: SettingsIndexRoute,
 }
 
-const SettingsRouteWithChildren = SettingsRoute._addFileChildren(SettingsRouteChildren)
+const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
+  SettingsRouteChildren,
+)
 
 interface WorkspacesRouteChildren {
   WorkspacesWorkspaceIdRoute: typeof WorkspacesWorkspaceIdRoute
@@ -1029,7 +1038,9 @@ const WorkspacesRouteChildren: WorkspacesRouteChildren = {
   WorkspacesIndexRoute: WorkspacesIndexRoute,
 }
 
-const WorkspacesRouteWithChildren = WorkspacesRoute._addFileChildren(WorkspacesRouteChildren)
+const WorkspacesRouteWithChildren = WorkspacesRoute._addFileChildren(
+  WorkspacesRouteChildren,
+)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,

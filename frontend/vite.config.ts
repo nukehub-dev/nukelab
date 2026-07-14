@@ -11,7 +11,11 @@ const base = process.env.VITE_CDN_URL || '/'
 export default defineConfig({
   base,
   plugins: [
-    TanStackRouterVite({ target: 'react', autoCodeSplitting: true, enableRouteGeneration: false }),
+    // Route generation must stay enabled: the code splitter only processes
+    // files the generator registers in globalThis.TSR_ROUTES_BY_ID_MAP, and
+    // with generation disabled that map is never populated — producing a
+    // single monolithic bundle despite autoCodeSplitting.
+    TanStackRouterVite({ target: 'react', autoCodeSplitting: true }),
     tailwindcss(),
     react(),
   ],

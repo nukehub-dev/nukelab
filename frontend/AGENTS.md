@@ -113,6 +113,8 @@ function AdminCreditsPage() {
 
 - `npm run build` produces `dist/`. The service worker is generated and cache injection runs automatically.
 - Do not manually edit generated files in `dist/` or `.tanstack/`.
+- Route-level code splitting is enabled via the TanStack Router Vite plugin (`autoCodeSplitting: true`). Do **not** set `enableRouteGeneration: false`: the code splitter only processes files the generator registers, so disabling generation silently produces a single monolithic bundle.
+- `src/routeTree.gen.ts` is regenerated on every dev/build and is excluded from Prettier; the generator's formatting is authoritative for that file.
 
 ### Common pitfalls
 
