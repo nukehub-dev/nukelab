@@ -143,6 +143,11 @@ High-level layout; see the Child NAD Index below for domain-specific details.
 
 - **Dev and prod share container names**; only one stack may run at a time.
   `_require_other_stack_stopped` enforces this.
+- **Notification emails are sent by `celery-worker`, not the API container**
+  (task `send_notification_channels` in `backend/app/tasks.py`). Any env-based
+  config used by background tasks (e.g. `SMTP_*`) must be passed to
+  `celery-worker` in `compose.yml`, not only to `backend` — otherwise it fails
+  silently in prod while request-path features (like the SMTP test) still work.
 
 ## Security & penetration testing
 

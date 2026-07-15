@@ -360,6 +360,16 @@ services:
             - XFS_QUOTA_ENABLED=${XFS_QUOTA_ENABLED:-false}
             - XFS_PROJECT_ID_START=${XFS_PROJECT_ID_START:-10000}
             - XFS_PROJECTS_FILE=${XFS_PROJECTS_FILE:-/data/xfs/projects.nukelab}
+            # Email / SMTP configuration — required: notification emails are
+            # sent by Celery tasks running in this worker, not by the API.
+            - SMTP_HOST=${SMTP_HOST:-}
+            - SMTP_PORT=${SMTP_PORT:-587}
+            - SMTP_USER=${SMTP_USER:-}
+            - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+            - SMTP_TLS=${SMTP_TLS:-true}
+            - SMTP_VERIFY_CERTS=${SMTP_VERIFY_CERTS:-true}
+            - SMTP_FROM=${SMTP_FROM:-noreply@nukelab.local}
+            - SMTP_FROM_NAME=${SMTP_FROM_NAME:-NukeLab}
         volumes:
             - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
             - ${VOLUME_STORAGE_PATH:-/var/lib/docker/volumes}:${VOLUME_STORAGE_PATH:-/var/lib/docker/volumes}:rw
