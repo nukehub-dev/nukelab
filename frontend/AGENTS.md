@@ -23,7 +23,7 @@ All files under `frontend/` except generated artifacts (`node_modules/`, `dist/`
 - `src/components/` — reusable UI components. Prefer composition over large monolithic components.
 - `src/hooks/` — custom React hooks, especially data-fetching wrappers around TanStack Query.
   - `src/hooks/use-page-guard.ts` — page-level RBAC guard hook that redirects unauthorized users.
-  - `src/hooks/use-is-desktop.ts` — viewport ≥lg (1024px) check for gating expensive visual effects off mobile.
+  - `src/hooks/use-is-desktop.ts` — viewport ≥lg (1024px) check; gates expensive visual effects off mobile and mounts responsive-only content exactly once (e.g. `Dialog` children render in either the mobile sheet or the desktop drawer, never both).
   - `src/hooks/use-keyboard-shortcuts.ts` — global shortcuts; `'mod'` modifier = ctrl-or-meta, optional `permission` gating. Global search palette (`src/components/search/command-palette.tsx`, backed by `src/hooks/use-search.ts`) opens via the `show-search` window event, bound to `Ctrl+K` (mod) and `/`. Scoped filters: a leading `/users` or `users:` token narrows the search to one entity group (sent as the `group` API param with `limit=10`). Static Go-to commands rank above entity results and cover all user and admin pages — each admin command gated by its route guard's permission — with `keywords` aliases, plus an admin-only Grafana action that opens via the monitoring auth redirect.
 - `src/stores/` — Zustand stores for client-side state that does not belong in the URL or server cache.
   - `src/stores/auth-store.ts` — auth store with user state, `PERMISSIONS` constants, and permission helpers.
