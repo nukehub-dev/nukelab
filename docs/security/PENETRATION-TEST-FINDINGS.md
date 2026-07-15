@@ -35,6 +35,7 @@
 | PENT-NKL-009 | Auth sidecar mounts wrong server-auth public key volume | High | Container Security / Authentication | Closed | Security Eng | Backend Eng | 2026-06-28 | 2026-06-28 |
 | PENT-NKL-010 | Server gateway page reloads instead of opening terminal | Medium | Frontend Security / Cache Handling | Closed | Security Eng | Frontend Eng | 2026-06-28 | 2026-06-28 |
 | PENT-NKL-011 | Backend reports server running before container is ready | Medium | Backend / Container Orchestration | Closed | Security Eng | Backend Eng | 2026-06-28 | 2026-06-28 |
+| PENT-NKL-012 | Shared read-only volumes leak host storage size and usage | Low | Container Security / Information Disclosure | Open | Security Eng | Platform Eng | 2026-07-15 | |
 
 ---
 
@@ -98,7 +99,7 @@ Specific code-level or config fix.
 | Critical | 0 | 0 | 0 | 0 | 0 | 0 |
 | High | 0 | 0 | 0 | 0 | 2 | 0 |
 | Medium | 1 | 0 | 0 | 0 | 6 | 0 |
-| Low | 0 | 0 | 0 | 0 | 0 | 0 |
+| Low | 1 | 0 | 0 | 0 | 0 | 0 |
 | Informational | 0 | 0 | 0 | 0 | 0 | 0 |
 
 ---
@@ -568,6 +569,51 @@ Users attempting to open a server immediately after the UI indicated it was runn
 
 ---
 
-**Last Updated:** 2026-06-28
+### PENT-NKL-012: Shared read-only volumes leak host storage size and usage
+
+**Severity:** Low  
+**CVSS 4.0 Score:** 2.3  
+**OWASP Category:** A05:2021 Security Misconfiguration  
+**Status:** Open  
+**Opened:** 2026-07-15  
+**Reporter:** Security Eng  
+**Owner:** Platform Eng  
+**Component:** `backend/app/container/spawner.py`, `backend/app/container/client.py`, host XFS quota configuration
+
+**Description:**
+Spawned server containers mount two shared read-only named volumes whose backing directories live on the host's XFS data partition: `nukelab-server-secrets` at `/etc/nukelab/auth` and `nukelab-cpu-lib` at `/usr/local/lib/nukelab`. Because those directories have no XFS project quota, the kernel reports filesystem-wide totals for them through `statfs`, so `df` inside any user container discloses the host data partition's total size and usage. The same leak class previously affected `/etc/hosts`, `/etc/hostname`, and `/etc/resolv.conf` before container metadata was moved onto a dedicated loopback filesystem.
+
+**Prerequisites:**
+
+- Authenticated user with a running server container
+
+**Evidence:**
+
+- `df -ha` inside a user container showed `/dev/mapper/nrms--vg-data 725G 224G 502G 31%` mounted at `/etc/nukelab/auth` and `/usr/local/lib/nukelab`.
+- Per-user volumes are unaffected: their XFS project quotas make `df` report the quota limit (verified with `df -h /home/<user>` showing the plan size, e.g. 30G).
+- Plain `df -h` hides duplicate device mounts (it keeps the entry with the shortest mount point per device), so auditing requires `df -ha` or `findmnt`.
+
+**Impact:**
+Any authenticated user can read the host's total storage capacity and current usage from inside their server container. This is reconnaissance information only: no file data is exposed, the mounts are read-only, and per-user quota enforcement is unaffected.
+
+**Remediation:**
+Attach a small XFS project quota (100M hard limit, project IDs below the backend's dynamic range of 10000+) to each shared volume's `_data` directory on the host so `statfs` reports the quota size instead of the filesystem totals. Step-by-step procedure: `docs/operations/PRODUCTION-DEPLOYMENT.md`, section "Hide host storage size on shared named volumes". Optionally also set per-container writable-layer limits (`storage_opt: {"size": ...}`) at spawn time so the container root (`overlay` on `/`) stops revealing the host root partition size.
+
+**Retest Criteria:**
+
+- `df -ha` inside a freshly spawned container shows no mount backed by the host data device reporting host-wide totals.
+- `df -h /etc/nukelab/auth` and `df -h /usr/local/lib/nukelab` report the configured quota size (~100M).
+- `xfs_quota -x -c 'report -p' <mountpoint>` on the host lists the projects for both shared volumes.
+- Server-auth key rotation and terminal access still work after the quota is applied (writes stay below the hard limit).
+
+**References:**
+
+- `docs/operations/PRODUCTION-DEPLOYMENT.md` — "Hide host storage size on shared named volumes"
+- GNU coreutils `df` manual — bind-mount duplicate elision
+- OWASP Top 10 2021 A05
+
+---
+
+**Last Updated:** 2026-07-15
 
 **Note:** Container hardening controls (PENT-NKL-001 through PENT-NKL-004) are implemented, covered by regression tests, and verified through a live container spawn/inspection. They are marked **Closed**.
