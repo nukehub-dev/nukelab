@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 import { createFileRoute } from '@tanstack/react-router'
-import { HardDrive, Pencil, Trash2, Server, Play, Archive } from 'lucide-react'
+import { HardDrive, Pencil, Trash2, Server, Play, Archive, RefreshCw } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import { ResourcePageLayout } from '../components/layout/resource-page-layout'
 import { DataTable } from '../components/data/data-table'
@@ -17,7 +17,7 @@ import { useThemeStore } from '../stores/theme-store'
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store'
 import { usePageGuard } from '../hooks/use-page-guard'
 import { useConfirmDialog } from '../components/ui/confirm-dialog'
-import { formatDate, formatBytes } from '../lib/utils'
+import { formatDate, formatBytes, cn } from '../lib/utils'
 import type {
   ColumnDef,
   ColumnFiltersState,
@@ -143,7 +143,13 @@ function VolumesAdminPage() {
     max_size_gb: 10,
   })
 
-  const { updateVolume, deleteVolume, bulkAction: bulkVolumeAction } = useAdminVolumeActions()
+  const {
+    updateVolume,
+    deleteVolume,
+    bulkAction: bulkVolumeAction,
+    refreshVolumeSize,
+    refreshAllSizes,
+  } = useAdminVolumeActions()
 
   const openEditDialog = (volume: AdminVolume) => {
     setEditingVolume(volume)
@@ -395,6 +401,17 @@ function VolumesAdminPage() {
             header: 'Actions',
             cell: ({ row }: { row: { original: AdminVolume } }) => (
               <div className="flex items-center gap-1">
+                <Tooltip content="Refresh size">
+                  <motion.button
+                    onClick={() => refreshVolumeSize.mutate(row.original.id)}
+                    disabled={refreshVolumeSize.isPending}
+                    className="inline-flex p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
+                  >
+                    <RefreshCw
+                      className={cn('w-4 h-4', refreshVolumeSize.isPending && 'animate-spin')}
+                    />
+                  </motion.button>
+                </Tooltip>
                 <Tooltip content="Edit">
                   <motion.button
                     onClick={() => openEditDialog(row.original)}
@@ -415,7 +432,7 @@ function VolumesAdminPage() {
               </div>
             ),
             enableSorting: false,
-            size: 80,
+            size: 110,
           } satisfies ColumnDef<AdminVolume>,
         ]
       : []),
@@ -473,6 +490,15 @@ function VolumesAdminPage() {
             </span>
             <div className="flex items-center gap-1">
               <button
+                onClick={() => refreshVolumeSize.mutate(v.id)}
+                disabled={refreshVolumeSize.isPending}
+                className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex"
+              >
+                <RefreshCw
+                  className={cn('w-4 h-4', refreshVolumeSize.isPending && 'animate-spin')}
+                />
+              </button>
+              <button
                 onClick={() => openEditDialog(v)}
                 className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex"
               >
@@ -501,6 +527,17 @@ function VolumesAdminPage() {
         icon={HardDrive}
         backTo="/admin"
         stats={stats}
+        actions={
+          canManageVolumes
+            ? [
+                {
+                  action: 'refresh' as const,
+                  onClick: () => refreshAllSizes.mutate(),
+                  loading: refreshAllSizes.isPending,
+                },
+              ]
+            : undefined
+        }
       >
         <DataTable
           columns={columns}

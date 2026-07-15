@@ -398,7 +398,7 @@ class VolumeService:
         if not volume:
             return None
 
-        size_bytes = await self.get_volume_size(volume.name)
+        size_bytes, _source = await self.measure_volume_size(volume.name)
         if size_bytes is not None:
             volume.size_bytes = size_bytes
             await self.db.commit()
@@ -437,6 +437,24 @@ class VolumeService:
 
         return None
 
+    async def measure_volume_size(self, volume_name: str) -> tuple[int | None, str | None]:
+        """Measure volume disk usage: XFS project quota report when available
+        (fast, no disk walk), otherwise fall back to du -sb.
+
+        Returns (size_bytes, source) where source is "xfs" or "du",
+        or (None, None) when the volume cannot be measured.
+        """
+        if xfs_quota_service._xfs_quota_available():
+            xfs_data = xfs_quota_service.get_quota_usage(volume_name)
+            if xfs_data is not None:
+                return xfs_data["used_bytes"], "xfs"
+
+        size_bytes = await self.get_volume_size(volume_name)
+        if size_bytes is not None:
+            return size_bytes, "du"
+
+        return None, None
+
     async def check_volumes_quota(
         self, volume_ids: list[str], plan_disk_limit: str
     ) -> dict[str, Any]:
@@ -460,7 +478,7 @@ class VolumeService:
         # (caller is responsible for committing the session)
         for vid in volume_ids:
             volume = volumes[vid]
-            size_bytes = await self.get_volume_size(volume.name)
+            size_bytes, _source = await self.measure_volume_size(volume.name)
             if size_bytes is not None and volume.size_bytes != size_bytes:
                 volume.size_bytes = size_bytes
 

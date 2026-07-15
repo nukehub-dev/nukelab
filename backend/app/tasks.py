@@ -1062,17 +1062,11 @@ def enforce_volume_quotas(self):
                     if not volume:
                         continue
 
-                    # Try XFS quota report first (fast, no disk walk)
-                    size_bytes = None
-                    if xfs_available:
-                        xfs_data = xfs_quota_service.get_quota_usage(volume.name)
-                        if xfs_data is not None:
-                            size_bytes = xfs_data["used_bytes"]
-                            xfs_used += 1
-
-                    # Fallback to du -sb for non-XFS volumes or if xfs_quota fails
-                    if size_bytes is None:
-                        size_bytes = await volume_service.get_volume_size(volume.name)
+                    # XFS quota report when available (fast, no disk walk), else du -sb
+                    size_bytes, source = await volume_service.measure_volume_size(volume.name)
+                    if source == "xfs":
+                        xfs_used += 1
+                    elif source == "du":
                         du_used += 1
 
                     if size_bytes is None:

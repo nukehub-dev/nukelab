@@ -24,6 +24,7 @@ from app.models.activity_log import ActivityLog
 from app.models.credit_transaction import CreditTransaction
 from app.models.server import Server
 from app.models.user import User
+from app.models.volume import Volume
 from app.services.credit_service import CreditService
 from app.services.notification_service import broadcast_server_status_change
 from app.services.token_revocation_service import token_revocation_service
@@ -1517,6 +1518,45 @@ async def admin_delete_volume(
         raise HTTPException(status_code=400, detail=str(e))
 
     return {"success": success, "message": "Volume deleted successfully"}
+
+
+@router.post("/volumes/refresh-sizes")
+async def admin_refresh_volume_sizes(
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Refresh tracked disk usage (size_bytes) for all active volumes (admin).
+
+    Uses the XFS project quota report when available (fast, no disk walk),
+    otherwise falls back to du -sb. Does not change volume status or send
+    near-limit notifications — the periodic quota task owns both.
+    """
+    service = VolumeService(db)
+    result = await db.execute(select(Volume).where(Volume.status.not_in(["archived", "deleting"])))
+    volumes = result.scalars().all()
+
+    refreshed = 0
+    failed: list[dict[str, str]] = []
+    for volume in volumes:
+        try:
+            size_bytes, _source = await service.measure_volume_size(volume.name)
+        except Exception as exc:  # one bad volume must not abort the batch
+            failed.append({"volume_id": str(volume.id), "error": str(exc)})
+            continue
+        if size_bytes is None:
+            failed.append({"volume_id": str(volume.id), "error": "could not measure size"})
+            continue
+        volume.size_bytes = size_bytes
+        refreshed += 1
+
+    await db.commit()
+
+    return {
+        "message": f"Refreshed {refreshed} volume(s)",
+        "refreshed": refreshed,
+        "failed": failed,
+    }
 
 
 # ========== Retention Policy Management ==========
