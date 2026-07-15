@@ -47,7 +47,9 @@ function getRefreshToken(): string {
 export function setTokens(access: string, refresh: string) {
   localStorage.setItem('nukelab-token', access)
   localStorage.setItem('nukelab-refresh', refresh)
-  document.cookie = `nukelab_token=${access}; path=/; Domain=localhost; SameSite=Lax`
+  // Host-only cookie (no Domain attribute) so it is valid on any host;
+  // a hard-coded domain is rejected by browsers on other origins.
+  document.cookie = `nukelab_token=${access}; path=/; SameSite=Lax`
 }
 
 function clearTokens() {
@@ -109,6 +111,23 @@ async function parseJson<T>(response: Response): Promise<T> {
   return text ? JSON.parse(text) : (undefined as T)
 }
 
+function extractErrorDetail(body: unknown, fallback: string): string {
+  if (body && typeof body === 'object') {
+    const { detail, message } = body as { detail?: unknown; message?: unknown }
+    if (typeof detail === 'string' && detail) return detail
+    // FastAPI validation errors arrive as a list of { loc, msg, type } objects.
+    if (Array.isArray(detail) && detail.length > 0) {
+      return detail
+        .map((item) =>
+          item && typeof item === 'object' && 'msg' in item ? String(item.msg) : String(item)
+        )
+        .join('; ')
+    }
+    if (typeof message === 'string' && message) return message
+  }
+  return fallback
+}
+
 async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const makeRequest = (token: string): Promise<Response> =>
     fetch(`${API_BASE}${path}`, {
@@ -140,7 +159,7 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
     let retryAfter: number | undefined
     try {
       const body = await response.json()
-      detail = body.detail || body.message || response.statusText
+      detail = extractErrorDetail(body, response.statusText)
       if (response.status === 429 && body.retry_after) {
         retryAfter = body.retry_after
         detail = `${detail} Retry in ${body.retry_after}s.`
@@ -216,7 +235,7 @@ export const api = {
       let retryAfter: number | undefined
       try {
         const body = await response.json()
-        detail = body.detail || body.message || response.statusText
+        detail = extractErrorDetail(body, response.statusText)
         if (response.status === 429 && body.retry_after) {
           retryAfter = body.retry_after
           detail = `${detail} Retry in ${body.retry_after}s.`

@@ -114,6 +114,7 @@ function AdminCreditsPage() {
 
 - Use controlled inputs with React state or a form library consistent with the project.
 - Validate user input before submission; display field-level errors returned by the backend.
+- Token scope options in `src/components/settings/tokens-page.tsx` (`AVAILABLE_SCOPES`) must match `VALID_TOKEN_SCOPES` in `backend/app/api/tokens.py`; the backend rejects unknown scopes with 422.
 
 ### Tests
 

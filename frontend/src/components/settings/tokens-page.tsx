@@ -44,44 +44,45 @@ import { Label } from '../ui/label'
 import { EmptyState } from '../feedback/empty-state'
 import type { ApiToken, ApiTokenWithValue } from '../../types/api'
 
+// Values must match VALID_TOKEN_SCOPES in backend/app/api/tokens.py.
 const AVAILABLE_SCOPES = [
   // Servers
   {
-    value: 'servers:read_own',
-    label: 'Read Own Servers',
-    description: 'View own server details',
+    value: 'servers:read',
+    label: 'Read Servers',
+    description: 'View server details',
     category: 'Servers',
   },
   {
-    value: 'servers:write_own',
-    label: 'Write Own Servers',
-    description: 'Create, start, stop, and delete own servers',
+    value: 'servers:manage',
+    label: 'Manage Servers',
+    description: 'Create, start, stop, and delete servers',
     category: 'Servers',
   },
   // Volumes
   {
-    value: 'volumes:read_own',
-    label: 'Read Own Volumes',
-    description: 'View own volume details',
+    value: 'volumes:read',
+    label: 'Read Volumes',
+    description: 'View volume details',
     category: 'Volumes',
   },
   {
-    value: 'volumes:write_own',
-    label: 'Write Own Volumes',
-    description: 'Create and manage own volumes',
+    value: 'volumes:manage',
+    label: 'Manage Volumes',
+    description: 'Create and manage volumes',
     category: 'Volumes',
   },
   // Workspaces
   {
-    value: 'workspaces:read_own',
-    label: 'Read Own Workspaces',
-    description: 'View own workspace details',
+    value: 'workspaces:read',
+    label: 'Read Workspaces',
+    description: 'View workspace details',
     category: 'Workspaces',
   },
   {
-    value: 'workspaces:write_own',
-    label: 'Write Own Workspaces',
-    description: 'Create and manage own workspaces',
+    value: 'workspaces:manage',
+    label: 'Manage Workspaces',
+    description: 'Create and manage workspaces',
     category: 'Workspaces',
   },
   // User
@@ -99,9 +100,9 @@ const AVAILABLE_SCOPES = [
   },
   // Credits
   {
-    value: 'credits:read_own',
-    label: 'Read Own Credits',
-    description: 'View own credit balance and history',
+    value: 'credits:read',
+    label: 'Read Credits',
+    description: 'View credit balance and history',
     category: 'Credits',
   },
   // Notifications
@@ -373,10 +374,7 @@ function CreateTokenDialog({
   const actions = useTokenActions()
   const [name, setName] = useState('')
   const [expiresDays, setExpiresDays] = useState('30')
-  const [selectedScopes, setSelectedScopes] = useState<string[]>([
-    'servers:read_own',
-    'servers:write_own',
-  ])
+  const [selectedScopes, setSelectedScopes] = useState<string[]>(['servers:read', 'servers:manage'])
   const [nameError, setNameError] = useState('')
 
   const toggleScope = (scope: string) => {
@@ -407,7 +405,7 @@ function CreateTokenDialog({
         onSuccess: (data) => {
           onSuccess(data as unknown as ApiTokenWithValue)
           setName('')
-          setSelectedScopes(['servers:read_own', 'servers:write_own'])
+          setSelectedScopes(['servers:read', 'servers:manage'])
           setExpiresDays('30')
         },
       }
@@ -418,7 +416,7 @@ function CreateTokenDialog({
     if (!isCreating) {
       setName('')
       setNameError('')
-      setSelectedScopes(['servers:read_own', 'servers:write_own'])
+      setSelectedScopes(['servers:read', 'servers:manage'])
       setExpiresDays('30')
       onOpenChange(false)
     }

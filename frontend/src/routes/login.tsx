@@ -114,8 +114,7 @@ function LoginPage() {
     if (signedOut) {
       localStorage.removeItem('nukelab-token')
       localStorage.removeItem('nukelab-refresh')
-      document.cookie =
-        'nukelab_token=; path=/; Domain=localhost; expires=Thu, 01 Jan 1970 00:00:00 GMT'
+      document.cookie = 'nukelab_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
       useAuthStore.getState().setUser(null)
       window.history.replaceState({}, '', '/login')
     }
@@ -126,7 +125,7 @@ function LoginPage() {
     if (token) {
       localStorage.setItem('nukelab-token', token)
       if (refresh) localStorage.setItem('nukelab-refresh', refresh)
-      document.cookie = `nukelab_token=${token}; path=/; Domain=localhost; SameSite=Lax`
+      document.cookie = `nukelab_token=${token}; path=/; SameSite=Lax`
       navigate({ to: nextPath || '/' })
     }
   }, [navigate])
