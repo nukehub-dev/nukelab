@@ -7,7 +7,7 @@ import ipaddress
 import logging
 import secrets
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urlparse
 
@@ -104,6 +104,18 @@ class AuthContext:
     auth_method: str  # "jwt", "api_token"
     token_scopes: list[str]
     api_token_id: str | None = None
+    user_id: str | None = field(init=False, default=None)
+    user_role: str | None = field(init=False, default=None)
+
+    def __post_init__(self) -> None:
+        # Snapshot user primitives while the ORM instance is still bound to its
+        # request-scoped session. Post-response middleware reads these after the
+        # session has closed; touching attributes on a detached/expired instance
+        # raises DetachedInstanceError (e.g. after a rollback on a failed request).
+        if self.user is not None:
+            if self.user.id is not None:
+                self.user_id = str(self.user.id)
+            self.user_role = self.user.role
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -1347,18 +1359,34 @@ async def oauth_sync(
             raise HTTPException(status_code=500, detail="OAuth token URL not configured")
 
         # Exchange refresh token for access token
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10.0)) as session:
-            async with session.post(
-                token_url,
-                data={
-                    "grant_type": "refresh_token",
-                    "client_id": settings.oauth_client_id,
-                    "client_secret": settings.oauth_client_secret,
-                    "refresh_token": refresh_token,
-                },
-            ) as resp:
-                resp.raise_for_status()
-                token_data = await resp.json()
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10.0)) as session:
+                async with session.post(
+                    token_url,
+                    data={
+                        "grant_type": "refresh_token",
+                        "client_id": settings.oauth_client_id,
+                        "client_secret": settings.oauth_client_secret,
+                        "refresh_token": refresh_token,
+                    },
+                ) as resp:
+                    if resp.status in (400, 401):
+                        logger.warning(
+                            "OAuth provider rejected stored refresh token (HTTP %s)", resp.status
+                        )
+                        raise HTTPException(
+                            status_code=400,
+                            detail="OAuth provider rejected the refresh token. Please log out and log back in.",
+                        )
+                    resp.raise_for_status()
+                    token_data = await resp.json()
+        except HTTPException:
+            raise
+        except (aiohttp.ClientError, TimeoutError) as exc:
+            logger.warning("OAuth token exchange failed: %s", exc)
+            raise HTTPException(
+                status_code=502, detail="OAuth provider is unreachable. Please try again later."
+            ) from exc
 
         access_token = token_data.get("access_token")
         new_refresh_token = token_data.get("refresh_token")
