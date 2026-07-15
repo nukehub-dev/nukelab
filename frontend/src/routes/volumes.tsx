@@ -13,13 +13,20 @@ import {
   FolderOpen,
   Search,
   Pencil,
+  RefreshCw,
   User,
   Users,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useState, useMemo } from 'react'
 import { ResourcePageLayout } from '../components/layout/resource-page-layout'
-import { useVolumes, useCreateVolume, useDeleteVolume, useUpdateVolume } from '../hooks/use-volumes'
+import {
+  useVolumes,
+  useCreateVolume,
+  useDeleteVolume,
+  useUpdateVolume,
+  useRefreshVolumeSize,
+} from '../hooks/use-volumes'
 import { useCurrentUser } from '../hooks/use-current-user'
 import { useThemeStore } from '../stores/theme-store'
 import { FileBrowser } from '../components/volume-file-browser'
@@ -59,6 +66,8 @@ function VolumeCard({
   onDelete,
   onBrowse,
   onEdit,
+  onRefresh,
+  isRefreshing,
   isOwner,
 }: {
   volume: Volume
@@ -66,6 +75,8 @@ function VolumeCard({
   onDelete?: () => void
   onBrowse?: () => void
   onEdit?: () => void
+  onRefresh?: () => void
+  isRefreshing?: boolean
   isOwner: boolean
 }) {
   const { density } = useThemeStore()
@@ -132,6 +143,20 @@ function VolumeCard({
                 >
                   {volume.visibility}
                 </span>
+              )}
+              {onRefresh && isOwner && (
+                <Tooltip content="Refresh size">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onRefresh()
+                    }}
+                    disabled={isRefreshing}
+                    className="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    <RefreshCw className={cn('w-3.5 h-3.5', isRefreshing && 'animate-spin')} />
+                  </button>
+                </Tooltip>
               )}
               {onBrowse && (
                 <Tooltip content="Browse files">
@@ -258,6 +283,20 @@ function VolumesPage() {
   const createVolume = useCreateVolume()
   const deleteVolume = useDeleteVolume()
   const updateVolume = useUpdateVolume()
+  const refreshVolumeSize = useRefreshVolumeSize()
+  const [refreshingIds, setRefreshingIds] = useState<ReadonlySet<string>>(new Set())
+
+  const handleRefreshSize = (volumeId: string) => {
+    setRefreshingIds((prev) => new Set(prev).add(volumeId))
+    refreshVolumeSize.mutate(volumeId, {
+      onSettled: () =>
+        setRefreshingIds((prev) => {
+          const next = new Set(prev)
+          next.delete(volumeId)
+          return next
+        }),
+    })
+  }
   const { confirm, dialog } = useConfirmDialog()
   const [searchQuery, setSearchQuery] = useState('')
   const [ownershipFilter, setOwnershipFilter] = useState<OwnershipFilter>('all')
@@ -615,6 +654,8 @@ function VolumesPage() {
                   onDelete={() => handleDelete(volume)}
                   onBrowse={() => setBrowsingVolume({ id: volume.id, name: volume.display_name })}
                   onEdit={() => handleEdit(volume)}
+                  onRefresh={() => handleRefreshSize(volume.id)}
+                  isRefreshing={refreshingIds.has(volume.id)}
                 />
               ))}
             </AnimatePresence>

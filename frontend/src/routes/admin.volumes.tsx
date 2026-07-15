@@ -98,6 +98,8 @@ function VolumesAdminPage() {
   const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({})
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+  const [refreshingIds, setRefreshingIds] = useState<ReadonlySet<string>>(new Set())
+  const [deletingIds, setDeletingIds] = useState<ReadonlySet<string>>(new Set())
 
   // Sync React Table column filters with API filter state
   const prevColumnFiltersRef = useRef<ColumnFiltersState>([])
@@ -190,6 +192,18 @@ function VolumesAdminPage() {
     )
   }
 
+  const handleRefreshSize = (volumeId: string) => {
+    setRefreshingIds((prev) => new Set(prev).add(volumeId))
+    refreshVolumeSize.mutate(volumeId, {
+      onSettled: () =>
+        setRefreshingIds((prev) => {
+          const next = new Set(prev)
+          next.delete(volumeId)
+          return next
+        }),
+    })
+  }
+
   const handleDelete = async (volume: AdminVolume) => {
     const confirmed = await confirm({
       title: 'Delete Volume',
@@ -199,7 +213,15 @@ function VolumesAdminPage() {
       cancelLabel: 'Cancel',
     })
     if (confirmed) {
-      deleteVolume.mutate(volume.id)
+      setDeletingIds((prev) => new Set(prev).add(volume.id))
+      deleteVolume.mutate(volume.id, {
+        onSettled: () =>
+          setDeletingIds((prev) => {
+            const next = new Set(prev)
+            next.delete(volume.id)
+            return next
+          }),
+      })
     }
   }
 
@@ -403,12 +425,15 @@ function VolumesAdminPage() {
               <div className="flex items-center gap-1">
                 <Tooltip content="Refresh size">
                   <motion.button
-                    onClick={() => refreshVolumeSize.mutate(row.original.id)}
-                    disabled={refreshVolumeSize.isPending}
+                    onClick={() => handleRefreshSize(row.original.id)}
+                    disabled={refreshingIds.has(row.original.id)}
                     className="inline-flex p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
                   >
                     <RefreshCw
-                      className={cn('w-4 h-4', refreshVolumeSize.isPending && 'animate-spin')}
+                      className={cn(
+                        'w-4 h-4',
+                        refreshingIds.has(row.original.id) && 'animate-spin'
+                      )}
                     />
                   </motion.button>
                 </Tooltip>
@@ -423,7 +448,7 @@ function VolumesAdminPage() {
                 <Tooltip content="Delete">
                   <motion.button
                     onClick={() => handleDelete(row.original)}
-                    disabled={deleteVolume.isPending}
+                    disabled={deletingIds.has(row.original.id)}
                     className="inline-flex p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -490,13 +515,11 @@ function VolumesAdminPage() {
             </span>
             <div className="flex items-center gap-1">
               <button
-                onClick={() => refreshVolumeSize.mutate(v.id)}
-                disabled={refreshVolumeSize.isPending}
+                onClick={() => handleRefreshSize(v.id)}
+                disabled={refreshingIds.has(v.id)}
                 className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex"
               >
-                <RefreshCw
-                  className={cn('w-4 h-4', refreshVolumeSize.isPending && 'animate-spin')}
-                />
+                <RefreshCw className={cn('w-4 h-4', refreshingIds.has(v.id) && 'animate-spin')} />
               </button>
               <button
                 onClick={() => openEditDialog(v)}
@@ -506,6 +529,7 @@ function VolumesAdminPage() {
               </button>
               <button
                 onClick={() => handleDelete(v)}
+                disabled={deletingIds.has(v.id)}
                 className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors inline-flex"
               >
                 <Trash2 className="w-4 h-4" />
