@@ -21,7 +21,7 @@ APScheduler==3.10.4
 python-crontab==3.0.0
 croniter==6.2.2
 python-dateutil==2.9.0
-aiosmtplib==3.0.2
+aiosmtplib==5.1.2
 sentry-sdk[fastapi]==2.19.0
 prometheus-client==0.21.0
 
