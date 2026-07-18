@@ -14,6 +14,7 @@ All files under `environments/`.
 - `base/` is the shared runtime base layer (nginx + auth-sidecar + non-root user + health endpoint).
 - `workspace/` extends `base/` with the IDE foundation (Node.js, Miniforge, nuke-ide).
 - `radiation-transport/` extends `workspace/` with the full nuclear simulation stack (MOAB, OpenMC, DAGMC, Geant4, PyNE, etc.).
+- In `radiation-transport/Dockerfile`, `paraview`/`vtk` (conda) and `cadquery`/`cadquery-ocp`/`cadquery_vtk` (pip, via paramak) must stay pinned to the verified combo, and the final `conda install --force-reinstall` of the VTK family must run after all pip installs — pip's `cadquery_vtk` shares the `vtkmodules` namespace with conda's `vtk` and clobbers files, which breaks `dagmc.visualize`/ParaView with "not compatible with vtkmodules.*" errors.
 - `dev/` is a minimal terminal environment extending `base/` with `ttyd` for dev/test.
 - Child environments add drop-in nginx configs via `/etc/nginx/conf.d/` and set `NUKELAB_START_COMMAND` to launch their service behind the shared nginx.
 - Images are built via `scripts/environments/build-base.sh`, `scripts/environments/build-workspace.sh`, `scripts/environments/build-radiation-transport.sh`, and `scripts/environments/build-dev.sh` or the CI/CD pipeline.

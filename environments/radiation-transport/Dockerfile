@@ -89,13 +89,17 @@ ENV NUKE_DIR=/opt/nuke \
 ENV PATH="${NUKE_DIR}/bin:${MOAB_ROOT}/bin:${DOUBLE_DOWN_ROOT}/lib:${GEANT4_ROOT}/bin:${DAGMC_ROOT}/bin:${LIBMESH_ROOT}/bin:${NJOY2016_ROOT}/bin:${OPENMC_ROOT}/bin:${KDSOURCE_ROOT}/bin:${ALARA_ROOT}/bin:${PATH}"
 ENV LD_LIBRARY_PATH="${MOAB_ROOT}/lib:${DOUBLE_DOWN_ROOT}/lib:${GEANT4_ROOT}/lib:${DAGMC_ROOT}/lib:${LIBMESH_ROOT}/lib:${NJOY2016_ROOT}/lib:${OPENMC_ROOT}/lib:${KDSOURCE_ROOT}/lib"
 
-# Create the dedicated Conda environment for the nuclear codes
+# Create the dedicated Conda environment for the nuclear codes.
+# paraview/vtk are pinned: pip's cadquery_vtk (pulled in via paramak ->
+# cadquery) shares the vtkmodules namespace with conda's vtk; this exact
+# combo is verified to coexist (see the repair step at the end of the file).
 ARG PYTHON_VERSION
 RUN conda create --yes -p ${NUKE_DIR} \
         python=${PYTHON_VERSION} \
         ipykernel \
         xeus-cling \
-        paraview \
+        paraview=6.0.1 \
+        vtk=9.5.2 \
         pythonocc-core && \
     conda clean --all -f -y
 
@@ -256,15 +260,28 @@ RUN git clone -b ${ALARA_BRANCH} --depth 1 https://github.com/svalinn/ALARA && \
     rm -rf /tmp/ALARA
 
 
-# Install remaining Python packages from PyPI and GitHub
+# Install remaining Python packages from PyPI and GitHub.
+# The cadquery stack is pinned to the combo verified against conda vtk 9.5.2:
+# cadquery-ocp needs the pip-style VTK libs shipped by cadquery_vtk.
+# pydagmc is pinned to a commit for reproducible builds.
 RUN pip install --no-cache-dir \
         --extra-index-url https://shimwell.github.io/wheels \
         trame \
         moab \
+        cadquery==2.7.0 \
+        cadquery-ocp==7.8.1.1.post1 \
+        cadquery_vtk==9.3.1 \
         montepy \
         ncrystal \
         paramak \
         plasmapy \
         geant4-pybind \
         vmecpp \
-        git+https://github.com/svalinn/pydagmc
+        git+https://github.com/svalinn/pydagmc@4afa678d24aa091417798ef4b3d11fda98b165f8
+
+# pip's cadquery_vtk clobbers some of conda's vtkmodules files during install.
+# Re-write the conda VTK family LAST so paraview keeps working; the pip-only
+# libraries OCP needs are not conda-owned and survive this reinstall.
+RUN conda install -p ${NUKE_DIR} -y --force-reinstall -c conda-forge \
+        paraview=6.0.1 vtk=9.5.2 vtk-base=9.5.2 vtk-io-ffmpeg=9.5.2 && \
+    conda clean --all -f -y
