@@ -45,12 +45,13 @@ _manage_sh_complete() {
 		COMPREPLY=($(compgen -W "$opts" -- "$cur"))
 		;;
 	build)
+		local _build_flags="--no-cache ${global_flags[*]}"
 		if [[ "$COMP_CWORD" -eq 2 ]]; then
-			COMPREPLY=($(compgen -W "backend frontend all env ${global_flags[*]}" -- "$cur"))
+			COMPREPLY=($(compgen -W "backend frontend all env $_build_flags" -- "$cur"))
 		elif [[ "${COMP_WORDS[2]}" == "env" ]]; then
-			COMPREPLY=($(compgen -W "base workspace radiation-transport dev all ${global_flags[*]}" -- "$cur"))
+			COMPREPLY=($(compgen -W "base workspace radiation-transport dev all $_build_flags" -- "$cur"))
 		else
-			COMPREPLY=($(compgen -W "${global_flags[*]}" -- "$cur"))
+			COMPREPLY=($(compgen -W "$_build_flags" -- "$cur"))
 		fi
 		;;
 	stop)

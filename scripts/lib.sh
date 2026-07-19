@@ -203,14 +203,17 @@ detect_engine() {
     fi
 }
 
-# Usage: build_environment_image <caller_script_dir> <name> <env_dir> <tag>
+# Usage: build_environment_image <caller_script_dir> <name> <env_dir> <tag> [extra_args...]
 # Builds an environment image using the detected container engine.
 # <caller_script_dir> is the directory containing the invoking build-*.sh script.
+# Optional extra_args are forwarded to the container engine build command.
 build_environment_image() {
     local caller_dir="$1"
     local name="$2"
     local env_dir="$3"
     local tag="$4"
+    shift 4
+    local extra_args=("$@")
     local root
     root="$(cd "$caller_dir/../.." > /dev/null 2>&1 && pwd)"
 
@@ -220,7 +223,7 @@ build_environment_image() {
 
     log "Building NukeLab $name..."
     cd "$root/environments/$env_dir"
-    $CONTAINER_ENGINE build -t "$tag" .
+    $CONTAINER_ENGINE build -t "$tag" "${extra_args[@]}" .
 
     log_ok "$name built successfully!"
 }
