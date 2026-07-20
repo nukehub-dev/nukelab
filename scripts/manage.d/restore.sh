@@ -39,17 +39,20 @@ cmd_restore() {
 
     step "Restoring from ${BOLD}$backup_file${RESET}..."
 
+    # Drop/create must run against the maintenance database: you cannot drop
+    # the database you are connected to. WITH (FORCE) kicks out the backend's
+    # live connections first (PostgreSQL 13+).
     log "Dropping database if exists..."
-    _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" exec postgres psql -U "$db_user" -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS $db_name;"
+    _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" exec -T postgres psql -U "$db_user" -d postgres -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS $db_name WITH (FORCE);"
 
     log "Creating database..."
-    _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" exec postgres psql -U "$db_user" -v ON_ERROR_STOP=1 -c "CREATE DATABASE $db_name;"
+    _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" exec -T postgres psql -U "$db_user" -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE $db_name;"
 
     log "Restoring data..."
     _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" exec -T postgres psql -U "$db_user" -v ON_ERROR_STOP=1 -d "$db_name" < "$backup_file"
 
     log "Stamping alembic version..."
-    _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" exec backend python -m alembic stamp head
+    _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" exec -T backend python -m alembic stamp head
 
     ok "Restore complete"
 }

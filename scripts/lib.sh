@@ -478,24 +478,32 @@ _warn_stale_containers() {
     fi
 }
 
-# Return 0 if any service managed by the current COMPOSE_ARGS is running.
-# Detection goes through the engine: `compose ps -q` prints the project's
-# container IDs (supported by docker compose v1/v2 and podman-compose, unlike
-# `ps --format json`, whose shape differs across implementations and which
-# older podman-compose releases reject); each ID is then checked for the
-# running state via the engine itself, which both tools report identically.
-_is_stack_running() {
-    local _ids
-    _ids=$($COMPOSE "${COMPOSE_ARGS[@]}" ps -q 2> /dev/null || true)
-    [ -z "$_ids" ] && return 1
+# Return 0 if any container of the given compose project is running.
+# Detection is engine-level via the project label that both docker compose
+# and podman-compose stamp on every container — it needs no compose files
+# (which may not exist on disk anymore) and never fails open the way a
+# compose invocation error does.
+_project_stack_running() {
+    local _project="$1"
+    [ -n "$_project" ] || return 1
+    [ -n "$($CONTAINER_ENGINE ps -q \
+        --filter "label=com.docker.compose.project=$_project" \
+        --filter status=running 2> /dev/null)" ]
+}
 
-    local _id
-    while IFS= read -r _id; do
-        [ -z "$_id" ] && continue
-        if [ "$($CONTAINER_ENGINE inspect -f '{{.State.Running}}' "$_id" 2> /dev/null)" = "true" ]; then
+# Return 0 if any container of the current stack's project is running. The
+# directory-derived legacy project is checked too: stacks started before
+# COMPOSE_PROJECT_NAME was exported live under basename "$DIR".
+_is_stack_running() {
+    local _proj _probed=" "
+    for _proj in "${COMPOSE_PROJECT_NAME:-}" "$(basename "$DIR")"; do
+        [ -z "$_proj" ] && continue
+        case "$_probed" in *" $_proj "*) continue ;; esac
+        _probed="$_probed$_proj "
+        if _project_stack_running "$_proj"; then
             return 0
         fi
-    done <<< "$_ids"
+    done
     return 1
 }
 
@@ -510,52 +518,34 @@ _other_stack_running() {
 
     [ -f "$other_state_file" ] || return 1
 
-    # Temporarily source the other state file and ask compose whether any of
-    # its services are up. We restore COMPOSE_ARGS and COMPOSE_PROJECT_NAME
-    # afterwards.
-    local _saved_args=("${COMPOSE_ARGS[@]}")
+    # Source the other state file for NUKELAB_PROJECT_NAME (new-format state
+    # files record the project that actually created the stack).
     # shellcheck source=/dev/null
     source "$other_state_file"
-    if [ ${#NUKELAB_COMPOSE_ARGS[@]} -gt 0 ]; then
-        COMPOSE_ARGS=("${NUKELAB_COMPOSE_ARGS[@]}")
-    else
-        COMPOSE_ARGS=(-f "$COMPOSE_FILE")
-    fi
 
-    # compose ps resolves the project from the exported COMPOSE_PROJECT_NAME,
-    # which holds OUR mode's project — asking with it would query our own
-    # stack, not the other one. Probe with the other mode's project instead,
-    # plus the directory-derived legacy project (stacks started before
-    # COMPOSE_PROJECT_NAME was exported live under basename "$DIR"), deduped.
-    local _dir_project
-    _dir_project=$(basename "$DIR")
     local _other_project
     if $USE_DEV_MODE; then
-        _other_project="${PROD_PROJECT_NAME:-$_dir_project}"
+        _other_project="${PROD_PROJECT_NAME:-}"
     else
-        _other_project="${DEV_PROJECT_NAME:-${_dir_project}-dev}"
+        _other_project="${DEV_PROJECT_NAME:-}"
     fi
 
-    local _saved_project="${COMPOSE_PROJECT_NAME:-}"
-    local _running=false
-    local _proj _probed=""
-    for _proj in "$_other_project" "$_dir_project"; do
-        [ "$_proj" = "$_probed" ] && continue
-        _probed="$_proj"
-        export COMPOSE_PROJECT_NAME="$_proj"
-        if _is_stack_running; then
-            _running=true
-            break
+    # Candidates: the other mode's project, the project recorded in the other
+    # stack's state file, and the directory-derived legacy project. Our own
+    # project is always excluded — otherwise e.g. a prod `start` would count
+    # the already-running prod stack (basename "$DIR" == nukelab here) as the
+    # other stack and break idempotent starts.
+    local _proj _probed=" "
+    for _proj in "$_other_project" "${NUKELAB_PROJECT_NAME:-}" "$(basename "$DIR")"; do
+        [ -z "$_proj" ] && continue
+        [ "$_proj" = "${COMPOSE_PROJECT_NAME:-}" ] && continue
+        case "$_probed" in *" $_proj "*) continue ;; esac
+        _probed="$_probed$_proj "
+        if _project_stack_running "$_proj"; then
+            return 0
         fi
     done
-    if [ -n "$_saved_project" ]; then
-        export COMPOSE_PROJECT_NAME="$_saved_project"
-    else
-        unset COMPOSE_PROJECT_NAME
-    fi
-
-    COMPOSE_ARGS=("${_saved_args[@]}")
-    $_running
+    return 1
 }
 
 # Block start when the opposite stack is running.

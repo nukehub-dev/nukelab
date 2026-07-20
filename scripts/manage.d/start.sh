@@ -134,6 +134,11 @@ cmd_start() {
 
         persist_state
 
+        # The start operation is done; the blocking wait below only idles
+        # while the dev session runs. Release the manage lock so other
+        # nukelabctl commands (logs, backup, stop, ...) work during it.
+        _release_lock
+
         trap '_stop_dev_stack' INT TERM
         wait
     else
