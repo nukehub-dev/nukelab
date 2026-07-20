@@ -16,6 +16,17 @@ cmd_install() {
     fi
 }
 
+# install takes no flags; validate only that the target is a real one so a
+# typo (e.g. `install fronend`) fails loudly instead of silently doing nothing.
+parse_install_args() {
+    case "$TARGET" in
+        backend | frontend | all) ;;
+        *)
+            die "Unknown target for install: $TARGET\nRun './nukelabctl install --help' for usage."
+            ;;
+    esac
+}
+
 help_install() {
     cat <<- EOF
 ${BOLD}Usage:${RESET} ./nukelabctl install [target]

@@ -3,12 +3,21 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 cmd_test() {
+    # Collect per-suite results so every selected suite runs even when an
+    # earlier one fails; the command exits non-zero at the end if any failed.
+    local _failed_suites=()
+
     if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
         step "Running frontend tests..."
         cd "$DIR/frontend"
         [ -d "node_modules" ] || die "Run: ./nukelabctl install frontend"
-        npm run test:unit || warn "Frontend unit tests failed"
-        npm run test 2> /dev/null || npm run lint || warn "No test script found"
+        if ! npm run test:unit; then
+            warn "Frontend unit tests failed"
+            _failed_suites+=("frontend")
+        fi
+        # Return to $DIR so relative compose overlay paths resolve correctly
+        # for the backend suite below.
+        cd "$DIR"
     fi
 
     if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
@@ -24,7 +33,7 @@ cmd_test() {
         if $USE_COVERAGE; then
             _pytest_args+=(--cov=app --cov-report=term --cov-report=html)
         fi
-        _pytest_args+=("${EXTRA_ARGS[@]:-}")
+        _pytest_args+=("${EXTRA_ARGS[@]}")
 
         # To avoid Postgres connection exhaustion from the live dev server
         # (uvicorn workers + Celery) while tests run, stop the backend services
@@ -69,15 +78,23 @@ cmd_test() {
             -e "TESTING=true" \
             backend-test sh -c 'python -m pytest "$@"' _ "${_pytest_args[@]}" || _test_exit=$?
 
-        # Restart backend services if they were running before.
+        # Restart backend services if they were running before. This must run
+        # even when tests failed, otherwise the stack is left down.
         if $_backend_was_running; then
             info "Restarting backend services..."
-            $COMPOSE "${COMPOSE_ARGS[@]}" up -d backend celery-worker celery-beat > /dev/null 2>&1 || warn "Failed to restart backend services"
+            $COMPOSE "${COMPOSE_ARGS[@]}" up -d backend celery-worker celery-beat > /dev/null 2>&1 \
+                || warn "Failed to restart backend services — the stack may be left down.\nRun './nukelabctl start backend' to bring it back up."
         fi
 
-        if [ $_test_exit -ne 0 ]; then
-            warn "Tests failed or not configured"
+        if [ "$_test_exit" -ne 0 ]; then
+            warn "Backend tests failed (exit $_test_exit)"
+            _failed_suites+=("backend")
         fi
+    fi
+
+    if [ ${#_failed_suites[@]} -gt 0 ]; then
+        err "Test suites failed: ${_failed_suites[*]}"
+        exit 1
     fi
 }
 
@@ -85,7 +102,8 @@ help_test() {
     cat <<- EOF
 ${BOLD}Usage:${RESET} ./nukelabctl test [target]
 
-Run tests.
+Run tests. Exits non-zero if any selected suite fails (all selected suites
+still run to completion).
 
 ${BOLD}Targets:${RESET} frontend | backend | all
 

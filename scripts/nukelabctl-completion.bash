@@ -25,7 +25,7 @@ _manage_sh_complete() {
 
 	# Options that take a value — complete the value, not an option name.
 	case "$prev" in
-	--tail | -n | --timeout | -t)
+	--tail | -n | --timeout | -t | -k)
 		return
 		;;
 	--overlay | -o)
@@ -76,8 +76,15 @@ _manage_sh_complete() {
 		COMPREPLY=($(compgen -W "frontend backend shell all --fix -f ${global_flags[*]}" -- "$cur"))
 		;;
 	restore)
-		# restore takes a backup file path.
-		COMPREPLY=($(compgen -f -- "$cur"))
+		# restore takes a backup file path; --yes skips the confirmation.
+		if [[ "$cur" == -* ]]; then
+			COMPREPLY=($(compgen -W "--yes -y ${global_flags[*]}" -- "$cur"))
+		else
+			COMPREPLY=($(compgen -f -- "$cur"))
+		fi
+		;;
+	clean | reset)
+		COMPREPLY=($(compgen -W "--yes -y ${global_flags[*]}" -- "$cur"))
 		;;
 	dev)
 		if [[ "$COMP_CWORD" -eq 2 ]]; then
@@ -104,7 +111,7 @@ _manage_sh_complete() {
 			esac
 		fi
 		;;
-	update | pull | clean | e2e | db-migrate | db-shell | backup | reset | selftest | install-completion | help | security | init-user-auth-keys | rotate-user-auth-key | cleanup-user-auth-keys)
+	update | pull | e2e | db-migrate | db-shell | backup | selftest | install-completion | help | security | init-user-auth-keys | rotate-user-auth-key | cleanup-user-auth-keys)
 		COMPREPLY=($(compgen -W "${global_flags[*]}" -- "$cur"))
 		;;
 	*)

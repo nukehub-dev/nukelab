@@ -46,9 +46,12 @@ parse_dev_args() {
             help_dev
             exit 0
             ;;
-        *)
-            # Options or targets without an explicit subcommand go to "start".
+        backend | frontend | all | -*)
+            # Targets or options without an explicit subcommand go to "start".
             DEV_SUBCMD="start"
+            ;;
+        *)
+            die "Unknown dev subcommand: ${EXTRA_ARGS[0]}\nRun './nukelabctl dev --help' for usage."
             ;;
     esac
 }

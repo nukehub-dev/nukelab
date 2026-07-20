@@ -22,7 +22,8 @@ All files under `scripts/`, plus the top-level `nukelabctl` dispatcher.
 - Add new shared helpers to `scripts/lib.sh`; do not duplicate them across modules.
 - Unknown flags must be rejected with `die "Unknown option for <cmd>: $arg"`; never silently swallow them.
 - `set -E` ERR trap is active; append `|| true` when invoking tools that legitimately return non-zero (e.g., `shfmt -l`, `git describe`).
-- Do not hardcode the version string or names of named volumes/services; use `_nukelab_version`, `compose config --volumes`, and `_backend_services`.
+- `_acquire_lock` uses `flock` on a persistent fd (noclobber pidfile fallback); modules must not replace the dispatcher's EXIT/INT/TERM traps — lock cleanup chains through `_release_lock` from the existing traps.
+- Do not hardcode the version string or names of named volumes/services; use `_nukelab_version` and `_backend_services`. Discover compose-managed volumes via the `com.docker.compose.project` label rather than hardcoded name prefixes.
 - `_backend_services` returns a space-separated string meant to word-split; do not quote it at the call site (`# shellcheck disable=SC2086`).
 - When adding or changing `nukelabctl` commands, targets, or flags, update
   `scripts/nukelabctl-completion.bash` so bash tab-completion stays in sync.

@@ -118,26 +118,39 @@ _error_trap() {
 # ─── Environment Loading ───────────────────────────────────────────────────
 # Usage: load_env_file <file>
 # Exports KEY=VALUE lines from the file, skipping comments/blanks and stripping
-# trailing inline comments. Variables already set (non-empty) in the environment
-# are NOT overwritten, so shell exports take precedence.
+# trailing inline comments. An optional leading `export ` prefix is tolerated.
+# Lines whose key is not a legal shell identifier are skipped with a warning
+# instead of aborting the script on the ${!key} indirection. Variables already
+# set (non-empty) in the environment are NOT overwritten, so shell exports
+# take precedence.
 load_env_file() {
     local env_file="$1"
     while IFS= read -r line || [[ -n "$line" ]]; do
         [[ "$line" =~ ^[[:space:]]*#.*$ ]] && continue
         [[ -z "${line// /}" ]] && continue
 
+        # Tolerate an optional leading `export ` prefix
+        local cleaned="${line#export }"
+
         # Extract KEY=VALUE, then strip trailing inline comments
         # (only when # is preceded by whitespace, preserving # in passwords/URLs)
-        local cleaned="$line"
-        if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)[[:space:]]+#.*$ ]]; then
+        if [[ "$cleaned" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)[[:space:]]+#.*$ ]]; then
             cleaned="${BASH_REMATCH[1]}=${BASH_REMATCH[2]}"
             while [[ "$cleaned" == *[[:space:]] ]]; do
                 cleaned="${cleaned%[[:space:]]}"
             done
         fi
 
-        # Only export if the variable is not already set in the environment
+        # Skip malformed lines (e.g. `FOO-BAR=baz`) instead of crashing on the
+        # indirection below. Only the key is logged so values (which may be
+        # secrets) stay out of the output.
         local key="${cleaned%%=*}"
+        if [[ "$cleaned" != *=* ]] || [[ ! "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+            warn "Skipping invalid line in $env_file (bad key: ${key:-<none>})"
+            continue
+        fi
+
+        # Only export if the variable is not already set in the environment
         if [ -z "${!key:-}" ]; then
             export "$cleaned" 2> /dev/null || true
         fi
@@ -145,28 +158,32 @@ load_env_file() {
 }
 
 # Usage: init_env [dev_mode]
-# Loads .env as base defaults, then .env.development when dev_mode is true or
-# when .env is missing and .env.development exists.
+# In dev mode (.env.development present) the dev file is loaded FIRST so its
+# values win: load_env_file never overwrites an already-set variable, so .env
+# afterwards only fills gaps. In prod mode only .env is loaded. Either way,
+# variables already exported in the real environment win over both files.
 # Exports NUKELAB_ENV_FILE so compose services can reference the active env file.
 init_env() {
     local dev_mode="${1:-false}"
 
-    # Always load .env as base defaults
-    if [ -f .env ]; then
-        log "Loading ${BOLD}.env${RESET}"
-        load_env_file .env
-        export NUKELAB_ENV_FILE=".env"
-    fi
-    # In dev mode, overlay .env.development on top so dev values win
     if $dev_mode && [ -f .env.development ]; then
+        # Dev mode: load the dev file first so dev values win over .env.
         log "Loading ${BOLD}.env.development${RESET} (dev overrides)"
         load_env_file .env.development
         export NUKELAB_ENV_FILE=".env.development"
-    elif [ ! -f .env ] && [ -f .env.development ]; then
+        if [ -f .env ]; then
+            log "Loading ${BOLD}.env${RESET} (filling gaps)"
+            load_env_file .env
+        fi
+    elif [ -f .env ]; then
+        log "Loading ${BOLD}.env${RESET}"
+        load_env_file .env
+        export NUKELAB_ENV_FILE=".env"
+    elif [ -f .env.development ]; then
         log "Loading ${BOLD}.env.development${RESET}"
         load_env_file .env.development
         export NUKELAB_ENV_FILE=".env.development"
-    elif [ ! -f .env ] && [ ! -f .env.development ]; then
+    else
         die "No environment file found.\n\n  cp .env.example .env.development"
     fi
 }
@@ -183,23 +200,40 @@ detect_engine() {
     elif [ "${CONTAINER_ENGINE:-}" = "podman" ] && command -v podman > /dev/null 2>&1; then
         info "Podman detected (via CONTAINER_ENGINE)"
     elif command -v podman > /dev/null 2>&1; then
+        if [ -n "${CONTAINER_ENGINE:-}" ]; then
+            warn "CONTAINER_ENGINE='$CONTAINER_ENGINE' is invalid or not installed; auto-detected podman"
+        fi
         CONTAINER_ENGINE=podman
         info "Podman detected"
     elif command -v docker > /dev/null 2>&1; then
+        if [ -n "${CONTAINER_ENGINE:-}" ]; then
+            warn "CONTAINER_ENGINE='$CONTAINER_ENGINE' is invalid or not installed; auto-detected docker"
+        fi
         CONTAINER_ENGINE=docker
         info "Docker detected"
     else
         die "Neither podman nor docker found"
     fi
 
-    if command -v podman-compose > /dev/null 2>&1; then
-        COMPOSE="podman-compose"
-    elif command -v docker-compose > /dev/null 2>&1; then
-        COMPOSE="docker-compose"
-    elif $CONTAINER_ENGINE compose version > /dev/null 2>&1; then
-        COMPOSE="$CONTAINER_ENGINE compose"
+    # Probe compose tooling for the selected engine only. podman-compose talks
+    # to the podman socket and docker(-)compose to the docker daemon, so
+    # falling back across engines would silently target the wrong runtime.
+    if [ "$CONTAINER_ENGINE" = "docker" ]; then
+        if $CONTAINER_ENGINE compose version > /dev/null 2>&1; then
+            COMPOSE="$CONTAINER_ENGINE compose"
+        elif command -v docker-compose > /dev/null 2>&1; then
+            COMPOSE="docker-compose"
+        else
+            die "No compose command found (tried: docker compose, docker-compose)"
+        fi
     else
-        die "No compose command found"
+        if command -v podman-compose > /dev/null 2>&1; then
+            COMPOSE="podman-compose"
+        elif $CONTAINER_ENGINE compose version > /dev/null 2>&1; then
+            COMPOSE="$CONTAINER_ENGINE compose"
+        else
+            die "No compose command found (tried: podman-compose, podman compose)"
+        fi
     fi
 }
 
@@ -259,13 +293,21 @@ setup_podman_socket() {
             export DOCKER_SOCKET="$SOCK"
         elif [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -S "$XDG_RUNTIME_DIR/podman/podman.sock" ]; then
             export DOCKER_SOCKET="$XDG_RUNTIME_DIR/podman/podman.sock"
-        else
+        elif [ -S /run/podman/podman.sock ]; then
+            # Rootful fallback only when the socket actually exists; otherwise
+            # leave DOCKER_SOCKET unset so the failure later is unmistakable.
             export DOCKER_SOCKET="/run/podman/podman.sock"
         fi
-        info "Using Podman socket: $DOCKER_SOCKET"
+        if [ -n "${DOCKER_SOCKET:-}" ]; then
+            info "Using Podman socket: $DOCKER_SOCKET"
+        else
+            warn "No Podman socket found; DOCKER_SOCKET left unset"
+        fi
     fi
 
-    export DOCKER_NUKELAB_HOST="$DOCKER_SOCKET"
+    if [ -n "${DOCKER_SOCKET:-}" ]; then
+        export DOCKER_NUKELAB_HOST="$DOCKER_SOCKET"
+    fi
 }
 
 # ─── State Persistence ─────────────────────────────────────────────────────
@@ -279,6 +321,7 @@ persist_state() {
         echo "# Do not edit by hand; delete this file to force env-based fallback."
         echo "NUKELAB_USE_DEV_MODE=$USE_DEV_MODE"
         echo "NUKELAB_TARGET=$TARGET"
+        echo "NUKELAB_PROJECT_NAME=$COMPOSE_PROJECT_NAME"
         echo "NUKELAB_PGBOUNCER_ENABLED=${PGBOUNCER_ENABLED:-false}"
         echo "NUKELAB_PROMETHEUS_ENABLED=${PROMETHEUS_ENABLED:-false}"
         echo "NUKELAB_GRAFANA_ENABLED=${GRAFANA_ENABLED:-false}"
@@ -331,6 +374,15 @@ restore_state() {
     GRAFANA_ENABLED="${NUKELAB_GRAFANA_ENABLED:-false}"
     ALERTMANAGER_ENABLED="${NUKELAB_ALERTMANAGER_ENABLED:-false}"
     TRACING_ENABLED="${NUKELAB_TRACING_ENABLED:-false}"
+
+    # Adopt the compose project the stack was actually started with so
+    # stop/status/logs query that project. State files written before
+    # COMPOSE_PROJECT_NAME was persisted lack the variable; in that case keep
+    # the project the dispatcher selected for the current mode.
+    if [ -n "${NUKELAB_PROJECT_NAME:-}" ]; then
+        COMPOSE_PROJECT_NAME="$NUKELAB_PROJECT_NAME"
+        export COMPOSE_PROJECT_NAME
+    fi
 
     if [ ${#NUKELAB_COMPOSE_ARGS[@]} -gt 0 ]; then
         COMPOSE_ARGS=("${NUKELAB_COMPOSE_ARGS[@]}")
@@ -427,9 +479,24 @@ _warn_stale_containers() {
 }
 
 # Return 0 if any service managed by the current COMPOSE_ARGS is running.
+# Detection goes through the engine: `compose ps -q` prints the project's
+# container IDs (supported by docker compose v1/v2 and podman-compose, unlike
+# `ps --format json`, whose shape differs across implementations and which
+# older podman-compose releases reject); each ID is then checked for the
+# running state via the engine itself, which both tools report identically.
 _is_stack_running() {
-    $COMPOSE "${COMPOSE_ARGS[@]}" ps --format json 2> /dev/null | grep -q '"State": "running"' \
-        || $COMPOSE "${COMPOSE_ARGS[@]}" ps 2> /dev/null | grep -qE 'Up[[:space:]]+[a-z0-9-]+$'
+    local _ids
+    _ids=$($COMPOSE "${COMPOSE_ARGS[@]}" ps -q 2> /dev/null || true)
+    [ -z "$_ids" ] && return 1
+
+    local _id
+    while IFS= read -r _id; do
+        [ -z "$_id" ] && continue
+        if [ "$($CONTAINER_ENGINE inspect -f '{{.State.Running}}' "$_id" 2> /dev/null)" = "true" ]; then
+            return 0
+        fi
+    done <<< "$_ids"
+    return 1
 }
 
 # Return 0 if the opposite-mode stack is currently running.
@@ -444,7 +511,8 @@ _other_stack_running() {
     [ -f "$other_state_file" ] || return 1
 
     # Temporarily source the other state file and ask compose whether any of
-    # its services are up. We restore COMPOSE_ARGS afterwards.
+    # its services are up. We restore COMPOSE_ARGS and COMPOSE_PROJECT_NAME
+    # afterwards.
     local _saved_args=("${COMPOSE_ARGS[@]}")
     # shellcheck source=/dev/null
     source "$other_state_file"
@@ -454,9 +522,36 @@ _other_stack_running() {
         COMPOSE_ARGS=(-f "$COMPOSE_FILE")
     fi
 
+    # compose ps resolves the project from the exported COMPOSE_PROJECT_NAME,
+    # which holds OUR mode's project — asking with it would query our own
+    # stack, not the other one. Probe with the other mode's project instead,
+    # plus the directory-derived legacy project (stacks started before
+    # COMPOSE_PROJECT_NAME was exported live under basename "$DIR"), deduped.
+    local _dir_project
+    _dir_project=$(basename "$DIR")
+    local _other_project
+    if $USE_DEV_MODE; then
+        _other_project="${PROD_PROJECT_NAME:-$_dir_project}"
+    else
+        _other_project="${DEV_PROJECT_NAME:-${_dir_project}-dev}"
+    fi
+
+    local _saved_project="${COMPOSE_PROJECT_NAME:-}"
     local _running=false
-    if _is_stack_running; then
-        _running=true
+    local _proj _probed=""
+    for _proj in "$_other_project" "$_dir_project"; do
+        [ "$_proj" = "$_probed" ] && continue
+        _probed="$_proj"
+        export COMPOSE_PROJECT_NAME="$_proj"
+        if _is_stack_running; then
+            _running=true
+            break
+        fi
+    done
+    if [ -n "$_saved_project" ]; then
+        export COMPOSE_PROJECT_NAME="$_saved_project"
+    else
+        unset COMPOSE_PROJECT_NAME
     fi
 
     COMPOSE_ARGS=("${_saved_args[@]}")
@@ -476,8 +571,9 @@ _require_other_stack_stopped() {
 
 # ─── Compose Args ──────────────────────────────────────────────────────────
 setup_compose_args() {
-    # Option B: dev and prod are mutually exclusive stacks using the same
-    # Compose project and container names. Only one may be running at a time.
+    # Dev and prod are separate Compose projects (via the exported
+    # COMPOSE_PROJECT_NAME) but share container names, so they remain
+    # mutually exclusive: only one may be running at a time.
     COMPOSE_ARGS=(-f "$COMPOSE_FILE")
 
     if $USE_DEV_MODE; then
@@ -630,6 +726,10 @@ _preflight_port_in_use() {
         netstat -tln 2> /dev/null | grep -Eq ":${port}[[:space:]]" && return 0
     else
         # No tool available — warn once but do not block.
+        if [ -z "${_PREFLIGHT_PORT_TOOL_WARNED:-}" ]; then
+            _PREFLIGHT_PORT_TOOL_WARNED=1
+            warn "Neither 'ss' nor 'netstat' found; skipping port availability check"
+        fi
         return 1
     fi
     return 1
@@ -722,32 +822,104 @@ preflight_checks() {
 # ─── Concurrency Lock ──────────────────────────────────────────────────────
 # Prevents two nukelabctl invocations from running conflicting operations at the
 # same time. The lock file stores the PID and command of the holding process.
+#
+# When flock(1) is available the lock is an exclusive flock on a persistent
+# fd: acquisition is atomic (no check-then-write race) and the kernel releases
+# it when the process dies, even on SIGKILL. The lock file is never deleted or
+# renamed on this path — flock is tied to the inode, so replacing the file
+# would let two processes hold locks on different inodes at once. Without
+# flock we fall back to atomic pidfile creation via `set -o noclobber`.
+#
+# Release is chained into the dispatcher's existing traps: _cleanup_trap,
+# _interrupt_trap, and _error_trap already call _release_lock. _acquire_lock
+# deliberately does NOT install its own trap — clobbering the dispatcher's
+# handlers would let SIGTERM fall through without exiting and lose the
+# Ctrl-C exit-130 semantics.
 
 LOCK_DIR="${XDG_RUNTIME_DIR:-$HOME/.local/share}/nukelab"
 LOCK_FILE="$LOCK_DIR/manage.lock"
+_LOCK_OWNER_PID=""
+_LOCK_METHOD=""
+_LOCK_FD=""
 
 _acquire_lock() {
     mkdir -p "$LOCK_DIR"
-    if [ -f "$LOCK_FILE" ]; then
-        local other_pid
-        other_pid=$(awk 'NR==1' "$LOCK_FILE" 2> /dev/null || true)
-        if [ -n "$other_pid" ] && kill -0 "$other_pid" 2> /dev/null; then
-            local other_cmd
-            other_cmd=$(sed -n '2p' "$LOCK_FILE" 2> /dev/null || true)
-            die "Another nukelabctl process is already running (PID $other_pid, command: ${other_cmd:-unknown}).\nWait for it to finish or remove $LOCK_FILE if it crashed."
-        fi
-        warn "Stale lock found (PID ${other_pid:-unknown}). Removing..."
-        rm -f "$LOCK_FILE"
+    if command -v flock > /dev/null 2>&1; then
+        _acquire_lock_flock
+    else
+        _acquire_lock_pidfile
     fi
-    echo "$$" > "$LOCK_FILE"
-    echo "$CMD ${TARGET:-}" >> "$LOCK_FILE"
-    trap '_release_lock' EXIT INT TERM
+    _LOCK_OWNER_PID=$BASHPID
 }
 
-_release_lock() {
-    if [ -f "$LOCK_FILE" ] && [ "$(awk 'NR==1' "$LOCK_FILE" 2> /dev/null || true)" = "$$" ]; then
-        rm -f "$LOCK_FILE"
+_acquire_lock_flock() {
+    exec {_LOCK_FD}>> "$LOCK_FILE"
+    if ! flock -n "$_LOCK_FD"; then
+        local other_pid other_cmd
+        other_pid=$(awk 'NR==1' "$LOCK_FILE" 2> /dev/null || true)
+        other_cmd=$(sed -n '2p' "$LOCK_FILE" 2> /dev/null || true)
+        die "Another nukelabctl process is already running (PID ${other_pid:-unknown}, command: ${other_cmd:-unknown}).\nWait for it to finish or remove $LOCK_FILE if it crashed."
     fi
+    # Holding the lock makes this truncate-and-rewrite safe: contenders only
+    # read the file after their own flock attempt fails.
+    printf '%s\n%s\n' "$BASHPID" "$CMD ${TARGET:-}" > "$LOCK_FILE"
+    _LOCK_METHOD=flock
+}
+
+_acquire_lock_pidfile() {
+    # $BASHPID must be captured OUTSIDE the noclobber subshells below: inside
+    # them it would be the transient subshell PID, which is dead by the time a
+    # contender checks liveness — the lock would look instantly stale.
+    local _pid=$BASHPID
+    if (
+        set -o noclobber
+        printf '%s\n%s\n' "$_pid" "$CMD ${TARGET:-}" > "$LOCK_FILE"
+    ) 2> /dev/null; then
+        _LOCK_METHOD=pidfile
+        return
+    fi
+
+    local other_pid
+    other_pid=$(awk 'NR==1' "$LOCK_FILE" 2> /dev/null || true)
+    if [ -n "$other_pid" ] && kill -0 "$other_pid" 2> /dev/null; then
+        local other_cmd
+        other_cmd=$(sed -n '2p' "$LOCK_FILE" 2> /dev/null || true)
+        die "Another nukelabctl process is already running (PID $other_pid, command: ${other_cmd:-unknown}).\nWait for it to finish or remove $LOCK_FILE if it crashed."
+    fi
+    warn "Stale lock found (PID ${other_pid:-unknown}). Removing..."
+    rm -f "$LOCK_FILE"
+    # Retry once; noclobber keeps this create atomic, so a simultaneous
+    # contender either wins or dies here — never both.
+    if (
+        set -o noclobber
+        printf '%s\n%s\n' "$_pid" "$CMD ${TARGET:-}" > "$LOCK_FILE"
+    ) 2> /dev/null; then
+        _LOCK_METHOD=pidfile
+    else
+        die "Could not acquire lock $LOCK_FILE (lost race with another nukelabctl). Try again."
+    fi
+}
+
+# Release the lock. Only the process that acquired it may release it: ERR
+# traps inherited via `set -E` also fire inside subshells (e.g. command
+# substitutions), where $BASHPID differs from the lock owner and this becomes
+# a no-op. $$ cannot be used for the check — it equals the parent PID there.
+_release_lock() {
+    [ -n "$_LOCK_OWNER_PID" ] && [ "$_LOCK_OWNER_PID" = "$BASHPID" ] || return 0
+    case "$_LOCK_METHOD" in
+        flock)
+            if [ -n "$_LOCK_FD" ]; then
+                flock -u "$_LOCK_FD" 2> /dev/null || true
+                exec {_LOCK_FD}>&-
+                _LOCK_FD=""
+            fi
+            ;;
+        pidfile)
+            rm -f "$LOCK_FILE"
+            ;;
+    esac
+    _LOCK_OWNER_PID=""
+    _LOCK_METHOD=""
 }
 
 # ─── Output Helpers ────────────────────────────────────────────────────────
@@ -794,7 +966,18 @@ is_frontend_running() {
 
 kill_frontend() {
     if is_frontend_running; then
-        local pid=$(cat "$FRONTEND_PID_FILE")
+        local pid
+        pid=$(cat "$FRONTEND_PID_FILE")
+        # PIDs get recycled: before signalling, confirm the process still
+        # looks like the Vite/npm/node dev server. If not, the pidfile is
+        # stale — drop it instead of killing an unrelated process.
+        local cmdline
+        cmdline=$(tr '\0' ' ' < "/proc/$pid/cmdline" 2> /dev/null || ps -p "$pid" -o args= 2> /dev/null || true)
+        if [[ ! "$cmdline" =~ node|npm|vite ]]; then
+            warn "PID $pid from $FRONTEND_PID_FILE is not a node/npm/vite process (${cmdline:-unknown}); removing stale PID file"
+            rm -f "$FRONTEND_PID_FILE"
+            return
+        fi
         log "Stopping frontend (PID: $pid)..."
         # Vite is spawned by npm/node; kill child processes first so the
         # dev server does not outlive the PID file.
@@ -906,33 +1089,52 @@ _stop_dev_stack() {
     exit 0
 }
 
+# Return 0 if libnukelab_cpu.so is actually present inside the volume. The
+# check needs a container, which needs the build image locally; if the image
+# is missing we report "absent" so the caller rebuilds (which pulls it).
+_cpu_lib_artifact_present() {
+    local vol_name="$1"
+    local build_image="$2"
+    $CONTAINER_ENGINE image inspect "$build_image" > /dev/null 2>&1 || return 1
+    $CONTAINER_ENGINE run --rm \
+        -v "$vol_name:/dst:ro" \
+        "$build_image" \
+        test -f /dst/libnukelab_cpu.so > /dev/null 2>&1
+}
+
 setup_cpu_lib_volume() {
     local vol_name="nukelab-cpu-lib"
     local c_file="$DIR/resources/lib/nukelab/libnukelab_cpu.c"
+    local build_image="docker.io/library/gcc:latest"
 
     if [ ! -f "$c_file" ]; then
         warn "CPU mask source not found: $c_file"
         return
     fi
 
-    # Skip if volume already exists
+    # Skip only when the built artifact actually exists in the volume. A bare
+    # volume can be left behind by a failed pull/create below and must not
+    # suppress the build on every future run.
     if $CONTAINER_ENGINE volume inspect "$vol_name" > /dev/null 2>&1; then
-        return
+        if _cpu_lib_artifact_present "$vol_name" "$build_image"; then
+            warn "Volume $vol_name already contains libnukelab_cpu.so; skipping build"
+            return
+        fi
+        warn "Volume $vol_name exists but libnukelab_cpu.so is missing; rebuilding"
+    else
+        step "Setting up CPU mask library..."
+
+        # Create volume
+        $CONTAINER_ENGINE volume create "$vol_name" > /dev/null
+        ok "Created volume: $vol_name"
     fi
-
-    step "Setting up CPU mask library..."
-
-    # Create volume
-    $CONTAINER_ENGINE volume create "$vol_name" > /dev/null
-    ok "Created volume: $vol_name"
 
     # Build .so inside a temporary gcc container
     log "Building libnukelab_cpu.so (one-time)..."
     local tmp_name="nukelab-tmp-build-cpu-lib"
-    local build_image="docker.io/library/gcc:latest"
 
     # Pull gcc image if not present
-    if ! $CONTAINER_ENGINE image exists "$build_image" 2> /dev/null; then
+    if ! $CONTAINER_ENGINE image inspect "$build_image" > /dev/null 2>&1; then
         log "Pulling $build_image..."
         $CONTAINER_ENGINE pull "$build_image" > /dev/null 2>&1 || {
             warn "Failed to pull $build_image"
@@ -952,14 +1154,15 @@ setup_cpu_lib_volume() {
         return
     }
 
-    # Compile
+    # Compile. The failure is captured instead of propagating through `set -e`
+    # so the cleanup below always runs and the build container cannot leak.
+    local exit_code=0
     $CONTAINER_ENGINE exec "$tmp_name" \
-        gcc -shared -fPIC -o /dst/libnukelab_cpu.so /src/libnukelab_cpu.c -ldl
+        gcc -shared -fPIC -o /dst/libnukelab_cpu.so /src/libnukelab_cpu.c -ldl || exit_code=$?
 
-    local exit_code=$?
-    $CONTAINER_ENGINE rm -f "$tmp_name" > /dev/null 2>&1
+    $CONTAINER_ENGINE rm -f "$tmp_name" > /dev/null 2>&1 || true
 
-    if [ $exit_code -ne 0 ]; then
+    if [ "$exit_code" -ne 0 ]; then
         err "Failed to build libnukelab_cpu.so"
         $CONTAINER_ENGINE volume rm "$vol_name" > /dev/null 2>&1 || true
         return

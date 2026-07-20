@@ -27,6 +27,13 @@ parse_build_args() {
     done
 
     EXTRA_ARGS=("${_filtered[@]}")
+
+    case "$TARGET" in
+        backend | frontend | env | all) ;;
+        *)
+            die "Unknown target for build: $TARGET\nRun './nukelabctl build --help' for usage."
+            ;;
+    esac
 }
 
 cmd_build() {

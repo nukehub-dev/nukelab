@@ -30,7 +30,9 @@ DEV_COMPOSE_FILE="$DIR/.nukelab-dev-compose.yml"
 COMPOSE_ARGS=(-f "$COMPOSE_FILE")
 
 # Defaults; the active mode selects the actual values before dispatch.
-COMPOSE_PROJECT_NAME="$PROD_PROJECT_NAME"
+# COMPOSE_PROJECT_NAME must be exported so compose subprocesses actually
+# isolate dev and prod into separate Compose projects.
+export COMPOSE_PROJECT_NAME="$PROD_PROJECT_NAME"
 STATE_FILE="$PROD_STATE_FILE"
 
 # ─── Argument Parsing ─────────────────────────────────────────────────────-
@@ -46,7 +48,7 @@ COMPOSE_OVERLAY_FILES=()
 
 # Per-command options that take a value. These are passed through to command
 # parsers so the value is not misinterpreted as a target.
-VALUE_OPTIONS=("--tail" "-n" "--timeout" "-t")
+VALUE_OPTIONS=("--tail" "-n" "--timeout" "-t" "-k")
 
 parse_args() {
     # Phase 1: consume global flags that may appear before the command.
@@ -178,7 +180,9 @@ parse_args() {
                 fi
                 ;;
             *)
-                if [[ -z "$TARGET" ]] && [ "$CMD" != "dev" ]; then
+                # e2e has no target: positionals are Playwright arguments
+                # (spec files, test dirs) and must be forwarded in order.
+                if [[ -z "$TARGET" ]] && [ "$CMD" != "dev" ] && [ "$CMD" != "e2e" ]; then
                     TARGET="$1"
                 else
                     EXTRA_ARGS+=("$1")
@@ -254,7 +258,7 @@ ${BOLD}Database:${RESET}
 
 ${BOLD}Testing:${RESET}
   ${GREEN}test${RESET}       [target] [--coverage]     Run tests
-  ${GREEN}e2e${RESET}                                  Run Playwright E2E tests
+  ${GREEN}e2e${RESET}        [playwright-args...]      Run Playwright E2E tests
   ${GREEN}loadtest${RESET}   [profile]                 Run Locust/k6 load tests
   ${GREEN}selftest${RESET}                             Quick nukelabctl sanity check
 
@@ -439,7 +443,7 @@ main() {
             # dev is a meta-command: it loads the dev environment and then
             # dispatches to start/restart/stop/logs/status with USE_DEV_MODE=true.
             USE_DEV_MODE=true
-            COMPOSE_PROJECT_NAME="$DEV_PROJECT_NAME"
+            export COMPOSE_PROJECT_NAME="$DEV_PROJECT_NAME"
             STATE_FILE="$DEV_STATE_FILE"
             _bootstrap raw
             _dispatch_command "$CMD"
@@ -458,7 +462,7 @@ main() {
         loadtest)
             # Load tests need the multi-worker prod backend; always target prod.
             USE_DEV_MODE=false
-            COMPOSE_PROJECT_NAME="$PROD_PROJECT_NAME"
+            export COMPOSE_PROJECT_NAME="$PROD_PROJECT_NAME"
             STATE_FILE="$PROD_STATE_FILE"
             _bootstrap restore
             _dispatch_command "$CMD"

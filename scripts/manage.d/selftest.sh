@@ -58,6 +58,17 @@ cmd_selftest() {
     _t "logs --tail parses" bash -c './nukelabctl logs --tail 5 --no-follow backend 2>&1 | grep -vq "Option --tail requires a value"' || _increment_failures
     _t "stop --timeout parses" bash -c './nukelabctl stop --timeout 5 2>&1 | grep -vq "Unexpected argument"' || _increment_failures
 
+    # pytest -k takes a value; it must not be mistaken for the target.
+    # parse_args is extracted and run standalone so nothing is dispatched.
+    _t "test -k value not parsed as target" bash -c '
+        eval "$(grep "^VALUE_OPTIONS=" ./nukelabctl)"
+        eval "$(awk "/^parse_args\(\) \{/,/^\}/" ./nukelabctl)"
+        CMD="" TARGET="" SHOW_HELP=false
+        EXTRA_ARGS=() COMPOSE_OVERLAY_FILES=()
+        parse_args test -k "quota"
+        [ "$TARGET" = "all" ] && [ "${EXTRA_ARGS[*]}" = "-k quota" ]
+    ' || _increment_failures
+
     # Invalid option values are rejected
     if ./nukelabctl logs --tail abc --no-follow backend > /dev/null 2>&1; then
         err "invalid --tail value not rejected"
@@ -89,11 +100,38 @@ cmd_selftest() {
         ok "removed --dev flag rejected"
     fi
 
+    # Unknown targets must die with usage instead of silently doing nothing.
+    _t "start rejects unknown target" bash -c '
+        DIR=.; source ./scripts/lib.sh > /dev/null 2>&1
+        source ./scripts/manage.d/start.sh
+        TARGET=typo
+        EXTRA_ARGS=()
+        ! (parse_start_args) > /dev/null 2>&1
+    ' || _increment_failures
+    _t "start accepts valid targets" bash -c '
+        DIR=.; source ./scripts/lib.sh > /dev/null 2>&1
+        source ./scripts/manage.d/start.sh
+        EXTRA_ARGS=()
+        for t in backend frontend all; do
+            TARGET="$t"
+            (parse_start_args) > /dev/null 2>&1 || exit 1
+        done
+    ' || _increment_failures
+
     # dev meta-command subcommand parsing
     _t "dev defaults to start" bash -c './nukelabctl dev --help | grep -q "Start the dev stack"' || _increment_failures
     _t "dev start help" bash -c './nukelabctl dev start --help | grep -q "Start the NukeLab stack"' || _increment_failures
     _t "dev restart help" bash -c './nukelabctl dev restart --help | grep -q "Stop and then start"' || _increment_failures
     _t "dev logs --tail parses" bash -c './nukelabctl dev logs --tail 5 --no-follow backend 2>&1 | grep -vq "Option --tail requires a value"' || _increment_failures
+
+    # Unknown dev subcommands must die instead of silently starting the stack.
+    if ./nukelabctl dev nosuchcmd --help > /dev/null 2>&1; then
+        err "unknown dev subcommand not rejected"
+        _increment_failures
+    else
+        ok "unknown dev subcommand rejected"
+    fi
+    _t "dev reports unknown subcommand" bash -c './nukelabctl dev nosuchcmd --help 2>&1 | grep -q "Unknown dev subcommand"' || _increment_failures
 
     # restart must parse --no-build / --no-wait (start.sh resets the flags at
     # source time, so restart needs its own parser to honor them).
@@ -151,6 +189,17 @@ cmd_selftest() {
 
     # e2e forwards argv (help text documents this)
     _t "e2e --help documents playwright-args passthrough" bash -c './nukelabctl e2e --help | grep -q "playwright-args"' || _increment_failures
+
+    # Positional spec files must be forwarded to Playwright, not swallowed as
+    # TARGET. parse_args is extracted and run standalone so nothing is dispatched.
+    _t "e2e positional spec files forwarded" bash -c '
+        eval "$(grep "^VALUE_OPTIONS=" ./nukelabctl)"
+        eval "$(awk "/^parse_args\(\) \{/,/^\}/" ./nukelabctl)"
+        CMD="" TARGET="" SHOW_HELP=false
+        EXTRA_ARGS=() COMPOSE_OVERLAY_FILES=()
+        parse_args e2e tests/login.spec.ts --workers 1
+        [ "$TARGET" = "all" ] && [ "${EXTRA_ARGS[*]}" = "tests/login.spec.ts --workers 1" ]
+    ' || _increment_failures
 
     # Shared dev venv helper now lives in lib.sh (drift guard for lint/security)
     _t "lib.sh exposes _ensure_venv_tool" bash -c 'DIR=.; source ./scripts/lib.sh >/dev/null 2>&1; type -t _ensure_venv_tool | grep -q function' || _increment_failures

@@ -58,6 +58,13 @@ parse_start_args() {
                 ;;
         esac
     done
+
+    case "$TARGET" in
+        backend | frontend | all) ;;
+        *)
+            die "Unknown target for start: $TARGET\nRun './nukelabctl start --help' for usage."
+            ;;
+    esac
 }
 
 cmd_start() {

@@ -114,7 +114,8 @@ Quick reference:
 # Create backup
 ./nukelabctl backup
 
-# Restore from backup
+# Restore from backup (drops/recreates the DB; asks for confirmation,
+# pass --yes to skip the prompt)
 ./nukelabctl restore backups/nukelab_backup_YYYYMMDD_HHMMSS.sql
 ```
 
