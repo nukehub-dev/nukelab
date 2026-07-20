@@ -19,14 +19,20 @@ import {
   Building2,
   Users,
   Briefcase,
+  Server,
+  Cpu,
+  MemoryStick,
+  HardDrive,
+  CircuitBoard,
   type LucideIcon,
 } from 'lucide-react'
 
 import { AvatarEditDialog } from './avatar-edit-dialog'
 import { useAuthStore } from '../../stores/auth-store'
 import { useToast } from '../../stores/toast-store'
-import { cn, parseUtcDate } from '../../lib/utils'
+import { cn, formatBytes, parseMemoryString, parseUtcDate } from '../../lib/utils'
 import { api } from '../../lib/api'
+import { useMyQuota } from '../../hooks/use-quotas'
 import type { User } from '../../types/api'
 import { Card } from '../ui/card'
 import {
@@ -136,6 +142,53 @@ function DetailRow({
       </span>
     </div>
   )
+}
+
+function QuotaRow({
+  icon: Icon,
+  label,
+  usedText,
+  limitText,
+  ratio,
+}: {
+  icon: LucideIcon
+  label: string
+  usedText: string
+  limitText: string
+  ratio: number
+}) {
+  const pct = Math.min(Math.max(Math.round(ratio * 100), 0), 100)
+  const nearLimit = ratio >= 0.9
+  return (
+    <div className="py-2.5 space-y-1.5">
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 text-sm text-muted-foreground shrink-0">
+          <Icon className="w-4 h-4 shrink-0" />
+          <span className="whitespace-nowrap">{label}</span>
+        </div>
+        <span
+          className={cn(
+            'text-sm font-medium text-right ml-auto whitespace-nowrap',
+            nearLimit && 'text-amber-400'
+          )}
+        >
+          {usedText} / {limitText}
+        </span>
+      </div>
+      <div className="h-1 rounded-full bg-muted overflow-hidden">
+        <div
+          className={cn('h-full rounded-full', nearLimit ? 'bg-amber-400' : 'bg-primary')}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  )
+}
+
+/** Ratio of used MB against a Docker-style limit string ("16g", "512m"). */
+function sizeQuotaRatio(usedMb: number, limitStr: string): number {
+  const limitBytes = parseMemoryString(limitStr)
+  return limitBytes > 0 ? (usedMb * 1024 * 1024) / limitBytes : 0
 }
 
 function RoleBadge({ role }: { role: string }) {
@@ -419,6 +472,7 @@ export function ProfilePage() {
   const user = useAuthStore((s) => s.user)
   const setUser = useAuthStore((s) => s.setUser)
   const { success, error } = useToast()
+  const { data: quota, isLoading: quotaLoading, isError: quotaError } = useMyQuota()
 
   const [editOpen, setEditOpen] = useState(false)
   const [avatarDialogOpen, setAvatarDialogOpen] = useState(false)
@@ -723,6 +777,73 @@ export function ProfilePage() {
                     {user.daily_allowance.toLocaleString()} NUKE
                   </span>
                 </div>
+              </SectionCard>
+
+              {/* Resource Quota */}
+              <SectionCard className="p-6" delay={0.18}>
+                <h3 className="text-lg font-semibold mb-1">Resource Quota</h3>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Your current usage against resource limits
+                </p>
+
+                {quotaLoading ? (
+                  <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Loading quota…
+                  </div>
+                ) : quotaError || !quota ? (
+                  <p className="py-4 text-sm text-muted-foreground">
+                    Quota information is unavailable right now
+                  </p>
+                ) : (
+                  <div className="divide-y divide-border/30">
+                    <QuotaRow
+                      icon={Server}
+                      label="Servers"
+                      usedText={String(quota.usage.servers)}
+                      limitText={String(quota.limits.max_servers_total)}
+                      ratio={
+                        quota.limits.max_servers_total > 0
+                          ? quota.usage.servers / quota.limits.max_servers_total
+                          : 0
+                      }
+                    />
+                    <QuotaRow
+                      icon={Cpu}
+                      label="CPU"
+                      usedText={`${quota.usage.cpu}`}
+                      limitText={`${quota.limits.max_cpu_total} cores`}
+                      ratio={
+                        quota.limits.max_cpu_total > 0
+                          ? quota.usage.cpu / quota.limits.max_cpu_total
+                          : 0
+                      }
+                    />
+                    <QuotaRow
+                      icon={MemoryStick}
+                      label="Memory"
+                      usedText={formatBytes(quota.usage.memory_mb * 1024 * 1024)}
+                      limitText={formatBytes(parseMemoryString(quota.limits.max_memory_total))}
+                      ratio={sizeQuotaRatio(quota.usage.memory_mb, quota.limits.max_memory_total)}
+                    />
+                    <QuotaRow
+                      icon={HardDrive}
+                      label="Disk"
+                      usedText={formatBytes(quota.usage.disk_mb * 1024 * 1024)}
+                      limitText={formatBytes(parseMemoryString(quota.limits.max_disk_total))}
+                      ratio={sizeQuotaRatio(quota.usage.disk_mb, quota.limits.max_disk_total)}
+                    />
+                    {quota.limits.max_gpu_total > 0 && (
+                      <QuotaRow
+                        icon={CircuitBoard}
+                        label="GPU"
+                        usedText={String(quota.usage.gpu)}
+                        limitText={String(quota.limits.max_gpu_total)}
+                        ratio={quota.usage.gpu / quota.limits.max_gpu_total}
+                      />
+                    )}
+                  </div>
+                )}
               </SectionCard>
 
               {/* Preferences */}

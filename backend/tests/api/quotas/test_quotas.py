@@ -67,6 +67,23 @@ class TestQuotaAdminEndpoints:
         assert "data" in data
 
     @pytest.mark.asyncio
+    async def test_get_my_quota_as_regular_user(self, client, user_token, test_user, db_session):
+        """Regular user should be able to read their own quota."""
+        quota = ResourceQuota(user_id=test_user.id, max_cpu_total=2.0, max_memory_total="8g")
+        db_session.add(quota)
+        await db_session.commit()
+
+        with mock.patch("app.api.quotas.QuotaService.recalculate_usage", return_value=quota):
+            response = await client.get(
+                "/api/quotas/", headers={"Authorization": f"Bearer {user_token}"}
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["data"]["limits"]["max_cpu_total"] == 2.0
+
+    @pytest.mark.asyncio
     async def test_check_spawn_allowed(self, client, support_token, support_user, db_session):
         """Support user should be able to check spawn allowance."""
         quota = ResourceQuota(user_id=support_user.id, max_cpu_total=2.0)
