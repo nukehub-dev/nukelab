@@ -148,6 +148,11 @@ class Settings(BaseSettings):
     docker_pull_policy: str = "if-not-present"
     volume_storage_path: str = ""
 
+    # NVIDIA GPU support. Requires an NVIDIA driver, nvidia-container-toolkit,
+    # and (for Podman) a CDI spec on the host.
+    gpu_enabled: bool = False
+    gpu_cdi_device: str = "nvidia.com/gpu=all"
+
     # Container runtime hardening (defaults to enabled unless dev_mode is True)
     container_hardening_enabled: bool | None = None
     container_user: str = "nukelab"

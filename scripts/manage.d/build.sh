@@ -95,7 +95,7 @@ _build_environments() {
         fi
     done
     if $_has_all; then
-        _envs=(base workspace radiation-transport dev)
+        _envs=(base workspace radiation-transport gpu dev)
     fi
 
     for _env in "${_envs[@]}"; do
@@ -117,7 +117,7 @@ Build container images.
 
 ${BOLD}Targets:${RESET} backend | frontend | all | env <name>
 
-${BOLD}Environment names:${RESET} base | workspace | radiation-transport | dev | all
+${BOLD}Environment names:${RESET} base | workspace | radiation-transport | gpu | dev | all
 
 ${BOLD}Options:${RESET}
   --no-cache    Build without reusing the container layer cache.

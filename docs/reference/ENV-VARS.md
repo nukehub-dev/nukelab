@@ -116,6 +116,8 @@ See `.env.example` for per-role RPM limits (`RATE_LIMIT_*_RPM`) and the master
 | `COMPOSE_OVERLAYS` | Space-separated extra compose files |
 | `VOLUME_STORAGE_PATH` | Host path for volume file operations |
 | `XFS_QUOTA_ENABLED` | Enable kernel-enforced XFS project quotas |
+| `GPU_ENABLED` | Enable NVIDIA GPU passthrough for user servers (see `docs/operations/GPU-SETUP.md`) |
+| `GPU_CDI_DEVICE` | CDI device spec used on Podman (default `nvidia.com/gpu=all`) |
 | `UPLOAD_DIR` | Container path for uploads |
 
 ### Server container authentication

@@ -133,6 +133,7 @@ class ServerResponse(BaseModel):
     allocated_cpu: float | None = None
     allocated_memory: str | None = None
     allocated_disk: str | None = None
+    allocated_gpu: int | None = None
     health_status: str | None = None
     status_reason: str | None = None
     user_id: str | None = None
@@ -511,6 +512,7 @@ async def create_server(
             cpu=plan.cpu_limit,
             memory=plan.memory_limit,
             disk=plan.disk_limit,
+            gpu=plan.gpu_limit,
             volume_mounts=volume_mounts,
         )
 
@@ -573,6 +575,7 @@ async def create_server(
             allocated_cpu=server.allocated_cpu,
             allocated_memory=server.allocated_memory,
             allocated_disk=server.allocated_disk,
+            allocated_gpu=server.allocated_gpu,
             health_status=server.health_status,
             status_reason=server.status_reason,
             user_id=str(server.user_id),
@@ -715,6 +718,7 @@ async def list_servers(
                     "allocated_cpu": s.allocated_cpu,
                     "allocated_memory": s.allocated_memory,
                     "allocated_disk": s.allocated_disk,
+                    "allocated_gpu": s.allocated_gpu,
                     "health_status": s.health_status,
                     "status_reason": s.status_reason,
                     "stop_reason": s.stop_reason,
@@ -781,6 +785,7 @@ async def get_server(
         "allocated_cpu": server.allocated_cpu,
         "allocated_memory": server.allocated_memory,
         "allocated_disk": server.allocated_disk,
+        "allocated_gpu": server.allocated_gpu,
         "health_status": server.health_status,
         "status_reason": server.status_reason,
         "stop_reason": server.stop_reason,
@@ -851,6 +856,7 @@ async def get_server_by_path(
         "allocated_cpu": server.allocated_cpu,
         "allocated_memory": server.allocated_memory,
         "allocated_disk": server.allocated_disk,
+        "allocated_gpu": server.allocated_gpu,
         "health_status": server.health_status,
         "status_reason": server.status_reason,
         "stop_reason": server.stop_reason,
@@ -968,6 +974,7 @@ async def _perform_server_start(
                     cpu=plan.cpu_limit if plan else server.allocated_cpu,
                     memory=plan.memory_limit if plan else server.allocated_memory,
                     disk=plan.disk_limit if plan else server.allocated_disk,
+                    gpu=plan.gpu_limit if plan else (server.allocated_gpu or 0),
                     volume_mounts=volume_mounts or None,
                     server_id=str(server.id),
                 )
@@ -1055,6 +1062,7 @@ async def _perform_server_start(
                 cpu=plan.cpu_limit if plan else server.allocated_cpu,
                 memory=plan.memory_limit if plan else server.allocated_memory,
                 disk=plan.disk_limit if plan else server.allocated_disk,
+                gpu=plan.gpu_limit if plan else (server.allocated_gpu or 0),
                 volume_mounts=volume_mounts or None,
                 server_id=str(server.id),
             )
@@ -1259,6 +1267,7 @@ async def _perform_server_restart(
                     cpu=plan.cpu_limit if plan else server.allocated_cpu,
                     memory=plan.memory_limit if plan else server.allocated_memory,
                     disk=plan.disk_limit if plan else server.allocated_disk,
+                    gpu=plan.gpu_limit if plan else (server.allocated_gpu or 0),
                     volume_mounts=volume_mounts or None,
                     server_id=str(server.id),
                 )
@@ -1561,6 +1570,7 @@ async def update_server(
         server.allocated_cpu = plan.cpu_limit
         server.allocated_memory = plan.memory_limit
         server.allocated_disk = plan.disk_limit
+        server.allocated_gpu = plan.gpu_limit
         needs_recreate = True
 
     # Validate and apply environment change
@@ -1731,6 +1741,7 @@ async def update_server(
                 cpu=plan.cpu_limit if plan else server.allocated_cpu,
                 memory=plan.memory_limit if plan else server.allocated_memory,
                 disk=plan.disk_limit if plan else server.allocated_disk,
+                gpu=plan.gpu_limit if plan else (server.allocated_gpu or 0),
                 volume_mounts=spawn_mounts or None,
                 server_id=str(server.id),
             )
@@ -1771,6 +1782,7 @@ async def update_server(
         allocated_cpu=server.allocated_cpu,
         allocated_memory=server.allocated_memory,
         allocated_disk=server.allocated_disk,
+        allocated_gpu=server.allocated_gpu,
         health_status=server.health_status,
         status_reason=server.status_reason,
         user_id=str(server.user_id),

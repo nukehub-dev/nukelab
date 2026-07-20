@@ -170,6 +170,9 @@ services:
             - SERVER_AUTH_AUDIT_LOG=${SERVER_AUTH_AUDIT_LOG:-true}
             # Container runtime hardening (default true; set false in dev if needed)
             - CONTAINER_HARDENING_ENABLED=${CONTAINER_HARDENING_ENABLED:-true}
+            # NVIDIA GPU passthrough for user servers (requires host toolkit + CDI)
+            - GPU_ENABLED=${GPU_ENABLED:-false}
+            - GPU_CDI_DEVICE=${GPU_CDI_DEVICE:-nvidia.com/gpu=all}
             # Email / SMTP configuration
             - SMTP_HOST=${SMTP_HOST:-}
             - SMTP_PORT=${SMTP_PORT:-587}
@@ -360,6 +363,10 @@ services:
             - XFS_QUOTA_ENABLED=${XFS_QUOTA_ENABLED:-false}
             - XFS_PROJECT_ID_START=${XFS_PROJECT_ID_START:-10000}
             - XFS_PROJECTS_FILE=${XFS_PROJECTS_FILE:-/data/xfs/projects.nukelab}
+            # NVIDIA GPU passthrough — required: scheduled/auto spawns and GPU
+            # metrics collection run in this worker, not in the API container.
+            - GPU_ENABLED=${GPU_ENABLED:-false}
+            - GPU_CDI_DEVICE=${GPU_CDI_DEVICE:-nvidia.com/gpu=all}
             # Email / SMTP configuration — required: notification emails are
             # sent by Celery tasks running in this worker, not by the API.
             - SMTP_HOST=${SMTP_HOST:-}

@@ -56,6 +56,7 @@ class ServerSpawner:
         cpu: float = 1.0,
         memory: str = "2g",
         disk: str = "10g",
+        gpu: int = 0,
         env_vars: dict | None = None,
         volume_mounts: list[dict[str, Any]] | None = None,
         server_id: str | None = None,
@@ -65,6 +66,12 @@ class ServerSpawner:
         Args:
             volume_mounts: List of dicts with keys: volume_id, mount_path, mode
         """
+        if gpu > 0 and not settings.gpu_enabled:
+            raise Exception(
+                "GPU requested but GPU support is disabled. "
+                "Set GPU_ENABLED=true on the backend to enable NVIDIA GPU support."
+            )
+
         container_client = await self._get_container_client()
 
         # Use existing server ID or generate new one
@@ -259,6 +266,7 @@ class ServerSpawner:
                 cpu_limit=cpu,
                 memory_limit=memory,
                 disk_limit=disk,
+                gpu_limit=gpu,
                 volumes=volumes,
                 hostname="NukeLab",
                 network_aliases=[health_alias],
@@ -340,6 +348,7 @@ class ServerSpawner:
                 allocated_cpu=cpu,
                 allocated_memory=memory,
                 allocated_disk=disk,
+                allocated_gpu=gpu,
                 external_url=f"{public_url}{route_prefix}",
                 started_at=datetime.now(UTC).replace(tzinfo=None),
                 created_at=datetime.now(UTC).replace(tzinfo=None),

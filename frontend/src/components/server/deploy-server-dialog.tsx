@@ -226,7 +226,8 @@ export function DeployServerDialog({
                   data-testid={`deploy-server-plan-${plan.id}`}
                 >
                   {plan.name} ({plan.cpu_limit} CPU / {plan.memory_limit} /{' '}
-                  {formatPlanResource(plan.disk_limit)} disk)
+                  {formatPlanResource(plan.disk_limit)} disk
+                  {plan.gpu_limit > 0 ? ` · ${plan.gpu_limit} GPU` : ''})
                 </SelectItem>
               ))}
             </Select>

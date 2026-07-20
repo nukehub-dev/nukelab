@@ -33,6 +33,7 @@
 - **OpenTelemetry Distributed Tracing** — End-to-end across FastAPI, Celery, SQLAlchemy, Redis
 - **CI/CD Pipeline** — GitHub Actions lint/test/build/push, path-filtered
 - **Load Testing** — Locust/k6 hybrid, five profiles, PgBouncer connection flood
+- **NVIDIA GPU Support** — Plan-based GPU passthrough (Podman CDI / Docker DeviceRequests), quota accounting, GPU metrics, CUDA environment image (`docs/operations/GPU-SETUP.md`)
 
 See [IMPLEMENTATION-PHASES.md](IMPLEMENTATION-PHASES.md) for the full phase-by-phase record.
 
@@ -57,7 +58,6 @@ See [IMPLEMENTATION-PHASES.md](IMPLEMENTATION-PHASES.md) for the full phase-by-p
 ## Deferred goals
 
 - Kubernetes migration (Helm, HPA, PVCs, Network Policies, Pod Security Standards)
-- GPU allocation and metrics
 - Blue-green/rollback deployment automation
 - Marketplace / plugin system
 

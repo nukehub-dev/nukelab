@@ -16,6 +16,33 @@ from app.models.server_metric import ServerMetric
 logger = get_logger(__name__)
 
 
+def parse_nvidia_smi_csv(output: str) -> dict | None:
+    """Parse the first CSV row of `nvidia-smi --query-gpu=utilization.gpu,
+    memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits`.
+
+    Returns a dict with gpu_percent (float), gpu_memory_used/gpu_memory_total
+    (int MB) and gpu_temperature (float), or None when the output is missing
+    or malformed. Pure function so it is unit-testable.
+    """
+    if not output or not output.strip():
+        return None
+
+    first_line = output.strip().splitlines()[0]
+    parts = [part.strip() for part in first_line.split(",")]
+    if len(parts) < 4:
+        return None
+
+    try:
+        return {
+            "gpu_percent": float(parts[0]),
+            "gpu_memory_used": int(float(parts[1])),
+            "gpu_memory_total": int(float(parts[2])),
+            "gpu_temperature": float(parts[3]),
+        }
+    except (TypeError, ValueError):
+        return None
+
+
 class MetricsCollector:
     """
     Collects container metrics from Docker Stats API.
@@ -96,6 +123,15 @@ class MetricsCollector:
                 return
 
             metrics = self._parse_container_stats(stats1, stats2, server_id, container_id)
+
+            # GPU metrics for servers with an allocated GPU. Best-effort: any
+            # failure leaves the GPU fields null and never fails collection.
+            allocated_gpu = await self._get_server_allocated_gpu(server_id)
+            if allocated_gpu > 0:
+                gpu_metrics = await self._collect_gpu_metrics(container)
+                if gpu_metrics:
+                    metrics.update(gpu_metrics)
+
             await self._persist_metrics(metrics)
             await self._broadcast_metrics(metrics)
         except Exception:
@@ -180,6 +216,86 @@ class MetricsCollector:
             "pids": stats2.get("pids_stats", {}).get("current", 0),
             "collected_at": datetime.now(UTC).replace(tzinfo=None),
         }
+
+    async def _get_server_allocated_gpu(self, server_id: str) -> int:
+        """Fetch the server's allocated GPU count using a fresh engine.
+
+        Mirrors _persist_metrics' fresh-engine pattern because the collector
+        runs in the Celery worker event loop. Returns 0 on any failure so GPU
+        metric collection is simply skipped.
+        """
+        from sqlalchemy import select
+        from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+        from sqlalchemy.orm import sessionmaker
+        from sqlalchemy.pool import NullPool
+
+        from app.models.server import Server
+
+        _use_pgbouncer = bool(settings.database_pgbouncer_url)
+        _connect_args = {"command_timeout": settings.database_query_timeout_seconds}
+        if _use_pgbouncer:
+            _connect_args["statement_cache_size"] = 0
+            _connect_args["prepared_statement_name_func"] = lambda: ""
+
+        _engine_kwargs = {
+            "echo": False,
+            "future": True,
+            "connect_args": _connect_args,
+        }
+        if _use_pgbouncer:
+            _engine_kwargs["poolclass"] = NullPool
+        else:
+            _engine_kwargs.update(pool_size=1, max_overflow=0)
+
+        _db_url = settings.database_pgbouncer_url if _use_pgbouncer else settings.database_url
+
+        engine = None
+        try:
+            engine = create_async_engine(_db_url, **_engine_kwargs)
+            AsyncSessionLocal = sessionmaker(
+                engine,
+                class_=AsyncSession,
+                expire_on_commit=False,
+            )
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(
+                    select(Server.allocated_gpu).where(Server.id == server_id)
+                )
+                return result.scalar_one_or_none() or 0
+        except Exception as e:
+            logger.debug("Could not load allocated_gpu for server %s: %s", server_id, e)
+            return 0
+        finally:
+            if engine:
+                with contextlib.suppress(Exception):
+                    await engine.dispose()
+
+    async def _collect_gpu_metrics(self, container) -> dict | None:
+        """Run nvidia-smi inside the container and parse GPU utilization.
+
+        Note: nvidia-smi reports whole-GPU stats, not per-container usage —
+        when several containers share a GPU these values reflect the device
+        as a whole. Best-effort: returns None on any failure.
+        """
+        try:
+            exec_instance = await container.exec(
+                [
+                    "nvidia-smi",
+                    "--query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu",
+                    "--format=csv,noheader,nounits",
+                ]
+            )
+            output = b""
+            async with exec_instance.start(detach=False) as stream:
+                while True:
+                    message = await stream.read_out()
+                    if message is None:
+                        break
+                    output += message.data
+            return parse_nvidia_smi_csv(output.decode("utf-8", errors="replace"))
+        except Exception as e:
+            logger.debug("GPU metrics collection failed: %s", e)
+            return None
 
     async def _persist_metrics(self, metrics: dict):
         """Save metrics to database using a fresh engine"""

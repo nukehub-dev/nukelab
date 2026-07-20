@@ -26,6 +26,7 @@ class ContainerClient:
         self._storage_support: bool | None = None
         self._lxcfs_support: bool | None = None
         self._cpu_lib_volume_ready: bool = False
+        self._is_podman: bool | None = None
 
     async def connect(self):
         """Connect to Docker/Podman socket"""
@@ -39,6 +40,25 @@ class ContainerClient:
     async def pull_image(self, image: str):
         """Pull Docker image"""
         await self.client.images.pull(image)
+
+    async def _detect_podman(self) -> bool:
+        """Detect whether the container runtime is Podman (cached).
+
+        Podman's Docker-compatible /version endpoint reports a "Podman Engine"
+        component, while Docker does not. Defaults to False (Docker) when the
+        version call fails.
+        """
+        if self._is_podman is not None:
+            return self._is_podman
+
+        try:
+            info = await self.client.version()
+            self._is_podman = "podman" in str(info).lower()
+        except Exception as e:
+            logger.warning(f"Could not detect container engine type: {e}. Assuming Docker.")
+            self._is_podman = False
+
+        return self._is_podman
 
     async def _get_available_controllers(self) -> set[str]:
         """Detect available cgroup v2 controllers from the host"""
@@ -246,6 +266,7 @@ class ContainerClient:
         cpu_limit: float | None = None,
         memory_limit: str | None = None,
         disk_limit: str | None = None,
+        gpu_limit: int = 0,
         hostname: str | None = None,
         network_aliases: list[str] | None = None,
     ):
@@ -385,6 +406,31 @@ class ContainerClient:
                     f"Expected in production with XFS(pquota), ZFS, or Btrfs. "
                     f"Disk limits will not be enforced."
                 )
+
+        # --- GPU (NVIDIA) device requests ---
+        if gpu_limit > 0:
+            if not settings.gpu_enabled:
+                raise ValueError("GPU requested but GPU support is disabled (GPU_ENABLED=false)")
+            if await self._detect_podman():
+                # Podman uses CDI (Container Device Interface) for GPU injection.
+                config["HostConfig"]["DeviceRequests"] = [
+                    {
+                        "Driver": "cdi",
+                        "DeviceIDs": [settings.gpu_cdi_device],
+                        "Capabilities": [["gpu"]],
+                    }
+                ]
+                logger.info(f"Applied GPU request via CDI device: {settings.gpu_cdi_device}")
+            else:
+                # Docker uses the nvidia container runtime driver.
+                config["HostConfig"]["DeviceRequests"] = [
+                    {
+                        "Driver": "nvidia",
+                        "Count": gpu_limit,
+                        "Capabilities": [["gpu", "compute", "utility"]],
+                    }
+                ]
+                logger.info(f"Applied GPU request: {gpu_limit} NVIDIA GPU(s)")
 
         # --- CPU mask library volume (read-only) ---
         await self._ensure_cpu_lib_volume()
