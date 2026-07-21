@@ -90,16 +90,12 @@ ENV PATH="${NUKE_DIR}/bin:${MOAB_ROOT}/bin:${DOUBLE_DOWN_ROOT}/lib:${GEANT4_ROOT
 ENV LD_LIBRARY_PATH="${MOAB_ROOT}/lib:${DOUBLE_DOWN_ROOT}/lib:${GEANT4_ROOT}/lib:${DAGMC_ROOT}/lib:${LIBMESH_ROOT}/lib:${NJOY2016_ROOT}/lib:${OPENMC_ROOT}/lib:${KDSOURCE_ROOT}/lib"
 
 # Create the dedicated Conda environment for the nuclear codes.
-# paraview/vtk are pinned: pip's cadquery_vtk (pulled in via paramak ->
-# cadquery) shares the vtkmodules namespace with conda's vtk; this exact
-# combo is verified to coexist (see the repair step at the end of the file).
 ARG PYTHON_VERSION
 RUN conda create --yes -p ${NUKE_DIR} \
         python=${PYTHON_VERSION} \
         ipykernel \
         xeus-cling \
-        paraview=6.0.1 \
-        vtk=9.5.2 \
+        paraview \
         pythonocc-core && \
     conda clean --all -f -y
 
