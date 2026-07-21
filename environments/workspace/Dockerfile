@@ -15,6 +15,7 @@ RUN apt-get update && \
         ffmpeg \
         libx11-dev \
         libxkbfile-dev \
+        xvfb \
         && \
     # Remove downloaded package files to reduce the final image size.
     apt-get clean && rm -rf /var/lib/apt/lists/* && \
@@ -65,4 +66,11 @@ COPY ide.conf /etc/nginx/conf.d/ide.conf
 # --hostname :: makes Theia listen on the IPv6 any-address (which also
 # accepts IPv4 connections), so nginx can reach it via localhost even when
 # the container resolver prefers ::1 for localhost.
-ENV NUKELAB_START_COMMAND="yarn --cwd /opt/nuke-ide/applications/browser theia start --hostname :: --plugins=local-dir:../../plugins"
+# start-ide.sh first launches Xvfb on $DISPLAY: conda-forge ParaView/VTK
+# (used by the nuke-ide visualizer) are X11/GLX-only builds and abort with
+# "bad X server connection" when creating a render window without an X
+# connection, even offscreen. The IDE backend passes DISPLAY through to the
+# visualizer server process.
+COPY --chmod=755 start-ide.sh /opt/nukelab/start-ide.sh
+ENV DISPLAY=:99
+ENV NUKELAB_START_COMMAND="/opt/nukelab/start-ide.sh"

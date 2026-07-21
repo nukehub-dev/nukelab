@@ -61,8 +61,7 @@ RUN apt-get update && \
         # Graphics and Visualization Libraries
         libxft-dev \
         libxext-dev \
-        libglu1-mesa-dev \
-        xvfb && \
+        libglu1-mesa-dev && \
     # Remove downloaded package files to reduce the final image size.
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
@@ -93,9 +92,11 @@ ARG PYTHON_VERSION
 RUN conda create --yes -p ${NUKE_DIR} \
         python=${PYTHON_VERSION} \
         ipykernel \
-        xeus-cling \
         paraview \
-        pythonocc-core && \
+        trame3 \
+        pythonocc-core \
+        cadquery \
+        gmsh && \
     conda clean --all -f -y
 
 # Activate the nuclear conda environment in login shells (terminals).
@@ -265,9 +266,6 @@ RUN git clone -b ${ALARA_BRANCH} --depth 1 https://github.com/svalinn/ALARA && \
 # setuptools must stay <81 (pkg_resources was removed in setuptools 81).
 RUN pip install --no-cache-dir \
         --extra-index-url https://shimwell.github.io/wheels \
-        gmsh \
-        "trame<3" \
-        "setuptools<81" \
         moab \
         montepy \
         ncrystal \
@@ -276,12 +274,3 @@ RUN pip install --no-cache-dir \
         geant4-pybind \
         vmecpp \
         git+https://github.com/svalinn/pydagmc@4afa678d24aa091417798ef4b3d11fda98b165f8
-
-# Headless rendering for the nuke-ide visualizer: conda-forge ParaView/VTK
-# are X11/GLX-only builds and abort ("bad X server connection") when creating
-# a render window without an X connection, even offscreen. start-ide.sh
-# launches Xvfb on $DISPLAY before starting the IDE, and the IDE backend
-# passes DISPLAY through to the visualizer server process.
-COPY --chmod=755 start-ide.sh /opt/nukelab/start-ide.sh
-ENV DISPLAY=:99 \
-    NUKELAB_START_COMMAND="/opt/nukelab/start-ide.sh"
