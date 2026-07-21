@@ -29,6 +29,10 @@ COPY --from=nukelab-auth-sidecar:latest --chmod=755 /auth-sidecar /usr/local/bin
 # Copy shared nginx config
 COPY nginx.conf /etc/nginx/nginx.conf
 
+# Starting page served while the environment app is still booting (see
+# error_page 5xx directive in nginx.conf)
+COPY starting.html /usr/share/nginx/html/starting.html
+
 # Prepare directories so nginx can run as the non-root nukelab user.
 # When the backend enables ReadonlyRootfs, these paths are mounted as tmpfs.
 # Drop-in config directory lets child environments add location blocks without

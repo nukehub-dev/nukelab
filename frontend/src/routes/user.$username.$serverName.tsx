@@ -66,7 +66,11 @@ async function ensureServiceWorkerUpdated(): Promise<void> {
   // Force an update and activate any waiting worker before we navigate.
   if (!('serviceWorker' in navigator)) return
   try {
-    const registration = await navigator.serviceWorker.ready
+    // navigator.serviceWorker.ready never resolves when no worker is
+    // registered (e.g. the Vite dev server, which does not register one),
+    // so check for a registration first instead of awaiting it blindly.
+    const registration = await navigator.serviceWorker.getRegistration()
+    if (!registration) return
     await registration.update()
     if (registration.waiting) {
       registration.waiting.postMessage({ type: 'SKIP_WAITING' })
@@ -686,45 +690,66 @@ function ServerGatewayPage() {
     }
   }, [server])
 
-  // When server transitions to running, get access token and redirect
+  // When server transitions to running, get access token and redirect.
+  // Wait for health_status === 'healthy' first (capped at 15s) so the
+  // one-shot redirect does not land on a transient 503 while Traefik
+  // routing and in-container app startup are still settling.
   useEffect(() => {
-    if (server?.status === 'running') {
-      const redirectKey = `server-redirect-${server.id}`
-      const alreadyRedirected = sessionStorage.getItem(redirectKey)
+    if (server?.status !== 'running') return
+    if (startTimeRef.current === null) startTimeRef.current = Date.now()
 
-      if (alreadyRedirected) {
-        queueMicrotask(() => setManualOpenReady(true))
-        return
-      }
-
-      // For cross-user access, don't auto-redirect; show manual open button
-      // so user can provide a reason via prompt
-      if (!isOwnServer) {
-        queueMicrotask(() => setManualOpenReady(true))
-        return
-      }
-
-      sessionStorage.setItem(redirectKey, 'true')
-
-      const getAccessTokenAndRedirect = async () => {
-        try {
-          await getServerAccessToken(server.id)
-          // Force a real navigation so the service worker bypass for /user/ routes
-          // sends the request to the terminal container instead of the SPA shell.
-          await ensureServiceWorkerUpdated()
-          window.location.href = server.external_url || window.location.href
-        } catch (err) {
-          setTokenError(err instanceof Error ? err.message : 'Failed to get access token')
-          setManualOpenReady(true)
-        }
-      }
-
-      const timeout = setTimeout(() => {
-        getAccessTokenAndRedirect()
-      }, 3000)
-      return () => clearTimeout(timeout)
+    const waitedMs = Date.now() - startTimeRef.current
+    if (server.health_status !== 'healthy' && waitedMs < 15000) {
+      const interval = setInterval(() => {
+        queryClient.invalidateQueries({ queryKey: ['server-by-path', username, serverName] })
+      }, 2000)
+      return () => clearInterval(interval)
     }
-  }, [server?.status, server?.id, server?.external_url, isOwnServer])
+
+    const redirectKey = `server-redirect-${server.id}`
+    const alreadyRedirected = sessionStorage.getItem(redirectKey)
+
+    if (alreadyRedirected) {
+      queueMicrotask(() => setManualOpenReady(true))
+      return
+    }
+
+    // For cross-user access, don't auto-redirect; show manual open button
+    // so user can provide a reason via prompt
+    if (!isOwnServer) {
+      queueMicrotask(() => setManualOpenReady(true))
+      return
+    }
+
+    sessionStorage.setItem(redirectKey, 'true')
+
+    const getAccessTokenAndRedirect = async () => {
+      try {
+        await getServerAccessToken(server.id)
+        // Force a real navigation so the service worker bypass for /user/ routes
+        // sends the request to the terminal container instead of the SPA shell.
+        await ensureServiceWorkerUpdated()
+        window.location.href = server.external_url || window.location.href
+      } catch (err) {
+        setTokenError(err instanceof Error ? err.message : 'Failed to get access token')
+        setManualOpenReady(true)
+      }
+    }
+
+    const timeout = setTimeout(() => {
+      getAccessTokenAndRedirect()
+    }, 1000)
+    return () => clearTimeout(timeout)
+  }, [
+    server?.status,
+    server?.id,
+    server?.external_url,
+    server?.health_status,
+    isOwnServer,
+    queryClient,
+    username,
+    serverName,
+  ])
 
   const handleStart = useCallback(async () => {
     if (!server) return
