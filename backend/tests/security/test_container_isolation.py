@@ -17,22 +17,16 @@ def _make_mock_container_client(captured: dict):
 
     async def fake_create_container(**kwargs):
         captured["create_kwargs"] = kwargs
-        mock_container = MagicMock()
-        mock_container.id = "mock-cid"
-        return mock_container
-
-    mock_client = MagicMock()
-    mock_client.volumes = MagicMock()
-    mock_client.volumes.get = AsyncMock(side_effect=Exception("not found"))
-    mock_client.volumes.create = AsyncMock()
-    mock_client.images = MagicMock()
-    mock_client.images.get = AsyncMock(side_effect=Exception("not found"))
+        return "mock-cid"
 
     mock_container_client = MagicMock()
-    mock_container_client.client = mock_client
+    mock_container_client.ensure_volume = AsyncMock()
+    mock_container_client.image_exists = AsyncMock(return_value=False)
     mock_container_client.pull_image = AsyncMock()
+    mock_container_client.get_container_by_name = AsyncMock(return_value=None)
     mock_container_client.create_container = AsyncMock(side_effect=fake_create_container)
     mock_container_client.start_container = AsyncMock()
+    mock_container_client.exec_in_container = AsyncMock(return_value="")
     mock_container_client.wait_for_container_ready = AsyncMock(return_value=True)
     mock_container_client.get_container_info = AsyncMock(
         return_value={"State": {"Status": "running"}}

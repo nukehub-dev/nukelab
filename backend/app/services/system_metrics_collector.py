@@ -61,22 +61,21 @@ class SystemMetricsCollector:
             docker_containers_total = len(containers)
             docker_containers_running = sum(1 for c in containers if c.get("State") == "running")
             # Count actual nukelab servers (containers with nukelab.server.id label)
-            for container in containers:
+            for container_info in containers:
                 try:
-                    container_info = await container.show()
                     labels = container_info.get("Config", {}).get("Labels", {}) or {}
                     if labels.get("nukelab.server.id"):
                         active_servers_count += 1
                 except Exception:
                     pass
-            images = await container_client.client.images.list()
+            images = await container_client.list_images()
             docker_images_total = len(images)
         except Exception:
             pass
         finally:
-            if container_client and container_client.client:
+            if container_client:
                 with contextlib.suppress(Exception):
-                    await container_client.client.close()
+                    await container_client.close()
 
         # Calculate disk I/O rate (bytes/sec) by comparing with previous reading
         disk_read_rate = 0

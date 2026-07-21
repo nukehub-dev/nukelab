@@ -9,7 +9,6 @@ import re
 from datetime import UTC, datetime
 from typing import Any
 
-import aiodocker
 from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +16,7 @@ from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.container.client import get_container_client
+from app.container.driver import ContainerDriverError
 from app.core.logging import get_logger
 from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
 from app.models.volume import Volume
@@ -135,16 +135,14 @@ class VolumeService:
 
         # Create Docker volume
         try:
-            await container_client.client.volumes.create(
-                {
-                    "Name": name,
-                    "Labels": {
-                        "nukelab.managed": "true",
-                        "nukelab.user.id": owner_id,
-                    },
-                }
+            await container_client.create_volume(
+                name,
+                labels={
+                    "nukelab.managed": "true",
+                    "nukelab.user.id": owner_id,
+                },
             )
-        except aiodocker.DockerError as e:
+        except ContainerDriverError as e:
             logger.warning(
                 "Docker volume creation failed",
                 extra={"volume_name": name, "error": e.message},
@@ -382,8 +380,7 @@ class VolumeService:
         # Delete Docker volume
         container_client = await get_container_client()
         try:
-            vol = await container_client.client.volumes.get(volume.name)
-            await vol.delete()
+            await container_client.delete_volume(volume.name)
         except Exception:
             pass
 

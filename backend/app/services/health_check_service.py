@@ -67,8 +67,7 @@ class HealthCheckService:
         container_client = None
         try:
             container_client = await get_fresh_container_client()
-            container = await container_client.client.containers.get(server.container_id)
-            info = await container.show()
+            info = await container_client.get_container_info(server.container_id)
             state = info.get("State", {})
 
             health = state.get("Health", {})
@@ -128,9 +127,9 @@ class HealthCheckService:
             self.db.add(health_check)
             await self.db.commit()
         finally:
-            if container_client and container_client.client:
+            if container_client:
                 with contextlib.suppress(Exception):
-                    await container_client.client.close()
+                    await container_client.close()
 
     async def _auto_restart(self, server: Server):
         """Auto-restart a failed container with rate limiting."""

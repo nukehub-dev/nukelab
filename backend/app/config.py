@@ -148,6 +148,10 @@ class Settings(BaseSettings):
     docker_pull_policy: str = "if-not-present"
     volume_storage_path: str = ""
 
+    # Container runtime driver ("docker" covers Docker and Podman via the
+    # Docker-compatible API; "kubernetes" is reserved for a future k3s driver).
+    container_runtime: str = "docker"
+
     # NVIDIA GPU support. Requires an NVIDIA driver, nvidia-container-toolkit,
     # and (for Podman) a CDI spec on the host.
     gpu_enabled: bool = False

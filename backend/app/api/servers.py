@@ -9,7 +9,6 @@ import logging
 import re
 from datetime import UTC, datetime, timedelta
 
-import aiodocker
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
@@ -18,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import get_current_user, limiter
 from app.config import settings
+from app.container.driver import ContainerDriverError
 from app.container.spawner import spawner
 from app.core.cache import (
     cache_delete,
@@ -727,8 +727,7 @@ async def create_server(
 
                 container_client = await get_container_client()
                 try:
-                    vol = await container_client.client.volumes.get(volume_name)
-                    await vol.delete()
+                    await container_client.delete_volume(volume_name)
                     logger.info(f"Cleaned up Docker volume: {volume_name}")
                 except Exception as e:
                     logger.warning(f"Failed to delete Docker volume {volume_name}: {e}")
@@ -765,8 +764,7 @@ async def create_server(
                 max_len=240,
             )
             try:
-                container = await container_client.client.containers.get(container_name)
-                await container.delete(force=True)
+                await container_client.delete_container(container_name, force=True)
             except Exception:
                 pass
         except Exception:
@@ -2191,8 +2189,8 @@ async def get_server_logs(
             "follow": follow,
             "status": "running",
         }
-    except aiodocker.DockerError:
-        # Container not found or Docker error — return empty logs gracefully
+    except ContainerDriverError:
+        # Container not found or runtime error — return empty logs gracefully
         return {
             "server_id": server_id,
             "logs": "",

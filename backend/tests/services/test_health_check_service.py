@@ -187,14 +187,12 @@ class TestCheckAllContainers:
         service = HealthCheckService(db_session)
 
         mock_client = mock.AsyncMock()
-        mock_container = mock.AsyncMock()
-        mock_container.show.return_value = {
+        mock_client.get_container_info.return_value = {
             "State": {
                 "Running": True,
                 "Health": {"Status": "healthy", "Log": [{"ExitCode": 0, "Output": "OK"}]},
             }
         }
-        mock_client.client.containers.get.return_value = mock_container
 
         with mock.patch(
             "app.services.health_check_service.get_fresh_container_client", return_value=mock_client
@@ -224,14 +222,12 @@ class TestCheckAllContainers:
         service = HealthCheckService(db_session)
 
         mock_client = mock.AsyncMock()
-        mock_container = mock.AsyncMock()
-        mock_container.show.return_value = {
+        mock_client.get_container_info.return_value = {
             "State": {
                 "Running": True,
                 "Health": {"Status": "unhealthy", "Log": [{"ExitCode": 1, "Output": "FAIL"}]},
             }
         }
-        mock_client.client.containers.get.return_value = mock_container
 
         with mock.patch(
             "app.services.health_check_service.get_fresh_container_client", return_value=mock_client
@@ -282,9 +278,7 @@ class TestCheckAllContainers:
         service = HealthCheckService(db_session)
 
         mock_client = mock.AsyncMock()
-        mock_container = mock.AsyncMock()
-        mock_container.show.return_value = {"State": {"Running": True}}
-        mock_client.client.containers.get.return_value = mock_container
+        mock_client.get_container_info.return_value = {"State": {"Running": True}}
 
         with mock.patch(
             "app.services.health_check_service.get_fresh_container_client", return_value=mock_client

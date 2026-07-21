@@ -2658,9 +2658,9 @@ class TestServerLogsBranches:
         db_session.add(s1)
         await db_session.commit()
 
-        from aiodocker.exceptions import DockerError
+        from app.container.driver import ContainerDriverError
 
-        docker_err = DockerError(404, {"message": "not found"})
+        docker_err = ContainerDriverError("not found", status=404)
         mock_client = mock.MagicMock()
         mock_client.get_container_logs = mock.AsyncMock(side_effect=docker_err)
         with mock.patch("app.api.servers.spawner.container_client", mock_client):

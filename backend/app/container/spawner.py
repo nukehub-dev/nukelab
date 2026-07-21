@@ -7,12 +7,12 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-import aiodocker
 from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
 
 from app.config import settings
-from app.container.client import ContainerClient, get_container_client
+from app.container.driver import ContainerDriver, ContainerDriverError
+from app.container.factory import get_driver as get_container_client
 from app.core.logging import get_logger
 from app.models.server import Server
 from app.services.volume_service import make_docker_resource_name
@@ -22,7 +22,7 @@ logger = get_logger(__name__)
 
 class ServerSpawner:
     def __init__(self):
-        self.container_client: ContainerClient | None = None
+        self.container_client: ContainerDriver | None = None
 
     async def _get_container_client(self):
         if not self.container_client:
@@ -32,18 +32,12 @@ class ServerSpawner:
     async def _ensure_volume(self, volume_name: str):
         """Create a named Docker volume if it doesn't exist."""
         container_client = await self._get_container_client()
-        try:
-            await container_client.client.volumes.get(volume_name)
-        except Exception:
-            await container_client.client.volumes.create(
-                {
-                    "Name": volume_name,
-                    "Labels": {
-                        "nukelab.managed": "true",
-                    },
-                }
-            )
-            logger.info("Created volume: %s", volume_name)
+        await container_client.ensure_volume(
+            volume_name,
+            labels={
+                "nukelab.managed": "true",
+            },
+        )
 
     async def spawn(
         self,
@@ -99,11 +93,14 @@ class ServerSpawner:
         # create a new one. This keeps the database and runtime state consistent and
         # prevents DockerError(500, "name already in use").
         try:
-            existing = await container_client.client.containers.get(container_name)
-            logger.warning("Found existing container %s before spawn; removing it", container_name)
-            await existing.delete(force=True)
-            # Wait briefly for container to release the name.
-            await asyncio.sleep(0.5)
+            existing_id = await container_client.get_container_by_name(container_name)
+            if existing_id:
+                logger.warning(
+                    "Found existing container %s before spawn; removing it", container_name
+                )
+                await container_client.delete_container(existing_id, force=True)
+                # Wait briefly for container to release the name.
+                await asyncio.sleep(0.5)
         except Exception:
             pass
 
@@ -237,11 +234,7 @@ class ServerSpawner:
 
         try:
             # Check if image exists locally first, then try to pull
-            try:
-                # Try to inspect image locally
-                await container_client.client.images.get(image)
-            except Exception:
-                # Try to pull if not found locally
+            if not await container_client.image_exists(image):
                 try:
                     await container_client.pull_image(image)
                 except Exception:
@@ -262,7 +255,7 @@ class ServerSpawner:
                 binds.append(bind_str)
 
             # Create container
-            container = await container_client.create_container(
+            container_id = await container_client.create_container(
                 name=container_name,
                 image=image,
                 command="/start.sh",
@@ -280,7 +273,7 @@ class ServerSpawner:
             )
 
             # Start container
-            await container_client.start_container(container.id)
+            await container_client.start_container(container_id)
 
             # Fix volume permissions inside the container.
             # Rootless Podman maps the host UID to container root, so named volumes
@@ -305,12 +298,12 @@ class ServerSpawner:
                     # Run as root so this works in hardened mode, where the
                     # container user is 65532 and cannot chmod a root-owned
                     # named volume that was initialized by an earlier run.
-                    exec_instance = await container.exec(["chmod", "777", mount_path], user="root")
                     # Start the chmod in the background; /start.sh polls for up to
                     # ~10s, so the short delay below is enough for the runtime to
-                    # schedule the exec while avoiding an unawaitable Stream object
-                    # that aiodocker returns with detach=False.
-                    await exec_instance.start(detach=True)
+                    # schedule the exec.
+                    await container_client.exec_in_container(
+                        container_id, ["chmod", "777", mount_path], user="root", detach=True
+                    )
                     await asyncio.sleep(0.5)
                 except Exception as e:
                     logger.warning(
@@ -347,7 +340,7 @@ class ServerSpawner:
                 name=server_name,
                 user_id=uuid.UUID(user_id),
                 environment_id=uuid.UUID(environment_id) if environment_id else None,
-                container_id=container.id,
+                container_id=container_id,
                 image=image,
                 volume_id=uuid.UUID(primary_volume_id) if primary_volume_id else None,
                 status="running",
@@ -366,8 +359,7 @@ class ServerSpawner:
         except Exception as e:
             # Cleanup on failure
             try:
-                container = await container_client.client.containers.get(container_name)
-                await container.delete(force=True)
+                await container_client.delete_container(container_name, force=True)
             except Exception:
                 pass
             raise Exception(f"Failed to spawn server: {str(e)}")
@@ -411,15 +403,8 @@ class ServerSpawner:
         """
         container_client = await self._get_container_client()
         try:
-            info = await container_client.get_container_info(container_id)
-            state = info.get("State", {})
-            if state.get("Running"):
-                return "running"
-            elif state.get("Paused"):
-                return "paused"
-            else:
-                return "stopped"
-        except aiodocker.DockerError as exc:
+            return await container_client.get_container_status(container_id)
+        except ContainerDriverError as exc:
             reason = "not_found" if exc.status == 404 else "api_error"
             if reason == "not_found":
                 logger.debug("Container %s not found during status lookup", container_id)

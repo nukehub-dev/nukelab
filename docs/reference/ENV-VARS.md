@@ -113,6 +113,7 @@ See `.env.example` for per-role RPM limits (`RATE_LIMIT_*_RPM`) and the master
 | `DOCKER_NETWORK` | Network name for spawned containers |
 | `DOCKER_REGISTRY` | Optional image registry |
 | `DOCKER_PULL_POLICY` | `always`, `if-not-present`, or `never` |
+| `CONTAINER_RUNTIME` | Container runtime driver (`docker` covers Podman; `kubernetes` reserved for the future k3s driver) |
 | `COMPOSE_OVERLAYS` | Space-separated extra compose files |
 | `VOLUME_STORAGE_PATH` | Host path for volume file operations |
 | `XFS_QUOTA_ENABLED` | Enable kernel-enforced XFS project quotas |

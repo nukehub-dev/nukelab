@@ -262,14 +262,11 @@ class TestCollectAll:
     async def test_collect_all_with_containers(self):
         """Should process running containers with labels."""
         collector = MetricsCollector()
-        mock_container = mock.AsyncMock()
-        mock_container._id = "cid-1"
-        mock_container.show = mock.AsyncMock(
-            return_value={"Config": {"Labels": {"nukelab.server.id": "srv-1"}}}
-        )
 
         mock_client = mock.AsyncMock()
-        mock_client.list_containers = mock.AsyncMock(return_value=[mock_container])
+        mock_client.list_containers = mock.AsyncMock(
+            return_value=[{"Id": "cid-1", "Config": {"Labels": {"nukelab.server.id": "srv-1"}}}]
+        )
 
         with (
             mock.patch(
@@ -287,12 +284,11 @@ class TestCollectAll:
     async def test_collect_all_skips_missing_labels(self):
         """Should skip containers without nukelab.server.id label."""
         collector = MetricsCollector()
-        mock_container = mock.AsyncMock()
-        mock_container._id = "cid-1"
-        mock_container.show = mock.AsyncMock(return_value={"Config": {"Labels": {}}})
 
         mock_client = mock.AsyncMock()
-        mock_client.list_containers = mock.AsyncMock(return_value=[mock_container])
+        mock_client.list_containers = mock.AsyncMock(
+            return_value=[{"Id": "cid-1", "Config": {"Labels": {}}}]
+        )
 
         with (
             mock.patch(
@@ -317,7 +313,7 @@ class TestCollectAll:
         ):
             await collector.collect_all()
 
-        mock_client.client.close.assert_awaited_once()
+        mock_client.close.assert_awaited_once()
 
 
 class TestCollectContainerMetrics:
@@ -326,13 +322,10 @@ class TestCollectContainerMetrics:
     @pytest.mark.asyncio
     async def test_collect_container_metrics_success(self):
         collector = MetricsCollector()
-        mock_container = mock.AsyncMock()
-        mock_container.stats = mock.AsyncMock(
-            return_value=[{"cpu_stats": {"cpu_usage": {"total_usage": 100}}, "memory_stats": {}}]
-        )
-
         mock_client = mock.AsyncMock()
-        mock_client.client.containers.get = mock.AsyncMock(return_value=mock_container)
+        mock_client.get_container_stats = mock.AsyncMock(
+            return_value={"cpu_stats": {"cpu_usage": {"total_usage": 100}}, "memory_stats": {}}
+        )
 
         with (
             mock.patch(
@@ -348,18 +341,15 @@ class TestCollectContainerMetrics:
                 with mock.patch("asyncio.sleep"):
                     await collector._collect_container_metrics("cid-1", "srv-1")
 
-        mock_client.client.containers.get.assert_awaited_once_with("cid-1")
-        assert mock_container.stats.call_count == 2
+        assert mock_client.get_container_stats.await_count == 2
+        mock_client.get_container_stats.assert_awaited_with("cid-1")
 
     @pytest.mark.asyncio
     async def test_collect_container_metrics_stats_not_dict(self):
         """Should return early when stats is not a dict."""
         collector = MetricsCollector()
-        mock_container = mock.AsyncMock()
-        mock_container.stats = mock.AsyncMock(return_value="not-a-dict")
-
         mock_client = mock.AsyncMock()
-        mock_client.client.containers.get = mock.AsyncMock(return_value=mock_container)
+        mock_client.get_container_stats = mock.AsyncMock(return_value="not-a-dict")
 
         with (
             mock.patch(
@@ -374,10 +364,10 @@ class TestCollectContainerMetrics:
 
     @pytest.mark.asyncio
     async def test_collect_container_metrics_container_error(self):
-        """Should gracefully handle container fetch errors."""
+        """Should gracefully handle container stats errors."""
         collector = MetricsCollector()
         mock_client = mock.AsyncMock()
-        mock_client.client.containers.get = mock.AsyncMock(side_effect=Exception("not found"))
+        mock_client.get_container_stats = mock.AsyncMock(side_effect=Exception("not found"))
 
         with mock.patch(
             "app.services.metrics_collector.get_fresh_container_client", return_value=mock_client
@@ -387,13 +377,10 @@ class TestCollectContainerMetrics:
     @pytest.mark.asyncio
     async def test_collect_container_metrics_closes_client(self):
         collector = MetricsCollector()
-        mock_container = mock.AsyncMock()
-        mock_container.stats = mock.AsyncMock(
-            return_value=[{"cpu_stats": {"cpu_usage": {"total_usage": 100}}, "memory_stats": {}}]
-        )
-
         mock_client = mock.AsyncMock()
-        mock_client.client.containers.get = mock.AsyncMock(return_value=mock_container)
+        mock_client.get_container_stats = mock.AsyncMock(
+            return_value={"cpu_stats": {"cpu_usage": {"total_usage": 100}}, "memory_stats": {}}
+        )
 
         with (
             mock.patch(
@@ -409,4 +396,4 @@ class TestCollectContainerMetrics:
                 with mock.patch("asyncio.sleep"):
                     await collector._collect_container_metrics("cid-1", "srv-1")
 
-        mock_client.client.close.assert_awaited_once()
+        mock_client.close.assert_awaited_once()

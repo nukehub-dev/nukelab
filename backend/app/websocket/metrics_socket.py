@@ -70,7 +70,6 @@ async def stream_logs_to_websocket(
 
     try:
         container_client = await get_container_client()
-        container = await container_client.client.containers.get(container_id)
 
         # Send initial message
         await websocket.send_json(
@@ -78,9 +77,7 @@ async def stream_logs_to_websocket(
         )
 
         # Stream logs
-        logs = await container.log(
-            stdout=True, stderr=True, tail=tail, follow=True, timestamps=True
-        )
+        logs = await container_client.stream_container_logs(container_id, tail=tail)
 
         async for line in logs:
             if websocket not in connection_users:

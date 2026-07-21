@@ -75,11 +75,10 @@ class MetricsCollector:
         except Exception:
             return
 
-        for container in containers:
+        for container_info in containers:
             try:
-                # aiodocker returns DockerContainer objects, not dicts
-                container_id = container._id
-                container_info = await container.show()
+                # list_containers returns inspect-shaped dicts
+                container_id = container_info.get("Id")
                 labels = container_info.get("Config", {}).get("Labels", {}) or {}
                 server_id = labels.get("nukelab.server.id")
 
@@ -91,34 +90,27 @@ class MetricsCollector:
                 pass
 
         # Close docker client after all processing is done
-        if container_client and container_client.client:
+        if container_client:
             with contextlib.suppress(Exception):
-                await container_client.client.close()
+                await container_client.close()
 
     async def _collect_container_metrics(self, container_id, server_id):
         """Collect metrics for a single container"""
         container_client = None
         try:
             container_client = await get_fresh_container_client()
-            container = await container_client.client.containers.get(container_id)
 
             # Take two readings 1 second apart for accurate CPU delta.
             # Container's built-in precpu_stats comes from an arbitrary previous
             # query time — could be seconds or minutes ago — making CPU %
             # completely unreliable from a single snapshot.
-            stats1_list = await container.stats(stream=False)
-            stats1 = (
-                stats1_list[0] if isinstance(stats1_list, list) and stats1_list else stats1_list
-            )
+            stats1 = await container_client.get_container_stats(container_id)
             if not isinstance(stats1, dict):
                 return
 
             await asyncio.sleep(1.0)
 
-            stats2_list = await container.stats(stream=False)
-            stats2 = (
-                stats2_list[0] if isinstance(stats2_list, list) and stats2_list else stats2_list
-            )
+            stats2 = await container_client.get_container_stats(container_id)
             if not isinstance(stats2, dict):
                 return
 
@@ -128,7 +120,7 @@ class MetricsCollector:
             # failure leaves the GPU fields null and never fails collection.
             allocated_gpu = await self._get_server_allocated_gpu(server_id)
             if allocated_gpu > 0:
-                gpu_metrics = await self._collect_gpu_metrics(container)
+                gpu_metrics = await self._collect_gpu_metrics(container_client, container_id)
                 if gpu_metrics:
                     metrics.update(gpu_metrics)
 
@@ -137,9 +129,9 @@ class MetricsCollector:
         except Exception:
             pass
         finally:
-            if container_client and container_client.client:
+            if container_client:
                 with contextlib.suppress(Exception):
-                    await container_client.client.close()
+                    await container_client.close()
 
     def _parse_container_stats(
         self, stats1: dict, stats2: dict, server_id: str, container_id: str
@@ -270,7 +262,7 @@ class MetricsCollector:
                 with contextlib.suppress(Exception):
                     await engine.dispose()
 
-    async def _collect_gpu_metrics(self, container) -> dict | None:
+    async def _collect_gpu_metrics(self, container_client, container_id) -> dict | None:
         """Run nvidia-smi inside the container and parse GPU utilization.
 
         Note: nvidia-smi reports whole-GPU stats, not per-container usage —
@@ -278,21 +270,15 @@ class MetricsCollector:
         as a whole. Best-effort: returns None on any failure.
         """
         try:
-            exec_instance = await container.exec(
+            output = await container_client.exec_in_container(
+                container_id,
                 [
                     "nvidia-smi",
                     "--query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu",
                     "--format=csv,noheader,nounits",
-                ]
+                ],
             )
-            output = b""
-            async with exec_instance.start(detach=False) as stream:
-                while True:
-                    message = await stream.read_out()
-                    if message is None:
-                        break
-                    output += message.data
-            return parse_nvidia_smi_csv(output.decode("utf-8", errors="replace"))
+            return parse_nvidia_smi_csv(output)
         except Exception as e:
             logger.debug("GPU metrics collection failed: %s", e)
             return None
