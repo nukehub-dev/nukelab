@@ -117,7 +117,8 @@ See `.env.example` for per-role RPM limits (`RATE_LIMIT_*_RPM`) and the master
 | `VOLUME_STORAGE_PATH` | Host path for volume file operations |
 | `XFS_QUOTA_ENABLED` | Enable kernel-enforced XFS project quotas |
 | `GPU_ENABLED` | Enable NVIDIA GPU passthrough for user servers (see `docs/operations/GPU-SETUP.md`) |
-| `GPU_CDI_DEVICE` | CDI device spec used on Podman (default `nvidia.com/gpu=all`) |
+| `GPU_CDI_DEVICE` | CDI device spec used on Podman when `GPU_DEVICES` is empty (default `nvidia.com/gpu=all`) |
+| `GPU_DEVICES` | Comma-separated CDI device pool for exclusive GPU assignment (e.g. `nvidia.com/gpu=0,nvidia.com/gpu=1`); empty = shared mode |
 | `UPLOAD_DIR` | Container path for uploads |
 
 ### Server container authentication

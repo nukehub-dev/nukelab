@@ -267,6 +267,7 @@ class ContainerClient:
         memory_limit: str | None = None,
         disk_limit: str | None = None,
         gpu_limit: int = 0,
+        gpu_devices: list[str] | None = None,
         hostname: str | None = None,
         network_aliases: list[str] | None = None,
     ):
@@ -413,24 +414,31 @@ class ContainerClient:
                 raise ValueError("GPU requested but GPU support is disabled (GPU_ENABLED=false)")
             if await self._detect_podman():
                 # Podman uses CDI (Container Device Interface) for GPU injection.
+                device_ids = gpu_devices or [settings.gpu_cdi_device]
                 config["HostConfig"]["DeviceRequests"] = [
                     {
                         "Driver": "cdi",
-                        "DeviceIDs": [settings.gpu_cdi_device],
+                        "DeviceIDs": device_ids,
                         "Capabilities": [["gpu"]],
                     }
                 ]
-                logger.info(f"Applied GPU request via CDI device: {settings.gpu_cdi_device}")
+                logger.info(f"Applied GPU request via CDI device(s): {device_ids}")
             else:
-                # Docker uses the nvidia container runtime driver.
-                config["HostConfig"]["DeviceRequests"] = [
-                    {
-                        "Driver": "nvidia",
-                        "Count": gpu_limit,
-                        "Capabilities": [["gpu", "compute", "utility"]],
-                    }
-                ]
-                logger.info(f"Applied GPU request: {gpu_limit} NVIDIA GPU(s)")
+                # Docker uses the nvidia container runtime driver. It takes
+                # plain GPU indices/UUIDs, not CDI names: "nvidia.com/gpu=0"
+                # becomes "0" (the part after "=").
+                device_request = {
+                    "Driver": "nvidia",
+                    "Capabilities": [["gpu", "compute", "utility"]],
+                }
+                if gpu_devices:
+                    device_request["DeviceIDs"] = [d.split("=", 1)[-1] for d in gpu_devices]
+                else:
+                    device_request["Count"] = gpu_limit
+                config["HostConfig"]["DeviceRequests"] = [device_request]
+                logger.info(
+                    f"Applied GPU request: {device_request.get('DeviceIDs') or gpu_limit} NVIDIA GPU(s)"
+                )
 
         # --- CPU mask library volume (read-only) ---
         await self._ensure_cpu_lib_volume()

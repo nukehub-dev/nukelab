@@ -6,6 +6,7 @@ Admin dashboard API endpoints.
 Provides statistics, user management, server management, and activity logs.
 """
 
+import logging
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -31,6 +32,8 @@ from app.services.token_revocation_service import token_revocation_service
 from app.services.user_service import UserService
 from app.services.volume_service import VolumeService
 from app.services.workspace_service import WorkspaceService
+
+logger = logging.getLogger(__name__)
 
 # Cache TTL for admin server lists (seconds)
 _ADMIN_SERVER_LIST_CACHE_TTL = 30
@@ -383,6 +386,7 @@ async def bulk_server_action(
     results = {"success": [], "failed": []}
     affected_user_ids: set[str] = set()
     status_changes: list[tuple[str, str, str]] = []  # (user_id, server_id, status)
+    gpu_release_ids: list[str] = []  # servers whose GPU devices release after commit
 
     # Validate UUIDs
     try:
@@ -410,7 +414,21 @@ async def bulk_server_action(
         try:
             if body.action == "start":
                 if server.container_id:
-                    await spawner.start(server.container_id)
+                    from app.api.servers import _gpu_requires_recreate, _respawn_server_container
+
+                    if await _gpu_requires_recreate(db, server):
+                        # GPU server: never plain-start a container with stale
+                        # baked-in DeviceRequests — its exclusive device rows
+                        # were released on bulk stop and may be reassigned.
+                        # Recreate with the devices it owns; a dry pool fails
+                        # this entry (recorded below) without starting it.
+                        new_server = await _respawn_server_container(server, db, server.name)
+                        server.container_id = new_server.container_id
+                        server.image = new_server.image
+                        server.volume_id = new_server.volume_id
+                        server.external_url = new_server.external_url
+                    else:
+                        await spawner.start(server.container_id)
                     server.status = "running"
                     status_changes.append((str(server.user_id), server_id, "running"))
             elif body.action == "stop":
@@ -418,12 +436,14 @@ async def bulk_server_action(
                     await spawner.stop(server.container_id)
                     server.status = "stopped"
                     status_changes.append((str(server.user_id), server_id, "stopped"))
+                    gpu_release_ids.append(server_id)
             elif body.action == "delete":
                 user_id = str(server.user_id)
                 if server.container_id:
                     await spawner.delete(server.container_id)
                 await db.delete(server)
                 affected_user_ids.add(user_id)
+                gpu_release_ids.append(server_id)
 
             if body.action in ("start", "stop"):
                 affected_user_ids.add(str(server.user_id))
@@ -433,6 +453,17 @@ async def bulk_server_action(
 
     # Single atomic commit for all successful DB changes
     await db.commit()
+
+    # Release exclusive GPU devices for stopped/deleted servers (idempotent;
+    # done after the atomic commit so a release failure cannot break it).
+    if gpu_release_ids:
+        from app.services.gpu_allocator import GpuAllocatorService
+
+        for sid in gpu_release_ids:
+            try:
+                await GpuAllocatorService(db).release(sid)
+            except Exception:
+                logger.exception("Failed to release GPU devices for server %s", sid)
 
     # Broadcast status changes after successful commit
     for user_id, sid, srv_status in status_changes:

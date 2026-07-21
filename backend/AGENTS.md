@@ -15,6 +15,7 @@ All files under `backend/` except generated artifacts (`.venv-dev`, `__pycache__
 - `app/api/` owns route definitions; `app/services/` owns business logic; `app/models/` owns SQLAlchemy models; `app/db/` owns session/connection logic; `app/core/` owns cross-cutting utilities; `app/middleware/` owns ASGI middleware; `app/container/` owns Docker orchestration; `app/tasks.py` and `app/worker.py` own Celery.
 - `app/api/search.py` — grouped, permission-scoped search at `/api/search/`; optional `group` query parameter scopes the response to a single group; groups the user lacks read permission for are omitted from the response (never 403).
 - `app/api/tokens.py` owns `VALID_TOKEN_SCOPES`, the source of truth for API-token scopes; the frontend `AVAILABLE_SCOPES` in `frontend/src/components/settings/tokens-page.tsx` must stay in sync (unknown scopes are rejected with 422).
+- `app/services/gpu_allocator.py` owns exclusive GPU device reservations (table `gpu_allocations`, active only when `GPU_DEVICES` lists CDI device names); every code path that stops or deletes a server must release its devices, and every GPU spawn path must allocate first.
 - `alembic/` owns database migrations; use Alembic commands to generate and test upgrades/downgrades.
 - `tests/` mirrors the `app/` structure; security regressions go in `tests/security/`.
 

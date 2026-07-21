@@ -36,14 +36,42 @@ Set in `.env.production` / `.env.development`:
 GPU_ENABLED=true
 # Optional, Podman only — override the CDI device spec:
 # GPU_CDI_DEVICE=nvidia.com/gpu=all
+# Optional — exclusive device pool (see "Exclusive allocation" below):
+# GPU_DEVICES=nvidia.com/gpu=0,nvidia.com/gpu=1
 ```
 
-Both variables are passed to the `backend` and `celery-worker` services in
+These variables are passed to the `backend` and `celery-worker` services in
 `compose.yml` (scheduled/auto spawns and GPU metrics collection run in the
 worker). Restart the stack after changing them.
 
 With `GPU_ENABLED=false` (default), selecting a GPU plan fails the spawn with a
 clear error instead of silently starting without a GPU.
+
+## Exclusive allocation
+
+By default (`GPU_DEVICES` empty) every GPU server receives the whole
+`GPU_CDI_DEVICE` spec — all GPUs, shared, time-sliced by the NVIDIA driver.
+The per-user `max_gpu_total` quota then acts as a concurrency limit on GPU
+servers, not as physical ownership.
+
+Set `GPU_DEVICES` to a comma-separated pool of CDI device names to switch to
+**exclusive whole-GPU assignment**:
+
+```bash
+GPU_DEVICES=nvidia.com/gpu=0,nvidia.com/gpu=1,nvidia.com/gpu=2
+```
+
+Each unit of a plan's `gpu_limit` then reserves one physical device for that
+server's lifetime (recorded in the `gpu_allocations` table, released on
+stop/delete, reconciled automatically if state drifts). When the pool is
+exhausted, spawns fail with HTTP 429 "No GPUs available on the host". On a
+single-GPU host use `GPU_DEVICES=nvidia.com/gpu=0` to enforce one GPU server
+at a time platform-wide.
+
+GPU compute cannot be subdivided like CPU/RAM on consumer cards (no MIG on
+GeForce); exclusive whole-GPU assignment is the strongest isolation available.
+VRAM is the practical ceiling in shared mode — concurrent containers share the
+GPU's memory pool and can OOM each other.
 
 ## Using GPUs
 
@@ -56,9 +84,9 @@ clear error instead of silently starting without a GPU.
 
 2. In the admin UI, create an **Environment** record pointing at the built
    image (`nukelab-gpu:latest`).
-3. Create or edit a **Plan** with **GPU** (`gpu_limit`) greater than 0. On a
-   single-GPU host use `1`; on Podman any positive value currently maps to the
-   whole `GPU_CDI_DEVICE` spec.
+3. Create or edit a **Plan** with **GPU** (`gpu_limit`) greater than 0. With
+   exclusive allocation enabled, `gpu_limit` counts whole physical GPUs per
+   server; keep the sum of concurrent GPU usage within the `GPU_DEVICES` pool.
 4. Users pick the GPU plan at spawn. Their profile quota tile shows GPU
    `used / limit` once their quota's `max_gpu_total` allows it (adjust under
    admin quotas or the system default limits).

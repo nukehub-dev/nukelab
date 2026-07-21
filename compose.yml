@@ -173,6 +173,7 @@ services:
             # NVIDIA GPU passthrough for user servers (requires host toolkit + CDI)
             - GPU_ENABLED=${GPU_ENABLED:-false}
             - GPU_CDI_DEVICE=${GPU_CDI_DEVICE:-nvidia.com/gpu=all}
+            - GPU_DEVICES=${GPU_DEVICES:-}
             # Email / SMTP configuration
             - SMTP_HOST=${SMTP_HOST:-}
             - SMTP_PORT=${SMTP_PORT:-587}
@@ -367,6 +368,7 @@ services:
             # metrics collection run in this worker, not in the API container.
             - GPU_ENABLED=${GPU_ENABLED:-false}
             - GPU_CDI_DEVICE=${GPU_CDI_DEVICE:-nvidia.com/gpu=all}
+            - GPU_DEVICES=${GPU_DEVICES:-}
             # Email / SMTP configuration — required: notification emails are
             # sent by Celery tasks running in this worker, not by the API.
             - SMTP_HOST=${SMTP_HOST:-}

@@ -108,6 +108,50 @@ class TestCreateContainerGpu:
         config = create_mock.call_args.args[0]
         assert "DeviceRequests" not in config["HostConfig"]
 
+    @pytest.mark.asyncio
+    async def test_podman_uses_explicit_device_ids_when_given(self, monkeypatch):
+        monkeypatch.setattr(settings, "gpu_enabled", True)
+        client, create_mock = _make_container_client(podman=True)
+
+        await client.create_container(
+            name="gpu-test",
+            image="img:latest",
+            gpu_limit=1,
+            gpu_devices=["nvidia.com/gpu=1"],
+        )
+
+        config = create_mock.call_args.args[0]
+        device_requests = config["HostConfig"]["DeviceRequests"]
+        assert device_requests == [
+            {
+                "Driver": "cdi",
+                "DeviceIDs": ["nvidia.com/gpu=1"],
+                "Capabilities": [["gpu"]],
+            }
+        ]
+
+    @pytest.mark.asyncio
+    async def test_docker_converts_cdi_names_to_plain_indices(self, monkeypatch):
+        monkeypatch.setattr(settings, "gpu_enabled", True)
+        client, create_mock = _make_container_client(podman=False)
+
+        await client.create_container(
+            name="gpu-test",
+            image="img:latest",
+            gpu_limit=2,
+            gpu_devices=["nvidia.com/gpu=0", "nvidia.com/gpu=1"],
+        )
+
+        config = create_mock.call_args.args[0]
+        device_requests = config["HostConfig"]["DeviceRequests"]
+        assert device_requests == [
+            {
+                "Driver": "nvidia",
+                "DeviceIDs": ["0", "1"],
+                "Capabilities": [["gpu", "compute", "utility"]],
+            }
+        ]
+
 
 class TestSpawnerGpu:
     """Spawner forwards gpu to create_container and records allocated_gpu."""
@@ -160,7 +204,34 @@ class TestSpawnerGpu:
             )
 
         assert captured["create_kwargs"]["gpu_limit"] == 1
+        assert captured["create_kwargs"]["gpu_devices"] is None
         assert server.allocated_gpu == 1
+
+    @pytest.mark.asyncio
+    async def test_spawn_forwards_gpu_devices(self, db_session, test_user, monkeypatch):
+        from app.container.spawner import spawner
+
+        monkeypatch.setattr(settings, "gpu_enabled", True)
+
+        captured = {}
+        mock_container_client = self._make_mock_container_client(captured)
+
+        with patch.object(spawner, "_get_container_client", return_value=mock_container_client):
+            await spawner.spawn(
+                user_id=str(test_user.id),
+                username=test_user.username,
+                server_name="gpu-server",
+                environment="dev",
+                image="img:latest",
+                cpu=2.0,
+                memory="4g",
+                disk="20g",
+                gpu=1,
+                gpu_devices=["nvidia.com/gpu=0"],
+            )
+
+        assert captured["create_kwargs"]["gpu_limit"] == 1
+        assert captured["create_kwargs"]["gpu_devices"] == ["nvidia.com/gpu=0"]
 
     @pytest.mark.asyncio
     async def test_spawn_gpu_requested_but_disabled_raises(self, monkeypatch):

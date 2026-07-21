@@ -60,6 +60,20 @@ def _run_async(coro):
     return result[0]
 
 
+async def _release_gpu_devices(db, server_id) -> None:
+    """Release a stopped/deleted server's exclusive GPU devices (idempotent).
+
+    Never raises: a failed release must not block task-driven stops;
+    GpuAllocatorService.reconcile() is the safety net.
+    """
+    try:
+        from app.services.gpu_allocator import GpuAllocatorService
+
+        await GpuAllocatorService(db).release(str(server_id))
+    except Exception:
+        logger.exception("Failed to release GPU devices for server %s", server_id)
+
+
 @celery_app.task(bind=True)
 def example_task(self, message: str):
     """Example task for testing"""
@@ -223,6 +237,7 @@ def shutdown_idle_servers(self):
                             server.status = "stopped"
                             server.container_id = None
                             await db.commit()
+                            await _release_gpu_devices(db, server.id)
                             continue
 
                         await spawner.delete(server.container_id)
@@ -232,6 +247,7 @@ def shutdown_idle_servers(self):
                     server.stopped_at = datetime.now(UTC).replace(tzinfo=None)
                     server.stop_reason = "idle_timeout"
                     server.expires_at = None
+                    await _release_gpu_devices(db, server.id)
 
                     # Reconcile billing
                     if server.plan_id:
@@ -389,6 +405,7 @@ def process_nuke_billing(self):
                             server.status = "stopped"
                             server.stopped_at = datetime.now(UTC).replace(tzinfo=None)
                             server.stop_reason = "credit_depleted"
+                            await _release_gpu_devices(db, server.id)
 
                             # Reconcile exact billing for final partial interval
                             await credit_service.reconcile_server_billing(server, plan)
@@ -481,6 +498,7 @@ def enforce_auto_stop(self):
                     server.stopped_at = now
                     server.stop_reason = "max_runtime_exceeded"
                     server.expires_at = None
+                    await _release_gpu_devices(db, server.id)
                     await broadcast_server_status_change(
                         server.user_id,
                         str(server.id),
@@ -606,6 +624,7 @@ def process_server_queue(self):
                         next_entry.error_message = "Insufficient NUKE credits"
                         continue
 
+                gpu_server_id = None
                 try:
                     # Look up environment details
                     from app.models.environment_template import EnvironmentTemplate
@@ -618,6 +637,24 @@ def process_server_queue(self):
                     environment = env_result.scalar_one_or_none()
                     env_slug = environment.slug if environment else "dev"
                     env_image = environment.image if environment else None
+
+                    # Reserve exclusive GPU devices (when the pool is
+                    # configured) before charging credits, using the same
+                    # allocate-or-fail helper as the API spawn paths. A dry
+                    # pool fails the entry cleanly with a clear reason.
+                    import uuid
+
+                    from app.api.servers import _ensure_gpu_devices
+
+                    gpu_server_id = str(uuid.uuid4())
+                    try:
+                        gpu_devices = await _ensure_gpu_devices(
+                            db, gpu_server_id, plan.gpu_limit or 0
+                        )
+                    except HTTPException as e:
+                        next_entry.status = "failed"
+                        next_entry.error_message = e.detail
+                        continue
 
                     # Deduct credits
                     if settings.credits_enabled and plan.cost_per_hour > 0:
@@ -638,6 +675,9 @@ def process_server_queue(self):
                         cpu=next_entry.requested_cpu or plan.cpu_limit,
                         memory=next_entry.requested_memory or plan.memory_limit,
                         disk=next_entry.requested_disk or plan.disk_limit,
+                        gpu=plan.gpu_limit or 0,
+                        gpu_devices=gpu_devices,
+                        server_id=gpu_server_id,
                     )
 
                     server.plan_id = next_entry.plan_id
@@ -681,6 +721,10 @@ def process_server_queue(self):
                     started_count += 1
 
                 except Exception as e:
+                    # Free any devices reserved above before recording the failure.
+                    if gpu_server_id:
+                        await _release_gpu_devices(db, gpu_server_id)
+
                     next_entry.status = "failed"
                     next_entry.error_message = str(e)
                     next_entry.retry_count += 1
@@ -1129,6 +1173,7 @@ def enforce_volume_quotas(self):
                         server.status = "stopped"
                         server.stopped_at = datetime.now(UTC).replace(tzinfo=None)
                         server.stop_reason = "volume_quota_exceeded"
+                        await _release_gpu_devices(db, server.id)
 
                         # Reconcile billing
                         if server.plan_id:

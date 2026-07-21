@@ -152,6 +152,16 @@ class Settings(BaseSettings):
     # and (for Podman) a CDI spec on the host.
     gpu_enabled: bool = False
     gpu_cdi_device: str = "nvidia.com/gpu=all"
+    # Optional exclusive GPU device pool: comma-separated CDI device names
+    # (e.g. "nvidia.com/gpu=0,nvidia.com/gpu=1"). When set, each unit of a
+    # plan's gpu_limit exclusively reserves one device per server. When empty,
+    # gpu_cdi_device is used as-is for every GPU server (shared legacy mode).
+    gpu_devices: str = ""
+
+    @property
+    def gpu_device_list(self) -> list[str]:
+        """Parse gpu_devices into a list of CDI device names."""
+        return [d.strip() for d in self.gpu_devices.split(",") if d.strip()]
 
     # Container runtime hardening (defaults to enabled unless dev_mode is True)
     container_hardening_enabled: bool | None = None

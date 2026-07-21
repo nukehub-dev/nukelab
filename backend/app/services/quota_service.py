@@ -164,6 +164,14 @@ class QuotaService:
     ) -> ResourceQuota:
         """Recalculate current usage from active servers and volumes"""
 
+        # Keep exclusive GPU allocations truthful on quota reads: drop rows
+        # whose server stopped, vanished, or no longer needs a GPU.
+        from app.services.gpu_allocator import GpuAllocatorService
+
+        allocator = GpuAllocatorService(self.db)
+        if allocator.enabled():
+            await allocator.reconcile()
+
         quota = await self.get_or_create_user_quota(user_id)
 
         # Get all active servers for user
@@ -303,6 +311,24 @@ class QuotaService:
                 "allowed": False,
                 "reason": f"GPU limit exceeded. This plan needs {plan.gpu_limit} GPU(s), but you only have {available} available (limit: {quota.max_gpu_total} GPU(s), currently using: {quota.usage_gpu}).",
             }
+
+        # Check the exclusive GPU device pool (only when one is configured).
+        # Devices the excluded server already holds count as available: a plan
+        # change releases and re-reserves them.
+        if plan.gpu_limit > 0:
+            from app.services.gpu_allocator import GpuAllocatorService
+
+            allocator = GpuAllocatorService(self.db)
+            if allocator.enabled():
+                available_count = len(await allocator.available())
+                if exclude_server_id:
+                    available_count += len(await allocator.devices_for(exclude_server_id))
+                if available_count < plan.gpu_limit:
+                    pool_size = len(allocator.pool())
+                    return {
+                        "allowed": False,
+                        "reason": f"No GPUs available on the host (all {pool_size} in use)",
+                    }
 
         return {"allowed": True, "reason": None, "estimated_cost_per_hour": plan.cost_per_hour}
 

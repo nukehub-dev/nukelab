@@ -168,8 +168,23 @@ class HealthCheckService:
 
         try:
             if server.container_id:
-                await spawner.stop(server.container_id)
-                await spawner.start(server.container_id)
+                from app.api.servers import _gpu_requires_recreate, _respawn_server_container
+
+                if await _gpu_requires_recreate(self.db, server):
+                    # GPU server: never stop+start the same container — a
+                    # stop-without-delete path may have released its device
+                    # rows while the container keeps old DeviceRequests baked
+                    # in. Recreate instead; its rows are normally still
+                    # reserved (no release on auto-restart), so the respawn
+                    # reuses the same devices.
+                    new_server = await _respawn_server_container(server, self.db, server.name)
+                    server.container_id = new_server.container_id
+                    server.image = new_server.image
+                    server.volume_id = new_server.volume_id
+                    server.external_url = new_server.external_url
+                else:
+                    await spawner.stop(server.container_id)
+                    await spawner.start(server.container_id)
             else:
                 # No container to restart — mark as needing manual attention
                 logger.warning("Server %s: no container_id, cannot auto-restart", server.id)

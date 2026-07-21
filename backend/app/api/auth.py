@@ -61,6 +61,20 @@ router = APIRouter()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
+async def _release_gpu_devices(db, server_id) -> None:
+    """Release a stopped server's exclusive GPU devices (idempotent).
+
+    Never raises: a failed release must not block logout-driven stops;
+    GpuAllocatorService.reconcile() is the safety net.
+    """
+    try:
+        from app.services.gpu_allocator import GpuAllocatorService
+
+        await GpuAllocatorService(db).release(str(server_id))
+    except Exception:
+        logger.exception("Failed to release GPU devices for server %s", server_id)
+
+
 class CustomHTTPBearer(HTTPBearer):
     """Custom HTTP Bearer that accepts both 'Bearer' and 'Token' schemes"""
 
@@ -653,12 +667,14 @@ async def logout_endpoint(
                         if actual_status == "stopped":
                             server.status = "stopped"
                             server.container_id = None
+                            await _release_gpu_devices(db, server.id)
                             continue
 
                         await spawner.delete(server.container_id)
                         server.container_id = None
                         server.status = "stopped"
                         server.stopped_at = datetime.now(UTC).replace(tzinfo=None)
+                        await _release_gpu_devices(db, server.id)
 
                         # Reconcile billing
                         if server.plan_id:

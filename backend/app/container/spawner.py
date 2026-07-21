@@ -57,6 +57,7 @@ class ServerSpawner:
         memory: str = "2g",
         disk: str = "10g",
         gpu: int = 0,
+        gpu_devices: list[str] | None = None,
         env_vars: dict | None = None,
         volume_mounts: list[dict[str, Any]] | None = None,
         server_id: str | None = None,
@@ -65,6 +66,11 @@ class ServerSpawner:
 
         Args:
             volume_mounts: List of dicts with keys: volume_id, mount_path, mode
+            gpu: Number of GPUs (quota/record accounting; forwarded as
+                gpu_limit to the container client)
+            gpu_devices: Exclusive CDI device names reserved by the GPU
+                allocator. When set, these are passed to the container client
+                instead of the shared default device.
         """
         if gpu > 0 and not settings.gpu_enabled:
             raise Exception(
@@ -267,6 +273,7 @@ class ServerSpawner:
                 memory_limit=memory,
                 disk_limit=disk,
                 gpu_limit=gpu,
+                gpu_devices=gpu_devices,
                 volumes=volumes,
                 hostname="NukeLab",
                 network_aliases=[health_alias],

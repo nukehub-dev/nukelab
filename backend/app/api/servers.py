@@ -83,6 +83,121 @@ def _set_server_expiry(server: Server, user: User) -> None:
         server.expires_at = None
 
 
+def _server_gpu_count(server: Server, plan) -> int:
+    """GPU units a server needs: plan limit when known, else recorded allocation."""
+    return (plan.gpu_limit or 0) if plan else (server.allocated_gpu or 0)
+
+
+async def _gpu_requires_recreate(db: AsyncSession, server: Server, plan=None) -> bool:
+    """True when a server must recreate its container instead of plain-starting it.
+
+    A stopped container keeps its original GPU DeviceRequests baked in, but
+    its exclusive gpu_allocations rows may have been released (stop-without-
+    delete paths, or reconcile() reaping) and the device reassigned. Plain-
+    starting would run two containers on one physical GPU despite exclusive
+    mode, so GPU servers always go through spawner.spawn when the allocator
+    is enabled. Non-GPU servers and allocator-disabled mode keep the cheap
+    plain-start behavior.
+    """
+    from app.services.gpu_allocator import GpuAllocatorService
+
+    if not GpuAllocatorService(db).enabled():
+        return False
+    return _server_gpu_count(server, plan) > 0
+
+
+async def _respawn_server_container(
+    server: Server, db: AsyncSession, fallback_username: str
+) -> Server:
+    """Recreate a server's container via spawner.spawn with the same server id.
+
+    Loads environment, plan, owner, and volume mounts; ensures exclusive GPU
+    devices (raises HTTP 429 when the pool is dry); deletes any stale
+    container first (force=True also kills a running one). Used by every
+    start-class path that must not plain-start a container with stale
+    baked-in GPU DeviceRequests (scheduled/bulk/health-driven starts).
+    Returns the new (unsaved) Server record produced by the spawn.
+    """
+    from sqlalchemy import select as sa_select
+
+    from app.models.user import User
+    from app.services.environment_service import EnvironmentService
+    from app.services.plan_service import PlanService
+
+    env_service = EnvironmentService(db)
+    environment = (
+        await env_service.get_by_id(str(server.environment_id)) if server.environment_id else None
+    )
+    plan_service = PlanService(db)
+    plan = await plan_service.get_by_id(str(server.plan_id)) if server.plan_id else None
+
+    result = await db.execute(sa_select(User).where(User.id == server.user_id))
+    server_owner = result.scalar_one_or_none()
+    owner_username = server_owner.username if server_owner else fallback_username
+
+    volume_mounts = await _load_server_volume_mounts(db, str(server.id))
+
+    gpu_devices = await _ensure_gpu_devices(db, str(server.id), _server_gpu_count(server, plan))
+
+    if server.container_id:
+        try:
+            await spawner.delete(server.container_id)
+        except Exception:
+            logger.exception("Warning: failed to delete stale container before respawn")
+
+    return await spawner.spawn(
+        user_id=str(server.user_id),
+        username=owner_username,
+        server_name=server.name,
+        environment=environment.slug if environment else "dev",
+        environment_id=str(server.environment_id) if server.environment_id else None,
+        image=environment.image if environment else None,
+        cpu=plan.cpu_limit if plan else server.allocated_cpu,
+        memory=plan.memory_limit if plan else server.allocated_memory,
+        disk=plan.disk_limit if plan else server.allocated_disk,
+        gpu=plan.gpu_limit if plan else (server.allocated_gpu or 0),
+        gpu_devices=gpu_devices,
+        volume_mounts=volume_mounts or None,
+        server_id=str(server.id),
+    )
+
+
+async def _ensure_gpu_devices(db: AsyncSession, server_id: str, gpu_count: int) -> list[str] | None:
+    """Ensure a server holds ``gpu_count`` exclusive GPU devices.
+
+    Returns the reserved CDI device names to forward to spawner.spawn, or
+    None when the allocator is disabled or no GPU is needed (legacy shared
+    mode). Raises HTTP 429 when the exclusive pool is exhausted.
+    """
+    from app.services.gpu_allocator import GpuAllocatorService
+
+    allocator = GpuAllocatorService(db)
+    if not allocator.enabled() or gpu_count <= 0:
+        return None
+
+    devices = await allocator.devices_for(server_id)
+    if not devices:
+        devices = await allocator.allocate(server_id, gpu_count)
+        if devices is None:
+            raise HTTPException(
+                status_code=429,
+                detail="No GPUs available on the host (all devices are in use). Please try again later.",
+            )
+    return devices
+
+
+async def _release_gpu_devices(db: AsyncSession, server_id: str) -> None:
+    """Release a server's exclusive GPU devices. Idempotent; never raises so
+    stop/delete paths cannot be blocked by allocator errors (reconcile() is
+    the safety net)."""
+    try:
+        from app.services.gpu_allocator import GpuAllocatorService
+
+        await GpuAllocatorService(db).release(server_id)
+    except Exception:
+        logger.exception("Failed to release GPU devices for server %s", server_id)
+
+
 class VolumeMountRequest(BaseModel):
     volume_id: str
     mount_path: str = "/data"
@@ -501,20 +616,33 @@ async def create_server(
                 status_code=status.HTTP_400_BAD_REQUEST, detail=quota_check["reason"]
             )
 
+        # Reserve exclusive GPU devices (when the pool is configured) before
+        # spawning so a pool-exhausted request fails cleanly with 429 before
+        # any container work happens.
+        gpu_server_id = str(uuid.uuid4())
+        gpu_devices = await _ensure_gpu_devices(db, gpu_server_id, plan.gpu_limit or 0)
+
         # Spawn the container using plan resources + environment image
-        server = await spawner.spawn(
-            user_id=str(current_user.id),
-            username=current_user.username,
-            server_name=body.name,
-            environment=environment.slug,
-            environment_id=body.environment_id,
-            image=environment.image,
-            cpu=plan.cpu_limit,
-            memory=plan.memory_limit,
-            disk=plan.disk_limit,
-            gpu=plan.gpu_limit,
-            volume_mounts=volume_mounts,
-        )
+        try:
+            server = await spawner.spawn(
+                user_id=str(current_user.id),
+                username=current_user.username,
+                server_name=body.name,
+                environment=environment.slug,
+                environment_id=body.environment_id,
+                image=environment.image,
+                cpu=plan.cpu_limit,
+                memory=plan.memory_limit,
+                disk=plan.disk_limit,
+                gpu=plan.gpu_limit,
+                gpu_devices=gpu_devices,
+                volume_mounts=volume_mounts,
+                server_id=gpu_server_id,
+            )
+        except Exception:
+            # Free the reserved devices before the generic failure cleanup runs.
+            await _release_gpu_devices(db, gpu_server_id)
+            raise
 
         # Store plan reference
         server.plan_id = uuid.UUID(body.plan_id)
@@ -939,13 +1067,28 @@ async def _perform_server_start(
                     "status": "running",
                 }
 
-            if actual_status in ("unknown", "stopped"):
+            # GPU servers (allocator enabled) must NEVER plain-start the
+            # existing container: its baked-in DeviceRequests may reference a
+            # device whose allocation row was released and reassigned.
+            # Recreating guarantees the container runs with devices it owns.
+            force_recreate = await _gpu_requires_recreate(db, server, plan)
+
+            if actual_status in ("unknown", "stopped") or force_recreate:
                 if actual_status == "unknown":
                     logger.warning("Container %s not found, recreating...", server.container_id)
                 else:
-                    logger.warning(
-                        "Container %s is stopped, deleting and recreating...", server.container_id
-                    )
+                    if force_recreate and actual_status != "stopped":
+                        logger.info(
+                            "GPU server %s: recreating container %s instead of plain-starting "
+                            "(stale baked-in GPU DeviceRequests)",
+                            server_id,
+                            server.container_id,
+                        )
+                    else:
+                        logger.warning(
+                            "Container %s is stopped, deleting and recreating...",
+                            server.container_id,
+                        )
                     try:
                         await spawner.delete(server.container_id)
                     except Exception:
@@ -964,6 +1107,10 @@ async def _perform_server_start(
                 server_owner = result.scalar_one_or_none()
                 owner_username = server_owner.username if server_owner else current_user.username
 
+                gpu_devices = await _ensure_gpu_devices(
+                    db, server_id, _server_gpu_count(server, plan)
+                )
+
                 new_server = await spawner.spawn(
                     user_id=str(server.user_id),
                     username=owner_username,
@@ -975,6 +1122,7 @@ async def _perform_server_start(
                     memory=plan.memory_limit if plan else server.allocated_memory,
                     disk=plan.disk_limit if plan else server.allocated_disk,
                     gpu=plan.gpu_limit if plan else (server.allocated_gpu or 0),
+                    gpu_devices=gpu_devices,
                     volume_mounts=volume_mounts or None,
                     server_id=str(server.id),
                 )
@@ -998,6 +1146,11 @@ async def _perform_server_start(
                     "status": "running",
                 }
 
+            # Plain-start is only reachable for non-GPU servers or when the
+            # exclusive allocator is disabled (see _gpu_requires_recreate
+            # above) — a stopped container's baked-in config is still valid
+            # for those. GPU servers in exclusive mode were routed to the
+            # recreate branch instead.
             success = await spawner.start(server.container_id)
             if not success:
                 raise Exception("Failed to start container - check container logs")
@@ -1052,6 +1205,8 @@ async def _perform_server_start(
         try:
             owner_username = server_owner.username if server_owner else current_user.username
 
+            gpu_devices = await _ensure_gpu_devices(db, server_id, _server_gpu_count(server, plan))
+
             new_server = await spawner.spawn(
                 user_id=str(server.user_id),
                 username=owner_username,
@@ -1063,6 +1218,7 @@ async def _perform_server_start(
                 memory=plan.memory_limit if plan else server.allocated_memory,
                 disk=plan.disk_limit if plan else server.allocated_disk,
                 gpu=plan.gpu_limit if plan else (server.allocated_gpu or 0),
+                gpu_devices=gpu_devices,
                 volume_mounts=volume_mounts or None,
                 server_id=str(server.id),
             )
@@ -1132,6 +1288,7 @@ async def _perform_server_stop(
                 server.container_id = None
                 server.expires_at = None
                 await db.commit()
+                await _release_gpu_devices(db, server_id)
                 await broadcast_server_status_change(server.user_id, server_id, "stopped")
                 return {
                     "message": "Server already stopped",
@@ -1144,6 +1301,7 @@ async def _perform_server_stop(
             server.status = "stopped"
             server.stopped_at = datetime.now(UTC).replace(tzinfo=None)
             server.expires_at = None
+            await _release_gpu_devices(db, server_id)
 
             if server.plan_id:
                 credit_service = CreditService(db)
@@ -1181,6 +1339,7 @@ async def _perform_server_stop(
     server.status = "stopped"
     server.expires_at = None
     await db.commit()
+    await _release_gpu_devices(db, server_id)
 
     notif_service = NotificationService(db)
     await notif_service.server_stopped(
@@ -1245,7 +1404,31 @@ async def _perform_server_restart(
     if server.container_id:
         try:
             actual_status = await spawner.get_status(server.container_id)
-            if actual_status == "unknown":
+
+            # GPU servers (allocator enabled) must recreate rather than
+            # stop+start the same container: a stop-without-delete path may
+            # have released their device rows while the container keeps its
+            # old DeviceRequests baked in. Their rows are normally still
+            # reserved (no release on restart), so the respawn reuses them.
+            force_recreate = await _gpu_requires_recreate(db, server, plan)
+
+            if actual_status == "unknown" or force_recreate:
+                if force_recreate and actual_status != "unknown":
+                    # The unknown case has no container to remove; every other
+                    # force-recreate case must delete the stale one first.
+                    logger.info(
+                        "GPU server %s: recreating container %s instead of stop+start "
+                        "(stale baked-in GPU DeviceRequests)",
+                        server_id,
+                        server.container_id,
+                    )
+                    try:
+                        await spawner.delete(server.container_id)
+                    except Exception:
+                        logger.exception(
+                            "Warning: failed to delete stale container before recreate"
+                        )
+
                 env_service = EnvironmentService(db)
                 environment = (
                     await env_service.get_by_id(str(server.environment_id))
@@ -1256,6 +1439,10 @@ async def _perform_server_restart(
                 plan = await plan_service.get_by_id(str(server.plan_id)) if server.plan_id else None
 
                 owner_username = server_owner.username if server_owner else current_user.username
+
+                gpu_devices = await _ensure_gpu_devices(
+                    db, server_id, _server_gpu_count(server, plan)
+                )
 
                 new_server = await spawner.spawn(
                     user_id=str(server.user_id),
@@ -1268,6 +1455,7 @@ async def _perform_server_restart(
                     memory=plan.memory_limit if plan else server.allocated_memory,
                     disk=plan.disk_limit if plan else server.allocated_disk,
                     gpu=plan.gpu_limit if plan else (server.allocated_gpu or 0),
+                    gpu_devices=gpu_devices,
                     volume_mounts=volume_mounts or None,
                     server_id=str(server.id),
                 )
@@ -1298,6 +1486,8 @@ async def _perform_server_restart(
                     "status": "running",
                 }
 
+            # Plain stop+start is only reachable for non-GPU servers or with
+            # the allocator disabled — GPU servers took the recreate branch.
             await spawner.stop(server.container_id)
             await spawner.start(server.container_id)
             server.status = "running"
@@ -1354,6 +1544,7 @@ async def _perform_server_delete(
 
     await db.delete(server)
     await db.commit()
+    await _release_gpu_devices(db, server_id)
 
     notif_service = NotificationService(db)
     await notif_service.server_deleted(user_id=user_id, server_name=server_name)
@@ -1566,6 +1757,26 @@ async def update_server(
         if not quota_check["allowed"]:
             raise HTTPException(status_code=429, detail=quota_check["reason"])
 
+        # Re-reserve exclusive GPU devices when the plan's GPU count changes.
+        # Release first so the server's own devices do not block the new
+        # reservation; on pool exhaustion restore the old reservation so the
+        # old plan and its allocations stay consistent.
+        from app.services.gpu_allocator import GpuAllocatorService
+
+        allocator = GpuAllocatorService(db)
+        if allocator.enabled() and plan.gpu_limit != (server.allocated_gpu or 0):
+            old_gpu_count = server.allocated_gpu or 0
+            await allocator.release(str(server.id))
+            if plan.gpu_limit > 0 and server.status in ("running", "starting"):
+                new_devices = await allocator.allocate(str(server.id), plan.gpu_limit)
+                if new_devices is None:
+                    if old_gpu_count > 0 and server.status in ("running", "starting"):
+                        await allocator.allocate(str(server.id), old_gpu_count)
+                    raise HTTPException(
+                        status_code=429,
+                        detail="No GPUs available on the host for the new plan (all devices are in use)",
+                    )
+
         server.plan_id = uuid.UUID(body.plan_id)
         server.allocated_cpu = plan.cpu_limit
         server.allocated_memory = plan.memory_limit
@@ -1730,6 +1941,10 @@ async def update_server(
         # Load current volume mounts for spawn
         spawn_mounts = await _load_server_volume_mounts(db, str(server.id))
 
+        # Reuse devices reserved at plan-change time, or reserve now (e.g. the
+        # server was stopped and held no rows). Raises 429 if the pool ran dry.
+        gpu_devices = await _ensure_gpu_devices(db, str(server.id), _server_gpu_count(server, plan))
+
         try:
             new_server_container = await spawner.spawn(
                 user_id=str(server.user_id),
@@ -1742,6 +1957,7 @@ async def update_server(
                 memory=plan.memory_limit if plan else server.allocated_memory,
                 disk=plan.disk_limit if plan else server.allocated_disk,
                 gpu=plan.gpu_limit if plan else (server.allocated_gpu or 0),
+                gpu_devices=gpu_devices,
                 volume_mounts=spawn_mounts or None,
                 server_id=str(server.id),
             )
@@ -1763,6 +1979,7 @@ async def update_server(
             server.status = "stopped"
             server.status_reason = "Failed to recreate container with new configuration. Please try starting the server again."
             await db.commit()
+            await _release_gpu_devices(db, str(server.id))
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to apply configuration changes. Please try again or contact support.",
