@@ -473,6 +473,10 @@ main() {
             ;;
         install | test)
             if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
+                # Tests run one-off containers on the internal network and
+                # never bind host ports; the port check would wrongly fail
+                # while the dev/prod stack is running.
+                if [ "$CMD" = "test" ]; then SKIP_PORT_CHECK=true; fi
                 _bootstrap lock restore preflight
             fi
             _dispatch_command "$CMD"

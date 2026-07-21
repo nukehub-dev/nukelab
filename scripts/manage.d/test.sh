@@ -57,8 +57,36 @@ cmd_test() {
         # Args are forwarded through positional `$@` of an inline `sh -c`
         # invocation so quoting/spaces survive intact (no `eval` of the
         # flattened argv string).
+        #
+        # --no-deps is required: when the dev stack is up, its postgres/redis
+        # containers are pod members, and `compose run` fails trying to start
+        # duplicate dependency containers ("container has joined pod ... and
+        # dependency container ... is not a member of the pod"). Instead we
+        # ensure the dependency containers are up ourselves and let the test
+        # container resolve postgres/redis over the shared network.
+        local _started_deps=false
+        if ! { $CONTAINER_ENGINE ps --format '{{.Names}}' | grep -qx 'nukelab-postgres'; } \
+            || ! { $CONTAINER_ENGINE ps --format '{{.Names}}' | grep -qx 'nukelab-redis'; }; then
+            info "Starting postgres/redis for the test run..."
+            $COMPOSE "${COMPOSE_ARGS[@]}" up -d postgres redis > /dev/null 2>&1
+            _started_deps=true
+            # Wait for Postgres to accept connections before running pytest.
+            local _pg_ready=false
+            for _ in $(seq 1 30); do
+                if $CONTAINER_ENGINE exec nukelab-postgres \
+                    pg_isready -U "${DATABASE_USER:-nukelab}" > /dev/null 2>&1; then
+                    _pg_ready=true
+                    break
+                fi
+                sleep 1
+            done
+            if ! $_pg_ready; then
+                warn "Postgres did not become ready in time; tests may fail to connect."
+            fi
+        fi
+
         local _test_exit=0
-        $COMPOSE --profile test "${COMPOSE_ARGS[@]}" run --rm \
+        $COMPOSE --profile test "${COMPOSE_ARGS[@]}" run --rm --no-deps \
             -v "${DIR}/backend:/app:Z" \
             -v "${DIR}/resources:/app/resources:ro" \
             -e "DATABASE_USER=${DATABASE_USER:-nukelab}" \
@@ -77,6 +105,11 @@ cmd_test() {
             -e "PGBOUNCER_ENABLED=false" \
             -e "TESTING=true" \
             backend-test sh -c 'python -m pytest "$@"' _ "${_pytest_args[@]}" || _test_exit=$?
+
+        # Stop the dependency containers again only if we started them.
+        if $_started_deps; then
+            $COMPOSE "${COMPOSE_ARGS[@]}" stop postgres redis > /dev/null 2>&1 || true
+        fi
 
         # Restart backend services if they were running before. This must run
         # even when tests failed, otherwise the stack is left down.
