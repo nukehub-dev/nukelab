@@ -59,7 +59,16 @@ class SystemMetricsCollector:
             container_client = await get_fresh_container_client()
             containers = await container_client.list_containers()
             docker_containers_total = len(containers)
-            docker_containers_running = sum(1 for c in containers if c.get("State") == "running")
+
+            # list_containers returns inspect-shaped dicts where State is a
+            # nested object ({"Status": "running", ...}); tolerate a plain
+            # string too for non-Docker drivers.
+            def _is_running(state) -> bool:
+                if isinstance(state, dict):
+                    return state.get("Status") == "running" or state.get("Running") is True
+                return state == "running"
+
+            docker_containers_running = sum(1 for c in containers if _is_running(c.get("State")))
             # Count actual nukelab servers (containers with nukelab.server.id label)
             for container_info in containers:
                 try:

@@ -326,19 +326,21 @@ class TestOAuthLoginPKCEAndSync:
     async def test_oauth_login_pkce_enabled(self, client):
         m = _make_oauth_mock()
         with mock.patch("app.services.oauth_service.oauth_service", m):
-            with mock.patch("app.api.auth.settings.oauth_pkce_enabled", True):
-                response = await client.get("/api/auth/oauth/login", follow_redirects=False)
-                assert response.status_code == 307
-                assert "oauth_verifier" in response.cookies
+            with mock.patch("app.api.auth.settings.auth_mode", "both"):
+                with mock.patch("app.api.auth.settings.oauth_pkce_enabled", True):
+                    response = await client.get("/api/auth/oauth/login", follow_redirects=False)
+                    assert response.status_code == 307
+                    assert "oauth_verifier" in response.cookies
 
     @pytest.mark.asyncio
     async def test_oauth_login_sync_mode(self, client):
         m = _make_oauth_mock()
         with mock.patch("app.services.oauth_service.oauth_service", m):
-            response = await client.get("/api/auth/oauth/login?sync=1", follow_redirects=False)
-            assert response.status_code == 307
-            assert "oauth_sync" in response.cookies
-            assert "prompt=none" in response.headers["location"]
+            with mock.patch("app.api.auth.settings.auth_mode", "both"):
+                response = await client.get("/api/auth/oauth/login?sync=1", follow_redirects=False)
+                assert response.status_code == 307
+                assert "oauth_sync" in response.cookies
+                assert "prompt=none" in response.headers["location"]
 
 
 class TestGetAuthContextEdgeCases:

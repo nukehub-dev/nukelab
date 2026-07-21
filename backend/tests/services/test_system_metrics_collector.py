@@ -114,7 +114,14 @@ class TestSystemMetricsCollect:
 
         mock_client = mock.AsyncMock()
         mock_client.list_containers = mock.AsyncMock(
-            return_value=[{"Id": "cid1", "Config": {"Labels": {"nukelab.server.id": "srv-1"}}}]
+            return_value=[
+                {
+                    "Id": "cid1",
+                    "State": {"Status": "running"},
+                    "Config": {"Labels": {"nukelab.server.id": "srv-1"}},
+                },
+                {"Id": "cid2", "State": {"Status": "exited"}, "Config": {"Labels": {}}},
+            ]
         )
         mock_client.list_images = mock.AsyncMock(return_value=["img1"])
         mock_client.close = mock.AsyncMock()
@@ -146,8 +153,8 @@ class TestSystemMetricsCollect:
                                                     with mock.patch("redis.asyncio.from_url"):
                                                         result = await collector.collect()
 
-        assert result["docker_containers_total"] == 1
-        assert result["docker_containers_running"] == 0  # mock_container doesn't have .get('State')
+        assert result["docker_containers_total"] == 2
+        assert result["docker_containers_running"] == 1  # inspect-shaped State dict
         assert result["docker_images_total"] == 1
 
     @pytest.mark.asyncio
