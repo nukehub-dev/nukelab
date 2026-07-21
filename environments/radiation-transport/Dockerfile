@@ -61,7 +61,8 @@ RUN apt-get update && \
         # Graphics and Visualization Libraries
         libxft-dev \
         libxext-dev \
-        libglu1-mesa-dev && \
+        libglu1-mesa-dev \
+        xvfb && \
     # Remove downloaded package files to reduce the final image size.
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
@@ -258,14 +259,16 @@ RUN git clone -b ${ALARA_BRANCH} --depth 1 https://github.com/svalinn/ALARA && \
 # The cadquery stack is pinned to the combo verified against conda vtk 9.5.2:
 # cadquery-ocp needs the pip-style VTK libs shipped by cadquery_vtk.
 # pydagmc is pinned to a commit for reproducible builds.
+# trame is pinned to 2.x because the nuke-ide visualizer imports
+# trame.ui.vuetify2 / trame.widgets.vuetify2, which trame 3.x removed.
+# trame 2.x's trame/ui/__init__.py calls pkg_resources.declare_namespace, so
+# setuptools must stay <81 (pkg_resources was removed in setuptools 81).
 RUN pip install --no-cache-dir \
         --extra-index-url https://shimwell.github.io/wheels \
         gmsh \
-        trame \
+        "trame<3" \
+        "setuptools<81" \
         moab \
-        cadquery==2.7.0 \
-        cadquery-ocp==7.8.1.1.post1 \
-        cadquery_vtk==9.3.1 \
         montepy \
         ncrystal \
         paramak \
@@ -274,9 +277,11 @@ RUN pip install --no-cache-dir \
         vmecpp \
         git+https://github.com/svalinn/pydagmc@4afa678d24aa091417798ef4b3d11fda98b165f8
 
-# pip's cadquery_vtk clobbers some of conda's vtkmodules files during install.
-# Re-write the conda VTK family LAST so paraview keeps working; the pip-only
-# libraries OCP needs are not conda-owned and survive this reinstall.
-RUN conda install -p ${NUKE_DIR} -y --force-reinstall -c conda-forge \
-        paraview=6.0.1 vtk=9.5.2 vtk-base=9.5.2 vtk-io-ffmpeg=9.5.2 && \
-    conda clean --all -f -y
+# Headless rendering for the nuke-ide visualizer: conda-forge ParaView/VTK
+# are X11/GLX-only builds and abort ("bad X server connection") when creating
+# a render window without an X connection, even offscreen. start-ide.sh
+# launches Xvfb on $DISPLAY before starting the IDE, and the IDE backend
+# passes DISPLAY through to the visualizer server process.
+COPY --chmod=755 start-ide.sh /opt/nukelab/start-ide.sh
+ENV DISPLAY=:99 \
+    NUKELAB_START_COMMAND="/opt/nukelab/start-ide.sh"
