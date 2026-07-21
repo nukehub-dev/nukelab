@@ -61,9 +61,7 @@ RUN apt-get update && \
         # Graphics and Visualization Libraries
         libxft-dev \
         libxext-dev \
-        libglu1-mesa-dev \
-        # Supporting Applications and Runtimes
-        gmsh && \
+        libglu1-mesa-dev && \
     # Remove downloaded package files to reduce the final image size.
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
@@ -262,6 +260,7 @@ RUN git clone -b ${ALARA_BRANCH} --depth 1 https://github.com/svalinn/ALARA && \
 # pydagmc is pinned to a commit for reproducible builds.
 RUN pip install --no-cache-dir \
         --extra-index-url https://shimwell.github.io/wheels \
+        gmsh \
         trame \
         moab \
         cadquery==2.7.0 \
