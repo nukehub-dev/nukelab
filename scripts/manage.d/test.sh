@@ -31,7 +31,9 @@ cmd_test() {
         # or shell metacharacters (e.g. `tests/Some Dir/test_x.py`).
         local _pytest_args=()
         if $USE_COVERAGE; then
-            _pytest_args+=(--cov=app --cov-report=term --cov-report=html)
+            # 94% is the ratcheted project floor (see backend/AGENTS.md);
+            # the suite currently sits at 96%.
+            _pytest_args+=(--cov=app --cov-report=term --cov-report=html --cov-fail-under=94)
         fi
         _pytest_args+=("${EXTRA_ARGS[@]}")
 

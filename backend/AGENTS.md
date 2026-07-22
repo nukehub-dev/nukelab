@@ -153,6 +153,8 @@ Prefer `require_permissions` for simple endpoint-level checks. Use `PermissionCh
 ./nukelabctl test backend
 ```
 
+- Coverage floor is **94%** (`--cov-fail-under=94` in `test backend --coverage`, run by CI). The suite currently sits at ~96%; keep it at or above the floor — raise the floor, never lower it.
+
 ## Child NAD Index
 
 - None
