@@ -204,6 +204,15 @@ cmd_selftest() {
     # Shared dev venv helper now lives in lib.sh (drift guard for lint/security)
     _t "lib.sh exposes _ensure_venv_tool" bash -c 'DIR=.; source ./scripts/lib.sh >/dev/null 2>&1; type -t _ensure_venv_tool | grep -q function' || _increment_failures
 
+    # Tracked shell scripts must keep mode 100755 in the git index. Checkouts
+    # on filesystems without Unix permissions (e.g. NTFS, where git sets
+    # core.fileMode=false) can silently record 100644, stripping ./nukelabctl
+    # executability on every machine that pulls. Fix with:
+    #   git update-index --chmod=+x <file>
+    if git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+        _t "tracked shell scripts executable in git index" bash -c '! git ls-files -s -- nukelabctl "*.sh" | grep -q "^100644"' || _increment_failures
+    fi
+
     # stale doctor logic tightened to require a real socket
     _t "doctor --skip-port-check still runs" bash -c './nukelabctl doctor --skip-port-check >/dev/null 2>&1' || _increment_failures
 
