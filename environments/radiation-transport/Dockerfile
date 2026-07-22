@@ -92,11 +92,11 @@ ARG PYTHON_VERSION
 RUN conda create --yes -p ${NUKE_DIR} \
         python=${PYTHON_VERSION} \
         ipykernel \
-        paraview \
         trame \
-        pythonocc-core \
+        paraview \
         cadquery \
-        gmsh && \
+        pythonocc-core \
+        python-gmsh && \
     conda clean --all -f -y
 
 # Activate the nuclear conda environment in login shells (terminals).
