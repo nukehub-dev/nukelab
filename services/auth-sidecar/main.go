@@ -41,6 +41,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -61,15 +62,15 @@ type Config struct {
 	TokenQueryParam string `json:"token_query_param"`
 
 	// HTTP server settings
-	ListenAddr      string `json:"listen_addr"`
-	ReadTimeout     int    `json:"read_timeout"`
-	WriteTimeout    int    `json:"write_timeout"`
-	MaxHeaderBytes  int    `json:"max_header_bytes"`
+	ListenAddr     string `json:"listen_addr"`
+	ReadTimeout    int    `json:"read_timeout"`
+	WriteTimeout   int    `json:"write_timeout"`
+	MaxHeaderBytes int    `json:"max_header_bytes"`
 
 	// Rate limiting
-	RateLimitEnabled   bool `json:"rate_limit_enabled"`
-	RateLimitRequests  int  `json:"rate_limit_requests"`
-	RateLimitWindow    int  `json:"rate_limit_window"`
+	RateLimitEnabled  bool `json:"rate_limit_enabled"`
+	RateLimitRequests int  `json:"rate_limit_requests"`
+	RateLimitWindow   int  `json:"rate_limit_window"`
 
 	// Logging
 	LogLevel string `json:"log_level"`
@@ -77,12 +78,12 @@ type Config struct {
 
 // ValidationResult represents the outcome of token validation.
 type ValidationResult struct {
-	Valid      bool   `json:"valid"`
-	UserID     string `json:"user_id,omitempty"`
-	ServerID   string `json:"server_id,omitempty"`
-	TokenType  string `json:"token_type,omitempty"`
-	Error      string `json:"error,omitempty"`
-	Expiry     int64  `json:"exp,omitempty"`
+	Valid     bool   `json:"valid"`
+	UserID    string `json:"user_id,omitempty"`
+	ServerID  string `json:"server_id,omitempty"`
+	TokenType string `json:"token_type,omitempty"`
+	Error     string `json:"error,omitempty"`
+	Expiry    int64  `json:"exp,omitempty"`
 }
 
 // extractClientIP extracts the real client IP from the request.
@@ -117,10 +118,22 @@ func isLoopback(ip string) bool {
 
 // AuthSidecar is the main authentication sidecar instance.
 type AuthSidecar struct {
-	config     *Config
-	publicKey  *rsa.PublicKey
+	config      *Config
+	publicKey   *rsa.PublicKey
 	rateLimiter *RateLimiter
-	logger     *log.Logger
+	logger      *log.Logger
+
+	// lastActivity holds the Unix timestamp of the most recent request that
+	// was allowed through (valid token, or auth-disabled pass-through). The
+	// backend idle-shutdown task polls it via /activity so real proxied
+	// traffic counts as server activity. Deliberately not updated by /health
+	// or /metrics, which are hit by infrastructure probes.
+	lastActivity atomic.Int64
+}
+
+// recordActivity marks an allowed request as user activity.
+func (a *AuthSidecar) recordActivity() {
+	a.lastActivity.Store(time.Now().Unix())
 }
 
 // RateLimiter implements a simple token bucket rate limiter per IP.
@@ -171,18 +184,18 @@ func (rl *RateLimiter) Allow(ip string) bool {
 // LoadConfig loads configuration from environment variables.
 func LoadConfig() *Config {
 	cfg := &Config{
-		ServerID:        getEnv("NUKELAB_AUTH_SERVER_ID", ""),
-		AuthEnabled:     getEnvBool("NUKELAB_AUTH_ENABLED", true),
-		PublicKeyPath:   getEnv("NUKELAB_AUTH_PUBLIC_KEY_PATH", "/etc/nukelab/auth/public.pem"),
-		Algorithm:       getEnv("NUKELAB_AUTH_ALGORITHM", "RS256"),
-		TokenHeader:     getEnv("NUKELAB_AUTH_TOKEN_HEADER", "Authorization"),
-		TokenCookie:     getEnv("NUKELAB_AUTH_TOKEN_COOKIE", "nukelab_server_token"),
-		TokenQueryParam: getEnv("NUKELAB_AUTH_TOKEN_QUERY_PARAM", "access_token"),
-		ListenAddr:      getEnv("NUKELAB_AUTH_LISTEN_ADDR", ":8080"),
-		ReadTimeout:     getEnvInt("NUKELAB_AUTH_READ_TIMEOUT", 5),
-		WriteTimeout:    getEnvInt("NUKELAB_AUTH_WRITE_TIMEOUT", 5),
-		MaxHeaderBytes:  getEnvInt("NUKELAB_AUTH_MAX_HEADER_BYTES", 16384),
-		RateLimitEnabled: getEnvBool("NUKELAB_AUTH_RATE_LIMIT_ENABLED", true),
+		ServerID:          getEnv("NUKELAB_AUTH_SERVER_ID", ""),
+		AuthEnabled:       getEnvBool("NUKELAB_AUTH_ENABLED", true),
+		PublicKeyPath:     getEnv("NUKELAB_AUTH_PUBLIC_KEY_PATH", "/etc/nukelab/auth/public.pem"),
+		Algorithm:         getEnv("NUKELAB_AUTH_ALGORITHM", "RS256"),
+		TokenHeader:       getEnv("NUKELAB_AUTH_TOKEN_HEADER", "Authorization"),
+		TokenCookie:       getEnv("NUKELAB_AUTH_TOKEN_COOKIE", "nukelab_server_token"),
+		TokenQueryParam:   getEnv("NUKELAB_AUTH_TOKEN_QUERY_PARAM", "access_token"),
+		ListenAddr:        getEnv("NUKELAB_AUTH_LISTEN_ADDR", ":8080"),
+		ReadTimeout:       getEnvInt("NUKELAB_AUTH_READ_TIMEOUT", 5),
+		WriteTimeout:      getEnvInt("NUKELAB_AUTH_WRITE_TIMEOUT", 5),
+		MaxHeaderBytes:    getEnvInt("NUKELAB_AUTH_MAX_HEADER_BYTES", 16384),
+		RateLimitEnabled:  getEnvBool("NUKELAB_AUTH_RATE_LIMIT_ENABLED", true),
 		RateLimitRequests: getEnvInt("NUKELAB_AUTH_RATE_LIMIT_REQUESTS", 100),
 		RateLimitWindow:   getEnvInt("NUKELAB_AUTH_RATE_LIMIT_WINDOW", 60),
 		LogLevel:          getEnv("NUKELAB_AUTH_LOG_LEVEL", "info"),
@@ -385,9 +398,9 @@ func (a *AuthSidecar) HealthHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"status": "healthy",
+		"status":       "healthy",
 		"auth_enabled": a.config.AuthEnabled,
-		"server_id": a.config.ServerID,
+		"server_id":    a.config.ServerID,
 	})
 }
 
@@ -417,6 +430,7 @@ func (a *AuthSidecar) ValidateHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// Auth disabled, allow through
+		a.recordActivity()
 		w.Header().Set("X-Auth-Status", "disabled")
 		w.WriteHeader(http.StatusOK)
 		return
@@ -438,6 +452,7 @@ func (a *AuthSidecar) ValidateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Success - set headers for downstream services
+	a.recordActivity()
 	w.Header().Set("X-User-Id", result.UserID)
 	w.Header().Set("X-Server-Id", result.ServerID)
 	w.Header().Set("X-Token-Type", result.TokenType)
@@ -471,6 +486,7 @@ func (a *AuthSidecar) AuthRequestHandler(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		// Auth disabled, allow through
+		a.recordActivity()
 		w.Header().Set("X-User-Id", "anonymous")
 		w.WriteHeader(http.StatusOK)
 		return
@@ -491,10 +507,23 @@ func (a *AuthSidecar) AuthRequestHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Success - set headers for nginx to pass to backend
+	a.recordActivity()
 	w.Header().Set("X-User-Id", result.UserID)
 	w.Header().Set("X-Server-Id", result.ServerID)
 	w.Header().Set("X-Token-Type", result.TokenType)
 	w.WriteHeader(http.StatusOK)
+}
+
+// ActivityHandler reports the last time a request was allowed through.
+// Used by the backend idle-shutdown task; last_activity is Unix seconds,
+// 0 means no proxied requests since the sidecar started.
+func (a *AuthSidecar) ActivityHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"server_id":     a.config.ServerID,
+		"last_activity": a.lastActivity.Load(),
+	})
 }
 
 // SetupRoutes configures the HTTP router.
@@ -509,6 +538,9 @@ func (a *AuthSidecar) SetupRoutes() *mux.Router {
 
 	// Nginx auth_request endpoint (returns status only)
 	r.HandleFunc("/auth", a.AuthRequestHandler).Methods("GET")
+
+	// Last allowed-request timestamp (polled by the backend idle-shutdown task)
+	r.HandleFunc("/activity", a.ActivityHandler).Methods("GET")
 
 	// Metrics endpoint (basic)
 	r.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {

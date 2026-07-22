@@ -58,6 +58,7 @@ All files under `backend/` except generated artifacts (`.venv-dev`, `__pycache__
 - Use Celery for work that can run asynchronously (e.g., container metrics collection, long-running provisioning).
 - Define tasks in `app/tasks.py`; call them with `.delay()` or `.apply_async()` from services or routes.
 - Keep tasks idempotent where possible and handle retries explicitly.
+- `shutdown_idle_servers` decides idleness from `Server.last_activity` merged with the proxied-traffic timestamp each container's auth sidecar reports via `GET http://srv-<server_id[:8]>:8080/activity` (`_fetch_sidecar_activity`). Probe failures must fall back to the DB timestamp and never block shutdown. `last_activity` writers: spawn/start/restart/access-token paths, `POST /servers/:id/activity` (interaction-gated frontend heartbeat), and this merge.
 
 ### Docker orchestration
 

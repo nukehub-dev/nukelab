@@ -402,6 +402,7 @@ from datetime import datetime, timedelta
 import pytest
 
 from app.tasks import (
+    _fetch_sidecar_activity,
     cleanup_expired_data,
     enforce_auto_stop,
     evaluate_schedules,
@@ -641,14 +642,22 @@ import pytest
 # ── helpers ──────────────────────────────────────────────────
 
 
-def _run_with_mock_db(task_func, mock_db):
-    """Run a Celery task with _run_async patched to execute in current loop."""
+def _run_with_mock_db(task_func, mock_db, sidecar_activity=None):
+    """Run a Celery task with _run_async patched to execute in current loop.
+
+    The sidecar activity probe is stubbed out so task tests stay hermetic;
+    pass sidecar_activity to exercise the idle-shutdown merge logic.
+    """
     with (
         mock.patch(
             "app.tasks._run_async",
             side_effect=lambda coro: asyncio.get_event_loop().run_until_complete(coro),
         ),
         mock.patch("app.tasks.AsyncSessionLocal") as mock_session,
+        mock.patch(
+            "app.tasks._fetch_sidecar_activity",
+            new=mock.AsyncMock(return_value=sidecar_activity or {}),
+        ),
     ):
         mock_session.return_value.__aenter__ = mock.AsyncMock(return_value=mock_db)
         mock_session.return_value.__aexit__ = mock.AsyncMock(return_value=False)
@@ -880,6 +889,168 @@ class TestShutdownIdleServersBranches:
             result = _run_with_mock_db(shutdown_idle_servers, db)
         assert "Stopped 0 idle servers" in result
         mock_delete.assert_not_called()
+
+
+class TestShutdownIdleServersSidecarActivity:
+    """Idle shutdown must honour proxied traffic reported by the auth sidecar."""
+
+    def _make_server(self, user, last_activity_hours=1):
+        server = mock.Mock()
+        server.id = uuid_mod.uuid4()
+        server.container_id = "cid-123"
+        server.last_activity = datetime.now(UTC).replace(tzinfo=None) - timedelta(
+            hours=last_activity_hours
+        )
+        server.started_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=2)
+        server.plan_id = None
+        return server
+
+    def _make_db(self, rows):
+        db = _make_async_mock_db()
+        res = mock.Mock()
+        res.all.return_value = rows
+        db.execute = mock.AsyncMock(return_value=res)
+        return db
+
+    def test_recent_sidecar_traffic_prevents_stop(self):
+        user = mock.Mock()
+        user.id = uuid_mod.uuid4()
+        user.preferences = {"idle_shutdown_timeout": 30}
+        server = self._make_server(user)
+        db = self._make_db([(server, user)])
+
+        sidecar_now = datetime.now(UTC).replace(tzinfo=None)
+        with mock.patch(
+            "app.container.spawner.spawner.get_status", new=mock.AsyncMock()
+        ) as mock_status:
+            result = _run_with_mock_db(
+                shutdown_idle_servers, db, sidecar_activity={str(server.id): sidecar_now}
+            )
+
+        assert "Stopped 0 idle servers" in result
+        # The runtime was never consulted — the server is not an idle candidate.
+        mock_status.assert_not_called()
+        # The fresher traffic timestamp is persisted for API/UI consumers.
+        assert server.last_activity == sidecar_now
+
+    def test_stale_sidecar_traffic_still_stops(self):
+        user = mock.Mock()
+        user.id = uuid_mod.uuid4()
+        user.preferences = {"idle_shutdown_timeout": 30}
+        server = self._make_server(user)
+        db = self._make_db([(server, user)])
+
+        stale = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1)
+        with (
+            mock.patch(
+                "app.container.spawner.spawner.get_status",
+                new=mock.AsyncMock(return_value="running"),
+            ),
+            mock.patch(
+                "app.container.spawner.spawner.delete", new=mock.AsyncMock(return_value=True)
+            ),
+            mock.patch("app.services.notification_service.NotificationService") as mock_notif,
+            mock.patch(
+                "app.services.notification_service.broadcast_server_status_change",
+                new=mock.AsyncMock(),
+            ),
+        ):
+            mock_notif.return_value.server_stopped = mock.AsyncMock()
+            result = _run_with_mock_db(
+                shutdown_idle_servers, db, sidecar_activity={str(server.id): stale}
+            )
+
+        assert "Stopped 1 idle servers" in result
+
+    def test_missing_sidecar_data_falls_back_to_db(self):
+        user = mock.Mock()
+        user.id = uuid_mod.uuid4()
+        user.preferences = {"idle_shutdown_timeout": 30}
+        server = self._make_server(user)
+        db = self._make_db([(server, user)])
+
+        with (
+            mock.patch(
+                "app.container.spawner.spawner.get_status",
+                new=mock.AsyncMock(return_value="running"),
+            ),
+            mock.patch(
+                "app.container.spawner.spawner.delete", new=mock.AsyncMock(return_value=True)
+            ),
+            mock.patch("app.services.notification_service.NotificationService") as mock_notif,
+            mock.patch(
+                "app.services.notification_service.broadcast_server_status_change",
+                new=mock.AsyncMock(),
+            ),
+        ):
+            mock_notif.return_value.server_stopped = mock.AsyncMock()
+            # Empty probe result: unreachable container must not block shutdown.
+            result = _run_with_mock_db(shutdown_idle_servers, db, sidecar_activity={})
+
+        assert "Stopped 1 idle servers" in result
+
+
+class TestFetchSidecarActivity:
+    """Unit tests for the sidecar /activity probe helper."""
+
+    def test_empty_server_list_short_circuits(self):
+        result = asyncio.new_event_loop().run_until_complete(_fetch_sidecar_activity([]))
+        assert result == {}
+
+    @staticmethod
+    def _mock_session(get_side_effect=None, response=None):
+        cm = mock.MagicMock()
+        if get_side_effect is not None:
+            cm.__aenter__ = mock.AsyncMock(side_effect=get_side_effect)
+        else:
+            cm.__aenter__ = mock.AsyncMock(return_value=response)
+        cm.__aexit__ = mock.AsyncMock(return_value=False)
+
+        session = mock.MagicMock()
+        session.get = mock.MagicMock(return_value=cm)
+
+        session_cm = mock.MagicMock()
+        session_cm.__aenter__ = mock.AsyncMock(return_value=session)
+        session_cm.__aexit__ = mock.AsyncMock(return_value=False)
+        return session_cm
+
+    def test_parses_valid_response(self):
+        resp = mock.AsyncMock()
+        resp.status = 200
+        resp.json = mock.AsyncMock(return_value={"last_activity": 1_700_000_000})
+
+        with mock.patch(
+            "aiohttp.ClientSession", return_value=self._mock_session(response=resp)
+        ):
+            result = asyncio.new_event_loop().run_until_complete(
+                _fetch_sidecar_activity(["abcdef12-0000-0000-0000-000000000000"])
+            )
+
+        expected = datetime.fromtimestamp(1_700_000_000, UTC).replace(tzinfo=None)
+        assert result == {"abcdef12-0000-0000-0000-000000000000": expected}
+
+    def test_unreachable_container_yields_no_entry(self):
+        with mock.patch(
+            "aiohttp.ClientSession",
+            return_value=self._mock_session(get_side_effect=OSError("dns failed")),
+        ):
+            result = asyncio.new_event_loop().run_until_complete(
+                _fetch_sidecar_activity(["abcdef12-0000-0000-0000-000000000000"])
+            )
+        assert result == {}
+
+    def test_zero_timestamp_yields_no_entry(self):
+        resp = mock.AsyncMock()
+        resp.status = 200
+        resp.json = mock.AsyncMock(return_value={"last_activity": 0})
+
+        with mock.patch(
+            "aiohttp.ClientSession", return_value=self._mock_session(response=resp)
+        ):
+            result = asyncio.new_event_loop().run_until_complete(
+                _fetch_sidecar_activity(["abcdef12-0000-0000-0000-000000000000"])
+            )
+        assert result == {}
 
 
 # ── process_nuke_billing ─────────────────────────────────────

@@ -12,6 +12,7 @@ All files under `services/auth-sidecar/`.
 
 - Go modules (`go.mod` / `go.sum`); single binary built from `main.go`.
 - `Dockerfile` defines the container image; built via `scripts/services/build-auth-sidecar.sh` or CI.
+- `/auth` and `/validate` record allowed requests to an in-memory `last_activity` timestamp, exposed via `GET /activity`; the backend idle-shutdown task polls it (`app/tasks.py:_fetch_sidecar_activity`). `/health` and `/metrics` must never update it.
 
 ## Work Guidance
 

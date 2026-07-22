@@ -3,7 +3,7 @@
 
 import asyncio
 import threading
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException
 
@@ -171,13 +171,50 @@ def cleanup_inactive_servers(self):
     return "Cleanup completed"
 
 
+async def _fetch_sidecar_activity(server_ids: list[str]) -> dict[str, datetime]:
+    """Poll each server container's auth sidecar for its last allowed request.
+
+    The sidecar records every request it lets through (valid token or
+    auth-disabled pass-through), so this captures real proxied traffic that
+    never touches the API. Returns naive-UTC datetimes keyed by server id.
+    Unreachable containers or older sidecars without /activity simply have no
+    entry — callers fall back to the database timestamp, so probe failures
+    never block idle shutdown.
+    """
+    import aiohttp
+
+    results: dict[str, datetime] = {}
+    if not server_ids:
+        return results
+
+    timeout = aiohttp.ClientTimeout(total=2)
+
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+
+        async def probe(server_id: str) -> None:
+            # Short DNS-safe alias assigned at spawn time (see spawner.py).
+            url = f"http://srv-{server_id[:8]}:8080/activity"
+            try:
+                async with session.get(url) as resp:
+                    if resp.status != 200:
+                        return
+                    data = await resp.json()
+            except Exception:
+                return
+            ts = data.get("last_activity") or 0
+            if ts > 0:
+                results[server_id] = datetime.fromtimestamp(int(ts), UTC).replace(tzinfo=None)
+
+        await asyncio.gather(*(probe(sid) for sid in server_ids))
+
+    return results
+
+
 @celery_app.task(bind=True)
 def shutdown_idle_servers(self):
     """Stop servers that have been idle beyond user preference timeout"""
 
     async def _enforce():
-        from datetime import UTC, datetime, timedelta
-
         from sqlalchemy import select
 
         from app.container.spawner import spawner
@@ -199,6 +236,15 @@ def shutdown_idle_servers(self):
             )
             servers = result.all()
 
+            # Merge in real proxied traffic observed by each container's auth
+            # sidecar. Requests to the environment (IDE loads, terminal
+            # connects) never touch the API, so without this a server in active
+            # use can look idle — and a stale open SPA tab used to be the only
+            # thing keeping last_activity fresh.
+            sidecar_activity = await _fetch_sidecar_activity(
+                [str(server.id) for server, _ in servers if server.container_id]
+            )
+
             for server, user in servers:
                 prefs = user.preferences or {}
 
@@ -209,8 +255,15 @@ def shutdown_idle_servers(self):
                 timeout_mins = prefs.get("idle_shutdown_timeout", 15)
                 cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=timeout_mins)
 
-                # Determine last activity time
+                # Determine last activity time, preferring the newest signal.
                 last_activity = server.last_activity or server.started_at
+                sidecar_ts = sidecar_activity.get(str(server.id))
+                if sidecar_ts and (not last_activity or sidecar_ts > last_activity):
+                    last_activity = sidecar_ts
+                if sidecar_ts and (not server.last_activity or sidecar_ts > server.last_activity):
+                    # Persist so API/UI consumers see the traffic-based time too.
+                    server.last_activity = sidecar_ts
+                    await db.commit()
                 if not last_activity:
                     continue
 
