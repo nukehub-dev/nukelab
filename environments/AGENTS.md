@@ -21,9 +21,9 @@ All files under `environments/`.
 - Child environments add drop-in nginx configs via `/etc/nginx/conf.d/` and set `NUKELAB_START_COMMAND` to launch their service behind the shared nginx.
 - `base/starting.html` is served by nginx (200) instead of a raw 5xx while the environment app is still booting (`error_page 500 502 503 504` in `base/nginx.conf`); it auto-reloads until the app is up, so front proxies (e.g. Cloudflare) never surface a 502 page. Changes to it only require rebuilding `base` and child images.
 - Images are built via `scripts/environments/build-base.sh`, `scripts/environments/build-workspace.sh`, `scripts/environments/build-radiation-transport.sh`, `scripts/environments/build-gpu.sh`, and `scripts/environments/build-dev.sh` or the CI/CD pipeline.
-- `./nukelabctl build` only builds backend/frontend compose images. To build an environment image, use `./nukelabctl build env <name>` (e.g. `./nukelabctl build env radiation-transport`).
-- Add `--no-cache` to build an environment image without reusing the layer cache, e.g. `./nukelabctl build env workspace --no-cache`.
-- `scripts/build-all.sh` builds the whole set.
+- `./nukelabctl build` only builds backend/frontend compose images. To build an environment image, use `./nukelabctl build env <name>` (e.g. `./nukelabctl build env radiation-transport`). Building `base` (directly or via `env all`) first builds the `nukelab-auth-sidecar` image, because `base/Dockerfile` embeds the sidecar binary via `COPY --from=nukelab-auth-sidecar:latest`.
+- Add `--no-cache` to build an environment image without reusing the layer cache, e.g. `./nukelabctl build env workspace --no-cache` (also forwarded to the sidecar build).
+- `scripts/build-all.sh` builds the whole set (sidecar first, then base, then the derived images).
 
 ## Work Guidance
 

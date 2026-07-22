@@ -98,6 +98,17 @@ _build_environments() {
         _envs=(base workspace radiation-transport gpu dev)
     fi
 
+    # The base image COPYs the sidecar binary from the nukelab-auth-sidecar
+    # image (environments/base/Dockerfile), so build it first whenever base is
+    # in the set — otherwise a stale (or missing) sidecar is baked in silently.
+    for _env in "${_envs[@]}"; do
+        if [ "$_env" = "base" ]; then
+            log "Building auth sidecar (required by the base image)"
+            _run_quiet_unless_verbose bash "$DIR/scripts/services/build-auth-sidecar.sh" "${BUILD_ARGS[@]}"
+            break
+        fi
+    done
+
     for _env in "${_envs[@]}"; do
         local _script="$DIR/scripts/environments/build-$_env.sh"
         if [ ! -f "$_script" ]; then
@@ -133,5 +144,7 @@ ${BOLD}Examples:${RESET}
 
 ${BOLD}Note:${RESET} The default ./nukelabctl build (and all) only builds backend/frontend
 compose images. Environment images are built separately with env NAME.
+Building env base (directly or via env all) first builds the
+nukelab-auth-sidecar image, which the base image embeds.
 EOF
 }

@@ -25,6 +25,7 @@ All files under `scripts/`, plus the top-level `nukelabctl` dispatcher.
 - `_acquire_lock` uses `flock` on a persistent fd (noclobber pidfile fallback); modules must not replace the dispatcher's EXIT/INT/TERM traps — lock cleanup chains through `_release_lock` from the existing traps.
 - Do not hardcode the version string or names of named volumes/services; use `_nukelab_version` and `_backend_services`. Discover compose-managed volumes via the `com.docker.compose.project` label rather than hardcoded name prefixes.
 - `_backend_services` returns a space-separated string meant to word-split; do not quote it at the call site (`# shellcheck disable=SC2086`).
+- Environment build order matters: `manage.d/build.sh` builds `services/build-auth-sidecar.sh` before any `env base` build (base embeds the sidecar binary), and `build-all.sh` mirrors that order. Keep the sidecar first when touching build orchestration.
 - When adding or changing `nukelabctl` commands, targets, or flags, update
   `scripts/nukelabctl-completion.bash` so bash tab-completion stays in sync.
 
