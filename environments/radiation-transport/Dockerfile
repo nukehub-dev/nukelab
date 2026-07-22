@@ -102,6 +102,13 @@ RUN conda create --yes -p ${NUKE_DIR} \
 # Activate the nuclear conda environment in login shells (terminals).
 COPY nuke-env.sh /etc/profile.d/nukelab-nuke-env.sh
 
+# Register the prefix env for all users. `conda env list` only reports envs
+# from envs_dirs plus the creating user's ~/.conda/environments.txt — the
+# image builds as root, so the runtime account (uid 65532) would never see
+# /opt/nuke. The system condarc makes every user see it as env name "nuke".
+# nuke-core discovers environments via `conda env list --json`.
+RUN conda config --system --append envs_dirs /opt
+
 # Install MOAB
 ARG MOAB_BRANCH
 RUN git clone -b ${MOAB_BRANCH} --depth 1 https://bitbucket.org/fathomteam/moab && \
@@ -257,13 +264,6 @@ RUN git clone -b ${ALARA_BRANCH} --depth 1 https://github.com/svalinn/ALARA && \
 
 
 # Install remaining Python packages from PyPI and GitHub.
-# The cadquery stack is pinned to the combo verified against conda vtk 9.5.2:
-# cadquery-ocp needs the pip-style VTK libs shipped by cadquery_vtk.
-# pydagmc is pinned to a commit for reproducible builds.
-# trame is pinned to 2.x because the nuke-ide visualizer imports
-# trame.ui.vuetify2 / trame.widgets.vuetify2, which trame 3.x removed.
-# trame 2.x's trame/ui/__init__.py calls pkg_resources.declare_namespace, so
-# setuptools must stay <81 (pkg_resources was removed in setuptools 81).
 RUN pip install --no-cache-dir \
         --extra-index-url https://shimwell.github.io/wheels \
         moab \
