@@ -217,9 +217,8 @@ RUN git clone -b ${OPENMC_BRANCH} https://github.com/openmc-dev/openmc.git && \
 ARG DOWNLOAD_CROSS_SECTION_DATA
 ENV OPENMC_DATA_DIR=/opt/openmc_data
 ENV OPENMC_CROSS_SECTIONS=${OPENMC_DATA_DIR}/lib80x_hdf5/cross_sections.xml
-COPY download_cross_sections.sh .
-RUN chmod +x download_cross_sections.sh && \
-    ./download_cross_sections.sh ${DOWNLOAD_CROSS_SECTION_DATA} ${OPENMC_DATA_DIR} && \
+COPY --chmod=755 download_cross_sections.sh .
+RUN ./download_cross_sections.sh ${DOWNLOAD_CROSS_SECTION_DATA} ${OPENMC_DATA_DIR} && \
     rm download_cross_sections.sh
 
 # Install PyNE
