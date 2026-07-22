@@ -71,9 +71,12 @@ Environment variables:
 
 Every request allowed through `/auth` or `/validate` (valid token, or
 auth-disabled pass-through) updates an in-memory `last_activity` timestamp.
-`/health` and `/metrics` deliberately do not — infrastructure probes must not
-keep a server alive. The timestamp resets on sidecar restart; the backend
-falls back to its database `last_activity` in that case.
+Requests carrying an **expired but authentic** token (valid signature and
+audience for this server) also update it, while still being rejected with 401 —
+this keeps long IDE sessions, whose token cookie outlives its 5-minute TTL,
+counted as activity. Forged tokens, wrong-audience tokens, and requests to
+`/health` or `/metrics` never update it. The timestamp resets on sidecar
+restart; the backend falls back to its database `last_activity` in that case.
 
 ## Building
 

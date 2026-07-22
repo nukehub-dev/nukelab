@@ -33,6 +33,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -84,6 +85,12 @@ type ValidationResult struct {
 	TokenType string `json:"token_type,omitempty"`
 	Error     string `json:"error,omitempty"`
 	Expiry    int64  `json:"exp,omitempty"`
+
+	// ExpiredAuthentic is true when the token is expired but carries a valid
+	// signature and audience for this server — proof the bearer recently held
+	// legitimate access, so the request still counts as user activity even
+	// though it must be rejected.
+	ExpiredAuthentic bool `json:"expired_authentic,omitempty"`
 }
 
 // extractClientIP extracts the real client IP from the request.
@@ -328,6 +335,17 @@ func (a *AuthSidecar) validateToken(tokenString string, clientIP string) (*Valid
 	}, jwt.WithValidMethods([]string{a.config.Algorithm}))
 
 	if err != nil {
+		if errors.Is(err, jwt.ErrTokenExpired) && a.isAuthenticToken(tokenString) {
+			// Expired but genuinely issued for this server: the bearer recently
+			// held legitimate access (e.g. an IDE session outliving the token
+			// TTL), so the request still signals user activity.
+			return &ValidationResult{
+				Valid:            false,
+				Error:            "token_expired",
+				ServerID:         a.config.ServerID,
+				ExpiredAuthentic: true,
+			}, nil
+		}
 		return &ValidationResult{Valid: false, Error: err.Error()}, nil
 	}
 
@@ -393,6 +411,24 @@ func (a *AuthSidecar) validateToken(tokenString string, clientIP string) (*Valid
 	}, nil
 }
 
+// isAuthenticToken reports whether tokenString carries a valid signature and
+// audience for this server while ignoring time-based claim validation. Used to
+// recognize expired-but-genuine tokens for activity tracking.
+func (a *AuthSidecar) isAuthenticToken(tokenString string) bool {
+	claims := jwt.MapClaims{}
+	token, err := jwt.NewParser(
+		jwt.WithValidMethods([]string{a.config.Algorithm}),
+		jwt.WithoutClaimsValidation(),
+	).ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+		return a.publicKey, nil
+	})
+	if err != nil || !token.Valid {
+		return false
+	}
+	aud, ok := claims["aud"].(string)
+	return ok && aud != "" && aud == a.config.ServerID
+}
+
 // HealthHandler handles health check requests.
 func (a *AuthSidecar) HealthHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -445,6 +481,11 @@ func (a *AuthSidecar) ValidateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !result.Valid {
+		if result.ExpiredAuthentic {
+			// Genuine but expired token: count the request as activity while
+			// still rejecting it (see isAuthenticToken).
+			a.recordActivity()
+		}
 		a.logger.Printf("WARN: Invalid token: %s", result.Error)
 		w.Header().Set("X-Auth-Error", result.Error)
 		http.Error(w, fmt.Sprintf(`{"error":"%s"}`, result.Error), http.StatusUnauthorized)
@@ -501,6 +542,11 @@ func (a *AuthSidecar) AuthRequestHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	if !result.Valid {
+		if result.ExpiredAuthentic {
+			// Genuine but expired token: count the request as activity while
+			// still rejecting it (see isAuthenticToken).
+			a.recordActivity()
+		}
 		a.logger.Printf("WARN: Invalid token: %s", result.Error)
 		w.WriteHeader(http.StatusUnauthorized)
 		return
