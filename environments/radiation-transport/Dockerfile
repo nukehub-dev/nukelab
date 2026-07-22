@@ -93,7 +93,7 @@ RUN conda create --yes -p ${NUKE_DIR} \
         python=${PYTHON_VERSION} \
         ipykernel \
         paraview \
-        trame3 \
+        trame \
         pythonocc-core \
         cadquery \
         gmsh && \
@@ -222,7 +222,7 @@ RUN git clone -b ${PYNE_BRANCH} https://github.com/pyne/pyne.git && \
     export SKBUILD_CMAKE_ARGS="-DDOWNLOAD_EIGEN3=OFF; \
         -DDOWNLOAD_LAPACK=OFF; \
         -DDOWNLOAD_BLAS=OFF; \
-        -DDOWNLOAD_HDF5=ON; \
+        -DDOWNLOAD_HDF5=OFF; \
         -DDOWNLOAD_MOAB=OFF; \
         -DMOAB_ROOT=${MOAB_ROOT}; \
         -DDOWNLOAD_DAGMC=OFF; \
