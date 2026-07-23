@@ -445,11 +445,13 @@ async def create_server(
     if not plan.is_active:
         raise HTTPException(status_code=400, detail="Plan is not active")
 
-    # Validate environment exists
+    # Validate environment exists and the user may use it
     env_service = EnvironmentService(db)
     environment = await env_service.get_by_id(body.environment_id)
     if not environment:
         raise HTTPException(status_code=404, detail="Environment not found")
+    if not await env_service.can_user_use_env(body.environment_id, current_user.role):
+        raise HTTPException(status_code=403, detail="Environment not available")
 
     # Check quota before spawning
     quota_service = QuotaService(db)
@@ -1809,6 +1811,8 @@ async def update_server(
         environment = await env_service.get_by_id(body.environment_id)
         if not environment:
             raise HTTPException(status_code=404, detail="Environment not found")
+        if not await env_service.can_user_use_env(body.environment_id, current_user.role):
+            raise HTTPException(status_code=403, detail="Environment not available")
         server.environment_id = uuid.UUID(body.environment_id)
         needs_recreate = True
 

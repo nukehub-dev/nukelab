@@ -390,3 +390,61 @@ class TestCreateServerVolumeQuota:
         mock_quota.check_volume_creation_allowed.assert_awaited_once()
         # No volume may be created when the reservation does not fit.
         mock_vol.create_volume.assert_not_called()
+
+
+class TestCreateServerEnvironmentVisibility:
+    """Users cannot spawn servers with private or inactive environments."""
+
+    @pytest.mark.asyncio
+    async def test_create_server_private_env_forbidden(
+        self, client, user_token, test_user, db_session, test_plan_env
+    ):
+        """Spawn with a private environment returns 403 for regular users."""
+        plan, _ = test_plan_env
+        private_env = EnvironmentTemplate(
+            id=uuid_mod.uuid4(),
+            name="priv-env",
+            slug=f"priv-env-{uuid_mod.uuid4().hex[:8]}",
+            image="test-image",
+            is_public=False,
+        )
+        db_session.add(private_env)
+        await db_session.commit()
+
+        response = await client.post(
+            "/api/servers/",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={
+                "name": "priv-env-server",
+                "plan_id": str(plan.id),
+                "environment_id": str(private_env.id),
+            },
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_create_server_inactive_env_forbidden(
+        self, client, user_token, test_user, db_session, test_plan_env
+    ):
+        """Spawn with an inactive environment returns 403."""
+        plan, _ = test_plan_env
+        inactive_env = EnvironmentTemplate(
+            id=uuid_mod.uuid4(),
+            name="inactive-env",
+            slug=f"inactive-env-{uuid_mod.uuid4().hex[:8]}",
+            image="test-image",
+            is_active=False,
+        )
+        db_session.add(inactive_env)
+        await db_session.commit()
+
+        response = await client.post(
+            "/api/servers/",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={
+                "name": "inactive-env-server",
+                "plan_id": str(plan.id),
+                "environment_id": str(inactive_env.id),
+            },
+        )
+        assert response.status_code == 403

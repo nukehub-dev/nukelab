@@ -13,6 +13,8 @@ from fastapi import HTTPException, status
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.permissions import Permission
+from app.core.roles import get_role_permissions
 from app.models.environment_template import EnvironmentTemplate
 
 
@@ -41,10 +43,16 @@ class EnvironmentService:
         category: str | None = None,
         is_active: bool | None = None,
         search: str | None = None,
+        user_role: str | None = None,
         page: int = 1,
         limit: int = 50,
     ) -> dict[str, Any]:
-        """List environments with filtering and pagination"""
+        """List environments with filtering and pagination.
+
+        Non-admin users (identified by user_role) only ever see public,
+        active environments; the filter is applied in SQL so pagination
+        counts stay correct.
+        """
 
         query = select(EnvironmentTemplate)
 
@@ -61,6 +69,11 @@ class EnvironmentService:
                     EnvironmentTemplate.description.ilike(f"%{search}%"),
                 )
             )
+
+        # Visibility: only admins may see private or inactive environments
+        if user_role is not None and not self._is_admin_role(user_role):
+            filters.append(EnvironmentTemplate.is_active.is_(True))
+            filters.append(EnvironmentTemplate.is_public.is_(True))
 
         if filters:
             query = query.where(and_(*filters))
@@ -84,6 +97,27 @@ class EnvironmentService:
             "limit": limit,
             "pages": (total + limit - 1) // limit,
         }
+
+    @staticmethod
+    def _is_admin_role(user_role: str | None) -> bool:
+        """Check if a role grants admin-level visibility."""
+        user_perms = get_role_permissions(user_role) if user_role else []
+        return Permission.ADMIN_ACCESS in user_perms or Permission.ALL in user_perms
+
+    async def can_user_use_env(self, env_id: str, user_role: str | None = None) -> bool:
+        """Check if a user can use an environment (spawn or attach servers).
+
+        Admins may use anything; everyone else needs an active, public
+        environment. Mirrors PlanService.can_user_use_plan.
+        """
+        env = await self.get_by_id(env_id)
+        if not env or not env.is_active:
+            return False
+
+        if self._is_admin_role(user_role):
+            return True
+
+        return bool(env.is_public)
 
     async def create_environment(
         self,
