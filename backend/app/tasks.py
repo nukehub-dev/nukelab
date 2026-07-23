@@ -3,11 +3,13 @@
 
 import asyncio
 import threading
+from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException
 
 from app.config import settings
 from app.core.logging import get_logger
+from app.core.time_utils import utc_now
 from app.worker import celery_app
 
 logger = get_logger(__name__)
@@ -56,6 +58,20 @@ def _run_async(coro):
         raise exception[0]
 
     return result[0]
+
+
+async def _release_gpu_devices(db, server_id) -> None:
+    """Release a stopped/deleted server's exclusive GPU devices (idempotent).
+
+    Never raises: a failed release must not block task-driven stops;
+    GpuAllocatorService.reconcile() is the safety net.
+    """
+    try:
+        from app.services.gpu_allocator import GpuAllocatorService
+
+        await GpuAllocatorService(db).release(str(server_id))
+    except Exception:
+        logger.exception("Failed to release GPU devices for server %s", server_id)
 
 
 @celery_app.task(bind=True)
@@ -155,13 +171,50 @@ def cleanup_inactive_servers(self):
     return "Cleanup completed"
 
 
+async def _fetch_sidecar_activity(server_ids: list[str]) -> dict[str, datetime]:
+    """Poll each server container's auth sidecar for its last allowed request.
+
+    The sidecar records every request it lets through (valid token or
+    auth-disabled pass-through), so this captures real proxied traffic that
+    never touches the API. Returns naive-UTC datetimes keyed by server id.
+    Unreachable containers or older sidecars without /activity simply have no
+    entry — callers fall back to the database timestamp, so probe failures
+    never block idle shutdown.
+    """
+    import aiohttp
+
+    results: dict[str, datetime] = {}
+    if not server_ids:
+        return results
+
+    timeout = aiohttp.ClientTimeout(total=2)
+
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+
+        async def probe(server_id: str) -> None:
+            # Short DNS-safe alias assigned at spawn time (see spawner.py).
+            url = f"http://srv-{server_id[:8]}:8080/activity"
+            try:
+                async with session.get(url) as resp:
+                    if resp.status != 200:
+                        return
+                    data = await resp.json()
+            except Exception:
+                return
+            ts = data.get("last_activity") or 0
+            if ts > 0:
+                results[server_id] = datetime.fromtimestamp(int(ts), UTC).replace(tzinfo=None)
+
+        await asyncio.gather(*(probe(sid) for sid in server_ids))
+
+    return results
+
+
 @celery_app.task(bind=True)
 def shutdown_idle_servers(self):
     """Stop servers that have been idle beyond user preference timeout"""
 
     async def _enforce():
-        from datetime import UTC, datetime, timedelta
-
         from sqlalchemy import select
 
         from app.container.spawner import spawner
@@ -183,6 +236,15 @@ def shutdown_idle_servers(self):
             )
             servers = result.all()
 
+            # Merge in real proxied traffic observed by each container's auth
+            # sidecar. Requests to the environment (IDE loads, terminal
+            # connects) never touch the API, so without this a server in active
+            # use can look idle — and a stale open SPA tab used to be the only
+            # thing keeping last_activity fresh.
+            sidecar_activity = await _fetch_sidecar_activity(
+                [str(server.id) for server, _ in servers if server.container_id]
+            )
+
             for server, user in servers:
                 prefs = user.preferences or {}
 
@@ -193,8 +255,15 @@ def shutdown_idle_servers(self):
                 timeout_mins = prefs.get("idle_shutdown_timeout", 15)
                 cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=timeout_mins)
 
-                # Determine last activity time
+                # Determine last activity time, preferring the newest signal.
                 last_activity = server.last_activity or server.started_at
+                sidecar_ts = sidecar_activity.get(str(server.id))
+                if sidecar_ts and (not last_activity or sidecar_ts > last_activity):
+                    last_activity = sidecar_ts
+                if sidecar_ts and (not server.last_activity or sidecar_ts > server.last_activity):
+                    # Persist so API/UI consumers see the traffic-based time too.
+                    server.last_activity = sidecar_ts
+                    await db.commit()
                 if not last_activity:
                     continue
 
@@ -205,10 +274,23 @@ def shutdown_idle_servers(self):
                 try:
                     if server.container_id:
                         actual_status = await spawner.get_status(server.container_id)
-                        if actual_status in ("stopped", "unknown"):
+                        if actual_status == "unknown":
+                            # Runtime lookup failed (e.g. socket timeout). Do not
+                            # mark the server stopped: the container may still be
+                            # running. Retry on the next task cycle.
+                            logger.warning(
+                                "Could not determine runtime status of idle server "
+                                "%s (container %s); skipping shutdown",
+                                server.id,
+                                server.container_id,
+                            )
+                            continue
+
+                        if actual_status == "stopped":
                             server.status = "stopped"
                             server.container_id = None
                             await db.commit()
+                            await _release_gpu_devices(db, server.id)
                             continue
 
                         await spawner.delete(server.container_id)
@@ -218,6 +300,7 @@ def shutdown_idle_servers(self):
                     server.stopped_at = datetime.now(UTC).replace(tzinfo=None)
                     server.stop_reason = "idle_timeout"
                     server.expires_at = None
+                    await _release_gpu_devices(db, server.id)
 
                     # Reconcile billing
                     if server.plan_id:
@@ -375,6 +458,7 @@ def process_nuke_billing(self):
                             server.status = "stopped"
                             server.stopped_at = datetime.now(UTC).replace(tzinfo=None)
                             server.stop_reason = "credit_depleted"
+                            await _release_gpu_devices(db, server.id)
 
                             # Reconcile exact billing for final partial interval
                             await credit_service.reconcile_server_billing(server, plan)
@@ -467,6 +551,7 @@ def enforce_auto_stop(self):
                     server.stopped_at = now
                     server.stop_reason = "max_runtime_exceeded"
                     server.expires_at = None
+                    await _release_gpu_devices(db, server.id)
                     await broadcast_server_status_change(
                         server.user_id,
                         str(server.id),
@@ -592,6 +677,7 @@ def process_server_queue(self):
                         next_entry.error_message = "Insufficient NUKE credits"
                         continue
 
+                gpu_server_id = None
                 try:
                     # Look up environment details
                     from app.models.environment_template import EnvironmentTemplate
@@ -604,6 +690,24 @@ def process_server_queue(self):
                     environment = env_result.scalar_one_or_none()
                     env_slug = environment.slug if environment else "dev"
                     env_image = environment.image if environment else None
+
+                    # Reserve exclusive GPU devices (when the pool is
+                    # configured) before charging credits, using the same
+                    # allocate-or-fail helper as the API spawn paths. A dry
+                    # pool fails the entry cleanly with a clear reason.
+                    import uuid
+
+                    from app.api.servers import _ensure_gpu_devices
+
+                    gpu_server_id = str(uuid.uuid4())
+                    try:
+                        gpu_devices = await _ensure_gpu_devices(
+                            db, gpu_server_id, plan.gpu_limit or 0
+                        )
+                    except HTTPException as e:
+                        next_entry.status = "failed"
+                        next_entry.error_message = e.detail
+                        continue
 
                     # Deduct credits
                     if settings.credits_enabled and plan.cost_per_hour > 0:
@@ -624,6 +728,9 @@ def process_server_queue(self):
                         cpu=next_entry.requested_cpu or plan.cpu_limit,
                         memory=next_entry.requested_memory or plan.memory_limit,
                         disk=next_entry.requested_disk or plan.disk_limit,
+                        gpu=plan.gpu_limit or 0,
+                        gpu_devices=gpu_devices,
+                        server_id=gpu_server_id,
                     )
 
                     server.plan_id = next_entry.plan_id
@@ -667,6 +774,10 @@ def process_server_queue(self):
                     started_count += 1
 
                 except Exception as e:
+                    # Free any devices reserved above before recording the failure.
+                    if gpu_server_id:
+                        await _release_gpu_devices(db, gpu_server_id)
+
                     next_entry.status = "failed"
                     next_entry.error_message = str(e)
                     next_entry.retry_count += 1
@@ -1048,17 +1159,11 @@ def enforce_volume_quotas(self):
                     if not volume:
                         continue
 
-                    # Try XFS quota report first (fast, no disk walk)
-                    size_bytes = None
-                    if xfs_available:
-                        xfs_data = xfs_quota_service.get_quota_usage(volume.name)
-                        if xfs_data is not None:
-                            size_bytes = xfs_data["used_bytes"]
-                            xfs_used += 1
-
-                    # Fallback to du -sb for non-XFS volumes or if xfs_quota fails
-                    if size_bytes is None:
-                        size_bytes = await volume_service.get_volume_size(volume.name)
+                    # XFS quota report when available (fast, no disk walk), else du -sb
+                    size_bytes, source = await volume_service.measure_volume_size(volume.name)
+                    if source == "xfs":
+                        xfs_used += 1
+                    elif source == "du":
                         du_used += 1
 
                     if size_bytes is None:
@@ -1121,6 +1226,7 @@ def enforce_volume_quotas(self):
                         server.status = "stopped"
                         server.stopped_at = datetime.now(UTC).replace(tzinfo=None)
                         server.stop_reason = "volume_quota_exceeded"
+                        await _release_gpu_devices(db, server.id)
 
                         # Reconcile billing
                         if server.plan_id:
@@ -1270,7 +1376,12 @@ def update_prometheus_business_metrics(self):
 
 @celery_app.task(bind=True)
 def grant_daily_allowance_to_all(self):
-    """Auto-grant the daily credit allowance to every active user.
+    """Auto-grant the daily credit allowance to recently-active users.
+
+    Only users who have logged in within the configured activity window
+    (``credits_daily_allowance_login_window_hours``, default 48h) are
+    eligible. This prevents dormant accounts from accumulating credits
+    every day.
 
     Idempotent per UTC day: the unique partial index
     uq_credit_tx_daily_allowance_per_user_per_day guarantees a user
@@ -1285,20 +1396,33 @@ def grant_daily_allowance_to_all(self):
 
         from app.models.user import User
         from app.services.credit_service import CreditService
+        from app.services.setting_service import SettingService
 
         async with AsyncSessionLocal() as db:
             credit_service = CreditService(db)
+            setting_service = SettingService(db)
+            window_hours = await setting_service.get_daily_allowance_login_window_hours()
+            cutoff = utc_now() - timedelta(hours=window_hours)
 
             result = await db.execute(
-                select(User.id, User.username).where(User.is_active.is_(True))
+                select(User.id, User.username, User.last_login).where(User.is_active.is_(True))
             )
             active_users = result.all()
 
             granted = 0
             already = 0
             failed = 0
+            skipped_inactive = 0
 
-            for user_id, username in active_users:
+            for user_id, username, last_login in active_users:
+                # Only grant to users who have logged in recently. None/NULL
+                # last_login means the account has never been used, so it is
+                # skipped. This turns the daily allowance into a login reward
+                # rather than an accrual for dormant accounts.
+                if last_login is None or last_login < cutoff:
+                    skipped_inactive += 1
+                    continue
+
                 try:
                     await credit_service.grant_daily_allowance(str(user_id))
                     granted += 1
@@ -1334,13 +1458,16 @@ def grant_daily_allowance_to_all(self):
                     "granted": granted,
                     "already_granted": already,
                     "failed": failed,
+                    "skipped_inactive": skipped_inactive,
                     "total_active": len(active_users),
+                    "login_window_hours": window_hours,
                 },
             )
 
             return (
                 f"Daily allowance: granted={granted}, "
                 f"already_granted={already}, failed={failed}, "
+                f"skipped_inactive={skipped_inactive}, "
                 f"total_active={len(active_users)}"
             )
 

@@ -349,6 +349,84 @@ Expected output shows the loop device size (10G), not the host's data partition:
 /dev/loop0                  10G   24K   10G   1% /etc/hosts
 ```
 
+### Hide host storage size on shared named volumes
+
+The loopback fix above covers Docker's per-container metadata files, but spawned containers also mount two shared read-only named volumes whose backing directories live on the same XFS data partition:
+
+| Container path | Named volume | Content | Mounted by |
+|---|---|---|---|
+| `/etc/nukelab/auth` | `nukelab-server-secrets` | Server-auth public key | `backend/app/container/spawner.py` |
+| `/usr/local/lib/nukelab` | `nukelab-cpu-lib` | `libnukelab_cpu.so` CPU-mask library | `backend/app/container/client.py` |
+
+These directories have no XFS project quota, so the kernel reports filesystem-wide totals for them and `df` inside any user container leaks the host data partition's size and usage:
+
+```text
+/dev/mapper/your-vg-data  500G   50G  450G  10% /etc/nukelab/auth
+/dev/mapper/your-vg-data  500G   50G  450G  10% /usr/local/lib/nukelab
+```
+
+When auditing, use `df -ha` (or `findmnt`) instead of plain `df -h`: for bind mounts, `df` prints each device only once and keeps the entry with the shortest mount point, so individual leaks are hidden from the default output.
+
+Attaching a small XFS project quota to each volume's `_data` directory makes `statfs` report the quota size instead of the filesystem totals, and enforces a real limit on the directory as a side benefit. The change takes effect immediately; running containers do not need a restart. Run on the host as root:
+
+**1. Resolve the volume paths and the XFS mountpoint:**
+
+```bash
+docker volume inspect nukelab-server-secrets --format '{{ .Mountpoint }}'
+docker volume inspect nukelab-cpu-lib --format '{{ .Mountpoint }}'
+# typically /data/docker/volumes/nukelab-server-secrets/_data
+#           /data/docker/volumes/nukelab-cpu-lib/_data
+
+findmnt -T /data/docker/volumes/nukelab-server-secrets/_data
+# TARGET is the mountpoint xfs_quota needs; FSTYPE must be xfs and
+# OPTIONS must contain prjquota.
+```
+
+`xfs_quota` requires the real mountpoint as its final argument. Passing a subdirectory such as `/data/docker` fails with `cannot setup path for mount ...: No such device or address` when the volume is mounted higher up (for example at `/data`).
+
+**2. Register project IDs outside the backend's dynamic range:**
+
+The backend allocates project IDs as `10000 + md5(volume_name) % 1000000` (`backend/app/services/xfs_quota_service.py`), so any ID below 10000 is collision-free:
+
+```bash
+echo "9001:/data/docker/volumes/nukelab-server-secrets/_data" >> /etc/projects
+echo "9002:/data/docker/volumes/nukelab-cpu-lib/_data" >> /etc/projects
+```
+
+**3. Set the project-inherit flag so future writes stay in the project:**
+
+```bash
+xfs_io -c 'chattr +P' /data/docker/volumes/nukelab-server-secrets/_data
+xfs_io -c 'chattr +P' /data/docker/volumes/nukelab-cpu-lib/_data
+```
+
+**4. Initialize the projects and set small hard limits:**
+
+```bash
+xfs_quota -x -c 'project -s -p /data/docker/volumes/nukelab-server-secrets/_data 9001' /data
+xfs_quota -x -c 'limit -p bhard=100m 9001' /data
+
+xfs_quota -x -c 'project -s -p /data/docker/volumes/nukelab-cpu-lib/_data 9002' /data
+xfs_quota -x -c 'limit -p bhard=100m 9002' /data
+```
+
+Use the mountpoint reported by `findmnt -T` in step 1 (here `/data`). Keep the limit generous: the backend rewrites keys in `nukelab-server-secrets` on startup and key rotation, and writes that exceed the hard limit fail with `EDQUOT`.
+
+**5. Verify:**
+
+```bash
+# On the host:
+xfs_quota -x -c 'report -p' /data | grep -E '9001|9002'
+
+# Inside any running user container (effective immediately):
+df -h /etc/nukelab/auth /usr/local/lib/nukelab
+# Expected: ~100M each, not the host partition size.
+```
+
+Quota limits persist in the filesystem's quota metadata across reboots as long as the partition mounts with `prjquota`. Repeat these steps for any future shared named volume or host bind mounted into user containers — any such mount without a project quota leaks the host totals.
+
+The container root (`overlay` on `/`) also reveals the host root partition size. To mask it, set a per-container writable-layer size limit (`storage_opt: {"size": "..."}`) at creation time; with overlay2 on XFS + `prjquota`, `df /` then reports the configured size instead.
+
 ---
 
 ## Docker vs Podman

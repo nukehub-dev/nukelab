@@ -12,6 +12,7 @@ import {
   ResponsiveContainer,
   type TooltipProps,
 } from 'recharts'
+import { formatDate } from '../../lib/utils'
 
 export interface AreaChartDataPoint {
   timestamp: string
@@ -73,13 +74,7 @@ function CustomTooltip({
       }}
     >
       <p className="font-medium text-muted-foreground mb-2">
-        {typeof label === 'string' && label.includes('T')
-          ? new Date(label).toLocaleDateString('en-US', {
-              month: 'short',
-              day: 'numeric',
-              year: 'numeric',
-            })
-          : label}
+        {typeof label === 'string' && label.includes('T') ? formatDate(label) : label}
       </p>
       <div className="space-y-1">
         {customItems ? (

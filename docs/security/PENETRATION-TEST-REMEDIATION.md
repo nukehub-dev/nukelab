@@ -21,6 +21,7 @@
 | PENT-NKL-009 | Auth sidecar mounts wrong server-auth public key volume | Backend Eng | 2026-06-28 | Closed | `backend/app/container/spawner.py`, `backend/tests/container/test_spawner.py` | Mount `nukelab-server-secrets` at `/etc/nukelab/auth`; end-to-end terminal access verified |
 | PENT-NKL-010 | Server gateway page reloads instead of opening terminal | Frontend Eng | 2026-06-28 | Closed | `frontend/src/routes/user.$username.$serverName.tsx`, `frontend/public/sw.js`, `frontend/public/sw.js.tpl` | Open terminal in new tab; bypass `/user/` in service worker; frontend rebuilt and redeployed |
 | PENT-NKL-011 | Backend reports server running before container is ready | Backend Eng | 2026-06-28 | Closed | `backend/app/container/spawner.py`, `backend/app/container/client.py`, `backend/app/config.py`, `backend/tests/container/test_client.py`, `backend/tests/container/test_spawner.py` | Wait for container `/health` before returning `running`; live spawn shows terminal accessible immediately after status flip |
+| PENT-NKL-012 | Shared read-only volumes leak host storage size and usage | Platform Eng | 2026-07-19 | Open | `docs/operations/PRODUCTION-DEPLOYMENT.md` | Apply small XFS project quotas to the `nukelab-server-secrets` and `nukelab-cpu-lib` volume directories on the prod host (procedure documented in "Hide host storage size on shared named volumes"), then verify against the finding's retest criteria |
 
 ---
 

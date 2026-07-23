@@ -19,15 +19,26 @@ import {
   Users,
   X,
   Clock,
+  Gift,
+  Scale,
 } from 'lucide-react'
 import { useUsers } from '../hooks/use-users'
 import { useLowBalanceUsers } from '../hooks/use-credits'
-import { useSystemDailyAllowance, useUpdateSystemDailyAllowance } from '../hooks/use-system-config'
+import {
+  useSystemDailyAllowance,
+  useUpdateSystemDailyAllowance,
+  useSystemMaxBalance,
+  useUpdateSystemMaxBalance,
+  useSystemInitialBalance,
+  useUpdateSystemInitialBalance,
+  useSystemAllowanceLoginWindow,
+  useUpdateSystemAllowanceLoginWindow,
+} from '../hooks/use-system-config'
 import { useDataTable } from '../hooks/use-data-table'
 import { useThemeStore } from '../stores/theme-store'
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store'
 import { usePageGuard } from '../hooks/use-page-guard'
-import { cn } from '../lib/utils'
+import { cn, parseUtcDate } from '../lib/utils'
 import { CreditAdjustDialog } from '../components/admin/credit-adjust-dialog'
 import { CreditHistoryDialog } from '../components/admin/credit-history-dialog'
 import { DailyAllowanceDialog } from '../components/admin/daily-allowance-dialog'
@@ -67,8 +78,38 @@ function CreditsAdminPage() {
   } = useSystemDailyAllowance()
   const updateSystemAllowance = useUpdateSystemDailyAllowance()
 
+  const {
+    data: systemMaxBalanceData,
+    isLoading: systemMaxBalanceLoading,
+    refetch: refetchSystemMaxBalance,
+  } = useSystemMaxBalance()
+  const updateSystemMaxBalance = useUpdateSystemMaxBalance()
+
+  const {
+    data: systemInitialBalanceData,
+    isLoading: systemInitialBalanceLoading,
+    refetch: refetchSystemInitialBalance,
+  } = useSystemInitialBalance()
+  const updateSystemInitialBalance = useUpdateSystemInitialBalance()
+
+  const {
+    data: systemLoginWindowData,
+    isLoading: systemLoginWindowLoading,
+    refetch: refetchSystemLoginWindow,
+  } = useSystemAllowanceLoginWindow()
+  const updateSystemLoginWindow = useUpdateSystemAllowanceLoginWindow()
+
   const [systemAllowanceInput, setSystemAllowanceInput] = useState('')
   const systemAllowanceValue = systemAllowanceData?.default_daily_allowance
+
+  const [systemMaxBalanceInput, setSystemMaxBalanceInput] = useState('')
+  const systemMaxBalanceValue = systemMaxBalanceData?.max_balance
+
+  const [systemInitialBalanceInput, setSystemInitialBalanceInput] = useState('')
+  const systemInitialBalanceValue = systemInitialBalanceData?.initial_balance
+
+  const [systemLoginWindowInput, setSystemLoginWindowInput] = useState('')
+  const systemLoginWindowValue = systemLoginWindowData?.login_window_hours
 
   const searchParams = useSearch({ from: '/admin/credits' }) as { user?: string }
 
@@ -129,6 +170,24 @@ function CreditsAdminPage() {
     }
   }, [systemAllowanceValue])
 
+  useEffect(() => {
+    if (systemMaxBalanceValue !== undefined) {
+      setSystemMaxBalanceInput(String(systemMaxBalanceValue))
+    }
+  }, [systemMaxBalanceValue])
+
+  useEffect(() => {
+    if (systemInitialBalanceValue !== undefined) {
+      setSystemInitialBalanceInput(String(systemInitialBalanceValue))
+    }
+  }, [systemInitialBalanceValue])
+
+  useEffect(() => {
+    if (systemLoginWindowValue !== undefined) {
+      setSystemLoginWindowInput(String(systemLoginWindowValue))
+    }
+  }, [systemLoginWindowValue])
+
   const users = useMemo(() => usersData?.data || [], [usersData?.data])
   const pagination = usersData?.pagination
   const lowBalanceUsers = useMemo(() => lowBalanceData?.users || [], [lowBalanceData?.users])
@@ -164,6 +223,27 @@ function CreditsAdminPage() {
     if (Number.isNaN(value) || value < 0) return
     if (value === systemAllowanceValue) return
     updateSystemAllowance.mutate(value)
+  }
+
+  const handleSaveSystemMaxBalance = () => {
+    const value = parseInt(systemMaxBalanceInput, 10)
+    if (Number.isNaN(value) || value < 0) return
+    if (value === systemMaxBalanceValue) return
+    updateSystemMaxBalance.mutate(value)
+  }
+
+  const handleSaveSystemInitialBalance = () => {
+    const value = parseInt(systemInitialBalanceInput, 10)
+    if (Number.isNaN(value) || value < 0) return
+    if (value === systemInitialBalanceValue) return
+    updateSystemInitialBalance.mutate(value)
+  }
+
+  const handleSaveSystemLoginWindow = () => {
+    const value = parseInt(systemLoginWindowInput, 10)
+    if (Number.isNaN(value) || value < 0) return
+    if (value === systemLoginWindowValue) return
+    updateSystemLoginWindow.mutate(value)
   }
 
   const openBulkGrant = useCallback(() => {
@@ -315,7 +395,7 @@ function CreditsAdminPage() {
             <span className="text-[10px] text-muted-foreground">/day</span>
             {overrideActive && (
               <Tooltip
-                content={`Override active: ${user.daily_allowance_override} / day until ${user.daily_allowance_override_until ? new Date(user.daily_allowance_override_until).toLocaleString() : 'soon'}`}
+                content={`Override active: ${user.daily_allowance_override} / day until ${user.daily_allowance_override_until ? parseUtcDate(user.daily_allowance_override_until).toLocaleString() : 'soon'}`}
               >
                 <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 cursor-help">
                   <Clock className="w-2.5 h-2.5" />
@@ -693,6 +773,251 @@ function CreditsAdminPage() {
               {(systemAllowanceValue ?? 0).toLocaleString()}
             </span>
             <span className="text-muted-foreground">NUKE / day</span>
+          </div>
+        )}
+      </motion.div>
+
+      {/* System Max Balance */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+        className="bubble space-y-4 p-6"
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-rose-500/10 flex items-center justify-center">
+              <Scale className="w-5 h-5 text-rose-400" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-base">System Max Balance</h3>
+              <p className="text-xs text-muted-foreground">
+                Hard cap on user credit balance; set to 0 for unlimited
+              </p>
+            </div>
+          </div>
+          <Tooltip content="Refresh">
+            <button
+              onClick={() => refetchSystemMaxBalance()}
+              className="p-1.5 rounded-lg hover:bg-accent transition-colors"
+            >
+              <RefreshCw
+                className={cn(
+                  'w-4 h-4 text-muted-foreground',
+                  systemMaxBalanceLoading && 'animate-spin'
+                )}
+              />
+            </button>
+          </Tooltip>
+        </div>
+
+        {systemMaxBalanceLoading && systemMaxBalanceValue === undefined ? (
+          <div className="h-12 bg-muted/50 rounded-xl animate-pulse" />
+        ) : canManageSystemAllowance ? (
+          <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3">
+            <div className="flex-1 w-full">
+              <label className="text-xs text-muted-foreground mb-1.5 block">
+                Max balance (NUKE, 0 = unlimited)
+              </label>
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={systemMaxBalanceInput}
+                onChange={(e) => setSystemMaxBalanceInput(e.target.value)}
+                disabled={updateSystemMaxBalance.isPending}
+                className="w-full h-9 px-3 text-sm bg-background border border-border/50 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
+              />
+            </div>
+            <Button
+              onClick={handleSaveSystemMaxBalance}
+              disabled={
+                updateSystemMaxBalance.isPending ||
+                Number.isNaN(parseInt(systemMaxBalanceInput, 10)) ||
+                parseInt(systemMaxBalanceInput, 10) < 0 ||
+                parseInt(systemMaxBalanceInput, 10) === systemMaxBalanceValue
+              }
+              className="h-9 shrink-0"
+            >
+              {updateSystemMaxBalance.isPending ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <Scale className="w-4 h-4" />
+              )}
+              <span className="ml-2">Save Cap</span>
+            </Button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-sm">
+            <Scale className="w-4 h-4 text-muted-foreground" />
+            <span className="font-mono font-medium">
+              {systemMaxBalanceValue === 0
+                ? 'Unlimited'
+                : (systemMaxBalanceValue ?? 0).toLocaleString()}
+            </span>
+            <span className="text-muted-foreground">NUKE</span>
+          </div>
+        )}
+      </motion.div>
+
+      {/* Signup Initial Balance */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.25 }}
+        className="bubble space-y-4 p-6"
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+              <Gift className="w-5 h-5 text-emerald-400" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-base">Signup Initial Balance</h3>
+              <p className="text-xs text-muted-foreground">
+                Credits granted to new users when they first sign up
+              </p>
+            </div>
+          </div>
+          <Tooltip content="Refresh">
+            <button
+              onClick={() => refetchSystemInitialBalance()}
+              className="p-1.5 rounded-lg hover:bg-accent transition-colors"
+            >
+              <RefreshCw
+                className={cn(
+                  'w-4 h-4 text-muted-foreground',
+                  systemInitialBalanceLoading && 'animate-spin'
+                )}
+              />
+            </button>
+          </Tooltip>
+        </div>
+
+        {systemInitialBalanceLoading && systemInitialBalanceValue === undefined ? (
+          <div className="h-12 bg-muted/50 rounded-xl animate-pulse" />
+        ) : canManageSystemAllowance ? (
+          <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3">
+            <div className="flex-1 w-full">
+              <label className="text-xs text-muted-foreground mb-1.5 block">
+                Initial balance (NUKE)
+              </label>
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={systemInitialBalanceInput}
+                onChange={(e) => setSystemInitialBalanceInput(e.target.value)}
+                disabled={updateSystemInitialBalance.isPending}
+                className="w-full h-9 px-3 text-sm bg-background border border-border/50 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
+              />
+            </div>
+            <Button
+              onClick={handleSaveSystemInitialBalance}
+              disabled={
+                updateSystemInitialBalance.isPending ||
+                Number.isNaN(parseInt(systemInitialBalanceInput, 10)) ||
+                parseInt(systemInitialBalanceInput, 10) < 0 ||
+                parseInt(systemInitialBalanceInput, 10) === systemInitialBalanceValue
+              }
+              className="h-9 shrink-0"
+            >
+              {updateSystemInitialBalance.isPending ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <Gift className="w-4 h-4" />
+              )}
+              <span className="ml-2">Save Initial Balance</span>
+            </Button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-sm">
+            <Gift className="w-4 h-4 text-muted-foreground" />
+            <span className="font-mono font-medium">
+              {(systemInitialBalanceValue ?? 0).toLocaleString()}
+            </span>
+            <span className="text-muted-foreground">NUKE</span>
+          </div>
+        )}
+      </motion.div>
+
+      {/* Daily Allowance Login Window */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3 }}
+        className="bubble space-y-4 p-6"
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
+              <Clock className="w-5 h-5 text-amber-400" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-base">Daily Allowance Login Window</h3>
+              <p className="text-xs text-muted-foreground">
+                Users must have logged in within this window to receive the daily allowance
+              </p>
+            </div>
+          </div>
+          <Tooltip content="Refresh">
+            <button
+              onClick={() => refetchSystemLoginWindow()}
+              className="p-1.5 rounded-lg hover:bg-accent transition-colors"
+            >
+              <RefreshCw
+                className={cn(
+                  'w-4 h-4 text-muted-foreground',
+                  systemLoginWindowLoading && 'animate-spin'
+                )}
+              />
+            </button>
+          </Tooltip>
+        </div>
+
+        {systemLoginWindowLoading && systemLoginWindowValue === undefined ? (
+          <div className="h-12 bg-muted/50 rounded-xl animate-pulse" />
+        ) : canManageSystemAllowance ? (
+          <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3">
+            <div className="flex-1 w-full">
+              <label className="text-xs text-muted-foreground mb-1.5 block">
+                Login window (hours)
+              </label>
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={systemLoginWindowInput}
+                onChange={(e) => setSystemLoginWindowInput(e.target.value)}
+                disabled={updateSystemLoginWindow.isPending}
+                className="w-full h-9 px-3 text-sm bg-background border border-border/50 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
+              />
+            </div>
+            <Button
+              onClick={handleSaveSystemLoginWindow}
+              disabled={
+                updateSystemLoginWindow.isPending ||
+                Number.isNaN(parseInt(systemLoginWindowInput, 10)) ||
+                parseInt(systemLoginWindowInput, 10) < 0 ||
+                parseInt(systemLoginWindowInput, 10) === systemLoginWindowValue
+              }
+              className="h-9 shrink-0"
+            >
+              {updateSystemLoginWindow.isPending ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <Clock className="w-4 h-4" />
+              )}
+              <span className="ml-2">Save Window</span>
+            </Button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-sm">
+            <Clock className="w-4 h-4 text-muted-foreground" />
+            <span className="font-mono font-medium">
+              {(systemLoginWindowValue ?? 0).toLocaleString()}
+            </span>
+            <span className="text-muted-foreground">hours</span>
           </div>
         )}
       </motion.div>

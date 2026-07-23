@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 import { createFileRoute, Link } from '@tanstack/react-router'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
+import { useMemo } from 'react'
 import {
   Palette,
   Moon,
@@ -13,16 +15,34 @@ import {
   ArrowLeft,
   MonitorSmartphone,
   Maximize2,
+  Globe,
 } from 'lucide-react'
 import { useThemeStore } from '../stores/theme-store'
 import { useSidebarStore } from '../stores/sidebar-store'
+import { AUTO_TIMEZONE, getBrowserTimezone, useTimezoneStore } from '../stores/timezone-store'
+import { useToast } from '../stores/toast-store'
+import { api } from '../lib/api'
 import { THEME_VALUES, THEME_PREVIEWS, ACCENT_COLORS } from '../types/theme'
 import { cn } from '../lib/utils'
+import { Combobox } from '../components/ui/combobox'
 import { Tooltip } from '../components/ui/tooltip'
 
 export const Route = createFileRoute('/settings/appearance')({
   component: AppearanceSettingsPage,
 })
+
+/** Short zone list used when Intl.supportedValuesOf is unavailable. */
+const FALLBACK_TIMEZONES = [
+  'UTC',
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+  'Europe/London',
+  'Europe/Berlin',
+  'Asia/Tokyo',
+  'Australia/Sydney',
+]
 
 function AppearanceSettingsPage() {
   const {
@@ -39,6 +59,58 @@ function AppearanceSettingsPage() {
   } = useThemeStore()
 
   const { mode, setMode } = useSidebarStore()
+
+  const queryClient = useQueryClient()
+  const { error } = useToast()
+  const timezone = useTimezoneStore((s) => s.preference)
+  const effectiveZone = useTimezoneStore((s) => s.effectiveZone)
+  const setTimezone = useTimezoneStore((s) => s.setPreference)
+
+  // ~400 IANA zones — memoize so the options array is not rebuilt every render
+  const timezoneOptions = useMemo(() => {
+    const zones =
+      typeof Intl.supportedValuesOf === 'function'
+        ? Intl.supportedValuesOf('timeZone')
+        : FALLBACK_TIMEZONES
+    const options = [
+      { value: AUTO_TIMEZONE, label: `Automatic (browser: ${getBrowserTimezone()})` },
+      { value: 'UTC', label: 'UTC' },
+      ...zones.filter((zone) => zone !== 'UTC').map((zone) => ({ value: zone, label: zone })),
+    ]
+    // Keep a stored but non-canonical zone id selectable
+    if (timezone !== AUTO_TIMEZONE && !options.some((o) => o.value === timezone)) {
+      options.push({ value: timezone, label: timezone })
+    }
+    return options
+  }, [timezone])
+
+  // Optimistic-save pattern from settings.servers.tsx
+  const timezoneMutation = useMutation({
+    mutationFn: async (payload: Record<string, unknown>) => {
+      return api.put('/preferences/', payload)
+    },
+    onSuccess: (_result, variables) => {
+      queryClient.setQueryData(['me'], (old: unknown) => {
+        if (!old) return old
+        const prev = old as { preferences?: Record<string, unknown> }
+        return {
+          ...old,
+          preferences: {
+            ...(prev.preferences || {}),
+            ...variables,
+          },
+        }
+      })
+    },
+    onError: (err) => {
+      error('Failed to save preferences', err instanceof Error ? err.message : 'Please try again')
+    },
+  })
+
+  const handleTimezoneChange = (value: string) => {
+    setTimezone(value)
+    timezoneMutation.mutate({ timezone: value })
+  }
 
   return (
     <div className="min-h-screen p-6 lg:p-10 space-y-10">
@@ -248,6 +320,33 @@ function AppearanceSettingsPage() {
               </div>
             </div>
           </div>
+        </SettingsSection>
+
+        {/* Timezone */}
+        <SettingsSection>
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Globe className="w-4 h-4 text-muted-foreground" />
+                <h3 className="text-base font-semibold">Timezone</h3>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Choose the timezone used to display dates and times
+              </p>
+            </div>
+            <Combobox
+              value={timezone}
+              onChange={handleTimezoneChange}
+              options={timezoneOptions}
+              placeholder="Select timezone"
+              searchPlaceholder="Search timezones..."
+              className="w-64 shrink-0"
+              triggerClassName="h-10 rounded-xl border-transparent bg-muted px-4 shadow-none hover:bg-muted/70"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground mt-3">
+            All times are shown in {effectiveZone}
+          </p>
         </SettingsSection>
 
         {/* Desktop Sidebar */}

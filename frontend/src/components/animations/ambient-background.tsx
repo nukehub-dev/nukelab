@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
 // SPDX-License-Identifier: BSD-2-Clause
 
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
+import { useIsDesktopViewport } from '../../hooks/use-is-desktop'
 import { cn } from '../../lib/utils'
 
 interface AmbientBackgroundProps {
@@ -10,7 +11,10 @@ interface AmbientBackgroundProps {
 }
 
 export function AmbientBackground({ variant = 'default', className }: AmbientBackgroundProps) {
-  if (variant === 'subtle') return null
+  const shouldReduceMotion = useReducedMotion()
+  const isDesktop = useIsDesktopViewport()
+
+  if (variant === 'subtle' || shouldReduceMotion || !isDesktop) return null
 
   return (
     <div className={cn('fixed inset-0 overflow-hidden pointer-events-none z-0', className)}>

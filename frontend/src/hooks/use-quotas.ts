@@ -38,6 +38,25 @@ export interface UserQuota {
   quota_id: string | null
 }
 
+export interface MyQuota {
+  id: string
+  user_id: string
+  role: string | null
+  plan_id: string | null
+  limits: QuotaLimits
+  usage: QuotaUsage
+}
+
+export function useMyQuota() {
+  return useQuery({
+    queryKey: ['quota', 'me'],
+    queryFn: async () => {
+      const response = await api.get<{ success: boolean; data: MyQuota }>('/quotas/')
+      return response.data
+    },
+  })
+}
+
 interface QuotasResponse {
   items: UserQuota[]
   total: number

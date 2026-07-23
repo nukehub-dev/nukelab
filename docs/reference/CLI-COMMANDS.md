@@ -65,7 +65,7 @@ You can also set `COMPOSE_OVERLAYS` in `.env` to always include overlays.
 
 ```bash
 ./nukelabctl backup
-./nukelabctl restore backups/nukelab_backup_YYYYMMDD_HHMMSS.sql
+./nukelabctl restore backups/nukelab_backup_YYYYMMDD_HHMMSS.sql   # asks for confirmation; --yes skips
 ```
 
 ### Testing and verification

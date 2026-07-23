@@ -58,6 +58,13 @@ parse_start_args() {
                 ;;
         esac
     done
+
+    case "$TARGET" in
+        backend | frontend | all) ;;
+        *)
+            die "Unknown target for start: $TARGET\nRun './nukelabctl start --help' for usage."
+            ;;
+    esac
 }
 
 cmd_start() {
@@ -126,6 +133,11 @@ cmd_start() {
         echo -e "\n  ${YELLOW}Ctrl+C to stop${RESET}"
 
         persist_state
+
+        # The start operation is done; the blocking wait below only idles
+        # while the dev session runs. Release the manage lock so other
+        # nukelabctl commands (logs, backup, stop, ...) work during it.
+        _release_lock
 
         trap '_stop_dev_stack' INT TERM
         wait

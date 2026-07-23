@@ -241,6 +241,14 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
         },
       },
       {
+        accessorKey: 'health_status',
+        header: 'Health',
+        cell: ({ row }) => {
+          const health = (row.getValue('health_status') as string) || 'unknown'
+          return <StatusBadge status={health as 'healthy' | 'unhealthy' | 'unknown'} />
+        },
+      },
+      {
         accessorKey: 'username',
         header: 'Owner',
         cell: ({ row }) => {
@@ -573,10 +581,15 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
     <div className="p-4 space-y-3">
       <div className="flex items-center justify-between">
         <div className="font-medium">{server.name}</div>
-        <StatusBadge
-          status={server.status as 'running' | 'stopped' | 'pending' | 'error'}
-          pulse={server.status === 'running'}
-        />
+        <div className="flex items-center gap-2">
+          <StatusBadge
+            status={server.status as 'running' | 'stopped' | 'pending' | 'error'}
+            pulse={server.status === 'running'}
+          />
+          <StatusBadge
+            status={(server.health_status || 'unknown') as 'healthy' | 'unhealthy' | 'unknown'}
+          />
+        </div>
       </div>
       {server.username && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">

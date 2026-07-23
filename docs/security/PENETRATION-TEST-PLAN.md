@@ -219,7 +219,7 @@ Phase 10: Remediation Support & Retest
 | LOGIC-05 | Schedule execution privilege escalation | Cron schedule action on another user's server | 403 unless admin |
 | LOGIC-06 | Bulk operation cross-user impact | Select own server + victim server in bulk | Only authorized servers affected; 403 otherwise |
 | LOGIC-07 | Workspace invitation abuse | Invite to workspace then escalate permissions | Member cannot grant permissions they don't hold |
-| LOGIC-08 | Volume quota double-counting regression | Create volume + server with same disk | No double-counting (previously fixed) |
+| LOGIC-08 | Volume quota double-counting regression | Create volume + server with same disk | No double-counting; regression test `backend/tests/services/test_quota_service.py::TestQuotaServiceCheckSpawn::test_volume_plus_spawn_no_double_count` |
 | LOGIC-09 | Maintenance mode bypass | Direct API call while maintenance enabled | 503 except exempt paths |
 | LOGIC-10 | Rate-limit tier bypass | Spoof role claim in JWT | Signature invalidates tampered claims |
 | LOGIC-11 | API token used for high-impact admin ops | Bulk actions with scoped token | Rejected; JWT session required |

@@ -74,6 +74,9 @@ class TestCreateServerHappyPaths:
             with mock.patch("app.services.quota_service.QuotaService") as mock_quota_cls:
                 mock_quota = mock_quota_cls.return_value
                 mock_quota.check_spawn_allowed = mock.AsyncMock(return_value={"allowed": True})
+                mock_quota.check_volume_creation_allowed = mock.AsyncMock(
+                    return_value={"allowed": True}
+                )
                 mock_quota.increment_usage = mock.AsyncMock()
                 with mock.patch(
                     "app.services.resource_pool_service.ResourcePoolService"
@@ -219,6 +222,9 @@ class TestCreateServerExceptionCleanup:
         with mock.patch("app.services.quota_service.QuotaService") as mock_quota_cls:
             mock_quota = mock_quota_cls.return_value
             mock_quota.check_spawn_allowed = mock.AsyncMock(return_value={"allowed": True})
+            mock_quota.check_volume_creation_allowed = mock.AsyncMock(
+                return_value={"allowed": True}
+            )
             mock_quota.increment_usage = mock.AsyncMock()
             with mock.patch(
                 "app.services.resource_pool_service.ResourcePoolService"
@@ -291,6 +297,9 @@ class TestCreateServerExceptionCleanup:
         with mock.patch("app.services.quota_service.QuotaService") as mock_quota_cls:
             mock_quota = mock_quota_cls.return_value
             mock_quota.check_spawn_allowed = mock.AsyncMock(return_value={"allowed": True})
+            mock_quota.check_volume_creation_allowed = mock.AsyncMock(
+                return_value={"allowed": True}
+            )
             with mock.patch(
                 "app.services.resource_pool_service.ResourcePoolService"
             ) as mock_pool_cls:
@@ -333,3 +342,164 @@ class TestCreateServerExceptionCleanup:
 
         assert response.status_code == 500
         assert "try again" in response.json()["detail"].lower()
+
+
+class TestCreateServerVolumeQuota:
+    """Auto-created volumes must fit the user's disk quota."""
+
+    @pytest.mark.asyncio
+    async def test_create_server_volume_quota_exceeded(
+        self, client, user_token, test_user, db_session, test_plan_env
+    ):
+        """Spawn that would auto-create volumes beyond the disk quota returns 429."""
+        plan, env = test_plan_env
+
+        with mock.patch("app.services.quota_service.QuotaService") as mock_quota_cls:
+            mock_quota = mock_quota_cls.return_value
+            mock_quota.check_spawn_allowed = mock.AsyncMock(return_value={"allowed": True})
+            mock_quota.check_volume_creation_allowed = mock.AsyncMock(
+                return_value={
+                    "allowed": False,
+                    "reason": "Disk quota exceeded. Volume needs 10.0 GB, but you only have 0 B available.",
+                }
+            )
+            with mock.patch("app.services.credit_service.CreditService") as mock_credit_cls:
+                mock_credit = mock_credit_cls.return_value
+                mock_credit.check_sufficient_credits = mock.AsyncMock(return_value=True)
+                with mock.patch(
+                    "app.services.resource_pool_service.ResourcePoolService"
+                ) as mock_pool_cls:
+                    mock_pool = mock_pool_cls.return_value
+                    mock_pool.can_fit = mock.AsyncMock(return_value=True)
+                    with mock.patch("app.services.volume_service.VolumeService") as mock_vol_cls:
+                        mock_vol = mock_vol_cls.return_value
+                        mock_vol._parse_memory = mock.Mock(return_value=10737418240)
+
+                        response = await client.post(
+                            "/api/servers/",
+                            headers={"Authorization": f"Bearer {user_token}"},
+                            json={
+                                "name": "quota-server",
+                                "plan_id": str(plan.id),
+                                "environment_id": str(env.id),
+                            },
+                        )
+
+        assert response.status_code == 429
+        assert "Disk quota exceeded" in response.json()["detail"]
+        mock_quota.check_volume_creation_allowed.assert_awaited_once()
+        # No volume may be created when the reservation does not fit.
+        mock_vol.create_volume.assert_not_called()
+
+
+class TestCreateServerEnvironmentVisibility:
+    """Users cannot spawn servers with private or inactive environments."""
+
+    @pytest.mark.asyncio
+    async def test_create_server_private_env_forbidden(
+        self, client, user_token, test_user, db_session, test_plan_env
+    ):
+        """Spawn with a private environment returns 403 for regular users."""
+        plan, _ = test_plan_env
+        private_env = EnvironmentTemplate(
+            id=uuid_mod.uuid4(),
+            name="priv-env",
+            slug=f"priv-env-{uuid_mod.uuid4().hex[:8]}",
+            image="test-image",
+            is_public=False,
+        )
+        db_session.add(private_env)
+        await db_session.commit()
+
+        response = await client.post(
+            "/api/servers/",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={
+                "name": "priv-env-server",
+                "plan_id": str(plan.id),
+                "environment_id": str(private_env.id),
+            },
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_create_server_inactive_env_forbidden(
+        self, client, user_token, test_user, db_session, test_plan_env
+    ):
+        """Spawn with an inactive environment returns 403."""
+        plan, _ = test_plan_env
+        inactive_env = EnvironmentTemplate(
+            id=uuid_mod.uuid4(),
+            name="inactive-env",
+            slug=f"inactive-env-{uuid_mod.uuid4().hex[:8]}",
+            image="test-image",
+            is_active=False,
+        )
+        db_session.add(inactive_env)
+        await db_session.commit()
+
+        response = await client.post(
+            "/api/servers/",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={
+                "name": "inactive-env-server",
+                "plan_id": str(plan.id),
+                "environment_id": str(inactive_env.id),
+            },
+        )
+        assert response.status_code == 403
+
+
+class TestCreateServerDuplicateName:
+    """Server names must be unique per user (gateway path + Docker names)."""
+
+    @pytest.mark.asyncio
+    async def test_create_server_duplicate_name_rejected(
+        self, client, user_token, test_user, db_session, test_plan_env
+    ):
+        """Creating a second server with an existing name returns 409."""
+        plan, env = test_plan_env
+        existing = Server(name="dup-server", user_id=test_user.id, status="stopped")
+        db_session.add(existing)
+        await db_session.commit()
+
+        response = await client.post(
+            "/api/servers/",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={
+                "name": "dup-server",
+                "plan_id": str(plan.id),
+                "environment_id": str(env.id),
+            },
+        )
+        assert response.status_code == 409
+        assert "already exists" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_create_server_same_name_other_user_allowed(
+        self, client, user_token, test_user, admin_user, db_session, test_plan_env
+    ):
+        """A name used by a different user does not block creation."""
+        plan, env = test_plan_env
+        other = Server(name="shared-name", user_id=admin_user.id, status="stopped")
+        db_session.add(other)
+        await db_session.commit()
+
+        # Reaches past the name check; fails later only if mocks are missing,
+        # so mock the full happy path minimally by expecting non-409.
+        with mock.patch("app.services.quota_service.QuotaService") as mock_quota_cls:
+            mock_quota = mock_quota_cls.return_value
+            mock_quota.check_spawn_allowed = mock.AsyncMock(
+                return_value={"allowed": False, "reason": "stop here"}
+            )
+            response = await client.post(
+                "/api/servers/",
+                headers={"Authorization": f"Bearer {user_token}"},
+                json={
+                    "name": "shared-name",
+                    "plan_id": str(plan.id),
+                    "environment_id": str(env.id),
+                },
+            )
+        # 429 from the mocked quota check proves the name check passed.
+        assert response.status_code == 429

@@ -12,7 +12,11 @@ All files under `backend/` except generated artifacts (`.venv-dev`, `__pycache__
 
 - Python 3.13; formatting and linting configured in `pyproject.toml`.
 - `app/main.py` is the ASGI entry point.
-- `app/api/` owns route definitions; `app/services/` owns business logic; `app/models/` owns SQLAlchemy models; `app/db/` owns session/connection logic; `app/core/` owns cross-cutting utilities; `app/middleware/` owns ASGI middleware; `app/container/` owns Docker orchestration; `app/tasks.py` and `app/worker.py` own Celery.
+- `app/api/` owns route definitions; `app/services/` owns business logic; `app/models/` owns SQLAlchemy models; `app/db/` owns session/connection logic; `app/core/` owns cross-cutting utilities; `app/middleware/` owns ASGI middleware; `app/container/` owns container-runtime orchestration; `app/tasks.py` and `app/worker.py` own Celery.
+- `app/container/` is a driver layer: `driver.py` defines the `ContainerDriver` ABC + `ContainerDriverError` (plain-data returns only — no runtime objects escape), `docker_driver.py` is the Docker/Podman implementation, `factory.py` selects the driver via `CONTAINER_RUNTIME` (default `docker`), `client.py` is a compatibility shim for legacy imports/test seams, and `spawner.py` (server lifecycle) talks only to driver methods. To add a runtime (e.g. Kubernetes): implement `ContainerDriver` (synthesizing the documented return shapes, e.g. Docker-stats for `get_container_stats`) and register it in `factory.py`.
+- `app/api/search.py` — grouped, permission-scoped search at `/api/search/`; optional `group` query parameter scopes the response to a single group; groups the user lacks read permission for are omitted from the response (never 403).
+- `app/api/tokens.py` owns `VALID_TOKEN_SCOPES`, the source of truth for API-token scopes; the frontend `AVAILABLE_SCOPES` in `frontend/src/components/settings/tokens-page.tsx` must stay in sync (unknown scopes are rejected with 422).
+- `app/services/gpu_allocator.py` owns exclusive GPU device reservations (table `gpu_allocations`, active only when `GPU_DEVICES` lists CDI device names); every code path that stops or deletes a server must release its devices, and every GPU spawn path must allocate first.
 - `alembic/` owns database migrations; use Alembic commands to generate and test upgrades/downgrades.
 - `tests/` mirrors the `app/` structure; security regressions go in `tests/security/`.
 
@@ -54,10 +58,11 @@ All files under `backend/` except generated artifacts (`.venv-dev`, `__pycache__
 - Use Celery for work that can run asynchronously (e.g., container metrics collection, long-running provisioning).
 - Define tasks in `app/tasks.py`; call them with `.delay()` or `.apply_async()` from services or routes.
 - Keep tasks idempotent where possible and handle retries explicitly.
+- `shutdown_idle_servers` decides idleness from `Server.last_activity` merged with the proxied-traffic timestamp each container's auth sidecar reports via `GET http://srv-<server_id[:8]>:8080/activity` (`_fetch_sidecar_activity`). Probe failures must fall back to the DB timestamp and never block shutdown. `last_activity` writers: spawn/start/restart/access-token paths, `POST /servers/:id/activity` (interaction-gated SPA heartbeat), the sidecar merge, and — indirectly — the nuke-ide `NukeLabActivityContribution` heartbeat that traverses the sidecar while the user works in the IDE.
 
 ### Docker orchestration
 
-- Use the Docker SDK through `app/container/` helpers, not raw SDK calls scattered in routes.
+- Use the `ContainerDriver` methods from `app/container/` (via the factory or the `client.py` shim), not raw Docker SDK/aiodocker calls scattered in routes and services. Only `docker_driver.py` may touch aiodocker.
 - Container operations must respect `CONTAINER_HARDENING_ENABLED` and run spawned containers as non-root with dropped capabilities.
 
 ### Authentication and authorization
@@ -147,6 +152,8 @@ Prefer `require_permissions` for simple endpoint-level checks. Use `PermissionCh
 ./nukelabctl lint backend
 ./nukelabctl test backend
 ```
+
+- Coverage floor is **94%** (`--cov-fail-under=94` in `test backend --coverage`, run by CI). The suite currently sits at ~96%; keep it at or above the floor — raise the floor, never lower it.
 
 ## Child NAD Index
 

@@ -133,3 +133,19 @@ export function useDeleteVolumeFile() {
     },
   })
 }
+
+export function useRefreshVolumeSize() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (volumeId: string) => {
+      const response = await api.post<{ volume_id: string; size_bytes: number | null }>(
+        `/volumes/${volumeId}/refresh-size`,
+        {}
+      )
+      return response
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['volumes'] })
+    },
+  })
+}

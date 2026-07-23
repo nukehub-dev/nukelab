@@ -9,7 +9,6 @@ import re
 from datetime import UTC, datetime
 from typing import Any
 
-import aiodocker
 from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +16,7 @@ from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.container.client import get_container_client
+from app.container.driver import ContainerDriverError
 from app.core.logging import get_logger
 from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
 from app.models.volume import Volume
@@ -135,16 +135,14 @@ class VolumeService:
 
         # Create Docker volume
         try:
-            await container_client.client.volumes.create(
-                {
-                    "Name": name,
-                    "Labels": {
-                        "nukelab.managed": "true",
-                        "nukelab.user.id": owner_id,
-                    },
-                }
+            await container_client.create_volume(
+                name,
+                labels={
+                    "nukelab.managed": "true",
+                    "nukelab.user.id": owner_id,
+                },
             )
-        except aiodocker.DockerError as e:
+        except ContainerDriverError as e:
             logger.warning(
                 "Docker volume creation failed",
                 extra={"volume_name": name, "error": e.message},
@@ -382,8 +380,7 @@ class VolumeService:
         # Delete Docker volume
         container_client = await get_container_client()
         try:
-            vol = await container_client.client.volumes.get(volume.name)
-            await vol.delete()
+            await container_client.delete_volume(volume.name)
         except Exception:
             pass
 
@@ -398,7 +395,7 @@ class VolumeService:
         if not volume:
             return None
 
-        size_bytes = await self.get_volume_size(volume.name)
+        size_bytes, _source = await self.measure_volume_size(volume.name)
         if size_bytes is not None:
             volume.size_bytes = size_bytes
             await self.db.commit()
@@ -437,6 +434,24 @@ class VolumeService:
 
         return None
 
+    async def measure_volume_size(self, volume_name: str) -> tuple[int | None, str | None]:
+        """Measure volume disk usage: XFS project quota report when available
+        (fast, no disk walk), otherwise fall back to du -sb.
+
+        Returns (size_bytes, source) where source is "xfs" or "du",
+        or (None, None) when the volume cannot be measured.
+        """
+        if xfs_quota_service._xfs_quota_available():
+            xfs_data = xfs_quota_service.get_quota_usage(volume_name)
+            if xfs_data is not None:
+                return xfs_data["used_bytes"], "xfs"
+
+        size_bytes = await self.get_volume_size(volume_name)
+        if size_bytes is not None:
+            return size_bytes, "du"
+
+        return None, None
+
     async def check_volumes_quota(
         self, volume_ids: list[str], plan_disk_limit: str
     ) -> dict[str, Any]:
@@ -460,7 +475,7 @@ class VolumeService:
         # (caller is responsible for committing the session)
         for vid in volume_ids:
             volume = volumes[vid]
-            size_bytes = await self.get_volume_size(volume.name)
+            size_bytes, _source = await self.measure_volume_size(volume.name)
             if size_bytes is not None and volume.size_bytes != size_bytes:
                 volume.size_bytes = size_bytes
 

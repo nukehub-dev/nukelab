@@ -33,7 +33,7 @@ class TestInitSentry:
                 call_kwargs = mock_init.call_args.kwargs
                 assert call_kwargs["dsn"] == "https://key@o1.ingest.sentry.io/1"
                 assert call_kwargs["environment"] == "test"
-                assert call_kwargs["traces_sample_rate"] == 0.1
+                assert call_kwargs["traces_sample_rate"] == 0.01
                 assert call_kwargs["release"] == "nukelab@abc123"
                 assert call_kwargs["max_value_length"] == 4096
                 assert "_before_send_transaction" in str(call_kwargs["before_send_transaction"])

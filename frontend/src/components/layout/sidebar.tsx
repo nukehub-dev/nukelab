@@ -24,6 +24,8 @@ import {
   ArrowRightFromLine,
   UserCircle,
   Clock,
+  LifeBuoy,
+  Search,
 } from 'lucide-react'
 import { NukeLabLogo } from '../logo'
 import { useSidebarStore } from '../../stores/sidebar-store'
@@ -80,6 +82,7 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'Settings', icon: Settings, href: '/settings' },
       { label: 'Administration', icon: Shield, href: '/admin' },
+      { label: 'Support', icon: LifeBuoy, href: '/support' },
     ],
   },
 ]
@@ -87,15 +90,7 @@ const navGroups: NavGroup[] = [
 const dockItems = [
   { label: 'Dashboard', icon: LayoutDashboard, href: '/' },
   { label: 'Servers', icon: Server, href: '/servers' },
-  { label: 'Workspaces', icon: FolderOpen, href: '/workspaces' },
 ]
-
-const leftDockItems = [
-  { label: 'Dashboard', icon: LayoutDashboard, href: '/' },
-  { label: 'Servers', icon: Server, href: '/servers' },
-]
-
-const rightDockItems = [{ label: 'Workspaces', icon: FolderOpen, href: '/workspaces' }]
 
 function canAccessItem(
   item: NavItem,
@@ -232,6 +227,51 @@ export function Sidebar() {
               {mode === 'collapsed' && <ArrowRightFromLine className="w-4 h-4" />}
             </button>
           </Tooltip>
+        </div>
+
+        {/* Search */}
+        <div className={cn('pt-3 shrink-0', isOpen && 'px-1')}>
+          {isOpen ? (
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent('show-search'))}
+              className={cn(
+                'flex items-center w-full py-2 rounded-lg text-sm font-medium transition-all duration-300',
+                'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                'text-sidebar-foreground/80'
+              )}
+              style={{ paddingLeft: 11, paddingRight: 11 }}
+            >
+              <Search className="w-5 h-5 shrink-0" />
+              <span
+                className="truncate whitespace-nowrap overflow-hidden transition-all duration-300"
+                style={{ maxWidth: 200, opacity: 1, marginLeft: 12 }}
+              >
+                Search
+              </span>
+              <kbd
+                className={cn(
+                  'ml-auto px-2 py-0.5 text-xs font-medium rounded',
+                  'bg-muted border border-border text-muted-foreground uppercase'
+                )}
+              >
+                Ctrl K
+              </kbd>
+            </button>
+          ) : (
+            <Tooltip content="Search (Ctrl+K)" position="right">
+              <button
+                onClick={() => window.dispatchEvent(new CustomEvent('show-search'))}
+                className={cn(
+                  'flex items-center py-2 rounded-lg text-sm font-medium transition-all duration-300',
+                  'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                  'text-sidebar-foreground/80'
+                )}
+                style={{ paddingLeft: 11, paddingRight: 11, marginLeft: 10, marginRight: 10 }}
+              >
+                <Search className="w-5 h-5 shrink-0" />
+              </button>
+            </Tooltip>
+          )}
         </div>
 
         {/* Navigation */}
@@ -459,17 +499,17 @@ export function Sidebar() {
       </aside>
 
       {/* Mobile Bottom Dock */}
-      <nav className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 lg:hidden">
-        <div className="relative flex items-center bg-background/80 backdrop-blur-xl border border-border/50 rounded-full shadow-lg shadow-black/20 px-2 h-14 overflow-visible">
-          {/* Left items */}
-          {visibleDockItems
-            .filter((item) => leftDockItems.some((l) => l.href === item.href))
-            .map((item) => (
+      <nav className="fixed bottom-4 left-4 right-4 z-40 lg:hidden flex justify-center pointer-events-none">
+        <div className="pointer-events-auto flex items-center w-full max-w-md bg-background/80 backdrop-blur-xl border border-border/50 rounded-full shadow-lg shadow-black/20 px-2 h-14 overflow-visible">
+          {/* Left items — each item gets an equal slot so spacing stays
+              symmetric around the center button regardless of label length. */}
+          <div className="flex flex-1 items-center h-full">
+            {visibleDockItems.map((item) => (
               <Link
                 key={item.href}
                 to={item.href}
                 className={cn(
-                  'flex items-center gap-1.5 px-3 h-full rounded-full transition-colors duration-150',
+                  'flex flex-1 items-center justify-center gap-1.5 px-2 h-full rounded-full transition-colors duration-150',
                   isActive(item.href)
                     ? 'text-primary'
                     : 'text-muted-foreground hover:text-foreground'
@@ -481,36 +521,31 @@ export function Sidebar() {
                 <span className="text-[10px] font-medium hidden sm:inline">{item.label}</span>
               </Link>
             ))}
+          </div>
 
-          {/* Center NukeLab Button - extends above dock */}
+          {/* Center menu button - extends above dock */}
           <button
             onClick={() => setShowMore(true)}
-            className="relative mx-1 flex items-center justify-center w-15 h-15 rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/40 transition-shadow duration-200 hover:shadow-primary/60 hover:shadow-xl"
+            className="relative mx-2 shrink-0 flex items-center justify-center w-15 h-15 rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/40 transition-shadow duration-200 hover:shadow-primary/60 hover:shadow-xl"
           >
             <NukeLabLogo size={35} className="text-primary-foreground" />
             {/* Glow effect */}
-            <div className="absolute inset-0 rounded-full bg-primary/20 blur-md -z-10" />
+            <div className="absolute inset-0 rounded-2xl bg-primary/20 blur-md -z-10" />
           </button>
 
           {/* Right items */}
-          {visibleDockItems
-            .filter((item) => rightDockItems.some((r) => r.href === item.href))
-            .map((item) => (
-              <Link
-                key={item.href}
-                to={item.href}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 h-full rounded-full transition-colors duration-150',
-                  isActive(item.href)
-                    ? 'text-primary'
-                    : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                <item.icon className="w-5 h-5" />
-                <span className="text-[10px] font-medium hidden sm:inline">{item.label}</span>
-              </Link>
-            ))}
-          <NotificationCenter variant="dock" />
+          <div className="flex flex-1 items-center h-full">
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent('show-search'))}
+              className="flex flex-1 items-center justify-center gap-1.5 px-2 h-full rounded-full transition-colors duration-150 text-muted-foreground hover:text-foreground"
+            >
+              <Search className="w-5 h-5" />
+              <span className="text-[10px] font-medium hidden sm:inline">Search</span>
+            </button>
+            <div className="flex flex-1 items-center justify-center h-full">
+              <NotificationCenter variant="dock" />
+            </div>
+          </div>
         </div>
       </nav>
 
@@ -548,6 +583,18 @@ export function Sidebar() {
                 </div>
 
                 <div className="px-6 py-4 space-y-6 max-h-[60vh] overflow-y-auto scrollbar-hide">
+                  {/* Search */}
+                  <button
+                    onClick={() => {
+                      setShowMore(false)
+                      window.dispatchEvent(new CustomEvent('show-search'))
+                    }}
+                    className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-sm font-medium transition-all duration-100 text-foreground/80 hover:bg-muted/50"
+                  >
+                    <Search className="w-5 h-5 shrink-0" />
+                    <span>Search</span>
+                  </button>
+
                   {visibleNavGroups.map((group) => (
                     <div key={group.label}>
                       <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-3 mb-3">

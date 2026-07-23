@@ -6,16 +6,11 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useSharedWebSocket } from '../../hooks/use-shared-websocket'
 import { useAuthStore } from '../../stores/auth-store'
 import { useToast } from '../../stores/toast-store'
+import { parseUtcDate } from '../../lib/utils'
 import type { Notification } from '../../hooks/use-notifications'
 import type { Server } from '../../types/api'
 
 const STORAGE_KEY = 'nukelab-last-notification-toast'
-
-/** Backend returns naive UTC datetimes (no Z suffix). Treat them as UTC. */
-function parseUtcDate(iso: string): Date {
-  const normalized = iso.endsWith('Z') ? iso : iso + 'Z'
-  return new Date(normalized)
-}
 
 function getLastToastTime(): string {
   const stored = localStorage.getItem(STORAGE_KEY)

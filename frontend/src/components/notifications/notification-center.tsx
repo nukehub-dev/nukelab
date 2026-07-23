@@ -26,7 +26,7 @@ import {
   useDeleteNotification,
   type Notification,
 } from '../../hooks/use-notifications'
-import { cn } from '../../lib/utils'
+import { cn, formatDate } from '../../lib/utils'
 import { Tooltip } from '../ui/tooltip'
 
 const severityIcons = {
@@ -199,12 +199,7 @@ function NotificationPanel({
                       {notification.message}
                     </p>
                     <p className="text-[10px] text-muted-foreground/70 mt-1">
-                      {new Date(notification.created_at).toLocaleDateString(undefined, {
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
+                      {formatDate(notification.created_at)}
                     </p>
                   </div>
 

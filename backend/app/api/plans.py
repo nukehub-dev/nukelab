@@ -63,7 +63,7 @@ async def get_plan(
     can_read_all = has_permission(current_user, Permission.PLAN_READ)
 
     if not can_read_all:
-        is_visible = await service.check_plan_access(
+        is_visible = await service.can_user_use_plan(
             plan_id, current_user.role, str(current_user.id)
         )
         if not is_visible:

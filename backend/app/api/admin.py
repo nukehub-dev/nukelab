@@ -6,6 +6,7 @@ Admin dashboard API endpoints.
 Provides statistics, user management, server management, and activity logs.
 """
 
+import logging
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -24,12 +25,15 @@ from app.models.activity_log import ActivityLog
 from app.models.credit_transaction import CreditTransaction
 from app.models.server import Server
 from app.models.user import User
+from app.models.volume import Volume
 from app.services.credit_service import CreditService
 from app.services.notification_service import broadcast_server_status_change
 from app.services.token_revocation_service import token_revocation_service
 from app.services.user_service import UserService
 from app.services.volume_service import VolumeService
 from app.services.workspace_service import WorkspaceService
+
+logger = logging.getLogger(__name__)
 
 # Cache TTL for admin server lists (seconds)
 _ADMIN_SERVER_LIST_CACHE_TTL = 30
@@ -382,6 +386,7 @@ async def bulk_server_action(
     results = {"success": [], "failed": []}
     affected_user_ids: set[str] = set()
     status_changes: list[tuple[str, str, str]] = []  # (user_id, server_id, status)
+    gpu_release_ids: list[str] = []  # servers whose GPU devices release after commit
 
     # Validate UUIDs
     try:
@@ -409,7 +414,21 @@ async def bulk_server_action(
         try:
             if body.action == "start":
                 if server.container_id:
-                    await spawner.start(server.container_id)
+                    from app.api.servers import _gpu_requires_recreate, _respawn_server_container
+
+                    if await _gpu_requires_recreate(db, server):
+                        # GPU server: never plain-start a container with stale
+                        # baked-in DeviceRequests — its exclusive device rows
+                        # were released on bulk stop and may be reassigned.
+                        # Recreate with the devices it owns; a dry pool fails
+                        # this entry (recorded below) without starting it.
+                        new_server = await _respawn_server_container(server, db, server.name)
+                        server.container_id = new_server.container_id
+                        server.image = new_server.image
+                        server.volume_id = new_server.volume_id
+                        server.external_url = new_server.external_url
+                    else:
+                        await spawner.start(server.container_id)
                     server.status = "running"
                     status_changes.append((str(server.user_id), server_id, "running"))
             elif body.action == "stop":
@@ -417,12 +436,14 @@ async def bulk_server_action(
                     await spawner.stop(server.container_id)
                     server.status = "stopped"
                     status_changes.append((str(server.user_id), server_id, "stopped"))
+                    gpu_release_ids.append(server_id)
             elif body.action == "delete":
                 user_id = str(server.user_id)
                 if server.container_id:
                     await spawner.delete(server.container_id)
                 await db.delete(server)
                 affected_user_ids.add(user_id)
+                gpu_release_ids.append(server_id)
 
             if body.action in ("start", "stop"):
                 affected_user_ids.add(str(server.user_id))
@@ -432,6 +453,17 @@ async def bulk_server_action(
 
     # Single atomic commit for all successful DB changes
     await db.commit()
+
+    # Release exclusive GPU devices for stopped/deleted servers (idempotent;
+    # done after the atomic commit so a release failure cannot break it).
+    if gpu_release_ids:
+        from app.services.gpu_allocator import GpuAllocatorService
+
+        for sid in gpu_release_ids:
+            try:
+                await GpuAllocatorService(db).release(sid)
+            except Exception:
+                logger.exception("Failed to release GPU devices for server %s", sid)
 
     # Broadcast status changes after successful commit
     for user_id, sid, srv_status in status_changes:
@@ -533,6 +565,94 @@ async def update_system_max_balance(
     )
 
     return {"message": f"System max balance updated to {request.amount}"}
+
+
+class UpdateSystemInitialBalanceRequest(BaseModel):
+    amount: int = Field(..., ge=0, description="Balance granted to new users on signup")
+
+
+@router.get("/credits/initial-balance")
+async def get_system_initial_balance(
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get the signup initial balance"""
+    from app.services.setting_service import SettingService
+
+    service = SettingService(db)
+    return {"initial_balance": await service.get_initial_balance()}
+
+
+@router.put("/credits/initial-balance")
+async def update_system_initial_balance(
+    request: UpdateSystemInitialBalanceRequest,
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update the signup initial balance"""
+    from app.services.activity_service import ActivityService
+    from app.services.setting_service import SettingService
+
+    service = SettingService(db)
+    await service.set_initial_balance(request.amount)
+
+    activity_service = ActivityService(db)
+    await activity_service.log(
+        action="credits.update_system_initial_balance",
+        target_type="system",
+        actor_id=str(current_user.id),
+        details={"amount": request.amount},
+    )
+
+    return {"message": f"Signup initial balance updated to {request.amount}"}
+
+
+class UpdateSystemAllowanceWindowRequest(BaseModel):
+    hours: int = Field(
+        ...,
+        ge=0,
+        description="Hours within which a user must have logged in to receive the daily allowance",
+    )
+
+
+@router.get("/credits/allowance-login-window")
+async def get_system_allowance_login_window(
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get the daily allowance login activity window in hours"""
+    from app.services.setting_service import SettingService
+
+    service = SettingService(db)
+    return {"login_window_hours": await service.get_daily_allowance_login_window_hours()}
+
+
+@router.put("/credits/allowance-login-window")
+async def update_system_allowance_login_window(
+    request: UpdateSystemAllowanceWindowRequest,
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update the daily allowance login activity window in hours"""
+    from app.services.activity_service import ActivityService
+    from app.services.setting_service import SettingService
+
+    service = SettingService(db)
+    await service.set_daily_allowance_login_window_hours(request.hours)
+
+    activity_service = ActivityService(db)
+    await activity_service.log(
+        action="credits.update_system_allowance_login_window",
+        target_type="system",
+        actor_id=str(current_user.id),
+        details={"hours": request.hours},
+    )
+
+    return {"message": f"Daily allowance login window updated to {request.hours} hours"}
 
 
 # ========== Default Resource Quotas (Admin) ==========
@@ -1429,6 +1549,45 @@ async def admin_delete_volume(
         raise HTTPException(status_code=400, detail=str(e))
 
     return {"success": success, "message": "Volume deleted successfully"}
+
+
+@router.post("/volumes/refresh-sizes")
+async def admin_refresh_volume_sizes(
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Refresh tracked disk usage (size_bytes) for all active volumes (admin).
+
+    Uses the XFS project quota report when available (fast, no disk walk),
+    otherwise falls back to du -sb. Does not change volume status or send
+    near-limit notifications — the periodic quota task owns both.
+    """
+    service = VolumeService(db)
+    result = await db.execute(select(Volume).where(Volume.status.not_in(["archived", "deleting"])))
+    volumes = result.scalars().all()
+
+    refreshed = 0
+    failed: list[dict[str, str]] = []
+    for volume in volumes:
+        try:
+            size_bytes, _source = await service.measure_volume_size(volume.name)
+        except Exception as exc:  # one bad volume must not abort the batch
+            failed.append({"volume_id": str(volume.id), "error": str(exc)})
+            continue
+        if size_bytes is None:
+            failed.append({"volume_id": str(volume.id), "error": "could not measure size"})
+            continue
+        volume.size_bytes = size_bytes
+        refreshed += 1
+
+    await db.commit()
+
+    return {
+        "message": f"Refreshed {refreshed} volume(s)",
+        "refreshed": refreshed,
+        "failed": failed,
+    }
 
 
 # ========== Retention Policy Management ==========

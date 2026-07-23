@@ -70,7 +70,6 @@ async def stream_logs_to_websocket(
 
     try:
         container_client = await get_container_client()
-        container = await container_client.client.containers.get(container_id)
 
         # Send initial message
         await websocket.send_json(
@@ -78,9 +77,7 @@ async def stream_logs_to_websocket(
         )
 
         # Stream logs
-        logs = await container.log(
-            stdout=True, stderr=True, tail=tail, follow=True, timestamps=True
-        )
+        logs = await container_client.stream_container_logs(container_id, tail=tail)
 
         async for line in logs:
             if websocket not in connection_users:
@@ -199,7 +196,16 @@ class MetricsWebSocketManager:
                         if channel_str.startswith("user:"):
                             await self._broadcast_user_event(data)
                         elif channel == "metrics:system" or "metrics:system" in channel_str:
-                            await self._broadcast_system_metric(data)
+                            # Some publishers (e.g. health checks) reuse this
+                            # channel to push event payloads; forward them under
+                            # their own event name instead of wrapping them as
+                            # system metrics (which would zero every field).
+                            if isinstance(data, dict) and "event" in data:
+                                await self._broadcast_global_event(
+                                    str(data["event"]), data.get("data", {})
+                                )
+                            else:
+                                await self._broadcast_system_metric(data)
                         else:
                             await self._broadcast_metric(data)
                     except Exception:
@@ -299,6 +305,17 @@ class MetricsWebSocketManager:
                 )
             except Exception:
                 disconnected.append((room, ws))
+        self._cleanup_disconnected(disconnected)
+
+    async def _broadcast_global_event(self, event: str, payload: dict):
+        """Broadcast a named event to global (admin) subscribers."""
+        disconnected = []
+        if "global" in connections:
+            for ws in connections["global"]:
+                try:
+                    await ws.send_json({"event": event, "data": payload})
+                except Exception:
+                    disconnected.append(("global", ws))
         self._cleanup_disconnected(disconnected)
 
     async def _broadcast_system_metric(self, metric: dict):

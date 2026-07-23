@@ -3,11 +3,21 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 cmd_test() {
+    # Collect per-suite results so every selected suite runs even when an
+    # earlier one fails; the command exits non-zero at the end if any failed.
+    local _failed_suites=()
+
     if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
         step "Running frontend tests..."
         cd "$DIR/frontend"
         [ -d "node_modules" ] || die "Run: ./nukelabctl install frontend"
-        npm run test 2> /dev/null || npm run lint || warn "No test script found"
+        if ! npm run test:unit; then
+            warn "Frontend unit tests failed"
+            _failed_suites+=("frontend")
+        fi
+        # Return to $DIR so relative compose overlay paths resolve correctly
+        # for the backend suite below.
+        cd "$DIR"
     fi
 
     if [ "$TARGET" = "backend" ] || [ "$TARGET" = "all" ]; then
@@ -21,9 +31,10 @@ cmd_test() {
         # or shell metacharacters (e.g. `tests/Some Dir/test_x.py`).
         local _pytest_args=()
         if $USE_COVERAGE; then
-            _pytest_args+=(--cov=app --cov-report=term --cov-report=html)
+            # 94% is the ratcheted project floor (see backend/AGENTS.md);
+            _pytest_args+=(--cov=app --cov-report=term --cov-report=html --cov-fail-under=94)
         fi
-        _pytest_args+=("${EXTRA_ARGS[@]:-}")
+        _pytest_args+=("${EXTRA_ARGS[@]}")
 
         # To avoid Postgres connection exhaustion from the live dev server
         # (uvicorn workers + Celery) while tests run, stop the backend services
@@ -47,8 +58,36 @@ cmd_test() {
         # Args are forwarded through positional `$@` of an inline `sh -c`
         # invocation so quoting/spaces survive intact (no `eval` of the
         # flattened argv string).
+        #
+        # --no-deps is required: when the dev stack is up, its postgres/redis
+        # containers are pod members, and `compose run` fails trying to start
+        # duplicate dependency containers ("container has joined pod ... and
+        # dependency container ... is not a member of the pod"). Instead we
+        # ensure the dependency containers are up ourselves and let the test
+        # container resolve postgres/redis over the shared network.
+        local _started_deps=false
+        if ! { $CONTAINER_ENGINE ps --format '{{.Names}}' | grep -qx 'nukelab-postgres'; } \
+            || ! { $CONTAINER_ENGINE ps --format '{{.Names}}' | grep -qx 'nukelab-redis'; }; then
+            info "Starting postgres/redis for the test run..."
+            $COMPOSE "${COMPOSE_ARGS[@]}" up -d postgres redis > /dev/null 2>&1
+            _started_deps=true
+            # Wait for Postgres to accept connections before running pytest.
+            local _pg_ready=false
+            for _ in $(seq 1 30); do
+                if $CONTAINER_ENGINE exec nukelab-postgres \
+                    pg_isready -U "${DATABASE_USER:-nukelab}" > /dev/null 2>&1; then
+                    _pg_ready=true
+                    break
+                fi
+                sleep 1
+            done
+            if ! $_pg_ready; then
+                warn "Postgres did not become ready in time; tests may fail to connect."
+            fi
+        fi
+
         local _test_exit=0
-        $COMPOSE --profile test "${COMPOSE_ARGS[@]}" run --rm \
+        $COMPOSE --profile test "${COMPOSE_ARGS[@]}" run --rm --no-deps \
             -v "${DIR}/backend:/app:Z" \
             -v "${DIR}/resources:/app/resources:ro" \
             -e "DATABASE_USER=${DATABASE_USER:-nukelab}" \
@@ -68,15 +107,28 @@ cmd_test() {
             -e "TESTING=true" \
             backend-test sh -c 'python -m pytest "$@"' _ "${_pytest_args[@]}" || _test_exit=$?
 
-        # Restart backend services if they were running before.
-        if $_backend_was_running; then
-            info "Restarting backend services..."
-            $COMPOSE "${COMPOSE_ARGS[@]}" up -d backend celery-worker celery-beat > /dev/null 2>&1 || warn "Failed to restart backend services"
+        # Stop the dependency containers again only if we started them.
+        if $_started_deps; then
+            $COMPOSE "${COMPOSE_ARGS[@]}" stop postgres redis > /dev/null 2>&1 || true
         fi
 
-        if [ $_test_exit -ne 0 ]; then
-            warn "Tests failed or not configured"
+        # Restart backend services if they were running before. This must run
+        # even when tests failed, otherwise the stack is left down.
+        if $_backend_was_running; then
+            info "Restarting backend services..."
+            $COMPOSE "${COMPOSE_ARGS[@]}" up -d backend celery-worker celery-beat > /dev/null 2>&1 \
+                || warn "Failed to restart backend services — the stack may be left down.\nRun './nukelabctl start backend' to bring it back up."
         fi
+
+        if [ "$_test_exit" -ne 0 ]; then
+            warn "Backend tests failed (exit $_test_exit)"
+            _failed_suites+=("backend")
+        fi
+    fi
+
+    if [ ${#_failed_suites[@]} -gt 0 ]; then
+        err "Test suites failed: ${_failed_suites[*]}"
+        exit 1
     fi
 }
 
@@ -84,7 +136,8 @@ help_test() {
     cat <<- EOF
 ${BOLD}Usage:${RESET} ./nukelabctl test [target]
 
-Run tests.
+Run tests. Exits non-zero if any selected suite fails (all selected suites
+still run to completion).
 
 ${BOLD}Targets:${RESET} frontend | backend | all
 

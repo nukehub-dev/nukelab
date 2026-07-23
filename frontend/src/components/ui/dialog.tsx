@@ -5,6 +5,7 @@ import * as React from 'react'
 import { cn } from '../../lib/utils'
 import { motion, AnimatePresence } from 'framer-motion'
 import { modalOverlayVariants } from '../../lib/animations'
+import { useIsDesktopViewport } from '../../hooks/use-is-desktop'
 import { X } from 'lucide-react'
 
 interface DialogProps {
@@ -23,6 +24,11 @@ const sizeClasses: Record<string, string> = {
 }
 
 function Dialog({ open, onOpenChange, children, size = 'default' }: DialogProps) {
+  // Children mount in exactly one container: rendering them in both the mobile
+  // sheet and the desktop drawer would duplicate every child (state, effects,
+  // portaled popovers) and break outside-click handling.
+  const isDesktop = useIsDesktopViewport()
+
   React.useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onOpenChange(false)
@@ -73,7 +79,7 @@ function Dialog({ open, onOpenChange, children, size = 'default' }: DialogProps)
               <div className="w-12 h-1.5 rounded-full bg-muted-foreground/30" />
             </div>
             {/* Content */}
-            <div className="flex-1 overflow-y-auto min-h-0">{children}</div>
+            <div className="flex-1 overflow-y-auto min-h-0">{!isDesktop && children}</div>
           </motion.div>
           {/* Desktop: Right Drawer */}
           <motion.div
@@ -86,7 +92,7 @@ function Dialog({ open, onOpenChange, children, size = 'default' }: DialogProps)
             exit={{ x: '100%' }}
             transition={{ type: 'spring', stiffness: 300, damping: 30 }}
           >
-            <div className="h-full overflow-y-auto">{children}</div>
+            <div className="h-full overflow-y-auto">{isDesktop && children}</div>
           </motion.div>
         </>
       )}

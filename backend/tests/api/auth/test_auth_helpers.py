@@ -589,3 +589,50 @@ class TestVerifyAuthEndpoint:
             "/api/auth/verify", headers={"Authorization": "Bearer invalidtoken"}
         )
         assert response.status_code == 401
+
+
+class TestAuthContextSnapshot:
+    """AuthContext snapshots user primitives for post-session middleware use."""
+
+    def test_snapshots_user_id_and_role(self):
+        import uuid
+        from unittest.mock import MagicMock
+
+        from app.api.auth import AuthContext
+
+        user = MagicMock()
+        user.id = uuid.UUID("12345678-1234-5678-1234-567812345678")
+        user.role = "admin"
+
+        context = AuthContext(user=user, auth_method="jwt", token_scopes=[])
+
+        assert context.user_id == "12345678-1234-5678-1234-567812345678"
+        assert context.user_role == "admin"
+
+    def test_snapshot_survives_detached_user(self):
+        """Snapshots stay readable when ORM attribute access later fails."""
+        from sqlalchemy.orm.exc import DetachedInstanceError
+
+        from app.api.auth import AuthContext
+
+        class _User:
+            id = "user-uuid-1"
+            role = "user"
+
+        context = AuthContext(user=_User(), auth_method="jwt", token_scopes=[])
+        assert context.user_id == "user-uuid-1"
+        assert context.user_role == "user"
+
+        # Simulate the post-rollback state: ORM attributes can no longer load.
+        class _DetachedUser:
+            @property
+            def id(self):
+                raise DetachedInstanceError("Instance is not bound to a Session")
+
+            @property
+            def role(self):
+                raise DetachedInstanceError("Instance is not bound to a Session")
+
+        context.user = _DetachedUser()
+        assert context.user_id == "user-uuid-1"
+        assert context.user_role == "user"

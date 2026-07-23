@@ -61,9 +61,7 @@ RUN apt-get update && \
         # Graphics and Visualization Libraries
         libxft-dev \
         libxext-dev \
-        libglu1-mesa-dev \
-        # Supporting Applications and Runtimes
-        gmsh && \
+        libglu1-mesa-dev && \
     # Remove downloaded package files to reduce the final image size.
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
@@ -89,18 +87,27 @@ ENV NUKE_DIR=/opt/nuke \
 ENV PATH="${NUKE_DIR}/bin:${MOAB_ROOT}/bin:${DOUBLE_DOWN_ROOT}/lib:${GEANT4_ROOT}/bin:${DAGMC_ROOT}/bin:${LIBMESH_ROOT}/bin:${NJOY2016_ROOT}/bin:${OPENMC_ROOT}/bin:${KDSOURCE_ROOT}/bin:${ALARA_ROOT}/bin:${PATH}"
 ENV LD_LIBRARY_PATH="${MOAB_ROOT}/lib:${DOUBLE_DOWN_ROOT}/lib:${GEANT4_ROOT}/lib:${DAGMC_ROOT}/lib:${LIBMESH_ROOT}/lib:${NJOY2016_ROOT}/lib:${OPENMC_ROOT}/lib:${KDSOURCE_ROOT}/lib"
 
-# Create the dedicated Conda environment for the nuclear codes
+# Create the dedicated Conda environment for the nuclear codes.
 ARG PYTHON_VERSION
 RUN conda create --yes -p ${NUKE_DIR} \
         python=${PYTHON_VERSION} \
         ipykernel \
-        xeus-cling \
+        trame \
         paraview \
-        pythonocc-core && \
+        cadquery \
+        pythonocc-core \
+        python-gmsh && \
     conda clean --all -f -y
 
 # Activate the nuclear conda environment in login shells (terminals).
 COPY nuke-env.sh /etc/profile.d/nukelab-nuke-env.sh
+
+# Register the prefix env for all users. `conda env list` only reports envs
+# from envs_dirs plus the creating user's ~/.conda/environments.txt — the
+# image builds as root, so the runtime account (uid 65532) would never see
+# /opt/nuke. The system condarc makes every user see it as env name "nuke".
+# nuke-core discovers environments via `conda env list --json`.
+RUN conda config --system --append envs_dirs /opt
 
 # Install MOAB
 ARG MOAB_BRANCH
@@ -210,9 +217,8 @@ RUN git clone -b ${OPENMC_BRANCH} https://github.com/openmc-dev/openmc.git && \
 ARG DOWNLOAD_CROSS_SECTION_DATA
 ENV OPENMC_DATA_DIR=/opt/openmc_data
 ENV OPENMC_CROSS_SECTIONS=${OPENMC_DATA_DIR}/lib80x_hdf5/cross_sections.xml
-COPY download_cross_sections.sh .
-RUN chmod +x download_cross_sections.sh && \
-    ./download_cross_sections.sh ${DOWNLOAD_CROSS_SECTION_DATA} ${OPENMC_DATA_DIR} && \
+COPY --chmod=755 download_cross_sections.sh .
+RUN ./download_cross_sections.sh ${DOWNLOAD_CROSS_SECTION_DATA} ${OPENMC_DATA_DIR} && \
     rm download_cross_sections.sh
 
 # Install PyNE
@@ -256,10 +262,9 @@ RUN git clone -b ${ALARA_BRANCH} --depth 1 https://github.com/svalinn/ALARA && \
     rm -rf /tmp/ALARA
 
 
-# Install remaining Python packages from PyPI and GitHub
+# Install remaining Python packages from PyPI and GitHub.
 RUN pip install --no-cache-dir \
         --extra-index-url https://shimwell.github.io/wheels \
-        trame \
         moab \
         montepy \
         ncrystal \
@@ -267,4 +272,4 @@ RUN pip install --no-cache-dir \
         plasmapy \
         geant4-pybind \
         vmecpp \
-        git+https://github.com/svalinn/pydagmc
+        git+https://github.com/svalinn/pydagmc@4afa678d24aa091417798ef4b3d11fda98b165f8

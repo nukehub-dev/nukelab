@@ -331,52 +331,26 @@ from app.container.spawner import ServerSpawner
 from app.models.server import Server
 
 
-class MockContainer:
-    """Mock Docker container."""
-
-    def __init__(self, container_id=None):
-        self.id = container_id or str(uuid_mod.uuid4())
-
-
-class MockExec:
-    """Mock exec instance."""
-
-    async def start(self, detach=False):
-        pass
-
-
 @pytest.fixture
 def mock_container_client():
     """Return a fully mocked container client suitable for spawner tests."""
     client = mock.AsyncMock()
 
-    # Mock volumes
-    mock_volume = mock.AsyncMock()
-    client.client.volumes.get = mock.AsyncMock(return_value=mock_volume)
-    client.client.volumes.create = mock.AsyncMock(return_value=mock_volume)
-
-    # Mock images
-    mock_image = mock.AsyncMock()
-    client.client.images.get = mock.AsyncMock(return_value=mock_image)
-    client.pull_image = mock.AsyncMock(return_value=mock_image)
-
-    # Mock containers
-    mock_container = MockContainer()
-    client.create_container = mock.AsyncMock(return_value=mock_container)
+    # Mock driver methods (post-driver-refactor surface)
+    client.ensure_volume = mock.AsyncMock()
+    client.image_exists = mock.AsyncMock(return_value=True)
+    client.pull_image = mock.AsyncMock()
+    client.get_container_by_name = mock.AsyncMock(return_value=None)
+    client.create_container = mock.AsyncMock(return_value="test-container-id")
     client.start_container = mock.AsyncMock()
+    client.exec_in_container = mock.AsyncMock(return_value="")
     client.wait_for_container_ready = mock.AsyncMock(return_value=True)
     client.stop_container = mock.AsyncMock()
     client.delete_container = mock.AsyncMock()
     client.get_container_info = mock.AsyncMock(
         return_value={"State": {"Running": True, "Paused": False}}
     )
-
-    # Mock container exec
-    mock_exec = MockExec()
-    mock_container_mock = mock.AsyncMock()
-    mock_container_mock.exec = mock.AsyncMock(return_value=mock_exec)
-    mock_container_mock.delete = mock.AsyncMock()
-    client.client.containers.get = mock.AsyncMock(return_value=mock_container_mock)
+    client.get_container_status = mock.AsyncMock(return_value="running")
 
     return client
 
@@ -436,23 +410,12 @@ class TestEnsureVolume:
     """Tests for _ensure_volume."""
 
     @pytest.mark.asyncio
-    async def test_volume_already_exists(self, fresh_spawner):
-        """Should not create volume if it already exists."""
+    async def test_volume_ensured_via_driver(self, fresh_spawner):
+        """Should delegate volume creation-if-missing to the driver."""
         await fresh_spawner._ensure_volume("existing-vol")
-        fresh_spawner.container_client.client.volumes.get.assert_awaited_once_with("existing-vol")
-        fresh_spawner.container_client.client.volumes.create.assert_not_awaited()
-
-    @pytest.mark.asyncio
-    async def test_volume_needs_creation(self, fresh_spawner):
-        """Should create volume if it does not exist."""
-        fresh_spawner.container_client.client.volumes.get = mock.AsyncMock(
-            side_effect=Exception("not found")
+        fresh_spawner.container_client.ensure_volume.assert_awaited_once_with(
+            "existing-vol", labels={"nukelab.managed": "true"}
         )
-        await fresh_spawner._ensure_volume("new-vol")
-        fresh_spawner.container_client.client.volumes.create.assert_awaited_once()
-        call_args = fresh_spawner.container_client.client.volumes.create.await_args[0][0]
-        assert call_args["Name"] == "new-vol"
-        assert call_args["Labels"]["nukelab.managed"] == "true"
 
 
 # ─────────────────────────────────────────────────────────────
@@ -524,32 +487,26 @@ class TestGetStatus:
 
     @pytest.mark.asyncio
     async def test_running(self, fresh_spawner):
-        """Should return 'running' when State.Running is True."""
-        fresh_spawner.container_client.get_container_info = mock.AsyncMock(
-            return_value={"State": {"Running": True, "Paused": False}}
-        )
+        """Should return 'running' from the driver."""
+        fresh_spawner.container_client.get_container_status = mock.AsyncMock(return_value="running")
         assert await fresh_spawner.get_status("cid") == "running"
 
     @pytest.mark.asyncio
     async def test_paused(self, fresh_spawner):
-        """Should return 'paused' when State.Paused is True."""
-        fresh_spawner.container_client.get_container_info = mock.AsyncMock(
-            return_value={"State": {"Running": False, "Paused": True}}
-        )
+        """Should return 'paused' from the driver."""
+        fresh_spawner.container_client.get_container_status = mock.AsyncMock(return_value="paused")
         assert await fresh_spawner.get_status("cid") == "paused"
 
     @pytest.mark.asyncio
     async def test_stopped(self, fresh_spawner):
-        """Should return 'stopped' when neither Running nor Paused."""
-        fresh_spawner.container_client.get_container_info = mock.AsyncMock(
-            return_value={"State": {"Running": False, "Paused": False}}
-        )
+        """Should return 'stopped' from the driver."""
+        fresh_spawner.container_client.get_container_status = mock.AsyncMock(return_value="stopped")
         assert await fresh_spawner.get_status("cid") == "stopped"
 
     @pytest.mark.asyncio
     async def test_unknown_on_exception(self, fresh_spawner):
-        """Should return 'unknown' when get_container_info raises."""
-        fresh_spawner.container_client.get_container_info = mock.AsyncMock(
+        """Should return 'unknown' when get_container_status raises."""
+        fresh_spawner.container_client.get_container_status = mock.AsyncMock(
             side_effect=Exception("docker error")
         )
         assert await fresh_spawner.get_status("cid") == "unknown"
@@ -583,6 +540,7 @@ class TestSpawnSuccess:
         assert f"nukelab-server-{user_id}-srv1-data" in call_kwargs["volumes"]
         assert call_kwargs["command"] == "/start.sh"
         assert call_kwargs["hostname"] == "NukeLab"
+        assert call_kwargs["network_aliases"] == [f"srv-{str(server.id)[:8]}"]
 
     @pytest.mark.asyncio
     async def test_spawn_with_provided_image(self, fresh_spawner):
@@ -601,9 +559,7 @@ class TestSpawnSuccess:
     @pytest.mark.asyncio
     async def test_spawn_image_fallback_on_pull_failure(self, fresh_spawner):
         """spawn should fallback to nukelab-base:latest when image inspect and pull both fail."""
-        fresh_spawner.container_client.client.images.get = mock.AsyncMock(
-            side_effect=Exception("not found")
-        )
+        fresh_spawner.container_client.image_exists = mock.AsyncMock(return_value=False)
         fresh_spawner.container_client.pull_image = mock.AsyncMock(
             side_effect=Exception("pull failed")
         )
@@ -621,9 +577,7 @@ class TestSpawnSuccess:
     @pytest.mark.asyncio
     async def test_spawn_image_pull_when_not_local(self, fresh_spawner):
         """spawn should pull image when not found locally."""
-        fresh_spawner.container_client.client.images.get = mock.AsyncMock(
-            side_effect=Exception("not found")
-        )
+        fresh_spawner.container_client.image_exists = mock.AsyncMock(return_value=False)
 
         with mock.patch("app.container.spawner.settings.public_url", "http://test"):
             await fresh_spawner.spawn(
@@ -713,24 +667,24 @@ class TestSpawnSuccess:
         """spawn should wait for container readiness before returning."""
         user_id = str(uuid_mod.uuid4())
         with mock.patch("app.container.spawner.settings.public_url", "http://test"):
-            await fresh_spawner.spawn(
+            server = await fresh_spawner.spawn(
                 user_id=user_id,
                 username="testuser",
                 server_name="srv1",
             )
 
+        health_alias = f"srv-{str(server.id)[:8]}"
         fresh_spawner.container_client.wait_for_container_ready.assert_awaited_once_with(
-            f"nukelab-server-{user_id}-srv1",
-            f"http://nukelab-server-{user_id}-srv1:8080/health",
+            health_alias,
+            f"http://{health_alias}:8080/health",
         )
 
     @pytest.mark.asyncio
     async def test_spawn_removes_existing_container_before_create(self, fresh_spawner):
         """spawn should delete an existing container with the same name before creating a new one."""
         user_id = str(uuid_mod.uuid4())
-        mock_existing = mock.AsyncMock()
-        fresh_spawner.container_client.client.containers.get = mock.AsyncMock(
-            return_value=mock_existing
+        fresh_spawner.container_client.get_container_by_name = mock.AsyncMock(
+            return_value="existing-id"
         )
 
         with mock.patch("app.container.spawner.settings.public_url", "http://test"):
@@ -741,19 +695,19 @@ class TestSpawnSuccess:
                     server_name="srv1",
                 )
 
-        fresh_spawner.container_client.client.containers.get.assert_awaited_once_with(
+        fresh_spawner.container_client.get_container_by_name.assert_awaited_once_with(
             f"nukelab-server-{user_id}-srv1"
         )
-        mock_existing.delete.assert_awaited_once_with(force=True)
+        fresh_spawner.container_client.delete_container.assert_awaited_once_with(
+            "existing-id", force=True
+        )
         fresh_spawner.container_client.create_container.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_spawn_ignores_missing_existing_container(self, fresh_spawner):
         """spawn should proceed normally when no existing container is found."""
         user_id = str(uuid_mod.uuid4())
-        fresh_spawner.container_client.client.containers.get = mock.AsyncMock(
-            side_effect=Exception("not found")
-        )
+        fresh_spawner.container_client.get_container_by_name = mock.AsyncMock(return_value=None)
 
         with mock.patch("app.container.spawner.settings.public_url", "http://test"):
             with mock.patch("asyncio.sleep"):
@@ -763,9 +717,10 @@ class TestSpawnSuccess:
                     server_name="srv1",
                 )
 
-        fresh_spawner.container_client.client.containers.get.assert_awaited_once_with(
+        fresh_spawner.container_client.get_container_by_name.assert_awaited_once_with(
             f"nukelab-server-{user_id}-srv1"
         )
+        fresh_spawner.container_client.delete_container.assert_not_awaited()
         fresh_spawner.container_client.create_container.assert_awaited_once()
 
     @pytest.mark.asyncio
@@ -785,14 +740,6 @@ class TestSpawnSuccess:
     @pytest.mark.asyncio
     async def test_spawn_permission_fix_includes_home(self, fresh_spawner):
         """spawn should chmod /home/{username} and extra volume mounts."""
-        mock_exec = MockExec()
-        mock_container = mock.AsyncMock()
-        mock_container.id = str(uuid_mod.uuid4())
-        mock_container.exec = mock.AsyncMock(return_value=mock_exec)
-        fresh_spawner.container_client.create_container = mock.AsyncMock(
-            return_value=mock_container
-        )
-
         with mock.patch("app.container.spawner.settings.public_url", "http://test"):
             with mock.patch("asyncio.sleep"):
                 await fresh_spawner.spawn(
@@ -807,19 +754,16 @@ class TestSpawnSuccess:
 
         # Home directory and extra mounts are both chmod-ed so the non-root
         # container user can write to them in hardened mode.
-        exec_calls = mock_container.exec.call_args_list
-        paths = [c[0][0][2] for c in exec_calls]
+        exec_calls = fresh_spawner.container_client.exec_in_container.call_args_list
+        paths = [c[0][1][2] for c in exec_calls]
         assert "/home/testuser" in paths
         assert "/data" in paths
 
     @pytest.mark.asyncio
     async def test_spawn_permission_fix_failure_logged(self, fresh_spawner):
         """spawn should log warning when chmod fails."""
-        mock_container = mock.AsyncMock()
-        mock_container.id = str(uuid_mod.uuid4())
-        mock_container.exec = mock.AsyncMock(side_effect=Exception("chmod failed"))
-        fresh_spawner.container_client.create_container = mock.AsyncMock(
-            return_value=mock_container
+        fresh_spawner.container_client.exec_in_container = mock.AsyncMock(
+            side_effect=Exception("chmod failed")
         )
 
         with mock.patch("app.container.spawner.settings.public_url", "http://test"):
@@ -892,10 +836,8 @@ class TestSpawnFailure:
         fresh_spawner.container_client.create_container = mock.AsyncMock(
             side_effect=Exception("create failed")
         )
-        mock_container = mock.AsyncMock()
-        mock_container.delete = mock.AsyncMock()
-        fresh_spawner.container_client.client.containers.get = mock.AsyncMock(
-            return_value=mock_container
+        fresh_spawner.container_client.get_container_by_name = mock.AsyncMock(
+            return_value="existing-id"
         )
 
         with mock.patch("app.container.spawner.settings.public_url", "http://test"):
@@ -907,8 +849,10 @@ class TestSpawnFailure:
                 )
 
         assert "Failed to spawn server" in str(exc_info.value)
-        mock_container.delete.assert_awaited_with(force=True)
-        assert mock_container.delete.await_count == 2
+        # Orphan cleanup before create + failure cleanup after the exception.
+        delete_calls = fresh_spawner.container_client.delete_container.call_args_list
+        assert fresh_spawner.container_client.delete_container.await_count == 2
+        assert all(c.kwargs.get("force") is True for c in delete_calls)
 
     @pytest.mark.asyncio
     async def test_spawn_cleanup_ignores_delete_failure(self, fresh_spawner):
@@ -916,7 +860,7 @@ class TestSpawnFailure:
         fresh_spawner.container_client.create_container = mock.AsyncMock(
             side_effect=Exception("create failed")
         )
-        fresh_spawner.container_client.client.containers.get = mock.AsyncMock(
+        fresh_spawner.container_client.delete_container = mock.AsyncMock(
             side_effect=Exception("not found")
         )
 

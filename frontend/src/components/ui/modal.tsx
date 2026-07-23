@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
 // SPDX-License-Identifier: BSD-2-Clause
 
+import { useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X } from 'lucide-react'
 import { modalOverlayVariants, modalContentVariants } from '../../lib/animations'
@@ -23,6 +24,15 @@ export function Modal({
   className,
   showClose = true,
 }: ModalProps) {
+  useEffect(() => {
+    if (!open) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onOpenChange(false)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [open, onOpenChange])
+
   return (
     <AnimatePresence>
       {open && (

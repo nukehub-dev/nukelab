@@ -97,6 +97,13 @@ SERVERS_TOTAL = Gauge(
     registry=REGISTRY,
 )
 
+CONTAINER_STATUS_LOOKUP_FAILURES_TOTAL = Counter(
+    _metric_name("container_status_lookup_failures_total"),
+    "Total container runtime status lookup failures",
+    ["reason"],
+    registry=REGISTRY,
+)
+
 USERS_TOTAL = Gauge(
     _metric_name("users_total"),
     "Total number of users",

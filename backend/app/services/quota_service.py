@@ -164,6 +164,14 @@ class QuotaService:
     ) -> ResourceQuota:
         """Recalculate current usage from active servers and volumes"""
 
+        # Keep exclusive GPU allocations truthful on quota reads: drop rows
+        # whose server stopped, vanished, or no longer needs a GPU.
+        from app.services.gpu_allocator import GpuAllocatorService
+
+        allocator = GpuAllocatorService(self.db)
+        if allocator.enabled():
+            await allocator.reconcile()
+
         quota = await self.get_or_create_user_quota(user_id)
 
         # Get all active servers for user
@@ -177,10 +185,17 @@ class QuotaService:
         result = await self.db.execute(select(Server).where(and_(*conditions)))
         servers = result.scalars().all()
 
+        # Disk usage is a persistent reservation: the sum of the user's volume
+        # size limits, independent of server state. Plan disk allocations are
+        # per-server capacity (enforced via volume mount checks), not user
+        # quota, so they are deliberately not counted here.
+        result = await self.db.execute(select(Volume).where(Volume.owner_id == uuid.UUID(user_id)))
+        volumes = result.scalars().all()
+        total_disk_mb = sum((v.max_size_bytes or 0) // (1024 * 1024) for v in volumes)
+
         # Calculate totals
         total_cpu = sum(s.allocated_cpu for s in servers)
         total_memory_mb = sum(self._parse_memory(s.allocated_memory) for s in servers)
-        total_disk_mb = sum(self._parse_memory(s.allocated_disk) for s in servers)
         total_gpu = sum(s.allocated_gpu for s in servers)
         total_servers = len(servers)
 
@@ -286,15 +301,10 @@ class QuotaService:
                 "reason": f"Memory limit exceeded. This plan needs {self._format_memory(plan_memory_mb)}, but you only have {self._format_memory(available_mb)} available (limit: {self._format_memory(max_memory_mb)}, currently using: {self._format_memory(quota.usage_memory_mb)}).",
             }
 
-        # Check disk limit
-        plan_disk_mb = self._parse_memory(plan.disk_limit)
-        max_disk_mb = self._parse_memory(quota.max_disk_total)
-        if quota.usage_disk_mb + plan_disk_mb > max_disk_mb:
-            available_mb = max(0, max_disk_mb - quota.usage_disk_mb)
-            return {
-                "allowed": False,
-                "reason": f"Disk limit exceeded. This plan needs {self._format_memory(plan_disk_mb)}, but you only have {self._format_memory(available_mb)} available (limit: {self._format_memory(max_disk_mb)}, currently using: {self._format_memory(quota.usage_disk_mb)}).",
-            }
+        # Disk is intentionally not checked here: the user's disk quota
+        # (max_disk_total) reserves persistent volume capacity and is enforced
+        # at volume creation time (check_volume_creation_allowed). Per-server
+        # plan disk is mount capacity, gated by check_volumes_quota instead.
 
         # Check GPU limit
         if quota.usage_gpu + plan.gpu_limit > quota.max_gpu_total:
@@ -304,17 +314,45 @@ class QuotaService:
                 "reason": f"GPU limit exceeded. This plan needs {plan.gpu_limit} GPU(s), but you only have {available} available (limit: {quota.max_gpu_total} GPU(s), currently using: {quota.usage_gpu}).",
             }
 
+        # Check the exclusive GPU device pool (only when one is configured).
+        # Devices the excluded server already holds count as available: a plan
+        # change releases and re-reserves them.
+        if plan.gpu_limit > 0:
+            from app.services.gpu_allocator import GpuAllocatorService
+
+            allocator = GpuAllocatorService(self.db)
+            if allocator.enabled():
+                available_count = len(await allocator.available())
+                if exclude_server_id:
+                    available_count += len(await allocator.devices_for(exclude_server_id))
+                if available_count < plan.gpu_limit:
+                    pool_size = len(allocator.pool())
+                    return {
+                        "allowed": False,
+                        "reason": f"No GPUs available on the host (all {pool_size} in use)",
+                    }
+
         return {"allowed": True, "reason": None, "estimated_cost_per_hour": plan.cost_per_hour}
 
     async def check_volume_creation_allowed(
-        self, user_id: str, requested_size_bytes: int | None = None
+        self,
+        user_id: str,
+        requested_size_bytes: int | None = None,
+        exclude_volume_id: str | None = None,
     ) -> dict[str, Any]:
-        """Check if user can create a volume with given size"""
+        """Check if user can create a volume with given size.
+
+        Pass exclude_volume_id when resizing an existing volume so its current
+        limit is not counted twice.
+        """
 
         quota = await self.get_or_create_user_quota(user_id)
 
         # Count current volume usage separately from server disk
-        result = await self.db.execute(select(Volume).where(Volume.owner_id == uuid.UUID(user_id)))
+        conditions = [Volume.owner_id == uuid.UUID(user_id)]
+        if exclude_volume_id:
+            conditions.append(Volume.id != uuid.UUID(exclude_volume_id))
+        result = await self.db.execute(select(Volume).where(and_(*conditions)))
         volumes = result.scalars().all()
         volume_usage_mb = sum((v.max_size_bytes or 0) // (1024 * 1024) for v in volumes)
 
@@ -345,7 +383,8 @@ class QuotaService:
         if plan:
             quota.usage_cpu += plan.cpu_limit
             quota.usage_memory_mb += self._parse_memory(plan.memory_limit)
-            quota.usage_disk_mb += self._parse_memory(plan.disk_limit)
+            # Disk usage is volume-capacity based (see recalculate_usage) and
+            # does not change when a server starts.
             quota.usage_gpu += plan.gpu_limit
             quota.usage_servers += 1
             quota.updated_at = datetime.now(UTC).replace(tzinfo=None)
@@ -370,7 +409,8 @@ class QuotaService:
             quota.usage_memory_mb = max(
                 0, quota.usage_memory_mb - self._parse_memory(plan.memory_limit)
             )
-            quota.usage_disk_mb = max(0, quota.usage_disk_mb - self._parse_memory(plan.disk_limit))
+            # Disk usage is volume-capacity based (see recalculate_usage) and
+            # does not change when a server stops.
             quota.usage_gpu = max(0, quota.usage_gpu - plan.gpu_limit)
             quota.usage_servers = max(0, quota.usage_servers - 1)
             quota.updated_at = datetime.now(UTC).replace(tzinfo=None)

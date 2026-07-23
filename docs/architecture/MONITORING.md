@@ -223,7 +223,10 @@ Grafana alerting can be configured through the UI or via provisioning files in
   rate(nukelab_http_requests_total[1m]) > 0.05`
 
 - **High p99 latency**: `histogram_quantile(0.99,
-  sum(rate(nukelab_http_request_duration_seconds_bucket[5m])) by (le)) > 1.0`
+  sum(rate(nukelab_http_request_duration_seconds_bucket{path!~"/api/servers/{server_id}/(start|stop|restart)"}[5m]))
+  by (le)) > 1.0` — container lifecycle endpoints (start/stop/restart) are
+  excluded because they legitimately take seconds waiting on the container
+  runtime.
 
 ---
 
@@ -297,7 +300,7 @@ Included alert rules live in `monitoring/prometheus/rules/nukelab.yml`:
 | Alert | Trigger |
 |-------|---------|
 | `NukeLabHighErrorRate` | 5xx rate > 5% for 2 minutes |
-| `NukeLabHighLatency` | p99 latency > 1s for 3 minutes |
+| `NukeLabHighLatency` | p99 latency > 1s for 3 minutes (excludes server start/stop/restart, which legitimately take seconds) |
 | `NukeLabTargetDown` | backend scrape target down for 1 minute |
 | `NukeLabPostgresConnectionsHigh` | Postgres connections > 80% of max |
 | `NukeLabRedisMemoryHigh` | Redis memory > 85% of max |

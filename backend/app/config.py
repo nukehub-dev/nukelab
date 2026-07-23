@@ -148,6 +148,25 @@ class Settings(BaseSettings):
     docker_pull_policy: str = "if-not-present"
     volume_storage_path: str = ""
 
+    # Container runtime driver ("docker" covers Docker and Podman via the
+    # Docker-compatible API; "kubernetes" is reserved for a future k3s driver).
+    container_runtime: str = "docker"
+
+    # NVIDIA GPU support. Requires an NVIDIA driver, nvidia-container-toolkit,
+    # and (for Podman) a CDI spec on the host.
+    gpu_enabled: bool = False
+    gpu_cdi_device: str = "nvidia.com/gpu=all"
+    # Optional exclusive GPU device pool: comma-separated CDI device names
+    # (e.g. "nvidia.com/gpu=0,nvidia.com/gpu=1"). When set, each unit of a
+    # plan's gpu_limit exclusively reserves one device per server. When empty,
+    # gpu_cdi_device is used as-is for every GPU server (shared legacy mode).
+    gpu_devices: str = ""
+
+    @property
+    def gpu_device_list(self) -> list[str]:
+        """Parse gpu_devices into a list of CDI device names."""
+        return [d.strip() for d in self.gpu_devices.split(",") if d.strip()]
+
     # Container runtime hardening (defaults to enabled unless dev_mode is True)
     container_hardening_enabled: bool | None = None
     container_user: str = "nukelab"
@@ -171,9 +190,11 @@ class Settings(BaseSettings):
     log_backup_count: int = 5
 
     credits_enabled: bool = True
-    credits_daily_allowance: int = 500
+    credits_initial_balance: int = 100
+    credits_daily_allowance: int = 10
     credits_max_balance: int = 5000
     credits_rollover: bool = False
+    credits_daily_allowance_login_window_hours: int = 48
 
     upload_dir: str = "/data/uploads"
     max_avatar_size_mb: int = 2
@@ -199,6 +220,9 @@ class Settings(BaseSettings):
     # Error Tracking
     sentry_dsn: str = ""
     sentry_release: str = ""
+
+    # Sentry-compatible security endpoint for CSP reports (GlitchTip, Sentry, etc.)
+    sentry_security_endpoint: str = ""
 
     # OpenTelemetry Distributed Tracing
     otel_traces_enabled: bool = False

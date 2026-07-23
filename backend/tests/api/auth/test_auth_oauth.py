@@ -8,8 +8,10 @@ from unittest import mock
 
 import pytest
 
+from app.config import settings
 from app.models.api_token import ApiToken
 from app.models.refresh_token import RefreshToken
+from app.models.user import User
 
 
 def _make_oauth_mock():
@@ -166,6 +168,16 @@ class TestOAuthCallbackHappyPaths:
                     assert response.status_code == 307
                     assert "token=" in response.headers["location"]
 
+        # The OAuth signup path should seed the user with the configured
+        # initial balance, not reuse the daily allowance as the starting
+        # balance.
+        from sqlalchemy import select
+
+        result = await db_session.execute(select(User).where(User.email == "oauth_new@example.com"))
+        user = result.scalar_one()
+        assert user.nuke_balance == settings.credits_initial_balance
+        assert user.daily_allowance == settings.credits_daily_allowance
+
     @pytest.mark.asyncio
     async def test_oauth_callback_link_existing_user_by_email(self, client, test_user, db_session):
         test_user.oauth_id = None
@@ -314,19 +326,21 @@ class TestOAuthLoginPKCEAndSync:
     async def test_oauth_login_pkce_enabled(self, client):
         m = _make_oauth_mock()
         with mock.patch("app.services.oauth_service.oauth_service", m):
-            with mock.patch("app.api.auth.settings.oauth_pkce_enabled", True):
-                response = await client.get("/api/auth/oauth/login", follow_redirects=False)
-                assert response.status_code == 307
-                assert "oauth_verifier" in response.cookies
+            with mock.patch("app.api.auth.settings.auth_mode", "both"):
+                with mock.patch("app.api.auth.settings.oauth_pkce_enabled", True):
+                    response = await client.get("/api/auth/oauth/login", follow_redirects=False)
+                    assert response.status_code == 307
+                    assert "oauth_verifier" in response.cookies
 
     @pytest.mark.asyncio
     async def test_oauth_login_sync_mode(self, client):
         m = _make_oauth_mock()
         with mock.patch("app.services.oauth_service.oauth_service", m):
-            response = await client.get("/api/auth/oauth/login?sync=1", follow_redirects=False)
-            assert response.status_code == 307
-            assert "oauth_sync" in response.cookies
-            assert "prompt=none" in response.headers["location"]
+            with mock.patch("app.api.auth.settings.auth_mode", "both"):
+                response = await client.get("/api/auth/oauth/login?sync=1", follow_redirects=False)
+                assert response.status_code == 307
+                assert "oauth_sync" in response.cookies
+                assert "prompt=none" in response.headers["location"]
 
 
 class TestGetAuthContextEdgeCases:

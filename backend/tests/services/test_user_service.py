@@ -173,6 +173,39 @@ class TestUserServiceCreate:
         assert user.daily_allowance == 10
 
     @pytest.mark.asyncio
+    async def test_create_user_uses_system_default_initial_balance(self, db_session):
+        """create_user should use the persisted system signup initial balance."""
+        from app.models.system_setting import SystemSetting
+
+        db_session.add(SystemSetting(key="credits_initial_balance", value="100"))
+        await db_session.commit()
+
+        service = UserService(db_session)
+        user = await service.create_user(
+            username="newuser",
+            email="new@example.com",
+            password="password123",
+        )
+        assert user.nuke_balance == 100
+
+    @pytest.mark.asyncio
+    async def test_create_user_override_initial_balance(self, db_session):
+        """create_user should allow caller to override the system initial balance."""
+        from app.models.system_setting import SystemSetting
+
+        db_session.add(SystemSetting(key="credits_initial_balance", value="100"))
+        await db_session.commit()
+
+        service = UserService(db_session)
+        user = await service.create_user(
+            username="newuser",
+            email="new@example.com",
+            password="password123",
+            credits=250,
+        )
+        assert user.nuke_balance == 250
+
+    @pytest.mark.asyncio
     async def test_create_user_override_daily_allowance(self, db_session):
         """create_user should allow caller to override the system default."""
         from app.models.system_setting import SystemSetting

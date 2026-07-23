@@ -7,6 +7,7 @@ import {
   Mail,
   Zap,
   Calendar,
+  CalendarClock,
   Clock,
   Pencil,
   Globe,
@@ -19,14 +20,20 @@ import {
   Building2,
   Users,
   Briefcase,
+  Server,
+  Cpu,
+  MemoryStick,
+  HardDrive,
+  CircuitBoard,
   type LucideIcon,
 } from 'lucide-react'
 
 import { AvatarEditDialog } from './avatar-edit-dialog'
 import { useAuthStore } from '../../stores/auth-store'
 import { useToast } from '../../stores/toast-store'
-import { cn } from '../../lib/utils'
+import { cn, formatBytes, parseMemoryString, parseUtcDate } from '../../lib/utils'
 import { api } from '../../lib/api'
+import { useMyQuota } from '../../hooks/use-quotas'
 import type { User } from '../../types/api'
 import { Card } from '../ui/card'
 import {
@@ -98,17 +105,23 @@ function SectionCard({
   className,
   orb,
   delay = 0,
+  fill = false,
 }: {
   children: React.ReactNode
   className?: string
   orb?: string
   delay?: number
+  /** Grow to absorb leftover column height; content becomes a flex column. */
+  fill?: boolean
 }) {
   return (
-    <motion.div variants={fadeUp} transition={{ delay }} className="h-full">
-      <Card variant="default" className={cn('relative overflow-hidden h-full', className)}>
+    <motion.div variants={fadeUp} transition={{ delay }} className={cn('h-full', fill && 'flex-1')}>
+      <Card
+        variant="default"
+        className={cn('relative overflow-hidden h-full', fill && 'flex flex-col', className)}
+      >
         {orb && <Orb className={orb} />}
-        <div className="relative">{children}</div>
+        <div className={cn('relative', fill && 'flex-1 flex flex-col')}>{children}</div>
       </Card>
     </motion.div>
   )
@@ -136,6 +149,73 @@ function DetailRow({
       </span>
     </div>
   )
+}
+
+function QuotaTile({
+  icon: Icon,
+  label,
+  usedText,
+  limitText,
+  availableText,
+  ratio,
+}: {
+  icon: LucideIcon
+  label: string
+  usedText: string
+  limitText: string
+  availableText: string
+  ratio: number
+}) {
+  const pct = Math.min(Math.max(Math.round(ratio * 100), 0), 100)
+  const nearLimit = ratio >= 0.9
+  return (
+    <div className="rounded-xl border border-border/50 bg-muted/30 p-3.5 flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground min-w-0">
+          <Icon className="w-4 h-4 shrink-0" />
+          <span className="whitespace-nowrap">{label}</span>
+        </div>
+        <span
+          className={cn(
+            'text-xs font-semibold tabular-nums',
+            nearLimit ? 'text-amber-400' : 'text-muted-foreground'
+          )}
+        >
+          {pct}%
+        </span>
+      </div>
+      <p
+        className={cn(
+          'text-lg font-semibold tracking-tight tabular-nums',
+          nearLimit && 'text-amber-400'
+        )}
+      >
+        {usedText}
+        <span className="text-sm font-medium text-muted-foreground"> / {limitText}</span>
+      </p>
+      <div className="mt-auto space-y-2">
+        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+          <div
+            className={cn('h-full rounded-full', nearLimit ? 'bg-amber-400' : 'bg-primary')}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <p className="text-[11px] text-muted-foreground">{availableText} available</p>
+      </div>
+    </div>
+  )
+}
+
+/** Ratio of used MB against a Docker-style limit string ("16g", "512m"). */
+function sizeQuotaRatio(usedMb: number, limitStr: string): number {
+  const limitBytes = parseMemoryString(limitStr)
+  return limitBytes > 0 ? (usedMb * 1024 * 1024) / limitBytes : 0
+}
+
+/** Remaining quota ("16g" limit minus used MB) as a formatted size. */
+function sizeQuotaAvailableText(usedMb: number, limitStr: string): string {
+  const remainingBytes = parseMemoryString(limitStr) - usedMb * 1024 * 1024
+  return formatBytes(Math.max(remainingBytes, 0))
 }
 
 function RoleBadge({ role }: { role: string }) {
@@ -419,6 +499,7 @@ export function ProfilePage() {
   const user = useAuthStore((s) => s.user)
   const setUser = useAuthStore((s) => s.setUser)
   const { success, error } = useToast()
+  const { data: quota, isLoading: quotaLoading, isError: quotaError } = useMyQuota()
 
   const [editOpen, setEditOpen] = useState(false)
   const [avatarDialogOpen, setAvatarDialogOpen] = useState(false)
@@ -478,7 +559,11 @@ export function ProfilePage() {
 
   const fmtDate = (d?: string) =>
     d
-      ? new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+      ? parseUtcDate(d).toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        })
       : 'Never'
 
   const handleSaved = (updated: Partial<User>) => setUser({ ...user, ...updated })
@@ -650,50 +735,84 @@ export function ProfilePage() {
 
           {/* ── 2-column grid (only on wide screens where sidebar + content fit) ── */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            {/* Left: Account Details */}
-            <SectionCard className="p-6" delay={0.1}>
-              <h3 className="text-lg font-semibold mb-1">Account Details</h3>
-              <p className="text-xs text-muted-foreground mb-4">
-                Your account information and activity
-              </p>
+            {/* Left: Account Details + Preferences */}
+            <div className="flex flex-col gap-6">
+              <SectionCard className="p-6" delay={0.1}>
+                <h3 className="text-lg font-semibold mb-1">Account Details</h3>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Your account information and activity
+                </p>
 
-              <div className="divide-y divide-border/30">
-                <DetailRow icon={UserCircle} label="Username" value={user.username} />
-                <DetailRow icon={Mail} label="Email" value={user.email} />
-                <DetailRow
-                  icon={Building2}
-                  label="Organization"
-                  value={(user.profile?.organization as string | undefined) || '—'}
-                />
-                <DetailRow
-                  icon={Users}
-                  label="Department"
-                  value={(user.profile?.department as string | undefined) || '—'}
-                />
-                <DetailRow
-                  icon={Briefcase}
-                  label="Occupation"
-                  value={(user.profile?.occupation as string | undefined) || '—'}
-                />
-                <DetailRow
-                  icon={LogIn}
-                  label="Total Logins"
-                  value={user.login_count.toLocaleString()}
-                />
-                <DetailRow icon={Calendar} label="Member Since" value={fmtDate(user.created_at)} />
-                <DetailRow icon={Clock} label="Last Login" value={fmtDate(user.last_login)} />
-                <DetailRow
-                  icon={RefreshCw}
-                  label="Profile Updated"
-                  value={fmtDate(user.updated_at)}
-                />
-              </div>
-            </SectionCard>
+                <div className="divide-y divide-border/30">
+                  <DetailRow icon={UserCircle} label="Username" value={user.username} />
+                  <DetailRow icon={Mail} label="Email" value={user.email} />
+                  <DetailRow
+                    icon={Building2}
+                    label="Organization"
+                    value={(user.profile?.organization as string | undefined) || '—'}
+                  />
+                  <DetailRow
+                    icon={Users}
+                    label="Department"
+                    value={(user.profile?.department as string | undefined) || '—'}
+                  />
+                  <DetailRow
+                    icon={Briefcase}
+                    label="Occupation"
+                    value={(user.profile?.occupation as string | undefined) || '—'}
+                  />
+                  <DetailRow
+                    icon={LogIn}
+                    label="Total Logins"
+                    value={user.login_count.toLocaleString()}
+                  />
+                  <DetailRow
+                    icon={Calendar}
+                    label="Member Since"
+                    value={fmtDate(user.created_at)}
+                  />
+                  <DetailRow icon={Clock} label="Last Login" value={fmtDate(user.last_login)} />
+                  <DetailRow
+                    icon={RefreshCw}
+                    label="Profile Updated"
+                    value={fmtDate(user.updated_at)}
+                  />
+                </div>
+              </SectionCard>
 
-            {/* Right: Credits + Preferences stacked */}
-            <div className="flex flex-col gap-6 h-full">
+              {/* Preferences */}
+              <SectionCard className="p-6" delay={0.2} fill>
+                <h3 className="text-lg font-semibold mb-1">Preferences</h3>
+                <p className="text-xs text-muted-foreground mb-4">Manage your profile settings</p>
+
+                <div className="flex-1 flex flex-col justify-center space-y-3">
+                  <PrefToggle
+                    icon={Globe}
+                    title="Use Gravatar"
+                    desc="Fetch avatar from Gravatar"
+                    checked={useGravatar}
+                    onChange={toggleGravatar}
+                  />
+                  <PrefToggle
+                    icon={Eye}
+                    title="Public Profile"
+                    desc="Let others find you in search"
+                    checked={user.profile_visibility === 'public'}
+                    onChange={toggleVisibility}
+                    disabled={togglingVis}
+                  />
+                </div>
+              </SectionCard>
+            </div>
+
+            {/* Right: Credits + Resource Quota */}
+            <div className="flex flex-col gap-6">
               {/* Credits — prominent */}
-              <SectionCard className="p-6" delay={0.15}>
+              <SectionCard
+                className="p-6"
+                delay={0.15}
+                orb="bottom-0 left-0 w-56 h-56 bg-primary/5 translate-y-1/3 -translate-x-1/4"
+              >
                 <h3 className="text-lg font-semibold mb-1">Credits</h3>
                 <p className="text-xs text-muted-foreground mb-4">Your current NUKE balance</p>
 
@@ -713,36 +832,97 @@ export function ProfilePage() {
                     </p>
                   </div>
                 </div>
-                <div className="mt-4 flex items-center justify-between py-2 px-1">
+                <div className="mt-3 flex items-center gap-3 rounded-xl border border-border/50 bg-muted/30 px-4 py-3">
+                  <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                    <CalendarClock className="w-4 h-4 text-primary" />
+                  </div>
                   <span className="text-sm text-muted-foreground">Daily Allowance</span>
-                  <span className="text-sm font-medium">
+                  <span className="text-sm font-semibold tabular-nums ml-auto">
                     {user.daily_allowance.toLocaleString()} NUKE
                   </span>
                 </div>
               </SectionCard>
 
-              {/* Preferences */}
-              <SectionCard className="p-6 flex-1" delay={0.2}>
-                <h3 className="text-lg font-semibold mb-1">Preferences</h3>
-                <p className="text-xs text-muted-foreground mb-4">Manage your profile settings</p>
+              {/* Resource Quota */}
+              <SectionCard className="p-6" delay={0.18} fill>
+                <h3 className="text-lg font-semibold mb-1">Resource Quota</h3>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Your current usage against resource limits
+                </p>
 
-                <div className="space-y-3">
-                  <PrefToggle
-                    icon={Globe}
-                    title="Use Gravatar"
-                    desc="Fetch avatar from Gravatar"
-                    checked={useGravatar}
-                    onChange={toggleGravatar}
-                  />
-                  <PrefToggle
-                    icon={Eye}
-                    title="Public Profile"
-                    desc="Let others find you in search"
-                    checked={user.profile_visibility === 'public'}
-                    onChange={toggleVisibility}
-                    disabled={togglingVis}
-                  />
-                </div>
+                {quotaLoading ? (
+                  <div className="flex-1 flex items-center gap-2 py-4 text-sm text-muted-foreground">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Loading quota…
+                  </div>
+                ) : quotaError || !quota ? (
+                  <p className="flex-1 py-4 text-sm text-muted-foreground">
+                    Quota information is unavailable right now
+                  </p>
+                ) : (
+                  <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3 auto-rows-fr">
+                    <QuotaTile
+                      icon={Server}
+                      label="Servers"
+                      usedText={String(quota.usage.servers)}
+                      limitText={String(quota.limits.max_servers_total)}
+                      availableText={String(
+                        Math.max(quota.limits.max_servers_total - quota.usage.servers, 0)
+                      )}
+                      ratio={
+                        quota.limits.max_servers_total > 0
+                          ? quota.usage.servers / quota.limits.max_servers_total
+                          : 0
+                      }
+                    />
+                    <QuotaTile
+                      icon={Cpu}
+                      label="CPU"
+                      usedText={`${quota.usage.cpu}`}
+                      limitText={`${quota.limits.max_cpu_total} cores`}
+                      availableText={`${Math.max(quota.limits.max_cpu_total - quota.usage.cpu, 0)} cores`}
+                      ratio={
+                        quota.limits.max_cpu_total > 0
+                          ? quota.usage.cpu / quota.limits.max_cpu_total
+                          : 0
+                      }
+                    />
+                    <QuotaTile
+                      icon={MemoryStick}
+                      label="Memory"
+                      usedText={formatBytes(quota.usage.memory_mb * 1024 * 1024)}
+                      limitText={formatBytes(parseMemoryString(quota.limits.max_memory_total))}
+                      availableText={sizeQuotaAvailableText(
+                        quota.usage.memory_mb,
+                        quota.limits.max_memory_total
+                      )}
+                      ratio={sizeQuotaRatio(quota.usage.memory_mb, quota.limits.max_memory_total)}
+                    />
+                    <QuotaTile
+                      icon={HardDrive}
+                      label="Disk"
+                      usedText={formatBytes(quota.usage.disk_mb * 1024 * 1024)}
+                      limitText={formatBytes(parseMemoryString(quota.limits.max_disk_total))}
+                      availableText={sizeQuotaAvailableText(
+                        quota.usage.disk_mb,
+                        quota.limits.max_disk_total
+                      )}
+                      ratio={sizeQuotaRatio(quota.usage.disk_mb, quota.limits.max_disk_total)}
+                    />
+                    {quota.limits.max_gpu_total > 0 && (
+                      <QuotaTile
+                        icon={CircuitBoard}
+                        label="GPU"
+                        usedText={String(quota.usage.gpu)}
+                        limitText={String(quota.limits.max_gpu_total)}
+                        availableText={String(
+                          Math.max(quota.limits.max_gpu_total - quota.usage.gpu, 0)
+                        )}
+                        ratio={quota.usage.gpu / quota.limits.max_gpu_total}
+                      />
+                    )}
+                  </div>
+                )}
               </SectionCard>
             </div>
           </div>

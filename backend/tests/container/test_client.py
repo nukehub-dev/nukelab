@@ -298,7 +298,7 @@ class TestCreateContainer:
             mock.patch.object(client, "_ensure_cpu_lib_volume"),
         ):
             result = await client.create_container("test-1", "nginx:latest")
-            assert result == mock_container
+            assert result == mock_container.id
             client.client.containers.create.assert_awaited_once()
             config = client.client.containers.create.call_args[0][0]
             assert config["Image"] == "nginx:latest"
@@ -523,7 +523,7 @@ class TestContainerLifecycle:
         fake_cm.__aenter__ = mock.AsyncMock(return_value=mock_session)
         fake_cm.__aexit__ = mock.AsyncMock(return_value=False)
 
-        with mock.patch("app.container.client.aiohttp.ClientSession", return_value=fake_cm):
+        with mock.patch("app.container.docker_driver.aiohttp.ClientSession", return_value=fake_cm):
             result = await client.wait_for_container_ready(
                 "srv", "http://srv:8080/health", timeout=1
             )
@@ -547,7 +547,7 @@ class TestContainerLifecycle:
         fake_cm.__aenter__ = mock.AsyncMock(return_value=mock_session)
         fake_cm.__aexit__ = mock.AsyncMock(return_value=False)
 
-        with mock.patch("app.container.client.aiohttp.ClientSession", return_value=fake_cm):
+        with mock.patch("app.container.docker_driver.aiohttp.ClientSession", return_value=fake_cm):
             result = await client.wait_for_container_ready(
                 "srv", "http://srv:8080/health", timeout=1
             )

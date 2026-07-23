@@ -67,8 +67,7 @@ class HealthCheckService:
         container_client = None
         try:
             container_client = await get_fresh_container_client()
-            container = await container_client.client.containers.get(server.container_id)
-            info = await container.show()
+            info = await container_client.get_container_info(server.container_id)
             state = info.get("State", {})
 
             health = state.get("Health", {})
@@ -87,6 +86,11 @@ class HealthCheckService:
                 exit_code=last_check.get("ExitCode"),
                 output=(last_check.get("Output", "") or "")[:1000],
             )
+
+            # Persist the latest health status on the server record so API
+            # consumers see a current summary without querying HealthCheck rows.
+            server.health_status = health_status
+            server.last_health_check = datetime.now(UTC).replace(tzinfo=None)
 
             # Track consecutive failures
             if health_status == "unhealthy":
@@ -118,12 +122,14 @@ class HealthCheckService:
                 status="unknown",
                 output=str(e)[:1000],
             )
+            server.health_status = "unknown"
+            server.last_health_check = datetime.now(UTC).replace(tzinfo=None)
             self.db.add(health_check)
             await self.db.commit()
         finally:
-            if container_client and container_client.client:
+            if container_client:
                 with contextlib.suppress(Exception):
-                    await container_client.client.close()
+                    await container_client.close()
 
     async def _auto_restart(self, server: Server):
         """Auto-restart a failed container with rate limiting."""
@@ -161,8 +167,23 @@ class HealthCheckService:
 
         try:
             if server.container_id:
-                await spawner.stop(server.container_id)
-                await spawner.start(server.container_id)
+                from app.api.servers import _gpu_requires_recreate, _respawn_server_container
+
+                if await _gpu_requires_recreate(self.db, server):
+                    # GPU server: never stop+start the same container — a
+                    # stop-without-delete path may have released its device
+                    # rows while the container keeps old DeviceRequests baked
+                    # in. Recreate instead; its rows are normally still
+                    # reserved (no release on auto-restart), so the respawn
+                    # reuses the same devices.
+                    new_server = await _respawn_server_container(server, self.db, server.name)
+                    server.container_id = new_server.container_id
+                    server.image = new_server.image
+                    server.volume_id = new_server.volume_id
+                    server.external_url = new_server.external_url
+                else:
+                    await spawner.stop(server.container_id)
+                    await spawner.start(server.container_id)
             else:
                 # No container to restart — mark as needing manual attention
                 logger.warning("Server %s: no container_id, cannot auto-restart", server.id)

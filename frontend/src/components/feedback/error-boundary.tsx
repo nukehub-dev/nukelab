@@ -4,7 +4,7 @@
 import { Component, type ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react'
-import * as Sentry from '@sentry/react'
+import { captureException } from '../../lib/sentry'
 import { Button } from '../ui/button'
 
 interface Props {
@@ -31,7 +31,7 @@ export class ErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error('ErrorBoundary caught:', error, errorInfo)
     this.setState({ errorInfo: errorInfo.componentStack || null })
-    Sentry.captureException(error, {
+    captureException(error, {
       contexts: {
         react: {
           componentStack: errorInfo.componentStack,
