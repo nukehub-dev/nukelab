@@ -1079,6 +1079,44 @@ class TestMetricsWebSocketManagerRedisListener:
         ws.send_json.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_redis_listener_event_payload_on_system_channel(self):
+        """Payloads carrying their own event name (e.g. health:system) must be
+        forwarded as that event, not re-wrapped as metrics:system (which would
+        zero every metric field on the frontend)."""
+        manager = MetricsWebSocketManager()
+        ws = mock.AsyncMock()
+        connections["global"] = {ws}
+
+        async def mock_listen(*args, **kwargs):
+            yield {
+                "type": "message",
+                "data": json.dumps(
+                    {"event": "health:system", "data": {"refreshed_at": "2026-01-01T00:00:00"}}
+                ),
+                "channel": "metrics:system",
+            }
+
+        with mock.patch("app.websocket.metrics_socket.redis.from_url") as mock_redis_cls:
+            mock_pubsub = mock.Mock()
+            mock_pubsub.subscribe = mock.AsyncMock()
+            mock_pubsub.psubscribe = mock.AsyncMock()
+            mock_pubsub.listen = mock_listen
+            mock_redis = mock.Mock()
+            mock_redis.pubsub.return_value = mock_pubsub
+            mock_redis_cls.return_value = mock_redis
+
+            task = asyncio.create_task(manager.start_redis_listener())
+            await asyncio.sleep(0.1)
+            manager._running = False
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
+        ws.send_json.assert_called_once_with(
+            {"event": "health:system", "data": {"refreshed_at": "2026-01-01T00:00:00"}}
+        )
+
+    @pytest.mark.asyncio
     async def test_redis_listener_pmessage(self):
         manager = MetricsWebSocketManager()
         ws = mock.AsyncMock()
