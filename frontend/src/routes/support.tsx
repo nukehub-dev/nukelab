@@ -73,7 +73,7 @@ const faqs = [
   {
     question: "Why can't I create a server?",
     answer:
-      'Your plan limits how many servers (and how much CPU, memory, and disk) you can run at once. Stop unused servers and try again, or ask an administrator to adjust your plan or quota.',
+      'Your plan limits how many servers (and how much CPU and memory) you can run at once, and your disk quota limits the total capacity of your volumes. Stop unused servers or shrink/delete unused volumes and try again, or ask an administrator to adjust your plan or quota.',
   },
   {
     question: 'Will my data persist after my server stops?',

@@ -74,6 +74,9 @@ class TestCreateServerHappyPaths:
             with mock.patch("app.services.quota_service.QuotaService") as mock_quota_cls:
                 mock_quota = mock_quota_cls.return_value
                 mock_quota.check_spawn_allowed = mock.AsyncMock(return_value={"allowed": True})
+                mock_quota.check_volume_creation_allowed = mock.AsyncMock(
+                    return_value={"allowed": True}
+                )
                 mock_quota.increment_usage = mock.AsyncMock()
                 with mock.patch(
                     "app.services.resource_pool_service.ResourcePoolService"
@@ -219,6 +222,9 @@ class TestCreateServerExceptionCleanup:
         with mock.patch("app.services.quota_service.QuotaService") as mock_quota_cls:
             mock_quota = mock_quota_cls.return_value
             mock_quota.check_spawn_allowed = mock.AsyncMock(return_value={"allowed": True})
+            mock_quota.check_volume_creation_allowed = mock.AsyncMock(
+                return_value={"allowed": True}
+            )
             mock_quota.increment_usage = mock.AsyncMock()
             with mock.patch(
                 "app.services.resource_pool_service.ResourcePoolService"
@@ -291,6 +297,9 @@ class TestCreateServerExceptionCleanup:
         with mock.patch("app.services.quota_service.QuotaService") as mock_quota_cls:
             mock_quota = mock_quota_cls.return_value
             mock_quota.check_spawn_allowed = mock.AsyncMock(return_value={"allowed": True})
+            mock_quota.check_volume_creation_allowed = mock.AsyncMock(
+                return_value={"allowed": True}
+            )
             with mock.patch(
                 "app.services.resource_pool_service.ResourcePoolService"
             ) as mock_pool_cls:
@@ -333,3 +342,51 @@ class TestCreateServerExceptionCleanup:
 
         assert response.status_code == 500
         assert "try again" in response.json()["detail"].lower()
+
+
+class TestCreateServerVolumeQuota:
+    """Auto-created volumes must fit the user's disk quota."""
+
+    @pytest.mark.asyncio
+    async def test_create_server_volume_quota_exceeded(
+        self, client, user_token, test_user, db_session, test_plan_env
+    ):
+        """Spawn that would auto-create volumes beyond the disk quota returns 429."""
+        plan, env = test_plan_env
+
+        with mock.patch("app.services.quota_service.QuotaService") as mock_quota_cls:
+            mock_quota = mock_quota_cls.return_value
+            mock_quota.check_spawn_allowed = mock.AsyncMock(return_value={"allowed": True})
+            mock_quota.check_volume_creation_allowed = mock.AsyncMock(
+                return_value={
+                    "allowed": False,
+                    "reason": "Disk quota exceeded. Volume needs 10.0 GB, but you only have 0 B available.",
+                }
+            )
+            with mock.patch("app.services.credit_service.CreditService") as mock_credit_cls:
+                mock_credit = mock_credit_cls.return_value
+                mock_credit.check_sufficient_credits = mock.AsyncMock(return_value=True)
+                with mock.patch(
+                    "app.services.resource_pool_service.ResourcePoolService"
+                ) as mock_pool_cls:
+                    mock_pool = mock_pool_cls.return_value
+                    mock_pool.can_fit = mock.AsyncMock(return_value=True)
+                    with mock.patch("app.services.volume_service.VolumeService") as mock_vol_cls:
+                        mock_vol = mock_vol_cls.return_value
+                        mock_vol._parse_memory = mock.Mock(return_value=10737418240)
+
+                        response = await client.post(
+                            "/api/servers/",
+                            headers={"Authorization": f"Bearer {user_token}"},
+                            json={
+                                "name": "quota-server",
+                                "plan_id": str(plan.id),
+                                "environment_id": str(env.id),
+                            },
+                        )
+
+        assert response.status_code == 429
+        assert "Disk quota exceeded" in response.json()["detail"]
+        mock_quota.check_volume_creation_allowed.assert_awaited_once()
+        # No volume may be created when the reservation does not fit.
+        mock_vol.create_volume.assert_not_called()

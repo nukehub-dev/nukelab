@@ -603,6 +603,9 @@ def _create_stack_mocks(db_session, *, spawn_return=None, spawn_side_effect=None
         ):
             mock_quota = mock_quota_cls.return_value
             mock_quota.check_spawn_allowed = mock.AsyncMock(return_value={"allowed": True})
+            mock_quota.check_volume_creation_allowed = mock.AsyncMock(
+                return_value={"allowed": True}
+            )
             mock_quota.increment_usage = mock.AsyncMock()
             mock_pool_cls.return_value.can_fit = mock.AsyncMock(return_value=True)
             mock_credit_cls.return_value.check_sufficient_credits = mock.AsyncMock(

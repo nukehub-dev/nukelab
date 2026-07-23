@@ -1037,6 +1037,9 @@ class TestCreateServerHappyPath:
                     with mock.patch("app.services.quota_service.QuotaService") as MockQS:
                         qs_inst = MockQS.return_value
                         qs_inst.check_spawn_allowed = mock.AsyncMock(return_value={"allowed": True})
+                        qs_inst.check_volume_creation_allowed = mock.AsyncMock(
+                            return_value={"allowed": True}
+                        )
                         qs_inst.increment_usage = mock.AsyncMock()
 
                         with mock.patch("app.services.plan_service.PlanService") as MockPS:
@@ -1345,6 +1348,9 @@ class TestCreateServerException:
                     with mock.patch("app.services.quota_service.QuotaService") as MockQS:
                         qs_inst = MockQS.return_value
                         qs_inst.check_spawn_allowed = mock.AsyncMock(return_value={"allowed": True})
+                        qs_inst.check_volume_creation_allowed = mock.AsyncMock(
+                            return_value={"allowed": True}
+                        )
 
                         with mock.patch("app.services.plan_service.PlanService") as MockPS:
                             ps_inst = MockPS.return_value
@@ -1590,6 +1596,9 @@ class TestCreateServerValidationMore:
                 with mock.patch("app.services.quota_service.QuotaService") as MockQS:
                     qs_inst = MockQS.return_value
                     qs_inst.check_spawn_allowed = mock.AsyncMock(return_value={"allowed": True})
+                    qs_inst.check_volume_creation_allowed = mock.AsyncMock(
+                        return_value={"allowed": True}
+                    )
                     qs_inst.increment_usage = mock.AsyncMock()
 
                     with mock.patch("app.services.plan_service.PlanService") as MockPS:
@@ -3393,6 +3402,9 @@ class TestCreateServerExceptionCleanup:
             with mock.patch("app.services.quota_service.QuotaService") as MockQS:
                 qs_inst = MockQS.return_value
                 qs_inst.check_spawn_allowed = mock.AsyncMock(return_value={"allowed": True})
+                qs_inst.check_volume_creation_allowed = mock.AsyncMock(
+                    return_value={"allowed": True}
+                )
 
                 with mock.patch("app.services.plan_service.PlanService") as MockPS:
                     ps_inst = MockPS.return_value

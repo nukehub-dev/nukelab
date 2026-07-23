@@ -65,6 +65,14 @@ async def create_volume(
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new volume."""
+    # Unlimited volumes bypass the disk quota entirely; only admins may
+    # create them.
+    if request.max_size_bytes is None and not PermissionChecker(current_user).is_admin():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="max_size_bytes is required: volumes must have a size limit within your disk quota.",
+        )
+
     # Check disk quota before creating
     quota_service = QuotaService(db)
     quota_check = await quota_service.check_volume_creation_allowed(
@@ -165,6 +173,20 @@ async def update_volume(
         volume_service.validate_max_size(volume, request.max_size_bytes)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+    # Raising a volume's size limit reserves additional disk quota; check it
+    # the same way volume creation does.
+    if request.max_size_bytes is not None:
+        quota_service = QuotaService(db)
+        quota_check = await quota_service.check_volume_creation_allowed(
+            user_id=str(volume.owner_id),
+            requested_size_bytes=request.max_size_bytes,
+            exclude_volume_id=volume_id,
+        )
+        if not quota_check["allowed"]:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=quota_check["reason"]
+            )
 
     # Prevent destructive status changes on volumes mounted by running servers
     if request.status and request.status in ("archived", "deleting"):

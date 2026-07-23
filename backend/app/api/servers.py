@@ -521,6 +521,27 @@ async def create_server(
         auto_created_volume = None
         auto_created_volume_names: list[str] = []
 
+        # Auto-created volumes reserve disk quota. Validate the total new
+        # reservation up front so nothing is created that the user's quota
+        # cannot cover.
+        plan_disk_bytes = volume_service._parse_memory(plan.disk_limit)
+        if body.volume_mounts:
+            new_volume_bytes = sum(
+                (vm.max_size_bytes or plan_disk_bytes)
+                for vm in body.volume_mounts
+                if not vm.volume_id
+            )
+        elif body.volume_id:
+            new_volume_bytes = 0
+        else:
+            new_volume_bytes = plan_disk_bytes
+        if new_volume_bytes:
+            volume_quota = await quota_service.check_volume_creation_allowed(
+                user_id=str(current_user.id), requested_size_bytes=new_volume_bytes
+            )
+            if not volume_quota["allowed"]:
+                raise HTTPException(status_code=429, detail=volume_quota["reason"])
+
         # Build volume_mounts list from new or legacy format
         volume_mounts = []
 
@@ -1801,6 +1822,21 @@ async def update_server(
             plan_service = PlanService(db)
             plan = await plan_service.get_by_id(str(server.plan_id))
         disk_limit = plan.disk_limit if plan else server.allocated_disk
+
+        # Auto-created volumes reserve disk quota; validate the total new
+        # reservation before creating anything.
+        new_volume_bytes = sum(
+            (vm.max_size_bytes or (volume_service._parse_memory(disk_limit) if disk_limit else 0))
+            for vm in body.volume_mounts
+            if not vm.volume_id
+        )
+        if new_volume_bytes:
+            quota_service = QuotaService(db)
+            volume_quota = await quota_service.check_volume_creation_allowed(
+                user_id=str(current_user.id), requested_size_bytes=new_volume_bytes
+            )
+            if not volume_quota["allowed"]:
+                raise HTTPException(status_code=429, detail=volume_quota["reason"])
 
         for idx, vm in enumerate(body.volume_mounts):
             mount_data = {
