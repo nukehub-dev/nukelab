@@ -642,3 +642,37 @@ class TestPatchCrossUser:
         assert response.status_code == 200
         data = response.json()
         assert data["name"] == "cross-renamed"
+
+
+class TestPatchServerNameUniqueness:
+    """Renames must not collide with the owner's other servers."""
+
+    @pytest.mark.asyncio
+    async def test_patch_rename_to_existing_name_rejected(
+        self, client, admin_token, patch_server, db_session, test_user
+    ):
+        """Renaming to a sibling server's name returns 409."""
+        sibling = Server(name="sibling-srv", user_id=test_user.id, status="stopped")
+        db_session.add(sibling)
+        await db_session.commit()
+
+        response = await client.patch(
+            f"/api/servers/{patch_server.id}",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"name": "sibling-srv", "reason": "uniqueness test"},
+        )
+        assert response.status_code == 409
+        assert "already exists" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_patch_rename_unique_name_allowed(
+        self, client, admin_token, patch_server, db_session, test_user
+    ):
+        """Renaming to a fresh name works."""
+        response = await client.patch(
+            f"/api/servers/{patch_server.id}",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"name": "renamed-srv", "reason": "uniqueness test"},
+        )
+        assert response.status_code == 200
+        assert response.json()["name"] == "renamed-srv"

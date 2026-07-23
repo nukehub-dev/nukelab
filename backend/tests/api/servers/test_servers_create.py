@@ -448,3 +448,58 @@ class TestCreateServerEnvironmentVisibility:
             },
         )
         assert response.status_code == 403
+
+
+class TestCreateServerDuplicateName:
+    """Server names must be unique per user (gateway path + Docker names)."""
+
+    @pytest.mark.asyncio
+    async def test_create_server_duplicate_name_rejected(
+        self, client, user_token, test_user, db_session, test_plan_env
+    ):
+        """Creating a second server with an existing name returns 409."""
+        plan, env = test_plan_env
+        existing = Server(name="dup-server", user_id=test_user.id, status="stopped")
+        db_session.add(existing)
+        await db_session.commit()
+
+        response = await client.post(
+            "/api/servers/",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={
+                "name": "dup-server",
+                "plan_id": str(plan.id),
+                "environment_id": str(env.id),
+            },
+        )
+        assert response.status_code == 409
+        assert "already exists" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_create_server_same_name_other_user_allowed(
+        self, client, user_token, test_user, admin_user, db_session, test_plan_env
+    ):
+        """A name used by a different user does not block creation."""
+        plan, env = test_plan_env
+        other = Server(name="shared-name", user_id=admin_user.id, status="stopped")
+        db_session.add(other)
+        await db_session.commit()
+
+        # Reaches past the name check; fails later only if mocks are missing,
+        # so mock the full happy path minimally by expecting non-409.
+        with mock.patch("app.services.quota_service.QuotaService") as mock_quota_cls:
+            mock_quota = mock_quota_cls.return_value
+            mock_quota.check_spawn_allowed = mock.AsyncMock(
+                return_value={"allowed": False, "reason": "stop here"}
+            )
+            response = await client.post(
+                "/api/servers/",
+                headers={"Authorization": f"Bearer {user_token}"},
+                json={
+                    "name": "shared-name",
+                    "plan_id": str(plan.id),
+                    "environment_id": str(env.id),
+                },
+            )
+        # 429 from the mocked quota check proves the name check passed.
+        assert response.status_code == 429

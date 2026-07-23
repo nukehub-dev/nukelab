@@ -429,6 +429,18 @@ async def create_server(
     checker = PermissionChecker(current_user)
     checker.require(Permission.SERVERS_WRITE_OWN)
 
+    # Server names must be unique per user: they address the
+    # /{username}/{server_name} gateway path and determine the Docker
+    # container/volume names.
+    name_taken = await db.execute(
+        select(Server.id).where(Server.user_id == current_user.id, Server.name == body.name)
+    )
+    if name_taken.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"A server named '{body.name}' already exists",
+        )
+
     # Validate plan exists and user can use it
     plan_service = PlanService(db)
     plan = await plan_service.get_by_id(body.plan_id)
@@ -1754,6 +1766,18 @@ async def update_server(
 
     # Validate and apply name change (no recreate needed)
     if body.name is not None:
+        name_taken = await db.execute(
+            select(Server.id).where(
+                Server.user_id == server.user_id,
+                Server.name == body.name,
+                Server.id != server.id,
+            )
+        )
+        if name_taken.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"A server named '{body.name}' already exists",
+            )
         server.name = body.name
 
     # Validate and apply plan change
