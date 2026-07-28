@@ -99,6 +99,9 @@ services:
             - SESSION_SAMESITE=${SESSION_SAMESITE:-lax}
             - SECURITY_HEADERS_ENABLED=${SECURITY_HEADERS_ENABLED:-true}
             - CSRF_PROTECTION_ENABLED=${CSRF_PROTECTION_ENABLED:-true}
+            # API docs (/docs, /redoc, /openapi.json). Empty = env-aware default
+            # (enabled in dev, disabled in production). Set true/false to override.
+            - API_DOCS_ENABLED=${API_DOCS_ENABLED:-}
             - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://localhost:8000}
             - CORS_ALLOW_CREDENTIALS=${CORS_ALLOW_CREDENTIALS:-true}
             # Rate Limiting — per-user tier configuration (Redis-backed)

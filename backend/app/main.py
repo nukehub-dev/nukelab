@@ -138,16 +138,19 @@ async def lifespan(app: FastAPI):
     )
 
 
-app = FastAPIOffline(
-    title=settings.app_name,
-    description="NukeLab Platform v2.0 API",
-    version="2.0.0",
-    debug=settings.app_debug,
-    root_path="/api",
-    docs_url="/docs",
-    openapi_url="/openapi.json",
-    lifespan=lifespan,
-)
+_app_kwargs = {
+    "title": settings.app_name,
+    "description": "NukeLab Platform v2.0 API",
+    "version": "2.0.0",
+    "debug": settings.app_debug,
+    "root_path": "/api",
+    "lifespan": lifespan,
+}
+if settings.api_docs_enabled:
+    app = FastAPIOffline(docs_url="/docs", openapi_url="/openapi.json", **_app_kwargs)
+else:
+    # Docs fully disabled (production default): no /docs, /redoc, /openapi.json.
+    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, **_app_kwargs)
 
 
 @app.exception_handler(429)

@@ -84,3 +84,39 @@ class TestProductionUserAuthKeyValidation:
             user_auth_private_key_path=str(private_path),
             user_auth_public_key_path=str(public_path),
         )
+
+
+class TestApiDocsDefaults:
+    """api_docs_enabled defaults to off in production, on elsewhere."""
+
+    def _production_settings(self, tmp_path, **overrides):
+        private_path = tmp_path / "user-auth-private.pem"
+        public_path = tmp_path / "user-auth-public.pem"
+        private_path.write_text("private")
+        public_path.write_text("public")
+        os.chmod(private_path, 0o600)
+        return Settings(
+            app_env="production",
+            user_auth_private_key_path=str(private_path),
+            user_auth_public_key_path=str(public_path),
+            cors_origins="https://example.com",
+            jwt_secret="a-strong-random-secret-at-least-32-characters-long",
+            session_secret="another-strong-random-secret-for-tests-only",
+            **overrides,
+        )
+
+    def test_development_defaults_to_enabled(self):
+        assert Settings(app_env="development").api_docs_enabled is True
+
+    def test_empty_string_uses_env_aware_default(self):
+        """compose.yml passes an empty value when the operator leaves it unset."""
+        assert Settings(app_env="development", api_docs_enabled="").api_docs_enabled is True
+
+    def test_production_defaults_to_disabled(self, tmp_path):
+        assert self._production_settings(tmp_path).api_docs_enabled is False
+
+    def test_explicit_override_wins_in_production(self, tmp_path):
+        assert self._production_settings(tmp_path, api_docs_enabled=True).api_docs_enabled is True
+
+    def test_explicit_disable_in_development(self):
+        assert Settings(app_env="development", api_docs_enabled=False).api_docs_enabled is False

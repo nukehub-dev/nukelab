@@ -126,7 +126,7 @@ Phase 10: Remediation Support & Retest
 | REC-02 | Fuzz hidden API endpoints and versions | ffuf, Kiterunner | Undocumented/internal endpoints return 401/403 or 404 |
 | REC-03 | Discover JavaScript assets and hardcoded API keys | Burp JS Link Finder, LinkFinder.py | No secrets, internal IPs, or debug endpoints in frontend bundles |
 | REC-04 | Identify technology stack and versions | Wappalyzer, WhatWeb, response headers | No version leakage; headers stripped by Traefik |
-| REC-05 | Map OpenAPI/Swagger if exposed | `/api/docs`, `/openapi.json` | Docs gated or disabled in production |
+| REC-05 | Map OpenAPI/Swagger if exposed | `/api/docs`, `/openapi.json` | Disabled in production by default (`API_DOCS_ENABLED`, see `config.py:set_api_docs_defaults`); must 404 in prod |
 | REC-06 | Review certificate transparency and DNS records | crt.sh, SecurityTrails | No dangling or attacker-controlled records |
 
 ### 5.2 Phase 2 — Architecture & Configuration Review

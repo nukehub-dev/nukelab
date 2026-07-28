@@ -169,6 +169,11 @@ class Settings(BaseSettings):
 
     # Container runtime hardening (defaults to enabled unless dev_mode is True)
     container_hardening_enabled: bool | None = None
+    # Serve /docs, /redoc, and /openapi.json. Default: enabled everywhere
+    # except production (see set_api_docs_defaults). compose.yml passes an
+    # empty string when the operator leaves it unset — normalized to None by
+    # the field validator below so the env-aware default applies.
+    api_docs_enabled: bool | None = None
     container_user: str = "nukelab"
     container_uid: int = 65532
     container_gid: int = 65532
@@ -281,6 +286,14 @@ class Settings(BaseSettings):
             return None
         return value
 
+    @field_validator("api_docs_enabled", mode="before")
+    @classmethod
+    def _empty_api_docs_to_none(cls, value: Any) -> Any:
+        """Treat an empty env value as "use the env-aware default"."""
+        if value == "" or value is None:
+            return None
+        return value
+
     @model_validator(mode="after")
     def set_key_paths(self) -> "Settings":
         """Derive key paths from secrets_dir if not explicitly set."""
@@ -356,6 +369,17 @@ class Settings(BaseSettings):
         """Default container hardening to enabled except in dev_mode."""
         if self.container_hardening_enabled is None:
             self.container_hardening_enabled = not self.dev_mode
+        return self
+
+    @model_validator(mode="after")
+    def set_api_docs_defaults(self) -> "Settings":
+        """Default API docs to disabled in production, enabled elsewhere.
+
+        The OpenAPI schema is a full recon map of every route, parameter, and
+        permission — useful in dev, an unnecessary gift in production.
+        """
+        if self.api_docs_enabled is None:
+            self.api_docs_enabled = self.app_env != "production"
         return self
 
     @model_validator(mode="after")
