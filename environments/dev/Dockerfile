@@ -13,3 +13,7 @@ COPY terminal.conf /etc/nginx/conf.d/terminal.conf
 
 # Start nginx and proxy authenticated requests to ttyd.
 ENV NUKELAB_START_COMMAND="ttyd --writable -p 7681 /bin/bash"
+
+# App probe for the runtime-injected healthcheck (see base/healthcheck.sh):
+# ttyd liveness, so a killed terminal process flips the container unhealthy.
+ENV NUKELAB_HEALTH_PROBE_URLS="http://localhost:7681/"

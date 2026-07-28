@@ -55,3 +55,9 @@ RUN chmod 644 /etc/profile.d/nukelab-prompt.sh && \
 # Start nginx and the configured application command
 COPY --chmod=755 start.sh /start.sh
 CMD ["/start.sh"]
+
+# Healthcheck probe script. The backend injects the healthcheck at container
+# create time (docker_driver.py) — image-level HEALTHCHECK is not used: OCI
+# image format drops it and Kubernetes ignores it. Child images declare their
+# app probe via ENV NUKELAB_HEALTH_PROBE_URLS (see healthcheck.sh).
+COPY --chmod=755 healthcheck.sh /usr/local/bin/nukelab-healthcheck.sh

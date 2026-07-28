@@ -474,3 +474,22 @@ class TestWaitForContainerReady:
 
         assert result is False
         session_cls.assert_not_called()
+
+
+class TestCreateContainerHealthcheck:
+    """The driver injects a uniform runtime-level healthcheck into every
+    container (image-level HEALTHCHECK is dropped by OCI format and ignored
+    by Kubernetes, so the definition lives in the driver layer)."""
+
+    @pytest.mark.asyncio
+    async def test_healthcheck_injected(self, hardening_off):
+        driver, _ = _make_driver()
+        await driver.create_container("hc-1", "img:latest")
+
+        config = driver.client.containers.create.call_args[0][0]
+        healthcheck = config["Healthcheck"]
+        assert healthcheck["Test"] == ["CMD", "/usr/local/bin/nukelab-healthcheck.sh"]
+        assert healthcheck["Interval"] == 30 * 10**9
+        assert healthcheck["Timeout"] == 10 * 10**9
+        assert healthcheck["StartPeriod"] == 90 * 10**9
+        assert healthcheck["Retries"] == 3

@@ -506,6 +506,20 @@ class DockerDriver(ContainerDriver):
                 settings.container_readonly_rootfs,
             )
 
+        # --- Container healthcheck (runtime-level, not image-level) ---
+        # OCI image format drops Dockerfile HEALTHCHECK and Kubernetes ignores
+        # it anyway, so the probe is defined here: a future k8s driver can
+        # translate this same definition into pod liveness/startup probes.
+        # The script exists in every environment image (environments/base) and
+        # probes nginx, the auth sidecar, and $NUKELAB_HEALTH_PROBE_URLS.
+        config["Healthcheck"] = {
+            "Test": ["CMD", "/usr/local/bin/nukelab-healthcheck.sh"],
+            "Interval": 30 * 10**9,
+            "Timeout": 10 * 10**9,
+            "StartPeriod": 90 * 10**9,
+            "Retries": 3,
+        }
+
         try:
             container = await self.client.containers.create(config, name=name)
         except aiodocker.DockerError as e:

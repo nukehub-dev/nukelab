@@ -74,3 +74,7 @@ COPY ide.conf /etc/nginx/conf.d/ide.conf
 COPY --chmod=755 start-ide.sh /opt/nukelab/start-ide.sh
 ENV DISPLAY=:99
 ENV NUKELAB_START_COMMAND="/opt/nukelab/start-ide.sh"
+
+# App probe for the runtime-injected healthcheck (see base/healthcheck.sh):
+# IDE liveness on :3000, inherited by gpu/ and radiation-transport/.
+ENV NUKELAB_HEALTH_PROBE_URLS="http://localhost:3000/"
