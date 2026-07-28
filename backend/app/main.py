@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
+from fastapi_offline import FastAPIOffline
 from sqlalchemy import text
 
 from app.config import settings
@@ -137,7 +138,7 @@ async def lifespan(app: FastAPI):
     )
 
 
-app = FastAPI(
+app = FastAPIOffline(
     title=settings.app_name,
     description="NukeLab Platform v2.0 API",
     version="2.0.0",

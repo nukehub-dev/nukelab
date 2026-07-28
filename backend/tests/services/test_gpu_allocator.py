@@ -275,6 +275,9 @@ def _create_server_mocks(db_session, spawn_side_effect):
         ):
             mock_quota = mock_quota_cls.return_value
             mock_quota.check_spawn_allowed = mock.AsyncMock(return_value={"allowed": True})
+            mock_quota.check_volume_creation_allowed = mock.AsyncMock(
+                return_value={"allowed": True}
+            )
             mock_quota.increment_usage = mock.AsyncMock()
 
             mock_pool = mock_pool_cls.return_value
