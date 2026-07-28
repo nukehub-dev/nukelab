@@ -289,9 +289,7 @@ class TestStartRedisListenerBranches:
         ws = mock.AsyncMock()
         connections["server:abc"] = {ws}
 
-        pubsub = self._make_pubsub(
-            [{"type": "message", "data": json.dumps({"server_id": "abc"})}]
-        )
+        pubsub = self._make_pubsub([{"type": "message", "data": json.dumps({"server_id": "abc"})}])
         await self._run_listener(manager, pubsub)
 
         ws.send_json.assert_called_once()
@@ -303,9 +301,7 @@ class TestStartRedisListenerBranches:
         ws = mock.AsyncMock()
         connections["global"] = {ws}
 
-        pubsub = self._make_pubsub(
-            [{"type": "subscribe", "data": 1, "channel": "metrics:system"}]
-        )
+        pubsub = self._make_pubsub([{"type": "subscribe", "data": 1, "channel": "metrics:system"}])
         await self._run_listener(manager, pubsub)
 
         ws.send_json.assert_not_called()
@@ -579,9 +575,7 @@ class TestHandleConnectionLogTaskCleanup:
                 return_value=test_user,
             ),
             mock.patch("app.websocket.metrics_socket.settings.rate_limit_enabled", True),
-            mock.patch(
-                "app.websocket.metrics_socket.redis.from_url", return_value=mock_redis
-            ),
+            mock.patch("app.websocket.metrics_socket.redis.from_url", return_value=mock_redis),
         ):
             await manager.handle_connection(ws)
 
@@ -605,9 +599,7 @@ class TestHandleConnectionLogTaskCleanup:
                 return_value=test_user,
             ),
             mock.patch("app.websocket.metrics_socket.settings.rate_limit_enabled", True),
-            mock.patch(
-                "app.websocket.metrics_socket.redis.from_url", return_value=mock_redis
-            ),
+            mock.patch("app.websocket.metrics_socket.redis.from_url", return_value=mock_redis),
         ):
             # Must not raise despite aclose failing
             await manager.handle_connection(ws)

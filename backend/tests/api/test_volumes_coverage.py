@@ -296,9 +296,7 @@ class TestGetVolumeAccess:
     """Access-check branches in get_volume."""
 
     @pytest.mark.asyncio
-    async def test_non_owner_can_read_public_volume(
-        self, client, auth, admin_user, db_session
-    ):
+    async def test_non_owner_can_read_public_volume(self, client, auth, admin_user, db_session):
         """A non-owner can read a public volume without admin rights."""
         vol = await _make_volume(db_session, admin_user.id, visibility="public")
 
@@ -334,9 +332,7 @@ class TestRefreshVolumeSizeAccess:
     """Access branches in refresh_volume_size."""
 
     @pytest.mark.asyncio
-    async def test_non_owner_can_refresh_public_volume(
-        self, client, auth, admin_user, db_session
-    ):
+    async def test_non_owner_can_refresh_public_volume(self, client, auth, admin_user, db_session):
         """Public volumes grant read_only access, enough for refresh-size."""
         vol = await _make_volume(db_session, admin_user.id, visibility="public")
 

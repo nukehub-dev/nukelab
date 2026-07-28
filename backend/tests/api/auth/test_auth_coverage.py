@@ -341,7 +341,9 @@ class TestVerifyAdminAuth:
         request = _make_request(headers={"Authorization": "Bearer x"})
         user = mock.MagicMock(spec=User)
         with (
-            mock.patch("app.api.auth._resolve_user_from_token", new=mock.AsyncMock(return_value=user)),
+            mock.patch(
+                "app.api.auth._resolve_user_from_token", new=mock.AsyncMock(return_value=user)
+            ),
             mock.patch("app.api.auth.has_permission", return_value=False),
         ):
             with pytest.raises(HTTPException) as exc_info:
@@ -357,7 +359,9 @@ class TestVerifyAdminAuth:
         user.id = uuid.uuid4()
         user.username = "adminuser"
         with (
-            mock.patch("app.api.auth._resolve_user_from_token", new=mock.AsyncMock(return_value=user)),
+            mock.patch(
+                "app.api.auth._resolve_user_from_token", new=mock.AsyncMock(return_value=user)
+            ),
             mock.patch("app.api.auth.has_permission", return_value=True),
         ):
             response = await auth.verify_admin_auth(request, mock.AsyncMock())
@@ -584,7 +588,9 @@ class TestOAuthSyncBranches:
         assert "failed to get user information" in response.json()["detail"].lower()
 
     @pytest.mark.asyncio
-    async def test_userinfo_id_token_decode_failure(self, client, user_token, test_user, db_session):
+    async def test_userinfo_id_token_decode_failure(
+        self, client, user_token, test_user, db_session
+    ):
         await _setup_oauth_user(test_user, db_session)
         mock_oauth = _make_oauth_mock()
         mock_oauth._load_discovery = mock.AsyncMock()

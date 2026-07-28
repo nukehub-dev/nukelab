@@ -169,7 +169,10 @@ class TestCreateContainerHardening:
         assert host_config["CapDrop"] == ["ALL"]
         assert host_config["SecurityOpt"] == ["no-new-privileges:true"]
         assert host_config["ReadonlyRootfs"] is True
-        assert host_config["Tmpfs"] == {"/tmp": "mode=1777,size=100m", "/run": "mode=1777,size=100m"}
+        assert host_config["Tmpfs"] == {
+            "/tmp": "mode=1777,size=100m",
+            "/run": "mode=1777,size=100m",
+        }
 
     @pytest.mark.asyncio
     async def test_hardening_without_readonly_rootfs_omits_tmpfs(self, monkeypatch):

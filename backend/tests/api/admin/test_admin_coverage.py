@@ -110,9 +110,7 @@ class TestBulkUserAction:
         body = BulkActionRequest(action="explode", user_ids=[str(uuid.uuid4())])
         db = _db([_result(scalars=[])])
         with pytest.raises(HTTPException) as exc_info:
-            await _unwrap(bulk_user_action)(
-                mock.Mock(), body, current_user=_admin_user(), db=db
-            )
+            await _unwrap(bulk_user_action)(mock.Mock(), body, current_user=_admin_user(), db=db)
         assert exc_info.value.status_code == 400
         assert "Unknown action" in exc_info.value.detail
 
@@ -121,9 +119,7 @@ class TestBulkUserAction:
         u1 = mock.Mock(id=uuid.uuid4())
         u2 = mock.Mock(id=uuid.uuid4())
         missing_id = str(uuid.uuid4())
-        body = BulkActionRequest(
-            action="delete", user_ids=[str(u1.id), str(u2.id), missing_id]
-        )
+        body = BulkActionRequest(action="delete", user_ids=[str(u1.id), str(u2.id), missing_id])
         db = _db([_result(scalars=[u1, u2])])
 
         avatar_file = f"{u1.id}_avatar.png"
@@ -141,9 +137,7 @@ class TestBulkUserAction:
         mock_remove.assert_called_once()
         assert avatar_file in mock_remove.call_args.args[0]
         assert set(response["results"]["success"]) == {str(u1.id), str(u2.id)}
-        assert response["results"]["failed"] == [
-            {"user_id": missing_id, "error": "User not found"}
-        ]
+        assert response["results"]["failed"] == [{"user_id": missing_id, "error": "User not found"}]
 
     @pytest.mark.asyncio
     async def test_delete_avatar_cleanup_errors_are_swallowed(self):
@@ -319,9 +313,7 @@ class TestBulkServerAction:
         allocator.release.side_effect = RuntimeError("gpu release boom")
         with (
             mock.patch("app.container.spawner.spawner") as mock_spawner,
-            mock.patch(
-                "app.services.gpu_allocator.GpuAllocatorService", return_value=allocator
-            ),
+            mock.patch("app.services.gpu_allocator.GpuAllocatorService", return_value=allocator),
             mock.patch(
                 "app.api.servers._invalidate_server_list_cache", new=mock.AsyncMock()
             ) as mock_invalidate,
@@ -366,9 +358,7 @@ class TestBulkServerAction:
                 "app.services.gpu_allocator.GpuAllocatorService",
                 return_value=mock.AsyncMock(),
             ),
-            mock.patch(
-                "app.api.servers._invalidate_server_list_cache", new=mock.AsyncMock()
-            ),
+            mock.patch("app.api.servers._invalidate_server_list_cache", new=mock.AsyncMock()),
             mock.patch("app.api.admin.broadcast_server_status_change"),
         ):
             mock_spawner.start = mock.AsyncMock()
@@ -402,9 +392,7 @@ class TestBulkServerAction:
                 "app.services.gpu_allocator.GpuAllocatorService",
                 return_value=mock.AsyncMock(),
             ),
-            mock.patch(
-                "app.api.servers._invalidate_server_list_cache", new=mock.AsyncMock()
-            ),
+            mock.patch("app.api.servers._invalidate_server_list_cache", new=mock.AsyncMock()),
             mock.patch("app.api.admin.broadcast_server_status_change"),
         ):
             mock_spawner.start = mock.AsyncMock()
@@ -430,9 +418,7 @@ class TestBulkServerAction:
                 "app.services.gpu_allocator.GpuAllocatorService",
                 return_value=mock.AsyncMock(),
             ),
-            mock.patch(
-                "app.api.servers._invalidate_server_list_cache", new=mock.AsyncMock()
-            ),
+            mock.patch("app.api.servers._invalidate_server_list_cache", new=mock.AsyncMock()),
             mock.patch("app.api.admin.broadcast_server_status_change"),
         ):
             mock_spawner.stop = mock.AsyncMock(side_effect=RuntimeError("docker down"))
@@ -463,9 +449,7 @@ class TestCreditSystemSettings:
     @pytest.mark.asyncio
     async def test_get_default_allowance(self):
         service = _setting_service(get_daily_allowance=250)
-        with mock.patch(
-            "app.services.setting_service.SettingService", return_value=service
-        ):
+        with mock.patch("app.services.setting_service.SettingService", return_value=service):
             response = await get_system_daily_allowance(
                 current_user=_admin_user(), db=mock.AsyncMock()
             )
@@ -478,9 +462,7 @@ class TestCreditSystemSettings:
         admin = _admin_user()
         with (
             mock.patch("app.services.setting_service.SettingService", return_value=service),
-            mock.patch(
-                "app.services.activity_service.ActivityService", return_value=activity
-            ),
+            mock.patch("app.services.activity_service.ActivityService", return_value=activity),
         ):
             response = await update_system_daily_allowance(
                 UpdateSystemDailyAllowanceRequest(amount=300),
@@ -496,12 +478,8 @@ class TestCreditSystemSettings:
     @pytest.mark.asyncio
     async def test_get_max_balance(self):
         service = _setting_service(get_max_balance=10000)
-        with mock.patch(
-            "app.services.setting_service.SettingService", return_value=service
-        ):
-            response = await get_system_max_balance(
-                current_user=_admin_user(), db=mock.AsyncMock()
-            )
+        with mock.patch("app.services.setting_service.SettingService", return_value=service):
+            response = await get_system_max_balance(current_user=_admin_user(), db=mock.AsyncMock())
         assert response == {"max_balance": 10000}
 
     @pytest.mark.asyncio
@@ -510,9 +488,7 @@ class TestCreditSystemSettings:
         activity = mock.AsyncMock()
         with (
             mock.patch("app.services.setting_service.SettingService", return_value=service),
-            mock.patch(
-                "app.services.activity_service.ActivityService", return_value=activity
-            ),
+            mock.patch("app.services.activity_service.ActivityService", return_value=activity),
         ):
             response = await update_system_max_balance(
                 UpdateSystemMaxBalanceRequest(amount=5000),
@@ -525,9 +501,7 @@ class TestCreditSystemSettings:
     @pytest.mark.asyncio
     async def test_get_initial_balance(self):
         service = _setting_service(get_initial_balance=100)
-        with mock.patch(
-            "app.services.setting_service.SettingService", return_value=service
-        ):
+        with mock.patch("app.services.setting_service.SettingService", return_value=service):
             response = await get_system_initial_balance(
                 current_user=_admin_user(), db=mock.AsyncMock()
             )
@@ -539,9 +513,7 @@ class TestCreditSystemSettings:
         activity = mock.AsyncMock()
         with (
             mock.patch("app.services.setting_service.SettingService", return_value=service),
-            mock.patch(
-                "app.services.activity_service.ActivityService", return_value=activity
-            ),
+            mock.patch("app.services.activity_service.ActivityService", return_value=activity),
         ):
             response = await update_system_initial_balance(
                 UpdateSystemInitialBalanceRequest(amount=50),
@@ -554,9 +526,7 @@ class TestCreditSystemSettings:
     @pytest.mark.asyncio
     async def test_get_allowance_login_window(self):
         service = _setting_service(get_daily_allowance_login_window_hours=48)
-        with mock.patch(
-            "app.services.setting_service.SettingService", return_value=service
-        ):
+        with mock.patch("app.services.setting_service.SettingService", return_value=service):
             response = await get_system_allowance_login_window(
                 current_user=_admin_user(), db=mock.AsyncMock()
             )
@@ -568,9 +538,7 @@ class TestCreditSystemSettings:
         activity = mock.AsyncMock()
         with (
             mock.patch("app.services.setting_service.SettingService", return_value=service),
-            mock.patch(
-                "app.services.activity_service.ActivityService", return_value=activity
-            ),
+            mock.patch("app.services.activity_service.ActivityService", return_value=activity),
         ):
             response = await update_system_allowance_login_window(
                 UpdateSystemAllowanceWindowRequest(hours=72),
@@ -591,9 +559,7 @@ class TestDefaultQuotaLimits:
     async def test_get_default_quota_limits(self):
         limits = {"max_cpu_total": 4, "max_memory_total": "16g"}
         service = _setting_service(get_quota_defaults=limits)
-        with mock.patch(
-            "app.services.setting_service.SettingService", return_value=service
-        ):
+        with mock.patch("app.services.setting_service.SettingService", return_value=service):
             response = await get_default_quota_limits(
                 current_user=_admin_user(), db=mock.AsyncMock()
             )
@@ -612,9 +578,7 @@ class TestDefaultQuotaLimits:
         activity = mock.AsyncMock()
         with (
             mock.patch("app.services.setting_service.SettingService", return_value=service),
-            mock.patch(
-                "app.services.activity_service.ActivityService", return_value=activity
-            ),
+            mock.patch("app.services.activity_service.ActivityService", return_value=activity),
         ):
             response = await update_default_quota_limits(
                 DefaultQuotaLimitsRequest(**new_limits),
@@ -637,9 +601,7 @@ class TestBulkSetAllowance:
     async def test_empty_user_ids(self):
         body = BulkSetAllowanceRequest.model_construct(user_ids=[], amount=10)
         with pytest.raises(HTTPException) as exc_info:
-            await bulk_set_daily_allowance(
-                body, current_user=_admin_user(), db=mock.AsyncMock()
-            )
+            await bulk_set_daily_allowance(body, current_user=_admin_user(), db=mock.AsyncMock())
         assert exc_info.value.status_code == 400
         assert "No user IDs" in exc_info.value.detail
 
@@ -647,9 +609,7 @@ class TestBulkSetAllowance:
     async def test_invalid_user_id_format(self):
         body = BulkSetAllowanceRequest(user_ids=["bad-uuid"], amount=10)
         with pytest.raises(HTTPException) as exc_info:
-            await bulk_set_daily_allowance(
-                body, current_user=_admin_user(), db=mock.AsyncMock()
-            )
+            await bulk_set_daily_allowance(body, current_user=_admin_user(), db=mock.AsyncMock())
         assert exc_info.value.status_code == 400
         assert "Invalid user ID format" in exc_info.value.detail
 
@@ -679,18 +639,12 @@ class TestBulkSetAllowance:
 
         with (
             mock.patch("app.services.user_service.UserService", return_value=user_service),
-            mock.patch(
-                "app.services.activity_service.ActivityService", return_value=activity
-            ),
+            mock.patch("app.services.activity_service.ActivityService", return_value=activity),
         ):
-            response = await bulk_set_daily_allowance(
-                body, current_user=_admin_user(), db=db
-            )
+            response = await bulk_set_daily_allowance(body, current_user=_admin_user(), db=db)
 
         results = response["results"]
-        assert results["success"] == [
-            {"user_id": str(good.id), "daily_allowance": 120}
-        ]
+        assert results["success"] == [{"user_id": str(good.id), "daily_allowance": 120}]
         failed = {f["user_id"]: f["error"] for f in results["failed"]}
         assert failed[str(http_fail.id)] == "User not found"
         assert failed[str(boom_fail.id)] == "db exploded"
@@ -717,9 +671,7 @@ class TestBulkGrantCredits:
 
         with (
             mock.patch("app.api.admin.CreditService", return_value=credit_service),
-            mock.patch(
-                "app.services.activity_service.ActivityService", return_value=activity
-            ),
+            mock.patch("app.services.activity_service.ActivityService", return_value=activity),
         ):
             response = await bulk_grant_credits(
                 BulkCreditGrantRequest(user_ids=[uid], amount=100, reason="promo"),
@@ -871,9 +823,7 @@ class TestEmailStatus:
 
     @pytest.mark.asyncio
     async def test_test_email_send_failure(self):
-        service = mock.AsyncMock(
-            enabled=True, smtp_host="smtp.example.com", smtp_port=25
-        )
+        service = mock.AsyncMock(enabled=True, smtp_host="smtp.example.com", smtp_port=25)
         service.send_email.return_value = {"success": False, "error": "relay denied"}
         with mock.patch("app.services.email_service.EmailService", return_value=service):
             with pytest.raises(HTTPException) as exc_info:
@@ -884,9 +834,7 @@ class TestEmailStatus:
 
     @pytest.mark.asyncio
     async def test_test_email_success(self):
-        service = mock.AsyncMock(
-            enabled=True, smtp_host="smtp.example.com", smtp_port=25
-        )
+        service = mock.AsyncMock(enabled=True, smtp_host="smtp.example.com", smtp_port=25)
         service.send_email.return_value = {"success": True}
         with mock.patch("app.services.email_service.EmailService", return_value=service):
             response = await send_test_email(
@@ -916,9 +864,7 @@ class TestRefreshVolumeSizes:
             (None, "du"),
         ]
         with mock.patch("app.api.admin.VolumeService", return_value=service):
-            response = await admin_refresh_volume_sizes(
-                current_user=_admin_user(), db=db
-            )
+            response = await admin_refresh_volume_sizes(current_user=_admin_user(), db=db)
 
         assert response["refreshed"] == 1
         assert v_ok.size_bytes == 12345
@@ -995,9 +941,7 @@ class TestHealthMonitoring:
             p_load,
             mock.patch("redis.asyncio.from_url", return_value=redis_client),
             mock.patch("app.container.client.container_client", container_client),
-            mock.patch(
-                "app.services.email_service.EmailService", return_value=email_service
-            ),
+            mock.patch("app.services.email_service.EmailService", return_value=email_service),
             mock.patch("app.db.partitioning.PartitionManager", return_value=pm),
             mock.patch("app.config.settings.volume_storage_path", "/data/volumes"),
         ):
@@ -1042,13 +986,9 @@ class TestHealthMonitoring:
         smtp.connect.side_effect = RuntimeError("smtp unreachable")
 
         with (
-            mock.patch(
-                "redis.asyncio.from_url", side_effect=RuntimeError("redis gone")
-            ),
+            mock.patch("redis.asyncio.from_url", side_effect=RuntimeError("redis gone")),
             mock.patch("app.container.client.container_client", container_client),
-            mock.patch(
-                "app.services.email_service.EmailService", return_value=email_service
-            ),
+            mock.patch("app.services.email_service.EmailService", return_value=email_service),
             mock.patch("aiosmtplib.SMTP", return_value=smtp),
             mock.patch(
                 "app.db.partitioning.PartitionManager",
@@ -1102,9 +1042,7 @@ class TestHealthMonitoring:
         mem = mock.Mock(percent=55.0, total=2048, available=1024, used=1024)
         with (
             mock.patch("psutil.disk_usage", return_value=disk_usage),
-            mock.patch(
-                "psutil.disk_partitions", side_effect=RuntimeError("partitions unreadable")
-            ),
+            mock.patch("psutil.disk_partitions", side_effect=RuntimeError("partitions unreadable")),
             mock.patch("psutil.cpu_count", return_value=4),
             mock.patch("psutil.cpu_freq", return_value=None),
             mock.patch("psutil.cpu_percent", return_value=3.5),
@@ -1112,9 +1050,7 @@ class TestHealthMonitoring:
             mock.patch("psutil.getloadavg", return_value=(0.1, 0.2, 0.3)),
             mock.patch("redis.asyncio.from_url", return_value=redis_client),
             mock.patch("app.container.client.container_client", container_client),
-            mock.patch(
-                "app.services.email_service.EmailService", return_value=email_service
-            ),
+            mock.patch("app.services.email_service.EmailService", return_value=email_service),
             mock.patch("aiosmtplib.SMTP", return_value=smtp),
             mock.patch("app.db.partitioning.PartitionManager", return_value=pm),
             mock.patch("app.config.settings.volume_storage_path", "/data/volumes"),

@@ -1019,9 +1019,7 @@ class TestFetchSidecarActivity:
         resp.status = 200
         resp.json = mock.AsyncMock(return_value={"last_activity": 1_700_000_000})
 
-        with mock.patch(
-            "aiohttp.ClientSession", return_value=self._mock_session(response=resp)
-        ):
+        with mock.patch("aiohttp.ClientSession", return_value=self._mock_session(response=resp)):
             result = asyncio.new_event_loop().run_until_complete(
                 _fetch_sidecar_activity(["abcdef12-0000-0000-0000-000000000000"])
             )
@@ -1044,9 +1042,7 @@ class TestFetchSidecarActivity:
         resp.status = 200
         resp.json = mock.AsyncMock(return_value={"last_activity": 0})
 
-        with mock.patch(
-            "aiohttp.ClientSession", return_value=self._mock_session(response=resp)
-        ):
+        with mock.patch("aiohttp.ClientSession", return_value=self._mock_session(response=resp)):
             result = asyncio.new_event_loop().run_until_complete(
                 _fetch_sidecar_activity(["abcdef12-0000-0000-0000-000000000000"])
             )

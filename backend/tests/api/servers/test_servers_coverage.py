@@ -156,27 +156,21 @@ class TestGpuHelpers:
 
     @pytest.mark.asyncio
     async def test_ensure_gpu_devices_disabled_returns_none(self):
-        with mock.patch(
-            "app.services.gpu_allocator.GpuAllocatorService"
-        ) as mock_alloc_cls:
+        with mock.patch("app.services.gpu_allocator.GpuAllocatorService") as mock_alloc_cls:
             mock_alloc_cls.return_value.enabled = mock.Mock(return_value=False)
             result = await _ensure_gpu_devices(mock.AsyncMock(), "sid", 2)
         assert result is None
 
     @pytest.mark.asyncio
     async def test_ensure_gpu_devices_zero_count_returns_none(self):
-        with mock.patch(
-            "app.services.gpu_allocator.GpuAllocatorService"
-        ) as mock_alloc_cls:
+        with mock.patch("app.services.gpu_allocator.GpuAllocatorService") as mock_alloc_cls:
             mock_alloc_cls.return_value.enabled = mock.Mock(return_value=True)
             result = await _ensure_gpu_devices(mock.AsyncMock(), "sid", 0)
         assert result is None
 
     @pytest.mark.asyncio
     async def test_ensure_gpu_devices_reuses_existing_reservation(self):
-        with mock.patch(
-            "app.services.gpu_allocator.GpuAllocatorService"
-        ) as mock_alloc_cls:
+        with mock.patch("app.services.gpu_allocator.GpuAllocatorService") as mock_alloc_cls:
             alloc = mock_alloc_cls.return_value
             alloc.enabled = mock.Mock(return_value=True)
             alloc.devices_for = mock.AsyncMock(return_value=["nvidia.com/gpu=0"])
@@ -187,9 +181,7 @@ class TestGpuHelpers:
 
     @pytest.mark.asyncio
     async def test_ensure_gpu_devices_allocates_when_missing(self):
-        with mock.patch(
-            "app.services.gpu_allocator.GpuAllocatorService"
-        ) as mock_alloc_cls:
+        with mock.patch("app.services.gpu_allocator.GpuAllocatorService") as mock_alloc_cls:
             alloc = mock_alloc_cls.return_value
             alloc.enabled = mock.Mock(return_value=True)
             alloc.devices_for = mock.AsyncMock(return_value=[])
@@ -199,9 +191,7 @@ class TestGpuHelpers:
 
     @pytest.mark.asyncio
     async def test_ensure_gpu_devices_exhausted_raises_429(self):
-        with mock.patch(
-            "app.services.gpu_allocator.GpuAllocatorService"
-        ) as mock_alloc_cls:
+        with mock.patch("app.services.gpu_allocator.GpuAllocatorService") as mock_alloc_cls:
             alloc = mock_alloc_cls.return_value
             alloc.enabled = mock.Mock(return_value=True)
             alloc.devices_for = mock.AsyncMock(return_value=[])
@@ -212,9 +202,7 @@ class TestGpuHelpers:
 
     @pytest.mark.asyncio
     async def test_release_gpu_devices_swallows_errors(self):
-        with mock.patch(
-            "app.services.gpu_allocator.GpuAllocatorService"
-        ) as mock_alloc_cls:
+        with mock.patch("app.services.gpu_allocator.GpuAllocatorService") as mock_alloc_cls:
             alloc = mock_alloc_cls.return_value
             alloc.release = mock.AsyncMock(side_effect=Exception("db down"))
             # Must not raise.
@@ -301,9 +289,7 @@ class TestRespawnServerContainer:
                 "app.api.servers._ensure_gpu_devices",
                 new=mock.AsyncMock(return_value=None),
             ),
-            mock.patch(
-                "app.api.servers.spawner.delete", new=mock.AsyncMock()
-            ) as mock_delete,
+            mock.patch("app.api.servers.spawner.delete", new=mock.AsyncMock()) as mock_delete,
             mock.patch(
                 "app.api.servers.spawner.spawn",
                 new=mock.AsyncMock(return_value=new_server),
@@ -399,9 +385,7 @@ class TestListServersStatusSync:
         db_session.add(server)
         await db_session.commit()
 
-        with mock.patch(
-            "app.api.servers.spawner.get_status", side_effect=Exception("docker down")
-        ):
+        with mock.patch("app.api.servers.spawner.get_status", side_effect=Exception("docker down")):
             response = await client.get(
                 "/api/servers/", headers={"Authorization": f"Bearer {user_token}"}
             )
@@ -484,9 +468,7 @@ class TestGetServerStatusSync:
         assert data["stopped_at"] is not None
 
     @pytest.mark.asyncio
-    async def test_get_status_error_is_swallowed(
-        self, client, user_token, test_user, db_session
-    ):
+    async def test_get_status_error_is_swallowed(self, client, user_token, test_user, db_session):
         server = Server(
             name=_unique("get-err"),
             user_id=test_user.id,
@@ -496,9 +478,7 @@ class TestGetServerStatusSync:
         db_session.add(server)
         await db_session.commit()
 
-        with mock.patch(
-            "app.api.servers.spawner.get_status", side_effect=Exception("docker down")
-        ):
+        with mock.patch("app.api.servers.spawner.get_status", side_effect=Exception("docker down")):
             response = await client.get(
                 f"/api/servers/{server.id}", headers={"Authorization": f"Bearer {user_token}"}
             )
@@ -512,9 +492,7 @@ class TestGetServerStatusSync:
 
 class TestGetServerByPath:
     @pytest.mark.asyncio
-    async def test_by_path_success_and_status_sync(
-        self, client, user_token, test_user, db_session
-    ):
+    async def test_by_path_success_and_status_sync(self, client, user_token, test_user, db_session):
         server = Server(
             name="bypath-srv",
             user_id=test_user.id,
@@ -537,9 +515,7 @@ class TestGetServerByPath:
         assert data["username"] == test_user.username
 
     @pytest.mark.asyncio
-    async def test_by_path_cross_user_denied(
-        self, client, user_token, admin_user, db_session
-    ):
+    async def test_by_path_cross_user_denied(self, client, user_token, admin_user, db_session):
         server = Server(
             name="bypath-admin-srv",
             user_id=admin_user.id,
@@ -557,9 +533,7 @@ class TestGetServerByPath:
         assert response.status_code == 403
 
     @pytest.mark.asyncio
-    async def test_by_path_status_error_swallowed(
-        self, client, user_token, test_user, db_session
-    ):
+    async def test_by_path_status_error_swallowed(self, client, user_token, test_user, db_session):
         server = Server(
             name="bypath-err-srv",
             user_id=test_user.id,
@@ -569,9 +543,7 @@ class TestGetServerByPath:
         db_session.add(server)
         await db_session.commit()
 
-        with mock.patch(
-            "app.api.servers.spawner.get_status", side_effect=Exception("docker down")
-        ):
+        with mock.patch("app.api.servers.spawner.get_status", side_effect=Exception("docker down")):
             response = await client.get(
                 f"/api/servers/by-path/{test_user.username}/bypath-err-srv",
                 headers={"Authorization": f"Bearer {user_token}"},
@@ -592,14 +564,10 @@ def _create_stack_mocks(db_session, *, spawn_return=None, spawn_side_effect=None
     def _stack():
         with (
             mock.patch("app.services.quota_service.QuotaService") as mock_quota_cls,
-            mock.patch(
-                "app.services.resource_pool_service.ResourcePoolService"
-            ) as mock_pool_cls,
+            mock.patch("app.services.resource_pool_service.ResourcePoolService") as mock_pool_cls,
             mock.patch("app.services.credit_service.CreditService") as mock_credit_cls,
             mock.patch("app.services.volume_service.VolumeService") as mock_vol_cls,
-            mock.patch(
-                "app.services.volume_access_service.VolumeAccessService"
-            ) as mock_access_cls,
+            mock.patch("app.services.volume_access_service.VolumeAccessService") as mock_access_cls,
         ):
             mock_quota = mock_quota_cls.return_value
             mock_quota.check_spawn_allowed = mock.AsyncMock(return_value={"allowed": True})
@@ -621,9 +589,7 @@ def _create_stack_mocks(db_session, *, spawn_return=None, spawn_side_effect=None
 
             spawn_patch = mock.patch(
                 "app.api.servers.spawner.spawn",
-                new=mock.AsyncMock(
-                    return_value=spawn_return, side_effect=spawn_side_effect
-                ),
+                new=mock.AsyncMock(return_value=spawn_return, side_effect=spawn_side_effect),
             )
             with spawn_patch as mock_spawn:
                 yield {
@@ -855,9 +821,7 @@ class TestCreateServerCoverage:
         await db_session.refresh(volume)
 
         with _create_stack_mocks(db_session, spawn_return=mock.Mock()):
-            with mock.patch(
-                "app.services.gpu_allocator.GpuAllocatorService"
-            ) as mock_alloc_cls:
+            with mock.patch("app.services.gpu_allocator.GpuAllocatorService") as mock_alloc_cls:
                 alloc = mock_alloc_cls.return_value
                 alloc.enabled = mock.Mock(return_value=True)
                 alloc.devices_for = mock.AsyncMock(return_value=[])
@@ -903,9 +867,7 @@ class TestCreateServerCoverage:
 
         with _create_stack_mocks(db_session, spawn_side_effect=Exception("boom")):
             with (
-                mock.patch(
-                    "app.services.gpu_allocator.GpuAllocatorService"
-                ) as mock_alloc_cls,
+                mock.patch("app.services.gpu_allocator.GpuAllocatorService") as mock_alloc_cls,
                 mock.patch(
                     "app.container.client.get_container_client",
                     new=mock.AsyncMock(return_value=mock.AsyncMock()),
@@ -964,9 +926,7 @@ class TestStartServerCoverage:
         assert "Failed to start server" in response.json()["detail"]
 
     @pytest.mark.asyncio
-    async def test_start_plan_access_lost_returns_403(
-        self, client, user_token, cov_server
-    ):
+    async def test_start_plan_access_lost_returns_403(self, client, user_token, cov_server):
         with (
             mock.patch("app.api.servers.settings.credits_enabled", False),
             mock.patch("app.services.plan_service.PlanService") as mock_plan_cls,
@@ -1243,9 +1203,7 @@ class TestStopServerCoverage:
 
 class TestRestartServerCoverage:
     @pytest.mark.asyncio
-    async def test_restart_without_container_returns_400(
-        self, client, user_token, cov_server
-    ):
+    async def test_restart_without_container_returns_400(self, client, user_token, cov_server):
         with mock.patch("app.api.servers.settings.credits_enabled", False):
             response = await client.post(
                 f"/api/servers/{cov_server.id}/restart",
@@ -1472,9 +1430,7 @@ class TestPatchServerCoverage:
             alloc = mock_alloc_cls.return_value
             alloc.enabled = mock.Mock(return_value=True)
             alloc.release = mock.AsyncMock()
-            alloc.allocate = mock.AsyncMock(
-                return_value=["nvidia.com/gpu=0", "nvidia.com/gpu=1"]
-            )
+            alloc.allocate = mock.AsyncMock(return_value=["nvidia.com/gpu=0", "nvidia.com/gpu=1"])
             alloc.devices_for = mock.AsyncMock(
                 return_value=["nvidia.com/gpu=0", "nvidia.com/gpu=1"]
             )
@@ -1504,9 +1460,7 @@ class TestPatchServerCoverage:
 
         with (
             mock.patch("app.services.volume_service.VolumeService") as mock_vol_cls,
-            mock.patch(
-                "app.services.volume_access_service.VolumeAccessService"
-            ) as mock_access_cls,
+            mock.patch("app.services.volume_access_service.VolumeAccessService") as mock_access_cls,
             mock.patch(
                 "app.api.servers.spawner.spawn",
                 new=mock.AsyncMock(return_value=_mock_spawn_result()),
@@ -1585,9 +1539,7 @@ class TestPatchServerCoverage:
 
 class TestTestMetricCoverage:
     @pytest.mark.asyncio
-    async def test_publish_failure_returns_500(
-        self, client, user_token, cov_server
-    ):
+    async def test_publish_failure_returns_500(self, client, user_token, cov_server):
         with mock.patch("app.core.redis_client.get_redis_client") as mock_redis_fn:
             mock_r = mock.AsyncMock()
             mock_r.publish = mock.AsyncMock(side_effect=Exception("redis down"))
@@ -1607,9 +1559,7 @@ class TestTestMetricCoverage:
 
 class TestServerLogsCoverage:
     @pytest.mark.asyncio
-    async def test_logs_with_since_param(
-        self, client, user_token, test_user, db_session
-    ):
+    async def test_logs_with_since_param(self, client, user_token, test_user, db_session):
         server = Server(
             name=_unique("logs-since"),
             user_id=test_user.id,
@@ -1637,9 +1587,7 @@ class TestServerLogsCoverage:
         assert kwargs["tail"] == 50
 
     @pytest.mark.asyncio
-    async def test_logs_invalid_since_is_ignored(
-        self, client, user_token, test_user, db_session
-    ):
+    async def test_logs_invalid_since_is_ignored(self, client, user_token, test_user, db_session):
         server = Server(
             name=_unique("logs-bad-since"),
             user_id=test_user.id,
@@ -1678,9 +1626,7 @@ class TestServerLogsCoverage:
         await db_session.commit()
 
         mock_client = mock.AsyncMock()
-        mock_client.get_container_logs = mock.AsyncMock(
-            side_effect=RuntimeError("unexpected")
-        )
+        mock_client.get_container_logs = mock.AsyncMock(side_effect=RuntimeError("unexpected"))
         original = spawner.container_client
         spawner.container_client = mock_client
         try:
@@ -1706,9 +1652,7 @@ class TestAccessTokenCoverage:
         cov_server.status = "running"
         await db_session.commit()
 
-        with mock.patch(
-            "app.services.server_auth_service.server_auth_service"
-        ) as mock_svc:
+        with mock.patch("app.services.server_auth_service.server_auth_service") as mock_svc:
             mock_svc.is_enabled = True
             mock_svc.generate_access_token = mock.AsyncMock(
                 side_effect=RuntimeError("token store down")
@@ -1737,10 +1681,7 @@ class TestAdminListCacheKey:
             _admin_server_list_cache_key(2, 25, "running", "u1")
             == "servers:list:admin:2:25:running:u1"
         )
-        assert (
-            _admin_server_list_cache_key(1, 10, None, None)
-            == "servers:list:admin:1:10:all:all"
-        )
+        assert _admin_server_list_cache_key(1, 10, None, None) == "servers:list:admin:1:10:all:all"
 
 
 class TestCreateInactivePlanBranch:
@@ -1776,9 +1717,7 @@ class TestCreateInactivePlanBranch:
 
 class TestListServersVolumeMountSerialization:
     @pytest.mark.asyncio
-    async def test_list_serializes_volume_mounts(
-        self, client, user_token, test_user, db_session
-    ):
+    async def test_list_serializes_volume_mounts(self, client, user_token, test_user, db_session):
         """Servers with mounts exercise _serialize_volume_mounts (line 363)."""
         volume = Volume(
             name=_unique("list-ser-vol"),
@@ -1862,15 +1801,11 @@ class TestCreateCleanupPaths:
             with (
                 mock.patch(
                     "app.container.client.get_container_client",
-                    new=mock.AsyncMock(
-                        side_effect=[Exception("no client"), client_b, client_c]
-                    ),
+                    new=mock.AsyncMock(side_effect=[Exception("no client"), client_b, client_c]),
                 ),
                 mock.patch(
                     "app.db.session.async_session",
-                    new=mock.Mock(
-                        side_effect=[_cleanup_session(), Exception("session boom")]
-                    ),
+                    new=mock.Mock(side_effect=[_cleanup_session(), Exception("session boom")]),
                 ),
             ):
                 response = await client.post(

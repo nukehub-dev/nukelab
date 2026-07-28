@@ -117,9 +117,7 @@ class TestSendNotificationChannels:
         user = mock.Mock()
         user.id = uuid.uuid4()
         db = self._make_db_with_user(user)
-        with mock.patch(
-            "app.services.notification_service.NotificationService"
-        ) as mock_notif:
+        with mock.patch("app.services.notification_service.NotificationService") as mock_notif:
             inst = mock_notif.return_value
             inst._get_user_notification_prefs = mock.AsyncMock(return_value={})
             inst._should_send = mock.Mock(return_value=True)
@@ -134,9 +132,7 @@ class TestSendNotificationChannels:
         user = mock.Mock()
         user.id = uuid.uuid4()
         db = self._make_db_with_user(user)
-        with mock.patch(
-            "app.services.notification_service.NotificationService"
-        ) as mock_notif:
+        with mock.patch("app.services.notification_service.NotificationService") as mock_notif:
             inst = mock_notif.return_value
             inst._get_user_notification_prefs = mock.AsyncMock(return_value={})
             inst._should_send = mock.Mock(return_value=False)
@@ -151,9 +147,7 @@ class TestSendNotificationChannels:
         user = mock.Mock()
         user.id = uuid.uuid4()
         db = self._make_db_with_user(user)
-        with mock.patch(
-            "app.services.notification_service.NotificationService"
-        ) as mock_notif:
+        with mock.patch("app.services.notification_service.NotificationService") as mock_notif:
             inst = mock_notif.return_value
             inst._get_user_notification_prefs = mock.AsyncMock(return_value={})
             # email=False, webhook=True
@@ -324,9 +318,7 @@ class TestProcessServerQueueSuccess:
         pool = mock.patch("app.services.resource_pool_service.ResourcePoolService")
         quota = mock.patch("app.services.quota_service.QuotaService")
         gpu = mock.patch("app.api.servers._ensure_gpu_devices", new_callable=mock.AsyncMock)
-        spawn = mock.patch(
-            "app.container.spawner.spawner.spawn", new_callable=mock.AsyncMock
-        )
+        spawn = mock.patch("app.container.spawner.spawner.spawn", new_callable=mock.AsyncMock)
         notif = mock.patch("app.services.notification_service.NotificationService")
         return pool, quota, gpu, spawn, notif, entry
 
@@ -342,9 +334,7 @@ class TestProcessServerQueueSuccess:
             spawn as mock_spawn,
             notif as mock_notif,
         ):
-            mock_pool.return_value.get_next_in_queue = mock.AsyncMock(
-                side_effect=[entry, None]
-            )
+            mock_pool.return_value.get_next_in_queue = mock.AsyncMock(side_effect=[entry, None])
             mock_quota.return_value.check_spawn_allowed = mock.AsyncMock(
                 return_value={"allowed": True}
             )
@@ -374,9 +364,7 @@ class TestProcessServerQueueSuccess:
             spawn as mock_spawn,
             notif as mock_notif,
         ):
-            mock_pool.return_value.get_next_in_queue = mock.AsyncMock(
-                side_effect=[entry, None]
-            )
+            mock_pool.return_value.get_next_in_queue = mock.AsyncMock(side_effect=[entry, None])
             mock_quota.return_value.check_spawn_allowed = mock.AsyncMock(
                 return_value={"allowed": True}
             )
@@ -397,9 +385,7 @@ class TestProcessServerQueueSuccess:
             spawn as mock_spawn,
             notif,
         ):
-            mock_pool.return_value.get_next_in_queue = mock.AsyncMock(
-                side_effect=[entry, None]
-            )
+            mock_pool.return_value.get_next_in_queue = mock.AsyncMock(side_effect=[entry, None])
             mock_quota.return_value.check_spawn_allowed = mock.AsyncMock(
                 return_value={"allowed": True}
             )
@@ -423,16 +409,12 @@ class TestProcessServerQueueSuccess:
             mock.patch("app.config.settings.credits_enabled", True),
             mock.patch("app.services.credit_service.CreditService") as mock_credit,
         ):
-            mock_pool.return_value.get_next_in_queue = mock.AsyncMock(
-                side_effect=[entry, None]
-            )
+            mock_pool.return_value.get_next_in_queue = mock.AsyncMock(side_effect=[entry, None])
             mock_quota.return_value.check_spawn_allowed = mock.AsyncMock(
                 return_value={"allowed": True}
             )
             mock_quota.return_value.increment_usage = mock.AsyncMock()
-            mock_credit.return_value.check_sufficient_credits = mock.AsyncMock(
-                return_value=True
-            )
+            mock_credit.return_value.check_sufficient_credits = mock.AsyncMock(return_value=True)
             mock_credit.return_value.consume_credits = mock.AsyncMock()
             mock_gpu.return_value = []
             mock_spawn.return_value = mock.Mock()
@@ -453,9 +435,7 @@ class TestProcessServerQueueSuccess:
             spawn as mock_spawn,
             notif as mock_notif,
         ):
-            mock_pool.return_value.get_next_in_queue = mock.AsyncMock(
-                side_effect=[entry, None]
-            )
+            mock_pool.return_value.get_next_in_queue = mock.AsyncMock(side_effect=[entry, None])
             mock_quota.return_value.check_spawn_allowed = mock.AsyncMock(
                 return_value={"allowed": True}
             )
@@ -692,8 +672,8 @@ class TestGrantDailyAllowanceBranches:
                     RuntimeError("unexpected"),
                 ]
             )
-            mock_settings.return_value.get_daily_allowance_login_window_hours = (
-                mock.AsyncMock(return_value=48)
+            mock_settings.return_value.get_daily_allowance_login_window_hours = mock.AsyncMock(
+                return_value=48
             )
             mock_activity.return_value.log = mock.AsyncMock()
             result = _run_task(grant_daily_allowance_to_all, db)
@@ -774,9 +754,7 @@ class TestTaskErrorTails:
     def test_prometheus_business_metrics_error(self):
         with (
             mock.patch("app.config.settings.prometheus_enabled", True),
-            mock.patch(
-                "app.tasks._run_async", side_effect=_run_async_raises(Exception("db down"))
-            ),
+            mock.patch("app.tasks._run_async", side_effect=_run_async_raises(Exception("db down"))),
         ):
             result = update_prometheus_business_metrics.run()
         assert "Error updating business metrics: db down" in result
@@ -858,8 +836,9 @@ class TestEnforceVolumeQuotasBranches:
             mock.patch("app.tasks._release_gpu_devices", new_callable=mock.AsyncMock),
         )
 
-    def _run_enforce(self, db, *, xfs_available=True, parse=10**9, measure=(0, "du"),
-                     get_status="running"):
+    def _run_enforce(
+        self, db, *, xfs_available=True, parse=10**9, measure=(0, "du"), get_status="running"
+    ):
         (
             p_vs,
             p_xfs,
@@ -921,8 +900,9 @@ class TestEnforceVolumeQuotasBranches:
         volume.owner_id = uuid.uuid4()
         server, plan, user, db = self._make_fixtures(volume)  # plan_id None
 
-        result, mock_delete, _ = self._run_enforce(db, parse=10, measure=(20, "xfs"),
-                                                   get_status="stopped")
+        result, mock_delete, _ = self._run_enforce(
+            db, parse=10, measure=(20, "xfs"), get_status="stopped"
+        )
 
         assert result == "Stopped 1 servers, warned 0 volumes (XFS=1 du=0)"
         assert volume.status == "over_limit"
