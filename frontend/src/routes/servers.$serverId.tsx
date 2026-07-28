@@ -679,7 +679,11 @@ function ServerDetailPage() {
             <MetricCard
               title="Memory"
               value={`${currentMetrics.memory.toFixed(1)}%`}
-              subtitle={`${formatBytes(currentMetrics.memoryUsed)} / ${formatBytes(currentMetrics.memoryTotal)}`}
+              subtitle={
+                currentMetrics.memoryCache > 0
+                  ? `${formatBytes(currentMetrics.memoryUsed)} / ${formatBytes(currentMetrics.memoryTotal)} · ${formatBytes(currentMetrics.memoryCache)} cache`
+                  : `${formatBytes(currentMetrics.memoryUsed)} / ${formatBytes(currentMetrics.memoryTotal)}`
+              }
               icon={Zap}
               iconColor="text-chart-2"
               bgColor="bg-chart-2/10"

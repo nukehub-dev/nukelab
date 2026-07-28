@@ -397,3 +397,69 @@ class TestCollectContainerMetrics:
                     await collector._collect_container_metrics("cid-1", "srv-1")
 
         mock_client.close.assert_awaited_once()
+
+
+class TestParseContainerStatsMemoryCache:
+    """Memory metrics exclude reclaimable page cache (docker stats semantics)."""
+
+    @staticmethod
+    def _stats(memory_stats: dict) -> tuple[dict, dict]:
+        stats1 = {"cpu_stats": {"cpu_usage": {"total_usage": 0}, "system_cpu_usage": 1}}
+        stats2 = {
+            "cpu_stats": {
+                "cpu_usage": {"total_usage": 10},
+                "system_cpu_usage": 100,
+                "online_cpus": 1,
+            },
+            "memory_stats": memory_stats,
+        }
+        return stats1, stats2
+
+    def test_excludes_inactive_file_cgroup_v2(self):
+        """cgroup v2: usage - inactive_file."""
+        collector = MetricsCollector()
+        stats1, stats2 = self._stats(
+            {
+                "usage": 1000000000,
+                "limit": 2000000000,
+                "stats": {"inactive_file": 400000000, "cache": 450000000},
+            }
+        )
+
+        result = collector._parse_container_stats(stats1, stats2, "srv", "cid")
+
+        assert result["memory_used"] == 600000000
+        assert result["memory_percent"] == 30.0
+        assert result["memory_cache"] == 450000000
+
+    def test_excludes_total_inactive_file_cgroup_v1(self):
+        """cgroup v1: usage - total_inactive_file."""
+        collector = MetricsCollector()
+        stats1, stats2 = self._stats(
+            {
+                "usage": 1000000000,
+                "limit": 2000000000,
+                "stats": {"total_inactive_file": 400000000},
+            }
+        )
+
+        result = collector._parse_container_stats(stats1, stats2, "srv", "cid")
+
+        assert result["memory_used"] == 600000000
+        assert result["memory_percent"] == 30.0
+
+    def test_clamps_at_zero_when_cache_exceeds_usage(self):
+        """Racy counter reads must not produce negative usage."""
+        collector = MetricsCollector()
+        stats1, stats2 = self._stats(
+            {
+                "usage": 100,
+                "limit": 1000,
+                "stats": {"inactive_file": 500},
+            }
+        )
+
+        result = collector._parse_container_stats(stats1, stats2, "srv", "cid")
+
+        assert result["memory_used"] == 0
+        assert result["memory_percent"] == 0.0

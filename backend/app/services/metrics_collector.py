@@ -164,10 +164,17 @@ class MetricsCollector:
         # Cap at reasonable max to catch calculation glitches
         cpu_percent = min(cpu_percent, cpu_count * 100.0)
 
-        # Memory (doesn't need delta — instantaneous reading)
+        # Memory (doesn't need delta — instantaneous reading).
+        # Exclude reclaimable page cache (docker stats semantics): raw cgroup
+        # usage includes file cache, so I/O-heavy containers look memory-hungry
+        # even though the kernel would reclaim that memory under pressure.
         memory_stats = stats2.get("memory_stats", {})
-        memory_usage = memory_stats.get("usage", 0)
+        raw_memory_usage = memory_stats.get("usage", 0)
         memory_limit = memory_stats.get("limit", 1)
+        mem_detail = memory_stats.get("stats", {})
+        # cgroup v2 exposes "inactive_file", cgroup v1 "total_inactive_file".
+        inactive_file = mem_detail.get("inactive_file", mem_detail.get("total_inactive_file", 0))
+        memory_usage = max(0, raw_memory_usage - inactive_file)
         memory_percent = (memory_usage / memory_limit) * 100.0 if memory_limit > 0 else 0
 
         # Disk I/O (cumulative counters — no delta needed for instantaneous)

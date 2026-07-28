@@ -14,6 +14,7 @@ export interface ServerMetricPoint {
   memory: number
   memoryUsed: number
   memoryTotal: number
+  memoryCache: number
   diskRead: number
   diskWrite: number
   networkRx: number
@@ -25,7 +26,12 @@ interface MetricApiResponse {
     server_id: string
     container_id: string
     cpu: { percent: number | null; cores: number | null }
-    memory: { percent: number | null; used: number | null; total: number | null }
+    memory: {
+      percent: number | null
+      used: number | null
+      total: number | null
+      cache: number | null
+    }
     disk: { read_bytes: number | null; write_bytes: number | null }
     network: { rx_bytes: number | null; tx_bytes: number | null }
     collected_at: string
@@ -51,6 +57,7 @@ function parseApiMetric(metric: MetricApiResponse['metrics'][number]): ServerMet
     memory: Number(metric.memory?.percent) || 0,
     memoryUsed: Number(metric.memory?.used) || 0,
     memoryTotal: Number(metric.memory?.total) || 0,
+    memoryCache: Number(metric.memory?.cache) || 0,
     diskRead: Number(metric.disk?.read_bytes) || 0,
     diskWrite: Number(metric.disk?.write_bytes) || 0,
     networkRx: Number(metric.network?.rx_bytes) || 0,
@@ -64,6 +71,7 @@ function parseWsMetric(data: {
   memory_percent?: number
   memory_used?: number
   memory_total?: number
+  memory_cache?: number
   disk_read_bytes?: number
   disk_write_bytes?: number
   network_rx_bytes?: number
@@ -83,6 +91,7 @@ function parseWsMetric(data: {
     memory: Number(data.memory_percent) || 0,
     memoryUsed: Number(data.memory_used) || 0,
     memoryTotal: Number(data.memory_total) || 0,
+    memoryCache: Number(data.memory_cache) || 0,
     diskRead: Number(data.disk_read_bytes) || 0,
     diskWrite: Number(data.disk_write_bytes) || 0,
     networkRx: Number(data.network_rx_bytes) || 0,
@@ -97,6 +106,7 @@ export function useServerMetrics(serverId: string | undefined) {
     memory: 0,
     memoryUsed: 0,
     memoryTotal: 0,
+    memoryCache: 0,
     diskRead: 0,
     diskWrite: 0,
     networkRx: 0,
@@ -133,6 +143,7 @@ export function useServerMetrics(serverId: string | undefined) {
             memory: latest.memory,
             memoryUsed: latest.memoryUsed,
             memoryTotal: latest.memoryTotal,
+            memoryCache: latest.memoryCache,
             diskRead: latest.diskRead,
             diskWrite: latest.diskWrite,
             networkRx: latest.networkRx,
@@ -164,6 +175,7 @@ export function useServerMetrics(serverId: string | undefined) {
           memory_percent?: number
           memory_used?: number
           memory_total?: number
+          memory_cache?: number
           disk_read_bytes?: number
           disk_write_bytes?: number
           network_rx_bytes?: number
@@ -179,6 +191,7 @@ export function useServerMetrics(serverId: string | undefined) {
           memory: point.memory,
           memoryUsed: point.memoryUsed,
           memoryTotal: point.memoryTotal,
+          memoryCache: point.memoryCache,
           diskRead: point.diskRead,
           diskWrite: point.diskWrite,
           networkRx: point.networkRx,
@@ -205,6 +218,7 @@ export function useServerMetrics(serverId: string | undefined) {
         memory: 0,
         memoryUsed: 0,
         memoryTotal: 0,
+        memoryCache: 0,
         diskRead: 0,
         diskWrite: 0,
         networkRx: 0,
