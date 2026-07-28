@@ -128,6 +128,10 @@ class ContainerDriver(ABC):
         """
 
     @abstractmethod
+    async def get_container_top(self, container_id: str, ps_args: str | None = None) -> dict:
+        """Return a Docker-top-shaped dict {"Titles": [...], "Processes": [[...]]}."""
+
+    @abstractmethod
     async def get_container_logs(
         self,
         container_id: str,

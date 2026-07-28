@@ -177,6 +177,7 @@ Phase 10: Remediation Support & Retest
 | BOLA-06 | Access workspace the user is not a member of | `GET /api/workspaces/{id}` | 403 |
 | BOLA-07 | Access volume not owned/shared | `GET /api/volumes/{id}` | 403 |
 | BOLA-08 | Enumerate sequential server/volume/user IDs | `GET /api/servers/1`, `/api/servers/2` ... | UUIDs prevent trivial enumeration; 403 on unauthorized |
+| BOLA-09 | List processes of another user's server | `GET /api/servers/{id}/tasks` | 403 unless actor has `servers:read_all` or `servers:access_others` |
 
 #### 4.2 Vertical Privilege Escalation (BFLA)
 

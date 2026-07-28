@@ -2270,6 +2270,111 @@ async def get_server_logs(
         )
 
 
+def _parse_ps_time(value: str) -> int:
+    """Parse a ps TIME column ([[dd-]hh:]mm:ss) into seconds."""
+    try:
+        days = 0
+        if "-" in value:
+            day_part, value = value.split("-", 1)
+            days = int(day_part)
+        parts = [int(p) for p in value.split(":")]
+        if len(parts) == 2:
+            hours, minutes, seconds = 0, parts[0], parts[1]
+        elif len(parts) == 3:
+            hours, minutes, seconds = parts
+        else:
+            return 0
+        return days * 86400 + hours * 3600 + minutes * 60 + seconds
+    except (TypeError, ValueError):
+        return 0
+
+
+def _normalize_top_tasks(top: dict) -> list[dict]:
+    """Zip Docker-top Titles/Processes into a stable task schema.
+
+    Rows are produced with ps_args="aux" (USER PID %CPU %MEM VSZ RSS TTY STAT
+    START TIME COMMAND) but are mapped by title so column order does not
+    matter. Short/malformed rows are tolerated with defaults.
+
+    Note: %CPU/%MEM are ps lifetime averages relative to the *host* — the
+    frontend derives current usage from cpu_time_seconds deltas and RSS
+    against the server's allocation instead.
+    """
+
+    def _float(cols: dict, key: str) -> float:
+        try:
+            return float(cols.get(key, 0))
+        except (TypeError, ValueError):
+            return 0.0
+
+    def _int(cols: dict, key: str) -> int:
+        try:
+            return int(cols.get(key, 0))
+        except (TypeError, ValueError):
+            return 0
+
+    titles = [str(t) for t in top.get("Titles", [])]
+    tasks = []
+    for row in top.get("Processes", []):
+        cols = {titles[i]: row[i] for i in range(min(len(titles), len(row)))}
+        time_raw = str(cols.get("TIME", ""))
+        tasks.append(
+            {
+                "pid": _int(cols, "PID"),
+                "user": str(cols.get("USER", "")),
+                "cpu_percent": _float(cols, "%CPU"),
+                "mem_percent": _float(cols, "%MEM"),
+                # ps reports RSS in KiB
+                "rss_bytes": _int(cols, "RSS") * 1024,
+                "stat": str(cols.get("STAT", "")),
+                "time": time_raw,
+                # Cumulative CPU seconds — delta between polls yields the
+                # process's current core usage.
+                "cpu_time_seconds": _parse_ps_time(time_raw),
+                "command": str(cols.get("COMMAND", "")),
+            }
+        )
+    return tasks
+
+
+@router.get("/{server_id}/tasks")
+async def get_server_tasks(
+    server_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    _=Depends(require_permissions(Permission.SERVERS_READ_OWN, Permission.SERVERS_READ_ALL)),
+    db: AsyncSession = Depends(get_db),
+):
+    """List running processes inside the server container (read-only)."""
+    server = await get_server_with_permission_check(
+        server_id,
+        current_user,
+        db,
+        request,
+        admin_permissions=[Permission.SERVERS_READ_ALL, Permission.SERVERS_ACCESS_OTHERS],
+    )
+
+    if not server.container_id:
+        return {"server_id": server_id, "tasks": [], "status": "stopped"}
+
+    try:
+        top = await spawner.container_client.get_container_top(server.container_id, ps_args="aux")
+        return {
+            "server_id": server_id,
+            "tasks": _normalize_top_tasks(top),
+            "status": "running",
+        }
+    except ContainerDriverError:
+        # Container not found or runtime error — degrade gracefully
+        return {"server_id": server_id, "tasks": [], "status": "error"}
+    except Exception:
+        logger.exception("Server tasks retrieval failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve tasks. Please try again or contact support.",
+        )
+
+
 # ── Server Access Token Endpoints ────────────────────────────────────────────
 
 

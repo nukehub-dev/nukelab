@@ -628,6 +628,20 @@ class DockerDriver(ContainerDriver):
         except aiodocker.DockerError as e:
             raise _map_error(e) from e
 
+    async def get_container_top(self, container_id: str, ps_args: str | None = None) -> dict:
+        """Return a Docker-top-shaped dict {"Titles": [...], "Processes": [[...]]}.
+
+        aiodocker 0.24 has no top() helper, so query the REST endpoint
+        directly (Podman's compat API implements it as well).
+        """
+        try:
+            params = {"ps_args": ps_args} if ps_args else {}
+            return await self.client._query_json(
+                f"containers/{container_id}/top", method="GET", params=params
+            )
+        except aiodocker.DockerError as e:
+            raise _map_error(e) from e
+
     async def get_container_logs(
         self,
         container_id: str,

@@ -31,14 +31,16 @@ import { MetricsAreaChart } from '../components/charts/area-chart'
 import { formatters } from '../components/charts/chart-formatters'
 import { SemiCircularGauge } from '../components/charts/semi-circular-gauge'
 import { StatusBadge } from '../components/data/status-badge'
-import { useServers, useServerLogs } from '../hooks/use-servers'
+import { useServers, useServerLogs, useServerTasks } from '../hooks/use-servers'
 import { useServerActionsWithReason } from '../hooks/use-server-actions-with-reason'
 import { useAuthStore } from '../stores/auth-store'
 import { LogViewer } from '../components/log-viewer'
+import { TasksTable } from '../components/tasks-table'
 import { ScheduleDialog } from '../components/server/schedule-dialog'
 import { useServerMetrics } from '../hooks/use-server-metrics'
 import { formatDate, formatBytes, formatPlanResource, cn } from '../lib/utils'
 import { counterRate } from '../lib/metrics-rates'
+import { parseMemoryToBytes } from '../lib/task-rates'
 import { springs } from '../lib/animations'
 import { useConfirmDialog } from '../components/ui/confirm-dialog'
 import { useActivityHeartbeat } from '../hooks/use-activity-heartbeat'
@@ -208,8 +210,9 @@ function ServerDetailPage() {
   const canAccessServer = (s: typeof server) =>
     !user || !s || s.user_id === user.id || canAccessOthersServers
   const isOwnServer = (s: typeof server) => !user || !s || s.user_id === user.id
+  const server = servers.find((s) => s.id === serverId)
   const { metrics, currentMetrics, isLive } = useServerMetrics(serverId)
-  const [activeTab, setActiveTab] = useState<'overview' | 'logs'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'logs' | 'tasks'>('overview')
   const [logsPaused, setLogsPaused] = useState(false)
   const { data: logsData, isLoading: logsLoading } = useServerLogs(
     serverId,
@@ -217,11 +220,15 @@ function ServerDetailPage() {
     logsPaused,
     activeTab === 'logs'
   )
+  const { data: tasksData, isLoading: tasksLoading } = useServerTasks(
+    serverId,
+    activeTab === 'tasks',
+    server?.allocated_cpu,
+    parseMemoryToBytes(server?.allocated_memory)
+  )
 
   const { confirm, dialog } = useConfirmDialog()
   const [showScheduleDialog, setShowScheduleDialog] = useState(false)
-
-  const server = servers.find((s) => s.id === serverId)
 
   // Refresh server last_activity while the detail page is open, visible, the
   // server is running, and the user recently interacted with the page. The
@@ -581,10 +588,10 @@ function ServerDetailPage() {
 
       {/* Tabs */}
       <div className="flex items-center gap-1 border-b border-border">
-        {['overview', 'logs'].map((tab: string) => (
+        {['overview', 'logs', 'tasks'].map((tab: string) => (
           <button
             key={tab}
-            onClick={() => setActiveTab(tab as 'overview' | 'logs')}
+            onClick={() => setActiveTab(tab as 'overview' | 'logs' | 'tasks')}
             className={cn(
               'px-4 py-2 text-sm font-medium capitalize transition-colors relative',
               activeTab === tab ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
@@ -891,6 +898,20 @@ function ServerDetailPage() {
             tail={logsData?.tail}
             isLoading={logsLoading}
             onPauseChange={setLogsPaused}
+          />
+        </motion.div>
+      )}
+      {activeTab === 'tasks' && (
+        <motion.div
+          className="bubble p-5"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={springs.gentle}
+        >
+          <TasksTable
+            tasks={tasksData?.tasks || []}
+            status={tasksData?.status as 'running' | 'stopped' | 'error'}
+            isLoading={tasksLoading}
           />
         </motion.div>
       )}
