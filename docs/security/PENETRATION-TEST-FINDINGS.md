@@ -36,6 +36,7 @@
 | PENT-NKL-010 | Server gateway page reloads instead of opening terminal | Medium | Frontend Security / Cache Handling | Closed | Security Eng | Frontend Eng | 2026-06-28 | 2026-06-28 |
 | PENT-NKL-011 | Backend reports server running before container is ready | Medium | Backend / Container Orchestration | Closed | Security Eng | Backend Eng | 2026-06-28 | 2026-06-28 |
 | PENT-NKL-012 | Shared read-only volumes leak host storage size and usage | Low | Container Security / Information Disclosure | Open | Security Eng | Platform Eng | 2026-07-15 | |
+| PENT-NKL-013 | User resource stats endpoint missing authorization check | Medium | API1:2023 BOLA / Information Disclosure | Closed | Security Eng | Backend Eng | 2026-07-29 | 2026-07-29 |
 
 ---
 
@@ -98,7 +99,7 @@ Specific code-level or config fix.
 |----------|------|-------------|--------------|----------|--------|---------------|
 | Critical | 0 | 0 | 0 | 0 | 0 | 0 |
 | High | 0 | 0 | 0 | 0 | 2 | 0 |
-| Medium | 1 | 0 | 0 | 0 | 6 | 0 |
+| Medium | 1 | 0 | 0 | 0 | 7 | 0 |
 | Low | 1 | 0 | 0 | 0 | 0 | 0 |
 | Informational | 0 | 0 | 0 | 0 | 0 | 0 |
 
@@ -614,6 +615,44 @@ Attach a small XFS project quota (100M hard limit, project IDs below the backend
 
 ---
 
-**Last Updated:** 2026-07-15
+**Last Updated:** 2026-07-29
 
 **Note:** Container hardening controls (PENT-NKL-001 through PENT-NKL-004) are implemented, covered by regression tests, and verified through a live container spawn/inspection. They are marked **Closed**.
+
+---
+
+### PENT-NKL-013: User resource stats endpoint missing authorization check
+
+**Severity:** Medium  
+**CVSS 4.0 Score:** 4.3  
+**OWASP Category:** API1:2023 Broken Object Level Authorization  
+**Status:** Closed  
+**Opened:** 2026-07-29  
+**Closed:** 2026-07-29  
+**Reporter:** Security Eng  
+**Owner:** Backend Eng  
+**Component:** `backend/app/api/users.py`
+
+**Description:**
+`GET /api/users/{user_id}/resources` performed no authorization check. Any authenticated user could read any other user's resource statistics: NUKE balance, daily allowance, role, server counts, active status, and last-login timestamp.
+
+**Prerequisites:**
+
+- Any authenticated account (role `user` suffices)
+- Target user ID (UUIDs limit, but do not prevent, enumeration)
+
+**Impact:**
+Cross-user disclosure of balances and account activity metadata — useful for targeting high-value accounts and profiling user activity patterns.
+
+**Remediation:**
+Endpoint now mirrors `GET /users/{user_id}`: self-view allowed; other users require the `users:read` permission (`backend/app/api/users.py`, `get_user_resources`). The same change also redacts PII (email, OAuth profile, preferences) from `GET /users/{id}` responses for non-admin viewers, so moderators see operational fields only.
+
+**Retest Criteria:**
+
+- `GET /api/users/{other_user_id}/resources` returns 403 for role `user`, 401 unauthenticated, 200 for self and for moderator/admin.
+- Regression tests pass: `backend/tests/security/test_bola.py::TestUserResourcesBOLA`, `backend/tests/api/users/test_user_detail_privacy.py`.
+
+**References:**
+
+- OWASP API1:2023 Broken Object Level Authorization
+- `backend/app/core/permissions.py`

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 import { createFileRoute } from '@tanstack/react-router'
+import { UserLink } from '../components/admin/user-link'
 import { HardDrive, Pencil, Trash2, Server, Play, Archive, RefreshCw } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import { ResourcePageLayout } from '../components/layout/resource-page-layout'
@@ -342,14 +343,11 @@ function VolumesAdminPage() {
         const owner = row.original.owner
         if (!owner) return '-'
         return (
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
-              <span className="text-[10px] font-medium text-primary">
-                {(owner.display_name || owner.username).slice(0, 2).toUpperCase()}
-              </span>
-            </div>
-            <span className="text-sm">{owner.display_name || owner.username}</span>
-          </div>
+          <UserLink
+            userId={row.original.owner_id}
+            name={owner.display_name || owner.username}
+            size="sm"
+          />
         )
       },
     },
@@ -499,6 +497,16 @@ function VolumesAdminPage() {
           <code className="text-[10px]">{v.id}</code>
           <code className="bg-muted px-1.5 py-0.5 rounded">{v.name}</code>
         </div>
+        {v.owner && (
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-xs text-muted-foreground">Owner</span>
+            <UserLink
+              userId={v.owner_id}
+              name={v.owner.display_name || v.owner.username}
+              size="sm"
+            />
+          </div>
+        )}
         <div className="flex items-center gap-2 text-sm">
           <span className="text-muted-foreground">{formatBytes(v.size_bytes)}</span>
           <span

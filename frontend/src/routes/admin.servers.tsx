@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 import { createFileRoute, Link } from '@tanstack/react-router'
+import { UserLink } from '../components/admin/user-link'
 import {
   Server,
   Activity,
@@ -253,14 +254,8 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
         header: 'Owner',
         cell: ({ row }) => {
           const username = row.original.username
-          return (
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs font-medium">
-                {username?.slice(0, 2).toUpperCase() || '??'}
-              </div>
-              <span className="text-sm">{username || 'Unknown'}</span>
-            </div>
-          )
+          if (!username) return <span className="text-sm">Unknown</span>
+          return <UserLink userId={row.original.user_id} name={username} size="sm" />
         },
       },
       {
@@ -591,10 +586,9 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
           />
         </div>
       </div>
-      {server.username && (
+      {server.username && server.user_id && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Users className="w-3.5 h-3.5" />
-          {server.username}
+          <UserLink userId={server.user_id} name={server.username} size="sm" />
         </div>
       )}
       <div className="flex items-center gap-3 text-sm text-muted-foreground">

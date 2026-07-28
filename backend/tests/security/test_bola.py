@@ -450,3 +450,29 @@ class TestUserProfileBOLA:
         assert response.status_code == 403, (
             f"Expected 403, got {response.status_code}: {response.text}"
         )
+
+
+class TestUserResourcesBOLA:
+    """Regression: GET /users/{id}/resources had no authorization check —
+    any authenticated user could read anyone's balance, role, and last
+    login time. See docs/security/PENETRATION-TEST-FINDINGS.md."""
+
+    @pytest.mark.asyncio
+    async def test_user_cannot_read_other_user_resources(
+        self, client: AsyncClient, test_user, user_token, admin_user
+    ):
+        """Non-privileged user gets 403 for another user's resource stats."""
+        response = await client.get(
+            f"/api/users/{admin_user.id}/resources",
+            headers={"Authorization": f"Bearer {user_token}"},
+        )
+        assert response.status_code == 403, (
+            f"Expected 403, got {response.status_code}: {response.text}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_unauthenticated_cannot_read_resources(self, client: AsyncClient, test_user):
+        response = await client.get(f"/api/users/{test_user.id}/resources")
+        assert response.status_code == 401, (
+            f"Expected 401, got {response.status_code}: {response.text}"
+        )

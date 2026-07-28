@@ -452,12 +452,18 @@ async def create_user(
 async def get_user(
     user_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
-    """Get user by ID. Users can view own profile, admins can view any."""
+    """Get user by ID. Users can view own profile, admins can view any.
+
+    PII (OAuth profile, preferences, login count) is redacted for non-admin
+    viewers — moderators get operational fields plus email (already exposed
+    by the users list under the same permission).
+    """
     # Check permissions
     checker = PermissionChecker(current_user)
 
     # Users can view their own profile
-    if str(current_user.id) != user_id:
+    is_self = str(current_user.id) == user_id
+    if not is_self:
         # Otherwise need read permission
         checker.require(Permission.USERS_READ)
 
@@ -467,7 +473,16 @@ async def get_user(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    return serialize_user(user)
+    data = serialize_user(user)
+    if not is_self and not checker.is_admin():
+        # Email is intentionally visible: the users list (same users:read
+        # permission) already exposes it, so hiding it here is inconsistent.
+        # login_count is an activity-tracking metric — admin-only.
+        data["login_count"] = 0
+        data["profile"] = {}
+        data["preferences"] = {}
+        data["oauth_provider"] = None
+    return data
 
 
 @router.put("/{user_id}", response_model=UserResponse)
@@ -621,7 +636,15 @@ async def get_user_servers(
 async def get_user_resources(
     user_id: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
-    """Get user's resource usage statistics"""
+    """Get user's resource usage statistics.
+
+    Users can view their own stats; viewing another user's requires
+    users:read (previously unchecked — any authenticated user could read
+    anyone's balance, role, and last-login time).
+    """
+    if str(current_user.id) != user_id:
+        PermissionChecker(current_user).require(Permission.USERS_READ)
+
     service = UserService(db)
     stats = await service.get_user_stats(user_id)
 

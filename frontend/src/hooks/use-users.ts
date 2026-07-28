@@ -161,3 +161,53 @@ export function useUserActions() {
     deleteUser,
   }
 }
+
+export function useUserDetail(userId: string) {
+  return useQuery({
+    queryKey: ['users', 'detail', userId],
+    queryFn: () => api.get<User>(`/users/${userId}`),
+    enabled: !!userId,
+  })
+}
+
+export interface UserServerEntry {
+  id: string
+  name: string
+  status: string
+  external_url: string | null
+  created_at: string | null
+}
+
+export function useUserServers(userId: string) {
+  return useQuery({
+    queryKey: ['users', 'servers', userId],
+    queryFn: () => api.get<{ servers: UserServerEntry[] }>(`/users/${userId}/servers`),
+    enabled: !!userId,
+  })
+}
+
+export interface UserQuotaDetail {
+  user_id: string
+  limits: {
+    max_cpu_total: number | null
+    max_memory_total: number | null
+    max_disk_total: number | null
+    max_gpu_total: number | null
+    max_servers_total: number | null
+  }
+  usage: {
+    cpu: number
+    memory_mb: number
+    disk_mb: number
+    gpu: number
+    servers: number
+  }
+}
+
+export function useUserQuota(userId: string) {
+  return useQuery({
+    queryKey: ['users', 'quota', userId],
+    queryFn: () => api.get<{ success: boolean; data: UserQuotaDetail }>(`/quotas/${userId}`),
+    enabled: !!userId,
+  })
+}

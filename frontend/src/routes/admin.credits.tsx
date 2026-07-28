@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 import { createFileRoute, useSearch, Link } from '@tanstack/react-router'
+import { UserLink } from '../components/admin/user-link'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import {
@@ -360,28 +361,14 @@ function CreditsAdminPage() {
         const user = row.original
         const isLow = user.nuke_balance <= 100
         return (
-          <div className="flex items-center gap-3">
-            <div
-              className={cn(
-                'w-9 h-9 rounded-full flex items-center justify-center shrink-0',
-                isLow ? 'bg-amber-500/10' : 'bg-primary/10'
-              )}
-            >
-              <span
-                className={cn('text-xs font-medium', isLow ? 'text-amber-400' : 'text-primary')}
-              >
-                {user.username.slice(0, 2).toUpperCase()}
+          <div className="flex items-center gap-2">
+            <UserLink userId={user.id} name={user.username} avatarUrl={user.avatar_url} size="lg" />
+            {isLow && (
+              <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400">
+                <AlertTriangle className="w-2.5 h-2.5" />
+                Low
               </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="font-medium text-sm">{user.username}</span>
-              {isLow && (
-                <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400">
-                  <AlertTriangle className="w-2.5 h-2.5" />
-                  Low
-                </span>
-              )}
-            </div>
+            )}
           </div>
         )
       },
@@ -570,7 +557,13 @@ function CreditsAdminPage() {
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-medium">{user.username}</span>
+              <Link
+                to="/admin/users/$userId"
+                params={{ userId: user.id }}
+                className="font-medium hover:text-primary hover:underline transition-colors"
+              >
+                {user.username}
+              </Link>
               {isLow && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400">
                   Low
@@ -716,7 +709,13 @@ function CreditsAdminPage() {
                         </span>
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{lbUser.username}</p>
+                        <Link
+                          to="/admin/users/$userId"
+                          params={{ userId: lbUser.id }}
+                          className="text-sm font-medium truncate block hover:text-primary hover:underline transition-colors"
+                        >
+                          {lbUser.username}
+                        </Link>
                         <p className="text-xs text-amber-400">
                           {lbUser.nuke_balance.toLocaleString()} NUKE
                         </p>

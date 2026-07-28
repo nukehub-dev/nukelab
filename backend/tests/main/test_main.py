@@ -26,10 +26,25 @@ class TestAppConfiguration:
         assert app.root_path == "/api"
 
     def test_app_docs_url(self):
-        assert app.docs_url == "/docs"
+        """Docs are served at /docs when enabled, absent when disabled.
+
+        With docs enabled the app uses fastapi-offline, which disables the
+        built-in docs app (app.docs_url is None) and registers its own /docs
+        route serving local assets. With docs disabled (production default)
+        no docs routes exist at all.
+        """
+        docs_routes = [getattr(r, "path", None) for r in app.routes]
+        if settings.api_docs_enabled:
+            assert "/docs" in docs_routes
+        else:
+            assert app.docs_url is None
+            assert "/docs" not in docs_routes
 
     def test_app_openapi_url(self):
-        assert app.openapi_url == "/openapi.json"
+        if settings.api_docs_enabled:
+            assert app.openapi_url == "/openapi.json"
+        else:
+            assert app.openapi_url is None
 
     def test_routers_registered(self):
         routes = [r.path for r in app.routes if hasattr(r, "path")]

@@ -55,8 +55,10 @@ import { Route as AdminEnvironmentsRouteImport } from './routes/admin.environmen
 import { Route as AdminCreditsRouteImport } from './routes/admin.credits'
 import { Route as AdminAuditLogsRouteImport } from './routes/admin.audit-logs'
 import { Route as AdminAnalyticsRouteImport } from './routes/admin.analytics'
+import { Route as AdminUsersIndexRouteImport } from './routes/admin.users.index'
 import { Route as UserUsernameServerNameRouteImport } from './routes/user.$username.$serverName'
 import { Route as ServersServerIdMetricsRouteImport } from './routes/servers.$serverId.metrics'
+import { Route as AdminUsersUserIdRouteImport } from './routes/admin.users.$userId'
 
 const WorkspacesRoute = WorkspacesRouteImport.update({
   id: '/workspaces',
@@ -288,6 +290,11 @@ const AdminAnalyticsRoute = AdminAnalyticsRouteImport.update({
   path: '/analytics',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminUsersIndexRoute = AdminUsersIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminUsersRoute,
+} as any)
 const UserUsernameServerNameRoute = UserUsernameServerNameRouteImport.update({
   id: '/user/$username/$serverName',
   path: '/user/$username/$serverName',
@@ -297,6 +304,11 @@ const ServersServerIdMetricsRoute = ServersServerIdMetricsRouteImport.update({
   id: '/metrics',
   path: '/metrics',
   getParentRoute: () => ServersServerIdRoute,
+} as any)
+const AdminUsersUserIdRoute = AdminUsersUserIdRouteImport.update({
+  id: '/$userId',
+  path: '/$userId',
+  getParentRoute: () => AdminUsersRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -331,7 +343,7 @@ export interface FileRoutesByFullPath {
   '/admin/quotas': typeof AdminQuotasRoute
   '/admin/servers': typeof AdminServersRoute
   '/admin/settings': typeof AdminSettingsRoute
-  '/admin/users': typeof AdminUsersRoute
+  '/admin/users': typeof AdminUsersRouteWithChildren
   '/admin/volumes': typeof AdminVolumesRoute
   '/admin/workspaces': typeof AdminWorkspacesRoute
   '/servers/$serverId': typeof ServersServerIdRouteWithChildren
@@ -346,8 +358,10 @@ export interface FileRoutesByFullPath {
   '/servers/': typeof ServersIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/workspaces/': typeof WorkspacesIndexRoute
+  '/admin/users/$userId': typeof AdminUsersUserIdRoute
   '/servers/$serverId/metrics': typeof ServersServerIdMetricsRoute
   '/user/$username/$serverName': typeof UserUsernameServerNameRoute
+  '/admin/users/': typeof AdminUsersIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -377,7 +391,6 @@ export interface FileRoutesByTo {
   '/admin/quotas': typeof AdminQuotasRoute
   '/admin/servers': typeof AdminServersRoute
   '/admin/settings': typeof AdminSettingsRoute
-  '/admin/users': typeof AdminUsersRoute
   '/admin/volumes': typeof AdminVolumesRoute
   '/admin/workspaces': typeof AdminWorkspacesRoute
   '/servers/$serverId': typeof ServersServerIdRouteWithChildren
@@ -392,8 +405,10 @@ export interface FileRoutesByTo {
   '/servers': typeof ServersIndexRoute
   '/settings': typeof SettingsIndexRoute
   '/workspaces': typeof WorkspacesIndexRoute
+  '/admin/users/$userId': typeof AdminUsersUserIdRoute
   '/servers/$serverId/metrics': typeof ServersServerIdMetricsRoute
   '/user/$username/$serverName': typeof UserUsernameServerNameRoute
+  '/admin/users': typeof AdminUsersIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -428,7 +443,7 @@ export interface FileRoutesById {
   '/admin/quotas': typeof AdminQuotasRoute
   '/admin/servers': typeof AdminServersRoute
   '/admin/settings': typeof AdminSettingsRoute
-  '/admin/users': typeof AdminUsersRoute
+  '/admin/users': typeof AdminUsersRouteWithChildren
   '/admin/volumes': typeof AdminVolumesRoute
   '/admin/workspaces': typeof AdminWorkspacesRoute
   '/servers/$serverId': typeof ServersServerIdRouteWithChildren
@@ -443,8 +458,10 @@ export interface FileRoutesById {
   '/servers/': typeof ServersIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/workspaces/': typeof WorkspacesIndexRoute
+  '/admin/users/$userId': typeof AdminUsersUserIdRoute
   '/servers/$serverId/metrics': typeof ServersServerIdMetricsRoute
   '/user/$username/$serverName': typeof UserUsernameServerNameRoute
+  '/admin/users/': typeof AdminUsersIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -495,8 +512,10 @@ export interface FileRouteTypes {
     | '/servers/'
     | '/settings/'
     | '/workspaces/'
+    | '/admin/users/$userId'
     | '/servers/$serverId/metrics'
     | '/user/$username/$serverName'
+    | '/admin/users/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -526,7 +545,6 @@ export interface FileRouteTypes {
     | '/admin/quotas'
     | '/admin/servers'
     | '/admin/settings'
-    | '/admin/users'
     | '/admin/volumes'
     | '/admin/workspaces'
     | '/servers/$serverId'
@@ -541,8 +559,10 @@ export interface FileRouteTypes {
     | '/servers'
     | '/settings'
     | '/workspaces'
+    | '/admin/users/$userId'
     | '/servers/$serverId/metrics'
     | '/user/$username/$serverName'
+    | '/admin/users'
   id:
     | '__root__'
     | '/'
@@ -591,8 +611,10 @@ export interface FileRouteTypes {
     | '/servers/'
     | '/settings/'
     | '/workspaces/'
+    | '/admin/users/$userId'
     | '/servers/$serverId/metrics'
     | '/user/$username/$serverName'
+    | '/admin/users/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -942,6 +964,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminAnalyticsRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/users/': {
+      id: '/admin/users/'
+      path: '/'
+      fullPath: '/admin/users/'
+      preLoaderRoute: typeof AdminUsersIndexRouteImport
+      parentRoute: typeof AdminUsersRoute
+    }
     '/user/$username/$serverName': {
       id: '/user/$username/$serverName'
       path: '/user/$username/$serverName'
@@ -956,8 +985,29 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ServersServerIdMetricsRouteImport
       parentRoute: typeof ServersServerIdRoute
     }
+    '/admin/users/$userId': {
+      id: '/admin/users/$userId'
+      path: '/$userId'
+      fullPath: '/admin/users/$userId'
+      preLoaderRoute: typeof AdminUsersUserIdRouteImport
+      parentRoute: typeof AdminUsersRoute
+    }
   }
 }
+
+interface AdminUsersRouteChildren {
+  AdminUsersUserIdRoute: typeof AdminUsersUserIdRoute
+  AdminUsersIndexRoute: typeof AdminUsersIndexRoute
+}
+
+const AdminUsersRouteChildren: AdminUsersRouteChildren = {
+  AdminUsersUserIdRoute: AdminUsersUserIdRoute,
+  AdminUsersIndexRoute: AdminUsersIndexRoute,
+}
+
+const AdminUsersRouteWithChildren = AdminUsersRoute._addFileChildren(
+  AdminUsersRouteChildren,
+)
 
 interface AdminRouteChildren {
   AdminAnalyticsRoute: typeof AdminAnalyticsRoute
@@ -972,7 +1022,7 @@ interface AdminRouteChildren {
   AdminQuotasRoute: typeof AdminQuotasRoute
   AdminServersRoute: typeof AdminServersRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
-  AdminUsersRoute: typeof AdminUsersRoute
+  AdminUsersRoute: typeof AdminUsersRouteWithChildren
   AdminVolumesRoute: typeof AdminVolumesRoute
   AdminWorkspacesRoute: typeof AdminWorkspacesRoute
   AdminIndexRoute: typeof AdminIndexRoute
@@ -991,7 +1041,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminQuotasRoute: AdminQuotasRoute,
   AdminServersRoute: AdminServersRoute,
   AdminSettingsRoute: AdminSettingsRoute,
-  AdminUsersRoute: AdminUsersRoute,
+  AdminUsersRoute: AdminUsersRouteWithChildren,
   AdminVolumesRoute: AdminVolumesRoute,
   AdminWorkspacesRoute: AdminWorkspacesRoute,
   AdminIndexRoute: AdminIndexRoute,
