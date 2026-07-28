@@ -270,6 +270,37 @@ class TestVolumeServiceList:
         assert result["page"] == 1
 
     @pytest.mark.asyncio
+    async def test_list_all_volumes_server_count_reflects_mounts(
+        self, db_session, vol_service, test_user
+    ):
+        """server_count must reflect ServerVolume rows (regression: admin list
+        did not eager-load server_mounts, so every volume reported 0)."""
+        from app.models.server import Server
+        from app.models.server_volume import ServerVolume
+
+        vol = Volume(name="mounted-vol", display_name="Mounted", owner_id=test_user.id)
+        server = Server(name="mount-srv", user_id=test_user.id, status="running")
+        db_session.add_all([vol, server])
+        await db_session.commit()
+        await db_session.refresh(vol)
+        await db_session.refresh(server)
+
+        db_session.add(
+            ServerVolume(
+                server_id=server.id,
+                volume_id=vol.id,
+                mount_path="/home/test",
+                mode="read_write",
+                is_primary=True,
+            )
+        )
+        await db_session.commit()
+
+        result = await vol_service.list_all_volumes()
+        entry = next(v for v in result["volumes"] if v["name"] == "mounted-vol")
+        assert entry["server_count"] == 1
+
+    @pytest.mark.asyncio
     async def test_list_all_volumes_pagination(self, db_session, vol_service, test_user):
         for i in range(5):
             db_session.add(Volume(name=f"p{i}", display_name=f"Page {i}", owner_id=test_user.id))

@@ -248,6 +248,8 @@ class VolumeService:
         query = select(Volume).options(
             selectinload(Volume.owner),
             selectinload(Volume.workspace_associations),
+            # server_count in to_dict() is 0 unless server_mounts is loaded
+            selectinload(Volume.server_mounts),
         )
 
         count_query = select(func.count()).select_from(Volume)
