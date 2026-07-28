@@ -38,6 +38,7 @@ import { LogViewer } from '../components/log-viewer'
 import { ScheduleDialog } from '../components/server/schedule-dialog'
 import { useServerMetrics } from '../hooks/use-server-metrics'
 import { formatDate, formatBytes, formatPlanResource, cn } from '../lib/utils'
+import { counterRate } from '../lib/metrics-rates'
 import { springs } from '../lib/animations'
 import { useConfirmDialog } from '../components/ui/confirm-dialog'
 import { useActivityHeartbeat } from '../hooks/use-activity-heartbeat'
@@ -227,23 +228,39 @@ function ServerDetailPage() {
   // interaction gate keeps an unattended open tab from blocking idle shutdown.
   useActivityHeartbeat(server?.id, server?.status === 'running')
 
+  // Network and disk counters are cumulative since container start — derive
+  // per-second rates between consecutive points for display.
   const chartData = useMemo(() => {
-    return metrics.map((m) => ({
-      timestamp: m.timestamp,
-      cpu: m.cpu,
-      memory: m.memory,
-      memoryUsed: m.memoryUsed,
-      memoryTotal: m.memoryTotal,
-      diskTotal: m.diskRead + m.diskWrite,
-      diskRead: m.diskRead,
-      diskWrite: m.diskWrite,
-      networkTotal: m.networkRx + m.networkTx,
-      networkRx: m.networkRx,
-      networkTx: m.networkTx,
-    }))
+    return metrics.map((m, i) => {
+      const prev = i > 0 ? metrics[i - 1] : null
+      const rate = (key: 'diskRead' | 'diskWrite' | 'networkRx' | 'networkTx') =>
+        counterRate(prev && { t: prev.epochMs, value: prev[key] }, { t: m.epochMs, value: m[key] })
+      const diskRead = rate('diskRead')
+      const diskWrite = rate('diskWrite')
+      const networkRx = rate('networkRx')
+      const networkTx = rate('networkTx')
+      return {
+        timestamp: m.timestamp,
+        cpu: m.cpu,
+        memory: m.memory,
+        memoryUsed: m.memoryUsed,
+        memoryTotal: m.memoryTotal,
+        diskTotal: diskRead + diskWrite,
+        diskRead,
+        diskWrite,
+        networkTotal: networkRx + networkTx,
+        networkRx,
+        networkTx,
+      }
+    })
   }, [metrics])
 
-  const totalNetwork = currentMetrics.networkRx + currentMetrics.networkTx
+  // Current throughput = rate of the most recent segment.
+  const latestRates = chartData.length > 0 ? chartData[chartData.length - 1] : null
+  const networkRxRate = latestRates?.networkRx ?? 0
+  const networkTxRate = latestRates?.networkTx ?? 0
+  const diskReadRate = latestRates?.diskRead ?? 0
+  const diskWriteRate = latestRates?.diskWrite ?? 0
 
   if (!server) {
     return (
@@ -692,8 +709,8 @@ function ServerDetailPage() {
 
             <MetricCard
               title="Disk I/O"
-              value={`${formatBytes(currentMetrics.diskRead + currentMetrics.diskWrite)}/s`}
-              subtitle={`${formatBytes(currentMetrics.diskRead)}/s read · ${formatBytes(currentMetrics.diskWrite)}/s write`}
+              value={`${formatBytes(diskReadRate + diskWriteRate)}/s`}
+              subtitle={`${formatBytes(diskReadRate)}/s read · ${formatBytes(diskWriteRate)}/s write`}
               icon={HardDrive}
               iconColor="text-chart-3"
               bgColor="bg-chart-3/10"
@@ -701,16 +718,16 @@ function ServerDetailPage() {
 
             <MetricCard
               title="Network"
-              value={`${formatBytes(totalNetwork)}/s`}
+              value={`${formatBytes(networkRxRate + networkTxRate)}/s`}
               subtitle={
                 <div className="flex items-center gap-3">
                   <span className="flex items-center gap-1">
                     <ArrowDown className="w-3 h-3 text-chart-4" />
-                    {formatBytes(currentMetrics.networkRx)}/s
+                    {formatBytes(networkRxRate)}/s
                   </span>
                   <span className="flex items-center gap-1">
                     <ArrowUp className="w-3 h-3 text-destructive" />
-                    {formatBytes(currentMetrics.networkTx)}/s
+                    {formatBytes(networkTxRate)}/s
                   </span>
                 </div>
               }

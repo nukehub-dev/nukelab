@@ -10,6 +10,8 @@ import { useSharedWebSocket } from './use-shared-websocket'
 
 export interface ServerMetricPoint {
   timestamp: string
+  /** Epoch milliseconds, used to derive per-second rates between points. */
+  epochMs: number
   cpu: number
   memory: number
   memoryUsed: number
@@ -53,6 +55,7 @@ function parseApiMetric(metric: MetricApiResponse['metrics'][number]): ServerMet
 
   return {
     timestamp,
+    epochMs: date.getTime(),
     cpu: Number(metric.cpu?.percent) || 0,
     memory: Number(metric.memory?.percent) || 0,
     memoryUsed: Number(metric.memory?.used) || 0,
@@ -87,6 +90,7 @@ function parseWsMetric(data: {
 
   return {
     timestamp,
+    epochMs: Date.now(),
     cpu: Number(data.cpu_percent) || 0,
     memory: Number(data.memory_percent) || 0,
     memoryUsed: Number(data.memory_used) || 0,
