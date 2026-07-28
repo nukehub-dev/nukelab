@@ -21,6 +21,8 @@ import {
   Clock,
   Gift,
   Scale,
+  Check,
+  Coins,
 } from 'lucide-react'
 import { useUsers } from '../hooks/use-users'
 import { useLowBalanceUsers } from '../hooks/use-credits'
@@ -245,6 +247,73 @@ function CreditsAdminPage() {
     if (value === systemLoginWindowValue) return
     updateSystemLoginWindow.mutate(value)
   }
+
+  const systemSettings = [
+    {
+      key: 'allowance',
+      title: 'Default Daily Allowance',
+      description: 'NUKE / day applied to new users',
+      icon: Coins,
+      iconBg: 'bg-violet-500/10',
+      iconColor: 'text-violet-400',
+      input: systemAllowanceInput,
+      setInput: setSystemAllowanceInput,
+      value: systemAllowanceValue,
+      loading: systemAllowanceLoading,
+      isPending: updateSystemAllowance.isPending,
+      onSave: handleSaveSystemAllowance,
+      saveLabel: 'Save Default',
+      display: (v?: number) => `${(v ?? 0).toLocaleString()} NUKE / day`,
+    },
+    {
+      key: 'max-balance',
+      title: 'Max Balance',
+      description: 'Hard cap in NUKE, 0 = unlimited',
+      icon: Scale,
+      iconBg: 'bg-rose-500/10',
+      iconColor: 'text-rose-400',
+      input: systemMaxBalanceInput,
+      setInput: setSystemMaxBalanceInput,
+      value: systemMaxBalanceValue,
+      loading: systemMaxBalanceLoading,
+      isPending: updateSystemMaxBalance.isPending,
+      onSave: handleSaveSystemMaxBalance,
+      saveLabel: 'Save Cap',
+      display: (v?: number) => (v === 0 ? 'Unlimited' : `${(v ?? 0).toLocaleString()} NUKE`),
+    },
+    {
+      key: 'initial-balance',
+      title: 'Signup Initial Balance',
+      description: 'NUKE granted on first signup',
+      icon: Gift,
+      iconBg: 'bg-emerald-500/10',
+      iconColor: 'text-emerald-400',
+      input: systemInitialBalanceInput,
+      setInput: setSystemInitialBalanceInput,
+      value: systemInitialBalanceValue,
+      loading: systemInitialBalanceLoading,
+      isPending: updateSystemInitialBalance.isPending,
+      onSave: handleSaveSystemInitialBalance,
+      saveLabel: 'Save Initial Balance',
+      display: (v?: number) => `${(v ?? 0).toLocaleString()} NUKE`,
+    },
+    {
+      key: 'login-window',
+      title: 'Allowance Login Window',
+      description: 'Hours of recent login required',
+      icon: Clock,
+      iconBg: 'bg-amber-500/10',
+      iconColor: 'text-amber-400',
+      input: systemLoginWindowInput,
+      setInput: setSystemLoginWindowInput,
+      value: systemLoginWindowValue,
+      loading: systemLoginWindowLoading,
+      isPending: updateSystemLoginWindow.isPending,
+      onSave: handleSaveSystemLoginWindow,
+      saveLabel: 'Save Window',
+      display: (v?: number) => `${v ?? 0} hours`,
+    },
+  ]
 
   const openBulkGrant = useCallback(() => {
     setBulkMode('grant')
@@ -696,330 +765,93 @@ function CreditsAdminPage() {
         </Card>
       </motion.div>
 
-      {/* System Default Daily Allowance */}
+      {/* System Credit Settings */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.15 }}
-        className="bubble space-y-4 p-6"
+        className="bubble p-5 space-y-4"
       >
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-violet-500/10 flex items-center justify-center">
-              <Wallet className="w-5 h-5 text-violet-400" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-base">System Default Daily Allowance</h3>
-              <p className="text-xs text-muted-foreground">
-                Default daily credit allowance applied to new users
-              </p>
-            </div>
+          <div className="flex items-center gap-2">
+            <Wallet className="w-4 h-4 text-violet-400" />
+            <h3 className="font-semibold text-sm">System Credit Settings</h3>
           </div>
-          <Tooltip content="Refresh">
+          <Tooltip content="Refresh all">
             <button
-              onClick={() => refetchSystemAllowance()}
+              onClick={() => {
+                refetchSystemAllowance()
+                refetchSystemMaxBalance()
+                refetchSystemInitialBalance()
+                refetchSystemLoginWindow()
+              }}
               className="p-1.5 rounded-lg hover:bg-accent transition-colors"
             >
-              <RefreshCw
-                className={cn(
-                  'w-4 h-4 text-muted-foreground',
-                  systemAllowanceLoading && 'animate-spin'
-                )}
-              />
+              <RefreshCw className="w-4 h-4 text-muted-foreground" />
             </button>
           </Tooltip>
         </div>
 
-        {systemAllowanceLoading && systemAllowanceValue === undefined ? (
-          <div className="h-12 bg-muted/50 rounded-xl animate-pulse" />
-        ) : canManageSystemAllowance ? (
-          <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3">
-            <div className="flex-1 w-full">
-              <label className="text-xs text-muted-foreground mb-1.5 block">
-                Default allowance (NUKE / day)
-              </label>
-              <input
-                type="number"
-                min={0}
-                step={1}
-                value={systemAllowanceInput}
-                onChange={(e) => setSystemAllowanceInput(e.target.value)}
-                disabled={updateSystemAllowance.isPending}
-                className="w-full h-9 px-3 text-sm bg-background border border-border/50 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
-              />
-            </div>
-            <Button
-              onClick={handleSaveSystemAllowance}
-              disabled={
-                updateSystemAllowance.isPending ||
-                Number.isNaN(parseInt(systemAllowanceInput, 10)) ||
-                parseInt(systemAllowanceInput, 10) < 0 ||
-                parseInt(systemAllowanceInput, 10) === systemAllowanceValue
-              }
-              className="h-9 shrink-0"
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-x-10">
+          {systemSettings.map((s) => (
+            <div
+              key={s.key}
+              className="flex items-center gap-3 py-3 border-b border-border/50 first:pt-0 last:border-0 xl:[&:nth-child(n+3)]:border-b-0 xl:[&:nth-child(n+3)]:pb-0"
             >
-              {updateSystemAllowance.isPending ? (
-                <RefreshCw className="w-4 h-4 animate-spin" />
-              ) : (
-                <Wallet className="w-4 h-4" />
-              )}
-              <span className="ml-2">Save Default</span>
-            </Button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 text-sm">
-            <Wallet className="w-4 h-4 text-muted-foreground" />
-            <span className="font-mono font-medium">
-              {(systemAllowanceValue ?? 0).toLocaleString()}
-            </span>
-            <span className="text-muted-foreground">NUKE / day</span>
-          </div>
-        )}
-      </motion.div>
-
-      {/* System Max Balance */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-        className="bubble space-y-4 p-6"
-      >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-rose-500/10 flex items-center justify-center">
-              <Scale className="w-5 h-5 text-rose-400" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-base">System Max Balance</h3>
-              <p className="text-xs text-muted-foreground">
-                Hard cap on user credit balance; set to 0 for unlimited
-              </p>
-            </div>
-          </div>
-          <Tooltip content="Refresh">
-            <button
-              onClick={() => refetchSystemMaxBalance()}
-              className="p-1.5 rounded-lg hover:bg-accent transition-colors"
-            >
-              <RefreshCw
+              <div
                 className={cn(
-                  'w-4 h-4 text-muted-foreground',
-                  systemMaxBalanceLoading && 'animate-spin'
+                  'w-8 h-8 rounded-lg flex items-center justify-center shrink-0',
+                  s.iconBg
                 )}
-              />
-            </button>
-          </Tooltip>
-        </div>
-
-        {systemMaxBalanceLoading && systemMaxBalanceValue === undefined ? (
-          <div className="h-12 bg-muted/50 rounded-xl animate-pulse" />
-        ) : canManageSystemAllowance ? (
-          <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3">
-            <div className="flex-1 w-full">
-              <label className="text-xs text-muted-foreground mb-1.5 block">
-                Max balance (NUKE, 0 = unlimited)
-              </label>
-              <input
-                type="number"
-                min={0}
-                step={1}
-                value={systemMaxBalanceInput}
-                onChange={(e) => setSystemMaxBalanceInput(e.target.value)}
-                disabled={updateSystemMaxBalance.isPending}
-                className="w-full h-9 px-3 text-sm bg-background border border-border/50 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
-              />
-            </div>
-            <Button
-              onClick={handleSaveSystemMaxBalance}
-              disabled={
-                updateSystemMaxBalance.isPending ||
-                Number.isNaN(parseInt(systemMaxBalanceInput, 10)) ||
-                parseInt(systemMaxBalanceInput, 10) < 0 ||
-                parseInt(systemMaxBalanceInput, 10) === systemMaxBalanceValue
-              }
-              className="h-9 shrink-0"
-            >
-              {updateSystemMaxBalance.isPending ? (
-                <RefreshCw className="w-4 h-4 animate-spin" />
+              >
+                <s.icon className={cn('w-4 h-4', s.iconColor)} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium leading-tight">{s.title}</p>
+                <p className="text-xs text-muted-foreground leading-tight truncate">
+                  {s.description}
+                </p>
+              </div>
+              {s.loading && s.value === undefined ? (
+                <div className="h-8 w-32 bg-muted/50 rounded-lg animate-pulse" />
+              ) : canManageSystemAllowance ? (
+                <div className="flex items-center gap-2 shrink-0">
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    aria-label={s.title}
+                    value={s.input}
+                    onChange={(e) => s.setInput(e.target.value)}
+                    disabled={s.isPending}
+                    className="w-28 h-8 px-2.5 text-sm text-right bg-background border border-border/50 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
+                  />
+                  <Tooltip content={s.saveLabel}>
+                    <Button
+                      size="sm"
+                      onClick={s.onSave}
+                      disabled={
+                        s.isPending ||
+                        Number.isNaN(parseInt(s.input, 10)) ||
+                        parseInt(s.input, 10) < 0 ||
+                        parseInt(s.input, 10) === s.value
+                      }
+                      className="h-8 w-8 p-0 shrink-0"
+                    >
+                      {s.isPending ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Check className="w-3.5 h-3.5" />
+                      )}
+                    </Button>
+                  </Tooltip>
+                </div>
               ) : (
-                <Scale className="w-4 h-4" />
+                <span className="font-mono font-medium text-sm shrink-0">{s.display(s.value)}</span>
               )}
-              <span className="ml-2">Save Cap</span>
-            </Button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 text-sm">
-            <Scale className="w-4 h-4 text-muted-foreground" />
-            <span className="font-mono font-medium">
-              {systemMaxBalanceValue === 0
-                ? 'Unlimited'
-                : (systemMaxBalanceValue ?? 0).toLocaleString()}
-            </span>
-            <span className="text-muted-foreground">NUKE</span>
-          </div>
-        )}
-      </motion.div>
-
-      {/* Signup Initial Balance */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.25 }}
-        className="bubble space-y-4 p-6"
-      >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
-              <Gift className="w-5 h-5 text-emerald-400" />
             </div>
-            <div>
-              <h3 className="font-semibold text-base">Signup Initial Balance</h3>
-              <p className="text-xs text-muted-foreground">
-                Credits granted to new users when they first sign up
-              </p>
-            </div>
-          </div>
-          <Tooltip content="Refresh">
-            <button
-              onClick={() => refetchSystemInitialBalance()}
-              className="p-1.5 rounded-lg hover:bg-accent transition-colors"
-            >
-              <RefreshCw
-                className={cn(
-                  'w-4 h-4 text-muted-foreground',
-                  systemInitialBalanceLoading && 'animate-spin'
-                )}
-              />
-            </button>
-          </Tooltip>
+          ))}
         </div>
-
-        {systemInitialBalanceLoading && systemInitialBalanceValue === undefined ? (
-          <div className="h-12 bg-muted/50 rounded-xl animate-pulse" />
-        ) : canManageSystemAllowance ? (
-          <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3">
-            <div className="flex-1 w-full">
-              <label className="text-xs text-muted-foreground mb-1.5 block">
-                Initial balance (NUKE)
-              </label>
-              <input
-                type="number"
-                min={0}
-                step={1}
-                value={systemInitialBalanceInput}
-                onChange={(e) => setSystemInitialBalanceInput(e.target.value)}
-                disabled={updateSystemInitialBalance.isPending}
-                className="w-full h-9 px-3 text-sm bg-background border border-border/50 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
-              />
-            </div>
-            <Button
-              onClick={handleSaveSystemInitialBalance}
-              disabled={
-                updateSystemInitialBalance.isPending ||
-                Number.isNaN(parseInt(systemInitialBalanceInput, 10)) ||
-                parseInt(systemInitialBalanceInput, 10) < 0 ||
-                parseInt(systemInitialBalanceInput, 10) === systemInitialBalanceValue
-              }
-              className="h-9 shrink-0"
-            >
-              {updateSystemInitialBalance.isPending ? (
-                <RefreshCw className="w-4 h-4 animate-spin" />
-              ) : (
-                <Gift className="w-4 h-4" />
-              )}
-              <span className="ml-2">Save Initial Balance</span>
-            </Button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 text-sm">
-            <Gift className="w-4 h-4 text-muted-foreground" />
-            <span className="font-mono font-medium">
-              {(systemInitialBalanceValue ?? 0).toLocaleString()}
-            </span>
-            <span className="text-muted-foreground">NUKE</span>
-          </div>
-        )}
-      </motion.div>
-
-      {/* Daily Allowance Login Window */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-        className="bubble space-y-4 p-6"
-      >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
-              <Clock className="w-5 h-5 text-amber-400" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-base">Daily Allowance Login Window</h3>
-              <p className="text-xs text-muted-foreground">
-                Users must have logged in within this window to receive the daily allowance
-              </p>
-            </div>
-          </div>
-          <Tooltip content="Refresh">
-            <button
-              onClick={() => refetchSystemLoginWindow()}
-              className="p-1.5 rounded-lg hover:bg-accent transition-colors"
-            >
-              <RefreshCw
-                className={cn(
-                  'w-4 h-4 text-muted-foreground',
-                  systemLoginWindowLoading && 'animate-spin'
-                )}
-              />
-            </button>
-          </Tooltip>
-        </div>
-
-        {systemLoginWindowLoading && systemLoginWindowValue === undefined ? (
-          <div className="h-12 bg-muted/50 rounded-xl animate-pulse" />
-        ) : canManageSystemAllowance ? (
-          <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3">
-            <div className="flex-1 w-full">
-              <label className="text-xs text-muted-foreground mb-1.5 block">
-                Login window (hours)
-              </label>
-              <input
-                type="number"
-                min={0}
-                step={1}
-                value={systemLoginWindowInput}
-                onChange={(e) => setSystemLoginWindowInput(e.target.value)}
-                disabled={updateSystemLoginWindow.isPending}
-                className="w-full h-9 px-3 text-sm bg-background border border-border/50 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
-              />
-            </div>
-            <Button
-              onClick={handleSaveSystemLoginWindow}
-              disabled={
-                updateSystemLoginWindow.isPending ||
-                Number.isNaN(parseInt(systemLoginWindowInput, 10)) ||
-                parseInt(systemLoginWindowInput, 10) < 0 ||
-                parseInt(systemLoginWindowInput, 10) === systemLoginWindowValue
-              }
-              className="h-9 shrink-0"
-            >
-              {updateSystemLoginWindow.isPending ? (
-                <RefreshCw className="w-4 h-4 animate-spin" />
-              ) : (
-                <Clock className="w-4 h-4" />
-              )}
-              <span className="ml-2">Save Window</span>
-            </Button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 text-sm">
-            <Clock className="w-4 h-4 text-muted-foreground" />
-            <span className="font-mono font-medium">
-              {(systemLoginWindowValue ?? 0).toLocaleString()}
-            </span>
-            <span className="text-muted-foreground">hours</span>
-          </div>
-        )}
       </motion.div>
 
       {/* Bulk action bar — appears when rows are selected */}
