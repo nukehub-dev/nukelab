@@ -1,4 +1,5 @@
-# Build the LD_PRELOAD library that masks host CPU count in containers
+# Build the LD_PRELOAD library that gives containers a container-scoped
+# CPU view (sysconf CPU count + synthesized /proc/stat)
 #
 # Usage:
 #     make              # Build libnukelab_cpu.so

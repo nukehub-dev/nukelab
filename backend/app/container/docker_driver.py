@@ -154,7 +154,8 @@ class DockerDriver(ContainerDriver):
         """
         Return environment variables that tell common libraries how many
         threads/cores to use, and set LD_PRELOAD to intercept sysconf()
-        so programs see the plan's CPU count instead of host cores.
+        and /proc/stat so programs see the plan's CPU count and the
+        container's own CPU usage instead of host-wide values.
         """
         if not cpu_limit or cpu_limit < 1:
             cpu_limit = os.cpu_count() or 1

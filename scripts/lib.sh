@@ -1102,15 +1102,26 @@ setup_cpu_lib_volume() {
         return
     fi
 
-    # Skip only when the built artifact actually exists in the volume. A bare
-    # volume can be left behind by a failed pull/create below and must not
-    # suppress the build on every future run.
+    # Skip only when the built artifact actually exists in the volume and is
+    # not older than the source. A bare volume can be left behind by a failed
+    # pull/create below and must not suppress the build on every future run,
+    # and a stale artifact must not suppress upgrades after the source changed.
     if $CONTAINER_ENGINE volume inspect "$vol_name" > /dev/null 2>&1; then
         if _cpu_lib_artifact_present "$vol_name" "$build_image"; then
-            warn "Volume $vol_name already contains libnukelab_cpu.so; skipping build"
-            return
+            local artifact_mtime source_mtime
+            artifact_mtime=$($CONTAINER_ENGINE run --rm \
+                -v "$vol_name:/dst:ro" \
+                "$build_image" \
+                stat -c %Y /dst/libnukelab_cpu.so 2> /dev/null || echo 0)
+            source_mtime=$(stat -c %Y "$c_file")
+            if [ "${artifact_mtime:-0}" -ge "$source_mtime" ]; then
+                log "Volume $vol_name already contains an up-to-date libnukelab_cpu.so; skipping build"
+                return
+            fi
+            log "libnukelab_cpu.c is newer than the artifact in $vol_name; rebuilding"
+        else
+            warn "Volume $vol_name exists but libnukelab_cpu.so is missing; rebuilding"
         fi
-        warn "Volume $vol_name exists but libnukelab_cpu.so is missing; rebuilding"
     else
         step "Setting up CPU mask library..."
 
