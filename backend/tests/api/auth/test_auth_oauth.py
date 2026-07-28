@@ -650,3 +650,94 @@ class TestOAuthSync:
             )
         assert response.status_code == 500
         assert "sync failed" in response.json()["detail"].lower()
+
+
+class TestOAuthLogout:
+    """RP-initiated logout: /auth/logout hands back the IdP end-session URL."""
+
+    @pytest.mark.asyncio
+    async def test_logout_returns_oauth_logout_url_for_oauth_user(
+        self, client, user_token, test_user, db_session
+    ):
+        """OAuth-authenticated users get the provider logout URL in the response."""
+        test_user.oauth_provider = "oauth"
+        await db_session.commit()
+
+        mock_oauth = _make_oauth_mock()
+        mock_oauth.get_logout_url = mock.AsyncMock(
+            return_value="https://auth.example.com/logout?client_id=x"
+        )
+
+        with mock.patch("app.services.oauth_service.oauth_service", mock_oauth):
+            with mock.patch("app.api.auth.settings.auth_mode", "both"):
+                response = await client.post(
+                    "/api/auth/logout",
+                    headers={"Authorization": f"Bearer {user_token}"},
+                )
+
+        assert response.status_code == 200
+        assert response.json()["oauth_logout_url"] == "https://auth.example.com/logout?client_id=x"
+
+    @pytest.mark.asyncio
+    async def test_logout_omits_oauth_logout_url_for_local_user(self, client, user_token):
+        """Local users never get a provider logout URL, even if OAuth is configured."""
+        mock_oauth = _make_oauth_mock()
+        mock_oauth.get_logout_url = mock.AsyncMock(
+            return_value="https://auth.example.com/logout?client_id=x"
+        )
+
+        with mock.patch("app.services.oauth_service.oauth_service", mock_oauth):
+            with mock.patch("app.api.auth.settings.auth_mode", "both"):
+                response = await client.post(
+                    "/api/auth/logout",
+                    headers={"Authorization": f"Bearer {user_token}"},
+                )
+
+        assert response.status_code == 200
+        assert "oauth_logout_url" not in response.json()
+        mock_oauth.get_logout_url.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_logout_omits_oauth_logout_url_when_provider_has_no_end_session(
+        self, client, user_token, test_user, db_session
+    ):
+        """Providers without an end-session endpoint fall back to local-only logout."""
+        test_user.oauth_provider = "oauth"
+        await db_session.commit()
+
+        mock_oauth = _make_oauth_mock()
+        mock_oauth.get_logout_url = mock.AsyncMock(return_value=None)
+
+        with mock.patch("app.services.oauth_service.oauth_service", mock_oauth):
+            with mock.patch("app.api.auth.settings.auth_mode", "both"):
+                response = await client.post(
+                    "/api/auth/logout",
+                    headers={"Authorization": f"Bearer {user_token}"},
+                )
+
+        assert response.status_code == 200
+        assert "oauth_logout_url" not in response.json()
+
+    @pytest.mark.asyncio
+    async def test_logout_omits_oauth_logout_url_when_auth_mode_local(
+        self, client, user_token, test_user, db_session
+    ):
+        """auth_mode=local disables provider logout even for OAuth-linked users."""
+        test_user.oauth_provider = "oauth"
+        await db_session.commit()
+
+        mock_oauth = _make_oauth_mock()
+        mock_oauth.get_logout_url = mock.AsyncMock(
+            return_value="https://auth.example.com/logout?client_id=x"
+        )
+
+        with mock.patch("app.services.oauth_service.oauth_service", mock_oauth):
+            with mock.patch("app.api.auth.settings.auth_mode", "local"):
+                response = await client.post(
+                    "/api/auth/logout",
+                    headers={"Authorization": f"Bearer {user_token}"},
+                )
+
+        assert response.status_code == 200
+        assert "oauth_logout_url" not in response.json()
+        mock_oauth.get_logout_url.assert_not_called()

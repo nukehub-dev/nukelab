@@ -68,6 +68,14 @@ See `.env.example` for per-role RPM limits (`RATE_LIMIT_*_RPM`) and the master
 | `OAUTH_SCOPE` / `OAUTH_USERNAME_CLAIM` / `OAUTH_EMAIL_CLAIM` / `OAUTH_NAME_CLAIM` / `OAUTH_PICTURE_CLAIM` | Claim mapping |
 | `OAUTH_PKCE_ENABLED` | Enable PKCE |
 
+Logout is OIDC RP-initiated: for OAuth-authenticated users, `POST /api/auth/logout`
+returns an `oauth_logout_url` (from the discovered `end_session_endpoint` or
+`OAUTH_LOGOUT_URL`) and the frontend navigates through it, terminating the SSO
+session. Register `<FRONTEND_URL>/login` as an allowed
+`post_logout_redirect_uri` with the provider, or the redirect back after logout
+will be rejected. If the provider has no end-session endpoint, logout is
+local-only.
+
 ### Database
 
 | Variable | Description |

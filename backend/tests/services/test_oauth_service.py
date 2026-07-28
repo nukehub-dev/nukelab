@@ -369,3 +369,50 @@ class TestOAuthServiceHelpers:
 
         assert result["extra_profile"]["organization"] == "Org"
         assert result["extra_profile"]["department"] == "Eng"
+
+
+class TestOAuthServiceLogoutUrl:
+    """Tests for get_logout_url (RP-initiated logout)."""
+
+    @pytest.mark.asyncio
+    async def test_logout_url_from_manual_config(self):
+        """Manual oauth_logout_url is used with client_id and redirect params."""
+        svc = OAuthService()
+        with mock.patch("app.services.oauth_service.settings") as mock_settings:
+            mock_settings.oauth_discovery_url = None
+            mock_settings.oauth_logout_url = "https://auth.example.com/logout"
+            mock_settings.oauth_client_id = "client-id"
+
+            result = await svc.get_logout_url("https://app.example.com/login")
+
+        assert result == (
+            "https://auth.example.com/logout"
+            "?client_id=client-id&post_logout_redirect_uri=https%3A%2F%2Fapp.example.com%2Flogin"
+        )
+
+    @pytest.mark.asyncio
+    async def test_logout_url_from_discovery(self):
+        """Discovered end_session_endpoint takes precedence over manual config."""
+        svc = OAuthService()
+        svc._discovery_loaded = True
+        svc.discovery_data = {"end_session_endpoint": "https://auth.example.com/oidc/logout"}
+        with mock.patch("app.services.oauth_service.settings") as mock_settings:
+            mock_settings.oauth_logout_url = "https://auth.example.com/manual"
+            mock_settings.oauth_client_id = "client-id"
+
+            result = await svc.get_logout_url("https://app.example.com/login")
+
+        assert result is not None
+        assert result.startswith("https://auth.example.com/oidc/logout?")
+
+    @pytest.mark.asyncio
+    async def test_logout_url_none_when_not_configured(self):
+        """No end-session endpoint anywhere means local-only logout."""
+        svc = OAuthService()
+        with mock.patch("app.services.oauth_service.settings") as mock_settings:
+            mock_settings.oauth_discovery_url = None
+            mock_settings.oauth_logout_url = None
+
+            result = await svc.get_logout_url("https://app.example.com/login")
+
+        assert result is None

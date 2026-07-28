@@ -259,7 +259,9 @@ class TestProcStatVirtualization:
 
     def test_fopen_returns_synthesized_stat(self, compiled_so, stat_binary, cgroup_cpu_counters):
         """The fopen() interposition path must behave like open()."""
-        result = run_with_preload(stat_binary, compiled_so, {"NUKELAB_CPU_COUNT": "3"}, args=["fopen"])
+        result = run_with_preload(
+            stat_binary, compiled_so, {"NUKELAB_CPU_COUNT": "3"}, args=["fopen"]
+        )
         assert result.returncode == 0, result.stderr
 
         _, per_cpu = parse_cpu_lines(result.stdout)
@@ -270,9 +272,9 @@ class TestProcStatVirtualization:
         result = run_with_preload(stat_binary, compiled_so, {"NUKELAB_CPU_COUNT": "4"})
         assert result.returncode == 0, result.stderr
 
-        lines = [l.split() for l in result.stdout.splitlines() if l.startswith("cpu")]
+        lines = [line.split() for line in result.stdout.splitlines() if line.startswith("cpu")]
         aggregate = [int(v) for v in lines[0][1:11]]
-        per_cpu = [[int(v) for v in l[1:11]] for l in lines[1:]]
+        per_cpu = [[int(v) for v in line[1:11]] for line in lines[1:]]
         assert len(per_cpu) == 4
         for col in range(10):
             assert sum(row[col] for row in per_cpu) == aggregate[col]

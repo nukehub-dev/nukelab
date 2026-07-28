@@ -715,7 +715,22 @@ async def logout_endpoint(
     if body and body.refresh_token and rt:
         await revoke_refresh_token(db=db, rt=rt)
 
-    response = JSONResponse(content={"message": "Logged out successfully"})
+    content: dict = {"message": "Logged out successfully"}
+
+    # If the user authenticated via OAuth, hand the frontend the provider's
+    # end-session URL so the SSO session is terminated too (OIDC RP-initiated
+    # logout) — otherwise the IdP session cookie would silently re-authenticate
+    # the user on the next login.
+    if user and user.oauth_provider == "oauth" and settings.auth_mode in ("oauth", "both"):
+        from app.services.oauth_service import oauth_service
+
+        if oauth_service.is_configured:
+            redirect_base = (settings.frontend_url or settings.public_url).rstrip("/")
+            oauth_logout_url = await oauth_service.get_logout_url(f"{redirect_base}/login")
+            if oauth_logout_url:
+                content["oauth_logout_url"] = oauth_logout_url
+
+    response = JSONResponse(content=content)
     response.delete_cookie("nukelab_token")
     response.headers["Clear-Site-Data"] = '"cache", "cookies", "storage"'
     return response

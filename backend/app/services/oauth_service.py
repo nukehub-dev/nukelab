@@ -140,6 +140,24 @@ class OAuthService:
                 response.raise_for_status()
                 return await response.json()
 
+    async def get_logout_url(self, post_logout_redirect_uri: str) -> str | None:
+        """Build the OIDC RP-initiated logout URL.
+
+        Returns None when the provider exposes no end-session endpoint and no
+        manual logout URL is configured — callers then do a local-only logout.
+        """
+        await self._load_discovery()
+
+        end_session_url = self._get_endpoint("logout")
+        if not end_session_url:
+            return None
+
+        params = {
+            "client_id": settings.oauth_client_id,
+            "post_logout_redirect_uri": post_logout_redirect_uri,
+        }
+        return f"{end_session_url}?{urlencode(params)}"
+
     def generate_state(self) -> str:
         """Generate a random state parameter."""
         return secrets.token_urlsafe(32)
