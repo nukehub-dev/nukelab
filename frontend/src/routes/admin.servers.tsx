@@ -14,7 +14,6 @@ import {
   Trash2,
   ExternalLink,
   Eye,
-  Users,
 } from 'lucide-react'
 import { Tooltip } from '../components/ui/tooltip'
 import { Checkbox } from '../components/ui/checkbox'
@@ -254,8 +253,9 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
         header: 'Owner',
         cell: ({ row }) => {
           const username = row.original.username
-          if (!username) return <span className="text-sm">Unknown</span>
-          return <UserLink userId={row.original.user_id} name={username} size="sm" />
+          const userId = row.original.user_id
+          if (!username || !userId) return <span className="text-sm">Unknown</span>
+          return <UserLink userId={userId} name={username} size="sm" />
         },
       },
       {
