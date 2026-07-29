@@ -32,8 +32,8 @@ help_e2e() {
 ${BOLD}Usage:${RESET} ./nukelabctl e2e [playwright-args...]
 
 Run Playwright end-to-end tests. The backend must be running. Any arguments
-after the command are forwarded to \`npx playwright test\`, so you can scope
-runs by file, grep, project, etc.
+after the command — including positional spec files — are forwarded to
+\`npx playwright test\`, so you can scope runs by file, grep, project, etc.
 
 ${BOLD}Examples:${RESET}
   ./nukelabctl e2e

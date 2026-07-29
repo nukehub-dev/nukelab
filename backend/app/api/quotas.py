@@ -20,10 +20,9 @@ router = APIRouter(tags=["quotas"])
 @router.get("/")
 async def get_my_quota(
     current_user=Depends(get_current_user),
-    _=Depends(require_permissions(Permission.QUOTA_READ)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get current user's quota"""
+    """Get current user's quota (own data — any authenticated user)"""
     service = QuotaService(db)
     quota = await service.recalculate_usage(str(current_user.id))
     return {"success": True, "data": quota.to_dict()}

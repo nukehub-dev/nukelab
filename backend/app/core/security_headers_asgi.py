@@ -72,6 +72,14 @@ class SecurityHeadersMiddleware:
                 headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
                 headers["Permissions-Policy"] = self._PERMISSIONS_POLICY
                 headers["Cross-Origin-Resource-Policy"] = "same-origin"
+                security_endpoint = getattr(settings, "sentry_security_endpoint", "")
+                if security_endpoint:
+                    headers["Content-Security-Policy-Report-Only"] = (
+                        "default-src 'self'; "
+                        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+                        "style-src 'self' 'unsafe-inline'; "
+                        f"report-uri {security_endpoint}"
+                    )
                 if is_sensitive:
                     headers["Cache-Control"] = (
                         "no-store, no-cache, must-revalidate, proxy-revalidate"

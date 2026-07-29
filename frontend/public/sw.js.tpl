@@ -44,6 +44,15 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+// Allow the SPA to force activation of a waiting service worker before
+// navigating to a server environment. This prevents stale SWs from serving
+// the cached SPA shell for /user/ routes.
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
 // Fetch: network-first navigation, cache-first static assets, bypass monitoring/API routes
 self.addEventListener('fetch', (event) => {
   const { request } = event;

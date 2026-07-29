@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<!-- SPDX-FileCopyrightText: 2023-2026 NukeHub Developers -->
+<!-- SPDX-License-Identifier: BSD-2-Clause -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Served by nginx instead of a raw 5xx while the environment app
+         (IDE/terminal) is still starting. Auto-reloads until it is up. -->
+    <meta http-equiv="refresh" content="4" />
+    <title>Starting your environment — NukeLab</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #09090b;
+        color: #fafafa;
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          Roboto,
+          sans-serif;
+      }
+      .card {
+        text-align: center;
+        padding: 2.5rem;
+        max-width: 26rem;
+      }
+      .spinner {
+        width: 56px;
+        height: 56px;
+        margin: 0 auto 1.5rem;
+        border-radius: 50%;
+        border: 3px solid rgba(245, 158, 11, 0.15);
+        border-top-color: #f59e0b;
+        animation: spin 0.9s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      h1 {
+        font-size: 1.375rem;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        margin-bottom: 0.625rem;
+      }
+      p {
+        color: #a1a1aa;
+        font-size: 0.9375rem;
+        line-height: 1.55;
+      }
+      p.hint {
+        margin-top: 1.25rem;
+        font-size: 0.8125rem;
+        color: #71717a;
+      }
+      .elapsed {
+        font-variant-numeric: tabular-nums;
+        color: #f59e0b;
+      }
+      noscript p.hint {
+        color: #a1a1aa;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <div class="spinner" role="status" aria-label="Loading"></div>
+      <h1>Starting your environment</h1>
+      <p>
+        The server is up, but the application behind it is still booting. This page
+        reloads automatically and will hand you over as soon as it is ready.
+      </p>
+      <p class="hint">Waiting <span class="elapsed" id="elapsed">0s</span> — no need to refresh manually.</p>
+      <noscript>
+        <p class="hint">This page refreshes itself every few seconds.</p>
+      </noscript>
+    </main>
+    <script>
+      ;(function () {
+        var started = Date.now()
+        var el = document.getElementById('elapsed')
+        setInterval(function () {
+          el.textContent = Math.floor((Date.now() - started) / 1000) + 's'
+        }, 1000)
+      })()
+    </script>
+  </body>
+</html>

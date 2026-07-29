@@ -112,16 +112,19 @@ class TestSystemMetricsCollect:
         """Should count Docker containers."""
         collector = SystemMetricsCollector()
 
-        mock_container = mock.Mock()
-        mock_container._id = "cid1"
-        mock_container.show = mock.AsyncMock(
-            return_value={"Config": {"Labels": {"nukelab.server.id": "srv-1"}}}
-        )
-
         mock_client = mock.AsyncMock()
-        mock_client.list_containers = mock.AsyncMock(return_value=[mock_container])
-        mock_client.client.images.list = mock.AsyncMock(return_value=["img1"])
-        mock_client.client.close = mock.AsyncMock()
+        mock_client.list_containers = mock.AsyncMock(
+            return_value=[
+                {
+                    "Id": "cid1",
+                    "State": {"Status": "running"},
+                    "Config": {"Labels": {"nukelab.server.id": "srv-1"}},
+                },
+                {"Id": "cid2", "State": {"Status": "exited"}, "Config": {"Labels": {}}},
+            ]
+        )
+        mock_client.list_images = mock.AsyncMock(return_value=["img1"])
+        mock_client.close = mock.AsyncMock()
 
         with mock.patch("psutil.cpu_percent", return_value=10.0):
             with mock.patch("psutil.cpu_count", return_value=2):
@@ -150,8 +153,8 @@ class TestSystemMetricsCollect:
                                                     with mock.patch("redis.asyncio.from_url"):
                                                         result = await collector.collect()
 
-        assert result["docker_containers_total"] == 1
-        assert result["docker_containers_running"] == 0  # mock_container doesn't have .get('State')
+        assert result["docker_containers_total"] == 2
+        assert result["docker_containers_running"] == 1  # inspect-shaped State dict
         assert result["docker_images_total"] == 1
 
     @pytest.mark.asyncio

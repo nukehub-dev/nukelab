@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
+from fastapi_offline import FastAPIOffline
 from sqlalchemy import text
 
 from app.config import settings
@@ -30,6 +31,7 @@ from app.api import (
     preferences,
     quotas,
     schedules,
+    search,
     servers,
     system,
     tokens,
@@ -136,16 +138,19 @@ async def lifespan(app: FastAPI):
     )
 
 
-app = FastAPI(
-    title=settings.app_name,
-    description="NukeLab Platform v2.0 API",
-    version="2.0.0",
-    debug=settings.app_debug,
-    root_path="/api",
-    docs_url="/docs",
-    openapi_url="/openapi.json",
-    lifespan=lifespan,
-)
+_app_kwargs = {
+    "title": settings.app_name,
+    "description": "NukeLab Platform v2.0 API",
+    "version": "2.0.0",
+    "debug": settings.app_debug,
+    "root_path": "/api",
+    "lifespan": lifespan,
+}
+if settings.api_docs_enabled:
+    app = FastAPIOffline(docs_url="/docs", openapi_url="/openapi.json", **_app_kwargs)
+else:
+    # Docs fully disabled (production default): no /docs, /redoc, /openapi.json.
+    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, **_app_kwargs)
 
 
 @app.exception_handler(429)
@@ -275,6 +280,7 @@ app.include_router(schedules.router, prefix="/schedules", tags=["schedules"])
 app.include_router(volumes.router, prefix="/volumes", tags=["volumes"])
 app.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
 app.include_router(workspaces.router, prefix="/workspaces", tags=["workspaces"])
+app.include_router(search.router, prefix="/search", tags=["search"])
 app.include_router(ip_restriction.router, prefix="/admin", tags=["admin"])
 
 

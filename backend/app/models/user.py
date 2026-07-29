@@ -29,7 +29,7 @@ class User(Base):
 
     # NUKE Currency & Quotas
     nuke_balance = Column(Integer, default=100)
-    daily_allowance = Column(Integer, default=100)
+    daily_allowance = Column(Integer, default=10)
     # Time-boxed boost: while override_until > now, grant_daily_allowance
     # uses daily_allowance_override instead of daily_allowance. Expires
     # automatically (no write needed at revert); cleanup task nulls

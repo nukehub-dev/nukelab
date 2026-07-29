@@ -7,6 +7,7 @@ import { AlertTriangle } from 'lucide-react'
 import { useThemeStore } from '../../stores/theme-store'
 import { useSidebarStore } from '../../stores/sidebar-store'
 import { useCurrentUser } from '../../hooks/use-current-user'
+import { useTimezoneSync } from '../../hooks/use-timezone-sync'
 import { useGlobalShortcuts } from '../../hooks/use-keyboard-shortcuts'
 import { useFavicon } from '../../lib/favicon'
 import { useNotificationToasts } from '../notifications/notification-toast-provider'
@@ -14,6 +15,7 @@ import { useHealth } from '../../hooks/use-health'
 import { Sidebar } from './sidebar'
 import { ToastProvider } from '../feedback/toast'
 import { ShortcutsModal } from '../feedback/shortcuts-modal'
+import { CommandPalette } from '../search/command-palette'
 import { AmbientBackground } from '../animations/ambient-background'
 import { ErrorBoundary } from '../error-boundary'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -39,6 +41,9 @@ export function AppShell() {
   // Fetch current user when authenticated (skip on login page)
   const hasToken = !!localStorage.getItem('nukelab-token')
   useCurrentUser({ enabled: hasToken && !isLoginPage })
+
+  // Keep the timezone store in sync with the backend preference
+  useTimezoneSync()
 
   // Global notification toast watcher
   useNotificationToasts()
@@ -66,13 +71,14 @@ export function AppShell() {
       <>
         <ToastProvider />
         <ShortcutsModal />
+        <CommandPalette />
         <AnimatePresence mode="wait">
           <motion.div
             key={location.pathname}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
             className="min-h-screen bg-background relative z-10"
           >
             <Outlet />
@@ -87,6 +93,7 @@ export function AppShell() {
       <AmbientBackground variant={isDashboard ? 'dashboard' : 'default'} />
       <ToastProvider />
       <ShortcutsModal />
+      <CommandPalette />
 
       {/* Maintenance banner */}
       {isMaintenance && (
@@ -128,10 +135,10 @@ export function AppShell() {
             <AnimatePresence mode="wait" initial={false}>
               <motion.div
                 key={location.pathname}
-                initial={{ opacity: 0, y: 20, scale: 0.98 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -20, scale: 0.98 }}
-                transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
               >
                 <Outlet />
               </motion.div>

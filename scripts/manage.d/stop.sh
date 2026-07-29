@@ -2,8 +2,6 @@
 # SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
 # SPDX-License-Identifier: BSD-2-Clause
 
-: "${CONTAINER_ENGINE:=podman}"
-
 # Default values for stop options.
 STOP_TIMEOUT=10
 STOP_SERVERS=false

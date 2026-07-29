@@ -5,60 +5,17 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider, createRouter } from '@tanstack/react-router'
-import * as Sentry from '@sentry/react'
+import { MotionConfig } from 'framer-motion'
 import { routeTree } from './routeTree.gen'
 import { queryClient } from './lib/api'
+import { initSentry } from './lib/sentry'
 import { ErrorBoundary } from './components/feedback/error-boundary'
 import { NotFound } from './components/feedback/not-found'
 import { registerServiceWorker } from './lib/register-sw'
 import './styles/index.css'
 
-// Initialize Sentry error tracking
-const SENTRY_DSN = import.meta.env.VITE_SENTRY_DSN
-if (SENTRY_DSN) {
-  Sentry.init({
-    dsn: SENTRY_DSN,
-    environment: import.meta.env.MODE || 'development',
-    release: import.meta.env.VITE_SENTRY_RELEASE || 'nukelab-frontend@dev',
-    integrations: [
-      Sentry.browserTracingIntegration(),
-      Sentry.replayIntegration({
-        maskAllText: true,
-        blockAllMedia: true,
-        maskAllInputs: true,
-      }),
-    ],
-    tracesSampleRate: 0.1,
-    replaysSessionSampleRate: 0.0,
-    replaysOnErrorSampleRate: 1.0,
-    beforeSend(event: Sentry.ErrorEvent) {
-      // Strip all sensitive headers
-      if (event.request?.headers) {
-        const headers = event.request.headers as Record<string, string>
-        const sensitiveHeaders = ['Authorization', 'Cookie', 'X-CSRF-Token', 'X-Correlation-ID']
-        for (const h of sensitiveHeaders) {
-          if (headers[h]) headers[h] = '[REDACTED]'
-        }
-      }
-      // Scrub sensitive query params from request URL
-      if (event.request?.url) {
-        try {
-          const url = new URL(event.request.url as string)
-          const sensitiveParams = ['refresh_token', 'token', 'password', 'secret', 'api_key']
-          for (const p of sensitiveParams) {
-            if (url.searchParams.has(p)) {
-              url.searchParams.set(p, '[REDACTED]')
-            }
-          }
-          event.request.url = url.toString()
-        } catch {
-          // ignore invalid URLs
-        }
-      }
-      return event
-    },
-  })
-}
+// Initialize Sentry error tracking (loaded lazily, see lib/sentry.ts)
+initSentry()
 
 const router = createRouter({
   routeTree,
@@ -112,7 +69,10 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
+        {/* Honor the OS reduced-motion setting for all framer-motion animations */}
+        <MotionConfig reducedMotion="user">
+          <RouterProvider router={router} />
+        </MotionConfig>
       </QueryClientProvider>
     </ErrorBoundary>
   </StrictMode>

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 import { createFileRoute } from '@tanstack/react-router'
+import { UserLink } from '../components/admin/user-link'
 import { Gauge, Pencil, Server, Cpu, HardDrive, MemoryStick, CircuitBoard } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { ResourcePageLayout } from '../components/layout/resource-page-layout'
@@ -171,19 +172,7 @@ function QuotasPage() {
       cell: ({ row }) => {
         const q = row.original
         return (
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-              <span className="text-xs font-medium text-primary">
-                {q.username.slice(0, 2).toUpperCase()}
-              </span>
-            </div>
-            <div>
-              <div className="font-medium">{q.username}</div>
-              {q.display_name && (
-                <div className="text-xs text-muted-foreground">{q.display_name}</div>
-              )}
-            </div>
-          </div>
+          <UserLink userId={q.user_id} name={q.username} secondary={q.display_name} size="md" />
         )
       },
     },
@@ -302,15 +291,7 @@ function QuotasPage() {
   const mobileCard = (q: UserQuota) => (
     <div className="p-3 space-y-3">
       <div className="flex items-center gap-2">
-        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-          <span className="text-xs font-medium text-primary">
-            {q.username.slice(0, 2).toUpperCase()}
-          </span>
-        </div>
-        <div>
-          <p className="text-sm font-medium">{q.username}</p>
-          <p className="text-xs text-muted-foreground">{q.role}</p>
-        </div>
+        <UserLink userId={q.user_id} name={q.username} secondary={q.role} size="md" />
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">
         <div className="flex items-center gap-1.5 text-muted-foreground">

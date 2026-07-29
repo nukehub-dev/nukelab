@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 import { createFileRoute, useRouter } from '@tanstack/react-router'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   ArrowLeft,
   Activity,
+  HeartPulse,
   Cpu,
   HardDrive,
   Network,
@@ -30,26 +31,19 @@ import { MetricsAreaChart } from '../components/charts/area-chart'
 import { formatters } from '../components/charts/chart-formatters'
 import { SemiCircularGauge } from '../components/charts/semi-circular-gauge'
 import { StatusBadge } from '../components/data/status-badge'
-import { useServers, useServerLogs } from '../hooks/use-servers'
+import { useServers, useServerLogs, useServerTasks } from '../hooks/use-servers'
 import { useServerActionsWithReason } from '../hooks/use-server-actions-with-reason'
 import { useAuthStore } from '../stores/auth-store'
 import { LogViewer } from '../components/log-viewer'
+import { TasksTable } from '../components/tasks-table'
 import { ScheduleDialog } from '../components/server/schedule-dialog'
 import { useServerMetrics } from '../hooks/use-server-metrics'
 import { formatDate, formatBytes, formatPlanResource, cn } from '../lib/utils'
+import { counterRate } from '../lib/metrics-rates'
+import { parseMemoryToBytes } from '../lib/task-rates'
 import { springs } from '../lib/animations'
 import { useConfirmDialog } from '../components/ui/confirm-dialog'
-import { api } from '../lib/api'
-
-const ACTIVITY_HEARTBEAT_INTERVAL_MS = 30_000
-
-async function pingServerActivity(serverId: string): Promise<void> {
-  try {
-    await api.post(`/servers/${serverId}/activity`, {})
-  } catch {
-    // Activity pings are best-effort; don't surface failures to the user.
-  }
-}
+import { useActivityHeartbeat } from '../hooks/use-activity-heartbeat'
 
 export const Route = createFileRoute('/servers/$serverId')({
   component: ServerDetailPage,
@@ -216,8 +210,9 @@ function ServerDetailPage() {
   const canAccessServer = (s: typeof server) =>
     !user || !s || s.user_id === user.id || canAccessOthersServers
   const isOwnServer = (s: typeof server) => !user || !s || s.user_id === user.id
+  const server = servers.find((s) => s.id === serverId)
   const { metrics, currentMetrics, isLive } = useServerMetrics(serverId)
-  const [activeTab, setActiveTab] = useState<'overview' | 'logs'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'logs' | 'tasks'>('overview')
   const [logsPaused, setLogsPaused] = useState(false)
   const { data: logsData, isLoading: logsLoading } = useServerLogs(
     serverId,
@@ -225,59 +220,54 @@ function ServerDetailPage() {
     logsPaused,
     activeTab === 'logs'
   )
+  const { data: tasksData, isLoading: tasksLoading } = useServerTasks(
+    serverId,
+    activeTab === 'tasks',
+    server?.allocated_cpu,
+    parseMemoryToBytes(server?.allocated_memory)
+  )
 
   const { confirm, dialog } = useConfirmDialog()
   const [showScheduleDialog, setShowScheduleDialog] = useState(false)
 
-  const server = servers.find((s) => s.id === serverId)
+  // Refresh server last_activity while the detail page is open, visible, the
+  // server is running, and the user recently interacted with the page. The
+  // interaction gate keeps an unattended open tab from blocking idle shutdown.
+  useActivityHeartbeat(server?.id, server?.status === 'running')
 
-  // Refresh server last_activity while the detail page is open, visible, and
-  // the server is running. This keeps the idle-shutdown window from expiring
-  // while the user is actively monitoring the server in the UI.
-  useEffect(() => {
-    if (!server || server.status !== 'running') {
-      return
-    }
-
-    const sendPing = () => {
-      if (document.visibilityState === 'visible') {
-        void pingServerActivity(server.id)
-      }
-    }
-
-    sendPing()
-
-    const interval = setInterval(sendPing, ACTIVITY_HEARTBEAT_INTERVAL_MS)
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        sendPing()
-      }
-    }
-    document.addEventListener('visibilitychange', handleVisibility)
-
-    return () => {
-      clearInterval(interval)
-      document.removeEventListener('visibilitychange', handleVisibility)
-    }
-  }, [server])
-
+  // Network and disk counters are cumulative since container start — derive
+  // per-second rates between consecutive points for display.
   const chartData = useMemo(() => {
-    return metrics.map((m) => ({
-      timestamp: m.timestamp,
-      cpu: m.cpu,
-      memory: m.memory,
-      memoryUsed: m.memoryUsed,
-      memoryTotal: m.memoryTotal,
-      diskTotal: m.diskRead + m.diskWrite,
-      diskRead: m.diskRead,
-      diskWrite: m.diskWrite,
-      networkTotal: m.networkRx + m.networkTx,
-      networkRx: m.networkRx,
-      networkTx: m.networkTx,
-    }))
+    return metrics.map((m, i) => {
+      const prev = i > 0 ? metrics[i - 1] : null
+      const rate = (key: 'diskRead' | 'diskWrite' | 'networkRx' | 'networkTx') =>
+        counterRate(prev && { t: prev.epochMs, value: prev[key] }, { t: m.epochMs, value: m[key] })
+      const diskRead = rate('diskRead')
+      const diskWrite = rate('diskWrite')
+      const networkRx = rate('networkRx')
+      const networkTx = rate('networkTx')
+      return {
+        timestamp: m.timestamp,
+        cpu: m.cpu,
+        memory: m.memory,
+        memoryUsed: m.memoryUsed,
+        memoryTotal: m.memoryTotal,
+        diskTotal: diskRead + diskWrite,
+        diskRead,
+        diskWrite,
+        networkTotal: networkRx + networkTx,
+        networkRx,
+        networkTx,
+      }
+    })
   }, [metrics])
 
-  const totalNetwork = currentMetrics.networkRx + currentMetrics.networkTx
+  // Current throughput = rate of the most recent segment.
+  const latestRates = chartData.length > 0 ? chartData[chartData.length - 1] : null
+  const networkRxRate = latestRates?.networkRx ?? 0
+  const networkTxRate = latestRates?.networkTx ?? 0
+  const diskReadRate = latestRates?.diskRead ?? 0
+  const diskWriteRate = latestRates?.diskWrite ?? 0
 
   if (!server) {
     return (
@@ -455,6 +445,19 @@ function ServerDetailPage() {
             </div>
           </div>
 
+          {/* Health Card */}
+          <div className="flex items-start gap-4 p-4 rounded-xl bg-surface/50 border border-border/50">
+            <div className="p-2.5 rounded-lg bg-chart-3/10">
+              <HeartPulse className="w-4 h-4 text-chart-3" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Health</p>
+              <StatusBadge
+                status={(server.health_status || 'unknown') as 'healthy' | 'unhealthy' | 'unknown'}
+              />
+            </div>
+          </div>
+
           {/* Created Card */}
           <div className="flex items-start gap-4 p-4 rounded-xl bg-surface/50 border border-border/50">
             <div className="p-2.5 rounded-lg bg-chart-2/10">
@@ -585,10 +588,10 @@ function ServerDetailPage() {
 
       {/* Tabs */}
       <div className="flex items-center gap-1 border-b border-border">
-        {['overview', 'logs'].map((tab: string) => (
+        {['overview', 'logs', 'tasks'].map((tab: string) => (
           <button
             key={tab}
-            onClick={() => setActiveTab(tab as 'overview' | 'logs')}
+            onClick={() => setActiveTab(tab as 'overview' | 'logs' | 'tasks')}
             className={cn(
               'px-4 py-2 text-sm font-medium capitalize transition-colors relative',
               activeTab === tab ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
@@ -700,7 +703,11 @@ function ServerDetailPage() {
             <MetricCard
               title="Memory"
               value={`${currentMetrics.memory.toFixed(1)}%`}
-              subtitle={`${formatBytes(currentMetrics.memoryUsed)} / ${formatBytes(currentMetrics.memoryTotal)}`}
+              subtitle={
+                currentMetrics.memoryCache > 0
+                  ? `${formatBytes(currentMetrics.memoryUsed)} / ${formatBytes(currentMetrics.memoryTotal)} · ${formatBytes(currentMetrics.memoryCache)} cache`
+                  : `${formatBytes(currentMetrics.memoryUsed)} / ${formatBytes(currentMetrics.memoryTotal)}`
+              }
               icon={Zap}
               iconColor="text-chart-2"
               bgColor="bg-chart-2/10"
@@ -709,8 +716,8 @@ function ServerDetailPage() {
 
             <MetricCard
               title="Disk I/O"
-              value={`${formatBytes(currentMetrics.diskRead + currentMetrics.diskWrite)}/s`}
-              subtitle={`${formatBytes(currentMetrics.diskRead)}/s read · ${formatBytes(currentMetrics.diskWrite)}/s write`}
+              value={`${formatBytes(diskReadRate + diskWriteRate)}/s`}
+              subtitle={`${formatBytes(diskReadRate)}/s read · ${formatBytes(diskWriteRate)}/s write`}
               icon={HardDrive}
               iconColor="text-chart-3"
               bgColor="bg-chart-3/10"
@@ -718,16 +725,16 @@ function ServerDetailPage() {
 
             <MetricCard
               title="Network"
-              value={`${formatBytes(totalNetwork)}/s`}
+              value={`${formatBytes(networkRxRate + networkTxRate)}/s`}
               subtitle={
                 <div className="flex items-center gap-3">
                   <span className="flex items-center gap-1">
                     <ArrowDown className="w-3 h-3 text-chart-4" />
-                    {formatBytes(currentMetrics.networkRx)}/s
+                    {formatBytes(networkRxRate)}/s
                   </span>
                   <span className="flex items-center gap-1">
                     <ArrowUp className="w-3 h-3 text-destructive" />
-                    {formatBytes(currentMetrics.networkTx)}/s
+                    {formatBytes(networkTxRate)}/s
                   </span>
                 </div>
               }
@@ -891,6 +898,20 @@ function ServerDetailPage() {
             tail={logsData?.tail}
             isLoading={logsLoading}
             onPauseChange={setLogsPaused}
+          />
+        </motion.div>
+      )}
+      {activeTab === 'tasks' && (
+        <motion.div
+          className="bubble p-5"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={springs.gentle}
+        >
+          <TasksTable
+            tasks={tasksData?.tasks || []}
+            status={tasksData?.status as 'running' | 'stopped' | 'error'}
+            isLoading={tasksLoading}
           />
         </motion.div>
       )}

@@ -7,8 +7,12 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
+
 from app.config import settings
-from app.container.client import ContainerClient, get_container_client
+from app.container.driver import ContainerDriver, ContainerDriverError
+from app.container.factory import get_driver as get_container_client
 from app.core.logging import get_logger
 from app.models.server import Server
 from app.services.volume_service import make_docker_resource_name
@@ -18,7 +22,7 @@ logger = get_logger(__name__)
 
 class ServerSpawner:
     def __init__(self):
-        self.container_client: ContainerClient | None = None
+        self.container_client: ContainerDriver | None = None
 
     async def _get_container_client(self):
         if not self.container_client:
@@ -28,18 +32,12 @@ class ServerSpawner:
     async def _ensure_volume(self, volume_name: str):
         """Create a named Docker volume if it doesn't exist."""
         container_client = await self._get_container_client()
-        try:
-            await container_client.client.volumes.get(volume_name)
-        except Exception:
-            await container_client.client.volumes.create(
-                {
-                    "Name": volume_name,
-                    "Labels": {
-                        "nukelab.managed": "true",
-                    },
-                }
-            )
-            logger.info("Created volume: %s", volume_name)
+        await container_client.ensure_volume(
+            volume_name,
+            labels={
+                "nukelab.managed": "true",
+            },
+        )
 
     async def spawn(
         self,
@@ -52,6 +50,8 @@ class ServerSpawner:
         cpu: float = 1.0,
         memory: str = "2g",
         disk: str = "10g",
+        gpu: int = 0,
+        gpu_devices: list[str] | None = None,
         env_vars: dict | None = None,
         volume_mounts: list[dict[str, Any]] | None = None,
         server_id: str | None = None,
@@ -60,7 +60,18 @@ class ServerSpawner:
 
         Args:
             volume_mounts: List of dicts with keys: volume_id, mount_path, mode
+            gpu: Number of GPUs (quota/record accounting; forwarded as
+                gpu_limit to the container client)
+            gpu_devices: Exclusive CDI device names reserved by the GPU
+                allocator. When set, these are passed to the container client
+                instead of the shared default device.
         """
+        if gpu > 0 and not settings.gpu_enabled:
+            raise Exception(
+                "GPU requested but GPU support is disabled. "
+                "Set GPU_ENABLED=true on the backend to enable NVIDIA GPU support."
+            )
+
         container_client = await self._get_container_client()
 
         # Use existing server ID or generate new one
@@ -73,16 +84,23 @@ class ServerSpawner:
             max_len=240,
         )
 
+        # Short DNS-safe alias for the backend health probe. Container names can
+        # exceed the 63-byte DNS label limit, so resolving the full name fails.
+        health_alias = f"srv-{server_id[:8]}"
+
         # If a container with this name already exists (e.g., an orphaned container
         # from a previous failed stop/start/restart), remove it before attempting to
         # create a new one. This keeps the database and runtime state consistent and
         # prevents DockerError(500, "name already in use").
         try:
-            existing = await container_client.client.containers.get(container_name)
-            logger.warning("Found existing container %s before spawn; removing it", container_name)
-            await existing.delete(force=True)
-            # Wait briefly for container to release the name.
-            await asyncio.sleep(0.5)
+            existing_id = await container_client.get_container_by_name(container_name)
+            if existing_id:
+                logger.warning(
+                    "Found existing container %s before spawn; removing it", container_name
+                )
+                await container_client.delete_container(existing_id, force=True)
+                # Wait briefly for container to release the name.
+                await asyncio.sleep(0.5)
         except Exception:
             pass
 
@@ -216,11 +234,7 @@ class ServerSpawner:
 
         try:
             # Check if image exists locally first, then try to pull
-            try:
-                # Try to inspect image locally
-                await container_client.client.images.get(image)
-            except Exception:
-                # Try to pull if not found locally
+            if not await container_client.image_exists(image):
                 try:
                     await container_client.pull_image(image)
                 except Exception:
@@ -241,7 +255,7 @@ class ServerSpawner:
                 binds.append(bind_str)
 
             # Create container
-            container = await container_client.create_container(
+            container_id = await container_client.create_container(
                 name=container_name,
                 image=image,
                 command="/start.sh",
@@ -251,25 +265,15 @@ class ServerSpawner:
                 cpu_limit=cpu,
                 memory_limit=memory,
                 disk_limit=disk,
+                gpu_limit=gpu,
+                gpu_devices=gpu_devices,
                 volumes=volumes,
                 hostname="NukeLab",
+                network_aliases=[health_alias],
             )
 
             # Start container
-            await container_client.start_container(container.id)
-
-            # Wait for the container's /health endpoint to be reachable before
-            # reporting the server as running. This avoids the UI showing "ready"
-            # while the auth sidecar/ttyd/nginx are still starting inside the
-            # container.
-            health_url = f"http://{container_name}:8080/health"
-            ready = await container_client.wait_for_container_ready(container_name, health_url)
-            if not ready:
-                logger.warning(
-                    "Container %s started but did not become ready within timeout; "
-                    "continuing with status=running",
-                    container_name,
-                )
+            await container_client.start_container(container_id)
 
             # Fix volume permissions inside the container.
             # Rootless Podman maps the host UID to container root, so named volumes
@@ -280,6 +284,9 @@ class ServerSpawner:
             #     (each container would otherwise chown to its own user)
             # The home directory also needs this in hardened mode because /start.sh
             # runs as the non-root container user and cannot chmod it itself.
+            # This MUST run before waiting for the health endpoint: /start.sh
+            # aborts if /home/{username} is not writable within ~10s, so nginx
+            # never starts and the health probe never succeeds in time.
             mount_paths_to_fix = [home_mount_path]
             for mount in volume_mounts or []:
                 mount_path = mount.get("mount_path", "/data")
@@ -291,14 +298,32 @@ class ServerSpawner:
                     # Run as root so this works in hardened mode, where the
                     # container user is 65532 and cannot chmod a root-owned
                     # named volume that was initialized by an earlier run.
-                    exec_instance = await container.exec(["chmod", "777", mount_path], user="root")
-                    await exec_instance.start(detach=True)
-                    await asyncio.sleep(0.2)
+                    # Start the chmod in the background; /start.sh polls for up to
+                    # ~10s, so the short delay below is enough for the runtime to
+                    # schedule the exec.
+                    await container_client.exec_in_container(
+                        container_id, ["chmod", "777", mount_path], user="root", detach=True
+                    )
+                    await asyncio.sleep(0.5)
                 except Exception as e:
                     logger.warning(
                         f"Could not fix permissions for {mount_path} in container "
                         f"{container_name}: {e}"
                     )
+
+            # Wait for the container's /health endpoint to be reachable before
+            # reporting the server as running. This avoids the UI showing "ready"
+            # while the auth sidecar/ttyd/nginx are still starting inside the
+            # container. Use the short DNS alias instead of the long container
+            # name so the probe hostname stays within the DNS label limit.
+            health_url = f"http://{health_alias}:8080/health"
+            ready = await container_client.wait_for_container_ready(health_alias, health_url)
+            if not ready:
+                logger.warning(
+                    "Container %s started but did not become ready within timeout; "
+                    "continuing with status=running",
+                    container_name,
+                )
 
             # Determine primary volume_id from volume_mounts if provided
             primary_volume_id = None
@@ -307,19 +332,23 @@ class ServerSpawner:
                 primary = next((m for m in volume_mounts if m.get("is_primary")), volume_mounts[0])
                 primary_volume_id = primary.get("volume_id")
 
-            # Create server record
+            # Create server record. Reflect the result of the readiness probe in
+            # health_status so the API shows an accurate initial state instead of
+            # the model default "unknown".
             server = Server(
                 id=uuid.UUID(server_id),
                 name=server_name,
                 user_id=uuid.UUID(user_id),
                 environment_id=uuid.UUID(environment_id) if environment_id else None,
-                container_id=container.id,
+                container_id=container_id,
                 image=image,
                 volume_id=uuid.UUID(primary_volume_id) if primary_volume_id else None,
                 status="running",
+                health_status="healthy" if ready else "unhealthy",
                 allocated_cpu=cpu,
                 allocated_memory=memory,
                 allocated_disk=disk,
+                allocated_gpu=gpu,
                 external_url=f"{public_url}{route_prefix}",
                 started_at=datetime.now(UTC).replace(tzinfo=None),
                 created_at=datetime.now(UTC).replace(tzinfo=None),
@@ -330,8 +359,7 @@ class ServerSpawner:
         except Exception as e:
             # Cleanup on failure
             try:
-                container = await container_client.client.containers.get(container_name)
-                await container.delete(force=True)
+                await container_client.delete_container(container_name, force=True)
             except Exception:
                 pass
             raise Exception(f"Failed to spawn server: {str(e)}")
@@ -367,19 +395,64 @@ class ServerSpawner:
             return False
 
     async def get_status(self, container_id: str) -> str:
-        """Get container status"""
+        """Get container status.
+
+        Returns "unknown" when the runtime lookup fails. Errors are logged and
+        emitted to Sentry/tracing/metrics so operators can distinguish a
+        transient API failure from a genuinely missing container.
+        """
         container_client = await self._get_container_client()
         try:
-            info = await container_client.get_container_info(container_id)
-            state = info.get("State", {})
-            if state.get("Running"):
-                return "running"
-            elif state.get("Paused"):
-                return "paused"
+            return await container_client.get_container_status(container_id)
+        except ContainerDriverError as exc:
+            reason = "not_found" if exc.status == 404 else "api_error"
+            if reason == "not_found":
+                logger.debug("Container %s not found during status lookup", container_id)
             else:
-                return "stopped"
-        except Exception:
+                logger.warning(
+                    "Container runtime API error looking up status of %s: %s %s",
+                    container_id,
+                    exc.status,
+                    exc.message,
+                    exc_info=exc,
+                )
+                self._record_status_lookup_failure(container_id, exc, reason)
             return "unknown"
+        except Exception as exc:
+            logger.warning(
+                "Unexpected error looking up status of container %s: %s",
+                container_id,
+                exc,
+                exc_info=exc,
+            )
+            self._record_status_lookup_failure(container_id, exc, "error")
+            return "unknown"
+
+    def _record_status_lookup_failure(self, container_id: str, exc: Exception, reason: str) -> None:
+        """Emit diagnostics for a container status lookup failure.
+
+        Sends the exception to Sentry (when configured), records it on the
+        current OpenTelemetry span, and increments a Prometheus counter that
+        can drive Alertmanager notifications.
+        """
+        from app.core.prometheus_metrics import CONTAINER_STATUS_LOOKUP_FAILURES_TOTAL
+
+        if settings.prometheus_enabled:
+            CONTAINER_STATUS_LOOKUP_FAILURES_TOTAL.labels(reason=reason).inc()
+
+        if settings.sentry_dsn:
+            import sentry_sdk
+
+            sentry_sdk.set_tag("container_id", container_id)
+            sentry_sdk.set_tag("failure_reason", reason)
+            sentry_sdk.capture_exception(exc)
+
+        span = trace.get_current_span()
+        if span and span.is_recording():
+            span.set_attribute("container.id", container_id)
+            span.set_attribute("failure_reason", reason)
+            span.record_exception(exc)
+            span.set_status(Status(StatusCode.ERROR, "container status lookup failed"))
 
 
 # Singleton instance

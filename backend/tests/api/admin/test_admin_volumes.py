@@ -549,3 +549,49 @@ class TestBulkVolumeActions:
         )
         assert response.status_code == 403
         assert "JWT authentication required" in response.json()["detail"]
+
+
+class TestAdminRefreshVolumeSizes:
+    """Admin bulk refresh of tracked volume disk usage."""
+
+    @pytest.mark.asyncio
+    async def test_admin_can_refresh_volume_sizes(
+        self, client: AsyncClient, admin_user, admin_token
+    ):
+        """Admin can refresh size_bytes for all active volumes at once."""
+        from app.services.volume_service import VolumeService
+
+        headers = {"Authorization": f"Bearer {admin_token}"}
+
+        resp = await client.post(
+            "/api/volumes/",
+            json={"name": "refresh_target", "display_name": "Refresh Target"},
+            headers=headers,
+        )
+        assert resp.status_code == 201
+        volume_id = resp.json()["id"]
+
+        with mock.patch.object(
+            VolumeService,
+            "measure_volume_size",
+            new=mock.AsyncMock(return_value=(42 * 1024**3, "xfs")),
+        ):
+            response = await client.post("/api/admin/volumes/refresh-sizes", headers=headers)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["refreshed"] >= 1
+        assert data["failed"] == []
+
+        detail = await client.get(f"/api/admin/volumes/{volume_id}", headers=headers)
+        assert detail.status_code == 200
+        assert detail.json()["volume"]["size_bytes"] == 42 * 1024**3
+
+    @pytest.mark.asyncio
+    async def test_non_admin_cannot_refresh_volume_sizes(
+        self, client: AsyncClient, test_user, user_token
+    ):
+        """Regular user should get 403 on bulk refresh."""
+        headers = {"Authorization": f"Bearer {user_token}"}
+        response = await client.post("/api/admin/volumes/refresh-sizes", headers=headers)
+        assert response.status_code == 403

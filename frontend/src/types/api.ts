@@ -241,3 +241,47 @@ export interface UserPreferences {
 export interface ApiError {
   detail: string
 }
+
+export interface SearchServerResult {
+  id: string
+  name: string
+  status: string
+}
+
+export interface SearchVolumeResult {
+  id: string
+  name: string
+  display_name: string
+  size_bytes: number
+  status: string
+}
+
+export interface SearchWorkspaceResult {
+  id: string
+  name: string
+}
+
+export interface SearchEnvironmentResult {
+  id: string
+  name: string
+  slug: string
+  category: string
+}
+
+export interface SearchUserResult {
+  id: string
+  username: string
+  email: string | null
+}
+
+/** Entity groups supported by GET /api/search/ scoped queries (`group` param). */
+export type SearchScope = 'servers' | 'volumes' | 'workspaces' | 'environments' | 'users'
+
+/** GET /api/search/ response; each group is present only with its read permission. */
+export interface SearchResults {
+  servers?: SearchServerResult[]
+  volumes?: SearchVolumeResult[]
+  workspaces?: SearchWorkspaceResult[]
+  environments?: SearchEnvironmentResult[]
+  users?: SearchUserResult[]
+}

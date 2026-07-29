@@ -30,10 +30,9 @@ import { Button } from '../components/ui/button'
 
 import { formatDate, cn } from '../lib/utils'
 import { useQueryClient } from '@tanstack/react-query'
-import { api } from '../lib/api'
+import { useActivityHeartbeat } from '../hooks/use-activity-heartbeat'
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api'
-const ACTIVITY_HEARTBEAT_INTERVAL_MS = 30_000
 
 async function getServerAccessToken(serverId: string, reason?: string): Promise<void> {
   const token = localStorage.getItem('nukelab-token') || ''
@@ -52,11 +51,25 @@ async function getServerAccessToken(serverId: string, reason?: string): Promise<
   }
 }
 
-async function pingServerActivity(serverId: string): Promise<void> {
+async function ensureServiceWorkerUpdated(): Promise<void> {
+  // Browsers with a stale service worker may serve the cached SPA shell for
+  // /user/ routes instead of letting the request reach the terminal container.
+  // Force an update and activate any waiting worker before we navigate.
+  if (!('serviceWorker' in navigator)) return
   try {
-    await api.post(`/servers/${serverId}/activity`, {})
+    // navigator.serviceWorker.ready never resolves when no worker is
+    // registered (e.g. the Vite dev server, which does not register one),
+    // so check for a registration first instead of awaiting it blindly.
+    const registration = await navigator.serviceWorker.getRegistration()
+    if (!registration) return
+    await registration.update()
+    if (registration.waiting) {
+      registration.waiting.postMessage({ type: 'SKIP_WAITING' })
+      // Give the new worker a moment to activate and claim this client.
+      await new Promise((resolve) => setTimeout(resolve, 300))
+    }
   } catch {
-    // Activity pings are best-effort; don't surface failures to the user.
+    // Best-effort; don't block navigation if the SW API misbehaves.
   }
 }
 
@@ -312,6 +325,7 @@ function ManualOpenState({
   server,
   username,
   onOpen,
+  isOpening,
   tokenError,
 }: {
   server: {
@@ -325,6 +339,7 @@ function ManualOpenState({
   }
   username: string
   onOpen: () => void
+  isOpening?: boolean
   tokenError?: string | null
 }) {
   return (
@@ -350,9 +365,13 @@ function ManualOpenState({
                 </p>
               </div>
 
-              <Button onClick={onOpen} className="w-full gap-2" size="lg">
-                <ExternalLink className="w-4 h-4" />
-                Open Environment
+              <Button onClick={onOpen} disabled={isOpening} className="w-full gap-2" size="lg">
+                {isOpening ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <ExternalLink className="w-4 h-4" />
+                )}
+                {isOpening ? 'Opening...' : 'Open Environment'}
               </Button>
 
               {tokenError && (
@@ -596,6 +615,7 @@ function ServerGatewayPage() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [manualOpenReady, setManualOpenReady] = useState(false)
   const [tokenError, setTokenError] = useState<string | null>(null)
+  const [isOpening, setIsOpening] = useState(false)
 
   useEffect(() => {
     if (server?.status === 'pending' && startTimeRef.current === null) {
@@ -629,76 +649,73 @@ function ServerGatewayPage() {
     return () => clearInterval(interval)
   }, [server, username, serverName, queryClient])
 
-  // Keep server last_activity fresh while this gateway page is open and visible.
-  // The terminal itself runs outside the SPA, so this complements the access-token
-  // refresh that happens each time the user opens/reloads the environment.
+  // Keep server last_activity fresh while this gateway page is open, visible,
+  // and recently interacted with. The terminal itself runs outside the SPA, so
+  // this complements the access-token refresh that happens each time the user
+  // opens/reloads the environment. The interaction gate prevents an unattended
+  // open tab from blocking idle shutdown.
+  useActivityHeartbeat(server?.id, server?.status === 'running')
+
+  // When server transitions to running, get access token and redirect.
+  // Wait for health_status === 'healthy' first (capped at 15s) so the
+  // one-shot redirect does not land on a transient 503 while Traefik
+  // routing and in-container app startup are still settling.
   useEffect(() => {
-    if (!server || server.status !== 'running') {
+    if (server?.status !== 'running') return
+    if (startTimeRef.current === null) startTimeRef.current = Date.now()
+
+    const waitedMs = Date.now() - startTimeRef.current
+    if (server.health_status !== 'healthy' && waitedMs < 15000) {
+      const interval = setInterval(() => {
+        queryClient.invalidateQueries({ queryKey: ['server-by-path', username, serverName] })
+      }, 2000)
+      return () => clearInterval(interval)
+    }
+
+    const redirectKey = `server-redirect-${server.id}`
+    const alreadyRedirected = sessionStorage.getItem(redirectKey)
+
+    if (alreadyRedirected) {
+      queueMicrotask(() => setManualOpenReady(true))
       return
     }
 
-    const sendPing = () => {
-      if (document.visibilityState === 'visible') {
-        void pingServerActivity(server.id)
+    // For cross-user access, don't auto-redirect; show manual open button
+    // so user can provide a reason via prompt
+    if (!isOwnServer) {
+      queueMicrotask(() => setManualOpenReady(true))
+      return
+    }
+
+    sessionStorage.setItem(redirectKey, 'true')
+
+    const getAccessTokenAndRedirect = async () => {
+      try {
+        await getServerAccessToken(server.id)
+        // Force a real navigation so the service worker bypass for /user/ routes
+        // sends the request to the terminal container instead of the SPA shell.
+        await ensureServiceWorkerUpdated()
+        window.location.href = server.external_url || window.location.href
+      } catch (err) {
+        setTokenError(err instanceof Error ? err.message : 'Failed to get access token')
+        setManualOpenReady(true)
       }
     }
 
-    // Ping immediately so we refresh activity right away when the page becomes
-    // visible with a running server (e.g. returning to the manual-open state).
-    sendPing()
-
-    const interval = setInterval(sendPing, ACTIVITY_HEARTBEAT_INTERVAL_MS)
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        sendPing()
-      }
-    }
-    document.addEventListener('visibilitychange', handleVisibility)
-
-    return () => {
-      clearInterval(interval)
-      document.removeEventListener('visibilitychange', handleVisibility)
-    }
-  }, [server])
-
-  // When server transitions to running, get access token and redirect
-  useEffect(() => {
-    if (server?.status === 'running') {
-      const redirectKey = `server-redirect-${server.id}`
-      const alreadyRedirected = sessionStorage.getItem(redirectKey)
-
-      if (alreadyRedirected) {
-        queueMicrotask(() => setManualOpenReady(true))
-        return
-      }
-
-      // For cross-user access, don't auto-redirect; show manual open button
-      // so user can provide a reason via prompt
-      if (!isOwnServer) {
-        queueMicrotask(() => setManualOpenReady(true))
-        return
-      }
-
-      sessionStorage.setItem(redirectKey, 'true')
-
-      const getAccessTokenAndRedirect = async () => {
-        try {
-          await getServerAccessToken(server.id)
-          // Force a real navigation so the service worker bypass for /user/ routes
-          // sends the request to the terminal container instead of the SPA shell.
-          window.location.href = server.external_url || window.location.href
-        } catch (err) {
-          setTokenError(err instanceof Error ? err.message : 'Failed to get access token')
-          setManualOpenReady(true)
-        }
-      }
-
-      const timeout = setTimeout(() => {
-        getAccessTokenAndRedirect()
-      }, 3000)
-      return () => clearTimeout(timeout)
-    }
-  }, [server?.status, server?.id, server?.external_url, isOwnServer])
+    const timeout = setTimeout(() => {
+      getAccessTokenAndRedirect()
+    }, 1000)
+    return () => clearTimeout(timeout)
+  }, [
+    server?.status,
+    server?.id,
+    server?.external_url,
+    server?.health_status,
+    isOwnServer,
+    queryClient,
+    username,
+    serverName,
+  ])
 
   const handleStart = useCallback(async () => {
     if (!server) return
@@ -720,28 +737,20 @@ function ServerGatewayPage() {
       reason = entered || undefined
     }
 
-    // Open a blank window synchronously while we are still inside the user
-    // gesture. Waiting for the async token request before calling window.open
-    // causes most browsers to block the popup.
-    const newWindow = window.open('about:blank', '_blank')
-    if (!newWindow) {
-      setTokenError('Popup blocked. Please allow popups for this site and try again.')
-      return
-    }
-    // Break the opener relationship for security once we have a reference.
-    try {
-      newWindow.opener = null
-    } catch {
-      // Ignore if the browser disallows mutating opener.
-    }
+    setIsOpening(true)
+    setTokenError(null)
 
     try {
       if (server?.id) {
         await getServerAccessToken(server.id, reason)
       }
-      newWindow.location.href = targetUrl
+      // Same-tab navigation avoids popup blockers and is consistent with the
+      // auto-redirect flow. Update the service worker first so a stale SW does
+      // not serve the cached SPA shell for /user/ routes.
+      await ensureServiceWorkerUpdated()
+      window.location.href = targetUrl
     } catch (err) {
-      newWindow.close()
+      setIsOpening(false)
       setTokenError(err instanceof Error ? err.message : 'Failed to get access token')
     }
   }, [server, isOwnServer, promptAccessReason])
@@ -773,6 +782,7 @@ function ServerGatewayPage() {
             server={server}
             username={username}
             onOpen={handleManualOpen}
+            isOpening={isOpening}
             tokenError={tokenError}
           />
           {reasonDialog}

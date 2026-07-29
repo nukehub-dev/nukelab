@@ -171,3 +171,54 @@ class TestEnvironmentServiceClone:
         assert cloned.slug == "cloned-env"
         assert cloned.image == "img"
         assert cloned.packages == ["pkg1"]
+
+
+class TestEnvironmentVisibility:
+    """Visibility filtering for non-admin users."""
+
+    @pytest.mark.asyncio
+    async def test_list_hides_private_and_inactive_for_users(self, db_session):
+        """Non-admin list should only include public, active environments."""
+        private = EnvironmentTemplate(name="Priv", slug="priv-vis", image="img", is_public=False)
+        inactive = EnvironmentTemplate(name="Inact", slug="inact-vis", image="img", is_active=False)
+        public = EnvironmentTemplate(name="Pub", slug="pub-vis", image="img")
+        db_session.add_all([private, inactive, public])
+        await db_session.commit()
+
+        service = EnvironmentService(db_session)
+        result = await service.list_environments(user_role="user")
+        slugs = {e["slug"] for e in result["items"]}
+        assert "pub-vis" in slugs
+        assert "priv-vis" not in slugs
+        assert "inact-vis" not in slugs
+
+    @pytest.mark.asyncio
+    async def test_list_shows_all_for_admin(self, db_session):
+        """Admin list should include private and inactive environments."""
+        private = EnvironmentTemplate(name="Priv", slug="priv-adm", image="img", is_public=False)
+        inactive = EnvironmentTemplate(name="Inact", slug="inact-adm", image="img", is_active=False)
+        db_session.add_all([private, inactive])
+        await db_session.commit()
+
+        service = EnvironmentService(db_session)
+        result = await service.list_environments(user_role="admin")
+        slugs = {e["slug"] for e in result["items"]}
+        assert "priv-adm" in slugs
+        assert "inact-adm" in slugs
+
+    @pytest.mark.asyncio
+    async def test_can_user_use_env(self, db_session):
+        """Usability: users need active+public; admins may use private but not inactive."""
+        public = EnvironmentTemplate(name="Pub", slug="pub-use", image="img")
+        private = EnvironmentTemplate(name="Priv", slug="priv-use", image="img", is_public=False)
+        inactive = EnvironmentTemplate(name="Inact", slug="inact-use", image="img", is_active=False)
+        db_session.add_all([public, private, inactive])
+        await db_session.commit()
+
+        service = EnvironmentService(db_session)
+        assert await service.can_user_use_env(str(public.id), "user") is True
+        assert await service.can_user_use_env(str(private.id), "user") is False
+        assert await service.can_user_use_env(str(inactive.id), "user") is False
+        assert await service.can_user_use_env(str(private.id), "admin") is True
+        assert await service.can_user_use_env(str(inactive.id), "admin") is False
+        assert await service.can_user_use_env(str(uuid_mod.uuid4()), "admin") is False

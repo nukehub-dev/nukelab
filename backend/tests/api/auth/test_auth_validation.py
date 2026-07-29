@@ -105,7 +105,7 @@ class TestLogoutStopOnLogout:
     async def test_logout_stop_on_logout_unknown_status(
         self, client, user_token, test_user, db_session
     ):
-        """Logout should clear container_id when status is unknown."""
+        """Logout should leave server running when runtime status is unknown."""
         server = Server(
             name="unknown-srv",
             user_id=test_user.id,
@@ -115,6 +115,7 @@ class TestLogoutStopOnLogout:
         db_session.add(server)
         test_user.preferences = {"stop_on_logout": True}
         await db_session.commit()
+        await db_session.refresh(server)
 
         with mock.patch("app.api.auth.spawner.get_status", return_value="unknown"):
             with mock.patch("app.api.auth.spawner.delete") as mock_delete:
@@ -125,6 +126,9 @@ class TestLogoutStopOnLogout:
 
         assert response.status_code == 200
         mock_delete.assert_not_called()
+        await db_session.refresh(server)
+        assert server.status == "running"
+        assert server.container_id == "unknown-cid"
 
     @pytest.mark.asyncio
     async def test_logout_stop_on_logout_spawner_exception(

@@ -3,6 +3,7 @@
 
 import { useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useNavigate } from '@tanstack/react-router'
 import { Activity, Cpu, HardDrive, Network, Zap, ArrowDown, ArrowUp } from 'lucide-react'
 import { useDashboardMetrics } from '../../hooks/use-dashboard-metrics'
 import { useServers } from '../../hooks/use-servers'
@@ -117,6 +118,7 @@ function ChartCard({ title, subtitle, icon: Icon, children, delay = 0 }: ChartCa
 export function MetricsDashboard() {
   const { metrics, currentMetrics, serverMetrics, isLoading, isLive } = useDashboardMetrics()
   const { data: servers } = useServers()
+  const navigate = useNavigate()
 
   const serverBarData = useMemo(() => {
     const serverMap = new Map(servers?.map((s) => [s.id, s]) ?? [])
@@ -128,6 +130,7 @@ export function MetricsDashboard() {
             ? `${server.username}/${server.name}`
             : `Server ${id.slice(0, 8)}`
         return {
+          id,
           label,
           value: metrics.cpu,
           color:
@@ -358,6 +361,11 @@ export function MetricsDashboard() {
                   data={serverBarData}
                   maxValue={100}
                   valueFormatter={(v) => `${v.toFixed(1)}%`}
+                  onItemClick={(item) => {
+                    if (item.id) {
+                      navigate({ to: '/servers/$serverId', params: { serverId: item.id } })
+                    }
+                  }}
                 />
               </div>
             )}

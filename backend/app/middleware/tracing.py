@@ -75,12 +75,16 @@ class TracingEnrichmentMiddleware(BaseHTTPMiddleware):
         if route and hasattr(route, "path"):
             span.set_attribute("http.route", route.path)
 
-        # Auth/user attributes (PII policy: only id and role)
+        # Auth/user attributes (PII policy: only id and role). Read the
+        # primitive snapshots from AuthContext: the request-scoped DB session
+        # is already closed here, and touching ORM attributes on the user
+        # object can raise DetachedInstanceError after a rollback.
         auth_context = getattr(request.state, "auth_context", None)
         if auth_context and auth_context.user:
-            user = auth_context.user
-            span.set_attribute("enduser.id", str(user.id))
-            span.set_attribute("enduser.role", user.role)
+            if auth_context.user_id:
+                span.set_attribute("enduser.id", auth_context.user_id)
+            if auth_context.user_role:
+                span.set_attribute("enduser.role", auth_context.user_role)
             span.set_attribute("auth.method", auth_context.auth_method)
             if auth_context.auth_method == "api_token" and auth_context.api_token_id:
                 span.set_attribute("auth.api_token.id", str(auth_context.api_token_id))

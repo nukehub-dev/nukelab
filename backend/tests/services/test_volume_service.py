@@ -270,6 +270,37 @@ class TestVolumeServiceList:
         assert result["page"] == 1
 
     @pytest.mark.asyncio
+    async def test_list_all_volumes_server_count_reflects_mounts(
+        self, db_session, vol_service, test_user
+    ):
+        """server_count must reflect ServerVolume rows (regression: admin list
+        did not eager-load server_mounts, so every volume reported 0)."""
+        from app.models.server import Server
+        from app.models.server_volume import ServerVolume
+
+        vol = Volume(name="mounted-vol", display_name="Mounted", owner_id=test_user.id)
+        server = Server(name="mount-srv", user_id=test_user.id, status="running")
+        db_session.add_all([vol, server])
+        await db_session.commit()
+        await db_session.refresh(vol)
+        await db_session.refresh(server)
+
+        db_session.add(
+            ServerVolume(
+                server_id=server.id,
+                volume_id=vol.id,
+                mount_path="/home/test",
+                mode="read_write",
+                is_primary=True,
+            )
+        )
+        await db_session.commit()
+
+        result = await vol_service.list_all_volumes()
+        entry = next(v for v in result["volumes"] if v["name"] == "mounted-vol")
+        assert entry["server_count"] == 1
+
+    @pytest.mark.asyncio
     async def test_list_all_volumes_pagination(self, db_session, vol_service, test_user):
         for i in range(5):
             db_session.add(Volume(name=f"p{i}", display_name=f"Page {i}", owner_id=test_user.id))
@@ -553,3 +584,101 @@ class TestVolumeServiceRecordMount:
 
         await vol_service.mark_home_volume(str(vol.id))
         assert vol.labels.get("was_home_volume") is True
+
+
+class TestMeasureVolumeSize:
+    """Tests for measure_volume_size (XFS quota report with du fallback)."""
+
+    @pytest.mark.asyncio
+    async def test_xfs_path_returns_quota_usage(self, vol_service):
+        with (
+            mock.patch(
+                "app.services.volume_service.xfs_quota_service._xfs_quota_available",
+                return_value=True,
+            ),
+            mock.patch(
+                "app.services.volume_service.xfs_quota_service.get_quota_usage",
+                return_value={
+                    "used_bytes": 12345,
+                    "soft_limit_bytes": 0,
+                    "hard_limit_bytes": 10**9,
+                },
+            ),
+        ):
+            size, source = await vol_service.measure_volume_size("vol-xfs")
+
+        assert size == 12345
+        assert source == "xfs"
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_du_when_xfs_unavailable(self, vol_service):
+        with (
+            mock.patch(
+                "app.services.volume_service.xfs_quota_service._xfs_quota_available",
+                return_value=False,
+            ),
+            mock.patch.object(vol_service, "get_volume_size", return_value=67890),
+        ):
+            size, source = await vol_service.measure_volume_size("vol-du")
+
+        assert size == 67890
+        assert source == "du"
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_du_when_quota_report_missing(self, vol_service):
+        with (
+            mock.patch(
+                "app.services.volume_service.xfs_quota_service._xfs_quota_available",
+                return_value=True,
+            ),
+            mock.patch(
+                "app.services.volume_service.xfs_quota_service.get_quota_usage",
+                return_value=None,
+            ),
+            mock.patch.object(vol_service, "get_volume_size", return_value=222),
+        ):
+            size, source = await vol_service.measure_volume_size("vol-mixed")
+
+        assert size == 222
+        assert source == "du"
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_unmeasurable(self, vol_service):
+        with (
+            mock.patch(
+                "app.services.volume_service.xfs_quota_service._xfs_quota_available",
+                return_value=False,
+            ),
+            mock.patch.object(vol_service, "get_volume_size", return_value=None),
+        ):
+            size, source = await vol_service.measure_volume_size("vol-gone")
+
+        assert size is None
+        assert source is None
+
+
+class TestUpdateVolumeSize:
+    """Tests for update_volume_size using the shared measurement helper."""
+
+    @pytest.mark.asyncio
+    async def test_update_volume_size_uses_xfs_quota(self, db_session, vol_service, test_user):
+        vol = Volume(name="upd-xfs", display_name="Upd", owner_id=test_user.id, size_bytes=0)
+        db_session.add(vol)
+        await db_session.commit()
+        await db_session.refresh(vol)
+
+        with (
+            mock.patch(
+                "app.services.volume_service.xfs_quota_service._xfs_quota_available",
+                return_value=True,
+            ),
+            mock.patch(
+                "app.services.volume_service.xfs_quota_service.get_quota_usage",
+                return_value={"used_bytes": 777, "soft_limit_bytes": 0, "hard_limit_bytes": 0},
+            ),
+        ):
+            size = await vol_service.update_volume_size(str(vol.id))
+
+        assert size == 777
+        await db_session.refresh(vol)
+        assert vol.size_bytes == 777

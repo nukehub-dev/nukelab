@@ -121,7 +121,8 @@ def init_sentry() -> None:
         dsn=settings.sentry_dsn,
         environment=settings.app_env,
         release=settings.sentry_release or "nukelab@dev",
-        traces_sample_rate=0.1,
+        traces_sample_rate=0.01,
+        auto_session_tracking=False,  # GlitchTip does not support sessions
         profiles_sample_rate=0.0,
         max_value_length=4096,  # Prevent huge payloads from bloating events
         before_send=_before_send,
@@ -144,7 +145,7 @@ def init_sentry() -> None:
         extra={
             "environment": settings.app_env,
             "release": settings.sentry_release or "nukelab@dev",
-            "traces_sample_rate": 0.1,
+            "traces_sample_rate": 0.01,
         },
     )
 

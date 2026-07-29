@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 import { createFileRoute, useSearch, Link } from '@tanstack/react-router'
+import { UserLink } from '../components/admin/user-link'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import {
@@ -19,15 +20,28 @@ import {
   Users,
   X,
   Clock,
+  Gift,
+  Scale,
+  Check,
+  Coins,
 } from 'lucide-react'
 import { useUsers } from '../hooks/use-users'
 import { useLowBalanceUsers } from '../hooks/use-credits'
-import { useSystemDailyAllowance, useUpdateSystemDailyAllowance } from '../hooks/use-system-config'
+import {
+  useSystemDailyAllowance,
+  useUpdateSystemDailyAllowance,
+  useSystemMaxBalance,
+  useUpdateSystemMaxBalance,
+  useSystemInitialBalance,
+  useUpdateSystemInitialBalance,
+  useSystemAllowanceLoginWindow,
+  useUpdateSystemAllowanceLoginWindow,
+} from '../hooks/use-system-config'
 import { useDataTable } from '../hooks/use-data-table'
 import { useThemeStore } from '../stores/theme-store'
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store'
 import { usePageGuard } from '../hooks/use-page-guard'
-import { cn } from '../lib/utils'
+import { cn, parseUtcDate } from '../lib/utils'
 import { CreditAdjustDialog } from '../components/admin/credit-adjust-dialog'
 import { CreditHistoryDialog } from '../components/admin/credit-history-dialog'
 import { DailyAllowanceDialog } from '../components/admin/daily-allowance-dialog'
@@ -67,8 +81,38 @@ function CreditsAdminPage() {
   } = useSystemDailyAllowance()
   const updateSystemAllowance = useUpdateSystemDailyAllowance()
 
+  const {
+    data: systemMaxBalanceData,
+    isLoading: systemMaxBalanceLoading,
+    refetch: refetchSystemMaxBalance,
+  } = useSystemMaxBalance()
+  const updateSystemMaxBalance = useUpdateSystemMaxBalance()
+
+  const {
+    data: systemInitialBalanceData,
+    isLoading: systemInitialBalanceLoading,
+    refetch: refetchSystemInitialBalance,
+  } = useSystemInitialBalance()
+  const updateSystemInitialBalance = useUpdateSystemInitialBalance()
+
+  const {
+    data: systemLoginWindowData,
+    isLoading: systemLoginWindowLoading,
+    refetch: refetchSystemLoginWindow,
+  } = useSystemAllowanceLoginWindow()
+  const updateSystemLoginWindow = useUpdateSystemAllowanceLoginWindow()
+
   const [systemAllowanceInput, setSystemAllowanceInput] = useState('')
   const systemAllowanceValue = systemAllowanceData?.default_daily_allowance
+
+  const [systemMaxBalanceInput, setSystemMaxBalanceInput] = useState('')
+  const systemMaxBalanceValue = systemMaxBalanceData?.max_balance
+
+  const [systemInitialBalanceInput, setSystemInitialBalanceInput] = useState('')
+  const systemInitialBalanceValue = systemInitialBalanceData?.initial_balance
+
+  const [systemLoginWindowInput, setSystemLoginWindowInput] = useState('')
+  const systemLoginWindowValue = systemLoginWindowData?.login_window_hours
 
   const searchParams = useSearch({ from: '/admin/credits' }) as { user?: string }
 
@@ -129,6 +173,24 @@ function CreditsAdminPage() {
     }
   }, [systemAllowanceValue])
 
+  useEffect(() => {
+    if (systemMaxBalanceValue !== undefined) {
+      setSystemMaxBalanceInput(String(systemMaxBalanceValue))
+    }
+  }, [systemMaxBalanceValue])
+
+  useEffect(() => {
+    if (systemInitialBalanceValue !== undefined) {
+      setSystemInitialBalanceInput(String(systemInitialBalanceValue))
+    }
+  }, [systemInitialBalanceValue])
+
+  useEffect(() => {
+    if (systemLoginWindowValue !== undefined) {
+      setSystemLoginWindowInput(String(systemLoginWindowValue))
+    }
+  }, [systemLoginWindowValue])
+
   const users = useMemo(() => usersData?.data || [], [usersData?.data])
   const pagination = usersData?.pagination
   const lowBalanceUsers = useMemo(() => lowBalanceData?.users || [], [lowBalanceData?.users])
@@ -165,6 +227,94 @@ function CreditsAdminPage() {
     if (value === systemAllowanceValue) return
     updateSystemAllowance.mutate(value)
   }
+
+  const handleSaveSystemMaxBalance = () => {
+    const value = parseInt(systemMaxBalanceInput, 10)
+    if (Number.isNaN(value) || value < 0) return
+    if (value === systemMaxBalanceValue) return
+    updateSystemMaxBalance.mutate(value)
+  }
+
+  const handleSaveSystemInitialBalance = () => {
+    const value = parseInt(systemInitialBalanceInput, 10)
+    if (Number.isNaN(value) || value < 0) return
+    if (value === systemInitialBalanceValue) return
+    updateSystemInitialBalance.mutate(value)
+  }
+
+  const handleSaveSystemLoginWindow = () => {
+    const value = parseInt(systemLoginWindowInput, 10)
+    if (Number.isNaN(value) || value < 0) return
+    if (value === systemLoginWindowValue) return
+    updateSystemLoginWindow.mutate(value)
+  }
+
+  const systemSettings = [
+    {
+      key: 'allowance',
+      title: 'Default Daily Allowance',
+      description: 'NUKE / day applied to new users',
+      icon: Coins,
+      iconBg: 'bg-violet-500/10',
+      iconColor: 'text-violet-400',
+      input: systemAllowanceInput,
+      setInput: setSystemAllowanceInput,
+      value: systemAllowanceValue,
+      loading: systemAllowanceLoading,
+      isPending: updateSystemAllowance.isPending,
+      onSave: handleSaveSystemAllowance,
+      saveLabel: 'Save Default',
+      display: (v?: number) => `${(v ?? 0).toLocaleString()} NUKE / day`,
+    },
+    {
+      key: 'max-balance',
+      title: 'Max Balance',
+      description: 'Hard cap in NUKE, 0 = unlimited',
+      icon: Scale,
+      iconBg: 'bg-rose-500/10',
+      iconColor: 'text-rose-400',
+      input: systemMaxBalanceInput,
+      setInput: setSystemMaxBalanceInput,
+      value: systemMaxBalanceValue,
+      loading: systemMaxBalanceLoading,
+      isPending: updateSystemMaxBalance.isPending,
+      onSave: handleSaveSystemMaxBalance,
+      saveLabel: 'Save Cap',
+      display: (v?: number) => (v === 0 ? 'Unlimited' : `${(v ?? 0).toLocaleString()} NUKE`),
+    },
+    {
+      key: 'initial-balance',
+      title: 'Signup Initial Balance',
+      description: 'NUKE granted on first signup',
+      icon: Gift,
+      iconBg: 'bg-emerald-500/10',
+      iconColor: 'text-emerald-400',
+      input: systemInitialBalanceInput,
+      setInput: setSystemInitialBalanceInput,
+      value: systemInitialBalanceValue,
+      loading: systemInitialBalanceLoading,
+      isPending: updateSystemInitialBalance.isPending,
+      onSave: handleSaveSystemInitialBalance,
+      saveLabel: 'Save Initial Balance',
+      display: (v?: number) => `${(v ?? 0).toLocaleString()} NUKE`,
+    },
+    {
+      key: 'login-window',
+      title: 'Allowance Login Window',
+      description: 'Hours of recent login required',
+      icon: Clock,
+      iconBg: 'bg-amber-500/10',
+      iconColor: 'text-amber-400',
+      input: systemLoginWindowInput,
+      setInput: setSystemLoginWindowInput,
+      value: systemLoginWindowValue,
+      loading: systemLoginWindowLoading,
+      isPending: updateSystemLoginWindow.isPending,
+      onSave: handleSaveSystemLoginWindow,
+      saveLabel: 'Save Window',
+      display: (v?: number) => `${v ?? 0} hours`,
+    },
+  ]
 
   const openBulkGrant = useCallback(() => {
     setBulkMode('grant')
@@ -211,28 +361,14 @@ function CreditsAdminPage() {
         const user = row.original
         const isLow = user.nuke_balance <= 100
         return (
-          <div className="flex items-center gap-3">
-            <div
-              className={cn(
-                'w-9 h-9 rounded-full flex items-center justify-center shrink-0',
-                isLow ? 'bg-amber-500/10' : 'bg-primary/10'
-              )}
-            >
-              <span
-                className={cn('text-xs font-medium', isLow ? 'text-amber-400' : 'text-primary')}
-              >
-                {user.username.slice(0, 2).toUpperCase()}
+          <div className="flex items-center gap-2">
+            <UserLink userId={user.id} name={user.username} avatarUrl={user.avatar_url} size="lg" />
+            {isLow && (
+              <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400">
+                <AlertTriangle className="w-2.5 h-2.5" />
+                Low
               </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="font-medium text-sm">{user.username}</span>
-              {isLow && (
-                <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400">
-                  <AlertTriangle className="w-2.5 h-2.5" />
-                  Low
-                </span>
-              )}
-            </div>
+            )}
           </div>
         )
       },
@@ -315,7 +451,7 @@ function CreditsAdminPage() {
             <span className="text-[10px] text-muted-foreground">/day</span>
             {overrideActive && (
               <Tooltip
-                content={`Override active: ${user.daily_allowance_override} / day until ${user.daily_allowance_override_until ? new Date(user.daily_allowance_override_until).toLocaleString() : 'soon'}`}
+                content={`Override active: ${user.daily_allowance_override} / day until ${user.daily_allowance_override_until ? parseUtcDate(user.daily_allowance_override_until).toLocaleString() : 'soon'}`}
               >
                 <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 cursor-help">
                   <Clock className="w-2.5 h-2.5" />
@@ -421,7 +557,13 @@ function CreditsAdminPage() {
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-medium">{user.username}</span>
+              <Link
+                to="/admin/users/$userId"
+                params={{ userId: user.id }}
+                className="font-medium hover:text-primary hover:underline transition-colors"
+              >
+                {user.username}
+              </Link>
               {isLow && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400">
                   Low
@@ -567,7 +709,13 @@ function CreditsAdminPage() {
                         </span>
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{lbUser.username}</p>
+                        <Link
+                          to="/admin/users/$userId"
+                          params={{ userId: lbUser.id }}
+                          className="text-sm font-medium truncate block hover:text-primary hover:underline transition-colors"
+                        >
+                          {lbUser.username}
+                        </Link>
                         <p className="text-xs text-amber-400">
                           {lbUser.nuke_balance.toLocaleString()} NUKE
                         </p>
@@ -616,85 +764,93 @@ function CreditsAdminPage() {
         </Card>
       </motion.div>
 
-      {/* System Default Daily Allowance */}
+      {/* System Credit Settings */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.15 }}
-        className="bubble space-y-4 p-6"
+        className="bubble p-5 space-y-4"
       >
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-violet-500/10 flex items-center justify-center">
-              <Wallet className="w-5 h-5 text-violet-400" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-base">System Default Daily Allowance</h3>
-              <p className="text-xs text-muted-foreground">
-                Default daily credit allowance applied to new users
-              </p>
-            </div>
+          <div className="flex items-center gap-2">
+            <Wallet className="w-4 h-4 text-violet-400" />
+            <h3 className="font-semibold text-sm">System Credit Settings</h3>
           </div>
-          <Tooltip content="Refresh">
+          <Tooltip content="Refresh all">
             <button
-              onClick={() => refetchSystemAllowance()}
+              onClick={() => {
+                refetchSystemAllowance()
+                refetchSystemMaxBalance()
+                refetchSystemInitialBalance()
+                refetchSystemLoginWindow()
+              }}
               className="p-1.5 rounded-lg hover:bg-accent transition-colors"
             >
-              <RefreshCw
-                className={cn(
-                  'w-4 h-4 text-muted-foreground',
-                  systemAllowanceLoading && 'animate-spin'
-                )}
-              />
+              <RefreshCw className="w-4 h-4 text-muted-foreground" />
             </button>
           </Tooltip>
         </div>
 
-        {systemAllowanceLoading && systemAllowanceValue === undefined ? (
-          <div className="h-12 bg-muted/50 rounded-xl animate-pulse" />
-        ) : canManageSystemAllowance ? (
-          <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3">
-            <div className="flex-1 w-full">
-              <label className="text-xs text-muted-foreground mb-1.5 block">
-                Default allowance (NUKE / day)
-              </label>
-              <input
-                type="number"
-                min={0}
-                step={1}
-                value={systemAllowanceInput}
-                onChange={(e) => setSystemAllowanceInput(e.target.value)}
-                disabled={updateSystemAllowance.isPending}
-                className="w-full h-9 px-3 text-sm bg-background border border-border/50 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
-              />
-            </div>
-            <Button
-              onClick={handleSaveSystemAllowance}
-              disabled={
-                updateSystemAllowance.isPending ||
-                Number.isNaN(parseInt(systemAllowanceInput, 10)) ||
-                parseInt(systemAllowanceInput, 10) < 0 ||
-                parseInt(systemAllowanceInput, 10) === systemAllowanceValue
-              }
-              className="h-9 shrink-0"
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-x-10">
+          {systemSettings.map((s) => (
+            <div
+              key={s.key}
+              className="flex items-center gap-3 py-3 border-b border-border/50 first:pt-0 last:border-0 xl:[&:nth-child(n+3)]:border-b-0 xl:[&:nth-child(n+3)]:pb-0"
             >
-              {updateSystemAllowance.isPending ? (
-                <RefreshCw className="w-4 h-4 animate-spin" />
+              <div
+                className={cn(
+                  'w-8 h-8 rounded-lg flex items-center justify-center shrink-0',
+                  s.iconBg
+                )}
+              >
+                <s.icon className={cn('w-4 h-4', s.iconColor)} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium leading-tight">{s.title}</p>
+                <p className="text-xs text-muted-foreground leading-tight truncate">
+                  {s.description}
+                </p>
+              </div>
+              {s.loading && s.value === undefined ? (
+                <div className="h-8 w-32 bg-muted/50 rounded-lg animate-pulse" />
+              ) : canManageSystemAllowance ? (
+                <div className="flex items-center gap-2 shrink-0">
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    aria-label={s.title}
+                    value={s.input}
+                    onChange={(e) => s.setInput(e.target.value)}
+                    disabled={s.isPending}
+                    className="w-28 h-8 px-2.5 text-sm text-right bg-background border border-border/50 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
+                  />
+                  <Tooltip content={s.saveLabel}>
+                    <Button
+                      size="sm"
+                      onClick={s.onSave}
+                      disabled={
+                        s.isPending ||
+                        Number.isNaN(parseInt(s.input, 10)) ||
+                        parseInt(s.input, 10) < 0 ||
+                        parseInt(s.input, 10) === s.value
+                      }
+                      className="h-8 w-8 p-0 shrink-0"
+                    >
+                      {s.isPending ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Check className="w-3.5 h-3.5" />
+                      )}
+                    </Button>
+                  </Tooltip>
+                </div>
               ) : (
-                <Wallet className="w-4 h-4" />
+                <span className="font-mono font-medium text-sm shrink-0">{s.display(s.value)}</span>
               )}
-              <span className="ml-2">Save Default</span>
-            </Button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 text-sm">
-            <Wallet className="w-4 h-4 text-muted-foreground" />
-            <span className="font-mono font-medium">
-              {(systemAllowanceValue ?? 0).toLocaleString()}
-            </span>
-            <span className="text-muted-foreground">NUKE / day</span>
-          </div>
-        )}
+            </div>
+          ))}
+        </div>
       </motion.div>
 
       {/* Bulk action bar — appears when rows are selected */}

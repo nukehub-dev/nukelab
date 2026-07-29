@@ -68,6 +68,14 @@ See `.env.example` for per-role RPM limits (`RATE_LIMIT_*_RPM`) and the master
 | `OAUTH_SCOPE` / `OAUTH_USERNAME_CLAIM` / `OAUTH_EMAIL_CLAIM` / `OAUTH_NAME_CLAIM` / `OAUTH_PICTURE_CLAIM` | Claim mapping |
 | `OAUTH_PKCE_ENABLED` | Enable PKCE |
 
+Logout is OIDC RP-initiated: for OAuth-authenticated users, `POST /api/auth/logout`
+returns an `oauth_logout_url` (from the discovered `end_session_endpoint` or
+`OAUTH_LOGOUT_URL`) and the frontend navigates through it, terminating the SSO
+session. Register `<FRONTEND_URL>/login` as an allowed
+`post_logout_redirect_uri` with the provider, or the redirect back after logout
+will be rejected. If the provider has no end-session endpoint, logout is
+local-only.
+
 ### Database
 
 | Variable | Description |
@@ -113,9 +121,13 @@ See `.env.example` for per-role RPM limits (`RATE_LIMIT_*_RPM`) and the master
 | `DOCKER_NETWORK` | Network name for spawned containers |
 | `DOCKER_REGISTRY` | Optional image registry |
 | `DOCKER_PULL_POLICY` | `always`, `if-not-present`, or `never` |
+| `CONTAINER_RUNTIME` | Container runtime driver (`docker` covers Podman; `kubernetes` reserved for the future k3s driver) |
 | `COMPOSE_OVERLAYS` | Space-separated extra compose files |
 | `VOLUME_STORAGE_PATH` | Host path for volume file operations |
 | `XFS_QUOTA_ENABLED` | Enable kernel-enforced XFS project quotas |
+| `GPU_ENABLED` | Enable NVIDIA GPU passthrough for user servers (see `docs/operations/GPU-SETUP.md`) |
+| `GPU_CDI_DEVICE` | CDI device spec used on Podman when `GPU_DEVICES` is empty (default `nvidia.com/gpu=all`) |
+| `GPU_DEVICES` | Comma-separated CDI device pool for exclusive GPU assignment (e.g. `nvidia.com/gpu=0,nvidia.com/gpu=1`); empty = shared mode |
 | `UPLOAD_DIR` | Container path for uploads |
 
 ### Server container authentication

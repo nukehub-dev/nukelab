@@ -11,7 +11,8 @@
 # Full backup (schema + data + partitions)
 ./nukelabctl backup
 
-# Restore from backup
+# Restore from backup (drops and recreates the database — asks for
+# confirmation; pass --yes to skip the prompt, e.g. in scripts)
 ./nukelabctl restore backups/nukelab_backup_YYYYMMDD_HHMMSS.sql
 
 # Verify after restore

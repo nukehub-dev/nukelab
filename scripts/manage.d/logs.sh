@@ -115,5 +115,13 @@ cmd_logs() {
         _log_args+=(-f)
     fi
 
-    $COMPOSE "${COMPOSE_ARGS[@]}" logs "${_log_args[@]}" ${service:-}
+    # Split the space-separated service list into an array. Unlike unquoted
+    # expansion, read -ra splits on spaces only, so a service name containing
+    # glob characters cannot expand into filenames from the working directory.
+    local _services=()
+    if [ -n "$service" ]; then
+        read -ra _services <<< "$service"
+    fi
+
+    $COMPOSE "${COMPOSE_ARGS[@]}" logs "${_log_args[@]}" "${_services[@]}"
 }

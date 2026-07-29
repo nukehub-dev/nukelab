@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { api } from '../lib/api'
+import { computeTaskRates, type TaskSnapshot } from '../lib/task-rates'
 import { useToastStore } from '../stores/toast-store'
 import type { Server } from '../types/api'
 
@@ -389,6 +390,67 @@ export function useServerLogs(
     enabled: !!serverId && !paused && active,
     refetchInterval: paused || !active ? false : 5000,
   })
+}
+
+export interface ServerTask {
+  pid: number
+  user: string
+  cpu_percent: number
+  mem_percent: number
+  rss_bytes: number
+  stat: string
+  time: string
+  cpu_time_seconds: number
+  command: string
+}
+
+export function useServerTasks(
+  serverId: string,
+  active: boolean = true,
+  allocatedCpu?: number,
+  allocatedMemoryBytes?: number
+) {
+  const query = useQuery({
+    queryKey: ['server-tasks', serverId],
+    queryFn: async () => {
+      const response = await api.get<{ tasks: ServerTask[]; status?: string }>(
+        `/servers/${serverId}/tasks`
+      )
+      return response
+    },
+    enabled: !!serverId && active,
+    refetchInterval: active ? 5000 : false,
+  })
+
+  // ps %CPU/%MEM are host-relative lifetime averages; derive current,
+  // allocation-relative values from cpu_time_seconds deltas between polls.
+  const prevRef = useRef<TaskSnapshot | null>(null)
+  const [enrichedTasks, setEnrichedTasks] = useState<ServerTask[]>([])
+
+  useEffect(() => {
+    prevRef.current = null
+    queueMicrotask(() => setEnrichedTasks([]))
+  }, [serverId])
+
+  useEffect(() => {
+    if (!query.data) return
+    const { tasks, snapshot } = computeTaskRates(
+      query.data.tasks,
+      prevRef.current,
+      Date.now(),
+      allocatedCpu,
+      allocatedMemoryBytes
+    )
+    prevRef.current = snapshot
+    setEnrichedTasks(tasks)
+    // Recompute only when a new payload arrives, not on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query.dataUpdatedAt, allocatedCpu, allocatedMemoryBytes])
+
+  return {
+    data: query.data ? { tasks: enrichedTasks, status: query.data.status } : undefined,
+    isLoading: query.isLoading,
+  }
 }
 
 export interface BulkActionRequest {

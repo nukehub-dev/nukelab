@@ -9,4 +9,4 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" > /dev/null 2>&1 && pwd)"
 # shellcheck source=scripts/lib.sh
 source "$DIR/../../scripts/lib.sh"
 
-build_environment_image "$DIR" "dev environment" "dev" "nukelab-dev:latest"
+build_environment_image "$DIR" "dev environment" "dev" "nukelab-dev:latest" "$@"

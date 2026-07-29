@@ -26,24 +26,40 @@ export function isAuthenticated(): boolean {
 }
 
 export function logout(): void {
-  const refreshToken = localStorage.getItem('nukelab-refresh')
-  if (refreshToken) {
-    // Fire-and-forget: don't block the UI waiting for server cleanup
-    fetch(`${import.meta.env.VITE_API_URL || '/api'}/auth/logout`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: refreshToken }),
-    }).catch(() => {
-      // Ignore errors — local state is already cleared
-    })
-  }
-  // Clear all local state immediately so the UI responds instantly
-  localStorage.removeItem('nukelab-token')
-  localStorage.removeItem('nukelab-refresh')
-  // Clear server auth cookie
-  document.cookie = 'nukelab_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
-  // Clear auth store user
-  useAuthStore.getState().setUser(null)
-  // Hard navigation to login — full page reload ensures clean state
-  window.location.href = '/login'
+  // IIFE so callers can stay fire-and-forget while we await the backend
+  // response (it may carry the identity provider's end-session URL).
+  void (async () => {
+    const token = localStorage.getItem('nukelab-token')
+    const refreshToken = localStorage.getItem('nukelab-refresh')
+    let oauthLogoutUrl: string | null = null
+
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/auth/logout`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      })
+      if (res.ok) {
+        const data = (await res.json()) as { oauth_logout_url?: string }
+        oauthLogoutUrl = data.oauth_logout_url ?? null
+      }
+    } catch {
+      // Ignore errors — local state is cleared regardless
+    }
+
+    // Clear all local state so the UI responds instantly
+    localStorage.removeItem('nukelab-token')
+    localStorage.removeItem('nukelab-refresh')
+    // Clear server auth cookie
+    document.cookie = 'nukelab_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
+    // Clear auth store user
+    useAuthStore.getState().setUser(null)
+    // Hard navigation — full page reload ensures clean state. For OAuth users
+    // this goes through the provider's end-session endpoint first, so the SSO
+    // session is terminated too and the next login really asks for credentials.
+    window.location.href = oauthLogoutUrl ?? '/login'
+  })()
 }

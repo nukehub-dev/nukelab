@@ -7,10 +7,10 @@ import uuid as uuid_mod
 from datetime import UTC, datetime, timedelta
 from unittest import mock
 
-import aiodocker
 import pytest
 
 from app.api.servers import spawner
+from app.container.driver import ContainerDriverError
 from app.models.environment_template import EnvironmentTemplate
 from app.models.server import Server
 from app.models.server_plan import ServerPlan
@@ -131,7 +131,7 @@ class TestServerLogs:
 
     @pytest.mark.asyncio
     async def test_logs_docker_error(self, client, user_token, test_user, db_session):
-        """DockerError should return empty logs with error status."""
+        """A runtime driver error should return empty logs with error status."""
         server = Server(
             name="log-docker-err", user_id=test_user.id, status="running", container_id="cid-err"
         )
@@ -140,7 +140,7 @@ class TestServerLogs:
 
         mock_client = mock.AsyncMock()
         mock_client.get_container_logs = mock.AsyncMock(
-            side_effect=aiodocker.DockerError(status=404, data={"message": "not found"})
+            side_effect=ContainerDriverError("not found", status=404)
         )
         original = spawner.container_client
         spawner.container_client = mock_client

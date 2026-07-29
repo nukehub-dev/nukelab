@@ -33,6 +33,9 @@
 - **OpenTelemetry Distributed Tracing** — End-to-end across FastAPI, Celery, SQLAlchemy, Redis
 - **CI/CD Pipeline** — GitHub Actions lint/test/build/push, path-filtered
 - **Load Testing** — Locust/k6 hybrid, five profiles, PgBouncer connection flood
+- **NVIDIA GPU Support** — Plan-based GPU passthrough (Podman CDI / Docker DeviceRequests), quota accounting, GPU metrics, CUDA environment image (`docs/operations/GPU-SETUP.md`)
+- **Exclusive GPU Allocator** — Whole-GPU reservations (`gpu_allocations`) with race-safe booking and recreate-on-start (`GPU_DEVICES`)
+- **Container Runtime Driver Layer** — `ContainerDriver` ABC with Docker/Podman as the first driver (`CONTAINER_RUNTIME`); prepares the k3s/Kubernetes migration
 
 See [IMPLEMENTATION-PHASES.md](IMPLEMENTATION-PHASES.md) for the full phase-by-phase record.
 
@@ -57,7 +60,6 @@ See [IMPLEMENTATION-PHASES.md](IMPLEMENTATION-PHASES.md) for the full phase-by-p
 ## Deferred goals
 
 - Kubernetes migration (Helm, HPA, PVCs, Network Policies, Pod Security Standards)
-- GPU allocation and metrics
 - Blue-green/rollback deployment automation
 - Marketplace / plugin system
 

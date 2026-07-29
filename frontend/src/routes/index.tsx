@@ -292,19 +292,24 @@ function DashboardPage() {
                     key={item.id}
                     className="flex items-center gap-4 p-3 rounded-lg hover:bg-accent/50 transition-colors"
                   >
-                    <div className="w-2 h-2 rounded-full bg-emerald-400" />
-                    <div className="flex-1">
-                      <span className="font-medium">{item.action}</span>
-                      {item.target_id && (
-                        <>
-                          <span className="text-muted-foreground mx-2">on</span>
-                          <span className="font-mono text-sm">
-                            {item.target_type}:{item.target_id}
-                          </span>
-                        </>
-                      )}
+                    <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                    {/* min-w-0 lets this flex child shrink below its content
+                        width so long action/target strings truncate instead of
+                        overflowing the card on narrow screens. */}
+                    <div className="flex-1 min-w-0">
+                      <p className="truncate">
+                        <span className="font-medium">{item.action}</span>
+                        {item.target_id && (
+                          <>
+                            <span className="text-muted-foreground mx-2">on</span>
+                            <span className="font-mono text-sm">
+                              {item.target_type}:{item.target_id}
+                            </span>
+                          </>
+                        )}
+                      </p>
                     </div>
-                    <span className="text-sm text-muted-foreground">
+                    <span className="shrink-0 text-sm text-muted-foreground">
                       {formatDate(item.timestamp)}
                     </span>
                   </div>

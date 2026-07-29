@@ -17,22 +17,16 @@ def _make_mock_container_client(captured: dict):
 
     async def fake_create_container(**kwargs):
         captured["create_kwargs"] = kwargs
-        mock_container = MagicMock()
-        mock_container.id = "mock-cid"
-        return mock_container
-
-    mock_client = MagicMock()
-    mock_client.volumes = MagicMock()
-    mock_client.volumes.get = AsyncMock(side_effect=Exception("not found"))
-    mock_client.volumes.create = AsyncMock()
-    mock_client.images = MagicMock()
-    mock_client.images.get = AsyncMock(side_effect=Exception("not found"))
+        return "mock-cid"
 
     mock_container_client = MagicMock()
-    mock_container_client.client = mock_client
+    mock_container_client.ensure_volume = AsyncMock()
+    mock_container_client.image_exists = AsyncMock(return_value=False)
     mock_container_client.pull_image = AsyncMock()
+    mock_container_client.get_container_by_name = AsyncMock(return_value=None)
     mock_container_client.create_container = AsyncMock(side_effect=fake_create_container)
     mock_container_client.start_container = AsyncMock()
+    mock_container_client.exec_in_container = AsyncMock(return_value="")
     mock_container_client.wait_for_container_ready = AsyncMock(return_value=True)
     mock_container_client.get_container_info = AsyncMock(
         return_value={"State": {"Status": "running"}}
@@ -45,53 +39,26 @@ class TestContainerSecurityOptions:
     """Verify container security configuration at spawn time."""
 
     @pytest.mark.asyncio
-    async def test_spawn_does_not_mount_docker_socket(self, db_session, test_user):
+    async def test_spawn_does_not_mount_docker_socket(self):
         """User containers should never mount the Docker socket."""
+        import uuid
+
         from app.container.spawner import spawner
-        from app.models.environment_template import EnvironmentTemplate
-        from app.models.server_plan import ServerPlan
-
-        plan = ServerPlan(
-            name="No Socket Plan",
-            slug="no-socket-plan",
-            category="standard",
-            cpu_limit=1,
-            memory_limit="1g",
-            disk_limit="10g",
-            max_servers_per_user=5,
-            cost_per_hour=1,
-            is_active=True,
-            visible_to_roles=["user"],
-        )
-        db_session.add(plan)
-        await db_session.commit()
-        await db_session.refresh(plan)
-
-        env = EnvironmentTemplate(
-            name="No Socket Env",
-            slug="no-socket-env",
-            image="hello-world",
-            is_active=True,
-            is_public=True,
-        )
-        db_session.add(env)
-        await db_session.commit()
-        await db_session.refresh(env)
 
         captured = {}
         mock_container_client = _make_mock_container_client(captured)
 
         with patch.object(spawner, "_get_container_client", return_value=mock_container_client):
             await spawner.spawn(
-                user_id=str(test_user.id),
-                username=test_user.username,
+                user_id=str(uuid.uuid4()),
+                username="securityuser",
                 server_name="no-socket-server",
-                environment=env.slug,
-                environment_id=str(env.id),
-                image=env.image,
-                cpu=plan.cpu_limit,
-                memory=plan.memory_limit,
-                disk=plan.disk_limit,
+                environment="no-socket-env",
+                environment_id=str(uuid.uuid4()),
+                image="hello-world",
+                cpu=1,
+                memory="1g",
+                disk="10g",
             )
 
         create_kwargs = captured.get("create_kwargs", {})
@@ -110,54 +77,27 @@ class TestContainerSecurityOptions:
             assert "docker.sock" not in bind, "Docker socket path mounted in user container"
 
     @pytest.mark.asyncio
-    async def test_spawn_uses_isolated_network(self, db_session, test_user):
+    async def test_spawn_uses_isolated_network(self):
         """User containers should use the configured isolated Docker network."""
+        import uuid
+
         from app.config import settings
         from app.container.spawner import spawner
-        from app.models.environment_template import EnvironmentTemplate
-        from app.models.server_plan import ServerPlan
-
-        plan = ServerPlan(
-            name="Network Plan",
-            slug="network-plan",
-            category="standard",
-            cpu_limit=1,
-            memory_limit="1g",
-            disk_limit="10g",
-            max_servers_per_user=5,
-            cost_per_hour=1,
-            is_active=True,
-            visible_to_roles=["user"],
-        )
-        db_session.add(plan)
-        await db_session.commit()
-        await db_session.refresh(plan)
-
-        env = EnvironmentTemplate(
-            name="Network Env",
-            slug="network-env",
-            image="hello-world",
-            is_active=True,
-            is_public=True,
-        )
-        db_session.add(env)
-        await db_session.commit()
-        await db_session.refresh(env)
 
         captured = {}
         mock_container_client = _make_mock_container_client(captured)
 
         with patch.object(spawner, "_get_container_client", return_value=mock_container_client):
             await spawner.spawn(
-                user_id=str(test_user.id),
-                username=test_user.username,
+                user_id=str(uuid.uuid4()),
+                username="securityuser",
                 server_name="network-server",
-                environment=env.slug,
-                environment_id=str(env.id),
-                image=env.image,
-                cpu=plan.cpu_limit,
-                memory=plan.memory_limit,
-                disk=plan.disk_limit,
+                environment="network-env",
+                environment_id=str(uuid.uuid4()),
+                image="hello-world",
+                cpu=1,
+                memory="1g",
+                disk="10g",
             )
 
         create_kwargs = captured.get("create_kwargs", {})

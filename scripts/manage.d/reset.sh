@@ -2,13 +2,27 @@
 # SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
 # SPDX-License-Identifier: BSD-2-Clause
 
+# Default values for reset options.
+RESET_YES=false
+
 cmd_reset() {
-    step "${RED}${BOLD}WARNING:${RESET} This deletes ALL data and containers!"
-    read -rp "Type 'yes' to confirm: " confirm
-    [[ "$confirm" = "yes" ]] || {
-        info "Aborted."
-        exit 0
-    }
+    local _mode="PROD"
+    $USE_DEV_MODE && _mode="DEV"
+
+    # Resetting destroys all data of the active stack, so require explicit
+    # confirmation. The only non-interactive bypass is --yes; never read from
+    # a non-TTY (a failed `read` under set -e would dump the ERR trap).
+    if ! $RESET_YES; then
+        step "${RED}${BOLD}WARNING:${RESET} This deletes ALL data and containers of the ${BOLD}${_mode}${RESET} stack!"
+        if [ ! -t 0 ]; then
+            die "Reset of the ${_mode} stack requires confirmation, but stdin is not a terminal.\nPass --yes to confirm non-interactively."
+        fi
+        read -rp "Type 'yes' to confirm: " confirm || die "Confirmation required (no input); aborting."
+        [[ "$confirm" = "yes" ]] || {
+            info "Aborted."
+            exit 0
+        }
+    fi
 
     log "Stopping everything..."
     kill_frontend
@@ -18,45 +32,66 @@ cmd_reset() {
         warn "compose down returned an error; continuing with manual volume cleanup"
     fi
 
-    # Derive named volumes from the active compose configuration so reset
-    # never misses a volume that was added upstream. Best-effort: fall back
-    # to the historical hardcoded list if `compose config --volumes` fails
-    # (e.g. compose plugin missing on a partial install).
-    local _volumes=()
-    if _vol_out=$($COMPOSE "${COMPOSE_ARGS[@]}" config --volumes 2> /dev/null); then
-        while IFS= read -r line; do
-            [ -n "$line" ] && _volumes+=("$line")
-        done <<< "$_vol_out"
-    fi
-    if [ ${#_volumes[@]} -eq 0 ]; then
-        _volumes=(nukelab-postgres-data nukelab-letsencrypt)
-        log_debug "Falling back to hardcoded volume list: ${_volumes[*]}"
+    # `down -v` already removes the project's own named volumes via labels. As
+    # a fallback, remove any leftovers still carrying the compose project
+    # label. Both the configured project name and the directory-derived
+    # default are matched, because compose derives the project name from the
+    # checkout directory unless COMPOSE_PROJECT_NAME is exported — volumes
+    # created either way are found without hardcoding volume names.
+    local _projects=("${COMPOSE_PROJECT_NAME:-nukelab}")
+    local _dir_project
+    _dir_project="$(basename "$DIR")"
+    if [ "$_dir_project" != "${_projects[0]}" ]; then
+        _projects+=("$_dir_project")
     fi
 
-    # Prefix with the active project name if compose plugin emitted bare names.
-    # Both docker compose and podman-compose typically already prefix them, so
-    # we try the reported name first and then the prefixed form.
-    for vol in "${_volumes[@]}"; do
-        if $CONTAINER_ENGINE volume inspect "$vol" > /dev/null 2>&1; then
-            $CONTAINER_ENGINE volume rm "$vol" > /dev/null 2>&1 \
-                || log_debug "Could not remove volume: $vol"
-        elif $CONTAINER_ENGINE volume inspect "${COMPOSE_PROJECT_NAME:-nukelab}_$vol" > /dev/null 2>&1; then
-            $CONTAINER_ENGINE volume rm "${COMPOSE_PROJECT_NAME:-nukelab}_$vol" > /dev/null 2>&1 \
-                || log_debug "Could not remove volume: ${COMPOSE_PROJECT_NAME:-nukelab}_$vol"
-        fi
+    local _p _vol
+    for _p in "${_projects[@]}"; do
+        while IFS= read -r _vol; do
+            [ -n "$_vol" ] || continue
+            $CONTAINER_ENGINE volume rm "$_vol" > /dev/null 2>&1 \
+                || log_debug "Could not remove volume: $_vol"
+        done < <($CONTAINER_ENGINE volume ls --filter "label=com.docker.compose.project=$_p" --format '{{.Name}}' 2> /dev/null)
     done
 
     clear_state
     ok "Reset complete"
 }
 
+parse_reset_args() {
+    while [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; do
+        case "${EXTRA_ARGS[0]}" in
+            --yes | -y)
+                RESET_YES=true
+                EXTRA_ARGS=("${EXTRA_ARGS[@]:1}")
+                ;;
+            --help | -h)
+                help_reset
+                exit 0
+                ;;
+            --*)
+                die "Unknown option for reset: ${EXTRA_ARGS[0]}"
+                ;;
+            *)
+                die "Unexpected argument: ${EXTRA_ARGS[0]} (reset takes no target)"
+                ;;
+        esac
+    done
+}
+
 help_reset() {
     cat <<- EOF
-${BOLD}Usage:${RESET} ./nukelabctl reset
+${BOLD}Usage:${RESET} ./nukelabctl reset [options]
 
-⚠️  Delete ALL data, containers, and volumes. Requires confirmation.
+⚠️  Delete ALL data, containers, and volumes of the current stack (PROD or
+DEV, depending on the active mode). Requires typing 'yes' to confirm unless
+--yes is given.
+
+${BOLD}Options:${RESET}
+  --yes, -y    Skip the confirmation prompt (for scripts)
 
 ${BOLD}Examples:${RESET}
   ./nukelabctl reset
+  ./nukelabctl reset --yes
 EOF
 }

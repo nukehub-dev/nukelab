@@ -238,10 +238,16 @@ class TestDetailedHealthFailures:
         mock_email = mock_email_cls.return_value
         mock_email.enabled = False
 
+        # Healthy container runtime (no docker socket in the test container)
+        mock_container = mock.AsyncMock()
+        mock_container.connect = mock.AsyncMock()
+        mock_container.version = mock.AsyncMock(return_value={"Version": "test", "Components": []})
+
         with mock.patch("app.services.email_service.EmailService", mock_email_cls):
-            response = await client.get(
-                "/api/health/detailed", headers={"Authorization": f"Bearer {admin_token}"}
-            )
+            with mock.patch("app.container.client.container_client", mock_container):
+                response = await client.get(
+                    "/api/health/detailed", headers={"Authorization": f"Bearer {admin_token}"}
+                )
         assert response.status_code == 200
         data = response.json()
         assert data["services"]["smtp"]["status"] == "disabled"

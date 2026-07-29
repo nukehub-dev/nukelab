@@ -2,6 +2,11 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { refreshAccessToken } from '../lib/api'
+
+// If no message arrived for this long when the page becomes visible again,
+// assume the socket is a zombie (mobile OS/proxy dropped it silently).
+const ZOMBIE_THRESHOLD_MS = 90_000
 
 export interface WebSocketMessage {
   event: string
@@ -65,6 +70,8 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
   const handlersRef = useRef<Set<MessageHandler>>(new Set())
   const shouldReconnectRef = useRef(true)
   const isConnectingRef = useRef(false)
+  const lastMessageAtRef = useRef(0)
+  const authFailedRef = useRef(false)
 
   const connectRef = useRef<() => void>(() => {})
 
@@ -94,9 +101,11 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
       ws.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data) as WebSocketMessage
+          lastMessageAtRef.current = Date.now()
 
           // Handle auth handshake before dispatching to consumers
           if (message.event === 'auth:success') {
+            authFailedRef.current = false
             isConnectingRef.current = false
             setIsConnected(true)
             setIsConnecting(false)
@@ -105,6 +114,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
             return
           }
           if (message.event === 'auth:error') {
+            authFailedRef.current = true
             setError('Authentication failed')
             setIsConnecting(false)
             ws.close()
@@ -133,11 +143,26 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
         isConnectingRef.current = false
         setIsConnected(false)
         setIsConnecting(false)
-        wsRef.current = null
+        // Only clear the ref if this is still the current socket — a stale
+        // onclose from an abandoned socket must not clobber its replacement.
+        if (wsRef.current === ws) wsRef.current = null
 
-        // Don't reconnect on auth failure (4001) — token missing/invalid
-        if (e.code === 4001) {
+        // Auth failure: the token may simply be expired. The REST layer
+        // renews tokens transparently — do the same here instead of giving
+        // up permanently (which previously required a page refresh).
+        if (e.code === 4001 || authFailedRef.current) {
+          authFailedRef.current = false
           setError('Authentication required')
+          if (shouldReconnectRef.current) {
+            void refreshAccessToken().then((refreshed) => {
+              if (refreshed && shouldReconnectRef.current) {
+                reconnectAttemptsRef.current = 0
+                reconnectTimerRef.current = setTimeout(() => {
+                  connectRef.current()
+                }, 1000)
+              }
+            })
+          }
           return
         }
 
@@ -211,6 +236,47 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
       disconnect()
     }
   }, [autoConnect, connect, disconnect])
+
+  // Recover from silently-dead connections. Mobile browsers suspend
+  // background tabs and the OS/proxy drops the socket — often without
+  // firing onclose — leaving isConnected stuck at true with no traffic.
+  // Re-check the connection when the page becomes visible or the network
+  // returns, and clear the exhausted-retry state so recovery isn't blocked.
+  useEffect(() => {
+    if (!autoConnect) return
+
+    const recover = () => {
+      if (isConnectingRef.current) return
+      reconnectAttemptsRef.current = 0
+      shouldReconnectRef.current = true
+
+      const ws = wsRef.current
+      if (ws) {
+        if (ws.readyState === WebSocket.OPEN) {
+          // Socket looks open but may be a zombie: force a reconnect if
+          // no message arrived for a while (system metrics publish every
+          // 60s, container metrics every 5s).
+          if (Date.now() - lastMessageAtRef.current > ZOMBIE_THRESHOLD_MS) {
+            ws.close()
+          }
+          return
+        }
+        if (ws.readyState !== WebSocket.CLOSED) return // CONNECTING/CLOSING — let it settle
+      }
+      connectRef.current()
+    }
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') recover()
+    }
+
+    document.addEventListener('visibilitychange', handleVisibility)
+    window.addEventListener('online', recover)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility)
+      window.removeEventListener('online', recover)
+    }
+  }, [autoConnect])
 
   return {
     isConnected,

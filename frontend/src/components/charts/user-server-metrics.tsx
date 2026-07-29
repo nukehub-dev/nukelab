@@ -7,6 +7,7 @@ import { Cpu, HardDrive, Network, Server, Activity } from 'lucide-react'
 import { useSharedWebSocket } from '../../hooks/use-shared-websocket'
 import { GaugeChart } from './gauge-chart'
 import { formatBytes } from '../../lib/utils'
+import { counterRate } from '../../lib/metrics-rates'
 import { springs } from '../../lib/animations'
 import type { Server as ServerType } from '../../types/api'
 
@@ -15,6 +16,7 @@ interface ServerMetricData {
   memory_percent: number
   memory_used: number
   memory_total: number
+  // Throughput rates (bytes/sec) derived from cumulative counters
   network_rx: number
   network_tx: number
   disk_read: number
@@ -150,6 +152,10 @@ export function UserServerMetrics({ servers }: UserServerMetricsProps) {
 
   const { isConnected, subscribe, unsubscribe, onMessage } = useSharedWebSocket()
   const subscribedRef = useRef<Set<string>>(new Set())
+  // Previous cumulative counters per server, for rate derivation
+  const prevCountersRef = useRef<
+    Record<string, { t: number; rx: number; tx: number; read: number; write: number }>
+  >({})
 
   const [serverMetrics, setServerMetrics] = useState<Record<string, ServerMetricData>>({})
 
@@ -170,6 +176,7 @@ export function UserServerMetrics({ servers }: UserServerMetricsProps) {
       if (!currentIds.has(id)) {
         unsubscribe('server', id)
         subscribedRef.current.delete(id)
+        delete prevCountersRef.current[id]
         setServerMetrics((prev) => {
           const next = { ...prev }
           delete next[id]
@@ -206,6 +213,23 @@ export function UserServerMetrics({ servers }: UserServerMetricsProps) {
         const serverId = raw.server_id
         if (!serverId) return
 
+        // Counters are cumulative since container start; derive per-second
+        // rates against the previous sample for this server.
+        const now = Date.now()
+        const rx = Number(raw.network_rx_bytes) || 0
+        const tx = Number(raw.network_tx_bytes) || 0
+        const read = Number(raw.disk_read_bytes) || 0
+        const write = Number(raw.disk_write_bytes) || 0
+        const prevCounters = prevCountersRef.current[serverId] ?? null
+        prevCountersRef.current[serverId] = { t: now, rx, tx, read, write }
+        const rate = (value: number, prevValue: number | undefined) =>
+          counterRate(
+            prevCounters && prevValue !== undefined
+              ? { t: prevCounters.t, value: prevValue }
+              : null,
+            { t: now, value }
+          )
+
         setServerMetrics((prev) => ({
           ...prev,
           [serverId]: {
@@ -213,11 +237,11 @@ export function UserServerMetrics({ servers }: UserServerMetricsProps) {
             memory_percent: Number(raw.memory_percent) || 0,
             memory_used: Number(raw.memory_used) || 0,
             memory_total: Number(raw.memory_total) || 0,
-            network_rx: Number(raw.network_rx_bytes) || 0,
-            network_tx: Number(raw.network_tx_bytes) || 0,
-            disk_read: Number(raw.disk_read_bytes) || 0,
-            disk_write: Number(raw.disk_write_bytes) || 0,
-            timestamp: Date.now(),
+            network_rx: rate(rx, prevCounters?.rx),
+            network_tx: rate(tx, prevCounters?.tx),
+            disk_read: rate(read, prevCounters?.read),
+            disk_write: rate(write, prevCounters?.write),
+            timestamp: now,
           },
         }))
       }

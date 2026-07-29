@@ -22,10 +22,16 @@ All files under `frontend/` except generated artifacts (`node_modules/`, `dist/`
 - `src/routes/` — TanStack Router file-based routes. Each route file exports a default component and may export `Route` metadata. The route tree is regenerated automatically on `npm run dev` or via `npx tsr generate`.
 - `src/components/` — reusable UI components. Prefer composition over large monolithic components.
 - `src/hooks/` — custom React hooks, especially data-fetching wrappers around TanStack Query.
+  - `src/hooks/use-activity-heartbeat.ts` — pings `POST /servers/:id/activity` every 30s only while the tab is visible AND the user interacted within the input window (`src/lib/activity-heartbeat.ts`); an open-but-untouched tab must not block idle shutdown.
   - `src/hooks/use-page-guard.ts` — page-level RBAC guard hook that redirects unauthorized users.
+  - `src/hooks/use-is-desktop.ts` — viewport ≥lg (1024px) check; gates expensive visual effects off mobile and mounts responsive-only content exactly once (e.g. `Dialog` children render in either the mobile sheet or the desktop drawer, never both).
+  - `src/hooks/use-keyboard-shortcuts.ts` — global shortcuts; `'mod'` modifier = ctrl-or-meta, optional `permission` gating. Global search palette (`src/components/search/command-palette.tsx`, backed by `src/hooks/use-search.ts`) opens via the `show-search` window event, bound to `Ctrl+K` (mod) and `/`. Scoped filters: a leading `/users` or `users:` token narrows the search to one entity group (sent as the `group` API param with `limit=10`). Static Go-to commands rank above entity results and cover all user and admin pages — each admin command gated by its route guard's permission — with `keywords` aliases, plus an admin-only Grafana action that opens via the monitoring auth redirect.
 - `src/stores/` — Zustand stores for client-side state that does not belong in the URL or server cache.
   - `src/stores/auth-store.ts` — auth store with user state, `PERMISSIONS` constants, and permission helpers.
+  - `src/stores/timezone-store.ts` — non-persisted mirror of the backend `timezone` preference (`'auto'` or an IANA zone → `effectiveZone`), synced by `src/hooks/use-timezone-sync.ts`. Keep it self-contained; `lib/utils.ts` imports the store, never the reverse.
 - `src/lib/` — pure utility functions and shared constants.
+  - `src/lib/external-links.ts` — single source of truth for external destinations (NukeTalk community, contact page, blog). Import `EXTERNAL_LINKS`; never hard-code these URLs.
+  - `src/lib/utils.ts` — backend timestamps are naive UTC (ISO 8601 without Z/offset). Parse and format every API timestamp through `parseUtcDate` / `formatDate` / `formatRelativeTime` from this module; never call `new Date(apiString)` directly. Formatters apply the user's timezone preference (default auto/browser, stored in the backend `timezone` preference) and use the browser locale; date-only `YYYY-MM-DD` strings go through `parseLocalDate` / `formatDateOnly`.
 - `src/api/` — generated or hand-written API client code and request/response types.
 
 ### Adding a route
@@ -87,6 +93,12 @@ function AdminCreditsPage() {
 - Use Zustand for global UI state that should survive navigation (e.g., sidebar collapse, theme).
 - Avoid prop drilling more than two levels deep; use context or Zustand instead.
 
+### WebSocket
+
+- One shared connection per app, owned by `src/contexts/websocket-provider.tsx` (`useWebSocket`); consumers use `useSharedWebSocket` and room scopes (`global`, `server:<id>`, `user:<id>`).
+- The connection lifecycle is self-healing: it reconnects on `visibilitychange`/`online`, forces a reconnect when a socket looks open but has been silent past the zombie threshold, and refreshes an expired token on auth failure (4001) instead of dying permanently. Do not add per-feature reconnect logic — fix the shared hook.
+- Live dashboard metrics (`useDashboardMetrics`) depend on the `global` room; system metrics publish every 60s, container metrics every 5s.
+
 ### Styling
 
 - Use Tailwind CSS utility classes. Avoid arbitrary values; extend the theme in `tailwind.config.ts` when a value repeats.
@@ -103,16 +115,19 @@ function AdminCreditsPage() {
 
 - Use controlled inputs with React state or a form library consistent with the project.
 - Validate user input before submission; display field-level errors returned by the backend.
+- Token scope options in `src/components/settings/tokens-page.tsx` (`AVAILABLE_SCOPES`) must match `VALID_TOKEN_SCOPES` in `backend/app/api/tokens.py`; the backend rejects unknown scopes with 422.
 
 ### Tests
 
 - `npm run test` runs Playwright e2e tests. Write e2e specs for critical user flows.
-- Unit tests are not currently required unless the project adds a Vitest/Jest setup.
+- `npm run test:unit` runs Vitest unit tests (colocated `*.test.ts` under `src/`). Add unit tests for pure helpers in `src/lib/` and `src/hooks/`.
 
 ### Build and service worker
 
 - `npm run build` produces `dist/`. The service worker is generated and cache injection runs automatically.
 - Do not manually edit generated files in `dist/` or `.tanstack/`.
+- Route-level code splitting is enabled via the TanStack Router Vite plugin (`autoCodeSplitting: true`). Do **not** set `enableRouteGeneration: false`: the code splitter only processes files the generator registers, so disabling generation silently produces a single monolithic bundle.
+- `src/routeTree.gen.ts` is regenerated on every dev/build and is excluded from Prettier; the generator's formatting is authoritative for that file.
 
 ### Common pitfalls
 

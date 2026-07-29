@@ -113,6 +113,12 @@ export interface BulkVolumeActionResponse {
   }
 }
 
+export interface RefreshSizesResponse {
+  message: string
+  refreshed: number
+  failed: Array<{ volume_id: string; error: string }>
+}
+
 export function useAdminVolumeActions() {
   const queryClient = useQueryClient()
   const { success, error: showError } = useToast()
@@ -168,5 +174,42 @@ export function useAdminVolumeActions() {
     },
   })
 
-  return { updateVolume, deleteVolume, bulkAction }
+  const refreshVolumeSize = useMutation({
+    mutationFn: (volumeId: string) =>
+      api.post<{ volume_id: string; size_bytes: number | null }>(
+        `/volumes/${volumeId}/refresh-size`,
+        {}
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-volumes'] })
+      success('Size refreshed', 'Volume size has been recalculated')
+    },
+    onError: (err) => {
+      showError('Failed to refresh size', getErrorMessage(err))
+    },
+  })
+
+  const refreshAllSizes = useMutation({
+    mutationFn: () => api.post<RefreshSizesResponse>('/admin/volumes/refresh-sizes', {}),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-volumes'] })
+      if (data.failed.length > 0) {
+        showError(
+          `${data.failed.length} volume(s) failed`,
+          data.failed
+            .slice(0, 3)
+            .map((f) => f.error)
+            .join('; ')
+        )
+      }
+      if (data.refreshed > 0) {
+        success('Sizes refreshed', `${data.refreshed} volume(s) recalculated`)
+      }
+    },
+    onError: (err) => {
+      showError('Failed to refresh sizes', getErrorMessage(err))
+    },
+  })
+
+  return { updateVolume, deleteVolume, bulkAction, refreshVolumeSize, refreshAllSizes }
 }

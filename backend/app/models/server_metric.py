@@ -76,6 +76,7 @@ class ServerMetric(Base):
                 "used": self.memory_used,
                 "total": self.memory_total,
                 "percent": self.memory_percent,
+                "cache": self.memory_cache,
             },
             "disk": {
                 "read_bytes": self.disk_read_bytes,

@@ -126,7 +126,7 @@ Phase 10: Remediation Support & Retest
 | REC-02 | Fuzz hidden API endpoints and versions | ffuf, Kiterunner | Undocumented/internal endpoints return 401/403 or 404 |
 | REC-03 | Discover JavaScript assets and hardcoded API keys | Burp JS Link Finder, LinkFinder.py | No secrets, internal IPs, or debug endpoints in frontend bundles |
 | REC-04 | Identify technology stack and versions | Wappalyzer, WhatWeb, response headers | No version leakage; headers stripped by Traefik |
-| REC-05 | Map OpenAPI/Swagger if exposed | `/api/docs`, `/openapi.json` | Docs gated or disabled in production |
+| REC-05 | Map OpenAPI/Swagger if exposed | `/api/docs`, `/openapi.json` | Disabled in production by default (`API_DOCS_ENABLED`, see `config.py:set_api_docs_defaults`); must 404 in prod |
 | REC-06 | Review certificate transparency and DNS records | crt.sh, SecurityTrails | No dangling or attacker-controlled records |
 
 ### 5.2 Phase 2 — Architecture & Configuration Review
@@ -177,6 +177,8 @@ Phase 10: Remediation Support & Retest
 | BOLA-06 | Access workspace the user is not a member of | `GET /api/workspaces/{id}` | 403 |
 | BOLA-07 | Access volume not owned/shared | `GET /api/volumes/{id}` | 403 |
 | BOLA-08 | Enumerate sequential server/volume/user IDs | `GET /api/servers/1`, `/api/servers/2` ... | UUIDs prevent trivial enumeration; 403 on unauthorized |
+| BOLA-09 | List processes of another user's server | `GET /api/servers/{id}/tasks` | 403 unless actor has `servers:read_all` or `servers:access_others` |
+| BOLA-10 | Read another user's resource stats | `GET /api/users/{id}/resources` | 403 unless self or actor has `users:read`; PII redacted for non-admin `GET /api/users/{id}` viewers |
 
 #### 4.2 Vertical Privilege Escalation (BFLA)
 
@@ -219,7 +221,7 @@ Phase 10: Remediation Support & Retest
 | LOGIC-05 | Schedule execution privilege escalation | Cron schedule action on another user's server | 403 unless admin |
 | LOGIC-06 | Bulk operation cross-user impact | Select own server + victim server in bulk | Only authorized servers affected; 403 otherwise |
 | LOGIC-07 | Workspace invitation abuse | Invite to workspace then escalate permissions | Member cannot grant permissions they don't hold |
-| LOGIC-08 | Volume quota double-counting regression | Create volume + server with same disk | No double-counting (previously fixed) |
+| LOGIC-08 | Volume quota double-counting regression | Create volume + server with same disk | No double-counting; regression test `backend/tests/services/test_quota_service.py::TestQuotaServiceCheckSpawn::test_volume_plus_spawn_no_double_count` |
 | LOGIC-09 | Maintenance mode bypass | Direct API call while maintenance enabled | 503 except exempt paths |
 | LOGIC-10 | Rate-limit tier bypass | Spoof role claim in JWT | Signature invalidates tampered claims |
 | LOGIC-11 | API token used for high-impact admin ops | Bulk actions with scoped token | Rejected; JWT session required |

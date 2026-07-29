@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 import { createFileRoute } from '@tanstack/react-router'
-import { HardDrive, Pencil, Trash2, Server, Play, Archive } from 'lucide-react'
+import { UserLink } from '../components/admin/user-link'
+import { HardDrive, Pencil, Trash2, Server, Play, Archive, RefreshCw } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import { ResourcePageLayout } from '../components/layout/resource-page-layout'
 import { DataTable } from '../components/data/data-table'
@@ -17,7 +18,7 @@ import { useThemeStore } from '../stores/theme-store'
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store'
 import { usePageGuard } from '../hooks/use-page-guard'
 import { useConfirmDialog } from '../components/ui/confirm-dialog'
-import { formatDate, formatBytes } from '../lib/utils'
+import { formatDate, formatBytes, cn } from '../lib/utils'
 import type {
   ColumnDef,
   ColumnFiltersState,
@@ -98,6 +99,8 @@ function VolumesAdminPage() {
   const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({})
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+  const [refreshingIds, setRefreshingIds] = useState<ReadonlySet<string>>(new Set())
+  const [deletingIds, setDeletingIds] = useState<ReadonlySet<string>>(new Set())
 
   // Sync React Table column filters with API filter state
   const prevColumnFiltersRef = useRef<ColumnFiltersState>([])
@@ -143,7 +146,13 @@ function VolumesAdminPage() {
     max_size_gb: 10,
   })
 
-  const { updateVolume, deleteVolume, bulkAction: bulkVolumeAction } = useAdminVolumeActions()
+  const {
+    updateVolume,
+    deleteVolume,
+    bulkAction: bulkVolumeAction,
+    refreshVolumeSize,
+    refreshAllSizes,
+  } = useAdminVolumeActions()
 
   const openEditDialog = (volume: AdminVolume) => {
     setEditingVolume(volume)
@@ -184,6 +193,18 @@ function VolumesAdminPage() {
     )
   }
 
+  const handleRefreshSize = (volumeId: string) => {
+    setRefreshingIds((prev) => new Set(prev).add(volumeId))
+    refreshVolumeSize.mutate(volumeId, {
+      onSettled: () =>
+        setRefreshingIds((prev) => {
+          const next = new Set(prev)
+          next.delete(volumeId)
+          return next
+        }),
+    })
+  }
+
   const handleDelete = async (volume: AdminVolume) => {
     const confirmed = await confirm({
       title: 'Delete Volume',
@@ -193,7 +214,15 @@ function VolumesAdminPage() {
       cancelLabel: 'Cancel',
     })
     if (confirmed) {
-      deleteVolume.mutate(volume.id)
+      setDeletingIds((prev) => new Set(prev).add(volume.id))
+      deleteVolume.mutate(volume.id, {
+        onSettled: () =>
+          setDeletingIds((prev) => {
+            const next = new Set(prev)
+            next.delete(volume.id)
+            return next
+          }),
+      })
     }
   }
 
@@ -314,14 +343,11 @@ function VolumesAdminPage() {
         const owner = row.original.owner
         if (!owner) return '-'
         return (
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
-              <span className="text-[10px] font-medium text-primary">
-                {(owner.display_name || owner.username).slice(0, 2).toUpperCase()}
-              </span>
-            </div>
-            <span className="text-sm">{owner.display_name || owner.username}</span>
-          </div>
+          <UserLink
+            userId={row.original.owner_id}
+            name={owner.display_name || owner.username}
+            size="sm"
+          />
         )
       },
     },
@@ -395,6 +421,20 @@ function VolumesAdminPage() {
             header: 'Actions',
             cell: ({ row }: { row: { original: AdminVolume } }) => (
               <div className="flex items-center gap-1">
+                <Tooltip content="Refresh size">
+                  <motion.button
+                    onClick={() => handleRefreshSize(row.original.id)}
+                    disabled={refreshingIds.has(row.original.id)}
+                    className="inline-flex p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
+                  >
+                    <RefreshCw
+                      className={cn(
+                        'w-4 h-4',
+                        refreshingIds.has(row.original.id) && 'animate-spin'
+                      )}
+                    />
+                  </motion.button>
+                </Tooltip>
                 <Tooltip content="Edit">
                   <motion.button
                     onClick={() => openEditDialog(row.original)}
@@ -406,7 +446,7 @@ function VolumesAdminPage() {
                 <Tooltip content="Delete">
                   <motion.button
                     onClick={() => handleDelete(row.original)}
-                    disabled={deleteVolume.isPending}
+                    disabled={deletingIds.has(row.original.id)}
                     className="inline-flex p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -415,7 +455,7 @@ function VolumesAdminPage() {
               </div>
             ),
             enableSorting: false,
-            size: 80,
+            size: 110,
           } satisfies ColumnDef<AdminVolume>,
         ]
       : []),
@@ -457,6 +497,16 @@ function VolumesAdminPage() {
           <code className="text-[10px]">{v.id}</code>
           <code className="bg-muted px-1.5 py-0.5 rounded">{v.name}</code>
         </div>
+        {v.owner && (
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-xs text-muted-foreground">Owner</span>
+            <UserLink
+              userId={v.owner_id}
+              name={v.owner.display_name || v.owner.username}
+              size="sm"
+            />
+          </div>
+        )}
         <div className="flex items-center gap-2 text-sm">
           <span className="text-muted-foreground">{formatBytes(v.size_bytes)}</span>
           <span
@@ -473,6 +523,13 @@ function VolumesAdminPage() {
             </span>
             <div className="flex items-center gap-1">
               <button
+                onClick={() => handleRefreshSize(v.id)}
+                disabled={refreshingIds.has(v.id)}
+                className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex"
+              >
+                <RefreshCw className={cn('w-4 h-4', refreshingIds.has(v.id) && 'animate-spin')} />
+              </button>
+              <button
                 onClick={() => openEditDialog(v)}
                 className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex"
               >
@@ -480,6 +537,7 @@ function VolumesAdminPage() {
               </button>
               <button
                 onClick={() => handleDelete(v)}
+                disabled={deletingIds.has(v.id)}
                 className="p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors inline-flex"
               >
                 <Trash2 className="w-4 h-4" />
@@ -501,6 +559,17 @@ function VolumesAdminPage() {
         icon={HardDrive}
         backTo="/admin"
         stats={stats}
+        actions={
+          canManageVolumes
+            ? [
+                {
+                  action: 'refresh' as const,
+                  onClick: () => refreshAllSizes.mutate(),
+                  loading: refreshAllSizes.isPending,
+                },
+              ]
+            : undefined
+        }
       >
         <DataTable
           columns={columns}

@@ -25,11 +25,16 @@ REGISTRY="${DOCKER_REGISTRY:-}"
 IMAGE_NAME="${AUTH_SIDECAR_IMAGE:-nukelab-auth-sidecar}"
 TAG="latest"
 PUSH=false
+NO_CACHE=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
         --push)
             PUSH=true
+            shift
+            ;;
+        --no-cache)
+            NO_CACHE=true
             shift
             ;;
         --tag)
@@ -46,6 +51,7 @@ Usage: $0 [OPTIONS]
 
 Options:
   --push              Push image to registry after build
+  --no-cache          Build without reusing the container layer cache
   --tag TAG           Set image tag (default: latest)
   --registry URL      Set Docker registry URL
   --help, -h          Show this help message
@@ -76,7 +82,13 @@ log "  Builder: ${CONTAINER_ENGINE}"
 
 cd "${PROJECT_DIR}/services/auth-sidecar"
 
+BUILD_OPTS=()
+if [[ "$NO_CACHE" == true ]]; then
+    BUILD_OPTS+=(--no-cache)
+fi
+
 $CONTAINER_ENGINE build \
+    "${BUILD_OPTS[@]}" \
     --tag "${FULL_IMAGE}" \
     --file Dockerfile \
     .

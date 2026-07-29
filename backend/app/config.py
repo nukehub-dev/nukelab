@@ -148,8 +148,32 @@ class Settings(BaseSettings):
     docker_pull_policy: str = "if-not-present"
     volume_storage_path: str = ""
 
+    # Container runtime driver ("docker" covers Docker and Podman via the
+    # Docker-compatible API; "kubernetes" is reserved for a future k3s driver).
+    container_runtime: str = "docker"
+
+    # NVIDIA GPU support. Requires an NVIDIA driver, nvidia-container-toolkit,
+    # and (for Podman) a CDI spec on the host.
+    gpu_enabled: bool = False
+    gpu_cdi_device: str = "nvidia.com/gpu=all"
+    # Optional exclusive GPU device pool: comma-separated CDI device names
+    # (e.g. "nvidia.com/gpu=0,nvidia.com/gpu=1"). When set, each unit of a
+    # plan's gpu_limit exclusively reserves one device per server. When empty,
+    # gpu_cdi_device is used as-is for every GPU server (shared legacy mode).
+    gpu_devices: str = ""
+
+    @property
+    def gpu_device_list(self) -> list[str]:
+        """Parse gpu_devices into a list of CDI device names."""
+        return [d.strip() for d in self.gpu_devices.split(",") if d.strip()]
+
     # Container runtime hardening (defaults to enabled unless dev_mode is True)
     container_hardening_enabled: bool | None = None
+    # Serve /docs, /redoc, and /openapi.json. Default: enabled everywhere
+    # except production (see set_api_docs_defaults). compose.yml passes an
+    # empty string when the operator leaves it unset — normalized to None by
+    # the field validator below so the env-aware default applies.
+    api_docs_enabled: bool | None = None
     container_user: str = "nukelab"
     container_uid: int = 65532
     container_gid: int = 65532
@@ -171,9 +195,11 @@ class Settings(BaseSettings):
     log_backup_count: int = 5
 
     credits_enabled: bool = True
-    credits_daily_allowance: int = 500
+    credits_initial_balance: int = 100
+    credits_daily_allowance: int = 10
     credits_max_balance: int = 5000
     credits_rollover: bool = False
+    credits_daily_allowance_login_window_hours: int = 48
 
     upload_dir: str = "/data/uploads"
     max_avatar_size_mb: int = 2
@@ -199,6 +225,9 @@ class Settings(BaseSettings):
     # Error Tracking
     sentry_dsn: str = ""
     sentry_release: str = ""
+
+    # Sentry-compatible security endpoint for CSP reports (GlitchTip, Sentry, etc.)
+    sentry_security_endpoint: str = ""
 
     # OpenTelemetry Distributed Tracing
     otel_traces_enabled: bool = False
@@ -253,6 +282,14 @@ class Settings(BaseSettings):
     @classmethod
     def _empty_rotation_grace_to_none(cls, value: Any) -> Any:
         """Treat an empty env value as "use the default"."""
+        if value == "" or value is None:
+            return None
+        return value
+
+    @field_validator("api_docs_enabled", mode="before")
+    @classmethod
+    def _empty_api_docs_to_none(cls, value: Any) -> Any:
+        """Treat an empty env value as "use the env-aware default"."""
         if value == "" or value is None:
             return None
         return value
@@ -332,6 +369,17 @@ class Settings(BaseSettings):
         """Default container hardening to enabled except in dev_mode."""
         if self.container_hardening_enabled is None:
             self.container_hardening_enabled = not self.dev_mode
+        return self
+
+    @model_validator(mode="after")
+    def set_api_docs_defaults(self) -> "Settings":
+        """Default API docs to disabled in production, enabled elsewhere.
+
+        The OpenAPI schema is a full recon map of every route, parameter, and
+        permission — useful in dev, an unnecessary gift in production.
+        """
+        if self.api_docs_enabled is None:
+            self.api_docs_enabled = self.app_env != "production"
         return self
 
     @model_validator(mode="after")

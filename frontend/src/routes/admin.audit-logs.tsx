@@ -32,7 +32,7 @@ import { useAuthStore, PERMISSIONS } from '../stores/auth-store'
 import { useDataTable } from '../hooks/use-data-table'
 import { useAuditLogs } from '../hooks/use-audit-logs'
 import { AuditLogDiff } from '../components/audit/audit-log-diff'
-import { formatDate, cn } from '../lib/utils'
+import { formatDate, cn, parseUtcDate } from '../lib/utils'
 import { useToastStore } from '../stores/toast-store'
 import { Dialog, DialogContent, DialogClose } from '../components/ui/dialog'
 import { Tooltip } from '../components/ui/tooltip'
@@ -235,7 +235,7 @@ function AuditLogsPage() {
     (l) => l.action.includes('delete') || l.action.includes('disable') || l.action.includes('stop')
   ).length
   const todayEvents = logs.filter((l) => {
-    const date = new Date(l.created_at)
+    const date = parseUtcDate(l.created_at)
     const now = new Date()
     return date.toDateString() === now.toDateString()
   }).length

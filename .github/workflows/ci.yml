@@ -84,7 +84,6 @@ jobs:
 
       - name: Lint backend
         run: |
-          chmod +x ./nukelabctl
           ./nukelabctl lint backend
 
   lint-frontend:
@@ -138,7 +137,6 @@ jobs:
           cp .env.example .env.development
           mkdir -p /tmp/nukelab-volumes
           echo "VOLUME_STORAGE_PATH=/tmp/nukelab-volumes" >> .env.development
-          chmod +x ./nukelabctl
 
       - name: Run backend tests
         run: ./nukelabctl test backend --coverage --cov-report=xml
@@ -159,7 +157,6 @@ jobs:
       - name: Stop backing services
         if: always()
         run: |
-          chmod +x ./nukelabctl
           ./nukelabctl stop dev || true
 
   build-images:
@@ -208,7 +205,6 @@ jobs:
       - name: Generate image tags
         id: meta
         run: |
-          chmod +x ./scripts/ci-version.sh
           ./scripts/ci-version.sh
         env:
           GITHUB_REF: ${{ github.ref }}

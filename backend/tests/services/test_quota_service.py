@@ -10,6 +10,7 @@ import pytest
 from app.models.resource_quota import ResourceQuota
 from app.models.server import Server
 from app.models.server_plan import ServerPlan
+from app.models.volume import Volume
 from app.services.quota_service import QuotaService
 
 
@@ -207,7 +208,7 @@ class TestQuotaServiceRecalculate:
 
     @pytest.mark.asyncio
     async def test_recalculate_usage_with_servers(self, db_session, test_user):
-        """Should sum running server resources."""
+        """Should sum running server resources (disk comes from volumes, not servers)."""
         plan = ServerPlan(
             name="Test", slug="test", cpu_limit=2, memory_limit="4g", disk_limit="20g"
         )
@@ -230,8 +231,24 @@ class TestQuotaServiceRecalculate:
         quota = await service.recalculate_usage(str(test_user.id))
         assert quota.usage_cpu == 2
         assert quota.usage_memory_mb == 4096
-        assert quota.usage_disk_mb == 20480
+        assert quota.usage_disk_mb == 0
         assert quota.usage_servers == 1
+
+    @pytest.mark.asyncio
+    async def test_recalculate_usage_counts_volume_capacity(self, db_session, test_user):
+        """Disk usage should sum volume size limits regardless of server state."""
+        volume = Volume(
+            name="vol1",
+            display_name="vol1",
+            owner_id=test_user.id,
+            max_size_bytes=10 * 1024**3,
+        )
+        db_session.add(volume)
+        await db_session.commit()
+
+        service = QuotaService(db_session)
+        quota = await service.recalculate_usage(str(test_user.id))
+        assert quota.usage_disk_mb == 10240
 
     @pytest.mark.asyncio
     async def test_recalculate_usage_excludes_stopped(self, db_session, test_user):
@@ -387,8 +404,8 @@ class TestQuotaServiceCheckSpawn:
         assert "Memory limit exceeded" in result["reason"]
 
     @pytest.mark.asyncio
-    async def test_check_spawn_disk_limit(self, db_session, test_user):
-        """Should reject when disk limit exceeded."""
+    async def test_check_spawn_ignores_plan_disk(self, db_session, test_user):
+        """Plan disk should not be gated by the user disk quota (volume capacity is)."""
         quota = ResourceQuota(
             user_id=test_user.id,
             max_cpu_total=16,
@@ -414,8 +431,49 @@ class TestQuotaServiceCheckSpawn:
 
         service = QuotaService(db_session)
         result = await service.check_spawn_allowed(str(test_user.id), str(plan.id))
-        assert result["allowed"] is False
-        assert "Disk limit exceeded" in result["reason"]
+        assert result["allowed"] is True
+
+    @pytest.mark.asyncio
+    async def test_volume_plus_spawn_no_double_count(self, db_session, test_user):
+        """LOGIC-08 regression: volume capacity and plan disk must not both
+        count against max_disk_total."""
+        quota = ResourceQuota(
+            user_id=test_user.id,
+            max_cpu_total=64,
+            max_memory_total="64g",
+            max_disk_total="20g",
+            max_gpu_total=0,
+            max_servers_total=5,
+        )
+        db_session.add(quota)
+        volume = Volume(
+            name="vol-dc",
+            display_name="vol-dc",
+            owner_id=test_user.id,
+            max_size_bytes=10 * 1024**3,
+        )
+        db_session.add(volume)
+        await db_session.flush()
+
+        plan = ServerPlan(
+            name="Test",
+            slug="double-count-test",
+            cpu_limit=1,
+            memory_limit="1g",
+            disk_limit="20g",
+            max_servers_per_user=5,
+            cost_per_hour=1,
+        )
+        db_session.add(plan)
+        await db_session.commit()
+
+        service = QuotaService(db_session)
+        result = await service.check_spawn_allowed(str(test_user.id), str(plan.id))
+        assert result["allowed"] is True
+
+        # Usage reflects only the reserved volume capacity (10g), not the plan.
+        updated = await service.recalculate_usage(str(test_user.id))
+        assert updated.usage_disk_mb == 10240
 
     @pytest.mark.asyncio
     async def test_check_spawn_gpu_limit(self, db_session, test_user):
@@ -483,6 +541,36 @@ class TestQuotaServiceVolumeCheck:
         result = await service.check_volume_creation_allowed(str(test_user.id))
         assert result["allowed"] is True
 
+    @pytest.mark.asyncio
+    async def test_check_volume_exclude_volume_id(self, db_session, test_user):
+        """Resize check should not count the volume being resized twice."""
+        quota = ResourceQuota(user_id=test_user.id, max_disk_total="20g")
+        db_session.add(quota)
+        volume = Volume(
+            name="vol-resize",
+            display_name="vol-resize",
+            owner_id=test_user.id,
+            max_size_bytes=10 * 1024**3,
+        )
+        db_session.add(volume)
+        await db_session.commit()
+
+        service = QuotaService(db_session)
+
+        # Without exclusion, growing 10g -> 15g counts 10g + 15g > 20g.
+        result = await service.check_volume_creation_allowed(
+            str(test_user.id), requested_size_bytes=15 * 1024**3
+        )
+        assert result["allowed"] is False
+
+        # With exclusion, only other volumes count: 0 + 15g <= 20g.
+        result = await service.check_volume_creation_allowed(
+            str(test_user.id),
+            requested_size_bytes=15 * 1024**3,
+            exclude_volume_id=str(volume.id),
+        )
+        assert result["allowed"] is True
+
 
 class TestQuotaServiceIncrementDecrement:
     """Tests for increment_usage and decrement_usage."""
@@ -505,7 +593,8 @@ class TestQuotaServiceIncrementDecrement:
         quota = await service.increment_usage(str(test_user.id), str(plan.id))
         assert quota.usage_cpu == 2
         assert quota.usage_memory_mb == 4096
-        assert quota.usage_disk_mb == 20480
+        # Disk usage is volume-capacity based; starting a server does not change it.
+        assert quota.usage_disk_mb == 0
         assert quota.usage_gpu == 1
         assert quota.usage_servers == 1
 
@@ -538,7 +627,8 @@ class TestQuotaServiceIncrementDecrement:
         result = await service.decrement_usage(str(test_user.id), str(plan.id))
         assert result.usage_cpu == 0
         assert result.usage_memory_mb == 0
-        assert result.usage_disk_mb == 0
+        # Disk usage is volume-capacity based; stopping a server does not change it.
+        assert result.usage_disk_mb == 20480
         assert result.usage_gpu == 0
         assert result.usage_servers == 0
 

@@ -60,8 +60,6 @@ jobs:
       - name: Run NukeLab security scans
         run: |
           cp .env.example .env.development
-          chmod +x ./nukelabctl
-          chmod +x ./scripts/security/*.sh
           ./nukelabctl security --with-dev
         continue-on-error: true
 
@@ -102,7 +100,6 @@ jobs:
       - name: Set up environment
         run: |
           cp .env.example .env.development
-          chmod +x ./nukelabctl
 
       - name: Build core images
         run: ./nukelabctl build all
@@ -188,7 +185,6 @@ jobs:
       - name: Check for unsigned commits
         run: |
           cp .env.example .env.development
-          chmod +x ./nukelabctl
           ./nukelabctl security --signed-commits --no-bandit --no-pip-audit --no-npm-audit --no-trivy
         continue-on-error: true
 

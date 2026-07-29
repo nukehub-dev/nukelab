@@ -58,6 +58,34 @@ class TestSecurityHeadersMiddleware:
         assert response.status_code == 401
         assert response.headers.get("X-Content-Type-Options") == "nosniff"
 
+    @pytest.mark.asyncio
+    async def test_sentry_security_endpoint_adds_csp_report_only(self, client):
+        """A configured Sentry-compatible security endpoint should inject a CSP-Report-Only header."""
+        original = settings.sentry_security_endpoint
+        settings.sentry_security_endpoint = (
+            "https://app.glitchtip.com/api/25467/security/?glitchtip_key=test"
+        )
+        try:
+            response = await client.get("/api/health")
+            assert response.status_code == 200
+            csp = response.headers.get("Content-Security-Policy-Report-Only", "")
+            assert "report-uri" in csp
+            assert settings.sentry_security_endpoint in csp
+        finally:
+            settings.sentry_security_endpoint = original
+
+    @pytest.mark.asyncio
+    async def test_no_sentry_security_endpoint_no_csp_report_only(self, client):
+        """Without a security endpoint, no CSP-Report-Only header should be set."""
+        original = settings.sentry_security_endpoint
+        settings.sentry_security_endpoint = ""
+        try:
+            response = await client.get("/api/health")
+            assert response.status_code == 200
+            assert "Content-Security-Policy-Report-Only" not in response.headers
+        finally:
+            settings.sentry_security_endpoint = original
+
 
 class TestCacheControl:
     """Cache-Control header tests for sensitive endpoints."""

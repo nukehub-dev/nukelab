@@ -173,6 +173,7 @@ class ScheduleService:
 
     async def execute_schedule(self, schedule: ServerSchedule) -> dict[str, Any]:
         """Execute a schedule action on a server"""
+        from app.api.servers import _gpu_requires_recreate, _respawn_server_container
         from app.container.spawner import spawner
         from app.services.quota_service import QuotaService
 
@@ -194,7 +195,20 @@ class ScheduleService:
                 if server.container_id:
                     actual = await spawner.get_status(server.container_id)
                     if actual == "stopped":
-                        await spawner.start(server.container_id)
+                        if await _gpu_requires_recreate(self.db, server):
+                            # GPU server: never plain-start a container with
+                            # stale baked-in DeviceRequests — its exclusive
+                            # device rows may have been released and the device
+                            # reassigned. Recreate with the devices it owns.
+                            new_server = await _respawn_server_container(
+                                server, self.db, server.name
+                            )
+                            server.container_id = new_server.container_id
+                            server.image = new_server.image
+                            server.volume_id = new_server.volume_id
+                            server.external_url = new_server.external_url
+                        else:
+                            await spawner.start(server.container_id)
                         server.status = "running"
                         server.started_at = datetime.now(UTC).replace(tzinfo=None)
                         server.last_activity = datetime.now(UTC).replace(tzinfo=None)
@@ -214,6 +228,10 @@ class ScheduleService:
                     server.status = "stopped"
                     server.stopped_at = datetime.now(UTC).replace(tzinfo=None)
                     server.stop_reason = "scheduled_stop"
+
+                    from app.services.gpu_allocator import GpuAllocatorService
+
+                    await GpuAllocatorService(self.db).release(str(server.id))
                     await broadcast_server_status_change(
                         server.user_id, str(server.id), "stopped", {"stop_reason": "scheduled_stop"}
                     )
@@ -243,8 +261,19 @@ class ScheduleService:
 
             elif schedule.action == "restart":
                 if server.container_id and server.status == "running":
-                    await spawner.stop(server.container_id)
-                    await spawner.start(server.container_id)
+                    if await _gpu_requires_recreate(self.db, server):
+                        # GPU server: recreate instead of stop+start (stale
+                        # baked-in DeviceRequests). Its device rows are still
+                        # reserved — no release on restart — so the respawn
+                        # reuses the same devices.
+                        new_server = await _respawn_server_container(server, self.db, server.name)
+                        server.container_id = new_server.container_id
+                        server.image = new_server.image
+                        server.volume_id = new_server.volume_id
+                        server.external_url = new_server.external_url
+                    else:
+                        await spawner.stop(server.container_id)
+                        await spawner.start(server.container_id)
                     server.started_at = datetime.now(UTC).replace(tzinfo=None)
                     server.last_activity = datetime.now(UTC).replace(tzinfo=None)
                     success = True

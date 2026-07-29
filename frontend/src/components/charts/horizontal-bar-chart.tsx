@@ -8,6 +8,8 @@ export interface HorizontalBarDataPoint {
   label: string
   value: number
   color?: string
+  /** Optional payload passed back to onItemClick (e.g. server id). */
+  id?: string
 }
 
 interface HorizontalBarChartProps {
@@ -18,6 +20,7 @@ interface HorizontalBarChartProps {
   className?: string
   valueFormatter?: (value: number) => string
   showValues?: boolean
+  onItemClick?: (item: HorizontalBarDataPoint, index: number) => void
 }
 
 export function HorizontalBarChart({
@@ -28,6 +31,7 @@ export function HorizontalBarChart({
   className,
   valueFormatter,
   showValues = true,
+  onItemClick,
 }: HorizontalBarChartProps) {
   const computedMax = maxValue ?? Math.max(...data.map((d) => d.value), 1)
   const [hovered, setHovered] = useState<number | null>(null)
@@ -43,9 +47,22 @@ export function HorizontalBarChart({
         return (
           <div
             key={`${item.label}-${index}`}
-            className="flex items-center gap-3 relative cursor-pointer"
+            className={cn('flex items-center gap-3 relative', onItemClick && 'cursor-pointer')}
             onMouseEnter={() => setHovered(index)}
             onMouseLeave={() => setHovered(null)}
+            onClick={onItemClick ? () => onItemClick(item, index) : undefined}
+            role={onItemClick ? 'button' : undefined}
+            tabIndex={onItemClick ? 0 : undefined}
+            onKeyDown={
+              onItemClick
+                ? (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      onItemClick(item, index)
+                    }
+                  }
+                : undefined
+            }
           >
             {/* Label */}
             <div

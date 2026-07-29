@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 import { createFileRoute, Link } from '@tanstack/react-router'
+import { UserLink } from '../components/admin/user-link'
 import {
   Server,
   Activity,
@@ -13,7 +14,6 @@ import {
   Trash2,
   ExternalLink,
   Eye,
-  Users,
 } from 'lucide-react'
 import { Tooltip } from '../components/ui/tooltip'
 import { Checkbox } from '../components/ui/checkbox'
@@ -241,18 +241,21 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
         },
       },
       {
+        accessorKey: 'health_status',
+        header: 'Health',
+        cell: ({ row }) => {
+          const health = (row.getValue('health_status') as string) || 'unknown'
+          return <StatusBadge status={health as 'healthy' | 'unhealthy' | 'unknown'} />
+        },
+      },
+      {
         accessorKey: 'username',
         header: 'Owner',
         cell: ({ row }) => {
           const username = row.original.username
-          return (
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs font-medium">
-                {username?.slice(0, 2).toUpperCase() || '??'}
-              </div>
-              <span className="text-sm">{username || 'Unknown'}</span>
-            </div>
-          )
+          const userId = row.original.user_id
+          if (!username || !userId) return <span className="text-sm">Unknown</span>
+          return <UserLink userId={userId} name={username} size="sm" />
         },
       },
       {
@@ -573,15 +576,19 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
     <div className="p-4 space-y-3">
       <div className="flex items-center justify-between">
         <div className="font-medium">{server.name}</div>
-        <StatusBadge
-          status={server.status as 'running' | 'stopped' | 'pending' | 'error'}
-          pulse={server.status === 'running'}
-        />
+        <div className="flex items-center gap-2">
+          <StatusBadge
+            status={server.status as 'running' | 'stopped' | 'pending' | 'error'}
+            pulse={server.status === 'running'}
+          />
+          <StatusBadge
+            status={(server.health_status || 'unknown') as 'healthy' | 'unhealthy' | 'unknown'}
+          />
+        </div>
       </div>
-      {server.username && (
+      {server.username && server.user_id && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Users className="w-3.5 h-3.5" />
-          {server.username}
+          <UserLink userId={server.user_id} name={server.username} size="sm" />
         </div>
       )}
       <div className="flex items-center gap-3 text-sm text-muted-foreground">

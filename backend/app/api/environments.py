@@ -30,26 +30,21 @@ async def list_environments(
 ):
     """List environment templates.
 
-    Users with 'environment:read' permission see all environments.
+    Admins see all environments.
     Other authenticated users only see public, active environments.
     """
-    can_read_all = has_permission(current_user, Permission.ENVIRONMENT_READ)
+    is_admin = has_permission(current_user, Permission.ADMIN_ACCESS) or has_permission(
+        current_user, Permission.ALL
+    )
     service = EnvironmentService(db)
     result = await service.list_environments(
         category=category,
-        is_active=is_active if can_read_all else True,
+        is_active=is_active if is_admin else True,
         search=search,
+        user_role=current_user.role,
         page=page,
         limit=limit,
     )
-
-    # Filter to public-only for non-admin users
-    if not can_read_all:
-        items = result.get("items", [])
-        result["items"] = [
-            env for env in items if env.get("is_public") and env.get("is_active", True)
-        ]
-        result["total"] = len(result["items"])
 
     return {"success": True, "data": result}
 
@@ -60,7 +55,7 @@ async def get_environment(
 ):
     """Get environment template details.
 
-    Users with 'environment:read' permission can view any environment.
+    Admins can view any environment.
     Other authenticated users can only view public, active environments.
     """
     service = EnvironmentService(db)
@@ -69,9 +64,11 @@ async def get_environment(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Environment not found")
 
     env_dict = env.to_dict()
-    can_read_all = has_permission(current_user, Permission.ENVIRONMENT_READ)
+    is_admin = has_permission(current_user, Permission.ADMIN_ACCESS) or has_permission(
+        current_user, Permission.ALL
+    )
 
-    if not can_read_all and (not env_dict.get("is_public") or not env_dict.get("is_active", True)):
+    if not is_admin and (not env.is_public or not env.is_active):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     return {"success": True, "data": env_dict}

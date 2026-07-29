@@ -9,6 +9,7 @@ __all__ = [
     "CreditTransaction",
     "DailyServerMetric",
     "EnvironmentTemplate",
+    "GpuAllocation",
     "HealthCheck",
     "LoginEvent",
     "MaintenanceWindow",
@@ -43,6 +44,7 @@ from app.models.api_token import ApiToken as ApiToken
 from app.models.credit_transaction import CreditTransaction as CreditTransaction
 from app.models.daily_server_metric import DailyServerMetric as DailyServerMetric
 from app.models.environment_template import EnvironmentTemplate as EnvironmentTemplate
+from app.models.gpu_allocation import GpuAllocation as GpuAllocation
 from app.models.health_check import HealthCheck as HealthCheck
 from app.models.login_event import LoginEvent as LoginEvent
 from app.models.maintenance_window import MaintenanceWindow as MaintenanceWindow

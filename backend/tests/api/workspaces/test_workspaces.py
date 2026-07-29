@@ -219,6 +219,7 @@ class TestWorkspaceAPI:
             headers=headers,
             json={
                 "display_name": "API Test Volume",
+                "max_size_bytes": 10737418240,
             },
         )
         volume = resp.json()

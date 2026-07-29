@@ -49,6 +49,13 @@ parse_remove_args() {
                 ;;
         esac
     done
+
+    case "$TARGET" in
+        backend | frontend | all) ;;
+        *)
+            die "Unknown target for remove: $TARGET\nRun './nukelabctl remove --help' for usage."
+            ;;
+    esac
 }
 
 help_remove() {

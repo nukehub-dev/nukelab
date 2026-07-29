@@ -187,6 +187,7 @@ class TestServerMetricModel:
             memory_used=100,
             memory_total=200,
             memory_percent=50.0,
+            memory_cache=400,
             disk_read_bytes=0,
             disk_write_bytes=0,
             network_rx_bytes=0,
@@ -195,6 +196,7 @@ class TestServerMetricModel:
         )
         d = sm.to_dict()
         assert d["cpu"]["percent"] == 50.0
+        assert d["memory"]["cache"] == 400
 
 
 class TestServerPlanModel:

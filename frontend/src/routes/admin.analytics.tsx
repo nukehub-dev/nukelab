@@ -242,7 +242,7 @@ function AnalyticsDashboard() {
   const userGrowthData = useMemo(
     () =>
       userGrowth?.map((d) => ({
-        label: new Date(d.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        label: formatters.date(d.date),
         value: d.count,
       })) || [],
     [userGrowth]

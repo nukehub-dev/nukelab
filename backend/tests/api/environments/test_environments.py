@@ -227,3 +227,87 @@ class TestEnvironmentsAPI:
             json={"name": "Cloned", "slug": "cloned"},
         )
         assert response.status_code in [403, 404]
+
+
+class TestEnvironmentVisibilityAPI:
+    """Private/inactive environments must be hidden from non-admin users."""
+
+    @pytest.mark.asyncio
+    async def test_user_list_excludes_private_and_inactive(self, client, user_token, db_session):
+        """Regular users only see public, active environments in the list."""
+        from app.models.environment_template import EnvironmentTemplate
+
+        private = EnvironmentTemplate(
+            name="Priv", slug="priv-api-vis", image="img", is_public=False
+        )
+        inactive = EnvironmentTemplate(
+            name="Inact", slug="inact-api-vis", image="img", is_active=False
+        )
+        public = EnvironmentTemplate(name="Pub", slug="pub-api-vis", image="img")
+        db_session.add_all([private, inactive, public])
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/environments/", headers={"Authorization": f"Bearer {user_token}"}
+        )
+        assert response.status_code == 200
+        slugs = {e["slug"] for e in response.json()["data"]["items"]}
+        assert "pub-api-vis" in slugs
+        assert "priv-api-vis" not in slugs
+        assert "inact-api-vis" not in slugs
+
+    @pytest.mark.asyncio
+    async def test_admin_list_includes_private_and_inactive(self, client, admin_token, db_session):
+        """Admins see all environments in the list."""
+        from app.models.environment_template import EnvironmentTemplate
+
+        private = EnvironmentTemplate(
+            name="Priv", slug="priv-api-adm", image="img", is_public=False
+        )
+        inactive = EnvironmentTemplate(
+            name="Inact", slug="inact-api-adm", image="img", is_active=False
+        )
+        db_session.add_all([private, inactive])
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/environments/", headers={"Authorization": f"Bearer {admin_token}"}
+        )
+        assert response.status_code == 200
+        slugs = {e["slug"] for e in response.json()["data"]["items"]}
+        assert "priv-api-adm" in slugs
+        assert "inact-api-adm" in slugs
+
+    @pytest.mark.asyncio
+    async def test_user_detail_private_forbidden(self, client, user_token, db_session):
+        """Regular users get 403 for a private environment's detail."""
+        from app.models.environment_template import EnvironmentTemplate
+
+        private = EnvironmentTemplate(
+            name="Priv", slug="priv-api-detail", image="img", is_public=False
+        )
+        db_session.add(private)
+        await db_session.commit()
+
+        response = await client.get(
+            f"/api/environments/{private.id}",
+            headers={"Authorization": f"Bearer {user_token}"},
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_admin_detail_private_allowed(self, client, admin_token, db_session):
+        """Admins can view a private environment's detail."""
+        from app.models.environment_template import EnvironmentTemplate
+
+        private = EnvironmentTemplate(
+            name="Priv", slug="priv-api-detail-adm", image="img", is_public=False
+        )
+        db_session.add(private)
+        await db_session.commit()
+
+        response = await client.get(
+            f"/api/environments/{private.id}",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        assert response.status_code == 200

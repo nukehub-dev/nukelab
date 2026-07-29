@@ -63,6 +63,20 @@ Environment variables:
 - `GET /auth` - Nginx auth_request handler (returns 200/401)
 - `GET /validate` - Full validation with JSON response
 - `GET /metrics` - Basic metrics
+- `GET /activity` - Last allowed-request timestamp (Unix seconds, `0` = none
+  since start). Polled by the backend idle-shutdown task so real proxied
+  traffic counts as server activity.
+
+## Activity tracking
+
+Every request allowed through `/auth` or `/validate` (valid token, or
+auth-disabled pass-through) updates an in-memory `last_activity` timestamp.
+Requests carrying an **expired but authentic** token (valid signature and
+audience for this server) also update it, while still being rejected with 401 —
+this keeps long IDE sessions, whose token cookie outlives its 5-minute TTL,
+counted as activity. Forged tokens, wrong-audience tokens, and requests to
+`/health` or `/metrics` never update it. The timestamp resets on sidecar
+restart; the backend falls back to its database `last_activity` in that case.
 
 ## Building
 

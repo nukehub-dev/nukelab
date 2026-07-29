@@ -8,8 +8,10 @@ from unittest import mock
 
 import pytest
 
+from app.config import settings
 from app.models.api_token import ApiToken
 from app.models.refresh_token import RefreshToken
+from app.models.user import User
 
 
 def _make_oauth_mock():
@@ -166,6 +168,16 @@ class TestOAuthCallbackHappyPaths:
                     assert response.status_code == 307
                     assert "token=" in response.headers["location"]
 
+        # The OAuth signup path should seed the user with the configured
+        # initial balance, not reuse the daily allowance as the starting
+        # balance.
+        from sqlalchemy import select
+
+        result = await db_session.execute(select(User).where(User.email == "oauth_new@example.com"))
+        user = result.scalar_one()
+        assert user.nuke_balance == settings.credits_initial_balance
+        assert user.daily_allowance == settings.credits_daily_allowance
+
     @pytest.mark.asyncio
     async def test_oauth_callback_link_existing_user_by_email(self, client, test_user, db_session):
         test_user.oauth_id = None
@@ -314,19 +326,21 @@ class TestOAuthLoginPKCEAndSync:
     async def test_oauth_login_pkce_enabled(self, client):
         m = _make_oauth_mock()
         with mock.patch("app.services.oauth_service.oauth_service", m):
-            with mock.patch("app.api.auth.settings.oauth_pkce_enabled", True):
-                response = await client.get("/api/auth/oauth/login", follow_redirects=False)
-                assert response.status_code == 307
-                assert "oauth_verifier" in response.cookies
+            with mock.patch("app.api.auth.settings.auth_mode", "both"):
+                with mock.patch("app.api.auth.settings.oauth_pkce_enabled", True):
+                    response = await client.get("/api/auth/oauth/login", follow_redirects=False)
+                    assert response.status_code == 307
+                    assert "oauth_verifier" in response.cookies
 
     @pytest.mark.asyncio
     async def test_oauth_login_sync_mode(self, client):
         m = _make_oauth_mock()
         with mock.patch("app.services.oauth_service.oauth_service", m):
-            response = await client.get("/api/auth/oauth/login?sync=1", follow_redirects=False)
-            assert response.status_code == 307
-            assert "oauth_sync" in response.cookies
-            assert "prompt=none" in response.headers["location"]
+            with mock.patch("app.api.auth.settings.auth_mode", "both"):
+                response = await client.get("/api/auth/oauth/login?sync=1", follow_redirects=False)
+                assert response.status_code == 307
+                assert "oauth_sync" in response.cookies
+                assert "prompt=none" in response.headers["location"]
 
 
 class TestGetAuthContextEdgeCases:
@@ -636,3 +650,94 @@ class TestOAuthSync:
             )
         assert response.status_code == 500
         assert "sync failed" in response.json()["detail"].lower()
+
+
+class TestOAuthLogout:
+    """RP-initiated logout: /auth/logout hands back the IdP end-session URL."""
+
+    @pytest.mark.asyncio
+    async def test_logout_returns_oauth_logout_url_for_oauth_user(
+        self, client, user_token, test_user, db_session
+    ):
+        """OAuth-authenticated users get the provider logout URL in the response."""
+        test_user.oauth_provider = "oauth"
+        await db_session.commit()
+
+        mock_oauth = _make_oauth_mock()
+        mock_oauth.get_logout_url = mock.AsyncMock(
+            return_value="https://auth.example.com/logout?client_id=x"
+        )
+
+        with mock.patch("app.services.oauth_service.oauth_service", mock_oauth):
+            with mock.patch("app.api.auth.settings.auth_mode", "both"):
+                response = await client.post(
+                    "/api/auth/logout",
+                    headers={"Authorization": f"Bearer {user_token}"},
+                )
+
+        assert response.status_code == 200
+        assert response.json()["oauth_logout_url"] == "https://auth.example.com/logout?client_id=x"
+
+    @pytest.mark.asyncio
+    async def test_logout_omits_oauth_logout_url_for_local_user(self, client, user_token):
+        """Local users never get a provider logout URL, even if OAuth is configured."""
+        mock_oauth = _make_oauth_mock()
+        mock_oauth.get_logout_url = mock.AsyncMock(
+            return_value="https://auth.example.com/logout?client_id=x"
+        )
+
+        with mock.patch("app.services.oauth_service.oauth_service", mock_oauth):
+            with mock.patch("app.api.auth.settings.auth_mode", "both"):
+                response = await client.post(
+                    "/api/auth/logout",
+                    headers={"Authorization": f"Bearer {user_token}"},
+                )
+
+        assert response.status_code == 200
+        assert "oauth_logout_url" not in response.json()
+        mock_oauth.get_logout_url.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_logout_omits_oauth_logout_url_when_provider_has_no_end_session(
+        self, client, user_token, test_user, db_session
+    ):
+        """Providers without an end-session endpoint fall back to local-only logout."""
+        test_user.oauth_provider = "oauth"
+        await db_session.commit()
+
+        mock_oauth = _make_oauth_mock()
+        mock_oauth.get_logout_url = mock.AsyncMock(return_value=None)
+
+        with mock.patch("app.services.oauth_service.oauth_service", mock_oauth):
+            with mock.patch("app.api.auth.settings.auth_mode", "both"):
+                response = await client.post(
+                    "/api/auth/logout",
+                    headers={"Authorization": f"Bearer {user_token}"},
+                )
+
+        assert response.status_code == 200
+        assert "oauth_logout_url" not in response.json()
+
+    @pytest.mark.asyncio
+    async def test_logout_omits_oauth_logout_url_when_auth_mode_local(
+        self, client, user_token, test_user, db_session
+    ):
+        """auth_mode=local disables provider logout even for OAuth-linked users."""
+        test_user.oauth_provider = "oauth"
+        await db_session.commit()
+
+        mock_oauth = _make_oauth_mock()
+        mock_oauth.get_logout_url = mock.AsyncMock(
+            return_value="https://auth.example.com/logout?client_id=x"
+        )
+
+        with mock.patch("app.services.oauth_service.oauth_service", mock_oauth):
+            with mock.patch("app.api.auth.settings.auth_mode", "local"):
+                response = await client.post(
+                    "/api/auth/logout",
+                    headers={"Authorization": f"Bearer {user_token}"},
+                )
+
+        assert response.status_code == 200
+        assert "oauth_logout_url" not in response.json()
+        mock_oauth.get_logout_url.assert_not_called()
