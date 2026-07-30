@@ -325,6 +325,30 @@ class ServerSpawner:
                     container_name,
                 )
 
+            # Wait for Traefik to publish the server route. Without this, the
+            # frontend can redirect before Traefik knows about the container and
+            # land on the SPA user-gateway fallback or a 503. Probe the public
+            # path through Traefik's internal load-balancer address and check the
+            # body to distinguish the container's /health response from a
+            # fallback HTML shell.
+            traefik_ready = True
+            if settings.traefik_internal_url:
+                traefik_health_url = (
+                    f"{settings.traefik_internal_url.rstrip('/')}{route_prefix}/health"
+                )
+                traefik_ready = await container_client.wait_for_container_ready(
+                    container_name,
+                    traefik_health_url,
+                    timeout=settings.container_readiness_timeout,
+                    interval=settings.container_readiness_interval,
+                    body_contains="healthy",
+                )
+                if not traefik_ready:
+                    logger.warning(
+                        "Traefik route for %s not ready within timeout; continuing",
+                        container_name,
+                    )
+
             # Determine primary volume_id from volume_mounts if provided
             primary_volume_id = None
             if volume_mounts:
@@ -332,7 +356,7 @@ class ServerSpawner:
                 primary = next((m for m in volume_mounts if m.get("is_primary")), volume_mounts[0])
                 primary_volume_id = primary.get("volume_id")
 
-            # Create server record. Reflect the result of the readiness probe in
+            # Create server record. Reflect the result of the readiness probes in
             # health_status so the API shows an accurate initial state instead of
             # the model default "unknown".
             server = Server(
@@ -344,7 +368,7 @@ class ServerSpawner:
                 image=image,
                 volume_id=uuid.UUID(primary_volume_id) if primary_volume_id else None,
                 status="running",
-                health_status="healthy" if ready else "unhealthy",
+                health_status="healthy" if (ready and traefik_ready) else "unhealthy",
                 allocated_cpu=cpu,
                 allocated_memory=memory,
                 allocated_disk=disk,

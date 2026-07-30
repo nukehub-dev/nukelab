@@ -541,6 +541,7 @@ class DockerDriver(ContainerDriver):
         health_url: str,
         timeout: int | None = None,
         interval: float | None = None,
+        body_contains: str | None = None,
     ) -> bool:
         """Wait until the container responds successfully on health_url.
 
@@ -566,6 +567,16 @@ class DockerDriver(ContainerDriver):
                 async with aiohttp.ClientSession(timeout=timeout_obj) as session:
                     async with session.get(health_url) as resp:
                         if resp.status == 200:
+                            if body_contains:
+                                text = await resp.text()
+                                if body_contains not in text:
+                                    logger.debug(
+                                        "Container %s returned 200 but body did not contain %r",
+                                        container_name,
+                                        body_contains,
+                                    )
+                                    await asyncio.sleep(interval)
+                                    continue
                             logger.info("Container %s is ready", container_name)
                             return True
             except Exception as e:

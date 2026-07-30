@@ -657,9 +657,9 @@ function ServerGatewayPage() {
   useActivityHeartbeat(server?.id, server?.status === 'running')
 
   // When server transitions to running, get access token and redirect.
-  // The backend spawner already waits for the container's /health endpoint
-  // before reporting status=running, so nginx is up. A short fixed delay gives
-  // Traefik a moment to pick up the new Docker route before we navigate.
+  // The backend spawner already waits for both the container's /health endpoint
+  // and the Traefik route before reporting status=running, so we can redirect
+  // immediately.
   useEffect(() => {
     if (server?.status !== 'running') return
 
@@ -693,10 +693,10 @@ function ServerGatewayPage() {
       }
     }
 
-    const timeout = setTimeout(() => {
-      getAccessTokenAndRedirect()
-    }, 3000)
-    return () => clearTimeout(timeout)
+    // The backend now waits for the Traefik route before reporting
+    // status=running, so we can navigate as soon as we have a token and the
+    // service worker is up to date.
+    getAccessTokenAndRedirect()
   }, [server?.status, server?.id, server?.external_url, isOwnServer, username, serverName])
 
   const handleStart = useCallback(async () => {
