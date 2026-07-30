@@ -657,20 +657,11 @@ function ServerGatewayPage() {
   useActivityHeartbeat(server?.id, server?.status === 'running')
 
   // When server transitions to running, get access token and redirect.
-  // Wait for health_status === 'healthy' first (capped at 15s) so the
-  // one-shot redirect does not land on a transient 503 while Traefik
-  // routing and in-container app startup are still settling.
+  // The backend spawner already waits for the container's /health endpoint
+  // before reporting status=running, so nginx is up. A short fixed delay gives
+  // Traefik a moment to pick up the new Docker route before we navigate.
   useEffect(() => {
     if (server?.status !== 'running') return
-    if (startTimeRef.current === null) startTimeRef.current = Date.now()
-
-    const waitedMs = Date.now() - startTimeRef.current
-    if (server.health_status !== 'healthy' && waitedMs < 15000) {
-      const interval = setInterval(() => {
-        queryClient.invalidateQueries({ queryKey: ['server-by-path', username, serverName] })
-      }, 2000)
-      return () => clearInterval(interval)
-    }
 
     const redirectKey = `server-redirect-${server.id}`
     const alreadyRedirected = sessionStorage.getItem(redirectKey)
@@ -704,18 +695,9 @@ function ServerGatewayPage() {
 
     const timeout = setTimeout(() => {
       getAccessTokenAndRedirect()
-    }, 1000)
+    }, 3000)
     return () => clearTimeout(timeout)
-  }, [
-    server?.status,
-    server?.id,
-    server?.external_url,
-    server?.health_status,
-    isOwnServer,
-    queryClient,
-    username,
-    serverName,
-  ])
+  }, [server?.status, server?.id, server?.external_url, isOwnServer, username, serverName])
 
   const handleStart = useCallback(async () => {
     if (!server) return
