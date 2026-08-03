@@ -23,6 +23,11 @@ function shouldBypass(request, url) {
   for (const prefix of BYPASS_PATHS) {
     if (pathname.startsWith(prefix)) return true;
   }
+  // Visualizer reverse-proxy routes are served by the IDE container's trame
+  // servers and must not be served the cached SPA shell. They normally live
+  // under /user/.../visualizer/, but bypass them anywhere they appear as a
+  // defense-in-depth measure.
+  if (pathname.includes('/visualizer/')) return true;
   return false;
 }
 
