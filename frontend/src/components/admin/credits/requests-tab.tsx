@@ -3,7 +3,16 @@
 
 import { useState, useCallback, useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { Check, Clock, HandCoins, Hourglass, Inbox, TrendingUp, X } from 'lucide-react'
+import {
+  Check,
+  Clock,
+  HandCoins,
+  Hourglass,
+  Inbox,
+  MessageSquare,
+  TrendingUp,
+  X,
+} from 'lucide-react'
 import { UserLink } from '../user-link'
 import {
   useAllCreditRequests,
@@ -45,6 +54,21 @@ const REQUEST_SORT_OPTIONS = [
 
 /** Open requests older than this get an amber "waiting" highlight. */
 const WAITING_THRESHOLD_MS = 24 * 60 * 60 * 1000
+
+/** Inline outcome summary shown on terminal (approved/rejected/cancelled) rows. */
+function getOutcomeText(req: CreditRequest): string {
+  const reviewed = formatRelativeTime(req.reviewed_at ?? req.created_at)
+  if (req.status === 'approved') {
+    const amount = (req.granted_amount ?? req.amount).toLocaleString()
+    const granted =
+      req.request_type === 'allowance' ? `Set to ${amount} NUKE/day` : `Granted ${amount} NUKE`
+    return `${granted} · reviewed ${reviewed}`
+  }
+  if (req.status === 'rejected') {
+    return `Rejected · ${req.review_note?.trim() || 'no note'} · ${reviewed}`
+  }
+  return `Cancelled ${formatRelativeTime(req.created_at)}`
+}
 
 export function RequestsTab() {
   const hasPermission = useAuthStore((state) => state.hasPermission)
@@ -97,6 +121,14 @@ export function RequestsTab() {
     },
     []
   )
+
+  // Opens the review dialog without a preset decision (toggle defaults to approve);
+  // terminal requests render read-only there.
+  const handleViewRequest = useCallback((request: CreditRequest) => {
+    setReviewRequest(request)
+    setReviewAction('approve')
+    setReviewDialogOpen(true)
+  }, [])
 
   const handleToggleRequestSelected = useCallback((id: string, checked: boolean) => {
     setSelectedRequestIds((prev) => ({ ...prev, [id]: checked }))
@@ -287,10 +319,19 @@ export function RequestsTab() {
             {requestsLoading ? (
               <div className="space-y-2">
                 {[1, 2, 3].map((i) => (
-                  <div key={i} className="flex items-center gap-3 p-2 animate-pulse">
-                    <div className="w-8 h-8 rounded-full bg-muted shrink-0" />
-                    <div className="h-4 flex-1 bg-muted rounded" />
-                    <div className="h-4 w-20 bg-muted rounded" />
+                  <div
+                    key={i}
+                    className="rounded-xl border border-border/50 bg-card/50 p-4 space-y-2.5 animate-pulse"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-muted shrink-0" />
+                        <div className="h-4 w-28 bg-muted rounded" />
+                      </div>
+                      <div className="h-5 w-24 bg-muted rounded-full" />
+                    </div>
+                    <div className="h-4 w-3/4 bg-muted rounded" />
+                    <div className="h-4 w-1/3 bg-muted rounded" />
                   </div>
                 ))}
               </div>
@@ -300,7 +341,7 @@ export function RequestsTab() {
                 {requestStatusFilter ? ' with this status' : ''}.
               </p>
             ) : (
-              <div className="divide-y divide-border/20">
+              <div className="space-y-2">
                 {creditRequests.map((req) => {
                   const config = REQUEST_STATUS_CONFIG[req.status] || {
                     label: req.status,
@@ -311,72 +352,113 @@ export function RequestsTab() {
                   const isWaiting =
                     isOpen && now - parseUtcDate(req.created_at).getTime() > WAITING_THRESHOLD_MS
                   return (
-                    <div key={req.id} className="flex items-center gap-3 py-2.5">
-                      {isOpen && canGrant && (
-                        <Checkbox
-                          checked={!!selectedRequestIds[req.id]}
-                          onChange={(checked) => handleToggleRequestSelected(req.id, checked)}
-                          data-testid="credit-request-select"
-                          className="shrink-0"
-                        />
-                      )}
-                      <UserLink
-                        userId={req.user_id}
-                        name={req.username || req.user_id}
-                        secondary={req.email}
-                        size="sm"
-                        className="w-40 shrink-0"
-                      />
-                      <span className="font-mono font-semibold text-sm w-20 shrink-0 text-right">
-                        {req.amount.toLocaleString()}
-                      </span>
-                      <Tooltip content={req.reason}>
-                        <span className="flex-1 min-w-0 text-sm text-muted-foreground truncate">
-                          {req.reason}
-                        </span>
-                      </Tooltip>
-                      <Tooltip content={formatDate(req.created_at)}>
-                        <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
-                          {formatRelativeTime(req.created_at)}
-                        </span>
-                      </Tooltip>
-                      {isWaiting && (
-                        <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 shrink-0">
-                          <Clock className="w-2.5 h-2.5" />
-                          waiting
-                        </span>
-                      )}
-                      <span
-                        className={cn(
-                          'text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0',
-                          config.bg,
-                          config.color
-                        )}
-                      >
-                        {config.label}
-                      </span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 bg-muted text-muted-foreground">
-                        {req.request_type === 'allowance' ? 'Daily' : 'One-time'}
-                      </span>
-                      {isOpen && canGrant && (
-                        <div className="flex items-center gap-1 shrink-0">
-                          <Tooltip content="Approve">
-                            <button
-                              onClick={() => handleReviewRequest(req, 'approve')}
-                              className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-colors inline-flex"
-                            >
-                              <Check className="w-4 h-4" />
-                            </button>
-                          </Tooltip>
-                          <Tooltip content="Reject">
-                            <button
-                              onClick={() => handleReviewRequest(req, 'reject')}
-                              className="p-1.5 rounded-lg hover:bg-red-500/10 text-red-400 transition-colors inline-flex"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </Tooltip>
+                    <div
+                      key={req.id}
+                      onClick={() => handleViewRequest(req)}
+                      className="rounded-xl border border-border/50 bg-card/50 p-4 space-y-2.5 cursor-pointer hover:border-border hover:bg-card/80 transition-colors"
+                    >
+                      {/* Top line: user + badges */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-3 min-w-0">
+                          {isOpen && canGrant && (
+                            <span onClick={(e) => e.stopPropagation()} className="shrink-0 pt-1">
+                              <Checkbox
+                                checked={!!selectedRequestIds[req.id]}
+                                onChange={(checked) => handleToggleRequestSelected(req.id, checked)}
+                                data-testid="credit-request-select"
+                              />
+                            </span>
+                          )}
+                          <span className="min-w-0" onClick={(e) => e.stopPropagation()}>
+                            <UserLink
+                              userId={req.user_id}
+                              name={req.username || req.user_id}
+                              secondary={req.email}
+                              size="sm"
+                              className="min-w-0"
+                            />
+                          </span>
                         </div>
+                        <div className="flex items-center gap-1.5 flex-wrap justify-end shrink-0">
+                          {isWaiting && (
+                            <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400">
+                              <Clock className="w-2.5 h-2.5" />
+                              waiting
+                            </span>
+                          )}
+                          <span
+                            className={cn(
+                              'text-[10px] px-1.5 py-0.5 rounded-full font-medium',
+                              config.bg,
+                              config.color
+                            )}
+                          >
+                            {config.label}
+                          </span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-muted text-muted-foreground">
+                            {req.request_type === 'allowance' ? 'Daily' : 'One-time'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Reason — primary triage content */}
+                      <Tooltip content={req.reason}>
+                        <p className="text-sm line-clamp-2">{req.reason}</p>
+                      </Tooltip>
+
+                      {/* Bottom line */}
+                      {isOpen ? (
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span
+                              className={cn(
+                                'font-mono text-xs px-2 py-0.5 rounded-full',
+                                req.request_type === 'allowance'
+                                  ? 'text-violet-400 bg-violet-500/10'
+                                  : 'text-emerald-400 bg-emerald-500/10'
+                              )}
+                            >
+                              {req.request_type === 'allowance'
+                                ? `${req.amount.toLocaleString()} NUKE/day`
+                                : `+${req.amount.toLocaleString()} NUKE`}
+                            </span>
+                            <Tooltip content={formatDate(req.created_at)}>
+                              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                                {formatRelativeTime(req.created_at)}
+                              </span>
+                            </Tooltip>
+                          </div>
+                          {canGrant && (
+                            <div
+                              className="flex items-center gap-1.5"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <button
+                                onClick={() => handleViewRequest(req)}
+                                className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/70 transition-colors"
+                              >
+                                <MessageSquare className="w-3.5 h-3.5" />
+                                Review
+                              </button>
+                              <button
+                                onClick={() => handleReviewRequest(req, 'approve')}
+                                className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                                Approve
+                              </button>
+                              <button
+                                onClick={() => handleReviewRequest(req, 'reject')}
+                                className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                                Reject
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">{getOutcomeText(req)}</p>
                       )}
                     </div>
                   )
