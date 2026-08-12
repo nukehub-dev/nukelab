@@ -189,11 +189,21 @@ export interface CreditRequest {
   email?: string
   amount: number
   reason: string
-  status: 'pending' | 'approved' | 'rejected'
+  status: 'pending' | 'needs_info' | 'approved' | 'rejected' | 'cancelled'
   review_note: string | null
   granted_amount: number | null
   created_at: string
   reviewed_at: string | null
+}
+
+export interface CreditRequestMessage {
+  id: string
+  request_id: string
+  author_id: string
+  author_username: string
+  body: string
+  is_admin: boolean
+  created_at: string
 }
 
 export interface CreditRequestListResponse {

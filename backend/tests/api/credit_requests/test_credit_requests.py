@@ -53,7 +53,7 @@ class TestCreditRequestUserEndpoints:
             "/api/credit-requests/", headers=headers, json={"amount": 75, "reason": "second"}
         )
         assert response.status_code == 400
-        assert "pending credit request" in response.json()["detail"]
+        assert "open credit request" in response.json()["detail"]
 
     @pytest.mark.asyncio
     async def test_list_own_requests(self, client, user_token, test_user):
@@ -265,5 +265,222 @@ class TestCreditRequestAuthorization:
 
         response = await client.post(
             f"/api/credit-requests/{request_id}/reject", headers=headers, json={}
+        )
+        assert response.status_code == 403
+
+
+class TestCreditRequestOpenFilter:
+    """status=open query covers pending + needs_info."""
+
+    @pytest.mark.asyncio
+    async def test_list_own_open_filter(self, client, user_token, admin_token):
+        headers = {"Authorization": f"Bearer {user_token}"}
+        create = await client.post(
+            "/api/credit-requests/",
+            headers=headers,
+            json={"amount": 10, "reason": "open filter"},
+        )
+        request_id = create.json()["request"]["id"]
+
+        # Reviewer message flips to needs_info; still "open"
+        await client.post(
+            f"/api/credit-requests/{request_id}/messages",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"body": "which project?"},
+        )
+
+        response = await client.get("/api/credit-requests/?status=open", headers=headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["pagination"]["total"] == 1
+        assert data["requests"][0]["status"] == "needs_info"
+
+    @pytest.mark.asyncio
+    async def test_list_all_open_filter(self, client, admin_token, user_token):
+        create = await client.post(
+            "/api/credit-requests/",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"amount": 10, "reason": "admin open filter"},
+        )
+        request_id = create.json()["request"]["id"]
+
+        response = await client.get(
+            "/api/credit-requests/all?status=open",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        assert response.status_code == 200
+        assert any(r["id"] == request_id for r in response.json()["requests"])
+
+
+class TestCreditRequestMessagesAPI:
+    """Conversation endpoints."""
+
+    @pytest.mark.asyncio
+    async def test_user_posts_and_reads_own_thread(self, client, user_token):
+        headers = {"Authorization": f"Bearer {user_token}"}
+        create = await client.post(
+            "/api/credit-requests/",
+            headers=headers,
+            json={"amount": 10, "reason": "chat"},
+        )
+        request_id = create.json()["request"]["id"]
+
+        response = await client.post(
+            f"/api/credit-requests/{request_id}/messages",
+            headers=headers,
+            json={"body": "any update?"},
+        )
+        assert response.status_code == 200
+        assert response.json()["message"]["body"] == "any update?"
+
+        response = await client.get(f"/api/credit-requests/{request_id}/messages", headers=headers)
+        assert response.status_code == 200
+        messages = response.json()["messages"]
+        assert len(messages) == 1
+        assert messages[0]["is_admin"] is False
+
+    @pytest.mark.asyncio
+    async def test_reviewer_posts_and_state_flips(self, client, user_token, admin_token):
+        create = await client.post(
+            "/api/credit-requests/",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"amount": 10, "reason": "reviewer chat"},
+        )
+        request_id = create.json()["request"]["id"]
+        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+
+        response = await client.post(
+            f"/api/credit-requests/{request_id}/messages",
+            headers=admin_headers,
+            json={"body": "please clarify"},
+        )
+        assert response.status_code == 200
+
+        # Request now needs_info; visible in the admin list
+        response = await client.get(
+            "/api/credit-requests/all?status=needs_info", headers=admin_headers
+        )
+        assert any(r["id"] == request_id for r in response.json()["requests"])
+
+        # Reviewer reads the thread with is_admin flags
+        response = await client.get(
+            f"/api/credit-requests/{request_id}/messages", headers=admin_headers
+        )
+        assert response.status_code == 200
+        assert response.json()["messages"][0]["is_admin"] is True
+
+    @pytest.mark.asyncio
+    async def test_user_cannot_post_on_others_request(self, client, user_token, db_session):
+        """A regular user gets 403 posting on someone else's request."""
+        create = await client.post(
+            "/api/credit-requests/",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"amount": 10, "reason": "not yours"},
+        )
+        request_id = create.json()["request"]["id"]
+
+        from app.api.auth import create_access_token
+        from app.models.user import User
+
+        other = User(
+            username="otheruser",
+            email="other@example.com",
+            password_hash="hash",
+            role="user",
+            is_active=True,
+        )
+        db_session.add(other)
+        await db_session.commit()
+        other_token = create_access_token(data={"sub": other.username, "role": other.role})
+
+        response = await client.post(
+            f"/api/credit-requests/{request_id}/messages",
+            headers={"Authorization": f"Bearer {other_token}"},
+            json={"body": "intruding"},
+        )
+        assert response.status_code == 403
+
+        response = await client.get(
+            f"/api/credit-requests/{request_id}/messages",
+            headers={"Authorization": f"Bearer {other_token}"},
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_post_on_terminal_request_returns_400(self, client, user_token, admin_token):
+        headers = {"Authorization": f"Bearer {user_token}"}
+        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+        create = await client.post(
+            "/api/credit-requests/",
+            headers=headers,
+            json={"amount": 10, "reason": "terminal post"},
+        )
+        request_id = create.json()["request"]["id"]
+
+        response = await client.post(
+            f"/api/credit-requests/{request_id}/reject",
+            headers=admin_headers,
+            json={},
+        )
+        assert response.status_code == 200
+
+        response = await client.post(
+            f"/api/credit-requests/{request_id}/messages",
+            headers=headers,
+            json={"body": "hello?"},
+        )
+        assert response.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_post_message_validation(self, client, user_token):
+        headers = {"Authorization": f"Bearer {user_token}"}
+        create = await client.post(
+            "/api/credit-requests/",
+            headers=headers,
+            json={"amount": 10, "reason": "validation"},
+        )
+        request_id = create.json()["request"]["id"]
+
+        response = await client.post(
+            f"/api/credit-requests/{request_id}/messages",
+            headers=headers,
+            json={"body": ""},
+        )
+        assert response.status_code == 422
+
+
+class TestCreditRequestCancelAPI:
+    """Cancel endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_user_cancels_own_request(self, client, user_token):
+        headers = {"Authorization": f"Bearer {user_token}"}
+        create = await client.post(
+            "/api/credit-requests/",
+            headers=headers,
+            json={"amount": 10, "reason": "cancel me"},
+        )
+        request_id = create.json()["request"]["id"]
+
+        response = await client.post(f"/api/credit-requests/{request_id}/cancel", headers=headers)
+        assert response.status_code == 200
+        assert response.json()["request"]["status"] == "cancelled"
+
+        # Cancelling again hits the terminal-state guard
+        response = await client.post(f"/api/credit-requests/{request_id}/cancel", headers=headers)
+        assert response.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_admin_cannot_cancel_users_request(self, client, user_token, admin_token):
+        create = await client.post(
+            "/api/credit-requests/",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"amount": 10, "reason": "hands off"},
+        )
+        request_id = create.json()["request"]["id"]
+
+        response = await client.post(
+            f"/api/credit-requests/{request_id}/cancel",
+            headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert response.status_code == 403

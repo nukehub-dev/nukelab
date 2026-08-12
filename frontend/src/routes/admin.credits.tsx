@@ -70,13 +70,16 @@ export const Route = createFileRoute('/admin/credits')({
 
 const REQUEST_STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   pending: { label: 'Pending', color: 'text-amber-400', bg: 'bg-amber-500/10' },
+  needs_info: { label: 'Needs Info', color: 'text-blue-400', bg: 'bg-blue-500/10' },
   approved: { label: 'Approved', color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
   rejected: { label: 'Rejected', color: 'text-red-400', bg: 'bg-red-500/10' },
+  cancelled: { label: 'Cancelled', color: 'text-muted-foreground', bg: 'bg-muted' },
 }
 
 const REQUEST_FILTER_OPTIONS = [
   { value: '', label: 'All' },
   { value: 'pending', label: 'Pending' },
+  { value: 'needs_info', label: 'Needs Info' },
   { value: 'approved', label: 'Approved' },
   { value: 'rejected', label: 'Rejected' },
 ]
@@ -1035,7 +1038,7 @@ function CreditsAdminPage() {
                       >
                         {config.label}
                       </span>
-                      {req.status === 'pending' && canGrant && (
+                      {(req.status === 'pending' || req.status === 'needs_info') && canGrant && (
                         <div className="flex items-center gap-1 shrink-0">
                           <Tooltip content="Approve">
                             <button

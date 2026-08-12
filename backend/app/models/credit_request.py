@@ -13,14 +13,14 @@ from app.db.base import Base
 class CreditRequest(Base):
     __tablename__ = "credit_requests"
     __table_args__ = (
-        # At most one pending request per user; the cheap pre-check in
-        # CreditRequestService.create_request is backed by this index as the
-        # authoritative race guard (IntegrityError -> 400).
+        # At most one open (pending or needs_info) request per user; the
+        # cheap pre-check in CreditRequestService.create_request is backed
+        # by this index as the authoritative race guard (IntegrityError -> 400).
         Index(
             "uq_credit_requests_pending_per_user",
             "user_id",
             unique=True,
-            postgresql_where="status = 'pending'",
+            postgresql_where="status IN ('pending', 'needs_info')",
         ),
     )
 
@@ -55,4 +55,31 @@ class CreditRequest(Base):
             "transaction_id": str(self.transaction_id) if self.transaction_id else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "reviewed_at": self.reviewed_at.isoformat() if self.reviewed_at else None,
+        }
+
+
+class CreditRequestMessage(Base):
+    __tablename__ = "credit_request_messages"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    request_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("credit_requests.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # Nullable + SET NULL so the thread survives author account deletion.
+    author_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    body = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": str(self.id),
+            "request_id": str(self.request_id),
+            "author_id": str(self.author_id) if self.author_id else None,
+            "body": self.body,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }

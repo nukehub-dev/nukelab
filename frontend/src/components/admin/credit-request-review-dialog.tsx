@@ -16,6 +16,7 @@ import { Input } from '../ui/input'
 import { Button } from '../ui/button'
 import { Label } from '../ui/label'
 import { useReviewCreditRequest } from '../../hooks/use-credit-requests'
+import { CreditRequestThread } from '../credit-request-thread'
 import { cn, formatRelativeTime } from '../../lib/utils'
 import type { CreditRequest } from '../../types/api'
 
@@ -44,6 +45,7 @@ export function CreditRequestReviewDialog({
 
   const numericAmount = parseInt(amount, 10) || 0
   const isBusy = approveRequest.isPending || rejectRequest.isPending
+  const isOpenRequest = request?.status === 'pending' || request?.status === 'needs_info'
 
   const handleOpenChange = (open: boolean) => {
     if (!open) {
@@ -103,7 +105,7 @@ export function CreditRequestReviewDialog({
   ]
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange} size="lg">
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -126,7 +128,7 @@ export function CreditRequestReviewDialog({
         </DialogHeader>
 
         {request && (
-          <form id="credit-request-review-form" onSubmit={handleSubmit} className="mt-4 space-y-5">
+          <div className="mt-4 space-y-5">
             {/* Request details */}
             <div className="p-4 rounded-xl bg-muted/40 border border-border/50 space-y-1.5">
               <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -135,81 +137,99 @@ export function CreditRequestReviewDialog({
               <p className="text-sm whitespace-pre-wrap break-words">{request.reason}</p>
             </div>
 
-            {/* Action Toggle */}
-            <div className="flex gap-2 p-1 bg-muted rounded-xl">
-              {actionOptions.map((op) => (
-                <button
-                  key={op.value}
-                  type="button"
-                  onClick={() => setAction(op.value)}
-                  className={cn(
-                    'flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all',
-                    action === op.value
-                      ? `${op.activeBg} ${op.color} shadow-sm`
-                      : 'text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  <op.icon className="w-4 h-4" />
-                  {op.label}
-                </button>
-              ))}
-            </div>
+            {/* Conversation thread */}
+            <CreditRequestThread
+              requestId={request.id}
+              canReply={isOpenRequest}
+              replyHint="Replying sets the request to awaiting user reply."
+              replyPlaceholder="Ask the user for more details…"
+            />
 
-            {/* Amount (approve only) */}
-            {action === 'approve' && (
-              <div className="space-y-2">
-                <Label>Amount to Grant</Label>
-                <div className="relative">
-                  <Wallet className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            {isOpenRequest && (
+              <form
+                id="credit-request-review-form"
+                onSubmit={handleSubmit}
+                className="space-y-5 border-t border-border/50 pt-4"
+              >
+                {/* Action Toggle */}
+                <div className="flex gap-2 p-1 bg-muted rounded-xl">
+                  {actionOptions.map((op) => (
+                    <button
+                      key={op.value}
+                      type="button"
+                      onClick={() => setAction(op.value)}
+                      className={cn(
+                        'flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all',
+                        action === op.value
+                          ? `${op.activeBg} ${op.color} shadow-sm`
+                          : 'text-muted-foreground hover:text-foreground'
+                      )}
+                    >
+                      <op.icon className="w-4 h-4" />
+                      {op.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Amount (approve only) */}
+                {action === 'approve' && (
+                  <div className="space-y-2">
+                    <Label>Amount to Grant</Label>
+                    <div className="relative">
+                      <Wallet className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        type="number"
+                        min={1}
+                        value={amount}
+                        onChange={(e) => {
+                          setAmount(e.target.value)
+                          if (amountError) setAmountError('')
+                        }}
+                        placeholder="0"
+                        className="pl-10"
+                        disabled={isBusy}
+                      />
+                    </div>
+                    {amountError && <p className="text-xs text-destructive">{amountError}</p>}
+                    <p className="text-xs text-muted-foreground">
+                      Prefilled with the requested amount; adjust to grant a different amount.
+                    </p>
+                  </div>
+                )}
+
+                {/* Note */}
+                <div className="space-y-2">
+                  <Label>
+                    {action === 'approve' ? 'Note (optional)' : 'Rejection note (optional)'}
+                  </Label>
                   <Input
-                    type="number"
-                    min={1}
-                    value={amount}
-                    onChange={(e) => {
-                      setAmount(e.target.value)
-                      if (amountError) setAmountError('')
-                    }}
-                    placeholder="0"
-                    className="pl-10"
+                    type="text"
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder={
+                      action === 'approve'
+                        ? 'e.g., Approved for the weekend batch job'
+                        : 'e.g., Not enough justification'
+                    }
                     disabled={isBusy}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Shown to the user with the decision.
+                  </p>
                 </div>
-                {amountError && <p className="text-xs text-destructive">{amountError}</p>}
-                <p className="text-xs text-muted-foreground">
-                  Prefilled with the requested amount; adjust to grant a different amount.
-                </p>
-              </div>
-            )}
 
-            {/* Note */}
-            <div className="space-y-2">
-              <Label>
-                {action === 'approve' ? 'Note (optional)' : 'Rejection note (optional)'}
-              </Label>
-              <Input
-                type="text"
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder={
-                  action === 'approve'
-                    ? 'e.g., Approved for the weekend batch job'
-                    : 'e.g., Not enough justification'
-                }
-                disabled={isBusy}
-              />
-              <p className="text-xs text-muted-foreground">Shown to the user with the decision.</p>
-            </div>
-
-            {action === 'reject' && (
-              <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 text-amber-400 text-xs">
-                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>
-                  Rejecting notifies the user and frees them to submit a new request. No credits are
-                  granted.
-                </span>
-              </div>
+                {action === 'reject' && (
+                  <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 text-amber-400 text-xs">
+                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>
+                      Rejecting notifies the user and frees them to submit a new request. No credits
+                      are granted.
+                    </span>
+                  </div>
+                )}
+              </form>
             )}
-          </form>
+          </div>
         )}
 
         <DialogFooter>
@@ -221,15 +241,16 @@ export function CreditRequestReviewDialog({
           >
             Cancel
           </Button>
-          <Button
-            type="submit"
-            form="credit-request-review-form"
-            loading={isBusy}
-            variant={action === 'reject' ? 'destructive' : 'default'}
-            disabled={!request}
-          >
-            {action === 'approve' ? 'Approve Request' : 'Reject Request'}
-          </Button>
+          {isOpenRequest && (
+            <Button
+              type="submit"
+              form="credit-request-review-form"
+              loading={isBusy}
+              variant={action === 'reject' ? 'destructive' : 'default'}
+            >
+              {action === 'approve' ? 'Approve Request' : 'Reject Request'}
+            </Button>
+          )}
         </DialogFooter>
         <DialogClose onClick={() => handleOpenChange(false)} />
       </DialogContent>

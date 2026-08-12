@@ -4,7 +4,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useToast } from '../stores/toast-store'
-import type { CreditRequest, CreditRequestListResponse } from '../types/api'
+import type { CreditRequest, CreditRequestListResponse, CreditRequestMessage } from '../types/api'
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message
@@ -57,6 +57,61 @@ export function usePendingCreditRequestCount() {
     queryFn: async () => {
       const response = await api.get<{ pending: number }>('/credit-requests/pending-count')
       return response
+    },
+  })
+}
+
+export function useCreditRequestMessages(requestId: string | undefined) {
+  return useQuery({
+    queryKey: ['credit-requests', 'messages', requestId],
+    queryFn: async () => {
+      const response = await api.get<{ messages: CreditRequestMessage[] }>(
+        `/credit-requests/${requestId}/messages`
+      )
+      return response
+    },
+    enabled: !!requestId,
+  })
+}
+
+export function useAddCreditRequestMessage() {
+  const queryClient = useQueryClient()
+  const { error: showError } = useToast()
+
+  return useMutation({
+    mutationFn: ({ requestId, body }: { requestId: string; body: string }) =>
+      api.post<{ message: CreditRequestMessage }>(
+        `/credit-requests/${requestId}/messages`,
+        { body }
+      ),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['credit-requests'] })
+      queryClient.invalidateQueries({
+        queryKey: ['credit-requests', 'messages', variables.requestId],
+      })
+    },
+    onError: (err) => {
+      showError('Failed to send message', getErrorMessage(err))
+    },
+  })
+}
+
+export function useCancelCreditRequest() {
+  const queryClient = useQueryClient()
+  const { success, error: showError } = useToast()
+
+  return useMutation({
+    mutationFn: (requestId: string) =>
+      api.post<{ message: string; request: CreditRequest }>(
+        `/credit-requests/${requestId}/cancel`,
+        {}
+      ),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['credit-requests'] })
+      success('Request cancelled', data.message)
+    },
+    onError: (err) => {
+      showError('Failed to cancel request', getErrorMessage(err))
     },
   })
 }

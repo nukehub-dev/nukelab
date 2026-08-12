@@ -7,6 +7,7 @@ __all__ = [
     "AlertRule",
     "ApiToken",
     "CreditRequest",
+    "CreditRequestMessage",
     "CreditTransaction",
     "DailyServerMetric",
     "EnvironmentTemplate",
@@ -43,6 +44,7 @@ from app.models.alert_history import AlertHistory as AlertHistory
 from app.models.alert_rule import AlertRule as AlertRule
 from app.models.api_token import ApiToken as ApiToken
 from app.models.credit_request import CreditRequest as CreditRequest
+from app.models.credit_request import CreditRequestMessage as CreditRequestMessage
 from app.models.credit_transaction import CreditTransaction as CreditTransaction
 from app.models.daily_server_metric import DailyServerMetric as DailyServerMetric
 from app.models.environment_template import EnvironmentTemplate as EnvironmentTemplate

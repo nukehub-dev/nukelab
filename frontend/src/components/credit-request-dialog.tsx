@@ -113,6 +113,7 @@ export function CreditRequestDialog({ open, onOpenChange }: CreditRequestDialogP
                 placeholder="0"
                 className="pl-10"
                 disabled={isBusy}
+                data-testid="credit-request-amount"
               />
             </div>
             {amountError && <p className="text-xs text-destructive">{amountError}</p>}
@@ -131,6 +132,7 @@ export function CreditRequestDialog({ open, onOpenChange }: CreditRequestDialogP
               maxLength={MAX_REASON_LENGTH}
               rows={4}
               disabled={isBusy}
+              data-testid="credit-request-reason"
             />
             {reasonError && <p className="text-xs text-destructive">{reasonError}</p>}
             <p className="text-xs text-muted-foreground">
@@ -155,7 +157,12 @@ export function CreditRequestDialog({ open, onOpenChange }: CreditRequestDialogP
           >
             Cancel
           </Button>
-          <Button type="submit" form="credit-request-form" loading={isBusy}>
+          <Button
+            type="submit"
+            form="credit-request-form"
+            loading={isBusy}
+            data-testid="credit-request-submit"
+          >
             Submit Request
           </Button>
         </DialogFooter>

@@ -36,6 +36,10 @@ class RejectCreditRequestBody(BaseModel):
     note: str | None = Field(None, max_length=2000, description="Review note")
 
 
+class PostCreditRequestMessageBody(BaseModel):
+    body: str = Field(..., min_length=1, max_length=2000, description="Message text")
+
+
 # ========== User Endpoints ==========
 
 
@@ -138,3 +142,56 @@ async def reject_credit_request(
         note=body.note,
     )
     return {"message": "Credit request rejected", "request": request.to_dict()}
+
+
+# ========== Conversation & Cancellation ==========
+# Static admin paths (/all, /pending-count) are declared above; the routes
+# below all hang off /{request_id}.
+
+
+@router.post("/{request_id}/cancel")
+async def cancel_credit_request(
+    request_id: str,
+    current_user: User = Depends(get_current_user),
+    _=Depends(require_permissions(Permission.CREDITS_READ_OWN)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Cancel an open credit request (requester only)"""
+    service = CreditRequestService(db)
+    request = await service.cancel(
+        request_id=request_id,
+        user_id=str(current_user.id),
+    )
+    return {"message": "Credit request cancelled", "request": request.to_dict()}
+
+
+@router.get("/{request_id}/messages")
+async def list_credit_request_messages(
+    request_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List a credit request's conversation (requester or CREDITS_READ_ALL)"""
+    service = CreditRequestService(db)
+    messages = await service.list_messages(
+        request_id=request_id,
+        requesting_user=current_user,
+    )
+    return {"messages": messages}
+
+
+@router.post("/{request_id}/messages")
+async def post_credit_request_message(
+    request_id: str,
+    body: PostCreditRequestMessageBody,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Post a message on an open credit request (requester or CREDITS_GRANT)"""
+    service = CreditRequestService(db)
+    message = await service.add_message(
+        request_id=request_id,
+        author=current_user,
+        body=body.body,
+    )
+    return {"message": message.to_dict()}

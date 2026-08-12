@@ -35,6 +35,8 @@ EVENT_KEY_MAP = {
     "credits_granted": "credit_granted",
     "credits_deducted": "credit_low",
     "credit_request_rejected": "credit_request",
+    "credit_request_created": "credit_request",
+    "credit_request_message": "credit_request",
     "daily_allowance": "daily_allowance",
     "low_balance": "credit_low",
     "workspace_invitation": "workspace_invite",
@@ -427,6 +429,35 @@ class NotificationService:
         return await self.create(
             user_id=user_id,
             title="Credit Request Rejected",
+            message=msg,
+            type="credit",
+            severity="info",
+            event_key="credit_request",
+        )
+
+    async def credit_request_created(
+        self, user_id, amount: int, reason: str
+    ) -> Notification | None:
+        """Notify a reviewer that a new credit request was submitted."""
+        return await self.create(
+            user_id=user_id,
+            title="New Credit Request",
+            message=f"A user requested {amount} NUKE credits: {reason}",
+            type="credit",
+            severity="info",
+            event_key="credit_request",
+        )
+
+    async def credit_request_message(
+        self, user_id, amount: int, preview: str
+    ) -> Notification | None:
+        """Notify the counterpart of a new message on a credit request."""
+        msg = f"New message on the credit request for {amount} NUKE credits."
+        if preview:
+            msg = f"New message on the credit request for {amount} NUKE credits: {preview}"
+        return await self.create(
+            user_id=user_id,
+            title="Credit Request Update",
             message=msg,
             type="credit",
             severity="info",
