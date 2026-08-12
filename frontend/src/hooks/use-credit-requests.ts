@@ -1,0 +1,125 @@
+// SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
+// SPDX-License-Identifier: BSD-2-Clause
+
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { api } from '../lib/api'
+import { useToast } from '../stores/toast-store'
+import type { CreditRequest, CreditRequestListResponse } from '../types/api'
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'string') return error
+  return 'An unexpected error occurred'
+}
+
+interface CreditRequestListParams {
+  status?: string
+  page?: number
+  limit?: number
+}
+
+function buildQueryString(params: CreditRequestListParams): string {
+  const searchParams = new URLSearchParams()
+  if (params.status) searchParams.set('status', params.status)
+  if (params.page) searchParams.set('page', String(params.page))
+  if (params.limit) searchParams.set('limit', String(params.limit))
+  const queryString = searchParams.toString()
+  return queryString ? `?${queryString}` : ''
+}
+
+export function useMyCreditRequests(params: CreditRequestListParams = {}) {
+  return useQuery({
+    queryKey: ['credit-requests', 'mine', params],
+    queryFn: async () => {
+      const response = await api.get<CreditRequestListResponse>(
+        `/credit-requests/${buildQueryString(params)}`
+      )
+      return response
+    },
+  })
+}
+
+export function useAllCreditRequests(params: CreditRequestListParams = {}) {
+  return useQuery({
+    queryKey: ['credit-requests', 'all', params],
+    queryFn: async () => {
+      const response = await api.get<CreditRequestListResponse>(
+        `/credit-requests/all${buildQueryString(params)}`
+      )
+      return response
+    },
+  })
+}
+
+export function usePendingCreditRequestCount() {
+  return useQuery({
+    queryKey: ['credit-requests', 'pending-count'],
+    queryFn: async () => {
+      const response = await api.get<{ pending: number }>('/credit-requests/pending-count')
+      return response
+    },
+  })
+}
+
+export function useCreateCreditRequest() {
+  const queryClient = useQueryClient()
+  const { success, error: showError } = useToast()
+
+  return useMutation({
+    mutationFn: (data: { amount: number; reason: string }) =>
+      api.post<{ message: string; request: CreditRequest }>('/credit-requests/', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['credit-requests'] })
+      success('Credit request submitted', 'Your request is pending admin review')
+    },
+    onError: (err) => {
+      // Surfaces the duplicate-pending 400 detail ("You already have a pending credit request")
+      showError('Failed to submit credit request', getErrorMessage(err))
+    },
+  })
+}
+
+interface ReviewRequestData {
+  requestId: string
+  amount?: number
+  note?: string
+}
+
+export function useReviewCreditRequest() {
+  const queryClient = useQueryClient()
+  const { success, error: showError } = useToast()
+
+  const approveRequest = useMutation({
+    mutationFn: ({ requestId, amount, note }: ReviewRequestData) =>
+      api.post<{ message: string; request: CreditRequest }>(
+        `/credit-requests/${requestId}/approve`,
+        { amount, note }
+      ),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['credit-requests'] })
+      queryClient.invalidateQueries({ queryKey: ['credits'] })
+      success('Request approved', data.message)
+    },
+    onError: (err) => {
+      showError('Failed to approve request', getErrorMessage(err))
+    },
+  })
+
+  const rejectRequest = useMutation({
+    mutationFn: ({ requestId, note }: ReviewRequestData) =>
+      api.post<{ message: string; request: CreditRequest }>(
+        `/credit-requests/${requestId}/reject`,
+        { note }
+      ),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['credit-requests'] })
+      queryClient.invalidateQueries({ queryKey: ['credits'] })
+      success('Request rejected', data.message)
+    },
+    onError: (err) => {
+      showError('Failed to reject request', getErrorMessage(err))
+    },
+  })
+
+  return { approveRequest, rejectRequest }
+}

@@ -24,9 +24,12 @@ import {
   Scale,
   Check,
   Coins,
+  HandCoins,
+  Inbox,
 } from 'lucide-react'
 import { useUsers } from '../hooks/use-users'
 import { useLowBalanceUsers } from '../hooks/use-credits'
+import { useAllCreditRequests, usePendingCreditRequestCount } from '../hooks/use-credit-requests'
 import {
   useSystemDailyAllowance,
   useUpdateSystemDailyAllowance,
@@ -41,9 +44,10 @@ import { useDataTable } from '../hooks/use-data-table'
 import { useThemeStore } from '../stores/theme-store'
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store'
 import { usePageGuard } from '../hooks/use-page-guard'
-import { cn, parseUtcDate } from '../lib/utils'
+import { cn, formatDate, formatRelativeTime, parseUtcDate } from '../lib/utils'
 import { CreditAdjustDialog } from '../components/admin/credit-adjust-dialog'
 import { CreditHistoryDialog } from '../components/admin/credit-history-dialog'
+import { CreditRequestReviewDialog } from '../components/admin/credit-request-review-dialog'
 import { DailyAllowanceDialog } from '../components/admin/daily-allowance-dialog'
 import { BulkCreditDialog } from '../components/admin/bulk-credit-dialog'
 import { AllowanceOverrideDialog } from '../components/admin/allowance-override-dialog'
@@ -52,7 +56,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { StatCard } from '../components/data/stat-card'
 import { Tooltip } from '../components/ui/tooltip'
 import { Button } from '../components/ui/button'
-import type { User } from '../types/api'
+import type { CreditRequest, User } from '../types/api'
 import type {
   ColumnDef,
   SortingState,
@@ -63,6 +67,19 @@ import type {
 export const Route = createFileRoute('/admin/credits')({
   component: CreditsAdminPage,
 })
+
+const REQUEST_STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
+  pending: { label: 'Pending', color: 'text-amber-400', bg: 'bg-amber-500/10' },
+  approved: { label: 'Approved', color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+  rejected: { label: 'Rejected', color: 'text-red-400', bg: 'bg-red-500/10' },
+}
+
+const REQUEST_FILTER_OPTIONS = [
+  { value: '', label: 'All' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'approved', label: 'Approved' },
+  { value: 'rejected', label: 'Rejected' },
+]
 
 function CreditsAdminPage() {
   const allowed = usePageGuard({ permission: PERMISSIONS.CREDITS_READ_ALL })
@@ -138,6 +155,28 @@ function CreditsAdminPage() {
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false)
   const [bulkMode, setBulkMode] = useState<'grant' | 'allowance'>('grant')
   const [overrideDialogOpen, setOverrideDialogOpen] = useState(false)
+
+  const [requestStatusFilter, setRequestStatusFilter] = useState('pending')
+  const [reviewRequest, setReviewRequest] = useState<CreditRequest | null>(null)
+  const [reviewAction, setReviewAction] = useState<'approve' | 'reject'>('approve')
+  const [reviewDialogOpen, setReviewDialogOpen] = useState(false)
+
+  const { data: pendingCountData } = usePendingCreditRequestCount()
+  const { data: requestsData, isLoading: requestsLoading } = useAllCreditRequests({
+    status: requestStatusFilter || undefined,
+    page: 1,
+    limit: 10,
+  })
+  const creditRequests = useMemo(() => requestsData?.requests || [], [requestsData?.requests])
+
+  const handleReviewRequest = useCallback(
+    (request: CreditRequest, action: 'approve' | 'reject') => {
+      setReviewRequest(request)
+      setReviewAction(action)
+      setReviewDialogOpen(true)
+    },
+    []
+  )
 
   const selectedUserIds = useMemo(
     () => Object.keys(rowSelection).filter((id) => rowSelection[id]),
@@ -895,6 +934,136 @@ function CreditsAdminPage() {
         </motion.div>
       )}
 
+      {/* Credit Requests */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.18 }}
+        className="grid grid-cols-1 lg:grid-cols-3 gap-4"
+      >
+        <StatCard
+          title="Pending Requests"
+          value={pendingCountData?.pending ?? 0}
+          icon={Inbox}
+          iconColor="text-amber-400"
+          bgColor="bg-amber-500/10"
+          variant="compact"
+        />
+
+        <Card className="lg:col-span-2">
+          <CardHeader className="pb-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <HandCoins className="w-4 h-4 text-primary" />
+                Credit Requests
+                {(pendingCountData?.pending ?? 0) > 0 && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400">
+                    {pendingCountData?.pending} pending
+                  </span>
+                )}
+              </CardTitle>
+              <div className="flex items-center gap-1 p-1 bg-muted rounded-lg self-start">
+                {REQUEST_FILTER_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setRequestStatusFilter(opt.value)}
+                    className={cn(
+                      'px-2.5 py-1 rounded-md text-xs font-medium transition-all',
+                      requestStatusFilter === opt.value
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {requestsLoading ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="flex items-center gap-3 p-2 animate-pulse">
+                    <div className="w-8 h-8 rounded-full bg-muted shrink-0" />
+                    <div className="h-4 flex-1 bg-muted rounded" />
+                    <div className="h-4 w-20 bg-muted rounded" />
+                  </div>
+                ))}
+              </div>
+            ) : creditRequests.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No {requestStatusFilter || ''} credit requests
+                {requestStatusFilter ? ' with this status' : ''}.
+              </p>
+            ) : (
+              <div className="divide-y divide-border/20">
+                {creditRequests.map((req) => {
+                  const config = REQUEST_STATUS_CONFIG[req.status] || {
+                    label: req.status,
+                    color: 'text-muted-foreground',
+                    bg: 'bg-muted',
+                  }
+                  return (
+                    <div key={req.id} className="flex items-center gap-3 py-2.5">
+                      <UserLink
+                        userId={req.user_id}
+                        name={req.username || req.user_id}
+                        secondary={req.email}
+                        size="sm"
+                        className="w-40 shrink-0"
+                      />
+                      <span className="font-mono font-semibold text-sm w-20 shrink-0 text-right">
+                        {req.amount.toLocaleString()}
+                      </span>
+                      <Tooltip content={req.reason}>
+                        <span className="flex-1 min-w-0 text-sm text-muted-foreground truncate">
+                          {req.reason}
+                        </span>
+                      </Tooltip>
+                      <Tooltip content={formatDate(req.created_at)}>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
+                          {formatRelativeTime(req.created_at)}
+                        </span>
+                      </Tooltip>
+                      <span
+                        className={cn(
+                          'text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0',
+                          config.bg,
+                          config.color
+                        )}
+                      >
+                        {config.label}
+                      </span>
+                      {req.status === 'pending' && canGrant && (
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Tooltip content="Approve">
+                            <button
+                              onClick={() => handleReviewRequest(req, 'approve')}
+                              className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-colors inline-flex"
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                          </Tooltip>
+                          <Tooltip content="Reject">
+                            <button
+                              onClick={() => handleReviewRequest(req, 'reject')}
+                              className="p-1.5 rounded-lg hover:bg-red-500/10 text-red-400 transition-colors inline-flex"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </Tooltip>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </motion.div>
+
       {/* DataTable */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -963,6 +1132,12 @@ function CreditsAdminPage() {
         user={selectedUser}
         open={overrideDialogOpen}
         onOpenChange={setOverrideDialogOpen}
+      />
+      <CreditRequestReviewDialog
+        request={reviewRequest}
+        initialAction={reviewAction}
+        open={reviewDialogOpen}
+        onOpenChange={setReviewDialogOpen}
       />
     </div>
   )

@@ -19,12 +19,15 @@ import {
   ArrowUp,
   ArrowDown,
   Wallet,
+  HandCoins,
 } from 'lucide-react'
 import { useMyCreditSummary, useMyCreditHistory } from '../hooks/use-credits'
+import { useMyCreditRequests } from '../hooks/use-credit-requests'
 import { useAuthStore } from '../stores/auth-store'
-import { formatDate, cn } from '../lib/utils'
+import { formatDate, formatRelativeTime, cn } from '../lib/utils'
 import { Button } from '../components/ui/button'
-import type { CreditTransaction } from '../types/api'
+import { CreditRequestDialog } from '../components/credit-request-dialog'
+import type { CreditRequest, CreditTransaction } from '../types/api'
 
 const TYPE_CONFIG: Record<
   string,
@@ -59,6 +62,12 @@ const FILTER_OPTIONS = [
   { value: 'daily_allowance', label: 'Allowance' },
 ]
 
+const REQUEST_STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
+  pending: { label: 'Pending', color: 'text-amber-400', bg: 'bg-amber-500/10' },
+  approved: { label: 'Approved', color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+  rejected: { label: 'Rejected', color: 'text-red-400', bg: 'bg-red-500/10' },
+}
+
 function getTypeConfig(type: string) {
   return (
     TYPE_CONFIG[type] || {
@@ -87,6 +96,12 @@ function CreditsSettingsPage() {
   const [typeFilter, setTypeFilter] = useState('')
   const [sortBy, setSortBy] = useState('created_at')
   const [sortDesc, setSortDesc] = useState(true)
+  const [requestDialogOpen, setRequestDialogOpen] = useState(false)
+
+  const { data: pendingRequests } = useMyCreditRequests({ status: 'pending', limit: 1 })
+  const hasPendingRequest = (pendingRequests?.pagination.total ?? 0) > 0
+  const { data: myRequestsData, isLoading: myRequestsLoading } = useMyCreditRequests({ limit: 5 })
+  const myRequests = myRequestsData?.requests || []
 
   const { data: historyData, isLoading } = useMyCreditHistory({
     page,
@@ -136,6 +151,20 @@ function CreditsSettingsPage() {
           <p className="text-sm text-muted-foreground">
             View your credit balance and transaction history
           </p>
+        </div>
+        <div className="ml-auto flex flex-col items-end gap-1">
+          <Button
+            size="sm"
+            onClick={() => setRequestDialogOpen(true)}
+            disabled={hasPendingRequest}
+            className="gap-1.5"
+          >
+            <HandCoins className="w-4 h-4" />
+            Request Credits
+          </Button>
+          {hasPendingRequest && (
+            <p className="text-xs text-muted-foreground">Request pending review</p>
+          )}
         </div>
       </motion.div>
 
@@ -218,6 +247,48 @@ function CreditsSettingsPage() {
             </div>
           </motion.div>
         )}
+
+        {/* My Requests */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.18 }}
+          className="rounded-xl bg-card/50 border border-border/50 overflow-hidden"
+        >
+          <div className="flex items-center gap-2 p-4 border-b border-border/50">
+            <HandCoins className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm font-medium">My Requests</span>
+            <span className="text-xs text-muted-foreground">
+              ({myRequestsData?.pagination.total ?? 0})
+            </span>
+          </div>
+
+          {myRequestsLoading ? (
+            <div className="divide-y divide-border/20">
+              {[1, 2].map((i) => (
+                <div key={i} className="flex items-center gap-3 px-5 py-3 animate-pulse">
+                  <div className="h-5 w-16 bg-muted rounded-full" />
+                  <div className="h-4 w-20 bg-muted rounded" />
+                  <div className="h-4 flex-1 bg-muted rounded" />
+                  <div className="h-3 w-16 bg-muted rounded" />
+                </div>
+              ))}
+            </div>
+          ) : myRequests.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12">
+              <div className="w-12 h-12 rounded-xl bg-muted/50 flex items-center justify-center mb-3">
+                <HandCoins className="w-6 h-6 text-muted-foreground" />
+              </div>
+              <p className="text-sm font-medium text-muted-foreground">No credit requests yet</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-border/20">
+              {myRequests.map((req) => (
+                <RequestRow key={req.id} request={req} />
+              ))}
+            </div>
+          )}
+        </motion.div>
 
         {/* Transaction History */}
         <motion.div
@@ -386,8 +457,55 @@ function CreditsSettingsPage() {
             )}
           </div>
         </motion.div>
+
+        <CreditRequestDialog open={requestDialogOpen} onOpenChange={setRequestDialogOpen} />
       </div>
     </div>
+  )
+}
+
+function RequestRow({ request: req }: { request: CreditRequest }) {
+  const config = REQUEST_STATUS_CONFIG[req.status] || {
+    label: req.status,
+    color: 'text-muted-foreground',
+    bg: 'bg-muted',
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="px-5 py-3 space-y-1.5 hover:bg-muted/20 transition-colors"
+    >
+      <div className="flex items-center gap-3">
+        <span
+          className={cn(
+            'text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0',
+            config.bg,
+            config.color
+          )}
+        >
+          {config.label}
+        </span>
+        <span className="font-mono font-semibold text-sm">
+          {req.amount.toLocaleString()} <span className="text-muted-foreground">NUKE</span>
+        </span>
+        {req.status === 'approved' && req.granted_amount !== null && (
+          <span className="text-xs text-emerald-400">
+            granted {req.granted_amount.toLocaleString()} NUKE
+          </span>
+        )}
+        <span className="text-xs text-muted-foreground ml-auto whitespace-nowrap">
+          {formatRelativeTime(req.created_at)}
+        </span>
+      </div>
+      <p className="text-sm text-muted-foreground line-clamp-2">{req.reason}</p>
+      {req.review_note && (
+        <p className="text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">Admin note:</span> {req.review_note}
+        </p>
+      )}
+    </motion.div>
   )
 }
 

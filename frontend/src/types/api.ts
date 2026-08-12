@@ -182,6 +182,30 @@ export interface CreditHistoryResponse {
   }
 }
 
+export interface CreditRequest {
+  id: string
+  user_id: string
+  username?: string
+  email?: string
+  amount: number
+  reason: string
+  status: 'pending' | 'approved' | 'rejected'
+  review_note: string | null
+  granted_amount: number | null
+  created_at: string
+  reviewed_at: string | null
+}
+
+export interface CreditRequestListResponse {
+  requests: CreditRequest[]
+  pagination: {
+    page: number
+    limit: number
+    total: number
+    total_pages: number
+  }
+}
+
 export interface LowBalanceUser {
   id: string
   username: string

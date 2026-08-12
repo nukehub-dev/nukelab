@@ -34,6 +34,7 @@ EVENT_KEY_MAP = {
     "server_backup_completed": "server_backup_completed",
     "credits_granted": "credit_granted",
     "credits_deducted": "credit_low",
+    "credit_request_rejected": "credit_request",
     "daily_allowance": "daily_allowance",
     "low_balance": "credit_low",
     "workspace_invitation": "workspace_invite",
@@ -414,6 +415,22 @@ class NotificationService:
             type="credit",
             severity="warning",
             event_key="credit_low",
+        )
+
+    async def credit_request_rejected(
+        self, user_id, amount: int, note: str | None = None
+    ) -> Notification | None:
+        """Notify user that their credit request was rejected."""
+        msg = f"Your request for {amount} NUKE credits was rejected."
+        if note:
+            msg = f"Your request for {amount} NUKE credits was rejected: {note}"
+        return await self.create(
+            user_id=user_id,
+            title="Credit Request Rejected",
+            message=msg,
+            type="credit",
+            severity="info",
+            event_key="credit_request",
         )
 
     async def daily_allowance(self, user_id, amount: int, new_balance: int) -> Notification | None:
