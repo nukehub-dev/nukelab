@@ -38,6 +38,7 @@ EVENT_KEY_MAP = {
     "credit_request_created": "credit_request",
     "credit_request_message": "credit_request",
     "credit_request_allowance_approved": "credit_request",
+    "credit_request_stale_reminder": "credit_request",
     "daily_allowance": "daily_allowance",
     "low_balance": "credit_low",
     "workspace_invitation": "workspace_invite",
@@ -460,6 +461,30 @@ class NotificationService:
             type="credit",
             severity="success",
             event_key="credit_request",
+        )
+
+    async def credit_request_stale_reminder(
+        self, user_id, amount: int, requester_username: str, age_hours: int, request_id: str
+    ) -> Notification | None:
+        """Remind a reviewer about a stale open credit request.
+
+        The extra_data carries a distinct inner event_key
+        ("credit_request_stale") plus the request_id so the reminder
+        throttle can find prior reminders for the same request. The inner
+        key overrides the preference channel key in merged extra_data; the
+        preference lookup itself uses the outer "credit_request" key.
+        """
+        return await self.create(
+            user_id=user_id,
+            title="Stale Credit Request",
+            message=(
+                f"The credit request from {requester_username} for {amount} NUKE "
+                f"credits has been waiting for {age_hours} hours."
+            ),
+            type="credit",
+            severity="warning",
+            event_key="credit_request",
+            extra_data={"event_key": "credit_request_stale", "request_id": request_id},
         )
 
     async def credit_request_message(

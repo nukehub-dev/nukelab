@@ -519,3 +519,192 @@ class TestCreditRequestTypesAPI:
             json={"amount": 10, "reason": "bad type", "request_type": "bogus"},
         )
         assert response.status_code == 422
+
+
+class TestCreditRequestSortAndStats:
+    """sort param and /stats endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_list_all_sort_oldest(self, client, user_token, admin_token):
+        headers = {"Authorization": f"Bearer {user_token}"}
+        create = await client.post(
+            "/api/credit-requests/", headers=headers, json={"amount": 10, "reason": "older"}
+        )
+        first_id = create.json()["request"]["id"]
+        # Cancel so a second request is allowed
+        await client.post(f"/api/credit-requests/{first_id}/cancel", headers=headers)
+
+        create = await client.post(
+            "/api/credit-requests/", headers=headers, json={"amount": 10, "reason": "newer"}
+        )
+        second_id = create.json()["request"]["id"]
+
+        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+        response = await client.get("/api/credit-requests/all?sort=oldest", headers=admin_headers)
+        assert response.status_code == 200
+        ids = [r["id"] for r in response.json()["requests"]]
+        assert ids.index(first_id) < ids.index(second_id)
+
+        # Default is newest-first
+        response = await client.get("/api/credit-requests/all", headers=admin_headers)
+        ids = [r["id"] for r in response.json()["requests"]]
+        assert ids.index(second_id) < ids.index(first_id)
+
+    @pytest.mark.asyncio
+    async def test_stats_admin(self, client, admin_token, user_token):
+        """Admin gets aggregate stats with the documented shape."""
+        await client.post(
+            "/api/credit-requests/",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"amount": 10, "reason": "stats"},
+        )
+        response = await client.get(
+            "/api/credit-requests/stats",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["counts"]["pending"] >= 1
+        assert set(data["counts"]) == {
+            "pending",
+            "needs_info",
+            "approved",
+            "rejected",
+            "cancelled",
+        }
+        assert "decided" in data
+        assert "approval_rate" in data
+        assert "avg_decision_hours" in data
+        assert "oldest_open_hours" in data
+
+    @pytest.mark.asyncio
+    async def test_stats_forbidden_for_user(self, client, user_token):
+        response = await client.get(
+            "/api/credit-requests/stats",
+            headers={"Authorization": f"Bearer {user_token}"},
+        )
+        assert response.status_code == 403
+
+
+class TestBulkReviewAPI:
+    """POST /credit-requests/bulk-review."""
+
+    @pytest.mark.asyncio
+    async def test_bulk_review_success_and_failed(self, client, user_token, admin_token):
+        import uuid as uuid_mod
+
+        create = await client.post(
+            "/api/credit-requests/",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"amount": 20, "reason": "bulk"},
+        )
+        request_id = create.json()["request"]["id"]
+        unknown_id = str(uuid_mod.uuid4())
+
+        response = await client.post(
+            "/api/credit-requests/bulk-review",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"request_ids": [request_id, unknown_id], "action": "approve"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["results"]["success"] == [{"request_id": request_id}]
+        assert len(data["results"]["failed"]) == 1
+        assert data["results"]["failed"][0]["request_id"] == unknown_id
+        assert "error" in data["results"]["failed"][0]
+
+    @pytest.mark.asyncio
+    async def test_bulk_review_reject(self, client, user_token, admin_token):
+        create = await client.post(
+            "/api/credit-requests/",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"amount": 20, "reason": "bulk reject"},
+        )
+        request_id = create.json()["request"]["id"]
+
+        response = await client.post(
+            "/api/credit-requests/bulk-review",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"request_ids": [request_id], "action": "reject", "note": "batch no"},
+        )
+        assert response.status_code == 200
+        assert response.json()["results"]["success"] == [{"request_id": request_id}]
+
+    @pytest.mark.asyncio
+    async def test_bulk_review_forbidden_for_user(self, client, user_token):
+        response = await client.post(
+            "/api/credit-requests/bulk-review",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"request_ids": ["x"], "action": "approve"},
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_bulk_review_validation(self, client, admin_token):
+        """Empty id list and unknown action are rejected with 422."""
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        response = await client.post(
+            "/api/credit-requests/bulk-review",
+            headers=headers,
+            json={"request_ids": [], "action": "approve"},
+        )
+        assert response.status_code == 422
+
+        response = await client.post(
+            "/api/credit-requests/bulk-review",
+            headers=headers,
+            json={"request_ids": ["x"], "action": "delete"},
+        )
+        assert response.status_code == 422
+
+
+class TestInternalNotesAPI:
+    """internal flag on the messages endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_reviewer_posts_internal_note(self, client, user_token, admin_token):
+        create = await client.post(
+            "/api/credit-requests/",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"amount": 10, "reason": "internal api"},
+        )
+        request_id = create.json()["request"]["id"]
+        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+
+        response = await client.post(
+            f"/api/credit-requests/{request_id}/messages",
+            headers=admin_headers,
+            json={"body": "internal observation", "internal": True},
+        )
+        assert response.status_code == 200
+        assert response.json()["message"]["is_internal"] is True
+
+        # Hidden from the requester
+        response = await client.get(
+            f"/api/credit-requests/{request_id}/messages",
+            headers={"Authorization": f"Bearer {user_token}"},
+        )
+        assert response.json()["messages"] == []
+
+        # Visible to reviewers
+        response = await client.get(
+            f"/api/credit-requests/{request_id}/messages", headers=admin_headers
+        )
+        assert len(response.json()["messages"]) == 1
+
+    @pytest.mark.asyncio
+    async def test_requester_cannot_post_internal(self, client, user_token):
+        headers = {"Authorization": f"Bearer {user_token}"}
+        create = await client.post(
+            "/api/credit-requests/",
+            headers=headers,
+            json={"amount": 10, "reason": "sneaky internal"},
+        )
+        request_id = create.json()["request"]["id"]
+
+        response = await client.post(
+            f"/api/credit-requests/{request_id}/messages",
+            headers=headers,
+            json={"body": "fake note", "internal": True},
+        )
+        assert response.status_code == 403

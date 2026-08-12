@@ -4,7 +4,12 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import { useToast } from '../stores/toast-store'
-import type { CreditRequest, CreditRequestListResponse, CreditRequestMessage } from '../types/api'
+import type {
+  CreditRequest,
+  CreditRequestListResponse,
+  CreditRequestMessage,
+  CreditRequestStats,
+} from '../types/api'
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message
@@ -16,6 +21,7 @@ interface CreditRequestListParams {
   status?: string
   page?: number
   limit?: number
+  sort?: 'newest' | 'oldest'
 }
 
 function buildQueryString(params: CreditRequestListParams): string {
@@ -23,6 +29,7 @@ function buildQueryString(params: CreditRequestListParams): string {
   if (params.status) searchParams.set('status', params.status)
   if (params.page) searchParams.set('page', String(params.page))
   if (params.limit) searchParams.set('limit', String(params.limit))
+  if (params.sort) searchParams.set('sort', params.sort)
   const queryString = searchParams.toString()
   return queryString ? `?${queryString}` : ''
 }
@@ -61,6 +68,16 @@ export function usePendingCreditRequestCount() {
   })
 }
 
+export function useCreditRequestStats() {
+  return useQuery({
+    queryKey: ['credit-requests', 'stats'],
+    queryFn: async () => {
+      const response = await api.get<CreditRequestStats>('/credit-requests/stats')
+      return response
+    },
+  })
+}
+
 export function useCreditRequestMessages(requestId: string | undefined) {
   return useQuery({
     queryKey: ['credit-requests', 'messages', requestId],
@@ -79,9 +96,18 @@ export function useAddCreditRequestMessage() {
   const { error: showError } = useToast()
 
   return useMutation({
-    mutationFn: ({ requestId, body }: { requestId: string; body: string }) =>
+    mutationFn: ({
+      requestId,
+      body,
+      internal,
+    }: {
+      requestId: string
+      body: string
+      internal?: boolean
+    }) =>
       api.post<{ message: CreditRequestMessage }>(`/credit-requests/${requestId}/messages`, {
         body,
+        internal,
       }),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['credit-requests'] })
@@ -91,6 +117,53 @@ export function useAddCreditRequestMessage() {
     },
     onError: (err) => {
       showError('Failed to send message', getErrorMessage(err))
+    },
+  })
+}
+
+interface BulkReviewResult {
+  request_id: string
+  error?: string
+}
+
+interface BulkReviewResponse {
+  message: string
+  results: { success: BulkReviewResult[]; failed: BulkReviewResult[] }
+}
+
+interface BulkReviewData {
+  requestIds: string[]
+  action: 'approve' | 'reject'
+  note?: string
+}
+
+export function useBulkReviewCreditRequests() {
+  const queryClient = useQueryClient()
+  const { success, error: showError } = useToast()
+
+  return useMutation({
+    mutationFn: ({ requestIds, action, note }: BulkReviewData) =>
+      api.post<BulkReviewResponse>('/credit-requests/bulk-review', {
+        request_ids: requestIds,
+        action,
+        note,
+      }),
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['credit-requests'] })
+      queryClient.invalidateQueries({ queryKey: ['credits'] })
+      const ok = data.results.success.length
+      const fail = data.results.failed.length
+      if (fail > 0) {
+        showError(
+          `Bulk ${variables.action} partially failed`,
+          `${ok} succeeded, ${fail} failed — see results`
+        )
+      } else {
+        success(`Bulk ${variables.action} complete`, data.message)
+      }
+    },
+    onError: (err) => {
+      showError('Failed to bulk review requests', getErrorMessage(err))
     },
   })
 }

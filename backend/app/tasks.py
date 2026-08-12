@@ -166,6 +166,28 @@ def evaluate_maintenance_windows(self):
 
 
 @celery_app.task(bind=True)
+def remind_stale_credit_requests(self):
+    """Re-notify reviewers about open credit requests waiting > 24h.
+
+    Throttled inside CreditRequestService to at most one reminder per
+    request per 24h, so the hourly beat entry is safe to overlap.
+    """
+
+    async def _remind():
+        from app.services.credit_request_service import CreditRequestService
+
+        async with AsyncSessionLocal() as db:
+            service = CreditRequestService(db)
+            reminded = await service.remind_stale_requests(hours=24)
+            return f"Stale credit requests: {reminded} reminders sent"
+
+    try:
+        return _run_async(_remind())
+    except Exception as e:
+        return f"Error reminding stale credit requests: {e}"
+
+
+@celery_app.task(bind=True)
 def cleanup_inactive_servers(self):
     """Cleanup task - stops servers that have been inactive for too long"""
     return "Cleanup completed"

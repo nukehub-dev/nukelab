@@ -144,6 +144,7 @@ export function CreditRequestReviewDialog({
               canReply={isOpenRequest}
               replyHint="Replying sets the request to awaiting user reply."
               replyPlaceholder="Ask the user for more details…"
+              allowInternal
             />
 
             {isOpenRequest && (

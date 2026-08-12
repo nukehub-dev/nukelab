@@ -27,10 +27,16 @@ import {
   HandCoins,
   Inbox,
   Timer,
+  Hourglass,
+  TrendingUp,
 } from 'lucide-react'
 import { useUsers } from '../hooks/use-users'
 import { useLowBalanceUsers } from '../hooks/use-credits'
-import { useAllCreditRequests, usePendingCreditRequestCount } from '../hooks/use-credit-requests'
+import {
+  useAllCreditRequests,
+  useCreditRequestStats,
+  useBulkReviewCreditRequests,
+} from '../hooks/use-credit-requests'
 import {
   useSystemDailyAllowance,
   useUpdateSystemDailyAllowance,
@@ -61,6 +67,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { StatCard } from '../components/data/stat-card'
 import { Tooltip } from '../components/ui/tooltip'
 import { Button } from '../components/ui/button'
+import { Checkbox } from '../components/ui/checkbox'
+import { Input } from '../components/ui/input'
+import { useConfirmDialog } from '../components/ui/confirm-dialog'
 import type { CreditRequest, User } from '../types/api'
 import type {
   ColumnDef,
@@ -88,6 +97,14 @@ const REQUEST_FILTER_OPTIONS = [
   { value: 'approved', label: 'Approved' },
   { value: 'rejected', label: 'Rejected' },
 ]
+
+const REQUEST_SORT_OPTIONS = [
+  { value: 'newest', label: 'Newest' },
+  { value: 'oldest', label: 'Oldest' },
+] as const
+
+/** Open requests older than this get an amber "waiting" highlight. */
+const WAITING_THRESHOLD_MS = 24 * 60 * 60 * 1000
 
 function CreditsAdminPage() {
   const allowed = usePageGuard({ permission: PERMISSIONS.CREDITS_READ_ALL })
@@ -187,17 +204,43 @@ function CreditsAdminPage() {
   const [overrideDialogOpen, setOverrideDialogOpen] = useState(false)
 
   const [requestStatusFilter, setRequestStatusFilter] = useState('pending')
+  const [requestSort, setRequestSort] = useState<'newest' | 'oldest'>('newest')
   const [reviewRequest, setReviewRequest] = useState<CreditRequest | null>(null)
   const [reviewAction, setReviewAction] = useState<'approve' | 'reject'>('approve')
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false)
+  const [selectedRequestIds, setSelectedRequestIds] = useState<Record<string, boolean>>({})
+  const [bulkRejectNote, setBulkRejectNote] = useState('')
 
-  const { data: pendingCountData } = usePendingCreditRequestCount()
+  const { data: requestStats } = useCreditRequestStats()
+  const bulkReview = useBulkReviewCreditRequests()
+  const { confirm: confirmBulkReview, dialog: bulkReviewDialog } = useConfirmDialog()
   const { data: requestsData, isLoading: requestsLoading } = useAllCreditRequests({
     status: requestStatusFilter || undefined,
+    sort: requestSort,
     page: 1,
     limit: 10,
   })
   const creditRequests = useMemo(() => requestsData?.requests || [], [requestsData?.requests])
+
+  // Snapshot of "now" for the 24h waiting highlight (impure Date.now() must not run per-row).
+  const [now] = useState(() => Date.now())
+
+  const openRequestCount =
+    (requestStats?.counts.pending ?? 0) + (requestStats?.counts.needs_info ?? 0)
+  // The backend may express approval_rate as a 0..1 fraction or a 0..100 percentage.
+  const approvalRatePct = requestStats
+    ? Math.round(
+        requestStats.approval_rate <= 1
+          ? requestStats.approval_rate * 100
+          : requestStats.approval_rate
+      )
+    : 0
+
+  const selectedReviewIds = useMemo(
+    () => Object.keys(selectedRequestIds).filter((id) => selectedRequestIds[id]),
+    [selectedRequestIds]
+  )
+  const selectedReviewCount = selectedReviewIds.length
 
   const handleReviewRequest = useCallback(
     (request: CreditRequest, action: 'approve' | 'reject') => {
@@ -207,6 +250,57 @@ function CreditsAdminPage() {
     },
     []
   )
+
+  const handleToggleRequestSelected = useCallback((id: string, checked: boolean) => {
+    setSelectedRequestIds((prev) => ({ ...prev, [id]: checked }))
+  }, [])
+
+  const handleBulkApprove = async () => {
+    if (selectedReviewIds.length === 0) return
+    const confirmed = await confirmBulkReview({
+      title: `Approve ${selectedReviewIds.length} request${selectedReviewIds.length === 1 ? '' : 's'}?`,
+      description: 'Each requester is granted their requested amount.',
+      confirmLabel: 'Approve All',
+      variant: 'info',
+    })
+    if (!confirmed) return
+    bulkReview.mutate(
+      { requestIds: selectedReviewIds, action: 'approve' },
+      { onSuccess: () => setSelectedRequestIds({}) }
+    )
+  }
+
+  const handleBulkReject = async () => {
+    if (selectedReviewIds.length === 0) return
+    const confirmed = await confirmBulkReview({
+      title: `Reject ${selectedReviewIds.length} request${selectedReviewIds.length === 1 ? '' : 's'}?`,
+      description: 'Rejected requesters can submit a new request afterwards.',
+      confirmLabel: 'Reject All',
+      variant: 'destructive',
+      customContent: (
+        <Input
+          type="text"
+          value={bulkRejectNote}
+          onChange={(e) => setBulkRejectNote(e.target.value)}
+          placeholder="Optional rejection note shown to the users"
+        />
+      ),
+    })
+    if (!confirmed) return
+    bulkReview.mutate(
+      {
+        requestIds: selectedReviewIds,
+        action: 'reject',
+        note: bulkRejectNote.trim() || undefined,
+      },
+      {
+        onSuccess: () => {
+          setSelectedRequestIds({})
+          setBulkRejectNote('')
+        },
+      }
+    )
+  }
 
   const selectedUserIds = useMemo(
     () => Object.keys(rowSelection).filter((id) => rowSelection[id]),
@@ -1040,48 +1134,134 @@ function CreditsAdminPage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.18 }}
-        className="grid grid-cols-1 lg:grid-cols-3 gap-4"
+        className="space-y-4"
       >
-        <StatCard
-          title="Pending Requests"
-          value={pendingCountData?.pending ?? 0}
-          icon={Inbox}
-          iconColor="text-amber-400"
-          bgColor="bg-amber-500/10"
-          variant="compact"
-        />
+        {/* Stats strip */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard
+            title="Open Requests"
+            value={openRequestCount}
+            icon={Inbox}
+            iconColor="text-amber-400"
+            bgColor="bg-amber-500/10"
+            variant="compact"
+          />
+          <StatCard
+            title="Approval Rate"
+            value={`${approvalRatePct}%`}
+            icon={TrendingUp}
+            iconColor="text-emerald-400"
+            bgColor="bg-emerald-500/10"
+            variant="compact"
+          />
+          <StatCard
+            title="Avg Decision"
+            value={`${(requestStats?.avg_decision_hours ?? 0).toFixed(1)}h`}
+            icon={Clock}
+            iconColor="text-blue-400"
+            bgColor="bg-blue-500/10"
+            variant="compact"
+          />
+          <StatCard
+            title="Oldest Open"
+            value={`${Math.round(requestStats?.oldest_open_hours ?? 0)}h`}
+            icon={Hourglass}
+            iconColor="text-violet-400"
+            bgColor="bg-violet-500/10"
+            variant="compact"
+          />
+        </div>
 
-        <Card className="lg:col-span-2">
+        <Card>
           <CardHeader className="pb-2">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <CardTitle className="flex items-center gap-2 text-sm">
                 <HandCoins className="w-4 h-4 text-primary" />
                 Credit Requests
-                {(pendingCountData?.pending ?? 0) > 0 && (
+                {openRequestCount > 0 && (
                   <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400">
-                    {pendingCountData?.pending} pending
+                    {openRequestCount} open
                   </span>
                 )}
               </CardTitle>
-              <div className="flex items-center gap-1 p-1 bg-muted rounded-lg self-start">
-                {REQUEST_FILTER_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    onClick={() => setRequestStatusFilter(opt.value)}
-                    className={cn(
-                      'px-2.5 py-1 rounded-md text-xs font-medium transition-all',
-                      requestStatusFilter === opt.value
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground'
-                    )}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
+              <div className="flex items-center gap-2 flex-wrap self-start">
+                <div className="flex items-center gap-1 p-1 bg-muted rounded-lg">
+                  {REQUEST_FILTER_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setRequestStatusFilter(opt.value)}
+                      className={cn(
+                        'px-2.5 py-1 rounded-md text-xs font-medium transition-all',
+                        requestStatusFilter === opt.value
+                          ? 'bg-background text-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground'
+                      )}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-1 p-1 bg-muted rounded-lg">
+                  {REQUEST_SORT_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setRequestSort(opt.value)}
+                      className={cn(
+                        'px-2.5 py-1 rounded-md text-xs font-medium transition-all',
+                        requestSort === opt.value
+                          ? 'bg-background text-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground'
+                      )}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </CardHeader>
           <CardContent>
+            {/* Bulk selection bar */}
+            {selectedReviewCount > 0 && (
+              <div className="flex flex-wrap items-center gap-2 p-2.5 mb-3 rounded-lg bg-primary/5 border border-primary/20">
+                <span className="text-xs font-medium">{selectedReviewCount} selected</span>
+                <div className="flex items-center gap-1.5 ml-auto">
+                  {canGrant && (
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs gap-1"
+                      onClick={handleBulkApprove}
+                      loading={bulkReview.isPending}
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      Approve
+                    </Button>
+                  )}
+                  {canGrant && (
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      className="h-7 text-xs gap-1"
+                      onClick={handleBulkReject}
+                      disabled={bulkReview.isPending}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      Reject
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-xs"
+                    onClick={() => setSelectedRequestIds({})}
+                    disabled={bulkReview.isPending}
+                  >
+                    Clear
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {requestsLoading ? (
               <div className="space-y-2">
                 {[1, 2, 3].map((i) => (
@@ -1105,8 +1285,19 @@ function CreditsAdminPage() {
                     color: 'text-muted-foreground',
                     bg: 'bg-muted',
                   }
+                  const isOpen = req.status === 'pending' || req.status === 'needs_info'
+                  const isWaiting =
+                    isOpen && now - parseUtcDate(req.created_at).getTime() > WAITING_THRESHOLD_MS
                   return (
                     <div key={req.id} className="flex items-center gap-3 py-2.5">
+                      {isOpen && canGrant && (
+                        <Checkbox
+                          checked={!!selectedRequestIds[req.id]}
+                          onChange={(checked) => handleToggleRequestSelected(req.id, checked)}
+                          data-testid="credit-request-select"
+                          className="shrink-0"
+                        />
+                      )}
                       <UserLink
                         userId={req.user_id}
                         name={req.username || req.user_id}
@@ -1127,6 +1318,12 @@ function CreditsAdminPage() {
                           {formatRelativeTime(req.created_at)}
                         </span>
                       </Tooltip>
+                      {isWaiting && (
+                        <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 shrink-0">
+                          <Clock className="w-2.5 h-2.5" />
+                          waiting
+                        </span>
+                      )}
                       <span
                         className={cn(
                           'text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0',
@@ -1139,7 +1336,7 @@ function CreditsAdminPage() {
                       <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 bg-muted text-muted-foreground">
                         {req.request_type === 'allowance' ? 'Daily' : 'One-time'}
                       </span>
-                      {(req.status === 'pending' || req.status === 'needs_info') && canGrant && (
+                      {isOpen && canGrant && (
                         <div className="flex items-center gap-1 shrink-0">
                           <Tooltip content="Approve">
                             <button
@@ -1243,6 +1440,7 @@ function CreditsAdminPage() {
         open={reviewDialogOpen}
         onOpenChange={setReviewDialogOpen}
       />
+      {bulkReviewDialog}
     </div>
   )
 }

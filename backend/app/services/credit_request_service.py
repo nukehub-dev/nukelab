@@ -270,14 +270,20 @@ class CreditRequestService:
         }
 
     async def list_all(
-        self, status: str | None = None, page: int = 1, limit: int = 50
+        self, status: str | None = None, page: int = 1, limit: int = 50, sort: str = "newest"
     ) -> dict[str, Any]:
-        """List all credit requests (admin), joined with the requesting user."""
+        """List all credit requests (admin), joined with the requesting user.
+
+        ``sort`` is "newest" (default) or "oldest" by created_at.
+        """
         query = select(CreditRequest, User.username, User.email).join(
             User, CreditRequest.user_id == User.id
         )
         query = self._status_filter(query, status, CreditRequest.status)
-        query = query.order_by(CreditRequest.created_at.desc())
+        if sort == "oldest":
+            query = query.order_by(CreditRequest.created_at.asc())
+        else:
+            query = query.order_by(CreditRequest.created_at.desc())
 
         count_query = select(func.count()).select_from(CreditRequest)
         count_query = self._status_filter(count_query, status, CreditRequest.status)
@@ -340,6 +346,8 @@ class CreditRequestService:
         exclude_user_id: str | None,
         kind: str,
         preview: str | None = None,
+        requester_username: str | None = None,
+        age_hours: int | None = None,
     ) -> None:
         """Notify every active user holding CREDITS_GRANT (except the actor).
 
@@ -365,6 +373,14 @@ class CreditRequestService:
                     user_id=reviewer.id,
                     amount=request.amount,
                     reason=request.reason,
+                )
+            elif kind == "stale":
+                await notif_service.credit_request_stale_reminder(
+                    user_id=reviewer.id,
+                    amount=request.amount,
+                    requester_username=requester_username or "unknown",
+                    age_hours=age_hours or 0,
+                    request_id=str(request.id),
                 )
             else:
                 await notif_service.credit_request_message(
@@ -565,11 +581,17 @@ class CreditRequestService:
 
         return request
 
-    async def add_message(self, request_id: str, author: User, body: str) -> CreditRequestMessage:
+    async def add_message(
+        self, request_id: str, author: User, body: str, internal: bool = False
+    ) -> CreditRequestMessage:
         """Post a message on an open request and flip the ball-in-court state.
 
         The requester posting flips the request back to ``pending``; a
         reviewer (CREDITS_GRANT) posting flips it to ``needs_info``.
+
+        Internal notes (``internal=True``) are reviewer-only: they require
+        CREDITS_GRANT, do not flip the status, and never notify the
+        requester.
         """
         if not body or not body.strip():
             raise HTTPException(
@@ -580,44 +602,57 @@ class CreditRequestService:
         request = await self._get_open_for_update(request_id)
 
         is_requester = request.user_id == author.id
-        if not is_requester and not has_permission(author, Permission.CREDITS_GRANT):
+        is_reviewer = has_permission(author, Permission.CREDITS_GRANT)
+        if not is_requester and not is_reviewer:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You cannot post on this credit request",
+            )
+        if internal and not is_reviewer:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Internal notes require review permissions",
             )
 
         message = CreditRequestMessage(
             request_id=request.id,
             author_id=author.id,
             body=body,
+            is_internal=internal,
         )
         self.db.add(message)
-        request.status = STATUS_PENDING if is_requester else STATUS_NEEDS_INFO
+        if not internal:
+            request.status = STATUS_PENDING if is_requester else STATUS_NEEDS_INFO
         await self.db.commit()
         await self.db.refresh(message)
 
-        # Notify the counterpart, never the author.
-        notif_service = NotificationService(self.db)
-        if is_requester:
-            await self._notify_reviewers(
-                request,
-                exclude_user_id=str(author.id),
-                kind="message",
-                preview=body[:200],
-            )
-        else:
-            await notif_service.credit_request_message(
-                user_id=request.user_id,
-                amount=request.amount,
-                preview=body[:200],
-            )
+        # Notify the counterpart, never the author. Internal notes notify no one.
+        if not internal:
+            notif_service = NotificationService(self.db)
+            if is_requester:
+                await self._notify_reviewers(
+                    request,
+                    exclude_user_id=str(author.id),
+                    kind="message",
+                    preview=body[:200],
+                )
+            else:
+                await notif_service.credit_request_message(
+                    user_id=request.user_id,
+                    amount=request.amount,
+                    preview=body[:200],
+                )
 
         await ActivityService(self.db).log(
             action="credit_requests.message",
             target_type="credit_request",
             target_id=str(request.id),
             actor_id=str(author.id),
-            details={"message_id": str(message.id), "is_requester": is_requester},
+            details={
+                "message_id": str(message.id),
+                "is_requester": is_requester,
+                "internal": internal,
+            },
         )
 
         return message
@@ -653,12 +688,17 @@ class CreditRequestService:
                 detail="You cannot view this credit request",
             )
 
-        result = await self.db.execute(
+        query = (
             select(CreditRequestMessage, User.username)
             .outerjoin(User, CreditRequestMessage.author_id == User.id)
             .where(CreditRequestMessage.request_id == request.id)
-            .order_by(CreditRequestMessage.created_at.asc())
         )
+        # Internal reviewer notes are visible only to CREDITS_READ_ALL holders.
+        if not has_permission(requesting_user, Permission.CREDITS_READ_ALL):
+            query = query.where(CreditRequestMessage.is_internal.is_(False))
+        query = query.order_by(CreditRequestMessage.created_at.asc())
+
+        result = await self.db.execute(query)
 
         messages = []
         for message, author_username in result.all():
@@ -667,3 +707,124 @@ class CreditRequestService:
             data["is_admin"] = message.author_id != request.user_id
             messages.append(data)
         return messages
+
+    async def _was_reminded_recently(self, request_id: uuid.UUID, hours: int = 24) -> bool:
+        """Return True if a stale reminder for this request went out recently."""
+        from app.models.notification import Notification
+
+        cutoff = utc_now() - timedelta(hours=hours)
+        result = await self.db.execute(
+            select(Notification.id).where(
+                Notification.type == "credit",
+                Notification.created_at >= cutoff,
+                Notification.extra_data["event_key"].as_string() == "credit_request_stale",
+                Notification.extra_data["request_id"].as_string() == str(request_id),
+            )
+        )
+        return result.scalar_one_or_none() is not None
+
+    async def remind_stale_requests(self, hours: int = 24) -> int:
+        """Re-notify reviewers about open requests older than ``hours``.
+
+        Throttled to at most one reminder per request per 24h via the
+        notification's extra_data markers. Returns the number of requests
+        reminded (for the Celery task's log line).
+        """
+        cutoff = utc_now() - timedelta(hours=hours)
+        result = await self.db.execute(
+            select(CreditRequest, User.username)
+            .join(User, CreditRequest.user_id == User.id)
+            .where(
+                CreditRequest.status.in_(OPEN_STATUSES),
+                CreditRequest.created_at < cutoff,
+            )
+        )
+
+        reminded = 0
+        for request, requester_username in result.all():
+            if await self._was_reminded_recently(request.id):
+                continue
+            age_hours = int((utc_now() - request.created_at).total_seconds() // 3600)
+            await self._notify_reviewers(
+                request,
+                exclude_user_id=None,
+                kind="stale",
+                requester_username=requester_username,
+                age_hours=age_hours,
+            )
+            reminded += 1
+        return reminded
+
+    async def get_stats(self) -> dict[str, Any]:
+        """Aggregate credit request stats for the admin dashboard."""
+        counts = {
+            STATUS_PENDING: 0,
+            STATUS_NEEDS_INFO: 0,
+            STATUS_APPROVED: 0,
+            STATUS_REJECTED: 0,
+            STATUS_CANCELLED: 0,
+        }
+        result = await self.db.execute(
+            select(CreditRequest.status, func.count()).group_by(CreditRequest.status)
+        )
+        for status_value, count in result.all():
+            counts[status_value] = counts.get(status_value, 0) + count
+
+        decided = counts[STATUS_APPROVED] + counts[STATUS_REJECTED]
+        approval_rate = counts[STATUS_APPROVED] / decided if decided else 0
+
+        # Mean decision latency over decided rows, in hours.
+        result = await self.db.execute(
+            select(func.avg(CreditRequest.reviewed_at - CreditRequest.created_at)).where(
+                CreditRequest.status.in_((STATUS_APPROVED, STATUS_REJECTED)),
+                CreditRequest.reviewed_at.isnot(None),
+            )
+        )
+        avg_interval = result.scalar()
+        avg_decision_hours = (
+            round(avg_interval.total_seconds() / 3600, 2) if avg_interval is not None else None
+        )
+
+        result = await self.db.execute(
+            select(func.min(CreditRequest.created_at)).where(
+                CreditRequest.status.in_(OPEN_STATUSES)
+            )
+        )
+        oldest_open = result.scalar()
+        oldest_open_hours = (
+            round((utc_now() - oldest_open).total_seconds() / 3600, 2)
+            if oldest_open is not None
+            else None
+        )
+
+        return {
+            "counts": counts,
+            "decided": decided,
+            "approval_rate": approval_rate,
+            "avg_decision_hours": avg_decision_hours,
+            "oldest_open_hours": oldest_open_hours,
+        }
+
+    async def bulk_review(
+        self,
+        request_ids: list[str],
+        action: str,
+        reviewer_id: str,
+        note: str | None = None,
+    ) -> dict[str, Any]:
+        """Approve or reject many requests, capturing per-item failures.
+
+        Approvals use each request's own requested amount (cap clamping
+        still applies per grant). Mirrors the admin bulk-grant result shape.
+        """
+        results: dict[str, Any] = {"success": [], "failed": []}
+        for request_id in request_ids:
+            try:
+                if action == "approve":
+                    await self.approve(request_id, reviewer_id=reviewer_id, note=note)
+                else:
+                    await self.reject(request_id, reviewer_id=reviewer_id, note=note)
+                results["success"].append({"request_id": request_id})
+            except HTTPException as e:
+                results["failed"].append({"request_id": request_id, "error": e.detail})
+        return results

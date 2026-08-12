@@ -3,7 +3,7 @@
 
 import uuid
 
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.time_utils import utc_now
@@ -77,6 +77,9 @@ class CreditRequestMessage(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     body = Column(Text, nullable=False)
+    # Internal reviewer notes are hidden from the requester and do not
+    # flip the ball-in-court state or trigger requester notifications.
+    is_internal = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime, default=utc_now, nullable=False)
 
     def to_dict(self):
@@ -85,5 +88,6 @@ class CreditRequestMessage(Base):
             "request_id": str(self.request_id),
             "author_id": str(self.author_id) if self.author_id else None,
             "body": self.body,
+            "is_internal": self.is_internal,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

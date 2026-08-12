@@ -43,6 +43,7 @@ class RejectCreditRequestBody(BaseModel):
 
 class PostCreditRequestMessageBody(BaseModel):
     body: str = Field(..., min_length=1, max_length=2000, description="Message text")
+    internal: bool = Field(False, description="Reviewer-only internal note (no notification)")
 
 
 # ========== User Endpoints ==========
@@ -92,13 +93,14 @@ async def list_all_credit_requests(
     status: str | None = Query(None, description="Filter by status"),
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=100),
+    sort: str = Query("newest", description="Sort by creation: newest or oldest"),
     current_user: User = Depends(require_permissions(Permission.CREDITS_READ_ALL)),
     _jwt=Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db),
 ):
     """List all credit requests (admin)"""
     service = CreditRequestService(db)
-    return await service.list_all(status=status, page=page, limit=limit)
+    return await service.list_all(status=status, page=page, limit=limit, sort=sort)
 
 
 @router.get("/pending-count")
@@ -110,6 +112,47 @@ async def get_pending_credit_request_count(
     """Count of pending credit requests (admin)"""
     service = CreditRequestService(db)
     return {"pending": await service.pending_count()}
+
+
+@router.get("/stats")
+async def get_credit_request_stats(
+    current_user: User = Depends(require_permissions(Permission.CREDITS_READ_ALL)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Aggregate credit request stats (admin)"""
+    service = CreditRequestService(db)
+    return await service.get_stats()
+
+
+class BulkReviewBody(BaseModel):
+    request_ids: list[str] = Field(..., min_length=1, max_length=50)
+    action: Literal["approve", "reject"]
+    note: str | None = Field(None, max_length=2000, description="Review note")
+
+
+@router.post("/bulk-review")
+async def bulk_review_credit_requests(
+    body: BulkReviewBody,
+    current_user: User = Depends(require_permissions(Permission.CREDITS_GRANT)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Approve or reject many credit requests at once (admin)"""
+    service = CreditRequestService(db)
+    results = await service.bulk_review(
+        request_ids=body.request_ids,
+        action=body.action,
+        reviewer_id=str(current_user.id),
+        note=body.note,
+    )
+    return {
+        "message": (
+            f"Bulk {body.action}: {len(results['success'])} succeeded, "
+            f"{len(results['failed'])} failed"
+        ),
+        "results": results,
+    }
 
 
 @router.post("/{request_id}/approve")
@@ -201,5 +244,6 @@ async def post_credit_request_message(
         request_id=request_id,
         author=current_user,
         body=body.body,
+        internal=body.internal,
     )
     return {"message": message.to_dict()}

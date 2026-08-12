@@ -873,3 +873,286 @@ class TestRequestCooldown:
             user_id=str(test_user.id), amount=10, reason="no cooldown"
         )
         assert second.status == "pending"
+
+
+class TestStaleRequestReminders:
+    """remind_stale_requests fan-out and throttling."""
+
+    @pytest.mark.asyncio
+    async def test_stale_open_request_reminds_reviewers(self, db_session, test_user, admin_user):
+        """An open request older than the window re-notifies reviewers."""
+        from datetime import timedelta
+
+        from app.core.time_utils import utc_now
+
+        service = CreditRequestService(db_session)
+        request = await service.create_request(
+            user_id=str(test_user.id), amount=10, reason="stale one"
+        )
+        request.created_at = utc_now() - timedelta(hours=30)
+        await db_session.commit()
+
+        reminded = await service.remind_stale_requests(hours=24)
+        assert reminded == 1
+
+        # Reviewer received a stale reminder notification
+        from sqlalchemy import select
+
+        from app.models.notification import Notification
+
+        result = await db_session.execute(
+            select(Notification).where(
+                Notification.user_id == admin_user.id,
+                Notification.title == "Stale Credit Request",
+            )
+        )
+        notif = result.scalar_one()
+        assert notif.severity == "warning"
+        assert notif.extra_data["event_key"] == "credit_request_stale"
+        assert notif.extra_data["request_id"] == str(request.id)
+
+    @pytest.mark.asyncio
+    async def test_stale_reminder_throttled_within_24h(self, db_session, test_user, admin_user):
+        """A second run within 24h sends nothing for the same request."""
+        from datetime import timedelta
+
+        from app.core.time_utils import utc_now
+
+        service = CreditRequestService(db_session)
+        request = await service.create_request(
+            user_id=str(test_user.id), amount=10, reason="throttle me"
+        )
+        request.created_at = utc_now() - timedelta(hours=30)
+        await db_session.commit()
+
+        assert await service.remind_stale_requests(hours=24) == 1
+        # Second run: the reminder from the first run is still fresh
+        assert await service.remind_stale_requests(hours=24) == 0
+
+    @pytest.mark.asyncio
+    async def test_terminal_requests_not_reminded(self, db_session, test_user, admin_user):
+        """Approved/rejected requests are never reminded, however old."""
+        from datetime import timedelta
+
+        from app.core.time_utils import utc_now
+
+        service = CreditRequestService(db_session)
+        request = await service.create_request(
+            user_id=str(test_user.id), amount=10, reason="decided"
+        )
+        await service.approve(str(request.id), reviewer_id=str(admin_user.id))
+        request.created_at = utc_now() - timedelta(hours=72)
+        await db_session.commit()
+
+        assert await service.remind_stale_requests(hours=24) == 0
+
+    @pytest.mark.asyncio
+    async def test_fresh_requests_not_reminded(self, db_session, test_user):
+        """Open requests younger than the window are not reminded."""
+        service = CreditRequestService(db_session)
+        await service.create_request(user_id=str(test_user.id), amount=10, reason="fresh")
+
+        assert await service.remind_stale_requests(hours=24) == 0
+
+
+class TestInternalNotes:
+    """Internal reviewer notes."""
+
+    @pytest.mark.asyncio
+    async def test_internal_note_no_flip_no_notify(self, db_session, test_user, admin_user):
+        """Internal notes leave status untouched and notify no one."""
+        from unittest.mock import AsyncMock, patch
+
+        service = CreditRequestService(db_session)
+        request = await service.create_request(
+            user_id=str(test_user.id), amount=10, reason="internal test"
+        )
+        assert request.status == "pending"
+
+        with patch("app.services.credit_request_service.NotificationService") as mock_notif_cls:
+            mock_notif = mock_notif_cls.return_value
+            mock_notif.credit_request_message = AsyncMock()
+            message = await service.add_message(
+                str(request.id), author=admin_user, body="suspicious pattern", internal=True
+            )
+
+        assert message.is_internal is True
+        assert request.status == "pending"  # no flip to needs_info
+        mock_notif.credit_request_message.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_internal_note_hidden_from_owner(self, db_session, test_user, admin_user):
+        """The requester sees only public messages."""
+        service = CreditRequestService(db_session)
+        request = await service.create_request(
+            user_id=str(test_user.id), amount=10, reason="hidden note"
+        )
+        await service.add_message(str(request.id), author=admin_user, body="public question")
+        await service.add_message(
+            str(request.id), author=admin_user, body="internal note", internal=True
+        )
+
+        owner_view = await service.list_messages(str(request.id), requesting_user=test_user)
+        assert [m["body"] for m in owner_view] == ["public question"]
+
+    @pytest.mark.asyncio
+    async def test_internal_note_visible_to_reviewers(self, db_session, test_user, admin_user):
+        """CREDITS_READ_ALL holders see internal notes."""
+        service = CreditRequestService(db_session)
+        request = await service.create_request(
+            user_id=str(test_user.id), amount=10, reason="visible note"
+        )
+        await service.add_message(
+            str(request.id), author=admin_user, body="internal note", internal=True
+        )
+
+        admin_view = await service.list_messages(str(request.id), requesting_user=admin_user)
+        assert len(admin_view) == 1
+        assert admin_view[0]["is_internal"] is True
+
+    @pytest.mark.asyncio
+    async def test_non_reviewer_cannot_post_internal(self, db_session, test_user):
+        """The requester (no CREDITS_GRANT) gets 403 with internal=True."""
+        service = CreditRequestService(db_session)
+        request = await service.create_request(
+            user_id=str(test_user.id), amount=10, reason="sneaky"
+        )
+
+        with pytest.raises(Exception) as exc_info:
+            await service.add_message(
+                str(request.id), author=test_user, body="fake internal", internal=True
+            )
+        assert exc_info.value.status_code == 403
+
+
+class TestCreditRequestStats:
+    """get_stats aggregation."""
+
+    @pytest.mark.asyncio
+    async def test_stats_on_seeded_mix(self, db_session, test_user, admin_user):
+        from datetime import timedelta
+
+        from app.core.time_utils import utc_now
+        from app.models.credit_request import CreditRequest
+
+        now = utc_now()
+        rows = [
+            # approved after 2h
+            CreditRequest(
+                user_id=test_user.id,
+                amount=10,
+                reason="a",
+                status="approved",
+                created_at=now - timedelta(hours=10),
+                reviewed_at=now - timedelta(hours=8),
+            ),
+            # rejected after 4h
+            CreditRequest(
+                user_id=test_user.id,
+                amount=10,
+                reason="b",
+                status="rejected",
+                created_at=now - timedelta(hours=10),
+                reviewed_at=now - timedelta(hours=6),
+            ),
+            # open pending, 10h old
+            CreditRequest(
+                user_id=test_user.id,
+                amount=10,
+                reason="c",
+                status="pending",
+                created_at=now - timedelta(hours=10),
+            ),
+            # cancelled (terminal, not decided)
+            CreditRequest(
+                user_id=test_user.id,
+                amount=10,
+                reason="d",
+                status="cancelled",
+                created_at=now - timedelta(hours=5),
+                reviewed_at=now - timedelta(hours=4),
+            ),
+        ]
+        db_session.add_all(rows)
+        await db_session.commit()
+
+        service = CreditRequestService(db_session)
+        stats = await service.get_stats()
+
+        assert stats["counts"]["pending"] == 1
+        assert stats["counts"]["approved"] == 1
+        assert stats["counts"]["rejected"] == 1
+        assert stats["counts"]["cancelled"] == 1
+        assert stats["counts"]["needs_info"] == 0
+        assert stats["decided"] == 2
+        assert stats["approval_rate"] == 0.5
+        assert stats["avg_decision_hours"] == 3.0
+        assert stats["oldest_open_hours"] == pytest.approx(10.0, abs=0.1)
+
+    @pytest.mark.asyncio
+    async def test_stats_empty(self, db_session):
+        """No requests: zero counts, 0 approval rate, null latencies."""
+        service = CreditRequestService(db_session)
+        stats = await service.get_stats()
+
+        assert stats["decided"] == 0
+        assert stats["approval_rate"] == 0
+        assert stats["avg_decision_hours"] is None
+        assert stats["oldest_open_hours"] is None
+
+
+class TestBulkReview:
+    """bulk_review result capture."""
+
+    @pytest.mark.asyncio
+    async def test_bulk_approve_all_success(self, db_session, test_user, admin_user):
+        service = CreditRequestService(db_session)
+        request = await service.create_request(
+            user_id=str(test_user.id), amount=25, reason="bulk me"
+        )
+
+        results = await service.bulk_review(
+            [str(request.id)], action="approve", reviewer_id=str(admin_user.id)
+        )
+
+        assert results["success"] == [{"request_id": str(request.id)}]
+        assert results["failed"] == []
+
+    @pytest.mark.asyncio
+    async def test_bulk_review_partial_failure(self, db_session, test_user, admin_user):
+        """A terminal request in the batch fails without blocking the rest."""
+        service = CreditRequestService(db_session)
+        open_request = await service.create_request(
+            user_id=str(test_user.id), amount=25, reason="open one"
+        )
+        await service.reject(str(open_request.id), reviewer_id=str(admin_user.id))
+        terminal_id = str(open_request.id)
+
+        second = await service.create_request(
+            user_id=str(test_user.id), amount=25, reason="second one"
+        )
+
+        results = await service.bulk_review(
+            [str(second.id), terminal_id], action="approve", reviewer_id=str(admin_user.id)
+        )
+
+        assert results["success"] == [{"request_id": str(second.id)}]
+        assert len(results["failed"]) == 1
+        assert results["failed"][0]["request_id"] == terminal_id
+        assert "already" in results["failed"][0]["error"]
+
+    @pytest.mark.asyncio
+    async def test_bulk_reject(self, db_session, test_user, admin_user):
+        service = CreditRequestService(db_session)
+        request = await service.create_request(
+            user_id=str(test_user.id), amount=25, reason="bulk reject"
+        )
+
+        results = await service.bulk_review(
+            [str(request.id)], action="reject", reviewer_id=str(admin_user.id), note="no"
+        )
+
+        assert results["success"] == [{"request_id": str(request.id)}]
+        await db_session.refresh(request)
+        assert request.status == "rejected"
+        assert request.review_note == "no"

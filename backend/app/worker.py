@@ -151,6 +151,10 @@ celery_app.conf.update(
             "task": "app.tasks.evaluate_maintenance_windows",
             "schedule": 60.0,  # Every 60 seconds
         },
+        "remind-stale-credit-requests": {
+            "task": "app.tasks.remind_stale_credit_requests",
+            "schedule": 3600.0,  # Hourly
+        },
         "rollup-server-metrics": {
             "task": "app.tasks.rollup_server_metrics",
             "schedule": crontab(hour=3, minute=0),  # Daily at 3 AM

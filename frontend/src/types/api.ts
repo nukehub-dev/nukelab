@@ -204,7 +204,22 @@ export interface CreditRequestMessage {
   author_username: string
   body: string
   is_admin: boolean
+  is_internal: boolean
   created_at: string
+}
+
+export interface CreditRequestStats {
+  counts: {
+    pending: number
+    needs_info: number
+    approved: number
+    rejected: number
+    cancelled: number
+  }
+  decided: number
+  approval_rate: number
+  avg_decision_hours: number
+  oldest_open_hours: number
 }
 
 export interface CreditRequestListResponse {
