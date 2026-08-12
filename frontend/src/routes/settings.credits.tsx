@@ -115,6 +115,7 @@ function CreditsSettingsPage() {
 
   const { data: openRequests } = useMyCreditRequests({ status: 'open', limit: 1 })
   const hasOpenRequest = (openRequests?.pagination.total ?? 0) > 0
+  const requestsBlocked = !!user?.credit_requests_blocked
   const { data: myRequestsData, isLoading: myRequestsLoading } = useMyCreditRequests({ limit: 5 })
   const myRequests = myRequestsData?.requests || []
 
@@ -186,17 +187,23 @@ function CreditsSettingsPage() {
           <Button
             size="sm"
             onClick={() => setRequestDialogOpen(true)}
-            disabled={hasOpenRequest}
+            disabled={requestsBlocked || hasOpenRequest}
             className="gap-1.5"
             data-testid="request-credits-button"
           >
             <HandCoins className="w-4 h-4" />
             Request Credits
           </Button>
-          {hasOpenRequest && (
+          {requestsBlocked ? (
             <p className="text-xs text-muted-foreground">
-              Request pending review or awaiting your reply
+              Credit requests are disabled for your account
             </p>
+          ) : (
+            hasOpenRequest && (
+              <p className="text-xs text-muted-foreground">
+                Request pending review or awaiting your reply
+              </p>
+            )
           )}
         </div>
       </motion.div>

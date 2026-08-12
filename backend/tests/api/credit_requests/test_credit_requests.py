@@ -708,3 +708,80 @@ class TestInternalNotesAPI:
             json={"body": "fake note", "internal": True},
         )
         assert response.status_code == 403
+
+
+class TestCreditRequestBlockAPI:
+    """PUT /credit-requests/users/{user_id}/block."""
+
+    @pytest.mark.asyncio
+    async def test_block_flow(self, client, user_token, admin_token, test_user):
+        """Admin blocks -> create 403 -> unblock -> create succeeds."""
+        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+        user_headers = {"Authorization": f"Bearer {user_token}"}
+
+        response = await client.put(
+            f"/api/credit-requests/users/{test_user.id}/block",
+            headers=admin_headers,
+            json={"blocked": True, "reason": "policy violation"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["blocked"] is True
+        assert data["user_id"] == str(test_user.id)
+
+        response = await client.post(
+            "/api/credit-requests/",
+            headers=user_headers,
+            json={"amount": 10, "reason": "while blocked"},
+        )
+        assert response.status_code == 403
+        assert "disabled for your account" in response.json()["detail"]
+
+        response = await client.put(
+            f"/api/credit-requests/users/{test_user.id}/block",
+            headers=admin_headers,
+            json={"blocked": False},
+        )
+        assert response.status_code == 200
+        assert response.json()["blocked"] is False
+
+        response = await client.post(
+            "/api/credit-requests/",
+            headers=user_headers,
+            json={"amount": 10, "reason": "after unblock"},
+        )
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_block_requires_grant_permission(self, client, user_token, test_user):
+        """Regular users cannot block/unblock."""
+        response = await client.put(
+            f"/api/credit-requests/users/{test_user.id}/block",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"blocked": True},
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_block_unknown_user_404(self, client, admin_token):
+        """Blocking an unknown user returns 404."""
+        response = await client.put(
+            f"/api/credit-requests/users/{uuid_mod.uuid4()}/block",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"blocked": True},
+        )
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_block_exposed_in_user_profile(self, client, user_token, admin_token, test_user):
+        """The block flag surfaces on /auth/me via User.to_dict()."""
+        await client.put(
+            f"/api/credit-requests/users/{test_user.id}/block",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"blocked": True},
+        )
+        response = await client.get(
+            "/api/auth/me", headers={"Authorization": f"Bearer {user_token}"}
+        )
+        assert response.status_code == 200
+        assert response.json()["credit_requests_blocked"] is True

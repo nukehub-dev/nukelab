@@ -39,6 +39,7 @@ EVENT_KEY_MAP = {
     "credit_request_message": "credit_request",
     "credit_request_allowance_approved": "credit_request",
     "credit_request_stale_reminder": "credit_request",
+    "credit_request_block_changed": "credit_request",
     "daily_allowance": "daily_allowance",
     "low_balance": "credit_low",
     "workspace_invitation": "workspace_invite",
@@ -460,6 +461,31 @@ class NotificationService:
             message=f"Your daily allowance has been set to {allowance} NUKE credits per day.",
             type="credit",
             severity="success",
+            event_key="credit_request",
+        )
+
+    async def credit_request_block_changed(
+        self, user_id, blocked: bool, reason: str | None = None
+    ) -> Notification | None:
+        """Notify user that their ability to create credit requests changed."""
+        if blocked:
+            title = "Credit Requests Blocked"
+            msg = "Your ability to request credits has been disabled."
+            if reason:
+                msg = f"Your ability to request credits has been disabled: {reason}"
+            severity = "warning"
+        else:
+            title = "Credit Requests Unblocked"
+            msg = "Your ability to request credits has been restored."
+            if reason:
+                msg = f"Your ability to request credits has been restored: {reason}"
+            severity = "info"
+        return await self.create(
+            user_id=user_id,
+            title=title,
+            message=msg,
+            type="credit",
+            severity=severity,
             event_key="credit_request",
         )
 

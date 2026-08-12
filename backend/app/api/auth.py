@@ -993,6 +993,7 @@ async def get_me(
         "oauth_provider": current_user.oauth_provider,
         "is_active": current_user.is_active,
         "is_verified": current_user.is_verified,
+        "credit_requests_blocked": current_user.credit_requests_blocked,
         "login_count": current_user.login_count,
         "last_login": current_user.last_login.isoformat() if current_user.last_login else None,
         "created_at": current_user.created_at.isoformat() if current_user.created_at else None,

@@ -109,6 +109,16 @@ class CreditRequestService:
         Top-up requests at or below the auto-approve threshold
         (credits_auto_approve_max, 0 = off) are approved immediately.
         """
+        # Per-user block: an admin can disable credit requests for an
+        # account. Checked before everything else, including validation.
+        result = await self.db.execute(select(User).where(User.id == uuid.UUID(user_id)))
+        user = result.scalar_one_or_none()
+        if user is not None and user.credit_requests_blocked:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Credit requests are disabled for your account",
+            )
+
         if amount <= 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -828,3 +838,44 @@ class CreditRequestService:
             except HTTPException as e:
                 results["failed"].append({"request_id": request_id, "error": e.detail})
         return results
+
+    async def set_request_block(
+        self, user_id: str, blocked: bool, actor_id: str, reason: str | None = None
+    ) -> User:
+        """Block or unblock a user from creating credit requests (admin).
+
+        Flips users.credit_requests_blocked via UserService (which enforces
+        CREDITS_GRANT on the actor), audit-logs the change, and notifies
+        the user both ways.
+        """
+        from app.services.user_service import UserService
+
+        result = await self.db.execute(select(User).where(User.id == uuid.UUID(actor_id)))
+        actor = result.scalar_one_or_none()
+        if actor is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Actor {actor_id} not found",
+            )
+
+        user = await UserService(self.db).update_user(
+            user_id=user_id,
+            data={"credit_requests_blocked": blocked},
+            updated_by=actor,
+        )
+
+        await ActivityService(self.db).log(
+            action="credit_requests.block" if blocked else "credit_requests.unblock",
+            target_type="user",
+            target_id=user_id,
+            actor_id=actor_id,
+            details={"blocked": blocked, "reason": reason},
+        )
+
+        await NotificationService(self.db).credit_request_block_changed(
+            user_id=user.id,
+            blocked=blocked,
+            reason=reason,
+        )
+
+        return user

@@ -61,6 +61,9 @@ class User(Base):
     is_verified = Column(Boolean, default=False)
     email_verified_at = Column(DateTime, nullable=True)
 
+    # When true, the user cannot create credit requests (admin-imposed block).
+    credit_requests_blocked = Column(Boolean, default=False)
+
     # Audit
     last_login = Column(DateTime, nullable=True)
     login_count = Column(Integer, default=0)
@@ -178,6 +181,7 @@ class User(Base):
             "oauth_provider": self.oauth_provider,
             "is_active": self.is_active,
             "is_verified": self.is_verified,
+            "credit_requests_blocked": self.credit_requests_blocked,
             "last_login": self.last_login.isoformat() if self.last_login else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

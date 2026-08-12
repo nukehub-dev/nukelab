@@ -72,6 +72,7 @@ export interface User {
   has_active_allowance_override?: boolean
   is_active: boolean
   is_verified: boolean
+  credit_requests_blocked?: boolean
   last_login?: string
   created_at?: string
   updated_at?: string

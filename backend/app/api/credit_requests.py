@@ -155,6 +155,35 @@ async def bulk_review_credit_requests(
     }
 
 
+class SetRequestBlockBody(BaseModel):
+    blocked: bool = Field(..., description="Block or unblock credit requests for the user")
+    reason: str | None = Field(None, max_length=2000, description="Reason for the change")
+
+
+@router.put("/users/{user_id}/block")
+async def set_credit_request_block(
+    user_id: str,
+    body: SetRequestBlockBody,
+    current_user: User = Depends(require_permissions(Permission.CREDITS_GRANT)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Block or unblock a user from creating credit requests (admin)"""
+    service = CreditRequestService(db)
+    await service.set_request_block(
+        user_id=user_id,
+        blocked=body.blocked,
+        actor_id=str(current_user.id),
+        reason=body.reason,
+    )
+    state = "blocked" if body.blocked else "unblocked"
+    return {
+        "message": f"Credit requests {state} for user {user_id}",
+        "user_id": user_id,
+        "blocked": body.blocked,
+    }
+
+
 @router.post("/{request_id}/approve")
 async def approve_credit_request(
     request_id: str,

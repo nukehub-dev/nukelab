@@ -168,6 +168,38 @@ export function useBulkReviewCreditRequests() {
   })
 }
 
+export function useSetCreditRequestBlock() {
+  const queryClient = useQueryClient()
+  const { success, error: showError } = useToast()
+
+  return useMutation({
+    mutationFn: ({
+      userId,
+      blocked,
+      reason,
+    }: {
+      userId: string
+      blocked: boolean
+      reason?: string
+    }) =>
+      api.put<{ message: string; user_id: string; blocked: boolean }>(
+        `/credit-requests/users/${userId}/block`,
+        { blocked, reason }
+      ),
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      queryClient.invalidateQueries({ queryKey: ['credit-requests'] })
+      success(
+        variables.blocked ? 'Credit requests blocked' : 'Credit requests unblocked',
+        data.message
+      )
+    },
+    onError: (err) => {
+      showError('Failed to update credit request block', getErrorMessage(err))
+    },
+  })
+}
+
 export function useCancelCreditRequest() {
   const queryClient = useQueryClient()
   const { success, error: showError } = useToast()

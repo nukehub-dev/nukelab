@@ -1156,3 +1156,95 @@ class TestBulkReview:
         await db_session.refresh(request)
         assert request.status == "rejected"
         assert request.review_note == "no"
+
+
+class TestCreditRequestBlock:
+    """Per-user credit request block."""
+
+    @pytest.mark.asyncio
+    async def test_blocked_user_create_forbidden(self, db_session, test_user, admin_user):
+        """A blocked user gets 403 with the documented detail."""
+        service = CreditRequestService(db_session)
+        await service.set_request_block(
+            str(test_user.id), blocked=True, actor_id=str(admin_user.id), reason="abuse"
+        )
+
+        with pytest.raises(Exception) as exc_info:
+            await service.create_request(user_id=str(test_user.id), amount=10, reason="please")
+        assert exc_info.value.status_code == 403
+        assert "disabled for your account" in str(exc_info.value.detail)
+
+    @pytest.mark.asyncio
+    async def test_unblock_re_allows_creation(self, db_session, test_user, admin_user):
+        """Unblocking restores the ability to create requests."""
+        service = CreditRequestService(db_session)
+        await service.set_request_block(
+            str(test_user.id), blocked=True, actor_id=str(admin_user.id)
+        )
+        await service.set_request_block(
+            str(test_user.id), blocked=False, actor_id=str(admin_user.id)
+        )
+
+        request = await service.create_request(
+            user_id=str(test_user.id), amount=10, reason="back in"
+        )
+        assert request.status == "pending"
+
+    @pytest.mark.asyncio
+    async def test_block_and_unblock_log_and_notify(self, db_session, test_user, admin_user):
+        """Both directions write an activity log and notify the user."""
+        from unittest.mock import AsyncMock, patch
+
+        from sqlalchemy import select
+
+        from app.models.activity_log import ActivityLog
+
+        service = CreditRequestService(db_session)
+        with patch("app.services.credit_request_service.NotificationService") as mock_notif_cls:
+            mock_notif = mock_notif_cls.return_value
+            mock_notif.credit_request_block_changed = AsyncMock()
+
+            await service.set_request_block(
+                str(test_user.id), blocked=True, actor_id=str(admin_user.id), reason="spam"
+            )
+            await service.set_request_block(
+                str(test_user.id), blocked=False, actor_id=str(admin_user.id), reason="appeal"
+            )
+
+        calls = mock_notif.credit_request_block_changed.await_args_list
+        assert len(calls) == 2
+        assert calls[0].kwargs["blocked"] is True
+        assert calls[0].kwargs["reason"] == "spam"
+        assert calls[1].kwargs["blocked"] is False
+
+        result = await db_session.execute(
+            select(ActivityLog).where(
+                ActivityLog.target_id == test_user.id,
+                ActivityLog.action.in_(["credit_requests.block", "credit_requests.unblock"]),
+            )
+        )
+        actions = [log.action for log in result.scalars().all()]
+        assert "credit_requests.block" in actions
+        assert "credit_requests.unblock" in actions
+
+    @pytest.mark.asyncio
+    async def test_block_flag_visible_in_user_dict(self, db_session, test_user, admin_user):
+        """The flag flips on the User row and is exposed via to_dict()."""
+        service = CreditRequestService(db_session)
+        assert test_user.to_dict()["credit_requests_blocked"] is False
+
+        user = await service.set_request_block(
+            str(test_user.id), blocked=True, actor_id=str(admin_user.id)
+        )
+        assert user.credit_requests_blocked is True
+        assert user.to_dict()["credit_requests_blocked"] is True
+
+    @pytest.mark.asyncio
+    async def test_block_unknown_user_404(self, db_session, admin_user):
+        """Blocking an unknown user returns 404."""
+        service = CreditRequestService(db_session)
+        with pytest.raises(Exception) as exc_info:
+            await service.set_request_block(
+                str(uuid_mod.uuid4()), blocked=True, actor_id=str(admin_user.id)
+            )
+        assert exc_info.value.status_code == 404

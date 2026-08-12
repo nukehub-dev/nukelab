@@ -256,6 +256,23 @@ class UserService:
                     )
                 user.daily_allowance = data["daily_allowance"]
 
+        # Per-user credit request block. Same gating as daily_allowance:
+        # an actor holding CREDITS_GRANT is required to flip the flag.
+        if "credit_requests_blocked" in data and data["credit_requests_blocked"] is not None:
+            if updated_by is None:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="An actor is required to update credit request block",
+                )
+            blocked = bool(data["credit_requests_blocked"])
+            if user.credit_requests_blocked != blocked:
+                if not has_permission(updated_by, Permission.CREDITS_GRANT):
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Insufficient permissions to update credit request block",
+                    )
+                user.credit_requests_blocked = blocked
+
         # Time-boxed allowance override. Set by passing both
         # daily_allowance_override (int) and daily_allowance_override_until
         # (ISO datetime or None to clear). Requires CREDITS_GRANT. The
