@@ -6,6 +6,8 @@ Credit request API endpoints with RBAC enforcement.
 Users create and view their own requests; admins review them.
 """
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,6 +25,9 @@ router = APIRouter()
 class CreateCreditRequestBody(BaseModel):
     amount: int = Field(..., gt=0, le=1_000_000, description="Amount of credits requested")
     reason: str = Field(..., min_length=1, max_length=2000, description="Reason for the request")
+    request_type: Literal["top_up", "allowance"] = Field(
+        "top_up", description="top_up = one-time grant; allowance = daily allowance change"
+    )
 
 
 class ApproveCreditRequestBody(BaseModel):
@@ -53,7 +58,10 @@ async def create_credit_request(
     """Create a credit request for the current user"""
     service = CreditRequestService(db)
     request = await service.create_request(
-        user_id=str(current_user.id), amount=body.amount, reason=body.reason
+        user_id=str(current_user.id),
+        amount=body.amount,
+        reason=body.reason,
+        request_type=body.request_type,
     )
     return {"message": "Credit request created", "request": request.to_dict()}
 

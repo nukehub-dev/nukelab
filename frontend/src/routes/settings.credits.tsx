@@ -539,6 +539,9 @@ function RequestRow({
         >
           {config.label}
         </span>
+        <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 bg-muted text-muted-foreground">
+          {req.request_type === 'allowance' ? 'Daily' : 'One-time'}
+        </span>
         <span className="font-mono font-semibold text-sm">
           {req.amount.toLocaleString()} <span className="text-muted-foreground">NUKE</span>
         </span>

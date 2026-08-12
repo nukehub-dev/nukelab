@@ -37,6 +37,7 @@ EVENT_KEY_MAP = {
     "credit_request_rejected": "credit_request",
     "credit_request_created": "credit_request",
     "credit_request_message": "credit_request",
+    "credit_request_allowance_approved": "credit_request",
     "daily_allowance": "daily_allowance",
     "low_balance": "credit_low",
     "workspace_invitation": "workspace_invite",
@@ -445,6 +446,19 @@ class NotificationService:
             message=f"A user requested {amount} NUKE credits: {reason}",
             type="credit",
             severity="info",
+            event_key="credit_request",
+        )
+
+    async def credit_request_allowance_approved(
+        self, user_id, allowance: int
+    ) -> Notification | None:
+        """Notify user that their allowance request was approved."""
+        return await self.create(
+            user_id=user_id,
+            title="Credit Request Approved",
+            message=f"Your daily allowance has been set to {allowance} NUKE credits per day.",
+            type="credit",
+            severity="success",
             event_key="credit_request",
         )
 

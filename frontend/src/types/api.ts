@@ -189,6 +189,7 @@ export interface CreditRequest {
   email?: string
   amount: number
   reason: string
+  request_type: 'top_up' | 'allowance'
   status: 'pending' | 'needs_info' | 'approved' | 'rejected' | 'cancelled'
   review_note: string | null
   granted_amount: number | null

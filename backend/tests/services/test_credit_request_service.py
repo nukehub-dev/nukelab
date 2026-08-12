@@ -613,3 +613,263 @@ class TestReviewerNotifications:
 
         notified = {c.kwargs["user_id"] for c in mock_notif.credit_request_message.await_args_list}
         assert notified == {test_user.id}
+
+
+class TestCreditRequestTypes:
+    """request_type persistence and defaults."""
+
+    @pytest.mark.asyncio
+    async def test_request_type_defaults_to_top_up(self, db_session, test_user):
+        service = CreditRequestService(db_session)
+        request = await service.create_request(
+            user_id=str(test_user.id), amount=10, reason="default type"
+        )
+        assert request.request_type == "top_up"
+        assert request.to_dict()["request_type"] == "top_up"
+
+    @pytest.mark.asyncio
+    async def test_allowance_type_persisted(self, db_session, test_user):
+        service = CreditRequestService(db_session)
+        request = await service.create_request(
+            user_id=str(test_user.id),
+            amount=500,
+            reason="raise my allowance",
+            request_type="allowance",
+        )
+        assert request.request_type == "allowance"
+
+    @pytest.mark.asyncio
+    async def test_unknown_type_rejected(self, db_session, test_user):
+        service = CreditRequestService(db_session)
+        with pytest.raises(Exception) as exc_info:
+            await service.create_request(
+                user_id=str(test_user.id), amount=10, reason="bad", request_type="bogus"
+            )
+        assert exc_info.value.status_code == 400
+
+
+class TestAutoApprove:
+    """Auto-approve of top_up requests at/below the threshold."""
+
+    @pytest.mark.asyncio
+    async def test_auto_approve_fires(self, db_session, test_user, admin_user):
+        """At/below threshold: approved immediately, credits granted, no reviewer ping."""
+        from unittest.mock import AsyncMock, patch
+
+        from app.services.credit_service import CreditService
+        from app.services.setting_service import SettingService
+
+        await SettingService(db_session).set_auto_approve_max(100)
+        service = CreditRequestService(db_session)
+        initial = await CreditService(db_session).get_balance(str(test_user.id))
+
+        with patch("app.services.credit_request_service.NotificationService") as mock_notif_cls:
+            mock_notif = mock_notif_cls.return_value
+            mock_notif.credit_request_created = AsyncMock()
+            mock_notif.credits_granted = AsyncMock()
+
+            request = await service.create_request(
+                user_id=str(test_user.id), amount=50, reason="auto me"
+            )
+
+        assert request.status == "approved"
+        assert request.reviewed_by is None
+        assert request.reviewed_at is not None
+        assert request.granted_amount == 50
+        assert request.transaction_id is not None
+        assert await CreditService(db_session).get_balance(str(test_user.id)) == initial + 50
+        # Reviewers are NOT notified; the requester is.
+        mock_notif.credit_request_created.assert_not_awaited()
+        mock_notif.credits_granted.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_auto_approve_disabled_at_zero(self, db_session, test_user):
+        """Threshold 0 means off: request stays pending."""
+        from app.services.setting_service import SettingService
+
+        await SettingService(db_session).set_auto_approve_max(0)
+        service = CreditRequestService(db_session)
+        request = await service.create_request(
+            user_id=str(test_user.id), amount=1, reason="still pending"
+        )
+        assert request.status == "pending"
+
+    @pytest.mark.asyncio
+    async def test_above_threshold_stays_pending(self, db_session, test_user):
+        """Above the threshold the request goes through normal review."""
+        from app.services.setting_service import SettingService
+
+        await SettingService(db_session).set_auto_approve_max(100)
+        service = CreditRequestService(db_session)
+        request = await service.create_request(
+            user_id=str(test_user.id), amount=101, reason="too big"
+        )
+        assert request.status == "pending"
+
+    @pytest.mark.asyncio
+    async def test_auto_approve_respects_max_balance_cap(self, db_session, test_user):
+        """Auto-approved grants are still clamped by the max-balance cap."""
+        from app.config import settings
+        from app.services.setting_service import SettingService
+
+        service = CreditRequestService(db_session)
+        test_user.nuke_balance = 4800
+        await db_session.commit()
+        await SettingService(db_session).set_auto_approve_max(1000)
+
+        original_max = settings.credits_max_balance
+        settings.credits_max_balance = 5000
+        try:
+            request = await service.create_request(
+                user_id=str(test_user.id), amount=500, reason="clamp me"
+            )
+        finally:
+            settings.credits_max_balance = original_max
+
+        assert request.status == "approved"
+        assert request.granted_amount == 200  # 5000 - 4800
+
+    @pytest.mark.asyncio
+    async def test_allowance_requests_never_auto_approve(self, db_session, test_user):
+        """Auto-approve only applies to top_up requests."""
+        from app.services.setting_service import SettingService
+
+        await SettingService(db_session).set_auto_approve_max(1000)
+        service = CreditRequestService(db_session)
+        request = await service.create_request(
+            user_id=str(test_user.id),
+            amount=50,
+            reason="allowance auto?",
+            request_type="allowance",
+        )
+        assert request.status == "pending"
+
+
+class TestAllowanceApproval:
+    """Approving an allowance request sets daily_allowance, no ledger tx."""
+
+    @pytest.mark.asyncio
+    async def test_approve_allowance_updates_daily_allowance(
+        self, db_session, test_user, admin_user
+    ):
+        from app.services.credit_service import CreditService
+
+        service = CreditRequestService(db_session)
+        request = await service.create_request(
+            user_id=str(test_user.id),
+            amount=750,
+            reason="allowance bump",
+            request_type="allowance",
+        )
+        initial_balance = await CreditService(db_session).get_balance(str(test_user.id))
+
+        approved = await service.approve(str(request.id), reviewer_id=str(admin_user.id))
+
+        assert approved.status == "approved"
+        assert approved.granted_amount == 750
+        assert approved.transaction_id is None
+        await db_session.refresh(test_user)
+        assert test_user.daily_allowance == 750
+        # No credits were granted
+        assert await CreditService(db_session).get_balance(str(test_user.id)) == initial_balance
+
+    @pytest.mark.asyncio
+    async def test_approve_allowance_with_adjusted_amount(self, db_session, test_user, admin_user):
+        service = CreditRequestService(db_session)
+        request = await service.create_request(
+            user_id=str(test_user.id),
+            amount=750,
+            reason="adjust allowance",
+            request_type="allowance",
+        )
+
+        approved = await service.approve(
+            str(request.id), reviewer_id=str(admin_user.id), amount=400
+        )
+
+        assert approved.granted_amount == 400
+        await db_session.refresh(test_user)
+        assert test_user.daily_allowance == 400
+
+    @pytest.mark.asyncio
+    async def test_approve_allowance_notifies_user(self, db_session, test_user, admin_user):
+        from unittest.mock import AsyncMock, patch
+
+        service = CreditRequestService(db_session)
+        request = await service.create_request(
+            user_id=str(test_user.id),
+            amount=750,
+            reason="notify allowance",
+            request_type="allowance",
+        )
+
+        with patch("app.services.credit_request_service.NotificationService") as mock_notif_cls:
+            mock_notif = mock_notif_cls.return_value
+            mock_notif.credit_request_allowance_approved = AsyncMock()
+            await service.approve(str(request.id), reviewer_id=str(admin_user.id))
+
+        mock_notif.credit_request_allowance_approved.assert_awaited_once()
+        kwargs = mock_notif.credit_request_allowance_approved.await_args.kwargs
+        assert kwargs["user_id"] == str(test_user.id)
+        assert kwargs["allowance"] == 750
+
+
+class TestRequestCooldown:
+    """Post-rejection cooldown window."""
+
+    @pytest.mark.asyncio
+    async def test_cooldown_blocks_within_window(self, db_session, test_user, admin_user):
+        from app.services.setting_service import SettingService
+
+        service = CreditRequestService(db_session)
+        request = await service.create_request(
+            user_id=str(test_user.id), amount=10, reason="reject me"
+        )
+        await service.reject(str(request.id), reviewer_id=str(admin_user.id))
+
+        await SettingService(db_session).set_request_cooldown_hours(24)
+
+        with pytest.raises(Exception) as exc_info:
+            await service.create_request(user_id=str(test_user.id), amount=10, reason="too soon")
+        assert exc_info.value.status_code == 400
+        assert "hour" in str(exc_info.value.detail).lower()
+
+    @pytest.mark.asyncio
+    async def test_cooldown_allows_after_expiry(self, db_session, test_user, admin_user):
+        from datetime import timedelta
+
+        from app.core.time_utils import utc_now
+        from app.services.setting_service import SettingService
+
+        service = CreditRequestService(db_session)
+        request = await service.create_request(
+            user_id=str(test_user.id), amount=10, reason="old rejection"
+        )
+        rejected = await service.reject(str(request.id), reviewer_id=str(admin_user.id))
+
+        # Push the rejection outside the cooldown window
+        rejected.reviewed_at = utc_now() - timedelta(hours=25)
+        await db_session.commit()
+        await SettingService(db_session).set_request_cooldown_hours(24)
+
+        second = await service.create_request(
+            user_id=str(test_user.id), amount=10, reason="cooled off"
+        )
+        assert second.status == "pending"
+
+    @pytest.mark.asyncio
+    async def test_cooldown_disabled_at_zero(self, db_session, test_user, admin_user):
+        from app.services.setting_service import SettingService
+
+        service = CreditRequestService(db_session)
+        request = await service.create_request(
+            user_id=str(test_user.id), amount=10, reason="reject me"
+        )
+        await service.reject(str(request.id), reviewer_id=str(admin_user.id))
+
+        await SettingService(db_session).set_request_cooldown_hours(0)
+
+        second = await service.create_request(
+            user_id=str(test_user.id), amount=10, reason="no cooldown"
+        )
+        assert second.status == "pending"

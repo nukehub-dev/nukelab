@@ -13,6 +13,7 @@ request flips it to ``needs_info``; the requester posting flips it back to
 """
 
 import uuid
+from datetime import timedelta
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -40,6 +41,12 @@ STATUS_CANCELLED = "cancelled"
 
 OPEN_STATUSES = (STATUS_PENDING, STATUS_NEEDS_INFO)
 
+# top_up = one-time grant on approval; allowance = approval sets the
+# user's base daily_allowance instead (no ledger transaction).
+TYPE_TOP_UP = "top_up"
+TYPE_ALLOWANCE = "allowance"
+REQUEST_TYPES = (TYPE_TOP_UP, TYPE_ALLOWANCE)
+
 # Roles that may hold CREDITS_GRANT; used as a cheap candidate filter before
 # the authoritative has_permission check (which respects runtime overrides).
 _REVIEWER_ROLES = ("admin", "moderator", "support", "super_admin")
@@ -53,13 +60,54 @@ class CreditRequestService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def create_request(self, user_id: str, amount: int, reason: str) -> CreditRequest:
+    async def _check_cooldown(self, user_id: str) -> None:
+        """Raise 400 if the user's latest rejection is still within the
+        cooldown window (credits_request_cooldown_hours; 0 = off)."""
+        from app.services.setting_service import SettingService
+
+        hours = await SettingService(self.db).get_request_cooldown_hours()
+        if hours <= 0:
+            return
+
+        result = await self.db.execute(
+            select(CreditRequest)
+            .where(
+                CreditRequest.user_id == uuid.UUID(user_id),
+                CreditRequest.status == STATUS_REJECTED,
+                CreditRequest.reviewed_at.isnot(None),
+            )
+            .order_by(CreditRequest.reviewed_at.desc())
+            .limit(1)
+        )
+        latest = result.scalar_one_or_none()
+        if latest is None:
+            return
+
+        window = timedelta(hours=hours)
+        now = utc_now()
+        if latest.reviewed_at + window > now:
+            remaining_seconds = (latest.reviewed_at + window - now).total_seconds()
+            remaining_hours = max(1, int(remaining_seconds // 3600) + 1)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Your previous credit request was rejected recently. "
+                    f"You can submit a new request in approximately {remaining_hours} hour(s)."
+                ),
+            )
+
+    async def create_request(
+        self, user_id: str, amount: int, reason: str, request_type: str = TYPE_TOP_UP
+    ) -> CreditRequest:
         """Create a credit request for a user.
 
         Idempotent per user: at most one open (pending/needs_info) request at
         a time. The cheap pre-check below is backed by the partial unique
         index uq_credit_requests_pending_per_user; if a concurrent insert
         wins the race, the resulting IntegrityError maps to the same 400.
+
+        Top-up requests at or below the auto-approve threshold
+        (credits_auto_approve_max, 0 = off) are approved immediately.
         """
         if amount <= 0:
             raise HTTPException(
@@ -71,6 +119,13 @@ class CreditRequestService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Reason must not be empty",
             )
+        if request_type not in REQUEST_TYPES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unknown request type: {request_type}",
+            )
+
+        await self._check_cooldown(user_id)
 
         # Cheap pre-check: open request already exists?
         result = await self.db.execute(
@@ -89,6 +144,7 @@ class CreditRequestService:
             user_id=uuid.UUID(user_id),
             amount=amount,
             reason=reason,
+            request_type=request_type,
             status=STATUS_PENDING,
         )
         try:
@@ -109,8 +165,12 @@ class CreditRequestService:
             target_type="credit_request",
             target_id=str(request.id),
             actor_id=user_id,
-            details={"amount": amount, "reason": reason},
+            details={"amount": amount, "reason": reason, "request_type": request_type},
         )
+
+        if request_type == TYPE_TOP_UP and await self._try_auto_approve(request):
+            # Auto-approved: no reviewer notification.
+            return request
 
         await self._notify_reviewers(
             request,
@@ -119,6 +179,58 @@ class CreditRequestService:
         )
 
         return request
+
+    async def _try_auto_approve(self, request: CreditRequest) -> bool:
+        """Auto-approve a top_up request at/below the configured threshold.
+
+        Grants immediately (cap clamping still applies), stamps the request
+        approved with no reviewer, and notifies the requester. Returns True
+        when the request was auto-approved.
+        """
+        from app.services.setting_service import SettingService
+
+        threshold = await SettingService(self.db).get_auto_approve_max()
+        if threshold <= 0 or request.amount > threshold:
+            return False
+
+        reason = "Credit request auto-approved"
+        transaction = await CreditService(self.db).grant_credits(
+            user_id=str(request.user_id),
+            amount=request.amount,
+            actor_id=None,
+            reason=reason,
+            source="auto_approve",
+            meta_extra={"request_id": str(request.id)},
+        )
+
+        request.status = STATUS_APPROVED
+        request.reviewed_by = None
+        request.reviewed_at = utc_now()
+        request.granted_amount = transaction.amount
+        request.transaction_id = transaction.id
+        await self.db.commit()
+        await self.db.refresh(request)
+
+        await NotificationService(self.db).credits_granted(
+            user_id=str(request.user_id),
+            amount=transaction.amount,
+            new_balance=transaction.balance_after,
+            reason=reason,
+        )
+
+        await ActivityService(self.db).log(
+            action="credit_requests.auto_approve",
+            target_type="credit_request",
+            target_id=str(request.id),
+            actor_id=str(request.user_id),
+            details={
+                "transaction_id": str(transaction.id),
+                "requested_amount": request.amount,
+                "granted_amount": transaction.amount,
+            },
+        )
+
+        return True
 
     def _pagination(self, page: int, limit: int, total: int) -> dict[str, Any]:
         return {
@@ -268,14 +380,29 @@ class CreditRequestService:
         amount: int | None = None,
         note: str | None = None,
     ) -> CreditRequest:
-        """Approve an open request and grant the credits.
+        """Approve an open request.
 
-        The granted amount defaults to the requested amount and is clamped to
-        the max-balance cap inside CreditService.grant_credits; the request
-        records the *actual* granted amount and links the ledger transaction.
+        top_up: grants credits (clamped to the max-balance cap inside
+        CreditService.grant_credits); the request records the *actual*
+        granted amount and links the ledger transaction.
+
+        allowance: sets the user's base daily_allowance instead — no
+        ledger transaction, transaction_id stays null, granted_amount
+        records the new allowance.
         """
         request = await self._get_open_for_update(request_id)
+        if request.request_type == TYPE_ALLOWANCE:
+            return await self._approve_allowance(request, reviewer_id, amount, note)
+        return await self._approve_top_up(request, reviewer_id, amount, note)
 
+    async def _approve_top_up(
+        self,
+        request: CreditRequest,
+        reviewer_id: str,
+        amount: int | None,
+        note: str | None,
+    ) -> CreditRequest:
+        """Approve a top_up request: grant credits via the ledger."""
         reason = f"Credit request approved: {note or request.reason}"
         transaction = await CreditService(self.db).grant_credits(
             user_id=str(request.user_id),
@@ -311,6 +438,74 @@ class CreditRequestService:
                 "transaction_id": str(transaction.id),
                 "requested_amount": request.amount,
                 "granted_amount": transaction.amount,
+                "request_type": request.request_type,
+            },
+        )
+
+        return request
+
+    async def _approve_allowance(
+        self,
+        request: CreditRequest,
+        reviewer_id: str,
+        amount: int | None,
+        note: str | None,
+    ) -> CreditRequest:
+        """Approve an allowance request: set the user's base daily_allowance.
+
+        Mirrors the admin daily-allowance endpoint (UserService.update_user
+        + its activity log); no ledger transaction is created.
+        """
+        from app.services.user_service import UserService
+
+        result = await self.db.execute(select(User).where(User.id == uuid.UUID(reviewer_id)))
+        reviewer = result.scalar_one_or_none()
+        if reviewer is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Reviewer {reviewer_id} not found",
+            )
+
+        new_allowance = amount or request.amount
+        await UserService(self.db).update_user(
+            user_id=str(request.user_id),
+            data={"daily_allowance": new_allowance},
+            updated_by=reviewer,
+        )
+
+        # Mirror the admin daily-allowance endpoint's audit entry so both
+        # paths record the same user-facing change identically.
+        await ActivityService(self.db).log(
+            action="credits.update_user_daily_allowance",
+            target_type="user",
+            target_id=str(request.user_id),
+            actor_id=reviewer_id,
+            details={"amount": new_allowance},
+        )
+
+        request.status = STATUS_APPROVED
+        request.reviewed_by = uuid.UUID(reviewer_id)
+        request.reviewed_at = utc_now()
+        request.granted_amount = new_allowance
+        request.transaction_id = None
+        request.review_note = note
+        await self.db.commit()
+        await self.db.refresh(request)
+
+        await NotificationService(self.db).credit_request_allowance_approved(
+            user_id=str(request.user_id),
+            allowance=new_allowance,
+        )
+
+        await ActivityService(self.db).log(
+            action="credit_requests.approve",
+            target_type="credit_request",
+            target_id=str(request.id),
+            actor_id=reviewer_id,
+            details={
+                "requested_amount": request.amount,
+                "granted_amount": new_allowance,
+                "request_type": request.request_type,
             },
         )
 

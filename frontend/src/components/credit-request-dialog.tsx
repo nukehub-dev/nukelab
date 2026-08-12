@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 import { useState } from 'react'
-import { HandCoins, Wallet, AlertTriangle } from 'lucide-react'
+import { HandCoins, Wallet, AlertTriangle, Clock } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -17,8 +17,11 @@ import { Textarea } from './ui/textarea'
 import { Button } from './ui/button'
 import { Label } from './ui/label'
 import { useCreateCreditRequest } from '../hooks/use-credit-requests'
+import { cn } from '../lib/utils'
 
 const MAX_REASON_LENGTH = 2000
+
+type RequestType = 'top_up' | 'allowance'
 
 interface CreditRequestDialogProps {
   open: boolean
@@ -30,6 +33,7 @@ export function CreditRequestDialog({ open, onOpenChange }: CreditRequestDialogP
 
   const [amount, setAmount] = useState('')
   const [reason, setReason] = useState('')
+  const [requestType, setRequestType] = useState<RequestType>('top_up')
   const [amountError, setAmountError] = useState('')
   const [reasonError, setReasonError] = useState('')
   const [submitError, setSubmitError] = useState('')
@@ -41,6 +45,7 @@ export function CreditRequestDialog({ open, onOpenChange }: CreditRequestDialogP
     if (!open) {
       setAmount('')
       setReason('')
+      setRequestType('top_up')
       setAmountError('')
       setReasonError('')
       setSubmitError('')
@@ -73,7 +78,7 @@ export function CreditRequestDialog({ open, onOpenChange }: CreditRequestDialogP
     if (hasError) return
 
     createRequest.mutate(
-      { amount: numericAmount, reason: reason.trim() },
+      { amount: numericAmount, reason: reason.trim(), request_type: requestType },
       {
         onSuccess: () => handleOpenChange(false),
         onError: (err) => {
@@ -97,9 +102,39 @@ export function CreditRequestDialog({ open, onOpenChange }: CreditRequestDialogP
         </DialogHeader>
 
         <form id="credit-request-form" onSubmit={handleSubmit} className="mt-4 space-y-5">
+          {/* Request Type Toggle */}
+          <div className="flex gap-2 p-1 bg-muted rounded-xl">
+            <button
+              type="button"
+              onClick={() => setRequestType('top_up')}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all',
+                requestType === 'top_up'
+                  ? 'bg-primary/10 border-primary/30 text-primary shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              <HandCoins className="w-4 h-4" />
+              One-time top-up
+            </button>
+            <button
+              type="button"
+              onClick={() => setRequestType('allowance')}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all',
+                requestType === 'allowance'
+                  ? 'bg-violet-500/10 border-violet-500/30 text-violet-400 shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              <Clock className="w-4 h-4" />
+              Daily allowance
+            </button>
+          </div>
+
           {/* Amount */}
           <div className="space-y-2">
-            <Label>Amount</Label>
+            <Label>{requestType === 'allowance' ? 'Daily allowance (NUKE/day)' : 'Amount'}</Label>
             <div className="relative">
               <Wallet className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
@@ -117,6 +152,11 @@ export function CreditRequestDialog({ open, onOpenChange }: CreditRequestDialogP
               />
             </div>
             {amountError && <p className="text-xs text-destructive">{amountError}</p>}
+            {requestType === 'allowance' && (
+              <p className="text-xs text-muted-foreground">
+                If approved, your daily allowance is set to this amount instead of a one-time grant.
+              </p>
+            )}
           </div>
 
           {/* Reason */}

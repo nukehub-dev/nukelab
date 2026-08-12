@@ -80,10 +80,9 @@ export function useAddCreditRequestMessage() {
 
   return useMutation({
     mutationFn: ({ requestId, body }: { requestId: string; body: string }) =>
-      api.post<{ message: CreditRequestMessage }>(
-        `/credit-requests/${requestId}/messages`,
-        { body }
-      ),
+      api.post<{ message: CreditRequestMessage }>(`/credit-requests/${requestId}/messages`, {
+        body,
+      }),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['credit-requests'] })
       queryClient.invalidateQueries({
@@ -121,7 +120,7 @@ export function useCreateCreditRequest() {
   const { success, error: showError } = useToast()
 
   return useMutation({
-    mutationFn: (data: { amount: number; reason: string }) =>
+    mutationFn: (data: { amount: number; reason: string; request_type?: 'top_up' | 'allowance' }) =>
       api.post<{ message: string; request: CreditRequest }>('/credit-requests/', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['credit-requests'] })

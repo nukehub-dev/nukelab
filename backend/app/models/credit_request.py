@@ -30,6 +30,9 @@ class CreditRequest(Base):
     )
     amount = Column(Integer, nullable=False)
     reason = Column(Text, nullable=False)
+    # "top_up" = one-time credit grant on approval; "allowance" = approval
+    # sets the user's base daily_allowance instead (no ledger transaction).
+    request_type = Column(String(20), nullable=False, default="top_up")
     status = Column(String(20), nullable=False, default="pending", index=True)
     reviewed_by = Column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
@@ -48,6 +51,7 @@ class CreditRequest(Base):
             "user_id": str(self.user_id),
             "amount": self.amount,
             "reason": self.reason,
+            "request_type": self.request_type,
             "status": self.status,
             "reviewed_by": str(self.reviewed_by) if self.reviewed_by else None,
             "review_note": self.review_note,

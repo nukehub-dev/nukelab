@@ -484,3 +484,38 @@ class TestCreditRequestCancelAPI:
             headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert response.status_code == 403
+
+
+class TestCreditRequestTypesAPI:
+    """request_type handling at the API layer."""
+
+    @pytest.mark.asyncio
+    async def test_create_top_up_explicit(self, client, user_token):
+        response = await client.post(
+            "/api/credit-requests/",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"amount": 10, "reason": "typed", "request_type": "top_up"},
+        )
+        assert response.status_code == 200
+        assert response.json()["request"]["request_type"] == "top_up"
+
+    @pytest.mark.asyncio
+    async def test_create_allowance(self, client, user_token):
+        response = await client.post(
+            "/api/credit-requests/",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"amount": 500, "reason": "allowance bump", "request_type": "allowance"},
+        )
+        assert response.status_code == 200
+        data = response.json()["request"]
+        assert data["request_type"] == "allowance"
+        assert data["status"] == "pending"
+
+    @pytest.mark.asyncio
+    async def test_create_invalid_type_returns_422(self, client, user_token):
+        response = await client.post(
+            "/api/credit-requests/",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"amount": 10, "reason": "bad type", "request_type": "bogus"},
+        )
+        assert response.status_code == 422

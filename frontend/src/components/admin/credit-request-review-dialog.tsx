@@ -46,6 +46,7 @@ export function CreditRequestReviewDialog({
   const numericAmount = parseInt(amount, 10) || 0
   const isBusy = approveRequest.isPending || rejectRequest.isPending
   const isOpenRequest = request?.status === 'pending' || request?.status === 'needs_info'
+  const isAllowance = request?.request_type === 'allowance'
 
   const handleOpenChange = (open: boolean) => {
     if (!open) {
@@ -118,8 +119,8 @@ export function CreditRequestReviewDialog({
                 <span className="font-medium text-foreground">
                   {request.username || request.user_id}
                 </span>{' '}
-                requested {request.amount.toLocaleString()} NUKE ·{' '}
-                {formatRelativeTime(request.created_at)}
+                requested {request.amount.toLocaleString()} NUKE
+                {isAllowance ? '/day allowance' : ''} · {formatRelativeTime(request.created_at)}
               </>
             ) : (
               'Select a request to review'
@@ -174,7 +175,9 @@ export function CreditRequestReviewDialog({
                 {/* Amount (approve only) */}
                 {action === 'approve' && (
                   <div className="space-y-2">
-                    <Label>Amount to Grant</Label>
+                    <Label>
+                      {isAllowance ? 'New daily allowance (NUKE/day)' : 'Amount to Grant'}
+                    </Label>
                     <div className="relative">
                       <Wallet className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <Input
@@ -192,7 +195,9 @@ export function CreditRequestReviewDialog({
                     </div>
                     {amountError && <p className="text-xs text-destructive">{amountError}</p>}
                     <p className="text-xs text-muted-foreground">
-                      Prefilled with the requested amount; adjust to grant a different amount.
+                      {isAllowance
+                        ? "Approving sets the user's daily allowance to this amount; no one-time credits are granted."
+                        : 'Prefilled with the requested amount; adjust to grant a different amount.'}
                     </p>
                   </div>
                 )}
@@ -248,7 +253,11 @@ export function CreditRequestReviewDialog({
               loading={isBusy}
               variant={action === 'reject' ? 'destructive' : 'default'}
             >
-              {action === 'approve' ? 'Approve Request' : 'Reject Request'}
+              {action === 'approve'
+                ? isAllowance
+                  ? 'Set Allowance'
+                  : 'Approve Request'
+                : 'Reject Request'}
             </Button>
           )}
         </DialogFooter>

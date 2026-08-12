@@ -26,6 +26,7 @@ import {
   Coins,
   HandCoins,
   Inbox,
+  Timer,
 } from 'lucide-react'
 import { useUsers } from '../hooks/use-users'
 import { useLowBalanceUsers } from '../hooks/use-credits'
@@ -39,6 +40,10 @@ import {
   useUpdateSystemInitialBalance,
   useSystemAllowanceLoginWindow,
   useUpdateSystemAllowanceLoginWindow,
+  useSystemAutoApproveMax,
+  useUpdateSystemAutoApproveMax,
+  useSystemRequestCooldown,
+  useUpdateSystemRequestCooldown,
 } from '../hooks/use-system-config'
 import { useDataTable } from '../hooks/use-data-table'
 import { useThemeStore } from '../stores/theme-store'
@@ -122,6 +127,20 @@ function CreditsAdminPage() {
   } = useSystemAllowanceLoginWindow()
   const updateSystemLoginWindow = useUpdateSystemAllowanceLoginWindow()
 
+  const {
+    data: systemAutoApproveData,
+    isLoading: systemAutoApproveLoading,
+    refetch: refetchSystemAutoApprove,
+  } = useSystemAutoApproveMax()
+  const updateSystemAutoApproveMax = useUpdateSystemAutoApproveMax()
+
+  const {
+    data: systemCooldownData,
+    isLoading: systemCooldownLoading,
+    refetch: refetchSystemCooldown,
+  } = useSystemRequestCooldown()
+  const updateSystemCooldown = useUpdateSystemRequestCooldown()
+
   const [systemAllowanceInput, setSystemAllowanceInput] = useState('')
   const systemAllowanceValue = systemAllowanceData?.default_daily_allowance
 
@@ -133,6 +152,14 @@ function CreditsAdminPage() {
 
   const [systemLoginWindowInput, setSystemLoginWindowInput] = useState('')
   const systemLoginWindowValue = systemLoginWindowData?.login_window_hours
+
+  // These two inputs are uncontrolled (defaultValue + remount key in the render below)
+  // so they sync from the server value without effect-based setState.
+  const [systemAutoApproveInput, setSystemAutoApproveInput] = useState('')
+  const systemAutoApproveValue = systemAutoApproveData?.auto_approve_max
+
+  const [systemCooldownInput, setSystemCooldownInput] = useState('')
+  const systemCooldownValue = systemCooldownData?.request_cooldown_hours
 
   const searchParams = useSearch({ from: '/admin/credits' }) as { user?: string }
 
@@ -291,7 +318,40 @@ function CreditsAdminPage() {
     updateSystemLoginWindow.mutate(value)
   }
 
-  const systemSettings = [
+  const handleSaveSystemAutoApproveMax = () => {
+    const value = parseInt(systemAutoApproveInput, 10)
+    if (Number.isNaN(value) || value < 0) return
+    if (value === systemAutoApproveValue) return
+    updateSystemAutoApproveMax.mutate(value)
+  }
+
+  const handleSaveSystemCooldown = () => {
+    const value = parseInt(systemCooldownInput, 10)
+    if (Number.isNaN(value) || value < 0) return
+    if (value === systemCooldownValue) return
+    updateSystemCooldown.mutate(value)
+  }
+
+  interface SystemSetting {
+    key: string
+    title: string
+    description: string
+    icon: React.ElementType
+    iconBg: string
+    iconColor: string
+    input: string
+    setInput: (v: string) => void
+    value: number | undefined
+    loading: boolean
+    isPending: boolean
+    onSave: () => void
+    saveLabel: string
+    display: (v?: number) => string
+    /** When set, the input is uncontrolled and remounts with this default on server-value changes. */
+    defaultValue?: number
+  }
+
+  const systemSettings: SystemSetting[] = [
     {
       key: 'allowance',
       title: 'Default Daily Allowance',
@@ -355,6 +415,40 @@ function CreditsAdminPage() {
       onSave: handleSaveSystemLoginWindow,
       saveLabel: 'Save Window',
       display: (v?: number) => `${v ?? 0} hours`,
+    },
+    {
+      key: 'auto-approve-max',
+      title: 'Auto-approve Max',
+      description: 'Requests at or below auto-approve, 0 = disabled',
+      icon: Zap,
+      iconBg: 'bg-sky-500/10',
+      iconColor: 'text-sky-400',
+      input: systemAutoApproveInput,
+      setInput: setSystemAutoApproveInput,
+      value: systemAutoApproveValue,
+      loading: systemAutoApproveLoading,
+      isPending: updateSystemAutoApproveMax.isPending,
+      onSave: handleSaveSystemAutoApproveMax,
+      saveLabel: 'Save Auto-approve',
+      display: (v?: number) => (v === 0 ? 'Disabled' : `${(v ?? 0).toLocaleString()} NUKE`),
+      defaultValue: systemAutoApproveValue,
+    },
+    {
+      key: 'request-cooldown',
+      title: 'Request Cooldown',
+      description: 'Hours between credit requests per user',
+      icon: Timer,
+      iconBg: 'bg-orange-500/10',
+      iconColor: 'text-orange-400',
+      input: systemCooldownInput,
+      setInput: setSystemCooldownInput,
+      value: systemCooldownValue,
+      loading: systemCooldownLoading,
+      isPending: updateSystemCooldown.isPending,
+      onSave: handleSaveSystemCooldown,
+      saveLabel: 'Save Cooldown',
+      display: (v?: number) => `${v ?? 0} hours`,
+      defaultValue: systemCooldownValue,
     },
   ]
 
@@ -825,6 +919,8 @@ function CreditsAdminPage() {
                 refetchSystemMaxBalance()
                 refetchSystemInitialBalance()
                 refetchSystemLoginWindow()
+                refetchSystemAutoApprove()
+                refetchSystemCooldown()
               }}
               className="p-1.5 rounded-lg hover:bg-accent transition-colors"
             >
@@ -837,7 +933,7 @@ function CreditsAdminPage() {
           {systemSettings.map((s) => (
             <div
               key={s.key}
-              className="flex items-center gap-3 py-3 border-b border-border/50 first:pt-0 last:border-0 xl:[&:nth-child(n+3)]:border-b-0 xl:[&:nth-child(n+3)]:pb-0"
+              className="flex items-center gap-3 py-3 border-b border-border/50 first:pt-0 last:border-0 xl:[&:nth-child(n+5)]:border-b-0 xl:[&:nth-child(n+5)]:pb-0"
             >
               <div
                 className={cn(
@@ -862,7 +958,9 @@ function CreditsAdminPage() {
                     min={0}
                     step={1}
                     aria-label={s.title}
-                    value={s.input}
+                    {...(s.defaultValue !== undefined
+                      ? { key: String(s.defaultValue), defaultValue: s.defaultValue }
+                      : { value: s.input })}
                     onChange={(e) => s.setInput(e.target.value)}
                     disabled={s.isPending}
                     className="w-28 h-8 px-2.5 text-sm text-right bg-background border border-border/50 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
@@ -1037,6 +1135,9 @@ function CreditsAdminPage() {
                         )}
                       >
                         {config.label}
+                      </span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 bg-muted text-muted-foreground">
+                        {req.request_type === 'allowance' ? 'Daily' : 'One-time'}
                       </span>
                       {(req.status === 'pending' || req.status === 'needs_info') && canGrant && (
                         <div className="flex items-center gap-1 shrink-0">

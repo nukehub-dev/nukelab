@@ -120,6 +120,71 @@ export function useUpdateSystemMaxBalance() {
   })
 }
 
+export function useSystemAutoApproveMax() {
+  return useQuery({
+    queryKey: ['system-auto-approve-max'],
+    queryFn: async () => {
+      return api.get<{ auto_approve_max: number }>('/admin/credits/auto-approve-max')
+    },
+  })
+}
+
+export function useUpdateSystemAutoApproveMax() {
+  const queryClient = useQueryClient()
+  const { success, error: showError } = useToast()
+
+  return useMutation({
+    mutationFn: async (amount: number) => {
+      return api.put<{ message: string }>('/admin/credits/auto-approve-max', { amount })
+    },
+    onSuccess: (_data, amount) => {
+      queryClient.invalidateQueries({ queryKey: ['system-auto-approve-max'] })
+      queryClient.invalidateQueries({ queryKey: ['system-config'] })
+      const label = amount === 0 ? 'disabled' : `${amount.toLocaleString()} NUKE`
+      success('Auto-approve max updated', `Auto-approve threshold set to ${label}`)
+    },
+    onError: (err) => {
+      showError(
+        'Failed to update auto-approve max',
+        err instanceof Error ? err.message : 'Unknown error'
+      )
+    },
+  })
+}
+
+export function useSystemRequestCooldown() {
+  return useQuery({
+    queryKey: ['system-request-cooldown'],
+    queryFn: async () => {
+      return api.get<{ request_cooldown_hours: number }>('/admin/credits/request-cooldown-hours')
+    },
+  })
+}
+
+export function useUpdateSystemRequestCooldown() {
+  const queryClient = useQueryClient()
+  const { success, error: showError } = useToast()
+
+  return useMutation({
+    mutationFn: async (amount: number) => {
+      return api.put<{ message: string }>('/admin/credits/request-cooldown-hours', {
+        hours: amount,
+      })
+    },
+    onSuccess: (_data, amount) => {
+      queryClient.invalidateQueries({ queryKey: ['system-request-cooldown'] })
+      queryClient.invalidateQueries({ queryKey: ['system-config'] })
+      success('Request cooldown updated', `Cooldown set to ${amount} hours`)
+    },
+    onError: (err) => {
+      showError(
+        'Failed to update request cooldown',
+        err instanceof Error ? err.message : 'Unknown error'
+      )
+    },
+  })
+}
+
 export function useSystemInitialBalance() {
   return useQuery({
     queryKey: ['system-initial-balance'],
