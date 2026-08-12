@@ -15,6 +15,7 @@ RUN apt-get update && \
         ffmpeg \
         libx11-dev \
         libxkbfile-dev \
+        libsecret-1-dev \
         xvfb \
         && \
     # Remove downloaded package files to reduce the final image size.
