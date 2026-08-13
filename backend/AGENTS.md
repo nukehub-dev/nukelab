@@ -64,6 +64,7 @@ All files under `backend/` except generated artifacts (`.venv-dev`, `__pycache__
 
 - Use the `ContainerDriver` methods from `app/container/` (via the factory or the `client.py` shim), not raw Docker SDK/aiodocker calls scattered in routes and services. Only `docker_driver.py` may touch aiodocker.
 - Container operations must respect `CONTAINER_HARDENING_ENABLED` and run spawned containers as non-root with dropped capabilities.
+- `spawner.delete/stop/start` swallow runtime errors and return `False`; `spawner.get_status` returns `"unknown"` on lookup failure. Stop paths must never mark a server `stopped` in either case — the container may still be running (DB status must stay consistent with live containers). Log, skip, and let the next task cycle retry.
 
 ### Authentication and authorization
 

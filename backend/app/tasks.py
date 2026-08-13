@@ -315,7 +315,11 @@ def shutdown_idle_servers(self):
                             await _release_gpu_devices(db, server.id)
                             continue
 
-                        await spawner.delete(server.container_id)
+                        if not await spawner.delete(server.container_id):
+                            # Runtime delete failed (logged by spawner). Do
+                            # not mark the server stopped: the container may
+                            # still be running. Retry on the next task cycle.
+                            continue
                         server.container_id = None
 
                     server.status = "stopped"
@@ -475,7 +479,11 @@ def process_nuke_billing(self):
                         from app.container.spawner import spawner
 
                         try:
-                            await spawner.delete(server.container_id)
+                            if not await spawner.delete(server.container_id):
+                                # Runtime delete failed (logged by spawner). Do
+                                # not mark the server stopped: the container may
+                                # still be running. Retry on the next task cycle.
+                                continue
                             server.container_id = None
                             server.status = "stopped"
                             server.stopped_at = datetime.now(UTC).replace(tzinfo=None)
@@ -567,7 +575,17 @@ def enforce_auto_stop(self):
                     continue
 
                 try:
-                    await spawner.delete(server.container_id)
+                    if not await spawner.delete(server.container_id):
+                        # Runtime delete failed (logged by spawner). Do not
+                        # mark the server stopped: the container may still be
+                        # running. expires_at stays in the past, so the next
+                        # task cycle retries the stop.
+                        logger.warning(
+                            "Could not delete container %s for expired server %s; skipping stop",
+                            server.container_id,
+                            server.id,
+                        )
+                        continue
                     server.container_id = None
                     server.status = "stopped"
                     server.stopped_at = now
@@ -1238,11 +1256,28 @@ def enforce_volume_quotas(self):
                     try:
                         if server.container_id:
                             actual_status = await spawner.get_status(server.container_id)
-                            if actual_status in ("stopped", "unknown"):
+                            if actual_status == "unknown":
+                                # Runtime lookup failed (e.g. socket timeout). Do
+                                # not mark the server stopped: the container may
+                                # still be running. Retry on the next task cycle.
+                                logger.warning(
+                                    "Could not determine runtime status of server "
+                                    "%s (container %s) during volume quota "
+                                    "enforcement; skipping stop",
+                                    server.id,
+                                    server.container_id,
+                                )
+                                continue
+                            if actual_status == "stopped":
                                 server.status = "stopped"
                                 server.container_id = None
                             else:
-                                await spawner.delete(server.container_id)
+                                if not await spawner.delete(server.container_id):
+                                    # Runtime delete failed (logged by
+                                    # spawner). Do not mark the server
+                                    # stopped: the container may still be
+                                    # running. Retry on the next task cycle.
+                                    continue
                                 server.container_id = None
 
                         server.status = "stopped"
