@@ -587,20 +587,20 @@ class DockerDriver(ContainerDriver):
         return False
 
     async def stop_container(self, container_id: str, timeout: int = 30):
-        """Stop a container"""
+        """Stop a container. Raises ContainerDriverError on failure."""
         try:
             container = await self.client.containers.get(container_id)
             await container.stop(timeout=timeout)
-        except Exception:
-            pass
+        except aiodocker.DockerError as e:
+            raise _map_error(e) from e
 
     async def delete_container(self, container_id: str, force: bool = True):
-        """Delete a container"""
+        """Delete a container. Raises ContainerDriverError on failure."""
         try:
             container = await self.client.containers.get(container_id)
             await container.delete(force=force)
-        except Exception:
-            pass
+        except aiodocker.DockerError as e:
+            raise _map_error(e) from e
 
     async def get_container_info(self, container_id: str) -> dict:
         """Get container info"""

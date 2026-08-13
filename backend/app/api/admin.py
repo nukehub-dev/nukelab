@@ -428,19 +428,22 @@ async def bulk_server_action(
                         server.volume_id = new_server.volume_id
                         server.external_url = new_server.external_url
                     else:
-                        await spawner.start(server.container_id)
+                        if not await spawner.start(server.container_id):
+                            raise Exception("Failed to start container")
                     server.status = "running"
                     status_changes.append((str(server.user_id), server_id, "running"))
             elif body.action == "stop":
                 if server.container_id:
-                    await spawner.stop(server.container_id)
+                    if not await spawner.stop(server.container_id):
+                        raise Exception("Failed to stop container")
                     server.status = "stopped"
                     status_changes.append((str(server.user_id), server_id, "stopped"))
                     gpu_release_ids.append(server_id)
             elif body.action == "delete":
                 user_id = str(server.user_id)
                 if server.container_id:
-                    await spawner.delete(server.container_id)
+                    if not await spawner.delete(server.container_id):
+                        raise Exception("Failed to delete container")
                 await db.delete(server)
                 affected_user_ids.add(user_id)
                 gpu_release_ids.append(server_id)

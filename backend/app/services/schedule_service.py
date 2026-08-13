@@ -208,7 +208,12 @@ class ScheduleService:
                             server.volume_id = new_server.volume_id
                             server.external_url = new_server.external_url
                         else:
-                            await spawner.start(server.container_id)
+                            if not await spawner.start(server.container_id):
+                                # Runtime start failed (logged by spawner). Do
+                                # not mark the server running.
+                                message = f"Server '{server.name}' failed to start (runtime error)"
+                                await self.db.commit()
+                                return {"success": False, "error": message}
                         server.status = "running"
                         server.started_at = datetime.now(UTC).replace(tzinfo=None)
                         server.last_activity = datetime.now(UTC).replace(tzinfo=None)
@@ -223,7 +228,13 @@ class ScheduleService:
 
             elif schedule.action == "stop":
                 if server.container_id and server.status == "running":
-                    await spawner.delete(server.container_id)
+                    if not await spawner.delete(server.container_id):
+                        # Runtime delete failed (logged by spawner). Do not
+                        # mark the server stopped: the container may still be
+                        # running. Retry on the next schedule evaluation.
+                        message = f"Server '{server.name}' failed to stop (runtime error)"
+                        await self.db.commit()
+                        return {"success": False, "error": message}
                     server.container_id = None
                     server.status = "stopped"
                     server.stopped_at = datetime.now(UTC).replace(tzinfo=None)
@@ -272,8 +283,19 @@ class ScheduleService:
                         server.volume_id = new_server.volume_id
                         server.external_url = new_server.external_url
                     else:
-                        await spawner.stop(server.container_id)
-                        await spawner.start(server.container_id)
+                        if not await spawner.stop(server.container_id):
+                            message = (
+                                f"Server '{server.name}' failed to stop for restart (runtime error)"
+                            )
+                            await self.db.commit()
+                            return {"success": False, "error": message}
+                        if not await spawner.start(server.container_id):
+                            message = (
+                                f"Server '{server.name}' failed to start for restart "
+                                "(runtime error)"
+                            )
+                            await self.db.commit()
+                            return {"success": False, "error": message}
                     server.started_at = datetime.now(UTC).replace(tzinfo=None)
                     server.last_activity = datetime.now(UTC).replace(tzinfo=None)
                     success = True

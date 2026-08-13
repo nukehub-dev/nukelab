@@ -377,8 +377,12 @@ class TestCrossUserAuditLogging:
 
         from app.models.activity_log import ActivityLog
 
-        with patch("app.api.servers.spawner.stop", new_callable=AsyncMock) as mock_stop:
-            mock_stop.return_value = True
+        with (
+            patch("app.api.servers.spawner.get_status", new_callable=AsyncMock) as mock_status,
+            patch("app.api.servers.spawner.delete", new_callable=AsyncMock) as mock_delete,
+        ):
+            mock_status.return_value = "running"
+            mock_delete.return_value = True
             response = await client.post(
                 f"/api/servers/{other_user_server.id}/stop",
                 headers={"Authorization": f"Bearer {admin_token}"},

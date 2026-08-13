@@ -670,7 +670,18 @@ async def logout_endpoint(
                             await _release_gpu_devices(db, server.id)
                             continue
 
-                        await spawner.delete(server.container_id)
+                        if not await spawner.delete(server.container_id):
+                            # Runtime delete failed (logged by spawner). Do
+                            # not mark the server stopped: the container may
+                            # still be running. The idle/auto-stop tasks will
+                            # retry later.
+                            logger.warning(
+                                "Could not delete container %s for server %s on "
+                                "logout; skipping stop",
+                                server.container_id,
+                                server.id,
+                            )
+                            continue
                         server.container_id = None
                         server.status = "stopped"
                         server.stopped_at = datetime.now(UTC).replace(tzinfo=None)

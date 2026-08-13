@@ -562,9 +562,11 @@ class TestContainerLifecycle:
         mock_container.stop.assert_awaited_once_with(timeout=10)
 
     @pytest.mark.asyncio
-    async def test_stop_container_graceful_on_error(self, client):
+    async def test_stop_container_raises_on_error(self, client):
+        """Driver stop failures must propagate (callers rely on it)."""
         client.client.containers.get.side_effect = Exception("not found")
-        await client.stop_container("abc123")
+        with pytest.raises(Exception, match="not found"):
+            await client.stop_container("abc123")
 
     @pytest.mark.asyncio
     async def test_delete_container(self, client):
@@ -574,9 +576,11 @@ class TestContainerLifecycle:
         mock_container.delete.assert_awaited_once_with(force=True)
 
     @pytest.mark.asyncio
-    async def test_delete_container_graceful_on_error(self, client):
+    async def test_delete_container_raises_on_error(self, client):
+        """Driver delete failures must propagate (callers rely on it)."""
         client.client.containers.get.side_effect = Exception("not found")
-        await client.delete_container("abc123")
+        with pytest.raises(Exception, match="not found"):
+            await client.delete_container("abc123")
 
     @pytest.mark.asyncio
     async def test_get_container_info(self, client):

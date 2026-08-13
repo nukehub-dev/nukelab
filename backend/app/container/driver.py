@@ -83,11 +83,11 @@ class ContainerDriver(ABC):
 
     @abstractmethod
     async def stop_container(self, container_id: str, timeout: int = 30):
-        """Stop a container."""
+        """Stop a container. Raises ContainerDriverError on runtime failure."""
 
     @abstractmethod
     async def delete_container(self, container_id: str, force: bool = True):
-        """Delete a container (best-effort; errors are swallowed)."""
+        """Delete a container. Raises ContainerDriverError on runtime failure."""
 
     @abstractmethod
     async def get_container_info(self, container_id: str) -> dict:

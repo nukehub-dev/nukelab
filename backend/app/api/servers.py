@@ -1310,7 +1310,14 @@ async def _perform_server_stop(
     if server.container_id:
         try:
             actual_status = await spawner.get_status(server.container_id)
-            if actual_status == "stopped" or actual_status == "unknown":
+            if actual_status == "unknown":
+                # Runtime lookup failed (e.g. socket timeout). Refuse to mark
+                # the server stopped: the container may still be running.
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Could not verify container status. Please try again.",
+                )
+            if actual_status == "stopped":
                 # Ensure the stale container is removed even if it is already stopped.
                 try:
                     await spawner.delete(server.container_id)
@@ -1329,7 +1336,13 @@ async def _perform_server_stop(
                     "status": "stopped",
                 }
 
-            await spawner.delete(server.container_id)
+            if not await spawner.delete(server.container_id):
+                # Runtime delete failed (logged by spawner). Refuse to mark
+                # the server stopped: the container may still be running.
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Failed to stop the server container. Please try again.",
+                )
             server.container_id = None
             server.status = "stopped"
             server.stopped_at = datetime.now(UTC).replace(tzinfo=None)
@@ -1521,8 +1534,10 @@ async def _perform_server_restart(
 
             # Plain stop+start is only reachable for non-GPU servers or with
             # the allocator disabled — GPU servers took the recreate branch.
-            await spawner.stop(server.container_id)
-            await spawner.start(server.container_id)
+            if not await spawner.stop(server.container_id):
+                raise Exception("Failed to stop container for restart - check container logs")
+            if not await spawner.start(server.container_id):
+                raise Exception("Failed to start container - check container logs")
             server.status = "running"
             server.started_at = datetime.now(UTC).replace(tzinfo=None)
             server.last_activity = datetime.now(UTC).replace(tzinfo=None)
@@ -1565,10 +1580,13 @@ async def _perform_server_delete(
     await _load_server_volume_mounts(db, str(server.id))
 
     if server.container_id:
-        try:
-            await spawner.delete(server.container_id)
-        except Exception:
-            logger.exception("Warning: Failed to delete container")
+        if not await spawner.delete(server.container_id):
+            # Runtime delete failed (logged by spawner). Refuse to delete the
+            # DB row: the container would be orphaned while still running.
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Failed to delete the server container. Please try again.",
+            )
 
     await db.execute(delete(CreditTransaction).where(CreditTransaction.server_id == server.id))
 
@@ -1927,13 +1945,16 @@ async def update_server(
 
     # If server is running and needs recreate, stop and delete it first
     if needs_recreate and server.container_id:
-        try:
-            actual_status = await spawner.get_status(server.container_id)
-            if actual_status == "running":
-                await spawner.stop(server.container_id)
-            await spawner.delete(server.container_id)
-        except Exception:
-            logger.exception("Warning: failed to stop/delete container during update")
+        actual_status = await spawner.get_status(server.container_id)
+        if actual_status == "running":
+            await spawner.stop(server.container_id)
+        if not await spawner.delete(server.container_id):
+            # Runtime delete failed (logged by spawner). Abort the update:
+            # marking the server stopped would orphan a running container.
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Failed to stop the server container for update. Please try again.",
+            )
 
         server.container_id = None
         server.status = "stopped"

@@ -1847,17 +1847,18 @@ class TestCrossUserWithReason:
         db_session.add(s1)
         await db_session.commit()
 
-        with mock.patch("app.api.servers.spawner.delete", return_value=True):
-            with mock.patch("app.services.notification_service.NotificationService"):
-                with mock.patch(
-                    "app.services.notification_service.broadcast_server_status_change",
-                    mock.AsyncMock(),
-                ):
-                    response = await client.post(
-                        f"/api/servers/{s1.id}/stop",
-                        headers={"Authorization": f"Bearer {admin_token}"},
-                        json={"reason": "Maintenance"},
-                    )
+        with mock.patch("app.api.servers.spawner.get_status", return_value="running"):
+            with mock.patch("app.api.servers.spawner.delete", return_value=True):
+                with mock.patch("app.services.notification_service.NotificationService"):
+                    with mock.patch(
+                        "app.services.notification_service.broadcast_server_status_change",
+                        mock.AsyncMock(),
+                    ):
+                        response = await client.post(
+                            f"/api/servers/{s1.id}/stop",
+                            headers={"Authorization": f"Bearer {admin_token}"},
+                            json={"reason": "Maintenance"},
+                        )
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "stopped"
@@ -2388,6 +2389,8 @@ class TestDeleteServer:
 
     @pytest.mark.asyncio
     async def test_stop_server_unknown_container(self, client, user_token, test_user, db_session):
+        """A failed runtime status lookup must NOT mark the server stopped —
+        the container may still be running, so the API refuses with 503."""
         s1 = Server(name="srv-stop-unk", user_id=test_user.id, status="running", container_id="c1")
         db_session.add(s1)
         await db_session.commit()
@@ -2399,10 +2402,10 @@ class TestDeleteServer:
                 response = await client.post(
                     f"/api/servers/{s1.id}/stop", headers={"Authorization": f"Bearer {user_token}"}
                 )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "stopped"
-        assert "already stopped" in data["message"].lower()
+        assert response.status_code == 503
+        await db_session.refresh(s1)
+        assert s1.status == "running"
+        assert s1.container_id == "c1"
 
 
 class TestStopServerException:
@@ -3918,22 +3921,23 @@ class TestDeleteServerContainerWarning:
     """DELETE /{server_id} with container delete warning."""
 
     @pytest.mark.asyncio
-    async def test_delete_server_container_delete_warning(
+    async def test_delete_server_container_delete_failure_aborts(
         self, client, user_token, test_user, db_session
     ):
+        """A failed container delete must abort the server delete — otherwise
+        the container is orphaned while the DB row disappears."""
         s1 = Server(name="srv-del-warn", user_id=test_user.id, status="stopped", container_id="c1")
         db_session.add(s1)
         await db_session.commit()
 
-        with mock.patch("app.api.servers.spawner.delete", side_effect=Exception("docker down")):
-            with mock.patch("app.services.notification_service.NotificationService") as MockNS:
-                ns_inst = MockNS.return_value
-                ns_inst.server_deleted = mock.AsyncMock()
-                response = await client.delete(
-                    f"/api/servers/{s1.id}", headers={"Authorization": f"Bearer {user_token}"}
-                )
+        with mock.patch("app.api.servers.spawner.delete", new=mock.AsyncMock(return_value=False)):
+            response = await client.delete(
+                f"/api/servers/{s1.id}", headers={"Authorization": f"Bearer {user_token}"}
+            )
 
-        assert response.status_code == 200
+        assert response.status_code == 503
+        await db_session.refresh(s1)
+        assert s1.container_id == "c1"
 
 
 class TestUpdateServerQuotaFail:
@@ -4309,9 +4313,9 @@ class TestUpdateServerContainerStopWarning:
         )
 
         with mock.patch("app.api.servers.spawner.get_status", return_value="running"):
-            with mock.patch("app.api.servers.spawner.stop", side_effect=Exception("stop failed")):
+            with mock.patch("app.api.servers.spawner.stop", new=mock.AsyncMock(return_value=False)):
                 with mock.patch(
-                    "app.api.servers.spawner.delete", side_effect=Exception("delete failed")
+                    "app.api.servers.spawner.delete", new=mock.AsyncMock(return_value=True)
                 ):
                     with mock.patch("app.api.servers.spawner.spawn", return_value=spawned):
                         with mock.patch(

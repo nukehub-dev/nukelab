@@ -394,26 +394,52 @@ class ServerSpawner:
         try:
             await container_client.start_container(container_id)
             return True
+        except ContainerDriverError as exc:
+            if exc.status == 304:
+                # Already running — the desired end state.
+                return True
+            logger.exception("Error starting container")
+            return False
         except Exception:
             logger.exception("Error starting container")
             return False
 
     async def stop(self, container_id: str) -> bool:
-        """Stop a server container"""
+        """Stop a server container.
+
+        Returns True when the container is stopped (or already gone), False
+        when the runtime operation failed and the container may still run.
+        """
         container_client = await self._get_container_client()
         try:
             await container_client.stop_container(container_id)
             return True
+        except ContainerDriverError as exc:
+            if exc.status in (304, 404):
+                # Already stopped or already gone — the desired end state.
+                return True
+            logger.exception("Error stopping container")
+            return False
         except Exception:
             logger.exception("Error stopping container")
             return False
 
     async def delete(self, container_id: str) -> bool:
-        """Delete a server container"""
+        """Delete a server container.
+
+        Returns True when the container is deleted (or already gone), False
+        when the runtime operation failed and the container may still exist.
+        Callers must not mark a server stopped/deleted on False.
+        """
         container_client = await self._get_container_client()
         try:
             await container_client.delete_container(container_id, force=True)
             return True
+        except ContainerDriverError as exc:
+            if exc.status == 404:
+                return True
+            logger.exception("Error deleting container")
+            return False
         except Exception:
             logger.exception("Error deleting container")
             return False
