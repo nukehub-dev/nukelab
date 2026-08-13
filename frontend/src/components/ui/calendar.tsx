@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
 // SPDX-License-Identifier: BSD-2-Clause
 
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
+import { useState, useMemo, useRef, useEffect, useLayoutEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
@@ -116,16 +116,14 @@ export function Calendar({
     setPositioned(true)
   }, [usePortal, anchorRef])
 
-  // Position when opening
-  useEffect(() => {
+  // Position when opening. Must run in a layout effect: with rAF the panel
+  // paints at 0,0 for a frame or two before being moved (visible blink).
+  useLayoutEffect(() => {
     if (!open || !usePortal) {
       queueMicrotask(() => setPositioned(false))
       return
     }
-    queueMicrotask(() => setPositioned(false))
-    requestAnimationFrame(() => {
-      requestAnimationFrame(updatePosition)
-    })
+    updatePosition()
   }, [open, usePortal, updatePosition])
 
   // Update on scroll/resize while open

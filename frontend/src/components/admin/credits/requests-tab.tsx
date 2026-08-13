@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
 // SPDX-License-Identifier: BSD-2-Clause
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useRef } from 'react'
 import { motion } from 'framer-motion'
 import {
   Check,
@@ -70,6 +70,26 @@ function getOutcomeText(req: CreditRequest): string {
   return `Cancelled ${formatRelativeTime(req.created_at)}`
 }
 
+/**
+ * Rejection note field for the bulk-reject confirm dialog. The confirm dialog
+ * stores customContent as a one-time element snapshot, so the field must own
+ * its state and report the value through the stable ref.
+ */
+function BulkRejectNoteField({ valueRef }: { valueRef: { current: string } }) {
+  const [note, setNote] = useState('')
+  return (
+    <Input
+      type="text"
+      value={note}
+      onChange={(e) => {
+        setNote(e.target.value)
+        valueRef.current = e.target.value
+      }}
+      placeholder="Optional rejection note shown to the users"
+    />
+  )
+}
+
 export function RequestsTab() {
   const hasPermission = useAuthStore((state) => state.hasPermission)
   const canGrant = hasPermission(PERMISSIONS.CREDITS_GRANT)
@@ -80,7 +100,7 @@ export function RequestsTab() {
   const [reviewAction, setReviewAction] = useState<'approve' | 'reject'>('approve')
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false)
   const [selectedRequestIds, setSelectedRequestIds] = useState<Record<string, boolean>>({})
-  const [bulkRejectNote, setBulkRejectNote] = useState('')
+  const bulkRejectNoteRef = useRef('')
 
   const { data: requestStats } = useCreditRequestStats()
   const bulkReview = useBulkReviewCreditRequests()
@@ -151,31 +171,24 @@ export function RequestsTab() {
 
   const handleBulkReject = async () => {
     if (selectedReviewIds.length === 0) return
+    bulkRejectNoteRef.current = ''
     const confirmed = await confirmBulkReview({
       title: `Reject ${selectedReviewIds.length} request${selectedReviewIds.length === 1 ? '' : 's'}?`,
       description: 'Rejected requesters can submit a new request afterwards.',
       confirmLabel: 'Reject All',
       variant: 'destructive',
-      customContent: (
-        <Input
-          type="text"
-          value={bulkRejectNote}
-          onChange={(e) => setBulkRejectNote(e.target.value)}
-          placeholder="Optional rejection note shown to the users"
-        />
-      ),
+      customContent: <BulkRejectNoteField valueRef={bulkRejectNoteRef} />,
     })
     if (!confirmed) return
     bulkReview.mutate(
       {
         requestIds: selectedReviewIds,
         action: 'reject',
-        note: bulkRejectNote.trim() || undefined,
+        note: bulkRejectNoteRef.current.trim() || undefined,
       },
       {
         onSuccess: () => {
           setSelectedRequestIds({})
-          setBulkRejectNote('')
         },
       }
     )

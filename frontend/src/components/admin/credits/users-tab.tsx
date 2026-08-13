@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 import { Link } from '@tanstack/react-router'
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { motion } from 'framer-motion'
 import {
   AlertTriangle,
@@ -10,6 +10,7 @@ import {
   ArrowUp,
   ArrowUpDown,
   Ban,
+  Calendar as CalendarIcon,
   CircleCheck,
   Clock,
   CreditCard,
@@ -40,6 +41,8 @@ import { Tooltip } from '../../ui/tooltip'
 import { Button } from '../../ui/button'
 import { Input } from '../../ui/input'
 import { Label } from '../../ui/label'
+import { Calendar } from '../../ui/calendar'
+import { TimePicker } from '../../ui/time-picker'
 import { useConfirmDialog } from '../../ui/confirm-dialog'
 import type { User } from '../../../types/api'
 import type {
@@ -58,10 +61,128 @@ interface UsersTabProps {
 const isRequestBlocked = (user: User) =>
   user.has_active_credit_request_block ?? user.credit_requests_blocked ?? false
 
+/** Local YYYY-MM-DD (min date for the block-until calendar). */
+const localToday = () => {
+  const d = new Date()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${d.getFullYear()}-${m}-${day}`
+}
+
 const blockBadgeLabel = (user: User) =>
   user.credit_requests_blocked_until
     ? `Blocked until ${formatDate(user.credit_requests_blocked_until)}`
     : 'Requests blocked'
+
+interface BlockFieldsValue {
+  reason: string
+  /** Local datetime-local value (YYYY-MM-DDTHH:mm), empty = indefinite. */
+  until: string
+}
+
+/**
+ * Fields for the block confirm dialog. The confirm dialog stores customContent
+ * as a one-time element snapshot, so props driven by parent state never update;
+ * this component must own its state and report values through the stable ref.
+ */
+function BlockRequestFields({ valueRef }: { valueRef: { current: BlockFieldsValue } }) {
+  const [reason, setReason] = useState('')
+  const [until, setUntil] = useState('')
+  const [dateOpen, setDateOpen] = useState(false)
+  const [timeOpen, setTimeOpen] = useState(false)
+  const dateRef = useRef<HTMLButtonElement>(null)
+  const timeRef = useRef<HTMLButtonElement>(null)
+
+  const updateReason = (value: string) => {
+    setReason(value)
+    valueRef.current.reason = value
+  }
+  const updateUntil = (value: string) => {
+    setUntil(value)
+    valueRef.current.until = value
+  }
+
+  return (
+    <div className="space-y-3">
+      <Input
+        type="text"
+        value={reason}
+        onChange={(e) => updateReason(e.target.value)}
+        placeholder="Optional reason (internal note)"
+      />
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <Label className="text-xs text-muted-foreground">
+            Block until (optional — empty blocks indefinitely)
+          </Label>
+          {until && (
+            <button
+              type="button"
+              onClick={() => updateUntil('')}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1"
+            >
+              <X className="w-3 h-3" />
+              Clear
+            </button>
+          )}
+        </div>
+        <div className="flex">
+          <button
+            ref={dateRef}
+            type="button"
+            onClick={() => {
+              setDateOpen((o) => !o)
+              setTimeOpen(false)
+            }}
+            className="flex-1 h-9 px-3 rounded-l-md border border-r-0 border-input bg-background text-sm text-left hover:bg-accent transition-colors inline-flex items-center gap-2"
+          >
+            <CalendarIcon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <span className={cn(!until && 'text-muted-foreground')}>
+              {until ? until.split('T')[0] : 'Select date'}
+            </span>
+          </button>
+          <button
+            ref={timeRef}
+            type="button"
+            onClick={() => {
+              setTimeOpen((o) => !o)
+              setDateOpen(false)
+            }}
+            className="h-9 px-3 rounded-r-md border border-input bg-background text-sm hover:bg-accent transition-colors inline-flex items-center gap-1.5 w-[110px] justify-center shrink-0"
+          >
+            <Clock className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <span className={cn(!until && 'text-muted-foreground')}>
+              {until ? until.split('T')[1]?.slice(0, 5) || '00:00' : '00:00'}
+            </span>
+          </button>
+        </div>
+        <Calendar
+          open={dateOpen}
+          onClose={() => setDateOpen(false)}
+          anchorRef={dateRef}
+          value={until ? until.split('T')[0] : undefined}
+          onSelect={(date) => {
+            const time = until ? until.split('T')[1] || '00:00' : '00:00'
+            updateUntil(`${date}T${time}`)
+            setDateOpen(false)
+          }}
+          minDate={localToday()}
+        />
+        <TimePicker
+          open={timeOpen}
+          onClose={() => setTimeOpen(false)}
+          anchorRef={timeRef}
+          hour={until ? parseInt(until.split('T')[1]?.split(':')[0] || '0') : 0}
+          minute={until ? parseInt(until.split('T')[1]?.split(':')[1] || '0') : 0}
+          onChange={(h, m) => {
+            const date = until ? until.split('T')[0] : localToday()
+            updateUntil(`${date}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`)
+          }}
+        />
+      </div>
+    </div>
+  )
+}
 
 export function UsersTab({ focusUserId }: UsersTabProps) {
   const density = useThemeStore((state) => state.density)
@@ -93,8 +214,7 @@ export function UsersTab({ focusUserId }: UsersTabProps) {
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false)
   const [bulkMode, setBulkMode] = useState<'grant' | 'allowance'>('grant')
   const [overrideDialogOpen, setOverrideDialogOpen] = useState(false)
-  const [blockReason, setBlockReason] = useState('')
-  const [blockUntil, setBlockUntil] = useState('')
+  const blockValuesRef = useRef<BlockFieldsValue>({ reason: '', until: '' })
 
   const setCreditRequestBlock = useSetCreditRequestBlock()
   const { confirm: confirmBlock, dialog: blockDialog } = useConfirmDialog()
@@ -186,49 +306,23 @@ export function UsersTab({ focusUserId }: UsersTabProps) {
       })
       if (confirmed) setCreditRequestBlock.mutate({ userId: user.id, blocked: false })
     } else {
+      blockValuesRef.current = { reason: '', until: '' }
       const confirmed = await confirmBlock({
         title: `Block credit requests for ${user.username}?`,
         description:
           'The user can no longer submit credit requests. Optionally set an expiry to unblock automatically.',
         confirmLabel: 'Block Requests',
         variant: 'destructive',
-        customContent: (
-          <div className="space-y-3">
-            <Input
-              type="text"
-              value={blockReason}
-              onChange={(e) => setBlockReason(e.target.value)}
-              placeholder="Optional reason (internal note)"
-            />
-            <div className="space-y-1.5">
-              <Label htmlFor="block-until" className="text-xs text-muted-foreground">
-                Block until (optional — empty blocks indefinitely)
-              </Label>
-              <Input
-                id="block-until"
-                type="datetime-local"
-                value={blockUntil}
-                onChange={(e) => setBlockUntil(e.target.value)}
-              />
-            </div>
-          </div>
-        ),
+        customContent: <BlockRequestFields valueRef={blockValuesRef} />,
       })
       if (confirmed) {
-        setCreditRequestBlock.mutate(
-          {
-            userId: user.id,
-            blocked: true,
-            reason: blockReason.trim() || undefined,
-            until: blockUntil ? new Date(blockUntil).toISOString() : null,
-          },
-          {
-            onSuccess: () => {
-              setBlockReason('')
-              setBlockUntil('')
-            },
-          }
-        )
+        const { reason, until } = blockValuesRef.current
+        setCreditRequestBlock.mutate({
+          userId: user.id,
+          blocked: true,
+          reason: reason.trim() || undefined,
+          until: until ? new Date(until).toISOString() : null,
+        })
       }
     }
   }
