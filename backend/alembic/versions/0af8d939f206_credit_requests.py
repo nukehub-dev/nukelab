@@ -72,8 +72,9 @@ def upgrade() -> None:
         )
         op.create_index(op.f('ix_credit_request_messages_request_id'), 'credit_request_messages', ['request_id'], unique=False)
 
-    # Per-user credit request block. server_default backfills existing
-    # rows; it is dropped again so the ORM default rules.
+    # Per-user credit request block (flag + optional expiry). The flag's
+    # server_default backfills existing rows; it is dropped again so the
+    # ORM default rules. The expiry is nullable and needs no default.
     user_columns = {c['name'] for c in inspector.get_columns('users')}
     if 'credit_requests_blocked' not in user_columns:
         op.add_column(
@@ -86,6 +87,11 @@ def upgrade() -> None:
             ),
         )
         op.alter_column('users', 'credit_requests_blocked', server_default=None)
+    if 'credit_requests_blocked_until' not in user_columns:
+        op.add_column(
+            'users',
+            sa.Column('credit_requests_blocked_until', sa.DateTime(), nullable=True),
+        )
 
 
 def downgrade() -> None:
@@ -94,6 +100,8 @@ def downgrade() -> None:
     table_names = inspector.get_table_names()
 
     user_columns = {c['name'] for c in inspector.get_columns('users')}
+    if 'credit_requests_blocked_until' in user_columns:
+        op.drop_column('users', 'credit_requests_blocked_until')
     if 'credit_requests_blocked' in user_columns:
         op.drop_column('users', 'credit_requests_blocked')
 

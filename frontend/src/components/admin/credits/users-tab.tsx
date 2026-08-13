@@ -10,6 +10,7 @@ import {
   ArrowUp,
   ArrowUpDown,
   Ban,
+  CircleCheck,
   Clock,
   CreditCard,
   History,
@@ -26,7 +27,7 @@ import { useSetCreditRequestBlock } from '../../../hooks/use-credit-requests'
 import { useDataTable } from '../../../hooks/use-data-table'
 import { useThemeStore } from '../../../stores/theme-store'
 import { useAuthStore, PERMISSIONS } from '../../../stores/auth-store'
-import { cn, parseUtcDate } from '../../../lib/utils'
+import { cn, formatDate, parseUtcDate } from '../../../lib/utils'
 import { CreditAdjustDialog } from '../credit-adjust-dialog'
 import { CreditHistoryDialog } from '../credit-history-dialog'
 import { DailyAllowanceDialog } from '../daily-allowance-dialog'
@@ -38,6 +39,7 @@ import { StatCard } from '../../data/stat-card'
 import { Tooltip } from '../../ui/tooltip'
 import { Button } from '../../ui/button'
 import { Input } from '../../ui/input'
+import { Label } from '../../ui/label'
 import { useConfirmDialog } from '../../ui/confirm-dialog'
 import type { User } from '../../../types/api'
 import type {
@@ -51,6 +53,15 @@ interface UsersTabProps {
   /** When set (?user=<id> deep-link), pre-selects that user once loaded. */
   focusUserId?: string
 }
+
+/** Effective block state: prefers the backend-computed flag, falls back to the raw boolean. */
+const isRequestBlocked = (user: User) =>
+  user.has_active_credit_request_block ?? user.credit_requests_blocked ?? false
+
+const blockBadgeLabel = (user: User) =>
+  user.credit_requests_blocked_until
+    ? `Blocked until ${formatDate(user.credit_requests_blocked_until)}`
+    : 'Requests blocked'
 
 export function UsersTab({ focusUserId }: UsersTabProps) {
   const density = useThemeStore((state) => state.density)
@@ -83,6 +94,7 @@ export function UsersTab({ focusUserId }: UsersTabProps) {
   const [bulkMode, setBulkMode] = useState<'grant' | 'allowance'>('grant')
   const [overrideDialogOpen, setOverrideDialogOpen] = useState(false)
   const [blockReason, setBlockReason] = useState('')
+  const [blockUntil, setBlockUntil] = useState('')
 
   const setCreditRequestBlock = useSetCreditRequestBlock()
   const { confirm: confirmBlock, dialog: blockDialog } = useConfirmDialog()
@@ -165,7 +177,7 @@ export function UsersTab({ focusUserId }: UsersTabProps) {
   }, [])
 
   const handleToggleBlock = async (user: User) => {
-    if (user.credit_requests_blocked) {
+    if (isRequestBlocked(user)) {
       const confirmed = await confirmBlock({
         title: `Unblock credit requests for ${user.username}?`,
         description: 'The user can submit credit requests again.',
@@ -176,22 +188,46 @@ export function UsersTab({ focusUserId }: UsersTabProps) {
     } else {
       const confirmed = await confirmBlock({
         title: `Block credit requests for ${user.username}?`,
-        description: 'The user can no longer submit credit requests.',
+        description:
+          'The user can no longer submit credit requests. Optionally set an expiry to unblock automatically.',
         confirmLabel: 'Block Requests',
         variant: 'destructive',
         customContent: (
-          <Input
-            type="text"
-            value={blockReason}
-            onChange={(e) => setBlockReason(e.target.value)}
-            placeholder="Optional reason (internal note)"
-          />
+          <div className="space-y-3">
+            <Input
+              type="text"
+              value={blockReason}
+              onChange={(e) => setBlockReason(e.target.value)}
+              placeholder="Optional reason (internal note)"
+            />
+            <div className="space-y-1.5">
+              <Label htmlFor="block-until" className="text-xs text-muted-foreground">
+                Block until (optional — empty blocks indefinitely)
+              </Label>
+              <Input
+                id="block-until"
+                type="datetime-local"
+                value={blockUntil}
+                onChange={(e) => setBlockUntil(e.target.value)}
+              />
+            </div>
+          </div>
         ),
       })
       if (confirmed) {
         setCreditRequestBlock.mutate(
-          { userId: user.id, blocked: true, reason: blockReason.trim() || undefined },
-          { onSuccess: () => setBlockReason('') }
+          {
+            userId: user.id,
+            blocked: true,
+            reason: blockReason.trim() || undefined,
+            until: blockUntil ? new Date(blockUntil).toISOString() : null,
+          },
+          {
+            onSuccess: () => {
+              setBlockReason('')
+              setBlockUntil('')
+            },
+          }
         )
       }
     }
@@ -231,10 +267,10 @@ export function UsersTab({ focusUserId }: UsersTabProps) {
                 Low
               </span>
             )}
-            {user.credit_requests_blocked && (
+            {isRequestBlocked(user) && (
               <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-400">
                 <Ban className="w-2.5 h-2.5" />
-                Requests blocked
+                {blockBadgeLabel(user)}
               </span>
             )}
           </div>
@@ -385,25 +421,25 @@ export function UsersTab({ focusUserId }: UsersTabProps) {
                 </button>
               </Tooltip>
             )}
-            {canGrant && (
-              <Tooltip
-                content={
-                  user.credit_requests_blocked ? 'Unblock Credit Requests' : 'Block Credit Requests'
-                }
-              >
+            {canGrant &&
+              (isRequestBlocked(user) ? (
                 <button
                   onClick={() => handleToggleBlock(user)}
-                  className={cn(
-                    'p-1.5 rounded-lg transition-colors inline-flex',
-                    user.credit_requests_blocked
-                      ? 'hover:bg-emerald-500/10 text-emerald-400'
-                      : 'hover:bg-red-500/10 text-red-400'
-                  )}
+                  className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors"
                 >
-                  <Ban className="w-4 h-4" />
+                  <CircleCheck className="w-3.5 h-3.5" />
+                  Unblock
                 </button>
-              </Tooltip>
-            )}
+              ) : (
+                <Tooltip content="Block Credit Requests">
+                  <button
+                    onClick={() => handleToggleBlock(user)}
+                    className="p-1.5 rounded-lg transition-colors inline-flex hover:bg-red-500/10 text-red-400"
+                  >
+                    <Ban className="w-4 h-4" />
+                  </button>
+                </Tooltip>
+              ))}
           </div>
         )
       },
@@ -462,10 +498,10 @@ export function UsersTab({ focusUserId }: UsersTabProps) {
                   Override
                 </span>
               )}
-              {user.credit_requests_blocked && (
+              {isRequestBlocked(user) && (
                 <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-400">
                   <Ban className="w-2.5 h-2.5" />
-                  Blocked
+                  {blockBadgeLabel(user)}
                 </span>
               )}
             </div>
@@ -522,25 +558,25 @@ export function UsersTab({ focusUserId }: UsersTabProps) {
               </button>
             </Tooltip>
           )}
-          {canGrant && (
-            <Tooltip
-              content={
-                user.credit_requests_blocked ? 'Unblock Credit Requests' : 'Block Credit Requests'
-              }
-            >
+          {canGrant &&
+            (isRequestBlocked(user) ? (
               <button
                 onClick={() => handleToggleBlock(user)}
-                className={cn(
-                  'p-1.5 rounded-lg transition-colors inline-flex',
-                  user.credit_requests_blocked
-                    ? 'hover:bg-emerald-500/10 text-emerald-400'
-                    : 'hover:bg-red-500/10 text-red-400'
-                )}
+                className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors"
               >
-                <Ban className="w-4 h-4" />
+                <CircleCheck className="w-3.5 h-3.5" />
+                Unblock
               </button>
-            </Tooltip>
-          )}
+            ) : (
+              <Tooltip content="Block Credit Requests">
+                <button
+                  onClick={() => handleToggleBlock(user)}
+                  className="p-1.5 rounded-lg transition-colors inline-flex hover:bg-red-500/10 text-red-400"
+                >
+                  <Ban className="w-4 h-4" />
+                </button>
+              </Tooltip>
+            ))}
         </div>
       </div>
     )

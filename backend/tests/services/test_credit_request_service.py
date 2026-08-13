@@ -4,9 +4,11 @@
 """Tests for CreditRequestService business logic."""
 
 import uuid as uuid_mod
+from datetime import datetime, timedelta
 
 import pytest
 
+from app.core.time_utils import utc_now
 from app.services.credit_request_service import CreditRequestService
 from app.services.credit_service import CreditService
 
@@ -1176,19 +1178,85 @@ class TestCreditRequestBlock:
 
     @pytest.mark.asyncio
     async def test_unblock_re_allows_creation(self, db_session, test_user, admin_user):
-        """Unblocking restores the ability to create requests."""
+        """Unblocking restores the ability to create requests and clears both columns."""
         service = CreditRequestService(db_session)
         await service.set_request_block(
-            str(test_user.id), blocked=True, actor_id=str(admin_user.id)
+            str(test_user.id),
+            blocked=True,
+            actor_id=str(admin_user.id),
+            until=utc_now() + timedelta(hours=6),
         )
-        await service.set_request_block(
+        user = await service.set_request_block(
             str(test_user.id), blocked=False, actor_id=str(admin_user.id)
         )
+
+        assert user.credit_requests_blocked is False
+        assert user.credit_requests_blocked_until is None
+        assert user.has_active_credit_request_block is False
 
         request = await service.create_request(
             user_id=str(test_user.id), amount=10, reason="back in"
         )
         assert request.status == "pending"
+
+    @pytest.mark.asyncio
+    async def test_timeboxed_block_forbids_creation(self, db_session, test_user, admin_user):
+        """A block with a future expiry behaves like an indefinite block."""
+        service = CreditRequestService(db_session)
+        until = utc_now() + timedelta(hours=12)
+        user = await service.set_request_block(
+            str(test_user.id), blocked=True, actor_id=str(admin_user.id), until=until
+        )
+
+        assert user.credit_requests_blocked_until == until
+        assert user.has_active_credit_request_block is True
+
+        with pytest.raises(Exception) as exc_info:
+            await service.create_request(user_id=str(test_user.id), amount=10, reason="please")
+        assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_expired_block_allows_creation(self, db_session, test_user):
+        """A block whose expiry has passed expires implicitly."""
+        test_user.credit_requests_blocked = True
+        test_user.credit_requests_blocked_until = utc_now() - timedelta(hours=1)
+        await db_session.commit()
+
+        assert test_user.has_active_credit_request_block is False
+
+        service = CreditRequestService(db_session)
+        request = await service.create_request(
+            user_id=str(test_user.id), amount=10, reason="expired block"
+        )
+        assert request.status == "pending"
+
+    @pytest.mark.asyncio
+    async def test_past_until_rejected(self, db_session, test_user, admin_user):
+        """Setting a block with a past expiry returns 400."""
+        service = CreditRequestService(db_session)
+        with pytest.raises(Exception) as exc_info:
+            await service.set_request_block(
+                str(test_user.id),
+                blocked=True,
+                actor_id=str(admin_user.id),
+                until=utc_now() - timedelta(hours=1),
+            )
+        assert exc_info.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_tz_aware_until_converted_to_naive_utc(self, db_session, test_user, admin_user):
+        """A tz-aware expiry is normalized to naive UTC."""
+        from datetime import UTC
+
+        service = CreditRequestService(db_session)
+        aware = datetime.now(UTC) + timedelta(hours=3)
+        user = await service.set_request_block(
+            str(test_user.id), blocked=True, actor_id=str(admin_user.id), until=aware
+        )
+
+        assert user.credit_requests_blocked_until is not None
+        assert user.credit_requests_blocked_until.tzinfo is None
+        assert user.credit_requests_blocked_until == aware.replace(tzinfo=None)
 
     @pytest.mark.asyncio
     async def test_block_and_unblock_log_and_notify(self, db_session, test_user, admin_user):

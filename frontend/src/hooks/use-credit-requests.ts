@@ -177,14 +177,16 @@ export function useSetCreditRequestBlock() {
       userId,
       blocked,
       reason,
+      until,
     }: {
       userId: string
       blocked: boolean
       reason?: string
+      until?: string | null
     }) =>
       api.put<{ message: string; user_id: string; blocked: boolean }>(
         `/credit-requests/users/${userId}/block`,
-        { blocked, reason }
+        { blocked, reason, until }
       ),
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['users'] })

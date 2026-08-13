@@ -6,6 +6,7 @@ Credit request API endpoints with RBAC enforcement.
 Users create and view their own requests; admins review them.
 """
 
+from datetime import datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
@@ -158,6 +159,9 @@ async def bulk_review_credit_requests(
 class SetRequestBlockBody(BaseModel):
     blocked: bool = Field(..., description="Block or unblock credit requests for the user")
     reason: str | None = Field(None, max_length=2000, description="Reason for the change")
+    until: datetime | None = Field(
+        None, description="Optional block expiry (ISO 8601); omit for an indefinite block"
+    )
 
 
 @router.put("/users/{user_id}/block")
@@ -170,17 +174,23 @@ async def set_credit_request_block(
 ):
     """Block or unblock a user from creating credit requests (admin)"""
     service = CreditRequestService(db)
-    await service.set_request_block(
+    user = await service.set_request_block(
         user_id=user_id,
         blocked=body.blocked,
         actor_id=str(current_user.id),
         reason=body.reason,
+        until=body.until,
     )
     state = "blocked" if body.blocked else "unblocked"
     return {
         "message": f"Credit requests {state} for user {user_id}",
         "user_id": user_id,
         "blocked": body.blocked,
+        "until": (
+            user.credit_requests_blocked_until.isoformat()
+            if user.credit_requests_blocked_until
+            else None
+        ),
     }
 
 

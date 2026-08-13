@@ -73,6 +73,8 @@ export interface User {
   is_active: boolean
   is_verified: boolean
   credit_requests_blocked?: boolean
+  credit_requests_blocked_until?: string | null
+  has_active_credit_request_block?: boolean
   last_login?: string
   created_at?: string
   updated_at?: string

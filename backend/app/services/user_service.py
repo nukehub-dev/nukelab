@@ -273,6 +273,22 @@ class UserService:
                     )
                 user.credit_requests_blocked = blocked
 
+        # Optional expiry for the credit request block (None = indefinite
+        # when blocking, cleared when unblocking). Same gate as the flag.
+        if "credit_requests_blocked_until" in data:
+            if updated_by is None:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="An actor is required to update credit request block",
+                )
+            if user.credit_requests_blocked_until != data["credit_requests_blocked_until"]:
+                if not has_permission(updated_by, Permission.CREDITS_GRANT):
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Insufficient permissions to update credit request block",
+                    )
+                user.credit_requests_blocked_until = data["credit_requests_blocked_until"]
+
         # Time-boxed allowance override. Set by passing both
         # daily_allowance_override (int) and daily_allowance_override_until
         # (ISO datetime or None to clear). Requires CREDITS_GRANT. The

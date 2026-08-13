@@ -115,7 +115,7 @@ function CreditsSettingsPage() {
 
   const { data: openRequests } = useMyCreditRequests({ status: 'open', limit: 1 })
   const hasOpenRequest = (openRequests?.pagination.total ?? 0) > 0
-  const requestsBlocked = !!user?.credit_requests_blocked
+  const requestsBlocked = !!(user?.has_active_credit_request_block ?? user?.credit_requests_blocked)
   const { data: myRequestsData, isLoading: myRequestsLoading } = useMyCreditRequests({ limit: 5 })
   const myRequests = myRequestsData?.requests || []
 
@@ -196,7 +196,9 @@ function CreditsSettingsPage() {
           </Button>
           {requestsBlocked ? (
             <p className="text-xs text-muted-foreground">
-              Credit requests are disabled for your account
+              {user?.credit_requests_blocked_until
+                ? `Credit requests are blocked until ${formatDate(user.credit_requests_blocked_until)}`
+                : 'Credit requests are disabled for your account'}
             </p>
           ) : (
             hasOpenRequest && (

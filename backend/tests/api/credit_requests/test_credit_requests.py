@@ -785,3 +785,84 @@ class TestCreditRequestBlockAPI:
         )
         assert response.status_code == 200
         assert response.json()["credit_requests_blocked"] is True
+
+
+class TestCreditRequestBlockTimeboxedAPI:
+    """Time-boxed block via the API."""
+
+    @pytest.mark.asyncio
+    async def test_block_with_future_until(self, client, user_token, admin_token, test_user):
+        """until round-trips in the response and blocks creation."""
+        from datetime import UTC, datetime, timedelta
+
+        until = (datetime.now(UTC) + timedelta(hours=8)).isoformat()
+        response = await client.put(
+            f"/api/credit-requests/users/{test_user.id}/block",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"blocked": True, "until": until},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["blocked"] is True
+        assert data["until"] is not None
+        assert data["until"].startswith(until[:10])
+
+        response = await client.post(
+            "/api/credit-requests/",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"amount": 10, "reason": "while timeboxed"},
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_block_with_past_until_returns_400(self, client, admin_token, test_user):
+        """An expiry in the past is rejected."""
+        from datetime import UTC, datetime, timedelta
+
+        until = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+        response = await client.put(
+            f"/api/credit-requests/users/{test_user.id}/block",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"blocked": True, "until": until},
+        )
+        assert response.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_unblock_clears_until(self, client, admin_token, test_user):
+        """Unblocking clears both fields; the response shows until=null."""
+        from datetime import UTC, datetime, timedelta
+
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        await client.put(
+            f"/api/credit-requests/users/{test_user.id}/block",
+            headers=headers,
+            json={"blocked": True, "until": (datetime.now(UTC) + timedelta(hours=2)).isoformat()},
+        )
+        response = await client.put(
+            f"/api/credit-requests/users/{test_user.id}/block",
+            headers=headers,
+            json={"blocked": False},
+        )
+        assert response.status_code == 200
+        assert response.json()["blocked"] is False
+        assert response.json()["until"] is None
+
+    @pytest.mark.asyncio
+    async def test_auth_me_exposes_block_fields(self, client, user_token, admin_token, test_user):
+        """/auth/me carries the flag, expiry, and computed active state."""
+        from datetime import UTC, datetime, timedelta
+
+        await client.put(
+            f"/api/credit-requests/users/{test_user.id}/block",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"blocked": True, "until": (datetime.now(UTC) + timedelta(hours=4)).isoformat()},
+        )
+
+        response = await client.get(
+            "/api/auth/me", headers={"Authorization": f"Bearer {user_token}"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["credit_requests_blocked"] is True
+        assert data["credit_requests_blocked_until"] is not None
+        assert data["has_active_credit_request_block"] is True

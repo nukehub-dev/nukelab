@@ -465,14 +465,17 @@ class NotificationService:
         )
 
     async def credit_request_block_changed(
-        self, user_id, blocked: bool, reason: str | None = None
+        self, user_id, blocked: bool, reason: str | None = None, until=None
     ) -> Notification | None:
         """Notify user that their ability to create credit requests changed."""
         if blocked:
             title = "Credit Requests Blocked"
             msg = "Your ability to request credits has been disabled."
+            if until:
+                expiry = until.strftime("%Y-%m-%d %H:%M UTC")
+                msg = f"Your ability to request credits has been disabled until {expiry}."
             if reason:
-                msg = f"Your ability to request credits has been disabled: {reason}"
+                msg = f"{msg} Reason: {reason}"
             severity = "warning"
         else:
             title = "Credit Requests Unblocked"

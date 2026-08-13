@@ -13,7 +13,7 @@ request flips it to ``needs_info``; the requester posting flips it back to
 """
 
 import uuid
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -110,10 +110,11 @@ class CreditRequestService:
         (credits_auto_approve_max, 0 = off) are approved immediately.
         """
         # Per-user block: an admin can disable credit requests for an
-        # account. Checked before everything else, including validation.
+        # account (optionally time-boxed; expiry is implicit). Checked
+        # before everything else, including validation.
         result = await self.db.execute(select(User).where(User.id == uuid.UUID(user_id)))
         user = result.scalar_one_or_none()
-        if user is not None and user.credit_requests_blocked:
+        if user is not None and user.has_active_credit_request_block:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Credit requests are disabled for your account",
@@ -840,13 +841,20 @@ class CreditRequestService:
         return results
 
     async def set_request_block(
-        self, user_id: str, blocked: bool, actor_id: str, reason: str | None = None
+        self,
+        user_id: str,
+        blocked: bool,
+        actor_id: str,
+        reason: str | None = None,
+        until: datetime | None = None,
     ) -> User:
         """Block or unblock a user from creating credit requests (admin).
 
-        Flips users.credit_requests_blocked via UserService (which enforces
-        CREDITS_GRANT on the actor), audit-logs the change, and notifies
-        the user both ways.
+        Blocking sets the flag plus an optional expiry (``until``); the
+        block then expires implicitly — has_active_credit_request_block
+        reads utc_now(), no cleanup task. Unblocking clears BOTH fields.
+        Flips the columns via UserService (which enforces CREDITS_GRANT on
+        the actor), audit-logs the change, and notifies the user both ways.
         """
         from app.services.user_service import UserService
 
@@ -858,9 +866,23 @@ class CreditRequestService:
                 detail=f"Actor {actor_id} not found",
             )
 
+        # Normalize the expiry to naive UTC (codebase convention) and
+        # require it to be in the future when blocking.
+        if until is not None:
+            if until.tzinfo is not None:
+                until = until.astimezone(UTC).replace(tzinfo=None)
+            if blocked and until <= utc_now():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Block expiry must be in the future",
+                )
+
         user = await UserService(self.db).update_user(
             user_id=user_id,
-            data={"credit_requests_blocked": blocked},
+            data={
+                "credit_requests_blocked": blocked,
+                "credit_requests_blocked_until": until if blocked else None,
+            },
             updated_by=actor,
         )
 
@@ -869,13 +891,18 @@ class CreditRequestService:
             target_type="user",
             target_id=user_id,
             actor_id=actor_id,
-            details={"blocked": blocked, "reason": reason},
+            details={
+                "blocked": blocked,
+                "reason": reason,
+                "until": until.isoformat() if (blocked and until) else None,
+            },
         )
 
         await NotificationService(self.db).credit_request_block_changed(
             user_id=user.id,
             blocked=blocked,
             reason=reason,
+            until=until if blocked else None,
         )
 
         return user
