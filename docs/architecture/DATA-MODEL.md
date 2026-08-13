@@ -43,6 +43,8 @@ class User:
     max_servers: int
     nuke_balance: int
     daily_allowance: int
+    credit_requests_blocked: bool      # Admin block on submitting credit requests
+    credit_requests_blocked_until: datetime | None  # Expiry for automatic unblock; NULL = indefinite
     last_nuke_reset: datetime
     profile: dict              # Avatar, timezone, department, etc.
     preferences: dict          # Theme, language, defaults
@@ -202,12 +204,51 @@ class CreditTransaction:
     user_id: UUID
     amount: int                 # Positive = credit, negative = debit
     balance_after: int
-    type: str                   # daily_allowance, server_usage, admin_grant, purchase, refund
+    type: str                   # daily_allowance, server_usage, admin_grant, admin_deduct, purchase, refund
     description: str
     server_id: UUID
     plan_id: UUID
     actor_id: UUID
     metadata: dict
+```
+
+## Credit Request
+
+A user's request for credits, reviewed by an admin. At most one open
+(`pending`/`needs_info`) request per user, enforced by a partial unique
+index. Approving a `top_up` request grants credits as an `admin_grant`
+ledger transaction tagged `source="credit_request"` in metadata; approving
+an `allowance` request sets the user's base `daily_allowance` instead (no
+ledger entry). Open requests past 24h trigger hourly reviewer reminders
+(throttled to one per request per 24h).
+
+```python
+class CreditRequest:
+    id: UUID
+    user_id: UUID
+    amount: int
+    reason: str
+    request_type: str          # top_up, allowance
+    status: str                # pending, needs_info, approved, rejected, cancelled
+    reviewed_by: UUID
+    review_note: str
+    granted_amount: int
+    transaction_id: UUID       # Plain column, no FK (ledger is range-partitioned)
+    created_at: datetime
+    reviewed_at: datetime
+```
+
+Discussion between requester and reviewers lives in a message thread;
+internal notes are hidden from the requester:
+
+```python
+class CreditRequestMessage:
+    id: UUID
+    request_id: UUID
+    author_id: UUID            # Nullable (SET NULL) so threads survive account deletion
+    body: str
+    is_internal: bool          # Reviewer-only note; no requester notification
+    created_at: datetime
 ```
 
 ## Audit Log

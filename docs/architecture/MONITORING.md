@@ -222,11 +222,11 @@ Grafana alerting can be configured through the UI or via provisioning files in
 - **High error rate**: `rate(nukelab_http_requests_total{status_code=~"5.."}[1m]) /
   rate(nukelab_http_requests_total[1m]) > 0.05`
 
-- **High p99 latency**: `histogram_quantile(0.99,
-  sum(rate(nukelab_http_request_duration_seconds_bucket{path!~"/api/servers/{server_id}/(start|stop|restart)"}[5m]))
-  by (le)) > 1.0` — container lifecycle endpoints (start/stop/restart) are
-  excluded because they legitimately take seconds waiting on the container
-  runtime.
+- **High p99 latency**: `histogram_quantile(0.99, sum(rate(...) by (le))) > 1.0`
+  over all non-server paths plus every GET — server *write* endpoints
+  (create/update/delete/start/stop/restart) are excluded because they
+  legitimately take seconds waiting on the container runtime and readiness
+  probes. The method-aware filter keeps the busy server-list GET in the SLI.
 
 ---
 
@@ -300,10 +300,12 @@ Included alert rules live in `monitoring/prometheus/rules/nukelab.yml`:
 | Alert | Trigger |
 |-------|---------|
 | `NukeLabHighErrorRate` | 5xx rate > 5% for 2 minutes |
-| `NukeLabHighLatency` | p99 latency > 1s for 3 minutes (excludes server start/stop/restart, which legitimately take seconds) |
+| `NukeLabHighLatency` | p99 latency > 1s for 3 minutes (excludes server write endpoints — create/update/delete/start/stop/restart wait on the container runtime; read endpoints stay in the SLI) |
 | `NukeLabTargetDown` | backend scrape target down for 1 minute |
+| `NukeLabContainerStatusLookupFailures` | container runtime status lookups failing for 2 minutes (servers could appear stopped while still running) |
 | `NukeLabPostgresConnectionsHigh` | Postgres connections > 80% of max |
 | `NukeLabRedisMemoryHigh` | Redis memory > 85% of max |
+| `NukeLabRedisMaxMemoryNotSet` | Redis has no `maxmemory` limit configured |
 
 ---
 
