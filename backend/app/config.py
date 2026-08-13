@@ -217,6 +217,12 @@ class Settings(BaseSettings):
     container_readiness_timeout: int = 60  # seconds
     container_readiness_interval: float = 1.0  # seconds between probes
 
+    # Internal URL the backend uses to verify that Traefik has picked up a new
+    # server route before reporting status=running. Should point to Traefik's
+    # load-balancer port inside the container network (e.g. http://traefik:80).
+    # Leave empty to skip the Traefik readiness probe.
+    traefik_internal_url: str = "http://traefik:80"
+
     registration_enabled: bool = True
     max_servers_per_user: int = 10
 

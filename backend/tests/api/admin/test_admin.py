@@ -1703,3 +1703,71 @@ class TestCreditsGrantBulk:
         data = response.json()
         assert len(data["results"]["failed"]) == 1
         assert "payment gateway down" in data["results"]["failed"][0]["error"].lower()
+
+
+class TestAdminCreditRequestSettings:
+    """Auto-approve threshold and request cooldown admin endpoints."""
+
+    @pytest.mark.asyncio
+    async def test_get_and_update_auto_approve_max(self, client, admin_token):
+        """Admin should read and update the auto-approve threshold."""
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        response = await client.get("/api/admin/credits/auto-approve-max", headers=headers)
+        assert response.status_code == 200
+        assert "auto_approve_max" in response.json()
+
+        response = await client.put(
+            "/api/admin/credits/auto-approve-max", headers=headers, json={"amount": 250}
+        )
+        assert response.status_code == 200
+        assert "250" in response.json()["message"]
+
+        response = await client.get("/api/admin/credits/auto-approve-max", headers=headers)
+        assert response.json()["auto_approve_max"] == 250
+
+        # Reset to off so other tests are unaffected
+        await client.put("/api/admin/credits/auto-approve-max", headers=headers, json={"amount": 0})
+
+    @pytest.mark.asyncio
+    async def test_auto_approve_max_requires_admin(self, client, user_token):
+        """Non-admin users should be forbidden."""
+        headers = {"Authorization": f"Bearer {user_token}"}
+        response = await client.get("/api/admin/credits/auto-approve-max", headers=headers)
+        assert response.status_code == 403
+        response = await client.put(
+            "/api/admin/credits/auto-approve-max", headers=headers, json={"amount": 250}
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_get_and_update_request_cooldown_hours(self, client, admin_token):
+        """Admin should read and update the post-rejection cooldown window."""
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        response = await client.get("/api/admin/credits/request-cooldown-hours", headers=headers)
+        assert response.status_code == 200
+        assert "request_cooldown_hours" in response.json()
+
+        response = await client.put(
+            "/api/admin/credits/request-cooldown-hours", headers=headers, json={"hours": 48}
+        )
+        assert response.status_code == 200
+        assert "48" in response.json()["message"]
+
+        response = await client.get("/api/admin/credits/request-cooldown-hours", headers=headers)
+        assert response.json()["request_cooldown_hours"] == 48
+
+        # Reset to off so other tests are unaffected
+        await client.put(
+            "/api/admin/credits/request-cooldown-hours", headers=headers, json={"hours": 0}
+        )
+
+    @pytest.mark.asyncio
+    async def test_request_cooldown_hours_requires_admin(self, client, user_token):
+        """Non-admin users should be forbidden."""
+        headers = {"Authorization": f"Bearer {user_token}"}
+        response = await client.get("/api/admin/credits/request-cooldown-hours", headers=headers)
+        assert response.status_code == 403
+        response = await client.put(
+            "/api/admin/credits/request-cooldown-hours", headers=headers, json={"hours": 48}
+        )
+        assert response.status_code == 403

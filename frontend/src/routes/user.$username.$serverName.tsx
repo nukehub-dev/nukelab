@@ -54,7 +54,8 @@ async function getServerAccessToken(serverId: string, reason?: string): Promise<
 async function ensureServiceWorkerUpdated(): Promise<void> {
   // Browsers with a stale service worker may serve the cached SPA shell for
   // /user/ routes instead of letting the request reach the terminal container.
-  // Force an update and activate any waiting worker before we navigate.
+  // Force an update and wait for the new worker to activate and claim this
+  // client before we navigate.
   if (!('serviceWorker' in navigator)) return
   try {
     // navigator.serviceWorker.ready never resolves when no worker is
@@ -62,12 +63,46 @@ async function ensureServiceWorkerUpdated(): Promise<void> {
     // so check for a registration first instead of awaiting it blindly.
     const registration = await navigator.serviceWorker.getRegistration()
     if (!registration) return
-    await registration.update()
-    if (registration.waiting) {
-      registration.waiting.postMessage({ type: 'SKIP_WAITING' })
-      // Give the new worker a moment to activate and claim this client.
-      await new Promise((resolve) => setTimeout(resolve, 300))
+
+    const skipWaiting = (worker: ServiceWorker | null): void => {
+      if (worker) {
+        worker.postMessage({ type: 'SKIP_WAITING' })
+      }
     }
+
+    // If a worker is already waiting, activate it immediately.
+    skipWaiting(registration.waiting)
+
+    await new Promise<void>((resolve) => {
+      const timeout = setTimeout(() => resolve(), 2000)
+
+      const onStateChange = (worker: ServiceWorker): void => {
+        if (worker.state === 'activated') {
+          clearTimeout(timeout)
+          resolve()
+        }
+      }
+
+      registration.addEventListener('updatefound', () => {
+        const worker = registration.installing
+        if (!worker) return
+        skipWaiting(worker)
+        worker.addEventListener('statechange', () => onStateChange(worker))
+      })
+
+      // A worker may already be installing after registration.update() resolves.
+      if (registration.installing) {
+        skipWaiting(registration.installing)
+        registration.installing.addEventListener('statechange', () =>
+          onStateChange(registration.installing!)
+        )
+      }
+
+      registration.update().catch(() => {
+        clearTimeout(timeout)
+        resolve()
+      })
+    })
   } catch {
     // Best-effort; don't block navigation if the SW API misbehaves.
   }
@@ -657,20 +692,11 @@ function ServerGatewayPage() {
   useActivityHeartbeat(server?.id, server?.status === 'running')
 
   // When server transitions to running, get access token and redirect.
-  // Wait for health_status === 'healthy' first (capped at 15s) so the
-  // one-shot redirect does not land on a transient 503 while Traefik
-  // routing and in-container app startup are still settling.
+  // The backend spawner already waits for both the container's /health endpoint
+  // and the Traefik route before reporting status=running, so we can redirect
+  // immediately.
   useEffect(() => {
     if (server?.status !== 'running') return
-    if (startTimeRef.current === null) startTimeRef.current = Date.now()
-
-    const waitedMs = Date.now() - startTimeRef.current
-    if (server.health_status !== 'healthy' && waitedMs < 15000) {
-      const interval = setInterval(() => {
-        queryClient.invalidateQueries({ queryKey: ['server-by-path', username, serverName] })
-      }, 2000)
-      return () => clearInterval(interval)
-    }
 
     const redirectKey = `server-redirect-${server.id}`
     const alreadyRedirected = sessionStorage.getItem(redirectKey)
@@ -702,20 +728,11 @@ function ServerGatewayPage() {
       }
     }
 
-    const timeout = setTimeout(() => {
-      getAccessTokenAndRedirect()
-    }, 1000)
-    return () => clearTimeout(timeout)
-  }, [
-    server?.status,
-    server?.id,
-    server?.external_url,
-    server?.health_status,
-    isOwnServer,
-    queryClient,
-    username,
-    serverName,
-  ])
+    // The backend now waits for the Traefik route before reporting
+    // status=running, so we can navigate as soon as we have a token and the
+    // service worker is up to date.
+    getAccessTokenAndRedirect()
+  }, [server?.status, server?.id, server?.external_url, isOwnServer, username, serverName])
 
   const handleStart = useCallback(async () => {
     if (!server) return

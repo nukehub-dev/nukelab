@@ -298,7 +298,8 @@ class TestServerStop:
 
     @pytest.mark.asyncio
     async def test_stop_container_unknown(self, client, user_token, action_server, db_session):
-        """Stopping server with unknown container status should remove the container."""
+        """A failed runtime status lookup must NOT mark the server stopped —
+        the container may still be running, so the API refuses with 503."""
         action_server.container_id = "unknown-cid"
         action_server.status = "running"
         await db_session.commit()
@@ -311,9 +312,9 @@ class TestServerStop:
                 f"/api/servers/{action_server.id}/stop",
                 headers={"Authorization": f"Bearer {user_token}"},
             )
-        assert response.status_code == 200
-        data = response.json()
-        assert "stopped" in data["message"].lower()
+        assert response.status_code == 503
+        await db_session.refresh(action_server)
+        assert action_server.status == "running"
 
     @pytest.mark.asyncio
     async def test_stop_server_clears_expires_at(

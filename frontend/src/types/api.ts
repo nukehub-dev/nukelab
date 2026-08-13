@@ -72,6 +72,9 @@ export interface User {
   has_active_allowance_override?: boolean
   is_active: boolean
   is_verified: boolean
+  credit_requests_blocked?: boolean
+  credit_requests_blocked_until?: string | null
+  has_active_credit_request_block?: boolean
   last_login?: string
   created_at?: string
   updated_at?: string
@@ -174,6 +177,56 @@ export interface CreditSummary {
 
 export interface CreditHistoryResponse {
   transactions: CreditTransaction[]
+  pagination: {
+    page: number
+    limit: number
+    total: number
+    total_pages: number
+  }
+}
+
+export interface CreditRequest {
+  id: string
+  user_id: string
+  username?: string
+  email?: string
+  amount: number
+  reason: string
+  request_type: 'top_up' | 'allowance'
+  status: 'pending' | 'needs_info' | 'approved' | 'rejected' | 'cancelled'
+  review_note: string | null
+  granted_amount: number | null
+  created_at: string
+  reviewed_at: string | null
+}
+
+export interface CreditRequestMessage {
+  id: string
+  request_id: string
+  author_id: string
+  author_username: string
+  body: string
+  is_admin: boolean
+  is_internal: boolean
+  created_at: string
+}
+
+export interface CreditRequestStats {
+  counts: {
+    pending: number
+    needs_info: number
+    approved: number
+    rejected: number
+    cancelled: number
+  }
+  decided: number
+  approval_rate: number
+  avg_decision_hours: number
+  oldest_open_hours: number
+}
+
+export interface CreditRequestListResponse {
+  requests: CreditRequest[]
   pagination: {
     page: number
     limit: number

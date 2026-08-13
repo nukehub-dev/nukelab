@@ -83,11 +83,11 @@ class ContainerDriver(ABC):
 
     @abstractmethod
     async def stop_container(self, container_id: str, timeout: int = 30):
-        """Stop a container."""
+        """Stop a container. Raises ContainerDriverError on runtime failure."""
 
     @abstractmethod
     async def delete_container(self, container_id: str, force: bool = True):
-        """Delete a container (best-effort; errors are swallowed)."""
+        """Delete a container. Raises ContainerDriverError on runtime failure."""
 
     @abstractmethod
     async def get_container_info(self, container_id: str) -> dict:
@@ -112,8 +112,16 @@ class ContainerDriver(ABC):
         health_url: str,
         timeout: int | None = None,
         interval: float | None = None,
+        body_contains: str | None = None,
     ) -> bool:
-        """Wait until the container responds successfully on health_url."""
+        """Wait until the container responds successfully on health_url.
+
+        Args:
+            body_contains: If set, the response body must contain this string
+                (case-sensitive) for the probe to be considered successful.
+                Useful to distinguish the container's /health body from a
+                fallback SPA shell served by the reverse proxy.
+        """
 
     @abstractmethod
     async def list_containers(self, filters: dict | None = None) -> list[dict]:

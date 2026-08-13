@@ -15,6 +15,7 @@ RUN apt-get update && \
         ffmpeg \
         libx11-dev \
         libxkbfile-dev \
+        libsecret-1-dev \
         xvfb \
         && \
     # Remove downloaded package files to reduce the final image size.
@@ -47,14 +48,16 @@ RUN conda install -y -c conda-forge nodejs=${NODE_VERSION} yarn=1.22.22 && \
 # so node/yarn/python from /opt/conda/bin are on PATH.
 COPY conda-base.sh /etc/profile.d/nukelab-conda-base.sh
 
-# Install and build the nuke-ide extension
+# Install and build the nuke-ide extension.
+# NUKE_EXTENSIONS=all opts into nukelab-integration, which nuke-ide excludes
+# from builds by default (it is NukeLab-only; see scripts/with-extension-set.js).
 RUN cd /opt && \
     git clone https://github.com/nukehub-dev/nuke-ide.git && \
     cd nuke-ide && \
     export PUPPETEER_SKIP_DOWNLOAD=true && \
     yarn && \
     yarn download:plugins && \
-    yarn build:browser
+    NUKE_EXTENSIONS=all yarn build:browser
 
 # Set the Theia webview endpoint for rendering notebook outputs
 ENV THEIA_WEBVIEW_EXTERNAL_ENDPOINT={{hostname}}

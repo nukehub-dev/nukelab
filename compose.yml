@@ -159,6 +159,7 @@ services:
             - REDIS_PASSWORD=${REDIS_PASSWORD:-}
             - REDIS_DB=${REDIS_DB:-0}
             - DOCKER_NETWORK=${DOCKER_NETWORK:-nukelab-network}
+            - TRAEFIK_INTERNAL_URL=${TRAEFIK_INTERNAL_URL:-http://traefik:80}
             - LOG_LEVEL=${LOG_LEVEL:-INFO}
             - LOG_FORMAT=${LOG_FORMAT:-json}
             - DEV_RELOAD=${DEV_RELOAD:-true}

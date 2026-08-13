@@ -356,7 +356,13 @@ class CreditService:
             return f"{secs}s"
 
     async def grant_credits(
-        self, user_id: str, amount: int, actor_id: str, reason: str
+        self,
+        user_id: str,
+        amount: int,
+        actor_id: str,
+        reason: str,
+        source: str = "admin_panel",
+        meta_extra: dict | None = None,
     ) -> CreditTransaction:
         """Grant credits to a user (admin action)"""
         return await self._create_transaction(
@@ -365,7 +371,7 @@ class CreditService:
             transaction_type="admin_grant",
             description=f"Admin grant: {reason}",
             actor_id=actor_id,
-            meta={"reason": reason, "source": "admin_panel"},
+            meta={"reason": reason, "source": source, **(meta_extra or {})},
         )
 
     async def deduct_credits(

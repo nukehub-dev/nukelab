@@ -1328,23 +1328,26 @@ class TestRestartServerCoverage:
 
 class TestDeleteServerCoverage:
     @pytest.mark.asyncio
-    async def test_delete_container_failure_is_swallowed(
+    async def test_delete_container_failure_aborts_delete(
         self, client, user_token, cov_server, db_session
     ):
+        """A failed container delete must abort the server delete — otherwise
+        the container is orphaned while the DB row disappears."""
         cov_server.container_id = "cid-del-fail"
         await db_session.commit()
 
         with mock.patch(
             "app.api.servers.spawner.delete",
-            new=mock.AsyncMock(side_effect=Exception("delete boom")),
+            new=mock.AsyncMock(return_value=False),
         ):
             response = await client.delete(
                 f"/api/servers/{cov_server.id}",
                 headers={"Authorization": f"Bearer {user_token}"},
             )
 
-        assert response.status_code == 200
-        assert response.json()["message"] == "Server deleted"
+        assert response.status_code == 503
+        await db_session.refresh(cov_server)
+        assert cov_server.container_id == "cid-del-fail"
 
 
 # ── PATCH /{id} GPU re-reservation + misc ────────────────────────────────────

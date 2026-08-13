@@ -221,6 +221,24 @@ class TestProcessNukeBillingExtra:
             result = _run_task(process_nuke_billing, db)
         assert "stopped 0 servers" in result
 
+    def test_depletion_delete_false_keeps_server_running(self):
+        """spawner.delete returning False means the container may still run —
+        the server must NOT be marked stopped (Platform Overview vs live
+        metrics divergence regression)."""
+        server, plan = self._server_plan()
+        db = self._rows_db([(server, plan)], 0)
+        with (
+            mock.patch("app.config.settings.server_auto_stop_on_depletion", True),
+            mock.patch(
+                "app.container.spawner.spawner.delete",
+                new=mock.AsyncMock(return_value=False),
+            ),
+        ):
+            result = _run_task(process_nuke_billing, db)
+        assert "stopped 0 servers" in result
+        assert server.status == "running"
+        assert server.container_id == "cid-1"
+
     def test_minimum_one_credit_billed(self):
         # cost_per_hour=3 -> int(3 * 0.25) == 0 -> minimum 1 credit
         server, plan = self._server_plan(cost=3)
@@ -268,6 +286,32 @@ class TestEnforceAutoStopExtra:
             result = _run_task(enforce_auto_stop, db)
         assert "Stopped 0 servers" in result
         assert server.status == "running"
+
+    def test_delete_false_keeps_server_running(self):
+        """spawner.delete returning False means the container may still run —
+        the server must NOT be marked stopped (the 'max_runtime_exceeded'
+        Platform Overview vs live metrics divergence regression)."""
+        server = mock.Mock()
+        server.user_id = uuid.uuid4()
+        server.id = uuid.uuid4()
+        server.container_id = "cid-1"
+        server.status = "running"
+        server.name = "srv"
+        server.expires_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=5)
+
+        db = _make_db()
+        res = mock.Mock()
+        res.scalars.return_value.all.return_value = [server]
+        db.execute = mock.AsyncMock(return_value=res)
+
+        with mock.patch(
+            "app.container.spawner.spawner.delete",
+            new=mock.AsyncMock(return_value=False),
+        ):
+            result = _run_task(enforce_auto_stop, db)
+        assert "Stopped 0 servers" in result
+        assert server.status == "running"
+        assert server.container_id == "cid-1"
 
 
 # ── process_server_queue success / GPU paths ─────────────────
@@ -909,6 +953,27 @@ class TestEnforceVolumeQuotasBranches:
         # Runtime already stopped: no delete call, just state fixup.
         mock_delete.assert_not_called()
 
+    def test_over_limit_with_unknown_runtime_is_skipped(self):
+        """A failed runtime status lookup must NOT mark the server stopped —
+        the container may still be running (Platform Overview vs live metrics
+        divergence regression)."""
+        volume = mock.Mock()
+        volume.name = "vol-1"
+        volume.display_name = None
+        volume.max_size_bytes = None
+        volume.owner_id = uuid.uuid4()
+        server, plan, user, db = self._make_fixtures(volume)  # plan_id None
+
+        result, mock_delete, _ = self._run_enforce(
+            db, parse=10, measure=(20, "xfs"), get_status="unknown"
+        )
+
+        assert result == "Stopped 0 servers, warned 0 volumes (XFS=1 du=0)"
+        assert volume.status == "over_limit"
+        assert server.status == "running"
+        assert server.container_id == "cid-1"
+        mock_delete.assert_not_called()
+
     def test_unmeasurable_volume_is_skipped(self):
         volume = mock.Mock()
         volume.name = "vol-1"
@@ -933,6 +998,52 @@ class TestEnforceVolumeQuotasBranches:
         assert result == "Stopped 0 servers, warned 1 volumes (XFS=0 du=1)"
         mock_notif.return_value.volume_near_limit.assert_awaited_once()
         assert mock_notif.return_value.volume_near_limit.await_args.kwargs["usage_pct"] == 95
+
+    def test_delete_false_keeps_server_running(self):
+        """spawner.delete returning False means the container may still run —
+        the server must NOT be marked stopped (Platform Overview vs live
+        metrics divergence regression)."""
+        volume = mock.Mock()
+        volume.name = "vol-1"
+        volume.display_name = "data"
+        volume.max_size_bytes = 100
+        volume.owner_id = uuid.uuid4()
+        server, plan, user, db = self._make_fixtures(volume)
+
+        (
+            p_vs,
+            p_xfs,
+            p_get_status,
+            p_delete,
+            p_credit,
+            p_quota,
+            p_notif,
+            p_broadcast,
+            p_release,
+        ) = self._patches()
+        with (
+            p_vs as mock_vs,
+            p_xfs as mock_xfs,
+            p_get_status as mock_get_status,
+            p_delete as mock_delete,
+            p_credit,
+            p_quota,
+            p_notif,
+            p_broadcast,
+            p_release,
+        ):
+            inst = mock_vs.return_value
+            inst._parse_memory = mock.Mock(return_value=10**9)
+            inst._human_size = mock.Mock(side_effect=lambda b: f"{b}B")
+            inst.measure_volume_size = mock.AsyncMock(return_value=(200, "xfs"))
+            mock_xfs._xfs_quota_available = mock.Mock(return_value=True)
+            mock_get_status.return_value = "running"
+            mock_delete.return_value = False
+            result = _run_task(enforce_volume_quotas, db)
+
+        assert result == "Stopped 0 servers, warned 0 volumes (XFS=1 du=0)"
+        assert server.status == "running"
+        assert server.container_id == "cid-1"
 
     def test_stop_failure_is_caught(self):
         volume = mock.Mock()

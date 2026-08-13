@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 import { cn } from '../../lib/utils'
+import { Tooltip } from '../ui/tooltip'
 
 export interface Segment {
   label: string
@@ -32,22 +33,22 @@ export function SegmentedBar({
         {segments.map((segment) => {
           const pct = computedTotal > 0 ? (segment.value / computedTotal) * 100 : 0
           return (
-            <div
+            <Tooltip
               key={segment.label}
-              className="relative flex items-center justify-center transition-all duration-500"
-              style={{
+              content={`${segment.label}: ${segment.value}`}
+              wrapperClassName="relative flex items-center justify-center transition-all duration-500"
+              wrapperStyle={{
                 width: `${pct}%`,
                 backgroundColor: segment.color,
                 minWidth: segment.value > 0 ? 4 : 0,
               }}
-              title={`${segment.label}: ${segment.value}`}
             >
               {pct > 15 && (
                 <span className="text-xs font-semibold text-white drop-shadow-sm">
                   {segment.value}
                 </span>
               )}
-            </div>
+            </Tooltip>
           )
         })}
       </div>

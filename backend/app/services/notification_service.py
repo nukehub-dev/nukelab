@@ -34,6 +34,12 @@ EVENT_KEY_MAP = {
     "server_backup_completed": "server_backup_completed",
     "credits_granted": "credit_granted",
     "credits_deducted": "credit_low",
+    "credit_request_rejected": "credit_request",
+    "credit_request_created": "credit_request",
+    "credit_request_message": "credit_request",
+    "credit_request_allowance_approved": "credit_request",
+    "credit_request_stale_reminder": "credit_request",
+    "credit_request_block_changed": "credit_request",
     "daily_allowance": "daily_allowance",
     "low_balance": "credit_low",
     "workspace_invitation": "workspace_invite",
@@ -414,6 +420,116 @@ class NotificationService:
             type="credit",
             severity="warning",
             event_key="credit_low",
+        )
+
+    async def credit_request_rejected(
+        self, user_id, amount: int, note: str | None = None
+    ) -> Notification | None:
+        """Notify user that their credit request was rejected."""
+        msg = f"Your request for {amount} NUKE credits was rejected."
+        if note:
+            msg = f"Your request for {amount} NUKE credits was rejected: {note}"
+        return await self.create(
+            user_id=user_id,
+            title="Credit Request Rejected",
+            message=msg,
+            type="credit",
+            severity="info",
+            event_key="credit_request",
+        )
+
+    async def credit_request_created(
+        self, user_id, amount: int, reason: str
+    ) -> Notification | None:
+        """Notify a reviewer that a new credit request was submitted."""
+        return await self.create(
+            user_id=user_id,
+            title="New Credit Request",
+            message=f"A user requested {amount} NUKE credits: {reason}",
+            type="credit",
+            severity="info",
+            event_key="credit_request",
+        )
+
+    async def credit_request_allowance_approved(
+        self, user_id, allowance: int
+    ) -> Notification | None:
+        """Notify user that their allowance request was approved."""
+        return await self.create(
+            user_id=user_id,
+            title="Credit Request Approved",
+            message=f"Your daily allowance has been set to {allowance} NUKE credits per day.",
+            type="credit",
+            severity="success",
+            event_key="credit_request",
+        )
+
+    async def credit_request_block_changed(
+        self, user_id, blocked: bool, reason: str | None = None, until=None
+    ) -> Notification | None:
+        """Notify user that their ability to create credit requests changed."""
+        if blocked:
+            title = "Credit Requests Blocked"
+            msg = "Your ability to request credits has been disabled."
+            if until:
+                expiry = until.strftime("%Y-%m-%d %H:%M UTC")
+                msg = f"Your ability to request credits has been disabled until {expiry}."
+            if reason:
+                msg = f"{msg} Reason: {reason}"
+            severity = "warning"
+        else:
+            title = "Credit Requests Unblocked"
+            msg = "Your ability to request credits has been restored."
+            if reason:
+                msg = f"Your ability to request credits has been restored: {reason}"
+            severity = "info"
+        return await self.create(
+            user_id=user_id,
+            title=title,
+            message=msg,
+            type="credit",
+            severity=severity,
+            event_key="credit_request",
+        )
+
+    async def credit_request_stale_reminder(
+        self, user_id, amount: int, requester_username: str, age_hours: int, request_id: str
+    ) -> Notification | None:
+        """Remind a reviewer about a stale open credit request.
+
+        The extra_data carries a distinct inner event_key
+        ("credit_request_stale") plus the request_id so the reminder
+        throttle can find prior reminders for the same request. The inner
+        key overrides the preference channel key in merged extra_data; the
+        preference lookup itself uses the outer "credit_request" key.
+        """
+        return await self.create(
+            user_id=user_id,
+            title="Stale Credit Request",
+            message=(
+                f"The credit request from {requester_username} for {amount} NUKE "
+                f"credits has been waiting for {age_hours} hours."
+            ),
+            type="credit",
+            severity="warning",
+            event_key="credit_request",
+            extra_data={"event_key": "credit_request_stale", "request_id": request_id},
+        )
+
+    async def credit_request_message(
+        self, user_id, amount: int, preview: str
+    ) -> Notification | None:
+        """Notify the counterpart of a new message on a credit request."""
+        msg = f"New message on the credit request for {amount} NUKE credits."
+        if preview:
+            msg = f"New message on the credit request for {amount} NUKE credits: {preview}"
+        return await self.create(
+            user_id=user_id,
+            title="Credit Request Update",
+            message=msg,
+            type="credit",
+            severity="info",
+            event_key="credit_request",
         )
 
     async def daily_allowance(self, user_id, amount: int, new_balance: int) -> Notification | None:

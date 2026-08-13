@@ -61,6 +61,12 @@ class User(Base):
     is_verified = Column(Boolean, default=False)
     email_verified_at = Column(DateTime, nullable=True)
 
+    # When true, the user cannot create credit requests (admin-imposed block).
+    credit_requests_blocked = Column(Boolean, default=False)
+    # Optional expiry for the block; NULL = indefinite. Expiry is implicit
+    # (has_active_credit_request_block reads utc_now()) — no cleanup task.
+    credit_requests_blocked_until = Column(DateTime, nullable=True)
+
     # Audit
     last_login = Column(DateTime, nullable=True)
     login_count = Column(Integer, default=0)
@@ -121,6 +127,18 @@ class User(Base):
         )
 
     @property
+    def has_active_credit_request_block(self) -> bool:
+        """True iff the credit request block is currently in effect.
+
+        The block expires implicitly when credit_requests_blocked_until
+        passes; reads utc_now() so no cleanup task is needed.
+        """
+        return bool(self.credit_requests_blocked) and (
+            self.credit_requests_blocked_until is None
+            or self.credit_requests_blocked_until > utc_now()
+        )
+
+    @property
     def effective_daily_allowance(self) -> int:
         """The allowance amount actually used at grant time.
 
@@ -178,6 +196,13 @@ class User(Base):
             "oauth_provider": self.oauth_provider,
             "is_active": self.is_active,
             "is_verified": self.is_verified,
+            "credit_requests_blocked": self.credit_requests_blocked,
+            "credit_requests_blocked_until": (
+                self.credit_requests_blocked_until.isoformat()
+                if self.credit_requests_blocked_until
+                else None
+            ),
+            "has_active_credit_request_block": self.has_active_credit_request_block,
             "last_login": self.last_login.isoformat() if self.last_login else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

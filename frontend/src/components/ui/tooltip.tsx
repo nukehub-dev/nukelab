@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
 // SPDX-License-Identifier: BSD-2-Clause
 
-import { useState, useRef, useCallback, useEffect, type ReactNode } from 'react'
+import { useState, useRef, useCallback, useEffect, type CSSProperties, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { cn } from '../../lib/utils'
 
@@ -13,6 +13,10 @@ interface TooltipProps {
   position?: TooltipPosition
   delay?: number
   className?: string
+  /** Extra classes for the trigger wrapper span (default layout: inline-flex). */
+  wrapperClassName?: string
+  /** Inline styles for the trigger wrapper span (e.g. dynamic widths). */
+  wrapperStyle?: CSSProperties
 }
 
 const GAP = 8
@@ -95,6 +99,8 @@ export function Tooltip({
   position = 'top',
   delay = 300,
   className,
+  wrapperClassName,
+  wrapperStyle,
 }: TooltipProps) {
   const [visible, setVisible] = useState(false)
   const [positioned, setPositioned] = useState(false)
@@ -170,7 +176,8 @@ export function Tooltip({
         onMouseLeave={hide}
         onFocus={show}
         onBlur={hide}
-        className="inline-flex"
+        className={cn('inline-flex', wrapperClassName)}
+        style={wrapperStyle}
       >
         {children}
       </span>

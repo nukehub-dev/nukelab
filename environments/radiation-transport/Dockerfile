@@ -22,9 +22,10 @@ ARG KDSOURCE_BRANCH="v0.2.2"
 ARG PYNE_BRANCH="scikit-build-core"
 ARG ALARA_BRANCH="main"
 
-# Define whether to download Geant4 data and cross-section data
+# Define whether to download Geant4 data, cross-section data, and depletion chain data
 ARG DOWNLOAD_GEANT4_DATA=ON
 ARG DOWNLOAD_CROSS_SECTION_DATA=ON
+ARG DOWNLOAD_CHAIN_DATA=ON
 
 ###########################################################################
 #                              Initial Setup                              #
@@ -213,13 +214,16 @@ RUN git clone -b ${OPENMC_BRANCH} https://github.com/openmc-dev/openmc.git && \
     cd .. && pip install --no-cache-dir . && \
     rm -rf /tmp/openmc
 
-# Download cross-section data using the system shell
+# Download cross-section and depletion chain data using the system shell
 ARG DOWNLOAD_CROSS_SECTION_DATA
+ARG DOWNLOAD_CHAIN_DATA
 ENV OPENMC_DATA_DIR=/opt/openmc_data
 ENV OPENMC_CROSS_SECTIONS=${OPENMC_DATA_DIR}/lib80x_hdf5/cross_sections.xml
-COPY --chmod=755 download_cross_sections.sh .
+ENV OPENMC_CHAIN_FILE=${OPENMC_DATA_DIR}/chain/chain_endfb80_thermal.xml
+COPY --chmod=755 download_cross_sections.sh download_chain_files.sh .
 RUN ./download_cross_sections.sh ${DOWNLOAD_CROSS_SECTION_DATA} ${OPENMC_DATA_DIR} && \
-    rm download_cross_sections.sh
+    ./download_chain_files.sh ${DOWNLOAD_CHAIN_DATA} ${OPENMC_DATA_DIR} && \
+    rm download_cross_sections.sh download_chain_files.sh
 
 # Install PyNE
 ARG PYNE_BRANCH

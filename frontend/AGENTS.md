@@ -132,6 +132,7 @@ function AdminCreditsPage() {
 ### Common pitfalls
 
 - `nukelabctl test frontend` does **not** accept path passthrough; scope tests directly via `cd frontend && npm run test -- path/to/file.spec.ts`.
+- `useConfirmDialog`'s `customContent` is stored as a one-time element snapshot: parent-state-driven props inside it never update. Interactive fields must be self-contained components that own their state and report values through a stable ref (see `BlockRequestFields` in `src/components/admin/credits/users-tab.tsx`).
 - Do not import route files directly; rely on the generated route tree.
 - Keep environment-specific values in `.env.*` files, not hard-coded in source.
 

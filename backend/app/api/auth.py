@@ -670,7 +670,18 @@ async def logout_endpoint(
                             await _release_gpu_devices(db, server.id)
                             continue
 
-                        await spawner.delete(server.container_id)
+                        if not await spawner.delete(server.container_id):
+                            # Runtime delete failed (logged by spawner). Do
+                            # not mark the server stopped: the container may
+                            # still be running. The idle/auto-stop tasks will
+                            # retry later.
+                            logger.warning(
+                                "Could not delete container %s for server %s on "
+                                "logout; skipping stop",
+                                server.container_id,
+                                server.id,
+                            )
+                            continue
                         server.container_id = None
                         server.status = "stopped"
                         server.stopped_at = datetime.now(UTC).replace(tzinfo=None)
@@ -993,6 +1004,13 @@ async def get_me(
         "oauth_provider": current_user.oauth_provider,
         "is_active": current_user.is_active,
         "is_verified": current_user.is_verified,
+        "credit_requests_blocked": current_user.credit_requests_blocked,
+        "credit_requests_blocked_until": (
+            current_user.credit_requests_blocked_until.isoformat()
+            if current_user.credit_requests_blocked_until
+            else None
+        ),
+        "has_active_credit_request_block": current_user.has_active_credit_request_block,
         "login_count": current_user.login_count,
         "last_login": current_user.last_login.isoformat() if current_user.last_login else None,
         "created_at": current_user.created_at.isoformat() if current_user.created_at else None,

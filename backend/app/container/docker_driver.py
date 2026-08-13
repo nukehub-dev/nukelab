@@ -541,6 +541,7 @@ class DockerDriver(ContainerDriver):
         health_url: str,
         timeout: int | None = None,
         interval: float | None = None,
+        body_contains: str | None = None,
     ) -> bool:
         """Wait until the container responds successfully on health_url.
 
@@ -566,6 +567,16 @@ class DockerDriver(ContainerDriver):
                 async with aiohttp.ClientSession(timeout=timeout_obj) as session:
                     async with session.get(health_url) as resp:
                         if resp.status == 200:
+                            if body_contains:
+                                text = await resp.text()
+                                if body_contains not in text:
+                                    logger.debug(
+                                        "Container %s returned 200 but body did not contain %r",
+                                        container_name,
+                                        body_contains,
+                                    )
+                                    await asyncio.sleep(interval)
+                                    continue
                             logger.info("Container %s is ready", container_name)
                             return True
             except Exception as e:
@@ -576,20 +587,20 @@ class DockerDriver(ContainerDriver):
         return False
 
     async def stop_container(self, container_id: str, timeout: int = 30):
-        """Stop a container"""
+        """Stop a container. Raises ContainerDriverError on failure."""
         try:
             container = await self.client.containers.get(container_id)
             await container.stop(timeout=timeout)
-        except Exception:
-            pass
+        except aiodocker.DockerError as e:
+            raise _map_error(e) from e
 
     async def delete_container(self, container_id: str, force: bool = True):
-        """Delete a container"""
+        """Delete a container. Raises ContainerDriverError on failure."""
         try:
             container = await self.client.containers.get(container_id)
             await container.delete(force=force)
-        except Exception:
-            pass
+        except aiodocker.DockerError as e:
+            raise _map_error(e) from e
 
     async def get_container_info(self, container_id: str) -> dict:
         """Get container info"""

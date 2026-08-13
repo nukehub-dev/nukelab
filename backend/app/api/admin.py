@@ -428,19 +428,22 @@ async def bulk_server_action(
                         server.volume_id = new_server.volume_id
                         server.external_url = new_server.external_url
                     else:
-                        await spawner.start(server.container_id)
+                        if not await spawner.start(server.container_id):
+                            raise Exception("Failed to start container")
                     server.status = "running"
                     status_changes.append((str(server.user_id), server_id, "running"))
             elif body.action == "stop":
                 if server.container_id:
-                    await spawner.stop(server.container_id)
+                    if not await spawner.stop(server.container_id):
+                        raise Exception("Failed to stop container")
                     server.status = "stopped"
                     status_changes.append((str(server.user_id), server_id, "stopped"))
                     gpu_release_ids.append(server_id)
             elif body.action == "delete":
                 user_id = str(server.user_id)
                 if server.container_id:
-                    await spawner.delete(server.container_id)
+                    if not await spawner.delete(server.container_id):
+                        raise Exception("Failed to delete container")
                 await db.delete(server)
                 affected_user_ids.add(user_id)
                 gpu_release_ids.append(server_id)
@@ -565,6 +568,94 @@ async def update_system_max_balance(
     )
 
     return {"message": f"System max balance updated to {request.amount}"}
+
+
+class UpdateAutoApproveMaxRequest(BaseModel):
+    amount: int = Field(
+        ..., ge=0, description="Auto-approve threshold for credit requests (0 = off)"
+    )
+
+
+@router.get("/credits/auto-approve-max")
+async def get_auto_approve_max(
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get the credit request auto-approve threshold (0 = off)"""
+    from app.services.setting_service import SettingService
+
+    service = SettingService(db)
+    return {"auto_approve_max": await service.get_auto_approve_max()}
+
+
+@router.put("/credits/auto-approve-max")
+async def update_auto_approve_max(
+    request: UpdateAutoApproveMaxRequest,
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update the credit request auto-approve threshold (0 = off)"""
+    from app.services.activity_service import ActivityService
+    from app.services.setting_service import SettingService
+
+    service = SettingService(db)
+    await service.set_auto_approve_max(request.amount)
+
+    activity_service = ActivityService(db)
+    await activity_service.log(
+        action="credits.update_auto_approve_max",
+        target_type="system",
+        actor_id=str(current_user.id),
+        details={"amount": request.amount},
+    )
+
+    return {"message": f"Credit request auto-approve threshold updated to {request.amount}"}
+
+
+class UpdateRequestCooldownHoursRequest(BaseModel):
+    hours: int = Field(
+        ..., ge=0, description="Cooldown after a rejected credit request, in hours (0 = off)"
+    )
+
+
+@router.get("/credits/request-cooldown-hours")
+async def get_request_cooldown_hours(
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get the post-rejection credit request cooldown window in hours (0 = off)"""
+    from app.services.setting_service import SettingService
+
+    service = SettingService(db)
+    return {"request_cooldown_hours": await service.get_request_cooldown_hours()}
+
+
+@router.put("/credits/request-cooldown-hours")
+async def update_request_cooldown_hours(
+    request: UpdateRequestCooldownHoursRequest,
+    current_user: User = Depends(require_permissions(Permission.ADMIN_ACCESS)),
+    _jwt=Depends(require_jwt_auth()),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update the post-rejection credit request cooldown window (0 = off)"""
+    from app.services.activity_service import ActivityService
+    from app.services.setting_service import SettingService
+
+    service = SettingService(db)
+    await service.set_request_cooldown_hours(request.hours)
+
+    activity_service = ActivityService(db)
+    await activity_service.log(
+        action="credits.update_request_cooldown_hours",
+        target_type="system",
+        actor_id=str(current_user.id),
+        details={"hours": request.hours},
+    )
+
+    return {"message": f"Credit request cooldown updated to {request.hours} hours"}
 
 
 class UpdateSystemInitialBalanceRequest(BaseModel):

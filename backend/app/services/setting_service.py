@@ -171,6 +171,43 @@ class SettingService:
         await self.set("credits_max_balance", str(amount))
         settings.credits_max_balance = amount
 
+    async def get_auto_approve_max(self) -> int:
+        """Return the auto-approve threshold for credit requests.
+
+        Requests at or below this amount are approved immediately at
+        creation. 0 means auto-approve is off. Always read from the
+        database so changes propagate to all workers without restart.
+        """
+        value = await self.get("credits_auto_approve_max")
+        if value is not None:
+            try:
+                return int(value)
+            except ValueError:
+                logger.warning(f"Invalid credits_auto_approve_max value: {value}")
+        return 0
+
+    async def set_auto_approve_max(self, amount: int) -> None:
+        """Persist the auto-approve threshold (0 = off)."""
+        await self.set("credits_auto_approve_max", str(amount))
+
+    async def get_request_cooldown_hours(self) -> int:
+        """Return the cooldown window after a rejected credit request.
+
+        A user whose most recent rejected request was reviewed within this
+        window cannot submit a new request. 0 means no cooldown.
+        """
+        value = await self.get("credits_request_cooldown_hours")
+        if value is not None:
+            try:
+                return int(value)
+            except ValueError:
+                logger.warning(f"Invalid credits_request_cooldown_hours value: {value}")
+        return 0
+
+    async def set_request_cooldown_hours(self, hours: int) -> None:
+        """Persist the post-rejection cooldown window in hours (0 = off)."""
+        await self.set("credits_request_cooldown_hours", str(hours))
+
     async def get_quota_defaults(self) -> dict[str, float | int | str]:
         """Return system-wide default resource quota limits.
 

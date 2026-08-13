@@ -72,6 +72,12 @@ class UserResponse(BaseModel):
     created_at: str | None
     updated_at: str | None
     login_count: int
+    daily_allowance_override: int | None = None
+    daily_allowance_override_until: str | None = None
+    has_active_allowance_override: bool = False
+    credit_requests_blocked: bool = False
+    credit_requests_blocked_until: str | None = None
+    has_active_credit_request_block: bool = False
 
 
 class UserListResponse(BaseModel):
@@ -113,6 +119,20 @@ def serialize_user(user: User) -> dict:
         "updated_at": user.updated_at.isoformat() if user.updated_at else None,
         "login_count": user.login_count,
         "daily_allowance": user.daily_allowance,
+        "daily_allowance_override": user.daily_allowance_override,
+        "daily_allowance_override_until": (
+            user.daily_allowance_override_until.isoformat()
+            if user.daily_allowance_override_until
+            else None
+        ),
+        "has_active_allowance_override": user.has_active_allowance_override,
+        "credit_requests_blocked": user.credit_requests_blocked,
+        "credit_requests_blocked_until": (
+            user.credit_requests_blocked_until.isoformat()
+            if user.credit_requests_blocked_until
+            else None
+        ),
+        "has_active_credit_request_block": user.has_active_credit_request_block,
     }
 
 

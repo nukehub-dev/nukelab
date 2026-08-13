@@ -86,12 +86,14 @@ export function Combobox({
     setPositioned(true)
   }, [])
 
-  // Measure on open (two rAFs so the panel has rendered and can be measured).
-  React.useEffect(() => {
-    if (!open) return
-    queueMicrotask(() => setPositioned(false))
-    const raf = requestAnimationFrame(() => requestAnimationFrame(updatePosition))
-    return () => cancelAnimationFrame(raf)
+  // Measure on open in a layout effect so the panel is positioned before its
+  // first paint (with rAF it paints at 0,0 for a frame or two — visible blink).
+  React.useLayoutEffect(() => {
+    if (!open) {
+      queueMicrotask(() => setPositioned(false))
+      return
+    }
+    updatePosition()
   }, [open, updatePosition])
 
   // Keep the panel aligned with the trigger on scroll/resize while open.

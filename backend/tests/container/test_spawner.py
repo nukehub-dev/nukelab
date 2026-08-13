@@ -664,9 +664,17 @@ class TestSpawnSuccess:
 
     @pytest.mark.asyncio
     async def test_spawn_waits_for_container_ready(self, fresh_spawner):
-        """spawn should wait for container readiness before returning."""
+        """spawn should wait for container and Traefik readiness before returning."""
+        from app.container.spawner import settings
+
         user_id = str(uuid_mod.uuid4())
-        with mock.patch("app.container.spawner.settings.public_url", "http://test"):
+        with (
+            mock.patch("app.container.spawner.settings.public_url", "http://test"),
+            mock.patch(
+                "app.container.spawner.settings.traefik_internal_url",
+                "http://traefik",
+            ),
+        ):
             server = await fresh_spawner.spawn(
                 user_id=user_id,
                 username="testuser",
@@ -674,9 +682,17 @@ class TestSpawnSuccess:
             )
 
         health_alias = f"srv-{str(server.id)[:8]}"
-        fresh_spawner.container_client.wait_for_container_ready.assert_awaited_once_with(
-            health_alias,
-            f"http://{health_alias}:8080/health",
+        calls = fresh_spawner.container_client.wait_for_container_ready.await_args_list
+        assert mock.call(health_alias, f"http://{health_alias}:8080/health") in calls
+        assert (
+            mock.call(
+                mock.ANY,
+                "http://traefik/user/testuser/srv1/health",
+                timeout=settings.container_readiness_timeout,
+                interval=settings.container_readiness_interval,
+                body_contains="healthy",
+            )
+            in calls
         )
 
     @pytest.mark.asyncio

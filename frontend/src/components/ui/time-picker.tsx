@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
 // SPDX-License-Identifier: BSD-2-Clause
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '../../lib/utils'
@@ -91,15 +91,14 @@ export function TimePicker({
     setPositioned(true)
   }, [usePortal, anchorRef])
 
-  useEffect(() => {
+  // Position when opening. Must run in a layout effect: with rAF the panel
+  // paints at 0,0 for a frame or two before being moved (visible blink).
+  useLayoutEffect(() => {
     if (!isOpen || !usePortal) {
       queueMicrotask(() => setPositioned(false))
       return
     }
-    queueMicrotask(() => setPositioned(false))
-    requestAnimationFrame(() => {
-      requestAnimationFrame(updatePosition)
-    })
+    updatePosition()
   }, [isOpen, usePortal, updatePosition])
 
   useEffect(() => {

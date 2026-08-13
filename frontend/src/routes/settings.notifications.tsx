@@ -38,6 +38,7 @@ const EVENT_ICONS: Record<string, React.ElementType> = {
   server_backup_completed: Server,
   credit_low: CreditCard,
   credit_granted: CreditCard,
+  credit_request: CreditCard,
   daily_allowance: CreditCard,
   queue_position: Users,
   schedule_run: Calendar,
@@ -103,6 +104,12 @@ const defaultEvents: EventPreference[] = [
     event: 'credit_granted',
     label: 'Credits Granted',
     description: 'When credits are added to your account',
+    channels: { email: true, webhook: false, in_app: true },
+  },
+  {
+    event: 'credit_request',
+    label: 'Credit Request Response',
+    description: 'When your credit request is approved or rejected',
     channels: { email: true, webhook: false, in_app: true },
   },
   {
