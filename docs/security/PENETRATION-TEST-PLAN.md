@@ -250,7 +250,7 @@ Phase 10: Remediation Support & Retest
 |----|------|--------|-----------------|
 | CICD-01 | Dependency vulnerability scanning | `./nukelabctl security` | `pip-audit` and `npm audit` pass; no ignored criticals |
 | CICD-02 | Container image scanning in CI | `.github/workflows/security.yml` | Trivy/Grype gate on backend/frontend/env images |
-| CICD-03 | Secret scanning in repository | Gitleaks/TruffleHog scan | No active secrets in git history |
+| CICD-03 | Secret scanning in repository | Gitleaks/TruffleHog scan | No active secrets in git history. TruffleHog runs with `--exclude-detectors=Lob`: its `test_` key pattern false-positives on Python test function names and NukeLab never uses the Lob API |
 | CICD-04 | Signed commits / artifact signing | Git config, GHCR images | Commits signed; images signed with Cosign (target state). Implemented: signed-commits check warns until enforced; Cosign signing workflow in `.github/workflows/security.yml` |
 | CICD-04a | Git commit signing verification | `.github/workflows/security.yml` | CI runs `./nukelabctl security --signed-commits` on every push/PR; warns during transition, fails once branch protection requires signed commits |
 | CICD-04b | Container image signing with Cosign | `.github/workflows/security.yml` | Built backend/frontend/auth-sidecar images are signed with Cosign keyless signing using GitHub OIDC; signatures published to GHCR |

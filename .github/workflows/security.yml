@@ -171,7 +171,9 @@ jobs:
           # Schedule / manual dispatch: scan the full history (empty base).
           base: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
           head: ${{ github.event.pull_request.head.sha || github.event.after || 'HEAD' }}
-          extra_args: --debug --only-verified
+          # Lob is excluded: its test_-key pattern false-positives on Python
+          # test function names, and NukeLab never uses the Lob API.
+          extra_args: --debug --only-verified --exclude-detectors=Lob
 
   signed-commits-check:
     name: Signed Commits Check
