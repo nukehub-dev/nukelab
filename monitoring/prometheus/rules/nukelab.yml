@@ -17,12 +17,20 @@ groups:
           description: "5xx error rate is {{ $value | humanizePercentage }} over the last 5 minutes."
 
       - alert: NukeLabHighLatency
-        # Container lifecycle endpoints (start/stop/restart) legitimately take
-        # seconds because they wait on the container runtime; they are excluded
-        # so routine server starts do not trip the API latency SLI.
+        # Container lifecycle writes (create/update/delete/start/stop/restart)
+        # legitimately take seconds because they wait on the container runtime
+        # and readiness probes; exclude them so routine provisioning does not
+        # trip the API latency SLI. Create and list share the path label
+        # "/api/servers/", so path-only filtering would also drop the busy
+        # list endpoint — instead keep all non-server paths plus every GET
+        # (the read SLI) and exclude server writes via the method label.
         expr: |
           histogram_quantile(0.99,
-            sum(rate(nukelab_http_request_duration_seconds_bucket{path!~"/api/servers/{server_id}/(start|stop|restart)"}[5m])) by (le)
+            sum(
+              rate(nukelab_http_request_duration_seconds_bucket{path!~"/api/servers.*"}[5m])
+              or
+              rate(nukelab_http_request_duration_seconds_bucket{method="GET"}[5m])
+            ) by (le)
           ) > 1.0
         for: 3m
         labels:
