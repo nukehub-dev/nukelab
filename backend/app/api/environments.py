@@ -87,6 +87,8 @@ async def create_environment(
         name=data["name"],
         slug=data["slug"],
         image=data["image"],
+        tool_image=data.get("tool_image"),
+        tool_mounts=data.get("tool_mounts"),
         description=data.get("description"),
         dockerfile=data.get("dockerfile"),
         packages=data.get("packages"),

@@ -126,6 +126,27 @@ class TestEnvironmentCRUD:
         assert response.status_code == 201
 
     @pytest.mark.asyncio
+    async def test_create_environment_with_toolchain(self, client, admin_token):
+        """Admin should create an environment with a toolchain image attached."""
+        response = await client.post(
+            "/api/environments/",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={
+                "name": "Toolchain Environment",
+                "slug": "toolchain-env",
+                "image": "nukelab/workspace:latest",
+                "tool_image": "ghcr.io/nukelab/radiation-transport:v1.0.0",
+                "tool_mounts": ["/opt/nuke"],
+                "category": "simulation",
+            },
+        )
+
+        assert response.status_code == 201
+        data = response.json()["data"]
+        assert data["tool_image"] == "ghcr.io/nukelab/radiation-transport:v1.0.0"
+        assert data["tool_mounts"] == ["/opt/nuke"]
+
+    @pytest.mark.asyncio
     async def test_create_environment_as_user_forbidden(self, client, user_token):
         """User should not create environments."""
         response = await client.post(

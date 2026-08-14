@@ -47,6 +47,8 @@ interface CreateEnvironmentData {
   name: string
   slug: string
   image: string
+  tool_image?: string
+  tool_mounts?: string[]
   description?: string
   category?: string
   icon?: string
@@ -57,6 +59,8 @@ interface CreateEnvironmentData {
 interface UpdateEnvironmentData {
   name?: string
   image?: string
+  tool_image?: string
+  tool_mounts?: string[]
   description?: string
   category?: string
   icon?: string
