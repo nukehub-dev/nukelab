@@ -91,7 +91,7 @@ _manage_sh_complete() {
 		# offer options. We don't know available image names, so leave the
 		# value unconstrained and only complete flags once the user types '-'.
 		if [[ "$cur" == -* ]]; then
-			COMPREPLY=($(compgen -W "--engine= --mount= ${global_flags[*]}" -- "$cur"))
+			COMPREPLY=($(compgen -W "--engine= --mount= --force ${global_flags[*]}" -- "$cur"))
 		fi
 		;;
 	dev)

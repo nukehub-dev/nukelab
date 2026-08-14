@@ -11,11 +11,16 @@ DockerError is caught and re-raised as ContainerDriverError at the boundary.
 """
 
 import asyncio
+import hashlib
 import io
+import json
 import logging
 import os
+import shlex
 import tarfile
+import time
 import uuid
+from datetime import UTC, datetime
 
 import aiodocker
 import aiohttp
@@ -34,6 +39,13 @@ def _map_error(e: aiodocker.DockerError) -> ContainerDriverError:
 class DockerDriver(ContainerDriver):
     VOLUME_CPU_LIB = "nukelab-cpu-lib"
     CPU_LIB_TARGET = "/usr/local/lib/nukelab"
+
+    # Toolchain volume composition.
+    TOOLCHAIN_TARGET = "/toolchain-target"
+    TOOLCHAIN_MANIFEST_FILE = "nukelab-toolchain.json"
+    TOOLCHAIN_STAMP_FILE = ".nukelab-toolchain-stamp.json"
+    TOOLCHAIN_LOCK_TIMEOUT = 15 * 60  # seconds; also the stale-lock age
+    TOOLCHAIN_LOCK_POLL_INTERVAL = 2.0  # seconds
 
     def __init__(self):
         self.client: aiodocker.Docker | None = None
@@ -790,20 +802,27 @@ class DockerDriver(ContainerDriver):
         except Exception:
             pass
 
-    async def _read_toolchain_manifest(self, image: str, volume_name: str) -> dict | None:
-        """Read the toolchain manifest from a named volume if it exists.
+    async def _read_toolchain_manifest(
+        self, image: str, volume_name: str
+    ) -> tuple[dict, dict] | None:
+        """Read the toolchain manifest and population stamp from a named volume.
 
-        Returns the parsed manifest dict when the volume is already populated,
-        or None when the manifest cannot be read (volume missing, empty, or
-        manifest absent). Errors are swallowed so callers can decide whether to
-        fall back to population.
+        Runs a single hardened helper container that cats both files so the
+        manifest is never served without its stamp. Returns ``(manifest,
+        stamp)`` when both parse, or None when either cannot be read (volume
+        missing, empty, or files absent/invalid). Errors are swallowed so
+        callers can decide whether to fall back to population.
         """
-        import json
-
         try:
             manifest_config = {
                 "Image": image,
-                "Cmd": ["cat", "/opt/nuke/nukelab-toolchain.json"],
+                "Cmd": [
+                    "sh",
+                    "-c",
+                    f"cat /opt/nuke/{self.TOOLCHAIN_MANIFEST_FILE}"
+                    " && printf '\\n---\\n'"
+                    f" && cat /opt/nuke/{self.TOOLCHAIN_STAMP_FILE}",
+                ],
                 "HostConfig": {
                     "Mounts": [
                         {
@@ -814,6 +833,9 @@ class DockerDriver(ContainerDriver):
                         }
                     ],
                     "AutoRemove": False,
+                    "CapDrop": ["ALL"],
+                    "SecurityOpt": ["no-new-privileges:true"],
+                    "ReadonlyRootfs": True,
                 },
             }
             manifest_name = f"nukelab-toolchain-manifest-{uuid.uuid4().hex[:8]}"
@@ -827,8 +849,11 @@ class DockerDriver(ContainerDriver):
                 if exit_code not in (0, "0"):
                     return None
                 logs = await manifest_container.log(stdout=True, stderr=True)
-                manifest_text = "".join(logs)
-                return json.loads(manifest_text)
+                output = "".join(logs)
+                manifest_text, sep, stamp_text = output.partition("\n---\n")
+                if not sep:
+                    return None
+                return json.loads(manifest_text), json.loads(stamp_text)
             finally:
                 try:
                     await manifest_container.delete(force=True)
@@ -837,51 +862,119 @@ class DockerDriver(ContainerDriver):
         except Exception:
             return None
 
-    async def prepare_toolchain_volume(
-        self, image: str, volume_name: str, mount_paths: list[str]
-    ) -> dict:
-        """Create or refresh a named volume with contents from a toolchain image.
+    @staticmethod
+    def _toolchain_lock_name(volume_name: str) -> str:
+        """Derive the lock container name for a toolchain volume."""
+        digest = hashlib.sha256(volume_name.encode("utf-8")).hexdigest()[:12]
+        return f"nukelab-toolchain-lock-{digest}"
 
-        The volume is shared across all servers that use the same toolchain
-        image. If the volume already contains a valid toolchain manifest, the
-        expensive copy step is skipped and the manifest is returned directly.
-        Otherwise a temporary container copies the requested paths from the
-        image into the volume, and the manifest is then read and returned.
+    @staticmethod
+    def _parse_docker_timestamp(value: str | None) -> float | None:
+        """Parse a Docker RFC3339 timestamp to epoch seconds, or None."""
+        if not value:
+            return None
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=UTC)
+            return parsed.timestamp()
+        except (TypeError, ValueError):
+            return None
+
+    async def _acquire_toolchain_lock(self, image: str, volume_name: str):
+        """Acquire the cross-process populate lock for a toolchain volume.
+
+        Docker's atomic container-name creation acts as the semaphore: the
+        lock container is created with the toolchain image (guaranteed local
+        by then) and never started, so exactly one process holds the lock.
+        API workers and Celery tasks both reach this path, so the lock must
+        be engine-level, not in-process. Lock containers older than
+        TOOLCHAIN_LOCK_TIMEOUT are treated as stale (a crashed populate never
+        started the container, so age is the only signal) and force-deleted.
         """
-        await self.ensure_volume(volume_name, labels={"nukelab.managed": "true"})
+        lock_name = self._toolchain_lock_name(volume_name)
+        deadline = time.monotonic() + self.TOOLCHAIN_LOCK_TIMEOUT
+        while True:
+            try:
+                return await self.client.containers.create(
+                    {
+                        "Image": image,
+                        "Cmd": ["true"],
+                        "Labels": {
+                            "nukelab.managed": "true",
+                            "nukelab.toolchain.lock": volume_name,
+                        },
+                        "HostConfig": {"AutoRemove": False},
+                    },
+                    name=lock_name,
+                )
+            except aiodocker.DockerError as e:
+                if getattr(e, "status", None) != 409:
+                    raise _map_error(e) from e
 
-        # Fast path: if the volume is already populated, return the manifest
-        # without copying anything. This makes repeated server spawns fast.
-        manifest = await self._read_toolchain_manifest(image, volume_name)
-        if manifest is not None:
-            logger.info("Reusing populated toolchain volume %s for %s", volume_name, image)
-            return manifest
+            # Name conflict: another process holds (or crashed holding) the lock.
+            if time.monotonic() > deadline:
+                raise ContainerDriverError(
+                    f"Timed out waiting for toolchain lock {lock_name} for {volume_name}"
+                )
+            try:
+                holder = await self.client.containers.get(lock_name)
+                info = await holder.show()
+                created = self._parse_docker_timestamp(info.get("Created"))
+                if created is not None and time.time() - created > self.TOOLCHAIN_LOCK_TIMEOUT:
+                    logger.warning("Removing stale toolchain lock container %s", lock_name)
+                    await holder.delete(force=True)
+                    continue
+            except Exception:
+                # Lock container disappeared or is uninspectable; retry acquire.
+                continue
+            await asyncio.sleep(self.TOOLCHAIN_LOCK_POLL_INTERVAL)
 
-        logger.info("Populating toolchain volume %s from %s", volume_name, image)
+    async def _populate_toolchain_volume(
+        self, image: str, volume_name: str, mount_paths: list[str], image_info: dict
+    ):
+        """Wipe and (re)populate a toolchain volume, then write the stamp.
 
-        # Copy each mount path from the image into the volume. We use a temp
-        # container with the image's filesystem and the volume mounted at
-        # /toolchain-target.
-        copy_cmd = ["sh", "-c"]
-        copy_script = ""
+        The helper container is hardened (all caps dropped except those
+        ``cp -a`` needs to preserve ownership, no-new-privileges, read-only
+        rootfs) but keeps the image's default user because ownership
+        preservation requires it.
+        """
+        stamp = json.dumps(
+            {
+                "image_id": image_info.get("Id"),
+                "repo_digests": image_info.get("RepoDigests") or [],
+                "populated_at": datetime.now(UTC).isoformat(),
+            }
+        )
+        stamp_path = f"{self.TOOLCHAIN_TARGET}/{self.TOOLCHAIN_STAMP_FILE}"
+
+        # Wipe first so files deleted from a re-pushed image do not linger.
+        copy_script = f"rm -rf {self.TOOLCHAIN_TARGET}/* {self.TOOLCHAIN_TARGET}/.[!.]*; "
         for path in mount_paths:
             copy_script += (
-                f"mkdir -p /toolchain-target{path} && cp -a {path}/. /toolchain-target{path}/; "
+                f"mkdir -p {self.TOOLCHAIN_TARGET}{path}"
+                f" && cp -a {path}/. {self.TOOLCHAIN_TARGET}{path}/; "
             )
-        copy_cmd.append(copy_script)
+        copy_script += f"printf '%s' {shlex.quote(stamp)} > {stamp_path}"
 
         populate_config = {
             "Image": image,
-            "Cmd": copy_cmd,
+            "Cmd": ["sh", "-c", copy_script],
             "HostConfig": {
                 "Mounts": [
                     {
                         "Type": "volume",
                         "Source": volume_name,
-                        "Target": "/toolchain-target",
+                        "Target": self.TOOLCHAIN_TARGET,
                     }
                 ],
                 "AutoRemove": False,
+                "CapDrop": ["ALL"],
+                "CapAdd": ["CHOWN", "FOWNER", "DAC_OVERRIDE", "SETUID", "SETGID"],
+                "SecurityOpt": ["no-new-privileges:true"],
+                "ReadonlyRootfs": True,
+                "Tmpfs": {"/tmp": "rw,nosuid,nodev,size=64m"},
             },
         }
 
@@ -906,13 +999,69 @@ class DockerDriver(ContainerDriver):
                 except Exception:
                     pass
 
-        # Read the manifest from the freshly populated volume.
-        manifest = await self._read_toolchain_manifest(image, volume_name)
-        if manifest is None:
+    async def prepare_toolchain_volume(
+        self, image: str, volume_name: str, mount_paths: list[str]
+    ) -> dict:
+        """Create or refresh a named volume with contents from a toolchain image.
+
+        The volume is shared across all servers that use the same toolchain
+        image. The fast path requires BOTH a parseable manifest AND a stamp
+        whose ``image_id`` matches the current local image, so a re-pushed
+        image tag invalidates the stale volume instead of being served
+        forever. Population is serialized across processes with a lock
+        container, and re-population wipes the target before copying so
+        removed files do not linger.
+        """
+        await self.ensure_volume(volume_name, labels={"nukelab.managed": "true"})
+
+        try:
+            image_info = await self.client.images.get(image)
+        except Exception as e:
             raise ContainerDriverError(
-                f"Toolchain manifest missing after populating {image} into {volume_name}"
+                f"Toolchain image {image} is not available locally: {e}"
+            ) from e
+        image_id = image_info.get("Id")
+
+        # Fast path: reuse the volume without copying anything. This makes
+        # repeated server spawns fast. Old volumes lack a stamp and get a
+        # one-time automatic refresh here.
+        cached = await self._read_toolchain_manifest(image, volume_name)
+        if cached is not None and cached[1].get("image_id") == image_id:
+            logger.info("Reusing populated toolchain volume %s for %s", volume_name, image)
+            return cached[0]
+        if cached is not None:
+            logger.info(
+                "Toolchain volume %s is stale (image %s changed); re-populating",
+                volume_name,
+                image,
             )
-        return manifest
+
+        # Serialize population across processes; the loser of the race waits
+        # and then re-checks before deciding to populate itself.
+        lock_container = await self._acquire_toolchain_lock(image, volume_name)
+        try:
+            cached = await self._read_toolchain_manifest(image, volume_name)
+            if cached is not None and cached[1].get("image_id") == image_id:
+                logger.info(
+                    "Toolchain volume %s was populated while waiting for the lock", volume_name
+                )
+                return cached[0]
+
+            logger.info("Populating toolchain volume %s from %s", volume_name, image)
+            await self._populate_toolchain_volume(image, volume_name, mount_paths, image_info)
+
+            # Read the manifest back from the freshly populated volume.
+            cached = await self._read_toolchain_manifest(image, volume_name)
+            if cached is None:
+                raise ContainerDriverError(
+                    f"Toolchain manifest missing after populating {image} into {volume_name}"
+                )
+            return cached[0]
+        finally:
+            try:
+                await lock_container.delete(force=True)
+            except Exception:
+                pass
 
     async def image_exists(self, image: str) -> bool:
         """Return True when the image is present locally."""

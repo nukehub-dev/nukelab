@@ -196,11 +196,13 @@ class ContainerDriver(ABC):
         Returns the toolchain manifest (parsed JSON) so callers know which
         paths to mount and which environment variables to inject.
 
-        Implementations must be idempotent: if the named volume already
-        contains a valid toolchain manifest, the copy step should be skipped
-        and the existing manifest returned. This lets multiple servers share
-        one toolchain volume and avoids copying multi-gigabyte images on
-        every spawn.
+        Implementations must be idempotent and safe under concurrent callers
+        (API workers and Celery tasks both reach this path): population must
+        be serialized across processes, and a populated volume must only be
+        reused when it provably matches the current local image (a stamp
+        recorded at populate time), so re-pushed image tags invalidate the
+        cached volume. This lets multiple servers share one toolchain volume
+        and avoids copying multi-gigabyte images on every spawn.
 
         For Docker/Podman this runs a temporary container to copy image
         contents into a named volume only when the volume is not already

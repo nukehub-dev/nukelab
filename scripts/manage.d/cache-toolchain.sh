@@ -20,6 +20,9 @@ parse_cache_toolchain_args() {
             --mount=*)
                 CACHE_TOOLCHAIN_MOUNTS+=("${arg#*=}")
                 ;;
+            --force)
+                CACHE_TOOLCHAIN_FORCE=1
+                ;;
             *)
                 if [ -z "$CACHE_TOOLCHAIN_IMAGE" ]; then
                     CACHE_TOOLCHAIN_IMAGE="$arg"
@@ -52,12 +55,17 @@ cmd_cache_toolchain() {
         _mount_args+=("--mount" "$_mount")
     done
 
+    local _force_args=()
+    if [ -n "${CACHE_TOOLCHAIN_FORCE:-}" ]; then
+        _force_args+=("--force")
+    fi
+
     if [ -n "${CONTAINER_ENGINE:-}" ]; then
         export CONTAINER_ENGINE
     fi
 
     step "Pre-populating toolchain volume for ${BOLD}${CACHE_TOOLCHAIN_IMAGE}${RESET}"
-    "$_py" "$CACHE_TOOLCHAIN_SCRIPT" "${CACHE_TOOLCHAIN_IMAGE}" "${_mount_args[@]}"
+    "$_py" "$CACHE_TOOLCHAIN_SCRIPT" "${CACHE_TOOLCHAIN_IMAGE}" "${_mount_args[@]}" "${_force_args[@]}"
 }
 
 help_cache_toolchain() {
@@ -75,6 +83,8 @@ ${BOLD}Arguments:${RESET}
 ${BOLD}Options:${RESET}
   --engine=<engine>       Container engine: docker or podman (default: auto)
   --mount=<path>          Path inside the image to copy (default: /opt/nuke)
+  --force                 Wipe and re-populate the volume even if it is up to
+                          date (e.g. after re-pushing an image tag)
   --help, -h              Show this help
 
 ${BOLD}Examples:${RESET}

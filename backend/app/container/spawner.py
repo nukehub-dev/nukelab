@@ -259,7 +259,6 @@ class ServerSpawner:
             # mount it into the runtime container. This decouples heavy scientific
             # stacks from the workspace runtime image so workspace updates do not
             # force toolchain rebuilds.
-            toolchain_env: dict[str, str] = {}
             if tool_image:
                 if not await container_client.image_exists(tool_image):
                     try:
@@ -286,20 +285,27 @@ class ServerSpawner:
                     # Expand env vars against the runtime image's default env so
                     # PATH/LD_LIBRARY_PATH prepend correctly.
                     image_env = await container_client.get_image_env(image)
+                    # env_prepend: PATH-family lists prepended to the runtime
+                    # container's existing values (explicit env vars win over
+                    # image defaults as the base). Older manifests lack this
+                    # field; treat it as empty.
+                    for key, prepend in manifest.get("env_prepend", {}).items():
+                        existing = environment.get(key) or image_env.get(key)
+                        environment[key] = f"{prepend}:{existing}" if existing else prepend
+                    # env: scalar vars. Explicit template/user env vars win, so
+                    # apply with setdefault. _expand_env_vars stays for backward
+                    # compatibility with old manifests' ${VAR} references.
                     for key, value in manifest.get("env", {}).items():
-                        toolchain_env[key] = self._expand_env_vars(
-                            value, {**image_env, **environment, **toolchain_env}
-                        )
+                        expanded = self._expand_env_vars(value, {**image_env, **environment})
+                        environment.setdefault(key, expanded)
                 except Exception as e:
-                    logger.warning(
-                        "Failed to prepare toolchain volume for %s: %s; continuing without toolchain",
+                    logger.error(
+                        "TOOLCHAIN_DEGRADED: failed to prepare toolchain image %s: %s; "
+                        "server %s spawns WITHOUT the toolchain",
                         tool_image,
                         e,
+                        server_name,
                     )
-
-            # Merge toolchain env into the container environment.
-            if toolchain_env:
-                environment.update(toolchain_env)
 
             # Convert volumes dict to Docker bind mounts format
             # Handle both simple string format and dict format

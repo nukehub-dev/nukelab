@@ -34,12 +34,17 @@ The platform uses **runtime composition** to combine the workspace runtime with
 scientific toolchains:
 
 1. The backend spawns a container from `nukelab-workspace`.
-2. If the selected `EnvironmentTemplate` has a `tool_image`, the backend creates
-   a named volume from that toolchain image and mounts it (typically at
-   `/opt/nuke`) into the workspace container.
+2. If the selected `EnvironmentTemplate` has a `tool_image`, the backend mounts
+   a shared named volume (copied once per node from that toolchain image,
+   typically at `/opt/nuke`) read-only into the workspace container. The
+   volume is invalidated and re-populated automatically when the local image
+   changes; `./nukelabctl cache-toolchain <image> [--force]` pre-populates or
+   refreshes it.
 3. Environment variables declared in the toolchain manifest are injected into
-   the container so `PATH`, `LD_LIBRARY_PATH`, and code-specific variables are
-   available to the IDE and user processes.
+   the container: `env_prepend` entries (e.g. `PATH`, `LD_LIBRARY_PATH`) are
+   prepended to the runtime container's existing values, and `env` scalars
+   (e.g. code-specific data paths) are applied only when not already set
+   explicitly.
 
 This design is compatible with Kubernetes: a future k3s driver implements the
 same flow using an init container to populate an `emptyDir` volume and the same

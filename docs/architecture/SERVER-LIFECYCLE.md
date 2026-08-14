@@ -42,8 +42,10 @@ ResourcePoolService checks available CPU, memory, disk
                 |
                 +---> Pull toolchain image if configured
                 |
-                +---> Prepare toolchain volume from toolchain image
-                |     (mounts scientific software into the runtime container)
+                +---> Prepare shared toolchain volume from toolchain image
+                |     (one named volume per image ref, mounted read-only;
+                |     population is serialized via a lock container and a
+                |     stamp invalidates the volume when the image changes)
                 |
                 +---> Create container with plan limits
                 |     (NanoCpus, Memory, Cpuset, StorageOpt)
@@ -61,6 +63,24 @@ ResourcePoolService checks available CPU, memory, disk
                 v
         Publish WebSocket event server.status_changed
 ```
+
+### Toolchain volume composition
+
+When the selected environment template has a `tool_image`, the spawner mounts a
+shared named volume (`nukelab-toolchain-<image>-<hash>`) copied once per node
+from the toolchain image, read-only, into the workspace container. Population
+is serialized across processes (API workers and Celery tasks) by a lock
+container whose atomic name creation acts as the semaphore; stale locks older
+than 15 minutes are force-removed. After populating, the driver writes a stamp
+file (`.nukelab-toolchain-stamp.json`) recording the image ID and repo digests;
+a volume whose stamp does not match the current local image is wiped and
+re-populated, so re-pushed tags never serve stale content. The manifest-read
+and populate helper containers run hardened (dropped capabilities,
+no-new-privileges, read-only rootfs). Manifest `env_prepend` variables are
+prepended to the runtime container's existing values; plain `env` variables
+never override explicitly set ones. If toolchain preparation fails, the server
+spawns without the toolchain and an error-level `TOOLCHAIN_DEGRADED` message is
+logged.
 
 ## Start flow
 

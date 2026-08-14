@@ -121,15 +121,20 @@ class TestVolumeServiceHelpers:
         assert name1 != name2
 
     def test_make_toolchain_volume_name_basic(self):
-        name = make_toolchain_volume_name("nukelab/radiation-transport:v1.2.3")
-        # Slashes and colons become dashes; dots are preserved.
-        assert name == "nukelab-toolchain-nukelab-radiation-transport-v1.2.3"
+        import hashlib
+
+        image = "nukelab/radiation-transport:v1.2.3"
+        name = make_toolchain_volume_name(image)
+        # Slashes and colons become dashes; dots are preserved. A short hash
+        # of the full image reference is appended to prevent collisions.
+        digest = hashlib.sha256(image.encode("utf-8")).hexdigest()[:12]
+        assert name == f"nukelab-toolchain-nukelab-radiation-transport-v1.2.3-{digest}"
 
     def test_make_toolchain_volume_name_sanitizes_special_chars(self):
         name = make_toolchain_volume_name("myregistry.io/nuke/tool_chain:latest-rc/1")
         assert "/" not in name
         assert name[0].isalnum()
-        assert name == "nukelab-toolchain-myregistry.io-nuke-tool_chain-latest-rc-1"
+        assert name.startswith("nukelab-toolchain-myregistry.io-nuke-tool_chain-latest-rc-1-")
 
     def test_make_toolchain_volume_name_is_deterministic(self):
         """The same image reference must always produce the same volume name."""
@@ -142,6 +147,17 @@ class TestVolumeServiceHelpers:
         assert len(name) <= 240
         assert name[0].isalnum()
         assert name.startswith("nukelab-toolchain-")
+
+    def test_make_toolchain_volume_name_hash_prevents_truncation_collisions(self):
+        """Two long refs sharing a truncated prefix must not collide."""
+        shared_prefix = "registry.example.io/" + "team-" * 40
+        name1 = make_toolchain_volume_name(shared_prefix + "alpha:latest")
+        name2 = make_toolchain_volume_name(shared_prefix + "beta:latest")
+        assert len(name1) <= 240
+        assert len(name2) <= 240
+        assert name1 != name2
+        # The distinguishing suffix is the hash of the full image reference.
+        assert name1.rsplit("-", 1)[1] != name2.rsplit("-", 1)[1]
 
 
 class TestVolumeServiceCreate:
