@@ -52,3 +52,10 @@ RUN wget https://github.com/conda-forge/miniforge/releases/latest/download/Minif
 # Activate the conda base environment in login shells so python from
 # /opt/conda/bin is on PATH for toolchain builds and terminal sessions.
 COPY conda-base.sh /etc/profile.d/nukelab-conda-base.sh
+
+# Toolchain manifest generator shared by all domain toolchain images (they
+# inherit from this image per the nukelab-environments contract). A toolchain
+# image runs this generator during its own build, right after copying its
+# activation script, to produce /opt/nuke/nukelab-toolchain.json.
+COPY generate-toolchain-manifest.py /usr/local/bin/nukelab-generate-toolchain-manifest
+RUN chmod +x /usr/local/bin/nukelab-generate-toolchain-manifest

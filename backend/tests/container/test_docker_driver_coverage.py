@@ -634,6 +634,25 @@ class TestPrepareToolchainVolume:
         lock.delete.assert_awaited_once_with(force=True)
 
     @pytest.mark.asyncio
+    async def test_prepare_matches_stamp_across_engine_id_formats(self):
+        """A stamp written by podman (bare digest) matches docker's sha256:-prefixed Id."""
+        driver = self._ready_driver()
+        manifest = {"mounts": ["/opt/nuke"], "env": {}}
+        stamp = {"image_id": "img-1"}  # bare digest, no sha256: prefix
+
+        driver.client.containers.create = mock.AsyncMock(
+            return_value=self._read_container(manifest, stamp)
+        )
+
+        result = await driver.prepare_toolchain_volume(
+            "nukelab/rt:v1", "nukelab-toolchain-rt-v1", ["/opt/nuke"]
+        )
+
+        assert result == manifest
+        # Fast path taken: only the manifest-reading container was created.
+        assert driver.client.containers.create.call_count == 1
+
+    @pytest.mark.asyncio
     async def test_prepare_lock_conflict_waits_then_rechecks(self):
         """When another process holds the lock, wait, acquire, and re-check;
         if the holder populated meanwhile, skip the populate step."""

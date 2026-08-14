@@ -881,6 +881,19 @@ class DockerDriver(ContainerDriver):
         except (TypeError, ValueError):
             return None
 
+    @staticmethod
+    def _image_ids_match(a: str | None, b: str | None) -> bool:
+        """Compare image IDs across engine formats.
+
+        Docker reports ``sha256:<hex>`` while podman's CLI may report the
+        bare hex digest; comparing only the digest portion keeps the stamp
+        check valid when the CLI (cache-toolchain) and the backend run on
+        different engines.
+        """
+        if not a or not b:
+            return False
+        return a.rsplit(":", 1)[-1] == b.rsplit(":", 1)[-1]
+
     async def _acquire_toolchain_lock(self, image: str, volume_name: str):
         """Acquire the cross-process populate lock for a toolchain volume.
 
@@ -1026,7 +1039,7 @@ class DockerDriver(ContainerDriver):
         # repeated server spawns fast. Old volumes lack a stamp and get a
         # one-time automatic refresh here.
         cached = await self._read_toolchain_manifest(image, volume_name)
-        if cached is not None and cached[1].get("image_id") == image_id:
+        if cached is not None and self._image_ids_match(cached[1].get("image_id"), image_id):
             logger.info("Reusing populated toolchain volume %s for %s", volume_name, image)
             return cached[0]
         if cached is not None:
@@ -1041,7 +1054,7 @@ class DockerDriver(ContainerDriver):
         lock_container = await self._acquire_toolchain_lock(image, volume_name)
         try:
             cached = await self._read_toolchain_manifest(image, volume_name)
-            if cached is not None and cached[1].get("image_id") == image_id:
+            if cached is not None and self._image_ids_match(cached[1].get("image_id"), image_id):
                 logger.info(
                     "Toolchain volume %s was populated while waiting for the lock", volume_name
                 )

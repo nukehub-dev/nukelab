@@ -72,6 +72,18 @@ def _image_info(engine: str, image: str) -> dict | None:
         return None
 
 
+def _image_ids_match(a: str | None, b: str | None) -> bool:
+    """Compare image IDs across engine formats.
+
+    Docker reports ``sha256:<hex>`` while podman may report the bare hex
+    digest; comparing only the digest portion keeps the stamp check valid
+    when this CLI and the backend run on different engines.
+    """
+    if not a or not b:
+        return False
+    return a.rsplit(":", 1)[-1] == b.rsplit(":", 1)[-1]
+
+
 def _parse_timestamp(value: str | None) -> float | None:
     """Parse a Docker/Podman RFC3339 timestamp to epoch seconds, or None."""
     if not value:
@@ -281,7 +293,7 @@ def main() -> int:
 
     if not args.force:
         cached = _read_manifest_and_stamp(engine, args.image, volume_name)
-        if cached is not None and cached[1].get("image_id") == image_id:
+        if cached is not None and _image_ids_match(cached[1].get("image_id"), image_id):
             print("Volume is already populated and up to date; nothing to do.")
             return 0
 
@@ -291,7 +303,7 @@ def main() -> int:
         # we waited for the lock.
         if not args.force:
             cached = _read_manifest_and_stamp(engine, args.image, volume_name)
-            if cached is not None and cached[1].get("image_id") == image_id:
+            if cached is not None and _image_ids_match(cached[1].get("image_id"), image_id):
                 print("Volume was populated while waiting for the lock; nothing to do.")
                 return 0
 
