@@ -79,5 +79,6 @@ ENV DISPLAY=:99
 ENV NUKELAB_START_COMMAND="/opt/nukelab/start-ide.sh"
 
 # App probe for the runtime-injected healthcheck (see base/healthcheck.sh):
-# IDE liveness on :3000, inherited by gpu/ and radiation-transport/.
+# IDE liveness on :3000. Domain-specific images in nukelab-environments inherit
+# this probe when they extend the workspace image.
 ENV NUKELAB_HEALTH_PROBE_URLS="http://localhost:3000/"

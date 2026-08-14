@@ -49,7 +49,7 @@ _manage_sh_complete() {
 		if [[ "$COMP_CWORD" -eq 2 ]]; then
 			COMPREPLY=($(compgen -W "backend frontend all env $_build_flags" -- "$cur"))
 		elif [[ "${COMP_WORDS[2]}" == "env" ]]; then
-			COMPREPLY=($(compgen -W "base workspace radiation-transport dev all $_build_flags" -- "$cur"))
+			COMPREPLY=($(compgen -W "base workspace dev all $_build_flags" -- "$cur"))
 		else
 			COMPREPLY=($(compgen -W "$_build_flags" -- "$cur"))
 		fi

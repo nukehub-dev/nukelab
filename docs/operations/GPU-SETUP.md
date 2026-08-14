@@ -75,15 +75,22 @@ GPU's memory pool and can OOM each other.
 
 ## Using GPUs
 
-1. Build the CUDA environment image (extends `workspace` with the CUDA
-   toolkit):
+1. Build or pull the CUDA environment image from the `nukelab-environments`
+   repository (it extends `nukelab-workspace` with the CUDA toolkit):
 
    ```bash
-   ./nukelabctl build env gpu
+   cd /path/to/nukelab-environments
+   ./scripts/build.sh gpu
    ```
 
-2. In the admin UI, create an **Environment** record pointing at the built
-   image (`nukelab-gpu:latest`).
+   Or pull a published image:
+
+   ```bash
+   docker pull ghcr.io/nukelab/gpu:v1.0.0
+   ```
+
+2. In the admin UI, create an **Environment** record pointing at the image
+   (e.g. `ghcr.io/nukelab/gpu:v1.0.0`).
 3. Create or edit a **Plan** with **GPU** (`gpu_limit`) greater than 0. With
    exclusive allocation enabled, `gpu_limit` counts whole physical GPUs per
    server; keep the sum of concurrent GPU usage within the `GPU_DEVICES` pool.

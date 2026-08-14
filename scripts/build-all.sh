@@ -7,12 +7,11 @@ set -e
 
 SCRIPT_DIR="$(dirname "$0")"
 
-echo "Building all NukeLab components..."
+echo "Building all NukeLab platform images..."
 "$SCRIPT_DIR"/services/build-auth-sidecar.sh
 "$SCRIPT_DIR"/environments/build-base.sh
 "$SCRIPT_DIR"/environments/build-dev.sh
 "$SCRIPT_DIR"/environments/build-workspace.sh
-"$SCRIPT_DIR"/environments/build-radiation-transport.sh
-"$SCRIPT_DIR"/environments/build-gpu.sh
 
-echo "All components built successfully!"
+echo "All platform images built successfully!"
+echo "Domain-specific environment images are built from the nukelab-environments repository."
