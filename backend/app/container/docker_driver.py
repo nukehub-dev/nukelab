@@ -963,12 +963,12 @@ class DockerDriver(ContainerDriver):
         stamp_path = f"{self.TOOLCHAIN_TARGET}/{self.TOOLCHAIN_STAMP_FILE}"
 
         # Wipe first so files deleted from a re-pushed image do not linger.
+        # Each mount path's CONTENTS go to the volume root: consumers mount
+        # the volume at that path (e.g. /opt/nuke) and must see the toolchain
+        # tree directly. The contract is a single toolchain root per volume.
         copy_script = f"rm -rf {self.TOOLCHAIN_TARGET}/* {self.TOOLCHAIN_TARGET}/.[!.]*; "
         for path in mount_paths:
-            copy_script += (
-                f"mkdir -p {self.TOOLCHAIN_TARGET}{path}"
-                f" && cp -a {path}/. {self.TOOLCHAIN_TARGET}{path}/; "
-            )
+            copy_script += f"cp -a {path}/. {self.TOOLCHAIN_TARGET}/; "
         copy_script += f"printf '%s' {shlex.quote(stamp)} > {stamp_path}"
 
         populate_config = {

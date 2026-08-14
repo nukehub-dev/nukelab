@@ -214,10 +214,10 @@ def _populate(engine: str, image: str, volume_name: str, mount_paths: list[str],
         }
     )
     copy_script = f"rm -rf {_TOOLCHAIN_TARGET}/* {_TOOLCHAIN_TARGET}/.[!.]*; "
+    # Contents go to the volume root: consumers mount the volume at the mount
+    # path (e.g. /opt/nuke) and must see the toolchain tree directly.
     for path in mount_paths:
-        copy_script += (
-            f"mkdir -p {_TOOLCHAIN_TARGET}{path} && cp -a {path}/. {_TOOLCHAIN_TARGET}{path}/; "
-        )
+        copy_script += f"cp -a {path}/. {_TOOLCHAIN_TARGET}/; "
     copy_script += f"printf '%s' {shlex.quote(stamp)} > {_TOOLCHAIN_TARGET}/{_STAMP_FILE}"
 
     _run(

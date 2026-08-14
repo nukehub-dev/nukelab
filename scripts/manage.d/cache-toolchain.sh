@@ -6,6 +6,8 @@
 # The backend mounts these shared volumes read-only into workspace containers.
 
 CACHE_TOOLCHAIN_SCRIPT="$DIR/scripts/environments/cache-toolchain.py"
+CACHE_TOOLCHAIN_MOUNTS=()
+CACHE_TOOLCHAIN_FORCE=""
 
 parse_cache_toolchain_args() {
     for arg in "${EXTRA_ARGS[@]}"; do
@@ -24,18 +26,17 @@ parse_cache_toolchain_args() {
                 CACHE_TOOLCHAIN_FORCE=1
                 ;;
             *)
-                if [ -z "$CACHE_TOOLCHAIN_IMAGE" ]; then
-                    CACHE_TOOLCHAIN_IMAGE="$arg"
-                else
-                    die "Unknown extra argument for cache-toolchain: $arg"
-                fi
+                die "Unknown extra argument for cache-toolchain: $arg"
                 ;;
         esac
     done
 }
 
 cmd_cache_toolchain() {
-    if [ -z "$CACHE_TOOLCHAIN_IMAGE" ]; then
+    # The image is the command's positional target (see verify-hardening).
+    # TARGET defaults to "all" when no positional is given; that is not an image.
+    local image="${TARGET:-}"
+    if [ -z "$image" ] || [ "$image" = "all" ]; then
         help_cache_toolchain
         exit 1
     fi
@@ -64,8 +65,8 @@ cmd_cache_toolchain() {
         export CONTAINER_ENGINE
     fi
 
-    step "Pre-populating toolchain volume for ${BOLD}${CACHE_TOOLCHAIN_IMAGE}${RESET}"
-    "$_py" "$CACHE_TOOLCHAIN_SCRIPT" "${CACHE_TOOLCHAIN_IMAGE}" "${_mount_args[@]}" "${_force_args[@]}"
+    step "Pre-populating toolchain volume for ${BOLD}${image}${RESET}"
+    "$_py" "$CACHE_TOOLCHAIN_SCRIPT" "${image}" "${_mount_args[@]}" "${_force_args[@]}"
 }
 
 help_cache_toolchain() {

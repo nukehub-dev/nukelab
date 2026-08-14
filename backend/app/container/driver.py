@@ -206,7 +206,11 @@ class ContainerDriver(ABC):
 
         For Docker/Podman this runs a temporary container to copy image
         contents into a named volume only when the volume is not already
-        populated. For Kubernetes this becomes an init container in the pod
+        populated. Each mount path's contents are copied into the volume
+        root, because consumers mount the volume at that path (e.g. the
+        volume mounted at /opt/nuke must directly contain bin/, etc/).
+        The supported contract is a single toolchain root per volume.
+        For Kubernetes this becomes an init container in the pod
         spec and the driver can return a manifest read from the image
         metadata.
         """

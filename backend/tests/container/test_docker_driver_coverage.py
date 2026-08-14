@@ -602,7 +602,7 @@ class TestPrepareToolchainVolume:
         assert host_config["Tmpfs"] == {"/tmp": "rw,nosuid,nodev,size=64m"}
         script = populate_config["Cmd"][2]
         assert script.startswith("rm -rf /toolchain-target/* /toolchain-target/.[!.]*;")
-        assert "cp -a /opt/nuke/. /toolchain-target/opt/nuke/" in script
+        assert "cp -a /opt/nuke/. /toolchain-target/" in script
         # Stamp with the current image id is written after the copy.
         assert '"image_id": "sha256:img-1"' in script
         assert "/toolchain-target/.nukelab-toolchain-stamp.json" in script
