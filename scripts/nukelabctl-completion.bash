@@ -10,7 +10,7 @@ _manage_sh_complete() {
 	local commands=(
 		start stop restart status logs build update pull remove rm clean
 		shell exec install test e2e loadtest db-migrate db-shell
-		backup restore reset dev lint security
+		backup restore reset dev lint security cache-toolchain
 		init-user-auth-keys rotate-user-auth-key cleanup-user-auth-keys
 		doctor version install-completion selftest help
 	)
@@ -49,7 +49,7 @@ _manage_sh_complete() {
 		if [[ "$COMP_CWORD" -eq 2 ]]; then
 			COMPREPLY=($(compgen -W "backend frontend all env $_build_flags" -- "$cur"))
 		elif [[ "${COMP_WORDS[2]}" == "env" ]]; then
-			COMPREPLY=($(compgen -W "base workspace dev all $_build_flags" -- "$cur"))
+			COMPREPLY=($(compgen -W "base conda-base workspace dev all $_build_flags" -- "$cur"))
 		else
 			COMPREPLY=($(compgen -W "$_build_flags" -- "$cur"))
 		fi
@@ -85,6 +85,14 @@ _manage_sh_complete() {
 		;;
 	clean | reset)
 		COMPREPLY=($(compgen -W "--yes -y ${global_flags[*]}" -- "$cur"))
+		;;
+	cache-toolchain)
+		# First positional after the command is the image reference; after that
+		# offer options. We don't know available image names, so leave the
+		# value unconstrained and only complete flags once the user types '-'.
+		if [[ "$cur" == -* ]]; then
+			COMPREPLY=($(compgen -W "--engine= --mount= ${global_flags[*]}" -- "$cur"))
+		fi
 		;;
 	dev)
 		if [[ "$COMP_CWORD" -eq 2 ]]; then

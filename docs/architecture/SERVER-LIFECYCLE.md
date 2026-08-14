@@ -38,7 +38,12 @@ ResourcePoolService checks available CPU, memory, disk
                 |
                 +---> Ensure persistent volume exists
                 |
-                +---> Pull environment image if missing
+                +---> Pull runtime image if missing
+                |
+                +---> Pull toolchain image if configured
+                |
+                +---> Prepare toolchain volume from toolchain image
+                |     (mounts scientific software into the runtime container)
                 |
                 +---> Create container with plan limits
                 |     (NanoCpus, Memory, Cpuset, StorageOpt)

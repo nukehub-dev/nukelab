@@ -10,6 +10,7 @@ SCRIPT_DIR="$(dirname "$0")"
 echo "Building all NukeLab platform images..."
 "$SCRIPT_DIR"/services/build-auth-sidecar.sh
 "$SCRIPT_DIR"/environments/build-base.sh
+"$SCRIPT_DIR"/environments/build-conda-base.sh
 "$SCRIPT_DIR"/environments/build-dev.sh
 "$SCRIPT_DIR"/environments/build-workspace.sh
 

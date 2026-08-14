@@ -188,8 +188,34 @@ class ContainerDriver(ABC):
         """Delete a volume (best-effort; errors are swallowed)."""
 
     @abstractmethod
+    async def prepare_toolchain_volume(
+        self, image: str, volume_name: str, mount_paths: list[str]
+    ) -> dict:
+        """Create or refresh a volume populated from a toolchain image.
+
+        Returns the toolchain manifest (parsed JSON) so callers know which
+        paths to mount and which environment variables to inject.
+
+        Implementations must be idempotent: if the named volume already
+        contains a valid toolchain manifest, the copy step should be skipped
+        and the existing manifest returned. This lets multiple servers share
+        one toolchain volume and avoids copying multi-gigabyte images on
+        every spawn.
+
+        For Docker/Podman this runs a temporary container to copy image
+        contents into a named volume only when the volume is not already
+        populated. For Kubernetes this becomes an init container in the pod
+        spec and the driver can return a manifest read from the image
+        metadata.
+        """
+
+    @abstractmethod
     async def image_exists(self, image: str) -> bool:
         """Return True when the image is present locally."""
+
+    @abstractmethod
+    async def get_image_env(self, image: str) -> dict[str, str]:
+        """Return the default environment variables defined by an image."""
 
     @abstractmethod
     async def list_images(self) -> list:

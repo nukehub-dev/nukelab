@@ -1,52 +1,26 @@
 # Copyright (c) NukeLab Development Team.
 # Distributed under the terms of the BSD-2-Clause license.
 
-FROM nukelab-base:latest
+ARG BASE_TAG=v1.0.0
+ARG BASE_IMAGE=ghcr.io/nukelab/conda-base:${BASE_TAG}
 
-# Install build tools and runtimes needed by the IDE and Python packages.
+FROM $BASE_IMAGE
+
+# Install IDE-specific system dependencies.
 RUN apt-get update && \
-    apt-get upgrade -y && \
     apt-get install -y --no-install-recommends \
-        build-essential \
-        pkg-config \
-        git \
-        wget \
-        locales \
         ffmpeg \
         libx11-dev \
         libxkbfile-dev \
         libsecret-1-dev \
-        xvfb \
-        && \
-    # Remove downloaded package files to reduce the final image size.
-    apt-get clean && rm -rf /var/lib/apt/lists/* && \
-    # Configure the system's locale to en_US.UTF-8.
-    echo "en_US.UTF-8 UTF-8" > /etc/locale.gen && \
-    locale-gen
-
-# Configure core environment variables for Conda and the user
-ENV CONDA_DIR=/opt/conda \
-    SHELL=/bin/bash \
-    LC_ALL=en_US.UTF-8 \
-    LANG=en_US.UTF-8 \
-    LANGUAGE=en_US.UTF-8
-ENV PATH=${CONDA_DIR}/bin:${PATH}
-
-# Install Miniforge to manage Python environments
-RUN wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh -O Miniforge3.sh && \
-    bash Miniforge3.sh -b -p $CONDA_DIR && \
-    echo ". $CONDA_DIR/etc/profile.d/conda.sh" >> /etc/profile.d/conda.sh && \
-    rm Miniforge3.sh
+        xvfb && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js and Yarn from conda-forge instead of NodeSource apt,
 # because the NodeSource package hard-depends on system python3.
 ARG NODE_VERSION=24
 RUN conda install -y -c conda-forge nodejs=${NODE_VERSION} yarn=1.22.22 && \
     conda clean -afy
-
-# Activate the conda base environment in login shells (e.g. Theia terminals)
-# so node/yarn/python from /opt/conda/bin are on PATH.
-COPY conda-base.sh /etc/profile.d/nukelab-conda-base.sh
 
 # Install and build the nuke-ide extension.
 # NUKE_EXTENSIONS=all opts into nukelab-integration, which nuke-ide excludes
@@ -79,6 +53,6 @@ ENV DISPLAY=:99
 ENV NUKELAB_START_COMMAND="/opt/nukelab/start-ide.sh"
 
 # App probe for the runtime-injected healthcheck (see base/healthcheck.sh):
-# IDE liveness on :3000. Domain-specific images in nukelab-environments inherit
-# this probe when they extend the workspace image.
+# IDE liveness on :3000. Domain-specific toolchain images in nukelab-environments
+# mount scientific software into this runtime image.
 ENV NUKELAB_HEALTH_PROBE_URLS="http://localhost:3000/"

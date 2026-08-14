@@ -790,6 +790,130 @@ class DockerDriver(ContainerDriver):
         except Exception:
             pass
 
+    async def _read_toolchain_manifest(self, image: str, volume_name: str) -> dict | None:
+        """Read the toolchain manifest from a named volume if it exists.
+
+        Returns the parsed manifest dict when the volume is already populated,
+        or None when the manifest cannot be read (volume missing, empty, or
+        manifest absent). Errors are swallowed so callers can decide whether to
+        fall back to population.
+        """
+        import json
+
+        try:
+            manifest_config = {
+                "Image": image,
+                "Cmd": ["cat", "/opt/nuke/nukelab-toolchain.json"],
+                "HostConfig": {
+                    "Mounts": [
+                        {
+                            "Type": "volume",
+                            "Source": volume_name,
+                            "Target": "/opt/nuke",
+                            "ReadOnly": True,
+                        }
+                    ],
+                    "AutoRemove": False,
+                },
+            }
+            manifest_name = f"nukelab-toolchain-manifest-{uuid.uuid4().hex[:8]}"
+            manifest_container = await self.client.containers.create(
+                manifest_config, name=manifest_name
+            )
+            try:
+                await manifest_container.start()
+                wait_result = await manifest_container.wait()
+                exit_code = wait_result.get("StatusCode", wait_result)
+                if exit_code not in (0, "0"):
+                    return None
+                logs = await manifest_container.log(stdout=True, stderr=True)
+                manifest_text = "".join(logs)
+                return json.loads(manifest_text)
+            finally:
+                try:
+                    await manifest_container.delete(force=True)
+                except Exception:
+                    pass
+        except Exception:
+            return None
+
+    async def prepare_toolchain_volume(
+        self, image: str, volume_name: str, mount_paths: list[str]
+    ) -> dict:
+        """Create or refresh a named volume with contents from a toolchain image.
+
+        The volume is shared across all servers that use the same toolchain
+        image. If the volume already contains a valid toolchain manifest, the
+        expensive copy step is skipped and the manifest is returned directly.
+        Otherwise a temporary container copies the requested paths from the
+        image into the volume, and the manifest is then read and returned.
+        """
+        await self.ensure_volume(volume_name, labels={"nukelab.managed": "true"})
+
+        # Fast path: if the volume is already populated, return the manifest
+        # without copying anything. This makes repeated server spawns fast.
+        manifest = await self._read_toolchain_manifest(image, volume_name)
+        if manifest is not None:
+            logger.info("Reusing populated toolchain volume %s for %s", volume_name, image)
+            return manifest
+
+        logger.info("Populating toolchain volume %s from %s", volume_name, image)
+
+        # Copy each mount path from the image into the volume. We use a temp
+        # container with the image's filesystem and the volume mounted at
+        # /toolchain-target.
+        copy_cmd = ["sh", "-c"]
+        copy_script = ""
+        for path in mount_paths:
+            copy_script += (
+                f"mkdir -p /toolchain-target{path} && cp -a {path}/. /toolchain-target{path}/; "
+            )
+        copy_cmd.append(copy_script)
+
+        populate_config = {
+            "Image": image,
+            "Cmd": copy_cmd,
+            "HostConfig": {
+                "Mounts": [
+                    {
+                        "Type": "volume",
+                        "Source": volume_name,
+                        "Target": "/toolchain-target",
+                    }
+                ],
+                "AutoRemove": False,
+            },
+        }
+
+        populate_name = f"nukelab-toolchain-populate-{uuid.uuid4().hex[:8]}"
+        populate_container = None
+        try:
+            populate_container = await self.client.containers.create(
+                populate_config, name=populate_name
+            )
+            await populate_container.start()
+            wait_result = await populate_container.wait()
+            exit_code = wait_result.get("StatusCode", wait_result)
+            if exit_code not in (0, "0"):
+                logs = await populate_container.log(stdout=True, stderr=True)
+                raise ContainerDriverError(
+                    f"Toolchain population failed for {image} (exit {exit_code}): {''.join(logs)}"
+                )
+        finally:
+            if populate_container:
+                try:
+                    await populate_container.delete(force=True)
+                except Exception:
+                    pass
+
+        # Read the manifest from the freshly populated volume.
+        manifest = await self._read_toolchain_manifest(image, volume_name)
+        if manifest is None:
+            raise ContainerDriverError(
+                f"Toolchain manifest missing after populating {image} into {volume_name}"
+            )
+        return manifest
+
     async def image_exists(self, image: str) -> bool:
         """Return True when the image is present locally."""
         try:
@@ -797,6 +921,20 @@ class DockerDriver(ContainerDriver):
             return True
         except Exception:
             return False
+
+    async def get_image_env(self, image: str) -> dict[str, str]:
+        """Return the default environment variables defined by an image."""
+        env: dict[str, str] = {}
+        try:
+            img = await self.client.images.get(image)
+            config = img.get("Config") or img.get("ContainerConfig") or {}
+            for line in config.get("Env") or []:
+                if "=" in line:
+                    key, value = line.split("=", 1)
+                    env[key] = value
+        except Exception as e:
+            logger.warning("Could not read env from image %s: %s", image, e)
+        return env
 
     async def list_images(self) -> list:
         """List images present on the host."""

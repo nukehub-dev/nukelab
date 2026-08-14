@@ -9,6 +9,7 @@ hardening, network aliases/hostname, LD_PRELOAD combination, exec output
 streaming, archive writes, volume/image wrappers, and error mapping.
 """
 
+import json
 from unittest import mock
 
 import aiodocker
@@ -496,3 +497,82 @@ class TestCreateContainerHealthcheck:
         assert healthcheck["Timeout"] == 10 * 10**9
         assert healthcheck["StartPeriod"] == 90 * 10**9
         assert healthcheck["Retries"] == 3
+
+
+class TestPrepareToolchainVolume:
+    """Tests for shared toolchain volume population and reuse."""
+
+    @pytest.mark.asyncio
+    async def test_prepare_skips_copy_when_manifest_already_present(self):
+        driver, _ = _make_driver()
+        manifest = {"mounts": ["/opt/nuke"], "env": {"PATH": "/opt/nuke/bin"}}
+
+        mock_manifest_container = mock.AsyncMock()
+        mock_manifest_container.wait = mock.AsyncMock(return_value={"StatusCode": 0})
+        mock_manifest_container.log = mock.AsyncMock(return_value=[json.dumps(manifest)])
+        driver.client.containers.create = mock.AsyncMock(return_value=mock_manifest_container)
+
+        result = await driver.prepare_toolchain_volume(
+            "nukelab/rt:v1", "nukelab-toolchain-rt-v1", ["/opt/nuke"]
+        )
+
+        assert result == manifest
+        # Only the manifest-reading container should be created; no populate container.
+        assert driver.client.containers.create.call_count == 1
+        created_image = driver.client.containers.create.call_args[0][0]["Image"]
+        assert created_image == "nukelab/rt:v1"
+
+    @pytest.mark.asyncio
+    async def test_prepare_populates_when_manifest_missing(self):
+        driver, _ = _make_driver()
+        manifest = {"mounts": ["/opt/nuke"], "env": {}}
+
+        # Sequence: first manifest read fails (volume empty), then populate runs,
+        # then manifest read succeeds.
+        mock_first_read = mock.AsyncMock()
+        mock_first_read.wait = mock.AsyncMock(return_value={"StatusCode": 1})
+
+        mock_populate = mock.AsyncMock()
+        mock_populate.wait = mock.AsyncMock(return_value={"StatusCode": 0})
+
+        mock_second_read = mock.AsyncMock()
+        mock_second_read.wait = mock.AsyncMock(return_value={"StatusCode": 0})
+        mock_second_read.log = mock.AsyncMock(return_value=[json.dumps(manifest)])
+
+        driver.client.containers.create = mock.AsyncMock(
+            side_effect=[mock_first_read, mock_populate, mock_second_read]
+        )
+
+        result = await driver.prepare_toolchain_volume(
+            "nukelab/rt:v1", "nukelab-toolchain-rt-v1", ["/opt/nuke"]
+        )
+
+        assert result == manifest
+        assert driver.client.containers.create.call_count == 3
+        # Second call is the populate container.
+        populate_config = driver.client.containers.create.call_args_list[1][0][0]
+        assert populate_config["Cmd"][0] == "sh"
+        assert "/toolchain-target" in populate_config["HostConfig"]["Mounts"][0]["Target"]
+
+    @pytest.mark.asyncio
+    async def test_prepare_raises_when_populate_succeeds_but_manifest_missing(self):
+        driver, _ = _make_driver()
+
+        mock_first_read = mock.AsyncMock()
+        mock_first_read.wait = mock.AsyncMock(return_value={"StatusCode": 1})
+
+        mock_populate = mock.AsyncMock()
+        mock_populate.wait = mock.AsyncMock(return_value={"StatusCode": 0})
+
+        mock_second_read = mock.AsyncMock()
+        mock_second_read.wait = mock.AsyncMock(return_value={"StatusCode": 1})
+        mock_second_read.log = mock.AsyncMock(return_value=["not found"])
+
+        driver.client.containers.create = mock.AsyncMock(
+            side_effect=[mock_first_read, mock_populate, mock_second_read]
+        )
+
+        with pytest.raises(ContainerDriverError, match="manifest missing"):
+            await driver.prepare_toolchain_volume(
+                "nukelab/rt:v1", "nukelab-toolchain-rt-v1", ["/opt/nuke"]
+            )

@@ -20,7 +20,11 @@ class EnvironmentTemplate(Base):
     description = Column(Text, nullable=True)
 
     # Docker
+    # image = runtime container image (e.g. workspace with IDE)
+    # tool_image = optional scientific toolchain image mounted into the runtime
     image = Column(String(500), nullable=False)
+    tool_image = Column(String(500), nullable=True)
+    tool_mounts = Column(JSON, default=list)
     dockerfile = Column(Text, nullable=True)
 
     # Configuration
@@ -57,6 +61,8 @@ class EnvironmentTemplate(Base):
             "slug": self.slug,
             "description": self.description,
             "image": self.image,
+            "tool_image": self.tool_image,
+            "tool_mounts": self.tool_mounts or [],
             "dockerfile": self.dockerfile,
             "packages": self.packages or [],
             "environment_variables": self.environment_variables or {},

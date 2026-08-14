@@ -21,4 +21,4 @@ Reversible architecture and process decisions for NukeLab v2.0.
 | 2026-05-15 | `Alt+N` over `Ctrl+N` for quick spawn | Avoids Firefox "New Window" and OS shortcut collisions | Approved |
 | 2026-05-20 | Extracted spawner helpers for bulk ops | Reuse lifecycle logic instead of duplicating orchestration | Approved |
 | 2026-05-24 | DataTable row selection for bulk actions | Consistent UX pattern across tables | Approved |
-| 2026-08-14 | Separate `nukelab-environments` repository for domain-specific scientific images | Keeps platform repo focused on runtime; allows independent versioning, heavy CI runners, and domain maintainers for radiation-transport, gpu, moose, cardinal, openfoam | Approved |
+| 2026-08-14 | Separate `nukelab-environments` repository + runtime composition for scientific images | Keeps platform repo focused on runtime; toolchain images mount into `nukelab-workspace` at spawn time so workspace/IDE updates do not force MOAB/Geant4/OpenMC rebuilds; k3s-compatible via init-container volume population | Approved |

@@ -64,6 +64,7 @@ All files under `backend/` except generated artifacts (`.venv-dev`, `__pycache__
 
 - Use the `ContainerDriver` methods from `app/container/` (via the factory or the `client.py` shim), not raw Docker SDK/aiodocker calls scattered in routes and services. Only `docker_driver.py` may touch aiodocker.
 - Container operations must respect `CONTAINER_HARDENING_ENABLED` and run spawned containers as non-root with dropped capabilities.
+- Runtime composition: scientific toolchain images are mounted as volumes into the workspace runtime container. `ContainerDriver.prepare_toolchain_volume()` populates the volume and returns the toolchain manifest; a k3s driver implements the same flow with an init container.
 - Mutating driver methods (`stop_container`, `delete_container`, `start_container`) raise `ContainerDriverError` on runtime failure — never swallow. `spawner.stop/start/delete` map that to a `bool` (treating 304/404 as the already-achieved end state) and `spawner.get_status` returns `"unknown"` on lookup failure. Stop/delete paths must never mark a server `stopped` or remove its DB row on `False`/`"unknown"` — the container may still be running (DB status must stay consistent with live containers). Log, surface the error (API: 503; bulk: per-item failure), or skip and let the next task cycle retry.
 
 ### Authentication and authorization

@@ -837,6 +837,52 @@ class TestSpawnSuccess:
         vols = call_kwargs["volumes"]
         assert "nukelab-server-secrets" not in vols
 
+    @pytest.mark.asyncio
+    async def test_spawn_uses_shared_toolchain_volume_name(self, fresh_spawner):
+        """spawn should derive the toolchain volume name only from the image."""
+        fresh_spawner.container_client.prepare_toolchain_volume = mock.AsyncMock(
+            return_value={"mounts": ["/opt/nuke"], "env": {}}
+        )
+        user_id = str(uuid_mod.uuid4())
+
+        with mock.patch("app.container.spawner.settings.public_url", "http://test"):
+            await fresh_spawner.spawn(
+                user_id=user_id,
+                username="testuser",
+                server_name="srv1",
+                tool_image="nukelab/radiation-transport:v1.2.3",
+            )
+
+        call_kwargs = fresh_spawner.container_client.create_container.await_args.kwargs
+        vols = call_kwargs["volumes"]
+        expected_volume = "nukelab-toolchain-nukelab-radiation-transport-v1.2.3"
+        assert expected_volume in vols
+        assert vols[expected_volume]["mode"] == "ro"
+        fresh_spawner.container_client.prepare_toolchain_volume.assert_awaited_once_with(
+            "nukelab/radiation-transport:v1.2.3", expected_volume, ["/opt/nuke"]
+        )
+
+    @pytest.mark.asyncio
+    async def test_spawn_toolchain_volume_name_independent_of_server(self, fresh_spawner):
+        """Two different servers with the same tool_image must use the same volume."""
+        fresh_spawner.container_client.prepare_toolchain_volume = mock.AsyncMock(
+            return_value={"mounts": ["/opt/nuke"], "env": {}}
+        )
+        expected_volume = "nukelab-toolchain-nukelab-radiation-transport-v1.2.3"
+
+        for server_name in ("srv-a", "srv-b"):
+            with mock.patch("app.container.spawner.settings.public_url", "http://test"):
+                await fresh_spawner.spawn(
+                    user_id=str(uuid_mod.uuid4()),
+                    username="testuser",
+                    server_name=server_name,
+                    tool_image="nukelab/radiation-transport:v1.2.3",
+                )
+
+        create_calls = fresh_spawner.container_client.create_container.await_args_list
+        volumes_list = [c.kwargs["volumes"] for c in create_calls]
+        assert all(expected_volume in vols for vols in volumes_list)
+
 
 # ─────────────────────────────────────────────────────────────
 # spawn — failure paths

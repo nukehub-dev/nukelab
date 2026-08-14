@@ -135,6 +135,8 @@ class EnvironmentService:
         category: str | None = None,
         is_public: bool = True,
         created_by: str | None = None,
+        tool_image: str | None = None,
+        tool_mounts: list[str] | None = None,
     ) -> EnvironmentTemplate:
         """Create new environment template"""
 
@@ -151,6 +153,8 @@ class EnvironmentService:
             slug=slug,
             description=description,
             image=image,
+            tool_image=tool_image,
+            tool_mounts=tool_mounts or [],
             dockerfile=dockerfile,
             packages=packages or [],
             environment_variables=environment_variables or {},
@@ -223,6 +227,8 @@ class EnvironmentService:
             name=new_name,
             slug=new_slug,
             image=source.image,
+            tool_image=source.tool_image,
+            tool_mounts=source.tool_mounts,
             description=source.description,
             dockerfile=source.dockerfile,
             packages=source.packages,

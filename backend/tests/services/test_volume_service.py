@@ -15,7 +15,11 @@ from app.models.shared_workspace import SharedWorkspace
 from app.models.user import User
 from app.models.volume import Volume
 from app.models.workspace_volume import WorkspaceVolume
-from app.services.volume_service import VolumeService, make_docker_resource_name
+from app.services.volume_service import (
+    VolumeService,
+    make_docker_resource_name,
+    make_toolchain_volume_name,
+)
 
 
 @pytest.fixture
@@ -115,6 +119,29 @@ class TestVolumeServiceHelpers:
             suffix="data",
         )
         assert name1 != name2
+
+    def test_make_toolchain_volume_name_basic(self):
+        name = make_toolchain_volume_name("nukelab/radiation-transport:v1.2.3")
+        # Slashes and colons become dashes; dots are preserved.
+        assert name == "nukelab-toolchain-nukelab-radiation-transport-v1.2.3"
+
+    def test_make_toolchain_volume_name_sanitizes_special_chars(self):
+        name = make_toolchain_volume_name("myregistry.io/nuke/tool_chain:latest-rc/1")
+        assert "/" not in name
+        assert name[0].isalnum()
+        assert name == "nukelab-toolchain-myregistry.io-nuke-tool_chain-latest-rc-1"
+
+    def test_make_toolchain_volume_name_is_deterministic(self):
+        """The same image reference must always produce the same volume name."""
+        image = "nukelab/openfoam:v2024"
+        assert make_toolchain_volume_name(image) == make_toolchain_volume_name(image)
+
+    def test_make_toolchain_volume_name_truncates_long_images(self):
+        image = "a" * 300 + ":latest"
+        name = make_toolchain_volume_name(image)
+        assert len(name) <= 240
+        assert name[0].isalnum()
+        assert name.startswith("nukelab-toolchain-")
 
 
 class TestVolumeServiceCreate:

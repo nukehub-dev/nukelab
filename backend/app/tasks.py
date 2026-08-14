@@ -765,6 +765,8 @@ def process_server_queue(self):
                         environment=env_slug,
                         environment_id=str(next_entry.environment_id),
                         image=env_image,
+                        tool_image=environment.tool_image if environment else None,
+                        tool_mounts=environment.tool_mounts if environment else None,
                         cpu=next_entry.requested_cpu or plan.cpu_limit,
                         memory=next_entry.requested_memory or plan.memory_limit,
                         disk=next_entry.requested_disk or plan.disk_limit,
