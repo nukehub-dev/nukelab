@@ -315,7 +315,7 @@ produced from `monitoring/alertmanager/alertmanager.yml.tpl` by `nukelabctl`.
 Adjust environment variables (e.g., `ALERTMANAGER_EMAIL_TO`, `SMTP_*`) or edit
 the template to change receivers (Slack, PagerDuty, email, Discord, etc.).
 
-Included alert rules live in `monitoring/prometheus/rules/nukelab.yml`:
+Included alert rules live in `monitoring/prometheus/rules/nukelab.generated.yml`, generated from `monitoring/prometheus/rules/nukelab.yml.tpl` by `scripts/generate-prometheus-config.sh`. Edit the template and run `./scripts/generate-prometheus-config.sh` (or `./nukelabctl start`, which regenerates configs automatically) rather than editing the generated file directly.
 
 | Alert | Trigger |
 |-------|---------|
@@ -341,8 +341,10 @@ When you move to k3s, the same instrumentation works without changes:
    (Prometheus Operator).
 3. Add a `ServiceMonitor` that scrapes the backend service on `/api/metrics`.
 4. Re-use the dashboard JSON files by importing them into Grafana or mounting
-   them as ConfigMaps.
-5. Move alert rules from `monitoring/prometheus/rules/nukelab.yml` into
+   them as ConfigMaps. Update the `node_exporter_rootfs_path` dashboard
+   constant and the PromQL regex in the `PrometheusRule` CRD to match the
+   node-exporter `--path.rootfs` setting in the cluster.
+5. Move alert rules from `monitoring/prometheus/rules/nukelab.yml.tpl` into
    PrometheusRule CRDs.
 
 ### Reusable assets for k3s
@@ -352,7 +354,7 @@ When you move to k3s, the same instrumentation works without changes:
 | `compose.monitoring.yml` | `kube-prometheus-stack` Helm chart |
 | `compose.alertmanager.yml` | Alertmanager managed by the Operator |
 | `monitoring/prometheus/prometheus.yml.tpl` | `ServiceMonitor` + `Prometheus` CRD |
-| `monitoring/prometheus/rules/nukelab.yml` | `PrometheusRule` CRD |
+| `monitoring/prometheus/rules/nukelab.yml.tpl` | `PrometheusRule` CRD |
 | `monitoring/grafana/provisioning/dashboards/*.json` | Grafana dashboard ConfigMap |
 | `PROMETHEUS_SCRAPE_TOKEN` | Network policies or ServiceMonitor auth |
 

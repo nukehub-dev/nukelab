@@ -349,7 +349,7 @@
       "id": 10,
       "targets": [
         {
-          "expr": "100 * (1 - node_filesystem_avail_bytes{mountpoint=~\"/host(/.*)?\",fstype!~\"tmpfs|ramfs|squashfs|overlay|proc|sysfs|devtmpfs|devfs\"} / node_filesystem_size_bytes{mountpoint=~\"/host(/.*)?\",fstype!~\"tmpfs|ramfs|squashfs|overlay|proc|sysfs|devtmpfs|devfs\"})",
+          "expr": "100 * (1 - node_filesystem_avail_bytes{mountpoint=~\"${node_exporter_rootfs_path}(/.*)?\",fstype!~\"tmpfs|ramfs|squashfs|overlay|proc|sysfs|devtmpfs|devfs\"} / node_filesystem_size_bytes{mountpoint=~\"${node_exporter_rootfs_path}(/.*)?\",fstype!~\"tmpfs|ramfs|squashfs|overlay|proc|sysfs|devtmpfs|devfs\"})",
           "legendFormat": "{{mountpoint}}"
         }
       ],
@@ -383,6 +383,26 @@
         "regex": "",
         "skipUrlSync": false,
         "type": "datasource"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "/host",
+          "value": "/host"
+        },
+        "hide": 0,
+        "label": "Node exporter rootfs path",
+        "name": "node_exporter_rootfs_path",
+        "options": [
+          {
+            "selected": true,
+            "text": "/host",
+            "value": "/host"
+          }
+        ],
+        "query": "/host",
+        "skipUrlSync": false,
+        "type": "constant"
       }
     ]
   },
