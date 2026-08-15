@@ -1819,6 +1819,7 @@ class HealthMonitoringResponse(BaseModel):
     system: dict
     containers: dict
     recent_restarts: list
+    # system.storage is added at runtime; kept as dict for flexibility
 
 
 @router.get("/health/monitoring")
@@ -1851,6 +1852,7 @@ async def get_health_monitoring(
     from app.models.health_check import HealthCheck
     from app.models.user import User as UserModel
     from app.services.email_service import EmailService
+    from app.services.storage_metrics_service import get_postgres_database_size, get_redis_memory
 
     # ------------------------------------------------------------------
     # System health (fast, always computed)
@@ -1866,6 +1868,13 @@ async def get_health_monitoring(
             "status": "healthy",
             "latency_ms": round(db_latency, 2),
         }
+        # Add database size; keep going if size query fails
+        try:
+            pg_storage = await get_postgres_database_size(db)
+            if pg_storage["status"] == "healthy":
+                health_data["services"]["database"]["size_bytes"] = pg_storage["size_bytes"]
+        except Exception:
+            pass
     except Exception as e:
         health_data["services"]["database"] = {"status": "unhealthy", "error": str(e)}
         health_data["status"] = "degraded"
@@ -1881,6 +1890,14 @@ async def get_health_monitoring(
             "status": "healthy",
             "latency_ms": round(redis_latency, 2),
         }
+        # Add memory usage; keep going if memory query fails
+        try:
+            redis_storage = await get_redis_memory()
+            if redis_storage["status"] == "healthy":
+                health_data["services"]["redis"]["used_bytes"] = redis_storage["used_bytes"]
+                health_data["services"]["redis"]["max_bytes"] = redis_storage["max_bytes"]
+        except Exception:
+            pass
     except Exception as e:
         health_data["services"]["redis"] = {"status": "unhealthy", "error": str(e)}
         health_data["status"] = "degraded"

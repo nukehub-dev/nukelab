@@ -603,6 +603,11 @@ function ServiceCard({
     error?: string
     version?: string
     message?: string
+    host?: string
+    port?: number
+    size_bytes?: number
+    used_bytes?: number
+    max_bytes?: number
   }
   icon: React.ElementType
 }) {
@@ -610,12 +615,34 @@ function ServiceCard({
   const isHealthy = status === 'healthy'
   const isDisabled = status === 'disabled'
 
+  const badges: string[] = []
+
+  if (health?.size_bytes !== undefined) {
+    badges.push(formatBytes(health.size_bytes))
+  } else if (health?.used_bytes !== undefined) {
+    badges.push(
+      `${formatBytes(health.used_bytes)}${health.max_bytes ? ` / ${formatBytes(health.max_bytes)}` : ''}`
+    )
+  }
+
+  if (health?.latency_ms !== undefined) {
+    badges.push(`${health.latency_ms.toFixed(1)} ms`)
+  } else if (health?.version) {
+    badges.push(`v${health.version}`)
+  } else if (health?.host && health?.port !== undefined) {
+    badges.push(`${health.host}:${health.port}`)
+  } else if (health?.message) {
+    badges.push(health.message)
+  } else if (health?.error) {
+    badges.push(health.error)
+  }
+
   return (
-    <div className="bubble p-4 hover-lift cursor-default">
-      <div className="flex items-center gap-3 mb-2">
+    <div className="bubble p-4 hover-lift cursor-default min-h-[6.5rem] flex flex-col justify-between">
+      <div className="flex items-center gap-3">
         <div
           className={cn(
-            'w-9 h-9 rounded-lg flex items-center justify-center',
+            'w-9 h-9 rounded-lg flex items-center justify-center shrink-0',
             isHealthy
               ? 'bg-emerald-500/10 text-emerald-400'
               : isDisabled
@@ -625,8 +652,8 @@ function ServiceCard({
         >
           <Icon className="w-4 h-4" />
         </div>
-        <div className="flex-1 min-w-0">
-          <p className="font-medium text-sm">{name}</p>
+        <div className="min-w-0">
+          <p className="font-medium text-sm truncate">{name}</p>
           <p
             className={cn(
               'text-xs',
@@ -637,16 +664,18 @@ function ServiceCard({
           </p>
         </div>
       </div>
-      {health?.latency_ms !== undefined && (
-        <p className="text-xs text-muted-foreground">{health.latency_ms.toFixed(1)} ms</p>
+      {badges.length > 0 && (
+        <div className="flex justify-between gap-2 mt-2">
+          {badges.map((badge, index) => (
+            <span
+              key={index}
+              className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium text-muted-foreground truncate"
+            >
+              {badge}
+            </span>
+          ))}
+        </div>
       )}
-      {health?.version && <p className="text-xs text-muted-foreground">v{health.version}</p>}
-      {health?.error && (
-        <Tooltip content={health.error}>
-          <p className="text-xs text-red-400/80 truncate cursor-help">{health.error}</p>
-        </Tooltip>
-      )}
-      {health?.message && <p className="text-xs text-muted-foreground">{health.message}</p>}
     </div>
   )
 }

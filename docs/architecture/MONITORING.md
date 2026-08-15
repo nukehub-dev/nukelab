@@ -58,7 +58,17 @@ faster.
 | postgres-   |          | redis-      |
 | exporter    |          | exporter    |
 +-------------+          +-------------+
+        ^
+        | scrape
+        v
++-------------+
+| node-       |
+| exporter    |
++-------------+
 ```
+
+`node-exporter` is included for host-level metrics such as filesystem usage,
+which underpins storage alerts and the admin dashboard storage summary.
 
 When `PGBOUNCER_ENABLED=true`, `nukelabctl` also adds the PgBouncer exporter
 overlay (`compose.monitoring-pgbouncer.yml`).
@@ -96,10 +106,20 @@ Two dashboards are provisioned automatically:
   endpoints, WebSocket connections, Redis cache hit ratio.
 
 - **NukeLab Infrastructure** (`nukelab-infrastructure`)
-  Backend memory, Postgres connections/transactions, Redis memory/clients,
-  business metrics, Celery throughput.
+  Backend memory, Postgres connections/transactions/database size, Redis
+  memory/clients, volume filesystem usage, business metrics, Celery throughput.
 
 They appear under *Dashboards → Browse* after Grafana starts.
+
+---
+
+## Admin Health Service Cards
+
+The admin health page (`/admin/health`) enriches the Database and Redis
+service cards with the current Postgres database size and Redis used/max
+memory. Volume filesystem usage is already shown in the System Resources
+section above it. Data comes from `/api/admin/health/monitoring`. For charts,
+history, and alerting, use Grafana.
 
 ---
 
@@ -304,8 +324,10 @@ Included alert rules live in `monitoring/prometheus/rules/nukelab.yml`:
 | `NukeLabTargetDown` | backend scrape target down for 1 minute |
 | `NukeLabContainerStatusLookupFailures` | container runtime status lookups failing for 2 minutes (servers could appear stopped while still running) |
 | `NukeLabPostgresConnectionsHigh` | Postgres connections > 80% of max |
+| `NukeLabPostgresDatabaseGrowth` | Postgres database predicted to exceed 80% of the backing filesystem within 24 hours |
 | `NukeLabRedisMemoryHigh` | Redis memory > 85% of max |
 | `NukeLabRedisMaxMemoryNotSet` | Redis has no `maxmemory` limit configured |
+| `NukeLabFilesystemSpaceLow` | Host filesystem backing Postgres/Redis/volumes > 80% full |
 
 ---
 

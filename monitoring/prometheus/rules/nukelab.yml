@@ -91,3 +91,41 @@ groups:
         annotations:
           summary: "Redis maxmemory is not configured"
           description: "Redis has no maxmemory limit; memory alerts cannot be calculated. Set REDIS_MAXMEMORY in your environment."
+
+      - alert: NukeLabFilesystemSpaceLow
+        # node-exporter mounts the host rootfs at /host, so NukeLab data
+        # directories (Postgres, Redis, volumes) appear under /host/... .
+        # Tune the mountpoint regex to match the actual deployment host.
+        expr: |
+          100 * (
+            1
+            -
+            node_filesystem_avail_bytes{mountpoint=~"/host(/.*)?",fstype!~"tmpfs|ramfs|squashfs|overlay|proc|sysfs|devtmpfs|devfs"}
+            /
+            node_filesystem_size_bytes{mountpoint=~"/host(/.*)?",fstype!~"tmpfs|ramfs|squashfs|overlay|proc|sysfs|devtmpfs|devfs"}
+          ) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "NukeLab host filesystem is more than 80% full"
+          description: "Host filesystem {{ $labels.mountpoint }} is {{ $value | humanizePercentage }} full."
+
+      - alert: NukeLabPostgresDatabaseGrowth
+        # Predictive alert: if the current growth rate continues, any Postgres
+        # database will exceed 80% of the backing host filesystem within 24h.
+        expr: |
+          (
+            predict_linear(pg_database_size_bytes{datname=~".+"}[6h], 24*3600)
+            /
+            on(instance) group_left
+            max by (instance) (
+              node_filesystem_size_bytes{mountpoint=~"/host(/.*)?",fstype!~"tmpfs|ramfs|squashfs|overlay|proc|sysfs|devtmpfs|devfs"}
+            )
+          ) > 0.8
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Postgres database predicted to exceed 80% of filesystem within 24 hours"
+          description: "Database {{ $labels.datname }} on {{ $labels.instance }} is predicted to reach {{ $value | humanizePercentage }} of the host filesystem in 24h."
