@@ -26,7 +26,11 @@ const TABS: { key: CreditsTab; label: string; icon: React.ElementType }[] = [
 function CreditsAdminPage() {
   const allowed = usePageGuard({ permission: PERMISSIONS.CREDITS_READ_ALL })
   const navigate = useNavigate()
-  const searchParams = useSearch({ from: '/admin/credits' }) as { user?: string; tab?: string }
+  const searchParams = useSearch({ from: '/admin/credits' }) as {
+    user?: string
+    request?: string
+    tab?: string
+  }
 
   // The ?user=<id> deep-link always lands on the Users tab.
   const tabParam = searchParams.tab
@@ -94,7 +98,7 @@ function CreditsAdminPage() {
       </motion.div>
 
       {/* Panels mount lazily so hidden tabs don't fire their queries */}
-      {activeTab === 'requests' && <RequestsTab />}
+      {activeTab === 'requests' && <RequestsTab focusRequestId={searchParams.request} />}
       {activeTab === 'users' && <UsersTab focusUserId={searchParams.user} />}
       {activeTab === 'settings' && <SettingsTab />}
     </div>

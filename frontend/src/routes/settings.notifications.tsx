@@ -18,12 +18,15 @@ import {
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCurrentUser } from '../hooks/use-current-user'
 import { api } from '../lib/api'
 import { Input } from '../components/ui/input'
 import { Checkbox } from '../components/ui/checkbox'
 import { useToast } from '../stores/toast-store'
+import { getPushSubscription, subscribePush, unsubscribePush } from '../lib/register-sw'
+import { isAuthenticated } from '../hooks/use-auth'
+import { cn } from '../lib/utils'
 
 export const Route = createFileRoute('/settings/notifications')({
   component: NotificationsSettingsPage,
@@ -68,128 +71,128 @@ const defaultEvents: EventPreference[] = [
     event: 'server_start',
     label: 'Server Started',
     description: 'When a server is started',
-    channels: { email: false, webhook: false, in_app: true },
+    channels: { email: false, webhook: false, in_app: true, push: false },
   },
   {
     event: 'server_stop',
     label: 'Server Stopped',
     description: 'When a server is stopped',
-    channels: { email: false, webhook: false, in_app: true },
+    channels: { email: false, webhook: false, in_app: true, push: false },
   },
   {
     event: 'server_ready',
     label: 'Server Ready',
     description: 'When a server is ready to use',
-    channels: { email: true, webhook: false, in_app: true },
+    channels: { email: true, webhook: false, in_app: true, push: false },
   },
   {
     event: 'server_failed',
     label: 'Server Failed',
     description: 'When a server fails to start',
-    channels: { email: true, webhook: false, in_app: true },
+    channels: { email: true, webhook: false, in_app: true, push: false },
   },
   {
     event: 'server_backup_completed',
     label: 'Backup Completed',
     description: 'When a server backup finishes',
-    channels: { email: true, webhook: false, in_app: true },
+    channels: { email: true, webhook: false, in_app: true, push: false },
   },
   {
     event: 'credit_low',
     label: 'Low Credits',
     description: 'When your credit balance is low',
-    channels: { email: true, webhook: true, in_app: true },
+    channels: { email: true, webhook: true, in_app: true, push: false },
   },
   {
     event: 'credit_granted',
     label: 'Credits Granted',
     description: 'When credits are added to your account',
-    channels: { email: true, webhook: false, in_app: true },
+    channels: { email: true, webhook: false, in_app: true, push: false },
   },
   {
     event: 'credit_request',
     label: 'Credit Request Response',
     description: 'When your credit request is approved or rejected',
-    channels: { email: true, webhook: false, in_app: true },
+    channels: { email: true, webhook: false, in_app: true, push: false },
   },
   {
     event: 'daily_allowance',
     label: 'Daily Allowance',
     description: 'When your daily credit allowance is granted',
-    channels: { email: false, webhook: false, in_app: true },
+    channels: { email: false, webhook: false, in_app: true, push: false },
   },
   {
     event: 'queue_position',
     label: 'Queue Position',
     description: 'Updates on your queue position',
-    channels: { email: false, webhook: false, in_app: true },
+    channels: { email: false, webhook: false, in_app: true, push: false },
   },
   {
     event: 'schedule_run',
     label: 'Schedule Executed',
     description: 'When a scheduled task runs',
-    channels: { email: false, webhook: false, in_app: true },
+    channels: { email: false, webhook: false, in_app: true, push: false },
   },
   {
     event: 'alert_fired',
     label: 'Alert Fired',
     description: 'When a system alert is triggered',
-    channels: { email: true, webhook: true, in_app: true },
+    channels: { email: true, webhook: true, in_app: true, push: false },
   },
   {
     event: 'maintenance',
     label: 'Maintenance Mode',
     description: 'System maintenance notifications',
-    channels: { email: true, webhook: true, in_app: true },
+    channels: { email: true, webhook: true, in_app: true, push: false },
   },
   {
     event: 'workspace_invite',
     label: 'Workspace Invitation',
     description: 'When you are invited to a workspace',
-    channels: { email: true, webhook: false, in_app: true },
+    channels: { email: true, webhook: false, in_app: true, push: false },
   },
   {
     event: 'workspace_member_added',
     label: 'Added to Workspace',
     description: 'When you are added to a workspace',
-    channels: { email: true, webhook: false, in_app: true },
+    channels: { email: true, webhook: false, in_app: true, push: false },
   },
   {
     event: 'workspace_member_removed',
     label: 'Removed from Workspace',
     description: 'When you are removed from a workspace',
-    channels: { email: true, webhook: false, in_app: true },
+    channels: { email: true, webhook: false, in_app: true, push: false },
   },
   {
     event: 'ownership_transferred',
     label: 'Ownership Transferred',
     description: 'When workspace ownership is transferred to you',
-    channels: { email: true, webhook: false, in_app: true },
+    channels: { email: true, webhook: false, in_app: true, push: false },
   },
   {
     event: 'volume_created',
     label: 'Volume Created',
     description: 'When a new volume is provisioned',
-    channels: { email: false, webhook: false, in_app: true },
+    channels: { email: false, webhook: false, in_app: true, push: false },
   },
   {
     event: 'volume_near_limit',
     label: 'Volume Near Limit',
     description: 'When a volume reaches 90% capacity',
-    channels: { email: true, webhook: false, in_app: true },
+    channels: { email: true, webhook: false, in_app: true, push: false },
   },
   {
     event: 'volume_deleted',
     label: 'Volume Deleted',
     description: 'When a volume is permanently removed',
-    channels: { email: true, webhook: false, in_app: true },
+    channels: { email: true, webhook: false, in_app: true, push: false },
   },
 
   {
     event: 'api_key_created',
     label: 'API Key Created',
     description: 'When a new API key is generated',
-    channels: { email: true, webhook: false, in_app: true },
+    channels: { email: true, webhook: false, in_app: true, push: false },
   },
 ]
 
@@ -200,6 +203,33 @@ function NotificationsSettingsPage() {
   const [preferences, setPreferences] = useState<EventPreference[]>(defaultEvents)
   const [webhookUrl, setWebhookUrl] = useState('')
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const [pushPermission, setPushPermission] = useState<NotificationPermission | ''>(() => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return ''
+    return Notification.permission
+  })
+  const [pushEnabled, setPushEnabled] = useState(false)
+
+  const { data: vapidPublicKey } = useQuery({
+    queryKey: ['vapid-public-key'],
+    queryFn: async () => {
+      const response = await api.get<{ public_key: string }>('/push/vapid-public-key')
+      return response.public_key
+    },
+    enabled: isAuthenticated() && typeof window !== 'undefined' && 'PushManager' in window,
+    retry: false,
+    staleTime: Infinity,
+  })
+
+  const pushSupported =
+    typeof window !== 'undefined' &&
+    'serviceWorker' in navigator &&
+    'PushManager' in window &&
+    !!vapidPublicKey
+
+  useEffect(() => {
+    if (!pushSupported) return
+    getPushSubscription().then((sub) => setPushEnabled(!!sub))
+  }, [pushSupported])
 
   // Load saved preferences
   useEffect(() => {
@@ -221,6 +251,35 @@ function NotificationsSettingsPage() {
 
   // Debounced auto-save
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const pushSubscribeMutation = useMutation({
+    mutationFn: async (publicKey: string) => {
+      return subscribePush(publicKey, async (sub) => {
+        await api.post('/push/subscriptions', sub)
+      })
+    },
+    onSuccess: () => {
+      setPushEnabled(true)
+      setPushPermission('granted')
+    },
+    onError: (err) => {
+      error('Push subscription failed', err instanceof Error ? err.message : 'Please try again')
+    },
+  })
+
+  const pushUnsubscribeMutation = useMutation({
+    mutationFn: async () => {
+      return unsubscribePush(async (endpoint) => {
+        await api.delete('/push/subscriptions', { endpoint })
+      })
+    },
+    onSuccess: () => {
+      setPushEnabled(false)
+    },
+    onError: (err) => {
+      error('Push unsubscribe failed', err instanceof Error ? err.message : 'Please try again')
+    },
+  })
 
   const saveMutation = useMutation({
     mutationFn: async (payload: { events: EventPreference[]; webhook_url: string }) => {
@@ -285,7 +344,7 @@ function NotificationsSettingsPage() {
   const handleEnableAll = () => {
     const updated = preferences.map((p) => ({
       ...p,
-      channels: { email: true, webhook: true, in_app: true },
+      channels: { email: true, webhook: true, in_app: true, push: true },
     }))
     setPreferences(updated)
     triggerSave(updated, webhookUrl)
@@ -294,7 +353,7 @@ function NotificationsSettingsPage() {
   const handleDisableAll = () => {
     const updated = preferences.map((p) => ({
       ...p,
-      channels: { email: false, webhook: false, in_app: false },
+      channels: { email: false, webhook: false, in_app: false, push: false },
     }))
     setPreferences(updated)
     triggerSave(updated, webhookUrl)
@@ -379,6 +438,61 @@ function NotificationsSettingsPage() {
           </div>
         </SettingsSection>
 
+        {/* Push Notifications */}
+        {pushSupported && (
+          <SettingsSection
+            title="Push Notifications"
+            description="Receive notifications on this device even when the tab is closed."
+          >
+            <div className="flex items-center justify-between p-4 rounded-xl border border-border/50 bg-muted/20">
+              <div>
+                <p className="text-sm font-medium">
+                  {pushEnabled ? 'Push notifications enabled' : 'Push notifications disabled'}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {pushPermission === 'denied'
+                    ? 'Browser permission is denied. Enable notifications in your browser settings to use push.'
+                    : pushEnabled
+                      ? 'This device will receive notifications outside the app.'
+                      : 'Enable to receive notifications on this device.'}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  if (pushEnabled) {
+                    pushUnsubscribeMutation.mutate()
+                  } else if (vapidPublicKey) {
+                    pushSubscribeMutation.mutate(vapidPublicKey)
+                  }
+                }}
+                disabled={
+                  pushPermission === 'denied' ||
+                  pushSubscribeMutation.isPending ||
+                  pushUnsubscribeMutation.isPending
+                }
+                className={cn(
+                  'inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
+                  pushEnabled
+                    ? 'bg-destructive/10 text-destructive hover:bg-destructive/20'
+                    : 'bg-primary text-primary-foreground hover:bg-primary/90',
+                  (pushPermission === 'denied' ||
+                    pushSubscribeMutation.isPending ||
+                    pushUnsubscribeMutation.isPending) &&
+                    'opacity-50 cursor-not-allowed'
+                )}
+              >
+                {pushSubscribeMutation.isPending || pushUnsubscribeMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : pushEnabled ? (
+                  'Disable'
+                ) : (
+                  'Enable'
+                )}
+              </button>
+            </div>
+          </SettingsSection>
+        )}
+
         {/* Event Preferences */}
         <SettingsSection
           title="Event Preferences"
@@ -386,11 +500,19 @@ function NotificationsSettingsPage() {
         >
           <div className="rounded-xl border border-border/50 overflow-hidden">
             {/* Table Header */}
-            <div className="grid grid-cols-[1fr_80px_80px_80px] gap-2 px-4 py-3 bg-muted/30 border-b border-border/50 text-sm font-medium text-muted-foreground">
+            <div
+              className={cn(
+                'grid gap-2 px-4 py-3 bg-muted/30 border-b border-border/50 text-sm font-medium text-muted-foreground',
+                pushSupported
+                  ? 'grid-cols-[1fr_80px_80px_80px_80px]'
+                  : 'grid-cols-[1fr_80px_80px_80px]'
+              )}
+            >
               <span>Event</span>
               <span className="text-center">Email</span>
               <span className="text-center">Webhook</span>
               <span className="text-center">In-App</span>
+              {pushSupported && <span className="text-center">Push</span>}
             </div>
 
             {/* Event Rows */}
@@ -400,7 +522,12 @@ function NotificationsSettingsPage() {
                 return (
                   <div
                     key={pref.event}
-                    className="grid grid-cols-[1fr_80px_80px_80px] gap-2 px-4 py-4 items-center hover:bg-accent/10 transition-colors"
+                    className={cn(
+                      'grid gap-2 px-4 py-4 items-center hover:bg-accent/10 transition-colors',
+                      pushSupported
+                        ? 'grid-cols-[1fr_80px_80px_80px_80px]'
+                        : 'grid-cols-[1fr_80px_80px_80px]'
+                    )}
                   >
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
@@ -430,6 +557,14 @@ function NotificationsSettingsPage() {
                         onChange={() => toggleChannel(index, 'in_app')}
                       />
                     </div>
+                    {pushSupported && (
+                      <div className="flex justify-center">
+                        <Checkbox
+                          checked={pref.channels.push}
+                          onChange={() => toggleChannel(index, 'push')}
+                        />
+                      </div>
+                    )}
                   </div>
                 )
               })}

@@ -885,7 +885,8 @@ def _health_db(*, db_fails=False):
     if db_fails:
         results.append(RuntimeError("connection refused"))
     else:
-        results.append(_result())
+        results.append(_result())  # SELECT 1 health check
+        results.append(_result(scalar=0))  # pg_database_size
     # total_running=0 -> server id page empty -> latest checks skipped
     results.append(_result(scalar=0))  # total running servers
     results.append(_result(all_rows=[]))  # paginated server ids

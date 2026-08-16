@@ -1608,7 +1608,9 @@ async def _perform_server_delete(
     await _release_gpu_devices(db, server_id)
 
     notif_service = NotificationService(db)
-    await notif_service.server_deleted(user_id=user_id, server_name=server_name)
+    await notif_service.server_deleted(
+        user_id=user_id, server_name=server_name, server_id=server_id
+    )
 
     return {"message": "Server deleted", "server_id": server_id}
 

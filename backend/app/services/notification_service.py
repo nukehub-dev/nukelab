@@ -17,10 +17,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.core.time_utils import utc_now
 from app.models.notification import Notification
+from app.models.push_subscription import PushSubscription
 from app.models.user import User
 from app.tasks import send_notification_channels
 
 logger = logging.getLogger(__name__)
+
+# pywebpush is optional at import time so the backend can start without it.
+# When unavailable, push notifications are silently skipped.
+try:
+    from pywebpush import WebPushException, webpush
+except Exception:  # pragma: no cover - dependency may be missing
+    WebPushException = Exception  # type: ignore[misc,assignment]
+    webpush = None
 
 # Maps backend method names to frontend event keys in user preferences
 EVENT_KEY_MAP = {
@@ -58,7 +67,11 @@ EVENT_KEY_MAP = {
 }
 
 # Default channel settings when user has no preference for an event
-DEFAULT_CHANNELS = {"email": False, "webhook": False, "in_app": True}
+DEFAULT_CHANNELS = {"email": False, "webhook": False, "in_app": True, "push": False}
+
+# Maximum visible characters in a push payload body. The full notification
+# message is available in-app; push payloads only need a short preview.
+MAX_PUSH_BODY_LENGTH = 120
 
 # Shared Redis client for WebSocket pub/sub. Lazily initialized so
 # importing this module does not require a running Redis instance.
@@ -202,6 +215,86 @@ class NotificationService:
         except Exception as e:
             logger.warning("Failed to send webhook notification: %s", e)
 
+    async def _send_push_for_notification(
+        self,
+        user_id,
+        title: str,
+        body: str,
+        action_url: str | None = None,
+    ) -> None:
+        """Send a Web Push notification to all user subscriptions.
+
+        Payload is capped to ~2 KB and contains only title, a short body, and
+        the optional action_url. Endpoints are treated as secrets and are never
+        logged. Dead subscriptions (404/410) are removed.
+        """
+        if (
+            not settings.vapid_private_key
+            or not settings.vapid_public_key
+            or not settings.vapid_subject
+        ):
+            return
+
+        if webpush is None:
+            logger.warning("pywebpush is not installed; skipping push notification")
+            return
+
+        result = await self.db.execute(
+            select(PushSubscription).where(PushSubscription.user_id == user_id)
+        )
+        subscriptions = result.scalars().all()
+        if not subscriptions:
+            return
+
+        # Push payloads are size-constrained and should not leak the full
+        # notification message; keep a short preview and let the user open
+        # the app (or action_url) for details.
+        short_body = body
+        if len(short_body) > MAX_PUSH_BODY_LENGTH:
+            short_body = short_body[: MAX_PUSH_BODY_LENGTH - 1].rstrip() + "…"
+
+        payload = {
+            "title": title,
+            "body": short_body,
+        }
+        if action_url:
+            payload["action_url"] = action_url
+
+        import json
+
+        data = json.dumps(payload)
+        if len(data.encode("utf-8")) > 2048:
+            # Hard cap as a safety net; truncate body while keeping valid JSON.
+            max_body = 1800
+            payload["body"] = short_body[:max_body]
+            data = json.dumps(payload)
+
+        vapid_claims = {"sub": settings.vapid_subject}
+
+        for subscription in subscriptions:
+            try:
+                webpush(
+                    subscription_info={
+                        "endpoint": subscription.endpoint,
+                        "keys": subscription.keys,
+                    },
+                    data=data,
+                    vapid_private_key=settings.vapid_private_key,
+                    vapid_claims=vapid_claims,
+                )
+                subscription.last_used_at = utc_now()
+            except WebPushException as e:
+                status_code = getattr(e.response, "status_code", None)
+                if status_code in (404, 410):
+                    logger.debug("Removing dead push subscription for user %s", user_id)
+                    await self.db.delete(subscription)
+                else:
+                    logger.warning("Push failed for user %s: %s", user_id, e)
+            except Exception as e:
+                logger.warning("Push failed for user %s: %s", user_id, e)
+
+        await self.db.commit()
+
     async def _low_balance_notified_recently(
         self, user_id, event_key: str = "credit_low", hours: int = 24
     ) -> bool:
@@ -222,18 +315,19 @@ class NotificationService:
         """Push notification to WebSocket subscribers via Redis pub/sub."""
         try:
             r = _get_redis()
-            await r.publish(
-                f"user:{user_id}",
-                json.dumps(
-                    {
-                        "event": "notification:new",
-                        "user_id": str(user_id),
-                        "data": notification.to_dict(),
-                    }
-                ),
+            payload = {
+                "event": "notification:new",
+                "user_id": str(user_id),
+                "data": notification.to_dict(),
+            }
+            await r.publish(f"user:{user_id}", json.dumps(payload))
+            logger.info(
+                "Published notification:new to user:%s notification=%s",
+                user_id,
+                notification.id,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to publish notification:new to user:%s: %s", user_id, e)
 
     async def create(
         self,
@@ -260,6 +354,7 @@ class NotificationService:
         should_in_app = self._should_send(prefs, event_key, "in_app")
         should_email = self._should_send(prefs, event_key, "email")
         should_webhook = self._should_send(prefs, event_key, "webhook")
+        should_push = self._should_send(prefs, event_key, "push")
 
         # Store the event key so we can throttle/audit later.
         merged_extra = {"event_key": event_key, **(extra_data or {})}
@@ -285,8 +380,8 @@ class NotificationService:
             await self._publish_to_websocket(user_id, notification)
 
         # Offload slower channels so the request/transaction isn't held up
-        # by an external email server or webhook endpoint.
-        if should_email or should_webhook:
+        # by an external email server, webhook endpoint, or push service.
+        if should_email or should_webhook or should_push:
             try:
                 send_notification_channels.delay(
                     user_id=str(user_id),
@@ -295,6 +390,7 @@ class NotificationService:
                     message=message,
                     severity=severity,
                     notification_type=type,
+                    action_url=action_url,
                     extra_data=merged_extra,
                 )
             except Exception:
@@ -302,8 +398,41 @@ class NotificationService:
 
         return notification
 
+    async def bulk_delete(
+        self,
+        user_id,
+        notification_ids: list[str] | None = None,
+        read_only: bool = False,
+        all: bool = False,
+    ) -> int:
+        """Delete notifications scoped to a user.
+
+        Explicit IDs take precedence; filters are ignored when ids are given.
+        Returns the number of deleted rows.
+        """
+        from sqlalchemy import delete
+
+        stmt = delete(Notification).where(Notification.user_id == user_id)
+
+        if notification_ids:
+            stmt = stmt.where(Notification.id.in_(notification_ids))
+        else:
+            if read_only:
+                stmt = stmt.where(Notification.read.is_(True))
+            if all:
+                # all=true with no ids deletes every user notification
+                pass
+
+        result = await self.db.execute(stmt)
+        await self.db.commit()
+        return result.rowcount
+
     async def server_started(
-        self, user_id, server_name: str, action_url: str | None = None
+        self,
+        user_id,
+        server_name: str,
+        action_url: str | None = None,
+        server_id: str | None = None,
     ) -> Notification | None:
         """Notify user that their server has started."""
         return await self.create(
@@ -312,12 +441,16 @@ class NotificationService:
             message=f"Your server '{server_name}' is now running.",
             type="server",
             severity="success",
-            action_url=action_url,
+            action_url=action_url or (f"/servers/{server_id}" if server_id else None),
             event_key="server_start",
         )
 
     async def server_ready(
-        self, user_id, server_name: str, action_url: str | None = None
+        self,
+        user_id,
+        server_name: str,
+        action_url: str | None = None,
+        server_id: str | None = None,
     ) -> Notification | None:
         """Notify user that their server is ready to use."""
         return await self.create(
@@ -326,12 +459,17 @@ class NotificationService:
             message=f"Your server '{server_name}' is ready to use.",
             type="server",
             severity="success",
-            action_url=action_url,
+            action_url=action_url or (f"/servers/{server_id}" if server_id else None),
             event_key="server_ready",
         )
 
     async def server_idle_warning(
-        self, user_id, server_name: str, idle_minutes: int, action_url: str | None = None
+        self,
+        user_id,
+        server_name: str,
+        idle_minutes: int,
+        action_url: str | None = None,
+        server_id: str | None = None,
     ) -> Notification | None:
         """Warn user that their server will stop soon due to inactivity."""
         return await self.create(
@@ -340,7 +478,7 @@ class NotificationService:
             message=f"Server '{server_name}' will stop soon due to inactivity. Last activity: {idle_minutes} minutes ago.",
             type="server",
             severity="warning",
-            action_url=action_url,
+            action_url=action_url or (f"/servers/{server_id}" if server_id else None),
             event_key="server_stop",
         )
 
@@ -350,6 +488,7 @@ class NotificationService:
         server_name: str,
         reason: str | None = None,
         action_url: str | None = None,
+        server_id: str | None = None,
     ) -> Notification | None:
         """Notify user that their server has stopped."""
         msg = f"Your server '{server_name}' has been stopped."
@@ -361,12 +500,16 @@ class NotificationService:
             message=msg,
             type="server",
             severity="info",
-            action_url=action_url,
+            action_url=action_url or (f"/servers/{server_id}" if server_id else None),
             event_key="server_stop",
         )
 
     async def server_restarted(
-        self, user_id, server_name: str, action_url: str | None = None
+        self,
+        user_id,
+        server_name: str,
+        action_url: str | None = None,
+        server_id: str | None = None,
     ) -> Notification | None:
         """Notify user that their server has been restarted."""
         return await self.create(
@@ -375,11 +518,13 @@ class NotificationService:
             message=f"Your server '{server_name}' has been restarted.",
             type="server",
             severity="info",
-            action_url=action_url,
+            action_url=action_url or (f"/servers/{server_id}" if server_id else None),
             event_key="server_start",
         )
 
-    async def server_deleted(self, user_id, server_name: str) -> Notification | None:
+    async def server_deleted(
+        self, user_id, server_name: str, server_id: str | None = None
+    ) -> Notification | None:
         """Notify user that their server has been deleted."""
         return await self.create(
             user_id=user_id,
@@ -387,11 +532,17 @@ class NotificationService:
             message=f"Your server '{server_name}' has been permanently deleted.",
             type="server",
             severity="warning",
+            action_url=f"/servers/{server_id}" if server_id else None,
             event_key="server_stop",
         )
 
     async def credits_granted(
-        self, user_id, amount: int, new_balance: int, reason: str | None = None
+        self,
+        user_id,
+        amount: int,
+        new_balance: int,
+        reason: str | None = None,
+        action_url: str | None = None,
     ) -> Notification | None:
         """Notify user that credits have been granted."""
         msg = f"{amount} NUKE credits have been added to your account. New balance: {new_balance}."
@@ -403,6 +554,7 @@ class NotificationService:
             message=msg,
             type="credit",
             severity="success",
+            action_url=action_url,
             event_key="credit_granted",
         )
 
@@ -423,7 +575,7 @@ class NotificationService:
         )
 
     async def credit_request_rejected(
-        self, user_id, amount: int, note: str | None = None
+        self, user_id, amount: int, note: str | None = None, action_url: str | None = None
     ) -> Notification | None:
         """Notify user that their credit request was rejected."""
         msg = f"Your request for {amount} NUKE credits was rejected."
@@ -435,11 +587,16 @@ class NotificationService:
             message=msg,
             type="credit",
             severity="info",
+            action_url=action_url,
             event_key="credit_request",
         )
 
     async def credit_request_created(
-        self, user_id, amount: int, reason: str
+        self,
+        user_id,
+        amount: int,
+        reason: str,
+        action_url: str | None = None,
     ) -> Notification | None:
         """Notify a reviewer that a new credit request was submitted."""
         return await self.create(
@@ -448,11 +605,12 @@ class NotificationService:
             message=f"A user requested {amount} NUKE credits: {reason}",
             type="credit",
             severity="info",
+            action_url=action_url,
             event_key="credit_request",
         )
 
     async def credit_request_allowance_approved(
-        self, user_id, allowance: int
+        self, user_id, allowance: int, action_url: str | None = None
     ) -> Notification | None:
         """Notify user that their allowance request was approved."""
         return await self.create(
@@ -461,6 +619,7 @@ class NotificationService:
             message=f"Your daily allowance has been set to {allowance} NUKE credits per day.",
             type="credit",
             severity="success",
+            action_url=action_url,
             event_key="credit_request",
         )
 
@@ -493,7 +652,13 @@ class NotificationService:
         )
 
     async def credit_request_stale_reminder(
-        self, user_id, amount: int, requester_username: str, age_hours: int, request_id: str
+        self,
+        user_id,
+        amount: int,
+        requester_username: str,
+        age_hours: int,
+        request_id: str,
+        action_url: str | None = None,
     ) -> Notification | None:
         """Remind a reviewer about a stale open credit request.
 
@@ -512,12 +677,17 @@ class NotificationService:
             ),
             type="credit",
             severity="warning",
+            action_url=action_url,
             event_key="credit_request",
             extra_data={"event_key": "credit_request_stale", "request_id": request_id},
         )
 
     async def credit_request_message(
-        self, user_id, amount: int, preview: str
+        self,
+        user_id,
+        amount: int,
+        preview: str,
+        action_url: str | None = None,
     ) -> Notification | None:
         """Notify the counterpart of a new message on a credit request."""
         msg = f"New message on the credit request for {amount} NUKE credits."
@@ -529,6 +699,7 @@ class NotificationService:
             message=msg,
             type="credit",
             severity="info",
+            action_url=action_url,
             event_key="credit_request",
         )
 
@@ -561,7 +732,11 @@ class NotificationService:
         )
 
     async def queue_timeout(
-        self, user_id, server_name: str, action_url: str | None = None
+        self,
+        user_id,
+        server_name: str,
+        action_url: str | None = None,
+        server_id: str | None = None,
     ) -> Notification | None:
         """Notify user that their queued server timed out."""
         return await self.create(
@@ -570,12 +745,17 @@ class NotificationService:
             message=f"Server '{server_name}' was removed from the queue due to timeout.",
             type="server",
             severity="warning",
-            action_url=action_url,
+            action_url=action_url or (f"/servers/{server_id}" if server_id else None),
             event_key="queue_position",
         )
 
     async def server_failed(
-        self, user_id, server_name: str, error: str, action_url: str | None = None
+        self,
+        user_id,
+        server_name: str,
+        error: str,
+        action_url: str | None = None,
+        server_id: str | None = None,
     ) -> Notification | None:
         """Notify user that their server failed to start."""
         return await self.create(
@@ -584,12 +764,17 @@ class NotificationService:
             message=f"Failed to start server '{server_name}': {error}",
             type="server",
             severity="error",
-            action_url=action_url,
+            action_url=action_url or (f"/servers/{server_id}" if server_id else None),
             event_key="server_start",
         )
 
     async def workspace_invitation(
-        self, user_id, workspace_name: str, inviter_name: str, action_url: str | None = None
+        self,
+        user_id,
+        workspace_name: str,
+        inviter_name: str,
+        action_url: str | None = None,
+        workspace_id: str | None = None,
     ) -> Notification | None:
         """Notify user that they've been invited to a workspace."""
         return await self.create(
@@ -598,12 +783,16 @@ class NotificationService:
             message=f"{inviter_name} invited you to join the workspace '{workspace_name}'.",
             type="workspace",
             severity="info",
-            action_url=action_url,
+            action_url=action_url or (f"/workspaces/{workspace_id}" if workspace_id else None),
             event_key="workspace_invite",
         )
 
     async def workspace_member_added(
-        self, user_id, workspace_name: str, action_url: str | None = None
+        self,
+        user_id,
+        workspace_name: str,
+        action_url: str | None = None,
+        workspace_id: str | None = None,
     ) -> Notification | None:
         """Notify user that they've been added to a workspace."""
         return await self.create(
@@ -612,12 +801,16 @@ class NotificationService:
             message=f"You have been added to the workspace '{workspace_name}'.",
             type="workspace",
             severity="info",
-            action_url=action_url,
+            action_url=action_url or (f"/workspaces/{workspace_id}" if workspace_id else None),
             event_key="workspace_member_added",
         )
 
     async def workspace_member_removed(
-        self, user_id, workspace_name: str, action_url: str | None = None
+        self,
+        user_id,
+        workspace_name: str,
+        action_url: str | None = None,
+        workspace_id: str | None = None,
     ) -> Notification | None:
         """Notify user that they've been removed from a workspace."""
         return await self.create(
@@ -626,12 +819,17 @@ class NotificationService:
             message=f"You have been removed from the workspace '{workspace_name}'.",
             type="workspace",
             severity="warning",
-            action_url=action_url,
+            action_url=action_url or (f"/workspaces/{workspace_id}" if workspace_id else None),
             event_key="workspace_member_removed",
         )
 
     async def ownership_transferred(
-        self, user_id, workspace_name: str, previous_owner: str, action_url: str | None = None
+        self,
+        user_id,
+        workspace_name: str,
+        previous_owner: str,
+        action_url: str | None = None,
+        workspace_id: str | None = None,
     ) -> Notification | None:
         """Notify user that workspace ownership has been transferred to them."""
         return await self.create(
@@ -640,7 +838,7 @@ class NotificationService:
             message=f"You are now the owner of workspace '{workspace_name}' (transferred from {previous_owner}).",
             type="workspace",
             severity="info",
-            action_url=action_url,
+            action_url=action_url or (f"/workspaces/{workspace_id}" if workspace_id else None),
             event_key="ownership_transferred",
         )
 

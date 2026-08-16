@@ -189,6 +189,10 @@ services:
             - SMTP_VERIFY_CERTS=${SMTP_VERIFY_CERTS:-true}
             - SMTP_FROM=${SMTP_FROM:-noreply@nukelab.local}
             - SMTP_FROM_NAME=${SMTP_FROM_NAME:-NukeLab}
+            # Web Push (VAPID) configuration
+            - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY:-}
+            - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY:-}
+            - VAPID_SUBJECT=${VAPID_SUBJECT:-}
             # Error tracking
             - SENTRY_DSN=${SENTRY_DSN:-}
             - SENTRY_RELEASE=${SENTRY_RELEASE:-}
@@ -386,6 +390,11 @@ services:
             - SMTP_VERIFY_CERTS=${SMTP_VERIFY_CERTS:-true}
             - SMTP_FROM=${SMTP_FROM:-noreply@nukelab.local}
             - SMTP_FROM_NAME=${SMTP_FROM_NAME:-NukeLab}
+            # Web Push (VAPID) configuration — required: push notifications are
+            # sent by Celery tasks running in this worker, not by the API.
+            - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY:-}
+            - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY:-}
+            - VAPID_SUBJECT=${VAPID_SUBJECT:-}
         volumes:
             - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
             - ${VOLUME_STORAGE_PATH:-/var/lib/docker/volumes}:${VOLUME_STORAGE_PATH:-/var/lib/docker/volumes}:rw

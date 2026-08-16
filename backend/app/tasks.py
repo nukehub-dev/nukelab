@@ -89,13 +89,14 @@ def send_notification_channels(
     message: str,
     severity: str,
     notification_type: str,
+    action_url: str | None = None,
     extra_data: dict | None = None,
 ):
-    """Send email/webhook notification channels asynchronously.
+    """Send email/webhook/push notification channels asynchronously.
 
     The in-app notification and real-time WebSocket push are handled in the
     request path so the user gets immediate feedback. Slower outbound channels
-    (email + webhook) are offloaded to this task to avoid blocking the API.
+    (email, webhook, push) are offloaded to this task to avoid blocking the API.
     """
 
     async def _send():
@@ -114,6 +115,7 @@ def send_notification_channels(
             prefs = await service._get_user_notification_prefs(user.id)
             should_email = service._should_send(prefs, event_key, "email")
             should_webhook = service._should_send(prefs, event_key, "webhook")
+            should_push = service._should_send(prefs, event_key, "push")
 
             channels = []
 
@@ -134,6 +136,17 @@ def send_notification_channels(
                     extra_data=extra_data or {},
                 )
                 channels.append("webhook")
+
+            if should_push:
+                # Push payload is intentionally short and never contains the
+                # full message text, which may include sensitive details.
+                await service._send_push_for_notification(
+                    user_id=user.id,
+                    title=title,
+                    body=message[:120],
+                    action_url=action_url,
+                )
+                channels.append("push")
 
             return f"Sent channels: {','.join(channels) if channels else 'none'} for {event_key}"
 
@@ -353,6 +366,7 @@ def shutdown_idle_servers(self):
                         user_id=user.id,
                         server_name=server.name,
                         reason=f"inactivity ({timeout_mins} minutes)",
+                        server_id=str(server.id),
                     )
 
                     from app.services.notification_service import broadcast_server_status_change
@@ -505,6 +519,7 @@ def process_nuke_billing(self):
                                 user_id=server.user_id,
                                 server_name=server.name,
                                 reason="insufficient NUKE credits",
+                                server_id=str(server.id),
                             )
                             stopped_count += 1
                         except Exception:
@@ -611,6 +626,7 @@ def enforce_auto_stop(self):
                         user_id=server.user_id,
                         server_name=server.name,
                         reason="exceeded the maximum runtime limit",
+                        server_id=str(server.id),
                     )
                     stopped_count += 1
                 except Exception:
@@ -811,7 +827,9 @@ def process_server_queue(self):
                     # Notify user
                     notif_service = NotificationService(db)
                     await notif_service.server_started(
-                        user_id=next_entry.user_id, server_name=next_entry.server_name
+                        user_id=next_entry.user_id,
+                        server_name=next_entry.server_name,
+                        server_id=str(server.id),
                     )
                     started_count += 1
 
@@ -827,7 +845,10 @@ def process_server_queue(self):
                     # Notify user of failure
                     notif_service = NotificationService(db)
                     await notif_service.server_failed(
-                        user_id=next_entry.user_id, server_name=next_entry.server_name, error=str(e)
+                        user_id=next_entry.user_id,
+                        server_name=next_entry.server_name,
+                        error=str(e),
+                        server_id=gpu_server_id,
                     )
 
             await db.commit()
@@ -1307,6 +1328,7 @@ def enforce_volume_quotas(self):
                             user_id=user.id,
                             server_name=server.name,
                             reason=f"volume quota exceeded: {', '.join(over_limit_volumes)}",
+                            server_id=str(server.id),
                         )
                         await broadcast_server_status_change(
                             user.id,

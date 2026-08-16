@@ -177,6 +177,20 @@ class TestNotificationServiceServerMethods:
         assert "Out of memory" in notif.message
         assert notif.severity == "error"
 
+    @pytest.mark.asyncio
+    async def test_server_started_auto_action_url(self, db_session, test_user):
+        service = NotificationService(db_session)
+        notif = await service.server_started(test_user.id, "my-server", server_id="srv-123")
+        assert notif is not None
+        assert notif.action_url == "/servers/srv-123"
+
+    @pytest.mark.asyncio
+    async def test_server_deleted_auto_action_url(self, db_session, test_user):
+        service = NotificationService(db_session)
+        notif = await service.server_deleted(test_user.id, "deleted-srv", server_id="srv-123")
+        assert notif is not None
+        assert notif.action_url == "/servers/srv-123"
+
 
 class TestNotificationServiceCreditMethods:
     """Tests for credit-related notification convenience methods."""
@@ -191,11 +205,59 @@ class TestNotificationServiceCreditMethods:
         assert notif.type == "credit"
 
     @pytest.mark.asyncio
-    async def test_credits_granted_with_reason(self, db_session, test_user):
+    async def test_credits_granted_with_reason_and_action_url(self, db_session, test_user):
         service = NotificationService(db_session)
-        notif = await service.credits_granted(test_user.id, 50, 200, reason="bonus")
+        notif = await service.credits_granted(
+            test_user.id, 50, 200, reason="bonus", action_url="/settings/credits?request=abc"
+        )
         assert notif is not None
         assert "bonus" in notif.message
+        assert notif.action_url == "/settings/credits?request=abc"
+
+    @pytest.mark.asyncio
+    async def test_credit_request_rejected_action_url(self, db_session, test_user):
+        service = NotificationService(db_session)
+        notif = await service.credit_request_rejected(
+            test_user.id, 100, note="no", action_url="/settings/credits?request=abc"
+        )
+        assert notif is not None
+        assert notif.action_url == "/settings/credits?request=abc"
+
+    @pytest.mark.asyncio
+    async def test_credit_request_created_action_url(self, db_session, test_user):
+        service = NotificationService(db_session)
+        notif = await service.credit_request_created(
+            test_user.id, 100, "reason", action_url="/admin/credits?request=abc"
+        )
+        assert notif is not None
+        assert notif.action_url == "/admin/credits?request=abc"
+
+    @pytest.mark.asyncio
+    async def test_credit_request_allowance_approved_action_url(self, db_session, test_user):
+        service = NotificationService(db_session)
+        notif = await service.credit_request_allowance_approved(
+            test_user.id, 50, action_url="/settings/credits?request=abc"
+        )
+        assert notif is not None
+        assert notif.action_url == "/settings/credits?request=abc"
+
+    @pytest.mark.asyncio
+    async def test_credit_request_stale_reminder_action_url(self, db_session, test_user):
+        service = NotificationService(db_session)
+        notif = await service.credit_request_stale_reminder(
+            test_user.id, 100, "user", 5, "req-id", action_url="/admin/credits?request=req-id"
+        )
+        assert notif is not None
+        assert notif.action_url == "/admin/credits?request=req-id"
+
+    @pytest.mark.asyncio
+    async def test_credit_request_message_action_url(self, db_session, test_user):
+        service = NotificationService(db_session)
+        notif = await service.credit_request_message(
+            test_user.id, 100, "preview", action_url="/settings/credits?request=abc"
+        )
+        assert notif is not None
+        assert notif.action_url == "/settings/credits?request=abc"
 
     @pytest.mark.asyncio
     async def test_credits_deducted(self, db_session, test_user):
