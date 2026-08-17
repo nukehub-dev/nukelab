@@ -120,13 +120,16 @@ class TestSendNotificationChannels:
         with mock.patch("app.services.notification_service.NotificationService") as mock_notif:
             inst = mock_notif.return_value
             inst._get_user_notification_prefs = mock.AsyncMock(return_value={})
-            inst._should_send = mock.Mock(return_value=True)
+            # email=True, webhook=True, push=False
+            inst._should_send = mock.Mock(side_effect=[True, True, False])
             inst._send_email_for_notification = mock.AsyncMock()
             inst._send_webhook_for_notification = mock.AsyncMock()
+            inst._send_push_for_notification = mock.AsyncMock()
             result = self._call(db, {"user_id": str(user.id), "extra_data": None})
         assert result == "Sent channels: email,webhook for server.stopped"
         inst._send_email_for_notification.assert_awaited_once()
         inst._send_webhook_for_notification.assert_awaited_once()
+        inst._send_push_for_notification.assert_not_awaited()
 
     def test_no_channels_enabled(self):
         user = mock.Mock()
@@ -138,10 +141,12 @@ class TestSendNotificationChannels:
             inst._should_send = mock.Mock(return_value=False)
             inst._send_email_for_notification = mock.AsyncMock()
             inst._send_webhook_for_notification = mock.AsyncMock()
+            inst._send_push_for_notification = mock.AsyncMock()
             result = self._call(db, {"user_id": str(user.id)})
         assert result == "Sent channels: none for server.stopped"
         inst._send_email_for_notification.assert_not_called()
         inst._send_webhook_for_notification.assert_not_called()
+        inst._send_push_for_notification.assert_not_awaited()
 
     def test_webhook_only(self):
         user = mock.Mock()
@@ -150,10 +155,11 @@ class TestSendNotificationChannels:
         with mock.patch("app.services.notification_service.NotificationService") as mock_notif:
             inst = mock_notif.return_value
             inst._get_user_notification_prefs = mock.AsyncMock(return_value={})
-            # email=False, webhook=True
-            inst._should_send = mock.Mock(side_effect=[False, True])
+            # email=False, webhook=True, push=False
+            inst._should_send = mock.Mock(side_effect=[False, True, False])
             inst._send_email_for_notification = mock.AsyncMock()
             inst._send_webhook_for_notification = mock.AsyncMock()
+            inst._send_push_for_notification = mock.AsyncMock()
             result = self._call(db, {"user_id": str(user.id), "extra_data": {"k": "v"}})
         assert result == "Sent channels: webhook for server.stopped"
 

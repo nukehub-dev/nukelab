@@ -58,6 +58,65 @@ self.addEventListener('message', (event) => {
   }
 });
 
+// Web Push: show a notification from the push payload.
+self.addEventListener('push', (event) => {
+  let payload = { title: 'NukeLab', body: '', action_url: '/' }
+  try {
+    if (event.data) {
+      payload = event.data.json()
+    }
+  } catch {
+    // Fall back to defaults.
+  }
+
+  const title = payload.title || 'NukeLab'
+  const options = {
+    body: payload.body || '',
+    icon: '/icon-192x192.png',
+    badge: '/icon-192x192.png',
+    tag: payload.tag || payload.action_url || 'nukelab-notification',
+    requireInteraction: false,
+    data: {
+      action_url: payload.action_url || '/',
+    },
+  }
+
+  event.waitUntil(self.registration.showNotification(title, options))
+})
+
+// Notification click: focus an existing client or open the deep link.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+
+  const action_url = event.notification.data?.action_url || '/'
+  // client.url is absolute; action_url is relative — compare by path+search.
+  const targetUrl = new URL(action_url, self.location.origin)
+  const targetPath = targetUrl.pathname + targetUrl.search
+
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: 'window', includeUncontrolled: true })
+      .then((clientList) => {
+        // Prefer a tab already showing the target page.
+        for (const client of clientList) {
+          const clientUrl = new URL(client.url)
+          if (clientUrl.pathname + clientUrl.search === targetPath && 'focus' in client) {
+            return client.focus()
+          }
+        }
+        // Otherwise reuse any open app tab and navigate it to the target.
+        for (const client of clientList) {
+          if (new URL(client.url).origin === self.location.origin && 'focus' in client) {
+            return client.focus().then((c) => (c && c.navigate ? c.navigate(targetUrl.href) : c))
+          }
+        }
+        if (self.clients.openWindow) {
+          return self.clients.openWindow(targetPath)
+        }
+      })
+  )
+})
+
 // Fetch: network-first navigation, cache-first static assets, bypass monitoring/API routes
 self.addEventListener('fetch', (event) => {
   const { request } = event;

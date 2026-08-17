@@ -1,6 +1,6 @@
 # Implementation Phases
 
-This document records the original v2.0 implementation plan and current delivery status. Phases 1–5, 7, and 8 are complete. Phase 6 (Kubernetes/production hardening) remains partially deferred.
+This document records the original v2.0 implementation plan and current delivery status. Phases 1–5 and 7–10 are complete. Phase 6 (Kubernetes/production hardening) remains partially deferred.
 
 ## Phase 1: Foundation & Scaffolding
 
@@ -105,6 +105,34 @@ This document records the original v2.0 implementation plan and current delivery
 - PgBouncer connection-flood test
 - Self-seeding test data
 - Operational monitoring runbook
+
+## Phase 9: Notification System Improvements
+
+**Status**: Complete ✅
+
+- Actionable notifications: every notification carries an `action_url` that
+  routes the user to the relevant page (e.g. a credit-request conversation).
+- Credit-request notifications deep-link requesters to
+  `/settings/credits?request={id}` and reviewers to `/admin/credits?request={id}`.
+- Bulk notification deletion (`POST /notifications/bulk-delete`) with
+  scope-limited filters: by explicit ids, read-only, or all for the current user.
+- Web Push delivery via VAPID keys and `pywebpush`, with subscription CRUD,
+  dead-subscription cleanup on 404/410, and a service-worker `push` handler.
+- Frontend notification row click-through, `/notifications` page bulk actions,
+  and a settings push-notification toggle.
+
+## Phase 10: Storage Monitoring
+
+**Status**: Complete ✅
+
+- Prometheus alerts for filesystem usage on the Postgres/Redis/volume backing
+  store, Postgres database size growth (`pg_database_size_bytes`), and Redis
+  memory usage (`redis_memory_used_bytes` / `redis_memory_max_bytes`).
+- Grafana panels for Postgres database size, Redis used/max memory, and volume
+  filesystem usage, configurable via a `node_exporter_rootfs_path` variable.
+- Admin dashboard storage summary card exposing Postgres DB size, Redis memory,
+  and volume filesystem usage through the existing `/api/admin/health/monitoring`
+  endpoint, with short-lived caching.
 
 ## Known tech debt
 

@@ -237,6 +237,9 @@ ${BOLD}Build & Deploy:${RESET}
   ${GREEN}update${RESET}                               Pull images & rebuild
   ${GREEN}pull${RESET}                                 Pull latest base images
 
+${BOLD}Toolchains:${RESET}
+  ${GREEN}cache-toolchain${RESET} <image>             Pre-populate a shared toolchain volume
+
 ${BOLD}Maintenance:${RESET}
   ${GREEN}clean${RESET}                                Remove dangling images/volumes
   ${GREEN}remove${RESET}     [target]                  Remove containers (keep data)
@@ -313,6 +316,7 @@ ${BOLD}Examples:${RESET}
   ./nukelabctl lint frontend --fix        # Auto-fix frontend issues
   ./nukelabctl lint markdown              # Lint markdown and check links
   ./nukelabctl clean                      # Clean up dangling resources
+  ./nukelabctl cache-toolchain nukelab/radiation-transport:v1.2.3
   ./nukelabctl init-user-auth-keys        # Generate initial user-auth keys (production setup)
   ./nukelabctl rotate-user-auth-key       # Rotate the active user-auth key
   ./nukelabctl cleanup-user-auth-keys     # Prune expired retired public keys
@@ -437,6 +441,12 @@ main() {
             # Clean only prunes stopped resources and local state; it does not
             # need the stack reachable or ports free.
             _bootstrap lock raw
+            _dispatch_command "$CMD"
+            ;;
+        cache-toolchain)
+            # Pre-populates a shared toolchain volume; only needs the container
+            # engine, not a running stack.
+            _bootstrap raw
             _dispatch_command "$CMD"
             ;;
         dev)

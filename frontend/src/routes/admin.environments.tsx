@@ -120,6 +120,8 @@ function EnvironmentsPage() {
     name: '',
     slug: '',
     image: '',
+    tool_image: '',
+    tool_mounts: '',
     description: '',
     category: 'simulation',
     icon: '',
@@ -136,6 +138,8 @@ function EnvironmentsPage() {
       name: '',
       slug: '',
       image: '',
+      tool_image: '',
+      tool_mounts: '',
       description: '',
       category: 'simulation',
       icon: '',
@@ -151,6 +155,8 @@ function EnvironmentsPage() {
       name: env.name,
       slug: env.slug,
       image: env.image,
+      tool_image: env.tool_image || '',
+      tool_mounts: (env.tool_mounts || []).join(' '),
       description: env.description || '',
       category: env.category || 'simulation',
       icon: env.icon || '',
@@ -162,12 +168,18 @@ function EnvironmentsPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    const toolImage = formData.tool_image.trim()
+    const toolMounts = formData.tool_mounts.split(/[\s,]+/).filter(Boolean)
     if (editingEnv) {
       updateEnvironment.mutate({
         envId: editingEnv.id,
         data: {
           name: formData.name,
           image: formData.image,
+          // Sent unconditionally so clearing the field detaches the toolchain;
+          // the backend treats "" as "no toolchain".
+          tool_image: toolImage,
+          tool_mounts: toolImage ? toolMounts : [],
           description: formData.description || undefined,
           category: formData.category,
           icon: formData.icon || undefined,
@@ -180,6 +192,7 @@ function EnvironmentsPage() {
         name: formData.name,
         slug: formData.slug,
         image: formData.image,
+        ...(toolImage ? { tool_image: toolImage, tool_mounts: toolMounts } : {}),
         description: formData.description || undefined,
         category: formData.category,
         icon: formData.icon || undefined,
@@ -647,6 +660,34 @@ function EnvironmentsPage() {
                   placeholder="ubuntu:22.04"
                 />
               </div>
+              <div className="space-y-2">
+                <Label>Toolchain Image</Label>
+                <Input
+                  type="text"
+                  value={formData.tool_image}
+                  onChange={(e) => setFormData({ ...formData, tool_image: e.target.value })}
+                  placeholder="ghcr.io/nukelab/radiation-transport:v1.0.0"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Optional scientific toolchain mounted read-only into the runtime container at
+                  spawn time. Leave empty for no toolchain.
+                </p>
+              </div>
+              {formData.tool_image.trim() && (
+                <div className="space-y-2">
+                  <Label>Toolchain Mount Paths</Label>
+                  <Input
+                    type="text"
+                    value={formData.tool_mounts}
+                    onChange={(e) => setFormData({ ...formData, tool_mounts: e.target.value })}
+                    placeholder="/opt/nuke"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Space-separated paths copied from the toolchain image into the shared volume.
+                    Defaults to /opt/nuke when empty.
+                  </p>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label>Description</Label>
                 <Textarea

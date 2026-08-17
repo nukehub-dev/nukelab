@@ -97,3 +97,4 @@ volumes/
 # Generated files
 monitoring/alertmanager/alertmanager.generated.yml
 monitoring/prometheus/prometheus.generated.yml
+monitoring/prometheus/rules/nukelab.generated.yml

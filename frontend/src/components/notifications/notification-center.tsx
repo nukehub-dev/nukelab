@@ -3,7 +3,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { Link } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   Bell,
@@ -79,6 +79,7 @@ function NotificationPanel({
   deleteNotification,
   isMobile,
 }: NotificationPanelProps) {
+  const navigate = useNavigate()
   return (
     <>
       {/* Header */}
@@ -145,9 +146,13 @@ function NotificationPanel({
                     !notification.read && 'bg-primary/[0.03]'
                   )}
                   onClick={() => {
+                    if (notification.action_url) {
+                      navigate({ to: notification.action_url })
+                    }
                     if (!notification.read) {
                       markAsRead.mutate(notification.id)
                     }
+                    onClose()
                   }}
                 >
                   <div className="mt-2 shrink-0">
@@ -171,7 +176,8 @@ function NotificationPanel({
                     {notification.action_url ? (
                       <Link
                         to={notification.action_url}
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation()
                           if (!notification.read) {
                             markAsRead.mutate(notification.id)
                           }

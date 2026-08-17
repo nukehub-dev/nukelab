@@ -16,6 +16,7 @@ __all__ = [
     "LoginEvent",
     "MaintenanceWindow",
     "Notification",
+    "PushSubscription",
     "UserPlanAccess",
     "WorkspacePlanAccess",
     "RefreshToken",
@@ -55,6 +56,7 @@ from app.models.maintenance_window import MaintenanceWindow as MaintenanceWindow
 from app.models.notification import Notification as Notification
 from app.models.plan_access import UserPlanAccess as UserPlanAccess
 from app.models.plan_access import WorkspacePlanAccess as WorkspacePlanAccess
+from app.models.push_subscription import PushSubscription as PushSubscription
 from app.models.refresh_token import RefreshToken as RefreshToken
 from app.models.request_metric import RequestMetric as RequestMetric
 from app.models.resource_quota import ResourceQuota as ResourceQuota

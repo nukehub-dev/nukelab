@@ -209,6 +209,7 @@ jobs:
         env:
           GITHUB_REF: ${{ github.ref }}
           GITHUB_SHA: ${{ github.sha }}
+          IMAGE_NAME: ${{ matrix.image }}
 
       - name: Build and push
         if: |

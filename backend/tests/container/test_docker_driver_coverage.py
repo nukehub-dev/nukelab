@@ -9,6 +9,8 @@ hardening, network aliases/hostname, LD_PRELOAD combination, exec output
 streaming, archive writes, volume/image wrappers, and error mapping.
 """
 
+import json
+from datetime import UTC, datetime
 from unittest import mock
 
 import aiodocker
@@ -496,3 +498,243 @@ class TestCreateContainerHealthcheck:
         assert healthcheck["Timeout"] == 10 * 10**9
         assert healthcheck["StartPeriod"] == 90 * 10**9
         assert healthcheck["Retries"] == 3
+
+
+class TestPrepareToolchainVolume:
+    """Tests for shared toolchain volume population, locking, and reuse."""
+
+    IMAGE_ID = "sha256:img-1"
+
+    @staticmethod
+    def _read_container(manifest=None, stamp=None):
+        """Build a fake manifest/stamp reader container."""
+        container = mock.AsyncMock()
+        if manifest is None:
+            container.wait = mock.AsyncMock(return_value={"StatusCode": 1})
+            container.log = mock.AsyncMock(return_value=["missing"])
+        else:
+            container.wait = mock.AsyncMock(return_value={"StatusCode": 0})
+            output = json.dumps(manifest) + "\n---\n" + json.dumps(stamp or {})
+            container.log = mock.AsyncMock(return_value=[output])
+        return container
+
+    @staticmethod
+    def _populate_container():
+        container = mock.AsyncMock()
+        container.wait = mock.AsyncMock(return_value={"StatusCode": 0})
+        return container
+
+    def _ready_driver(self):
+        driver, _ = _make_driver()
+        driver.client.images.get = mock.AsyncMock(
+            return_value={"Id": self.IMAGE_ID, "RepoDigests": ["repo@sha256:abc"]}
+        )
+        return driver
+
+    @pytest.mark.asyncio
+    async def test_prepare_skips_copy_when_manifest_and_stamp_match(self):
+        driver = self._ready_driver()
+        manifest = {"mounts": ["/opt/nuke"], "env": {"PATH": "/opt/nuke/bin"}}
+        stamp = {"image_id": self.IMAGE_ID, "repo_digests": [], "populated_at": "now"}
+
+        driver.client.containers.create = mock.AsyncMock(
+            return_value=self._read_container(manifest, stamp)
+        )
+
+        result = await driver.prepare_toolchain_volume(
+            "nukelab/rt:v1", "nukelab-toolchain-rt-v1", ["/opt/nuke"]
+        )
+
+        assert result == manifest
+        # Only the manifest-reading container; no lock, no populate container.
+        assert driver.client.containers.create.call_count == 1
+        read_config = driver.client.containers.create.call_args[0][0]
+        assert read_config["Image"] == "nukelab/rt:v1"
+        # The reader is hardened and mounts the volume read-only.
+        host_config = read_config["HostConfig"]
+        assert host_config["CapDrop"] == ["ALL"]
+        assert host_config["SecurityOpt"] == ["no-new-privileges:true"]
+        assert host_config["ReadonlyRootfs"] is True
+        assert host_config["Mounts"][0]["ReadOnly"] is True
+
+    @pytest.mark.asyncio
+    async def test_prepare_populates_under_lock_and_writes_stamp(self):
+        driver = self._ready_driver()
+        manifest = {"mounts": ["/opt/nuke"], "env": {}}
+        stamp = {"image_id": self.IMAGE_ID}
+
+        lock = mock.AsyncMock()
+        populate = self._populate_container()
+        driver.client.containers.create = mock.AsyncMock(
+            side_effect=[
+                self._read_container(),  # fast path: empty volume
+                lock,
+                self._read_container(),  # re-check after acquiring the lock
+                populate,
+                self._read_container(manifest, stamp),  # read-back after populate
+            ]
+        )
+
+        result = await driver.prepare_toolchain_volume(
+            "nukelab/rt:v1", "nukelab-toolchain-rt-v1", ["/opt/nuke"]
+        )
+
+        assert result == manifest
+        assert driver.client.containers.create.call_count == 5
+
+        # Second call is the lock container: fixed name, never started,
+        # force-deleted on release.
+        lock_name = driver.client.containers.create.call_args_list[1][1]["name"]
+        assert lock_name.startswith("nukelab-toolchain-lock-")
+        lock_config = driver.client.containers.create.call_args_list[1][0][0]
+        assert lock_config["Cmd"] == ["true"]
+        lock.start.assert_not_awaited()
+        lock.delete.assert_awaited_once_with(force=True)
+
+        # Fourth call is the populate container: hardened, wiping, stamping.
+        populate_config = driver.client.containers.create.call_args_list[3][0][0]
+        host_config = populate_config["HostConfig"]
+        assert host_config["Mounts"][0]["Target"] == "/toolchain-target"
+        assert host_config["CapDrop"] == ["ALL"]
+        assert host_config["CapAdd"] == ["CHOWN", "FOWNER", "DAC_OVERRIDE", "SETUID", "SETGID"]
+        assert host_config["SecurityOpt"] == ["no-new-privileges:true"]
+        assert host_config["ReadonlyRootfs"] is True
+        assert host_config["Tmpfs"] == {"/tmp": "rw,nosuid,nodev,size=64m"}
+        script = populate_config["Cmd"][2]
+        assert script.startswith("rm -rf /toolchain-target/* /toolchain-target/.[!.]*;")
+        assert "cp -a /opt/nuke/. /toolchain-target/" in script
+        # Stamp with the current image id is written after the copy.
+        assert '"image_id": "sha256:img-1"' in script
+        assert "/toolchain-target/.nukelab-toolchain-stamp.json" in script
+
+    @pytest.mark.asyncio
+    async def test_prepare_repopulates_when_stamp_image_id_mismatches(self):
+        """A re-pushed image tag invalidates the cached volume."""
+        driver = self._ready_driver()
+        manifest = {"mounts": ["/opt/nuke"], "env": {}}
+        stale_stamp = {"image_id": "sha256:old-image"}
+
+        lock = mock.AsyncMock()
+        driver.client.containers.create = mock.AsyncMock(
+            side_effect=[
+                self._read_container(manifest, stale_stamp),  # fast path: stale
+                lock,
+                self._read_container(manifest, stale_stamp),  # still stale
+                self._populate_container(),
+                self._read_container(manifest, {"image_id": self.IMAGE_ID}),
+            ]
+        )
+
+        result = await driver.prepare_toolchain_volume(
+            "nukelab/rt:v1", "nukelab-toolchain-rt-v1", ["/opt/nuke"]
+        )
+
+        assert result == manifest
+        assert driver.client.containers.create.call_count == 5
+        lock.delete.assert_awaited_once_with(force=True)
+
+    @pytest.mark.asyncio
+    async def test_prepare_matches_stamp_across_engine_id_formats(self):
+        """A stamp written by podman (bare digest) matches docker's sha256:-prefixed Id."""
+        driver = self._ready_driver()
+        manifest = {"mounts": ["/opt/nuke"], "env": {}}
+        stamp = {"image_id": "img-1"}  # bare digest, no sha256: prefix
+
+        driver.client.containers.create = mock.AsyncMock(
+            return_value=self._read_container(manifest, stamp)
+        )
+
+        result = await driver.prepare_toolchain_volume(
+            "nukelab/rt:v1", "nukelab-toolchain-rt-v1", ["/opt/nuke"]
+        )
+
+        assert result == manifest
+        # Fast path taken: only the manifest-reading container was created.
+        assert driver.client.containers.create.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_prepare_lock_conflict_waits_then_rechecks(self):
+        """When another process holds the lock, wait, acquire, and re-check;
+        if the holder populated meanwhile, skip the populate step."""
+        driver = self._ready_driver()
+        driver.TOOLCHAIN_LOCK_POLL_INTERVAL = 0
+        manifest = {"mounts": ["/opt/nuke"], "env": {}}
+        stamp = {"image_id": self.IMAGE_ID}
+
+        conflict = aiodocker.DockerError(status=409, data={"message": "name in use"})
+        lock = mock.AsyncMock()
+        driver.client.containers.create = mock.AsyncMock(
+            side_effect=[
+                self._read_container(),  # fast path: empty
+                conflict,  # lock held by another process
+                lock,  # acquired after waiting
+                self._read_container(manifest, stamp),  # holder populated it
+            ]
+        )
+        holder = mock.AsyncMock()
+        holder.show = mock.AsyncMock(return_value={"Created": datetime.now(UTC).isoformat()})
+        driver.client.containers.get = mock.AsyncMock(return_value=holder)
+
+        result = await driver.prepare_toolchain_volume(
+            "nukelab/rt:v1", "nukelab-toolchain-rt-v1", ["/opt/nuke"]
+        )
+
+        assert result == manifest
+        # No populate container was created.
+        assert driver.client.containers.create.call_count == 4
+        lock.delete.assert_awaited_once_with(force=True)
+
+    @pytest.mark.asyncio
+    async def test_prepare_removes_stale_lock_container(self):
+        """A lock container older than the timeout is force-deleted."""
+        driver = self._ready_driver()
+        driver.TOOLCHAIN_LOCK_POLL_INTERVAL = 0
+        manifest = {"mounts": ["/opt/nuke"], "env": {}}
+        stamp = {"image_id": self.IMAGE_ID}
+
+        conflict = aiodocker.DockerError(status=409, data={"message": "name in use"})
+        lock = mock.AsyncMock()
+        populate = self._populate_container()
+        driver.client.containers.create = mock.AsyncMock(
+            side_effect=[
+                self._read_container(),
+                conflict,
+                lock,
+                self._read_container(),  # still empty after stale lock removed
+                populate,
+                self._read_container(manifest, stamp),
+            ]
+        )
+        stale_holder = mock.AsyncMock()
+        stale_holder.show = mock.AsyncMock(return_value={"Created": "2001-01-01T00:00:00Z"})
+        driver.client.containers.get = mock.AsyncMock(return_value=stale_holder)
+
+        result = await driver.prepare_toolchain_volume(
+            "nukelab/rt:v1", "nukelab-toolchain-rt-v1", ["/opt/nuke"]
+        )
+
+        assert result == manifest
+        stale_holder.delete.assert_awaited_once_with(force=True)
+
+    @pytest.mark.asyncio
+    async def test_prepare_raises_when_populate_succeeds_but_manifest_missing(self):
+        driver = self._ready_driver()
+
+        lock = mock.AsyncMock()
+        populate = self._populate_container()
+        driver.client.containers.create = mock.AsyncMock(
+            side_effect=[
+                self._read_container(),
+                lock,
+                self._read_container(),
+                populate,
+                self._read_container(),  # manifest still missing after populate
+            ]
+        )
+
+        with pytest.raises(ContainerDriverError, match="manifest missing"):
+            await driver.prepare_toolchain_volume(
+                "nukelab/rt:v1", "nukelab-toolchain-rt-v1", ["/opt/nuke"]
+            )
+        # The lock is released even on failure.
+        lock.delete.assert_awaited_once_with(force=True)

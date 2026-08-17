@@ -13,6 +13,9 @@ export interface SystemServiceHealth {
   message?: string
   version?: string
   runtime?: string
+  size_bytes?: number
+  used_bytes?: number
+  max_bytes?: number
 }
 
 export interface SystemHealth {

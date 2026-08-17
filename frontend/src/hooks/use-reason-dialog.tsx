@@ -4,6 +4,7 @@
 import { useState, useCallback } from 'react'
 import { Modal } from '../components/ui/modal'
 import { Button } from '../components/ui/button'
+import { Textarea } from '../components/ui/textarea'
 
 interface PromptOptions {
   title?: string
@@ -62,11 +63,10 @@ export function useReasonDialog() {
             <p className="text-sm text-muted-foreground mt-1">{state.description}</p>
           )}
         </div>
-        <textarea
+        <Textarea
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           placeholder="Enter reason..."
-          className="w-full min-h-[80px] rounded-lg border border-border/60 bg-background px-3 py-2.5 text-sm placeholder:text-muted-foreground/50 focus:border-primary/60 focus:ring-1 focus:ring-primary/30 focus:outline-none resize-y transition-colors"
           autoFocus
           onKeyDown={(e) => {
             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && reason.trim()) {

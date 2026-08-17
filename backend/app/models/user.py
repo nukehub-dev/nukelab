@@ -81,6 +81,9 @@ class User(Base):
     notifications = relationship(
         "Notification", back_populates="user", cascade="all, delete-orphan"
     )
+    push_subscriptions = relationship(
+        "PushSubscription", back_populates="user", cascade="all, delete-orphan"
+    )
     owned_workspaces = relationship(
         "SharedWorkspace", back_populates="owner", cascade="all, delete-orphan"
     )

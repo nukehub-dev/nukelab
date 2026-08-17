@@ -85,6 +85,29 @@ def make_docker_resource_name(
     return base
 
 
+def make_toolchain_volume_name(image: str, max_len: int = 240) -> str:
+    """Build a shared Docker volume name for a toolchain image.
+
+    The name is derived only from the image reference so that every server
+    using the same toolchain image mounts the same volume. This avoids
+    copying several gigabytes of toolchain files for every server spawn.
+
+    A short deterministic hash of the FULL image reference is appended so
+    that two long references sharing a truncated prefix cannot collide and
+    mount the wrong toolchain into a user's container.
+    """
+    import hashlib
+
+    safe_prefix = _sanitize_docker_name_component("nukelab-toolchain") or "nukelab-toolchain"
+    safe_image = _sanitize_docker_name_component(image) or "toolchain"
+    digest = hashlib.sha256(image.encode("utf-8")).hexdigest()[:12]
+    suffix = f"-{digest}"
+    base = f"{safe_prefix}-{safe_image}"
+    if len(base) + len(suffix) > max_len:
+        base = base[: max_len - len(suffix)].rstrip("_.-")
+    return base + suffix
+
+
 class VolumeService:
     """Docker volume management with database tracking"""
 

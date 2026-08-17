@@ -7,9 +7,15 @@
 # Reads:
 #   GITHUB_REF  - e.g. refs/heads/main, refs/tags/v1.2.3, refs/pull/42/merge
 #   GITHUB_SHA  - full commit SHA
+#   IMAGE_NAME  - optional image name to prefix tags, e.g.
+#                 ghcr.io/owner/nukelab-backend. When set, the tags output
+#                 contains full image references and a "latest" tag is added
+#                 automatically for refs that request it.
 #
 # Writes GitHub Actions step outputs:
-#   tags    - newline-separated list of image tags (without registry prefix)
+#   tags    - newline-separated list of image tags. With IMAGE_NAME set these
+#             are full references (e.g. ghcr.io/owner/repo:main); otherwise
+#             they are bare tag suffixes.
 #   version - primary version identifier
 #   latest  - "true" if the "latest" tag should also be applied
 #
@@ -18,12 +24,14 @@
 #     env:
 #       GITHUB_REF: ${{ github.ref }}
 #       GITHUB_SHA: ${{ github.sha }}
+#       IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/nukelab-backend
 
 set -euo pipefail
 
 _ref="${GITHUB_REF:-refs/heads/main}"
 _sha="${GITHUB_SHA:-$(git rev-parse HEAD 2> /dev/null || echo unknown)}"
 _short_sha="${_sha:0:7}"
+_image="${IMAGE_NAME:-}"
 
 _tags=()
 _version=""
@@ -61,6 +69,20 @@ case "$_ref" in
         _tags+=("$_version")
         ;;
 esac
+
+# Add the floating "latest" tag when requested and an image name is provided.
+if [ "$_latest" = "true" ] && [ -n "$_image" ]; then
+    _tags+=("latest")
+fi
+
+# Prefix with image name when provided, otherwise leave tags as bare suffixes.
+if [ -n "$_image" ]; then
+    _prefixed_tags=()
+    for _tag in "${_tags[@]}"; do
+        _prefixed_tags+=("${_image}:${_tag}")
+    done
+    _tags=("${_prefixed_tags[@]}")
+fi
 
 # GitHub Actions: write outputs
 if [ -n "${GITHUB_OUTPUT:-}" ]; then

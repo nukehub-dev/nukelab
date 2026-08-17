@@ -30,6 +30,7 @@ from app.api import (
     notifications,
     plans,
     preferences,
+    push,
     quotas,
     schedules,
     search,
@@ -271,6 +272,7 @@ app.include_router(admin.router, prefix="/admin", tags=["admin"])
 app.include_router(preferences.router, prefix="/preferences", tags=["preferences"])
 app.include_router(environments.router, prefix="/environments", tags=["environments"])
 app.include_router(plans.router, prefix="/plans", tags=["plans"])
+app.include_router(push.router, prefix="/push", tags=["push"])
 app.include_router(quotas.router, prefix="/quotas", tags=["quotas"])
 app.include_router(metrics.router, prefix="/metrics", tags=["metrics"])
 app.include_router(notifications.router, prefix="/notifications", tags=["notifications"])

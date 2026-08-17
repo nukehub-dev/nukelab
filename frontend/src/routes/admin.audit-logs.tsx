@@ -75,7 +75,11 @@ function getActionColor(action: string): string {
 }
 
 function formatActionName(action: string): string {
-  return action.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())
+  return action.replace(/[_.]/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())
+}
+
+function formatTargetType(targetType: string): string {
+  return targetType.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())
 }
 
 function getStatusBadge(statusCode: number | undefined): {
@@ -514,8 +518,8 @@ function AuditLogsPage() {
       </ResourcePageLayout>
 
       {/* Detail Drawer */}
-      <Dialog open={!!selectedLog} onOpenChange={(open) => !open && setSelectedLog(null)}>
-        <DialogContent className="sm:max-w-lg pt-6">
+      <Dialog open={!!selectedLog} onOpenChange={(open) => !open && setSelectedLog(null)} size="lg">
+        <DialogContent className="pt-6">
           <DialogClose onClick={() => setSelectedLog(null)} />
 
           {selectedLog && (
@@ -532,7 +536,18 @@ function AuditLogsPage() {
                   <h3 className="font-semibold text-base leading-tight">
                     {formatActionName(selectedLog.action)}
                   </h3>
-                  <div className="flex items-center gap-2 mt-1.5 text-xs text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-2 mt-1.5 text-xs text-muted-foreground">
+                    {selectedLog.target_type && (
+                      <>
+                        <span className="font-medium text-foreground capitalize">
+                          {formatTargetType(selectedLog.target_type)}
+                        </span>
+                        {selectedLog.target_id && (
+                          <span className="font-mono">{selectedLog.target_id.slice(0, 8)}...</span>
+                        )}
+                        <span className="text-border">|</span>
+                      </>
+                    )}
                     <Clock className="w-3 h-3" />
                     <span>{formatDate(selectedLog.created_at)}</span>
                     {selectedLog.request_id && (
@@ -550,7 +565,7 @@ function AuditLogsPage() {
                 <InfoCard
                   icon={Hash}
                   label="Target"
-                  value={selectedLog.target_type}
+                  value={formatTargetType(selectedLog.target_type)}
                   subValue={
                     selectedLog.target_id ? <CopyableId id={selectedLog.target_id} /> : undefined
                   }

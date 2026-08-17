@@ -152,6 +152,8 @@ async def _respawn_server_container(
         environment=environment.slug if environment else "dev",
         environment_id=str(server.environment_id) if server.environment_id else None,
         image=environment.image if environment else None,
+        tool_image=environment.tool_image if environment else None,
+        tool_mounts=environment.tool_mounts if environment else None,
         cpu=plan.cpu_limit if plan else server.allocated_cpu,
         memory=plan.memory_limit if plan else server.allocated_memory,
         disk=plan.disk_limit if plan else server.allocated_disk,
@@ -666,6 +668,8 @@ async def create_server(
                 environment=environment.slug,
                 environment_id=body.environment_id,
                 image=environment.image,
+                tool_image=environment.tool_image,
+                tool_mounts=environment.tool_mounts,
                 cpu=plan.cpu_limit,
                 memory=plan.memory_limit,
                 disk=plan.disk_limit,
@@ -1151,6 +1155,8 @@ async def _perform_server_start(
                     environment=environment.slug if environment else "dev",
                     environment_id=str(server.environment_id) if server.environment_id else None,
                     image=environment.image if environment else None,
+                    tool_image=environment.tool_image if environment else None,
+                    tool_mounts=environment.tool_mounts if environment else None,
                     cpu=plan.cpu_limit if plan else server.allocated_cpu,
                     memory=plan.memory_limit if plan else server.allocated_memory,
                     disk=plan.disk_limit if plan else server.allocated_disk,
@@ -1247,6 +1253,8 @@ async def _perform_server_start(
                 environment=environment.slug if environment else "dev",
                 environment_id=str(server.environment_id) if server.environment_id else None,
                 image=environment.image if environment else None,
+                tool_image=environment.tool_image if environment else None,
+                tool_mounts=environment.tool_mounts if environment else None,
                 cpu=plan.cpu_limit if plan else server.allocated_cpu,
                 memory=plan.memory_limit if plan else server.allocated_memory,
                 disk=plan.disk_limit if plan else server.allocated_disk,
@@ -1497,6 +1505,8 @@ async def _perform_server_restart(
                     environment=environment.slug if environment else "dev",
                     environment_id=str(server.environment_id) if server.environment_id else None,
                     image=environment.image if environment else None,
+                    tool_image=environment.tool_image if environment else None,
+                    tool_mounts=environment.tool_mounts if environment else None,
                     cpu=plan.cpu_limit if plan else server.allocated_cpu,
                     memory=plan.memory_limit if plan else server.allocated_memory,
                     disk=plan.disk_limit if plan else server.allocated_disk,
@@ -1598,7 +1608,9 @@ async def _perform_server_delete(
     await _release_gpu_devices(db, server_id)
 
     notif_service = NotificationService(db)
-    await notif_service.server_deleted(user_id=user_id, server_name=server_name)
+    await notif_service.server_deleted(
+        user_id=user_id, server_name=server_name, server_id=server_id
+    )
 
     return {"message": "Server deleted", "server_id": server_id}
 
@@ -2036,6 +2048,8 @@ async def update_server(
                 environment=environment.slug if environment else "dev",
                 environment_id=str(server.environment_id) if server.environment_id else None,
                 image=environment.image if environment else None,
+                tool_image=environment.tool_image if environment else None,
+                tool_mounts=environment.tool_mounts if environment else None,
                 cpu=plan.cpu_limit if plan else server.allocated_cpu,
                 memory=plan.memory_limit if plan else server.allocated_memory,
                 disk=plan.disk_limit if plan else server.allocated_disk,

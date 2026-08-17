@@ -292,18 +292,20 @@ class MetricsWebSocketManager:
     async def _broadcast_user_event(self, payload: dict):
         """Broadcast user-specific events (e.g. notifications) to their room."""
         user_id = payload.get("user_id")
+        event = payload.get("event", "user:event")
         if not user_id:
             return
         room = f"user:{user_id}"
         if room not in connections:
+            logger.debug("No WebSocket connections in room %s for event %s", room, event)
             return
         disconnected = []
         for ws in connections[room]:
             try:
-                await ws.send_json(
-                    {"event": payload.get("event", "user:event"), "data": payload.get("data", {})}
-                )
-            except Exception:
+                await ws.send_json({"event": event, "data": payload.get("data", {})})
+                logger.info("Forwarded %s to room %s", event, room)
+            except Exception as e:
+                logger.warning("Failed to send %s to room %s: %s", event, room, e)
                 disconnected.append((room, ws))
         self._cleanup_disconnected(disconnected)
 

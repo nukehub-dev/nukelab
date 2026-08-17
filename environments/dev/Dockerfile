@@ -1,4 +1,6 @@
-FROM nukelab-base:latest
+ARG BASE_IMAGE=nukelab-conda-base:latest
+
+FROM $BASE_IMAGE
 
 # Install ttyd (web terminal) used by the dev/test environment.
 ARG TTYD_VERSION=1.7.7

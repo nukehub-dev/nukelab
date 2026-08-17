@@ -131,12 +131,12 @@ services:
     image: docker.io/prom/node-exporter:v1.8.2
     container_name: nukelab-node-exporter
     command:
-      - --path.rootfs=/host
-      - --path.procfs=/host/proc
-      - --path.sysfs=/host/sys
+      - --path.rootfs=${NODE_EXPORTER_ROOTFS_PATH:-/host}
+      - --path.procfs=${NODE_EXPORTER_ROOTFS_PATH:-/host}/proc
+      - --path.sysfs=${NODE_EXPORTER_ROOTFS_PATH:-/host}/sys
       - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
     volumes:
-      - /:/host:ro,rslave
+      - /:${NODE_EXPORTER_ROOTFS_PATH:-/host}:ro,rslave
     networks:
       - nukelab-network
     pid: host

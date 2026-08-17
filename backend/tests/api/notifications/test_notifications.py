@@ -398,3 +398,95 @@ class TestAdminCreateNotification:
             headers={"Authorization": f"Bearer {user_token}"},
         )
         assert response.status_code == 404
+
+
+class TestBulkDeleteNotifications:
+    @pytest.mark.asyncio
+    async def test_bulk_delete_by_ids(self, client, user_token, test_user, db_session):
+        n1 = Notification(user_id=test_user.id, type="t", title="A", message="M")
+        n2 = Notification(user_id=test_user.id, type="t", title="B", message="M")
+        db_session.add_all([n1, n2])
+        await db_session.commit()
+
+        response = await client.post(
+            "/api/notifications/bulk-delete",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"notification_ids": [str(n1.id), str(n2.id)]},
+        )
+        assert response.status_code == 200
+        assert response.json()["deleted"] == 2
+
+    @pytest.mark.asyncio
+    async def test_bulk_delete_read_only(self, client, user_token, test_user, db_session):
+        n1 = Notification(user_id=test_user.id, type="t", title="R", message="M", read=True)
+        n2 = Notification(user_id=test_user.id, type="t", title="U", message="M", read=False)
+        db_session.add_all([n1, n2])
+        await db_session.commit()
+
+        response = await client.post(
+            "/api/notifications/bulk-delete",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"read_only": True},
+        )
+        assert response.status_code == 200
+        assert response.json()["deleted"] == 1
+
+    @pytest.mark.asyncio
+    async def test_bulk_delete_all(self, client, user_token, test_user, db_session):
+        n1 = Notification(user_id=test_user.id, type="t", title="A", message="M", read=True)
+        n2 = Notification(user_id=test_user.id, type="t", title="B", message="M", read=False)
+        db_session.add_all([n1, n2])
+        await db_session.commit()
+
+        response = await client.post(
+            "/api/notifications/bulk-delete",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"all": True},
+        )
+        assert response.status_code == 200
+        assert response.json()["deleted"] == 2
+
+    @pytest.mark.asyncio
+    async def test_bulk_delete_ids_ignore_filters(self, client, user_token, test_user, db_session):
+        n = Notification(user_id=test_user.id, type="t", title="U", message="M", read=False)
+        db_session.add(n)
+        await db_session.commit()
+
+        # Explicit ids take precedence: read_only should be ignored.
+        response = await client.post(
+            "/api/notifications/bulk-delete",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"notification_ids": [str(n.id)], "read_only": True},
+        )
+        assert response.status_code == 200
+        assert response.json()["deleted"] == 1
+
+    @pytest.mark.asyncio
+    async def test_bulk_delete_empty_body_bad_request(self, client, user_token):
+        response = await client.post(
+            "/api/notifications/bulk-delete",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={},
+        )
+        assert response.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_bulk_delete_cannot_touch_other_users(
+        self, client, user_token, test_user, db_session
+    ):
+        from app.models.user import User
+
+        other = User(username="other-bulk", email="other-bulk@example.com", password_hash="x")
+        db_session.add(other)
+        await db_session.commit()
+        n = Notification(user_id=other.id, type="t", title="X", message="M")
+        db_session.add(n)
+        await db_session.commit()
+
+        response = await client.post(
+            "/api/notifications/bulk-delete",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={"notification_ids": [str(n.id)]},
+        )
+        assert response.status_code == 200
+        assert response.json()["deleted"] == 0

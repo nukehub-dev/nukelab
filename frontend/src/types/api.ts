@@ -97,6 +97,8 @@ export interface Environment {
   name: string
   slug: string
   image: string
+  tool_image?: string | null
+  tool_mounts?: string[]
   description?: string
   category?: string
   is_active: boolean

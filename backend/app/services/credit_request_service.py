@@ -227,6 +227,7 @@ class CreditRequestService:
             amount=transaction.amount,
             new_balance=transaction.balance_after,
             reason=reason,
+            action_url=f"/settings/credits?request={request.id}",
         )
 
         await ActivityService(self.db).log(
@@ -384,6 +385,7 @@ class CreditRequestService:
                     user_id=reviewer.id,
                     amount=request.amount,
                     reason=request.reason,
+                    action_url=f"/admin/credits?request={request.id}",
                 )
             elif kind == "stale":
                 await notif_service.credit_request_stale_reminder(
@@ -392,12 +394,14 @@ class CreditRequestService:
                     requester_username=requester_username or "unknown",
                     age_hours=age_hours or 0,
                     request_id=str(request.id),
+                    action_url=f"/admin/credits?request={request.id}",
                 )
             else:
                 await notif_service.credit_request_message(
                     user_id=reviewer.id,
                     amount=request.amount,
                     preview=preview or "",
+                    action_url=f"/admin/credits?request={request.id}",
                 )
 
     async def approve(
@@ -454,6 +458,7 @@ class CreditRequestService:
             amount=transaction.amount,
             new_balance=transaction.balance_after,
             reason=reason,
+            action_url=f"/settings/credits?request={request.id}",
         )
 
         await ActivityService(self.db).log(
@@ -522,6 +527,7 @@ class CreditRequestService:
         await NotificationService(self.db).credit_request_allowance_approved(
             user_id=str(request.user_id),
             allowance=new_allowance,
+            action_url=f"/settings/credits?request={request.id}",
         )
 
         await ActivityService(self.db).log(
@@ -555,6 +561,7 @@ class CreditRequestService:
             user_id=str(request.user_id),
             amount=request.amount,
             note=note,
+            action_url=f"/settings/credits?request={request.id}",
         )
 
         await ActivityService(self.db).log(
@@ -641,6 +648,11 @@ class CreditRequestService:
         if not internal:
             notif_service = NotificationService(self.db)
             if is_requester:
+                logger.info(
+                    "Notifying reviewers of new message on request %s by requester %s",
+                    request.id,
+                    author.id,
+                )
                 await self._notify_reviewers(
                     request,
                     exclude_user_id=str(author.id),
@@ -648,10 +660,17 @@ class CreditRequestService:
                     preview=body[:200],
                 )
             else:
+                logger.info(
+                    "Notifying requester %s of new message on request %s by reviewer %s",
+                    request.user_id,
+                    request.id,
+                    author.id,
+                )
                 await notif_service.credit_request_message(
                     user_id=request.user_id,
                     amount=request.amount,
                     preview=body[:200],
+                    action_url=f"/settings/credits?request={request.id}",
                 )
 
         await ActivityService(self.db).log(

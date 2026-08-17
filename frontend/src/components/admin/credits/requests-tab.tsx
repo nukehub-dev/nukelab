@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
 // SPDX-License-Identifier: BSD-2-Clause
 
-import { useState, useCallback, useMemo, useRef } from 'react'
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
+import { useNavigate } from '@tanstack/react-router'
 import { motion } from 'framer-motion'
 import {
   Check,
@@ -21,6 +22,7 @@ import {
 } from '../../../hooks/use-credit-requests'
 import { useAuthStore, PERMISSIONS } from '../../../stores/auth-store'
 import { cn, formatDate, formatRelativeTime, parseUtcDate } from '../../../lib/utils'
+import { api } from '../../../lib/api'
 import { CreditRequestReviewDialog } from '../credit-request-review-dialog'
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card'
 import { StatCard } from '../../data/stat-card'
@@ -29,7 +31,7 @@ import { Button } from '../../ui/button'
 import { Checkbox } from '../../ui/checkbox'
 import { Input } from '../../ui/input'
 import { useConfirmDialog } from '../../ui/confirm-dialog'
-import type { CreditRequest } from '../../../types/api'
+import type { CreditRequest, CreditRequestListResponse } from '../../../types/api'
 
 const REQUEST_STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   pending: { label: 'Pending', color: 'text-amber-400', bg: 'bg-amber-500/10' },
@@ -90,7 +92,19 @@ function BulkRejectNoteField({ valueRef }: { valueRef: { current: string } }) {
   )
 }
 
-export function RequestsTab() {
+async function findAllCreditRequestById(requestId: string): Promise<CreditRequest | null> {
+  for (let page = 1; page <= 10; page++) {
+    const data = await api.get<CreditRequestListResponse>(
+      `/credit-requests/all?limit=10&page=${page}`
+    )
+    const found = data.requests.find((req) => req.id === requestId)
+    if (found) return found
+    if (data.pagination.total_pages <= page) break
+  }
+  return null
+}
+
+export function RequestsTab({ focusRequestId }: { focusRequestId?: string }) {
   const hasPermission = useAuthStore((state) => state.hasPermission)
   const canGrant = hasPermission(PERMISSIONS.CREDITS_GRANT)
 
@@ -101,6 +115,35 @@ export function RequestsTab() {
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false)
   const [selectedRequestIds, setSelectedRequestIds] = useState<Record<string, boolean>>({})
   const bulkRejectNoteRef = useRef('')
+  const handledFocusRequestIdRef = useRef<string | null>(null)
+  const navigate = useNavigate()
+
+  const handleReviewDialogOpenChange = (open: boolean) => {
+    setReviewDialogOpen(open)
+    if (!open && focusRequestId) {
+      navigate({ to: '/admin/credits', search: (prev) => ({ ...prev, request: undefined }) })
+    }
+  }
+
+  useEffect(() => {
+    if (!focusRequestId || handledFocusRequestIdRef.current === focusRequestId) return
+    let cancelled = false
+    const openDeepLinkedRequest = async () => {
+      const found = await findAllCreditRequestById(focusRequestId)
+      if (!cancelled) {
+        if (found) {
+          setReviewRequest(found)
+          setReviewAction('approve')
+          setReviewDialogOpen(true)
+        }
+        handledFocusRequestIdRef.current = focusRequestId
+      }
+    }
+    openDeepLinkedRequest()
+    return () => {
+      cancelled = true
+    }
+  }, [focusRequestId])
 
   const { data: requestStats } = useCreditRequestStats()
   const bulkReview = useBulkReviewCreditRequests()
@@ -486,7 +529,7 @@ export function RequestsTab() {
         request={reviewRequest}
         initialAction={reviewAction}
         open={reviewDialogOpen}
-        onOpenChange={setReviewDialogOpen}
+        onOpenChange={handleReviewDialogOpenChange}
       />
       {bulkReviewDialog}
     </>

@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
 // SPDX-License-Identifier: BSD-2-Clause
 
-import { createFileRoute, Link } from '@tanstack/react-router'
-import { useState } from 'react'
+import { createFileRoute, Link, useSearch, useNavigate } from '@tanstack/react-router'
+import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   ArrowLeft,
@@ -27,11 +27,12 @@ import { useMyCreditSummary, useMyCreditHistory } from '../hooks/use-credits'
 import { useMyCreditRequests, useCancelCreditRequest } from '../hooks/use-credit-requests'
 import { useAuthStore } from '../stores/auth-store'
 import { formatDate, formatRelativeTime, cn } from '../lib/utils'
+import { api } from '../lib/api'
 import { Button } from '../components/ui/button'
 import { useConfirmDialog } from '../components/ui/confirm-dialog'
 import { CreditRequestDialog } from '../components/credit-request-dialog'
 import { CreditRequestThreadDialog } from '../components/credit-request-thread-dialog'
-import type { CreditRequest, CreditTransaction } from '../types/api'
+import type { CreditRequest, CreditRequestListResponse, CreditTransaction } from '../types/api'
 
 const TYPE_CONFIG: Record<
   string,
@@ -109,6 +110,40 @@ function CreditsSettingsPage() {
   const [requestDialogOpen, setRequestDialogOpen] = useState(false)
   const [threadRequest, setThreadRequest] = useState<CreditRequest | null>(null)
   const [threadDialogOpen, setThreadDialogOpen] = useState(false)
+
+  const searchParams = useSearch({ from: '/settings/credits' }) as { request?: string }
+  const targetRequestId = searchParams.request
+  const navigate = useNavigate()
+  const handledRequestIdRef = useRef<string | null>(null)
+
+  const handleThreadDialogOpenChange = (open: boolean) => {
+    setThreadDialogOpen(open)
+    if (!open) {
+      setThreadRequest(null)
+      if (targetRequestId) {
+        navigate({ to: '/settings/credits', search: {} })
+      }
+    }
+  }
+
+  useEffect(() => {
+    if (!targetRequestId || handledRequestIdRef.current === targetRequestId) return
+    let cancelled = false
+    const openDeepLinkedRequest = async () => {
+      const found = await findCreditRequestById(targetRequestId)
+      if (!cancelled) {
+        if (found) {
+          setThreadRequest(found)
+          setThreadDialogOpen(true)
+        }
+        handledRequestIdRef.current = targetRequestId
+      }
+    }
+    openDeepLinkedRequest()
+    return () => {
+      cancelled = true
+    }
+  }, [targetRequestId])
 
   const cancelRequest = useCancelCreditRequest()
   const { confirm, dialog: confirmDialog } = useConfirmDialog()
@@ -509,7 +544,7 @@ function CreditsSettingsPage() {
         <CreditRequestThreadDialog
           request={threadRequest}
           open={threadDialogOpen}
-          onOpenChange={setThreadDialogOpen}
+          onOpenChange={handleThreadDialogOpenChange}
         />
         {confirmDialog}
       </div>
@@ -653,6 +688,16 @@ function TransactionRow({ transaction: tx }: { transaction: CreditTransaction })
       </span>
     </motion.div>
   )
+}
+
+async function findCreditRequestById(requestId: string): Promise<CreditRequest | null> {
+  for (let page = 1; page <= 10; page++) {
+    const data = await api.get<CreditRequestListResponse>(`/credit-requests/?limit=10&page=${page}`)
+    const found = data.requests.find((req) => req.id === requestId)
+    if (found) return found
+    if (data.pagination.total_pages <= page) break
+  }
+  return null
 }
 
 function TransactionSkeleton() {

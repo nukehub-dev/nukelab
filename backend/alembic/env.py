@@ -31,6 +31,7 @@ from app.db.base import Base
 from app.models.user import User
 from app.models.server import Server
 from app.models.notification import Notification
+from app.models.push_subscription import PushSubscription
 from app.models.api_token import ApiToken
 from app.models.credit_transaction import CreditTransaction
 from app.models.activity_log import ActivityLog

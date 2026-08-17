@@ -262,6 +262,12 @@ class Settings(BaseSettings):
     smtp_from: str = "noreply@nukelab.local"
     smtp_from_name: str = "NukeLab"
 
+    # Web Push (VAPID) Configuration
+    vapid_public_key: str = ""
+    vapid_private_key: str = ""
+    # Must be a mailto: or https:// URL identifying the sender.
+    vapid_subject: str = ""
+
     # Server Auth - Asymmetric key signing for container access tokens
     server_auth_enabled: bool = True
     server_auth_token_ttl: int = 300  # 5 minutes

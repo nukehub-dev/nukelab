@@ -712,7 +712,10 @@ async def logout_endpoint(
                         # Notify user
                         notif_service = NotificationService(db)
                         await notif_service.server_stopped(
-                            user_id=user.id, server_name=server.name, reason="logged out"
+                            user_id=user.id,
+                            server_name=server.name,
+                            reason="logged out",
+                            server_id=str(server.id),
                         )
 
                         await broadcast_server_status_change(user.id, str(server.id), "stopped")

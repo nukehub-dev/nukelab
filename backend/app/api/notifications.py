@@ -16,6 +16,7 @@ from app.api.auth import get_current_user
 from app.db.session import get_db
 from app.models.notification import Notification
 from app.models.user import User
+from app.services.notification_service import NotificationService
 
 router = APIRouter()
 
@@ -43,6 +44,12 @@ class NotificationListResponse(BaseModel):
 
 class MarkReadRequest(BaseModel):
     notification_ids: list[str]
+
+
+class BulkDeleteRequest(BaseModel):
+    notification_ids: list[str] | None = None
+    read_only: bool = False
+    all: bool = False
 
 
 def serialize_notification(notification: Notification) -> dict:
@@ -191,6 +198,34 @@ async def delete_notification(
     await db.commit()
 
     return None
+
+
+@router.post("/bulk-delete")
+async def bulk_delete_notifications(
+    request: BulkDeleteRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Delete many notifications for the current user.
+
+    At least one of notification_ids, read_only, or all must be true.
+    When notification_ids is provided, it takes precedence and filters
+    are ignored.
+    """
+    if not request.notification_ids and not request.read_only and not request.all:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one of notification_ids, read_only, or all must be set",
+        )
+
+    service = NotificationService(db)
+    deleted = await service.bulk_delete(
+        user_id=current_user.id,
+        notification_ids=request.notification_ids,
+        read_only=request.read_only,
+        all=request.all,
+    )
+    return {"deleted": deleted}
 
 
 # Admin endpoint to create notifications

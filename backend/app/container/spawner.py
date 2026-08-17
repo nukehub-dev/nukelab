@@ -15,7 +15,7 @@ from app.container.driver import ContainerDriver, ContainerDriverError
 from app.container.factory import get_driver as get_container_client
 from app.core.logging import get_logger
 from app.models.server import Server
-from app.services.volume_service import make_docker_resource_name
+from app.services.volume_service import make_docker_resource_name, make_toolchain_volume_name
 
 logger = get_logger(__name__)
 
@@ -39,6 +39,17 @@ class ServerSpawner:
             },
         )
 
+    @staticmethod
+    def _expand_env_vars(value: str, env: dict) -> str:
+        """Expand ${VAR} references in a value using the provided env dict."""
+        import re
+
+        def replacer(match):
+            key = match.group(1)
+            return str(env.get(key, ""))
+
+        return re.sub(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}", replacer, value)
+
     async def spawn(
         self,
         user_id: str,
@@ -55,6 +66,8 @@ class ServerSpawner:
         env_vars: dict | None = None,
         volume_mounts: list[dict[str, Any]] | None = None,
         server_id: str | None = None,
+        tool_image: str | None = None,
+        tool_mounts: list[str] | None = None,
     ) -> Server:
         """Spawn a new server container with persistent volume(s)
 
@@ -241,6 +254,58 @@ class ServerSpawner:
                     # Fallback to base image if specific env not built
                     # (nukelab-base has nginx and stays running)
                     image = "nukelab-base:latest"
+
+            # If a toolchain image is configured, prepare a volume from it and
+            # mount it into the runtime container. This decouples heavy scientific
+            # stacks from the workspace runtime image so workspace updates do not
+            # force toolchain rebuilds.
+            if tool_image:
+                if not await container_client.image_exists(tool_image):
+                    try:
+                        await container_client.pull_image(tool_image)
+                    except Exception as e:
+                        logger.warning(
+                            "Failed to pull toolchain image %s: %s; continuing without toolchain",
+                            tool_image,
+                            e,
+                        )
+                        tool_image = None
+
+            if tool_image:
+                # Use one shared volume per toolchain image so heavy scientific
+                # stacks are copied once per node, not once per server spawn.
+                tool_volume_name = make_toolchain_volume_name(tool_image)
+                mounts = tool_mounts or ["/opt/nuke"]
+                try:
+                    manifest = await container_client.prepare_toolchain_volume(
+                        tool_image, tool_volume_name, mounts
+                    )
+                    for mount_path in manifest.get("mounts", mounts):
+                        volumes[tool_volume_name] = {"bind": mount_path, "mode": "ro"}
+                    # Expand env vars against the runtime image's default env so
+                    # PATH/LD_LIBRARY_PATH prepend correctly.
+                    image_env = await container_client.get_image_env(image)
+                    # env_prepend: PATH-family lists prepended to the runtime
+                    # container's existing values (explicit env vars win over
+                    # image defaults as the base). Older manifests lack this
+                    # field; treat it as empty.
+                    for key, prepend in manifest.get("env_prepend", {}).items():
+                        existing = environment.get(key) or image_env.get(key)
+                        environment[key] = f"{prepend}:{existing}" if existing else prepend
+                    # env: scalar vars. Explicit template/user env vars win, so
+                    # apply with setdefault. _expand_env_vars stays for backward
+                    # compatibility with old manifests' ${VAR} references.
+                    for key, value in manifest.get("env", {}).items():
+                        expanded = self._expand_env_vars(value, {**image_env, **environment})
+                        environment.setdefault(key, expanded)
+                except Exception as e:
+                    logger.error(
+                        "TOOLCHAIN_DEGRADED: failed to prepare toolchain image %s: %s; "
+                        "server %s spawns WITHOUT the toolchain",
+                        tool_image,
+                        e,
+                        server_name,
+                    )
 
             # Convert volumes dict to Docker bind mounts format
             # Handle both simple string format and dict format

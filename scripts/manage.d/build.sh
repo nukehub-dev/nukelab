@@ -95,7 +95,7 @@ _build_environments() {
         fi
     done
     if $_has_all; then
-        _envs=(base workspace radiation-transport gpu dev)
+        _envs=(base conda-base workspace dev)
     fi
 
     # The base image COPYs the sidecar binary from the nukelab-auth-sidecar
@@ -128,7 +128,7 @@ Build container images.
 
 ${BOLD}Targets:${RESET} backend | frontend | all | env <name>
 
-${BOLD}Environment names:${RESET} base | workspace | radiation-transport | gpu | dev | all
+${BOLD}Environment names:${RESET} base | conda-base | workspace | dev | all
 
 ${BOLD}Options:${RESET}
   --no-cache    Build without reusing the container layer cache.
@@ -138,13 +138,12 @@ ${BOLD}Examples:${RESET}
   ./nukelabctl build backend
   ./nukelabctl build frontend
   ./nukelabctl build env base
-  ./nukelabctl build env radiation-transport
-  ./nukelabctl build env base workspace radiation-transport
+  ./nukelabctl build env base conda-base workspace dev
   ./nukelabctl build env workspace --no-cache
 
 ${BOLD}Note:${RESET} The default ./nukelabctl build (and all) only builds backend/frontend
-compose images. Environment images are built separately with env NAME.
-Building env base (directly or via env all) first builds the
-nukelab-auth-sidecar image, which the base image embeds.
+compose images. Platform environment images (base, workspace, dev) are built
+with env NAME. Domain-specific images (radiation-transport, gpu-toolkit,
+moose, etc.) are built from the nukelab-environments repository.
 EOF
 }

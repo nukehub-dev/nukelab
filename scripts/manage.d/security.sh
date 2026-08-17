@@ -308,7 +308,6 @@ _run_trivy() {
         "nukelab-frontend:latest"
         "nukelab-base:latest"
         "nukelab-workspace:latest"
-        "nukelab-radiation-transport:latest"
         "nukelab-auth-sidecar:latest"
     )
     for _image in "${_images[@]}"; do

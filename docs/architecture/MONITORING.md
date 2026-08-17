@@ -58,7 +58,17 @@ faster.
 | postgres-   |          | redis-      |
 | exporter    |          | exporter    |
 +-------------+          +-------------+
+        ^
+        | scrape
+        v
++-------------+
+| node-       |
+| exporter    |
++-------------+
 ```
+
+`node-exporter` is included for host-level metrics such as filesystem usage,
+which underpins storage alerts and the admin dashboard storage summary.
 
 When `PGBOUNCER_ENABLED=true`, `nukelabctl` also adds the PgBouncer exporter
 overlay (`compose.monitoring-pgbouncer.yml`).
@@ -96,10 +106,20 @@ Two dashboards are provisioned automatically:
   endpoints, WebSocket connections, Redis cache hit ratio.
 
 - **NukeLab Infrastructure** (`nukelab-infrastructure`)
-  Backend memory, Postgres connections/transactions, Redis memory/clients,
-  business metrics, Celery throughput.
+  Backend memory, Postgres connections/transactions/database size, Redis
+  memory/clients, volume filesystem usage, business metrics, Celery throughput.
 
 They appear under *Dashboards → Browse* after Grafana starts.
+
+---
+
+## Admin Health Service Cards
+
+The admin health page (`/admin/health`) enriches the Database and Redis
+service cards with the current Postgres database size and Redis used/max
+memory. Volume filesystem usage is already shown in the System Resources
+section above it. Data comes from `/api/admin/health/monitoring`. For charts,
+history, and alerting, use Grafana.
 
 ---
 
@@ -295,7 +315,7 @@ produced from `monitoring/alertmanager/alertmanager.yml.tpl` by `nukelabctl`.
 Adjust environment variables (e.g., `ALERTMANAGER_EMAIL_TO`, `SMTP_*`) or edit
 the template to change receivers (Slack, PagerDuty, email, Discord, etc.).
 
-Included alert rules live in `monitoring/prometheus/rules/nukelab.yml`:
+Included alert rules live in `monitoring/prometheus/rules/nukelab.generated.yml`, generated from `monitoring/prometheus/rules/nukelab.yml.tpl` by `scripts/generate-prometheus-config.sh`. Edit the template and run `./scripts/generate-prometheus-config.sh` (or `./nukelabctl start`, which regenerates configs automatically) rather than editing the generated file directly.
 
 | Alert | Trigger |
 |-------|---------|
@@ -304,8 +324,10 @@ Included alert rules live in `monitoring/prometheus/rules/nukelab.yml`:
 | `NukeLabTargetDown` | backend scrape target down for 1 minute |
 | `NukeLabContainerStatusLookupFailures` | container runtime status lookups failing for 2 minutes (servers could appear stopped while still running) |
 | `NukeLabPostgresConnectionsHigh` | Postgres connections > 80% of max |
+| `NukeLabPostgresDatabaseGrowth` | Postgres database predicted to exceed 80% of the backing filesystem within 24 hours |
 | `NukeLabRedisMemoryHigh` | Redis memory > 85% of max |
 | `NukeLabRedisMaxMemoryNotSet` | Redis has no `maxmemory` limit configured |
+| `NukeLabFilesystemSpaceLow` | Host filesystem backing Postgres/Redis/volumes > 80% full |
 
 ---
 
@@ -319,8 +341,10 @@ When you move to k3s, the same instrumentation works without changes:
    (Prometheus Operator).
 3. Add a `ServiceMonitor` that scrapes the backend service on `/api/metrics`.
 4. Re-use the dashboard JSON files by importing them into Grafana or mounting
-   them as ConfigMaps.
-5. Move alert rules from `monitoring/prometheus/rules/nukelab.yml` into
+   them as ConfigMaps. Update the `node_exporter_rootfs_path` dashboard
+   constant and the PromQL regex in the `PrometheusRule` CRD to match the
+   node-exporter `--path.rootfs` setting in the cluster.
+5. Move alert rules from `monitoring/prometheus/rules/nukelab.yml.tpl` into
    PrometheusRule CRDs.
 
 ### Reusable assets for k3s
@@ -330,7 +354,7 @@ When you move to k3s, the same instrumentation works without changes:
 | `compose.monitoring.yml` | `kube-prometheus-stack` Helm chart |
 | `compose.alertmanager.yml` | Alertmanager managed by the Operator |
 | `monitoring/prometheus/prometheus.yml.tpl` | `ServiceMonitor` + `Prometheus` CRD |
-| `monitoring/prometheus/rules/nukelab.yml` | `PrometheusRule` CRD |
+| `monitoring/prometheus/rules/nukelab.yml.tpl` | `PrometheusRule` CRD |
 | `monitoring/grafana/provisioning/dashboards/*.json` | Grafana dashboard ConfigMap |
 | `PROMETHEUS_SCRAPE_TOKEN` | Network policies or ServiceMonitor auth |
 

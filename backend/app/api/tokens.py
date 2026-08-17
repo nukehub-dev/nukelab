@@ -144,7 +144,9 @@ async def create_token(
     from app.services.notification_service import NotificationService
 
     notif_service = NotificationService(db)
-    await notif_service.api_key_created(user_id=current_user.id, key_name=token_data.name)
+    await notif_service.api_key_created(
+        user_id=current_user.id, key_name=token_data.name, action_url="/settings/tokens"
+    )
 
     # Return token with the raw token (only time it's shown)
     response = api_token.to_dict()

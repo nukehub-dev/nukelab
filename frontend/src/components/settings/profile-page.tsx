@@ -441,7 +441,6 @@ function EditDialog({
               onChange={(e) => setForm((f) => ({ ...f, about: e.target.value }))}
               placeholder="Tell us about yourself..."
               rows={3}
-              className="resize-none"
             />
           </div>
           <div className="grid grid-cols-2 gap-4">

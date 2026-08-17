@@ -122,7 +122,6 @@ if $SBOM_IMAGES; then
             "nukelab-auth-sidecar:latest"
             "nukelab-base:latest"
             "nukelab-workspace:latest"
-            "nukelab-radiation-transport:latest"
         )
         for image in "${images[@]}"; do
             image_exists=false

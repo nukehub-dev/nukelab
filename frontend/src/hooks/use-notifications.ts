@@ -83,12 +83,32 @@ export function useMarkAllAsRead() {
   })
 }
 
+export interface BulkDeleteNotificationsData {
+  notification_ids?: string[]
+  read_only?: boolean
+  all?: boolean
+}
+
 export function useDeleteNotification() {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: async (notificationId: string) => {
       await api.delete(`/notifications/${notificationId}`)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications'] })
+    },
+  })
+}
+
+export function useDeleteNotifications() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (data: BulkDeleteNotificationsData) => {
+      const response = await api.post<{ deleted: number }>('/notifications/bulk-delete', data)
+      return response
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notifications'] })

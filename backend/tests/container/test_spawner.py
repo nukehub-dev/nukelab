@@ -329,6 +329,7 @@ import pytest
 
 from app.container.spawner import ServerSpawner
 from app.models.server import Server
+from app.services.volume_service import make_toolchain_volume_name
 
 
 @pytest.fixture
@@ -836,6 +837,178 @@ class TestSpawnSuccess:
         call_kwargs = fresh_spawner.container_client.create_container.await_args.kwargs
         vols = call_kwargs["volumes"]
         assert "nukelab-server-secrets" not in vols
+
+    @pytest.mark.asyncio
+    async def test_spawn_uses_shared_toolchain_volume_name(self, fresh_spawner):
+        """spawn should derive the toolchain volume name only from the image."""
+        fresh_spawner.container_client.prepare_toolchain_volume = mock.AsyncMock(
+            return_value={"mounts": ["/opt/nuke"], "env": {}}
+        )
+        user_id = str(uuid_mod.uuid4())
+
+        with mock.patch("app.container.spawner.settings.public_url", "http://test"):
+            await fresh_spawner.spawn(
+                user_id=user_id,
+                username="testuser",
+                server_name="srv1",
+                tool_image="nukelab/radiation-transport:v1.2.3",
+            )
+
+        call_kwargs = fresh_spawner.container_client.create_container.await_args.kwargs
+        vols = call_kwargs["volumes"]
+        expected_volume = make_toolchain_volume_name("nukelab/radiation-transport:v1.2.3")
+        assert expected_volume in vols
+        assert vols[expected_volume]["mode"] == "ro"
+        fresh_spawner.container_client.prepare_toolchain_volume.assert_awaited_once_with(
+            "nukelab/radiation-transport:v1.2.3", expected_volume, ["/opt/nuke"]
+        )
+
+    @pytest.mark.asyncio
+    async def test_spawn_toolchain_volume_name_independent_of_server(self, fresh_spawner):
+        """Two different servers with the same tool_image must use the same volume."""
+        fresh_spawner.container_client.prepare_toolchain_volume = mock.AsyncMock(
+            return_value={"mounts": ["/opt/nuke"], "env": {}}
+        )
+        expected_volume = make_toolchain_volume_name("nukelab/radiation-transport:v1.2.3")
+
+        for server_name in ("srv-a", "srv-b"):
+            with mock.patch("app.container.spawner.settings.public_url", "http://test"):
+                await fresh_spawner.spawn(
+                    user_id=str(uuid_mod.uuid4()),
+                    username="testuser",
+                    server_name=server_name,
+                    tool_image="nukelab/radiation-transport:v1.2.3",
+                )
+
+        create_calls = fresh_spawner.container_client.create_container.await_args_list
+        volumes_list = [c.kwargs["volumes"] for c in create_calls]
+        assert all(expected_volume in vols for vols in volumes_list)
+
+    @pytest.mark.asyncio
+    async def test_spawn_toolchain_env_prepend_prepends_to_image_env(self, fresh_spawner):
+        """env_prepend values are prepended to the runtime image's values."""
+        fresh_spawner.container_client.prepare_toolchain_volume = mock.AsyncMock(
+            return_value={
+                "mounts": ["/opt/nuke"],
+                "env": {"OPENMC_DATA_DIR": "/opt/nuke/openmc_data"},
+                "env_prepend": {
+                    "PATH": "/opt/nuke/bin",
+                    "LD_LIBRARY_PATH": "/opt/nuke/moab/lib",
+                },
+            }
+        )
+        fresh_spawner.container_client.get_image_env = mock.AsyncMock(
+            return_value={"PATH": "/usr/local/bin:/usr/bin", "LD_LIBRARY_PATH": ""}
+        )
+
+        with mock.patch("app.container.spawner.settings.public_url", "http://test"):
+            await fresh_spawner.spawn(
+                user_id=str(uuid_mod.uuid4()),
+                username="testuser",
+                server_name="srv1",
+                tool_image="nukelab/radiation-transport:v1.2.3",
+            )
+
+        env = fresh_spawner.container_client.create_container.await_args.kwargs["env"]
+        assert env["PATH"] == "/opt/nuke/bin:/usr/local/bin:/usr/bin"
+        # Empty existing value collapses to just the prepended paths.
+        assert env["LD_LIBRARY_PATH"] == "/opt/nuke/moab/lib"
+        assert env["OPENMC_DATA_DIR"] == "/opt/nuke/openmc_data"
+
+    @pytest.mark.asyncio
+    async def test_spawn_toolchain_env_prepend_respects_explicit_env(self, fresh_spawner):
+        """Explicit template/user env vars form the base for env_prepend."""
+        fresh_spawner.container_client.prepare_toolchain_volume = mock.AsyncMock(
+            return_value={
+                "mounts": ["/opt/nuke"],
+                "env": {},
+                "env_prepend": {"PATH": "/opt/nuke/bin"},
+            }
+        )
+        fresh_spawner.container_client.get_image_env = mock.AsyncMock(
+            return_value={"PATH": "/usr/local/bin:/usr/bin"}
+        )
+
+        with mock.patch("app.container.spawner.settings.public_url", "http://test"):
+            await fresh_spawner.spawn(
+                user_id=str(uuid_mod.uuid4()),
+                username="testuser",
+                server_name="srv1",
+                tool_image="nukelab/radiation-transport:v1.2.3",
+                env_vars={"PATH": "/custom/bin"},
+            )
+
+        env = fresh_spawner.container_client.create_container.await_args.kwargs["env"]
+        assert env["PATH"] == "/opt/nuke/bin:/custom/bin"
+
+    @pytest.mark.asyncio
+    async def test_spawn_toolchain_env_does_not_override_explicit_vars(self, fresh_spawner):
+        """Plain env entries must not clobber explicitly-set env vars."""
+        fresh_spawner.container_client.prepare_toolchain_volume = mock.AsyncMock(
+            return_value={
+                "mounts": ["/opt/nuke"],
+                "env": {"OPENMC_DATA_DIR": "/opt/nuke/openmc_data", "EXTRA": "toolchain"},
+            }
+        )
+        fresh_spawner.container_client.get_image_env = mock.AsyncMock(return_value={})
+
+        with mock.patch("app.container.spawner.settings.public_url", "http://test"):
+            await fresh_spawner.spawn(
+                user_id=str(uuid_mod.uuid4()),
+                username="testuser",
+                server_name="srv1",
+                tool_image="nukelab/radiation-transport:v1.2.3",
+                env_vars={"OPENMC_DATA_DIR": "/custom/data"},
+            )
+
+        env = fresh_spawner.container_client.create_container.await_args.kwargs["env"]
+        assert env["OPENMC_DATA_DIR"] == "/custom/data"
+        assert env["EXTRA"] == "toolchain"
+
+    @pytest.mark.asyncio
+    async def test_spawn_toolchain_manifest_without_env_prepend_tolerated(self, fresh_spawner):
+        """Older manifests lack env_prepend; spawn must still succeed."""
+        fresh_spawner.container_client.prepare_toolchain_volume = mock.AsyncMock(
+            return_value={"mounts": ["/opt/nuke"], "env": {"FOO": "bar"}}
+        )
+        fresh_spawner.container_client.get_image_env = mock.AsyncMock(return_value={})
+
+        with mock.patch("app.container.spawner.settings.public_url", "http://test"):
+            await fresh_spawner.spawn(
+                user_id=str(uuid_mod.uuid4()),
+                username="testuser",
+                server_name="srv1",
+                tool_image="nukelab/radiation-transport:v1.2.3",
+            )
+
+        env = fresh_spawner.container_client.create_container.await_args.kwargs["env"]
+        assert env["FOO"] == "bar"
+
+    @pytest.mark.asyncio
+    async def test_spawn_toolchain_failure_logs_error_and_continues(self, fresh_spawner, caplog):
+        """Toolchain failure spawns without the toolchain and logs at error level."""
+        import logging
+
+        fresh_spawner.container_client.prepare_toolchain_volume = mock.AsyncMock(
+            side_effect=Exception("populate failed")
+        )
+
+        with mock.patch("app.container.spawner.settings.public_url", "http://test"):
+            with caplog.at_level(logging.ERROR, logger="app.container.spawner"):
+                await fresh_spawner.spawn(
+                    user_id=str(uuid_mod.uuid4()),
+                    username="testuser",
+                    server_name="srv1",
+                    tool_image="nukelab/radiation-transport:v1.2.3",
+                )
+
+        # The server still spawns, without the toolchain volume.
+        vols = fresh_spawner.container_client.create_container.await_args.kwargs["volumes"]
+        assert make_toolchain_volume_name("nukelab/radiation-transport:v1.2.3") not in vols
+        assert any(
+            r.levelno == logging.ERROR and "WITHOUT the toolchain" in r.getMessage()
+            for r in caplog.records
+        )
 
 
 # ─────────────────────────────────────────────────────────────
