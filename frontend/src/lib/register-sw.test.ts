@@ -26,9 +26,28 @@ function makeRegistration(overrides: Record<string, unknown> = {}) {
   }
 }
 
+function base64ToBinary(input: string): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+  const str = input.replace(/=+$/, '')
+  let output = ''
+  let buffer = 0
+  let bits = 0
+  for (const c of str) {
+    const val = chars.indexOf(c)
+    if (val === -1) continue
+    buffer = (buffer << 6) | val
+    bits += 6
+    if (bits >= 8) {
+      bits -= 8
+      output += String.fromCharCode((buffer >> bits) & 0xff)
+    }
+  }
+  return output
+}
+
 beforeEach(() => {
   vi.stubGlobal('window', {
-    atob: (s: string) => Buffer.from(s, 'base64').toString('binary'),
+    atob: (s: string) => base64ToBinary(s),
     PushManager: class {},
   })
   vi.stubGlobal('Notification', { requestPermission: vi.fn(async () => 'granted') })
