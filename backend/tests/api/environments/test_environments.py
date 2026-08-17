@@ -135,7 +135,7 @@ class TestEnvironmentCRUD:
                 "name": "Toolchain Environment",
                 "slug": "toolchain-env",
                 "image": "nukelab/workspace:latest",
-                "tool_image": "ghcr.io/nukelab/radiation-transport:v1.0.0",
+                "tool_image": "ghcr.io/nukehub-dev/radiation-transport:v1.0.0",
                 "tool_mounts": ["/opt/nuke"],
                 "category": "simulation",
             },
@@ -143,7 +143,7 @@ class TestEnvironmentCRUD:
 
         assert response.status_code == 201
         data = response.json()["data"]
-        assert data["tool_image"] == "ghcr.io/nukelab/radiation-transport:v1.0.0"
+        assert data["tool_image"] == "ghcr.io/nukehub-dev/radiation-transport:v1.0.0"
         assert data["tool_mounts"] == ["/opt/nuke"]
 
     @pytest.mark.asyncio

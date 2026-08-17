@@ -666,7 +666,7 @@ function EnvironmentsPage() {
                   type="text"
                   value={formData.tool_image}
                   onChange={(e) => setFormData({ ...formData, tool_image: e.target.value })}
-                  placeholder="ghcr.io/nukelab/radiation-transport:v1.0.0"
+                  placeholder="ghcr.io/nukehub-dev/radiation-transport:v1.0.0"
                 />
                 <p className="text-xs text-muted-foreground">
                   Optional scientific toolchain mounted read-only into the runtime container at
