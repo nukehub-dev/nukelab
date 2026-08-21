@@ -1375,7 +1375,7 @@ _ensure_venv_tool() {
 # Resolve the NukeLab version string. Preference order:
 #   1. $DIR/VERSION file (publishable artifact)
 #   2. git describe --tags (e.g. v2.0, v2.0-3-gabc123)
-#   3. hardcoded default (kept as a last-resort fallback)
+#   3. hardcoded development fallback (must never look like a release)
 #
 # Lives in lib.sh (not scripts/manage.d/version.sh) because print_help() in
 # nukelabctl calls it before any command module has been sourced.
@@ -1391,9 +1391,10 @@ _nukelab_version() {
     if command -v git > /dev/null 2>&1 && [ -d "$DIR/.git" ]; then
         # --tags only succeeds when at least one tag exists; --always is
         # intentionally omitted so a bare short-sha never masks the
-        # hardcoded fallback default. The trailing `|| true` plus the `if`
+        # development fallback. The trailing `|| true` plus the `if`
         # guard both neutralize the ERR trap inherited via `set -E` so a
-        # tag-less repo falls through to the v2.0 default instead of aborting.
+        # tag-less repo falls through to the 0.0.0-dev fallback instead of
+        # aborting.
         if version=$(cd "$DIR" && git describe --tags 2> /dev/null || true); then
             if [ -n "$version" ]; then
                 echo "$version"
@@ -1401,5 +1402,5 @@ _nukelab_version() {
             fi
         fi
     fi
-    echo "v2.0"
+    echo "0.0.0-dev"
 }
