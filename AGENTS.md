@@ -137,6 +137,10 @@ Notes:
   `NUKELAB_IMAGE_TAG` so `nukelabctl up` / `update` pull tagged images from
   `ghcr.io/nukehub-dev/nukelab-backend` and `-frontend` instead of rebuilding
   from source. Unpinned deploys keep the source-build path.
+- Rollback safety: `./nukelabctl db-migrate` takes an automatic pre-migration
+  snapshot, and the backend startup guard refuses to boot an old image on a
+  newer schema. To roll back, pin the previous release, run `./nukelabctl
+  update`, restore the `backups/pre-migrate-*` snapshot, and restart.
 - Cut a release with `scripts/bump-version.sh X.Y.Z` — it syncs `VERSION`,
   `frontend/package.json`, and `CHANGELOG.md` (the backend version is dynamic
   via `APP_VERSION`; `backend/app/version.py` stays `0.0.0-dev`), then prints

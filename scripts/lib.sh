@@ -1246,6 +1246,32 @@ _direct_database_url() {
     echo "postgresql+asyncpg://${DATABASE_USER:-nukelab}:${DATABASE_PASSWORD:-nukelab123}@${DATABASE_HOST:-postgres}:${DATABASE_PORT:-5432}/${DATABASE_NAME:-nukelab}"
 }
 
+# Usage: _pg_dump_backup <output_file>
+# Run pg_dump for the configured database into <output_file>. Returns 0 on
+# success and removes partial/empty files on failure. stdout is redirected to
+# the file; stderr remains visible so errors surface.
+_pg_dump_backup() {
+    local output_file="$1"
+    local backup_dir
+    backup_dir=$(dirname "$output_file")
+    mkdir -p "$backup_dir"
+
+    local _dump_exit=0
+    $COMPOSE "${COMPOSE_ARGS[@]}" exec -T postgres \
+        pg_dump -U "${DATABASE_USER:-nukelab}" "${DATABASE_NAME:-nukelab}" \
+        > "$output_file" || _dump_exit=$?
+
+    if [ "$_dump_exit" -ne 0 ]; then
+        rm -f "$output_file"
+        return 1
+    fi
+    if [ ! -s "$output_file" ]; then
+        rm -f "$output_file"
+        return 1
+    fi
+    return 0
+}
+
 wait_for_backend() {
     # Always check the local Traefik-exposed backend, not APP_URL. APP_URL may
     # point to an external hostname (e.g., https://lab.nukehub.org) that isn't

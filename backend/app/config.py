@@ -141,6 +141,12 @@ class Settings(BaseSettings):
     # instead of relying on auto-create.
     auto_create_tables: bool = True
 
+    # Schema-compatibility guard. "auto" refuses to start in production when
+    # the DB Alembic revision is newer than the revisions known to this image,
+    # and warns in other environments. "enforce" always refuses. "off" disables
+    # the guard (still logs at debug level during startup).
+    db_schema_guard: str = "auto"
+
     # Observability — Query Performance Monitoring
     observability_slow_query_threshold_ms: int = 100
     observability_pg_stat_statements_enabled: bool = True
@@ -319,6 +325,17 @@ class Settings(BaseSettings):
         """Treat an empty env value as "use the env-aware default"."""
         if value == "" or value is None:
             return None
+        return value
+
+    @field_validator("db_schema_guard", mode="before")
+    @classmethod
+    def _validate_db_schema_guard(cls, value: Any) -> Any:
+        """Reject unsupported schema-guard modes."""
+        allowed = {"off", "auto", "enforce"}
+        if value not in allowed:
+            raise ValueError(
+                f"DB_SCHEMA_GUARD must be one of {sorted(allowed)}, got {value!r}"
+            )
         return value
 
     @model_validator(mode="after")

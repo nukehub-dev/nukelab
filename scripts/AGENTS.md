@@ -34,6 +34,12 @@ All files under `scripts/`, plus the top-level `nukelabctl` dispatcher.
 - Environment build order matters: `manage.d/build.sh` builds `services/build-auth-sidecar.sh` before any `env base` build (base embeds the sidecar binary), then `conda-base`, then `workspace`/`dev`. `build-all.sh` mirrors that order. Keep the sidecar first when touching build orchestration.
 - When adding or changing `nukelabctl` commands, targets, or flags, update
   `scripts/nukelabctl-completion.bash` so bash tab-completion stays in sync.
+- `db-migrate` takes an automatic `pg_dump` snapshot before running
+  `alembic upgrade head`. The snapshot is written to `backups/` with the name
+  `pre-migrate-<NUKELAB_VERSION>-<current-revision>-<timestamp>.dump`. If the
+  backup fails, the migration aborts. If the migration then fails, the exact
+  `./nukelabctl restore <file>` command is printed. Use `--no-backup` to skip
+  the snapshot when you have already arranged your own protection.
 
 ## Verification
 

@@ -122,8 +122,11 @@ _manage_sh_complete() {
 	update)
 		COMPREPLY=($(compgen -W "--cache --build ${global_flags[*]}" -- "$cur"))
 		;;
-	pull | e2e | db-migrate | db-shell | backup | selftest | install-completion | help | security | init-user-auth-keys | rotate-user-auth-key | cleanup-user-auth-keys)
+	pull | e2e | db-shell | backup | selftest | install-completion | help | security | init-user-auth-keys | rotate-user-auth-key | cleanup-user-auth-keys)
 		COMPREPLY=($(compgen -W "${global_flags[*]}" -- "$cur"))
+		;;
+	db-migrate)
+		COMPREPLY=($(compgen -W "--no-backup ${global_flags[*]}" -- "$cur"))
 		;;
 	*)
 		COMPREPLY=($(compgen -W "${global_flags[*]}" -- "$cur"))

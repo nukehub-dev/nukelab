@@ -54,6 +54,23 @@ async def startup():
     init_tracing()
     init_sentry()
 
+    # Schema-compatibility guard: refuse to boot an old image against a newer
+    # schema. DB outages must not become a new startup failure mode, so any
+    # unexpected exception is logged and swallowed.
+    try:
+        import os
+
+        from app.db.schema_guard import run_schema_guard
+
+        script_dir = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "alembic"
+        )
+        await run_schema_guard(engine, script_dir, settings.db_schema_guard, settings.app_env)
+    except RuntimeError:
+        raise
+    except Exception as exc:
+        logger.warning(f"Schema compatibility guard failed: {exc}")
+
     # Create tables unless disabled (production should use Alembic migrations).
     # When enabled, use a Postgres advisory lock so multiple uvicorn workers
     # starting in parallel don't race to create the same tables/types.
