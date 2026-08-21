@@ -172,6 +172,10 @@ High-level layout; see the Child NAD Index below for domain-specific details.
   config used by background tasks (e.g. `SMTP_*`) must be passed to
   `celery-worker` in `compose.yml`, not only to `backend` — otherwise it fails
   silently in prod while request-path features (like the SMTP test) still work.
+- **`.env` and `.env.development` drift out of date** as `.env.example` evolves.
+  Run `./nukelabctl check-env` to detect missing or stale keys, and
+  `./nukelabctl sync-env` to non-destructively append missing keys from
+  `.env.example` while preserving local values and secrets.
 
 ## Security & penetration testing
 

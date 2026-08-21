@@ -157,6 +157,47 @@ load_env_file() {
     done < "$env_file"
 }
 
+# Usage: _read_env_into_assoc <file> <assoc_array_name>
+# Reads active KEY=VALUE lines from <file> into the named associative array.
+# Comments, blank lines, and malformed keys are ignored. An optional leading
+# `export ` prefix is tolerated, and trailing inline comments are stripped
+# (only when # is preceded by whitespace, matching load_env_file).
+# The array is reset before populating; values are NOT exported.
+_read_env_into_assoc() {
+    local env_file="$1"
+    local -n _assoc="$2"
+    _assoc=()
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        [[ "$line" =~ ^[[:space:]]*#.*$ ]] && continue
+        [[ -z "${line// /}" ]] && continue
+
+        local cleaned="${line#export }"
+
+        if [[ "$cleaned" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)[[:space:]]+#.*$ ]]; then
+            cleaned="${BASH_REMATCH[1]}=${BASH_REMATCH[2]}"
+            while [[ "$cleaned" == *[[:space:]] ]]; do
+                cleaned="${cleaned%[[:space:]]}"
+            done
+        fi
+
+        local key="${cleaned%%=*}"
+        if [[ "$cleaned" != *=* ]] || [[ ! "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+            continue
+        fi
+
+        local value="${cleaned#*=}"
+        _assoc["$key"]="$value"
+    done < "$env_file"
+}
+
+# Usage: _assoc_has_key <assoc_array_name> <key>
+# Returns 0 if the associative array contains the given key, 1 otherwise.
+_assoc_has_key() {
+    local -n _assoc="$1"
+    local key="$2"
+    [[ -v "_assoc[$key]" ]]
+}
+
 # Usage: init_env [dev_mode]
 # In dev mode (.env.development present) the dev file is loaded FIRST so its
 # values win: load_env_file never overwrites an already-set variable, so .env

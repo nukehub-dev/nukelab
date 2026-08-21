@@ -12,7 +12,7 @@ _manage_sh_complete() {
 		shell exec install test e2e loadtest db-migrate db-shell
 		backup restore reset dev lint security cache-toolchain
 		init-user-auth-keys rotate-user-auth-key cleanup-user-auth-keys
-		doctor version install-completion selftest help
+		check-env sync-env doctor version install-completion selftest help
 	)
 
 	local global_flags=(--coverage --overlay -o --verbose -v --quiet -q --skip-port-check --no-alertmanager --version --help -h)
@@ -127,6 +127,17 @@ _manage_sh_complete() {
 		;;
 	db-migrate)
 		COMPREPLY=($(compgen -W "--no-backup ${global_flags[*]}" -- "$cur"))
+		;;
+	check-env)
+		COMPREPLY=($(compgen -W "--all --changed ${global_flags[*]}" -- "$cur"))
+		;;
+	sync-env)
+		# First positional is the env file; after that only flags.
+		if [[ "$cur" == -* ]]; then
+			COMPREPLY=($(compgen -W "--dry-run --yes -y ${global_flags[*]}" -- "$cur"))
+		else
+			COMPREPLY=($(compgen -f -- "$cur"))
+		fi
 		;;
 	*)
 		COMPREPLY=($(compgen -W "${global_flags[*]}" -- "$cur"))
