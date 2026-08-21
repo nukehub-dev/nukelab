@@ -18,6 +18,13 @@ All files under `scripts/`, plus the top-level `nukelabctl` dispatcher.
 - `update` has a `--build` escape hatch that forces a source rebuild even when `NUKELAB_PULL_DEPLOY=true`. In source-build mode `update` and `pull` pull base images for the pullable infra services only, via `_pullable_infra_services`.
 - `_pullable_infra_services` returns the pullable (non-buildable) infra services (`traefik postgres redis` + enabled overlay services) as a word-split list, mirroring `_backend_services`. App services (`backend`, `celery-worker`, `celery-beat`, `frontend`) are excluded so unpinned ghcr.io images are never pulled without registry auth; pull mode pulls them explicitly.
 - Each management command exposes `cmd_<name>`, `help_<name>`, and `parse_<name>_args` when it accepts flags.
+- Environment-file helpers live in `scripts/lib.sh`:
+  - `load_env_file` exports active KEY=VALUE lines from a file.
+  - `_read_env_into_assoc` reads active KEY=VALUE lines into an associative array without exporting.
+  - `_assoc_has_key` tests associative-array key membership.
+- `check-env` and `sync-env` compare local env files against `.env.example`.
+  `check-env` is read-only; `sync-env` appends missing keys without overwriting
+  existing values and never removes stale keys without operator consent.
 - Security scanning helpers live in `scripts/security/`.
 
 ## Work Guidance

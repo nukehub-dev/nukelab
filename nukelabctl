@@ -248,6 +248,10 @@ ${BOLD}Maintenance:${RESET}
   ${GREEN}rotate-user-auth-key${RESET}                 Rotate the active user-auth Ed25519 key
   ${GREEN}cleanup-user-auth-keys${RESET}               Remove expired retired user-auth keys
 
+${BOLD}Environment:${RESET}
+  ${GREEN}check-env${RESET}  [options]                 Compare env files to .env.example
+  ${GREEN}sync-env${RESET}   [file] [options]          Merge missing keys from .env.example
+
 ${BOLD}Development Tools:${RESET}
   ${GREEN}shell${RESET}      [service]                 Open shell in container
   ${GREEN}exec${RESET}       [service] [command]       Execute command in container
@@ -320,6 +324,9 @@ ${BOLD}Examples:${RESET}
   ./nukelabctl init-user-auth-keys        # Generate initial user-auth keys (production setup)
   ./nukelabctl rotate-user-auth-key       # Rotate the active user-auth key
   ./nukelabctl cleanup-user-auth-keys     # Prune expired retired public keys
+  ./nukelabctl check-env                  # Check active env file for drift
+  ./nukelabctl check-env --all --changed  # Check all env files including value drift
+  ./nukelabctl sync-env .env.development --dry-run  # Preview missing keys
 
 EOF
 }
@@ -463,6 +470,10 @@ main() {
             _dispatch_command "$CMD"
             ;;
         lint)
+            _dispatch_command "$CMD"
+            ;;
+        check-env | sync-env)
+            # These commands only parse env files; no container engine or env state needed.
             _dispatch_command "$CMD"
             ;;
         status | logs | shell | exec | db-migrate | db-shell | backup | restore | e2e | security | doctor | init-user-auth-keys | rotate-user-auth-key | cleanup-user-auth-keys | verify-hardening)

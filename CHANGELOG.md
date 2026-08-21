@@ -47,6 +47,18 @@ release version.
   `DB_SCHEMA_GUARD` setting (`auto` refuse in production/warn elsewhere,
   `enforce` always refuse, `off` disabled). If the database is unreachable the
   guard logs a warning and does not block startup.
+- Environment-file drift detection and repair: `./nukelabctl check-env` compares
+  `.env` / `.env.development` against `.env.example` and reports missing or
+  stale keys (optionally value differences with `--changed`, all files with
+  `--all`). `./nukelabctl sync-env` non-destructively appends missing keys from
+  `.env.example` while preserving existing local values and secrets; stale keys
+  are reported but left for manual removal. Both commands are read-only by
+  default unless `sync-env` is invoked with `--yes` or confirmed interactively.
+- Production version guard: when `APP_ENV=production`, `nukelabctl` refuses to
+  boot if the resolved version is `0.0.0-dev`. Production requires a real
+  release via `VERSION`, a git tag, or an explicit `NUKELAB_VERSION` /
+  `NUKELAB_IMAGE_TAG` (the latter is useful when pulling pre-built GHCR
+  images).
 
 ### Changed
 

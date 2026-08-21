@@ -172,6 +172,14 @@ High-level layout; see the Child NAD Index below for domain-specific details.
   config used by background tasks (e.g. `SMTP_*`) must be passed to
   `celery-worker` in `compose.yml`, not only to `backend` — otherwise it fails
   silently in prod while request-path features (like the SMTP test) still work.
+- **`.env` and `.env.development` drift out of date** as `.env.example` evolves.
+  Run `./nukelabctl check-env` to detect missing or stale keys, and
+  `./nukelabctl sync-env` to non-destructively append missing keys from
+  `.env.example` while preserving local values and secrets.
+- **Production deployments must be version-pinned**. When `APP_ENV=production`,
+  `nukelabctl` refuses to boot if the resolved version is `0.0.0-dev`. Pin a
+  release with a `VERSION` file, a git tag, or an explicit `NUKELAB_VERSION`
+  / `NUKELAB_IMAGE_TAG` (use the latter when pulling pre-built GHCR images).
 
 ## Security & penetration testing
 

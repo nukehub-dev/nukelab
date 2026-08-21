@@ -157,6 +157,47 @@ load_env_file() {
     done < "$env_file"
 }
 
+# Usage: _read_env_into_assoc <file> <assoc_array_name>
+# Reads active KEY=VALUE lines from <file> into the named associative array.
+# Comments, blank lines, and malformed keys are ignored. An optional leading
+# `export ` prefix is tolerated, and trailing inline comments are stripped
+# (only when # is preceded by whitespace, matching load_env_file).
+# The array is reset before populating; values are NOT exported.
+_read_env_into_assoc() {
+    local env_file="$1"
+    local -n _assoc="$2"
+    _assoc=()
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        [[ "$line" =~ ^[[:space:]]*#.*$ ]] && continue
+        [[ -z "${line// /}" ]] && continue
+
+        local cleaned="${line#export }"
+
+        if [[ "$cleaned" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)[[:space:]]+#.*$ ]]; then
+            cleaned="${BASH_REMATCH[1]}=${BASH_REMATCH[2]}"
+            while [[ "$cleaned" == *[[:space:]] ]]; do
+                cleaned="${cleaned%[[:space:]]}"
+            done
+        fi
+
+        local key="${cleaned%%=*}"
+        if [[ "$cleaned" != *=* ]] || [[ ! "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+            continue
+        fi
+
+        local value="${cleaned#*=}"
+        _assoc["$key"]="$value"
+    done < "$env_file"
+}
+
+# Usage: _assoc_has_key <assoc_array_name> <key>
+# Returns 0 if the associative array contains the given key, 1 otherwise.
+_assoc_has_key() {
+    local -n _assoc="$1"
+    local key="$2"
+    [[ -v "_assoc[$key]" ]]
+}
+
 # Usage: init_env [dev_mode]
 # In dev mode (.env.development present) the dev file is loaded FIRST so its
 # values win: load_env_file never overwrites an already-set variable, so .env
@@ -208,6 +249,18 @@ init_env() {
         local _nv
         _nv="$(_nukelab_version)"
         export NUKELAB_VERSION="${_nv#v}"
+    fi
+
+    # Production guard: refuse to operate with the unresolved development
+    # fallback version. A production stack must be pinned to a real release
+    # via VERSION, a git tag, or an explicit NUKELAB_VERSION / NUKELAB_IMAGE_TAG.
+    if [ "${APP_ENV:-}" = "production" ] && [ "$NUKELAB_VERSION" = "0.0.0-dev" ]; then
+        die "Production deployments require a release version, but the resolved version is 0.0.0-dev.\n\n\
+Resolve this by one of:\n\
+  - Create a VERSION file: echo '2.0.0' > VERSION\n\
+  - Check out a git tag (vX.Y.Z)\n\
+  - Set NUKELAB_VERSION explicitly in the environment or env file\n\
+  - Set NUKELAB_IMAGE_TAG explicitly when pulling pre-built images"
     fi
 
     # Default the registry image tag consumed by compose.yml image:
@@ -1334,7 +1387,7 @@ _ensure_venv_tool() {
 # Resolve the NukeLab version string. Preference order:
 #   1. $DIR/VERSION file (publishable artifact)
 #   2. git describe --tags (e.g. v2.0, v2.0-3-gabc123)
-#   3. hardcoded default (kept as a last-resort fallback)
+#   3. hardcoded development fallback (must never look like a release)
 #
 # Lives in lib.sh (not scripts/manage.d/version.sh) because print_help() in
 # nukelabctl calls it before any command module has been sourced.
@@ -1350,9 +1403,10 @@ _nukelab_version() {
     if command -v git > /dev/null 2>&1 && [ -d "$DIR/.git" ]; then
         # --tags only succeeds when at least one tag exists; --always is
         # intentionally omitted so a bare short-sha never masks the
-        # hardcoded fallback default. The trailing `|| true` plus the `if`
+        # development fallback. The trailing `|| true` plus the `if`
         # guard both neutralize the ERR trap inherited via `set -E` so a
-        # tag-less repo falls through to the v2.0 default instead of aborting.
+        # tag-less repo falls through to the 0.0.0-dev fallback instead of
+        # aborting.
         if version=$(cd "$DIR" && git describe --tags 2> /dev/null || true); then
             if [ -n "$version" ]; then
                 echo "$version"
@@ -1360,5 +1414,5 @@ _nukelab_version() {
             fi
         fi
     fi
-    echo "v2.0"
+    echo "0.0.0-dev"
 }
