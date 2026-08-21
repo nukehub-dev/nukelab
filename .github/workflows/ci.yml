@@ -225,6 +225,9 @@ jobs:
           target: ${{ matrix.target }}
           push: ${{ github.event_name == 'push' }}
           tags: ${{ steps.meta.outputs.tags }}
+          # Inject the resolved version into the backend image so the running
+          # API reports the exact image tag (APP_VERSION env, see backend/Dockerfile).
+          build-args: ${{ matrix.name == 'backend' && format('APP_VERSION={0}', steps.meta.outputs.version) || '' }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}

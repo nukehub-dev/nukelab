@@ -8,6 +8,8 @@ from urllib.parse import urlparse, urlunparse
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings
 
+from app.version import __version__
+
 
 class Settings(BaseSettings):
     app_name: str = "NukeLab"
@@ -17,6 +19,11 @@ class Settings(BaseSettings):
     public_url: str = "http://localhost:8080"
     frontend_url: str = ""  # Defaults to public_url if not set
     app_timezone: str = "UTC"
+
+    # Platform version. Defaults to the checked-in fallback in app/version.py;
+    # CI image builds inject APP_VERSION (from scripts/ci-version.sh) so
+    # containers report the exact image tag (e.g. 2.1.0, main, pr-42).
+    app_version: str = __version__
 
     maintenance_mode: bool = False
     maintenance_message: str = "System under maintenance"
@@ -240,7 +247,7 @@ class Settings(BaseSettings):
     otel_exporter_otlp_endpoint: str = "http://otel-collector:4317"
     otel_exporter_otlp_protocol: str = "grpc"  # grpc | http
     otel_service_name: str = "nukelab-backend"
-    otel_service_version: str = "2.0.0"
+    otel_service_version: str = ""  # Defaults to app_version; override via OTEL_SERVICE_VERSION
     otel_log_correlation: bool = True
     otel_sampler_ratio: float = 1.0
 
@@ -290,6 +297,14 @@ class Settings(BaseSettings):
     user_auth_denylist_fail_closed: bool = True
     user_auth_key_rotation_grace_seconds: int | None = None
 
+    @field_validator("app_version", mode="before")
+    @classmethod
+    def _empty_app_version_to_fallback(cls, value: Any) -> Any:
+        """Treat an empty APP_VERSION env value as "use the static fallback"."""
+        if value == "" or value is None:
+            return __version__
+        return value
+
     @field_validator("user_auth_key_rotation_grace_seconds", mode="before")
     @classmethod
     def _empty_rotation_grace_to_none(cls, value: Any) -> Any:
@@ -325,6 +340,13 @@ class Settings(BaseSettings):
             self.user_auth_public_key_path = os.path.join(
                 self.user_auth_secrets_dir, "user-auth-public.pem"
             )
+        return self
+
+    @model_validator(mode="after")
+    def set_otel_service_version(self) -> "Settings":
+        """Default the OTEL service version to the resolved app version."""
+        if not self.otel_service_version:
+            self.otel_service_version = self.app_version
         return self
 
     @model_validator(mode="after")

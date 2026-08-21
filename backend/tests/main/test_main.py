@@ -20,7 +20,7 @@ class TestAppConfiguration:
         assert app.title == settings.app_name
 
     def test_app_version(self):
-        assert app.version == "2.0.0"
+        assert app.version == settings.app_version
 
     def test_app_root_path(self):
         assert app.root_path == "/api"
@@ -106,7 +106,7 @@ class TestRootEndpoint:
         result = await root()
         assert "message" in result
         assert settings.app_name in result["message"]
-        assert result["version"] == "2.0.0"
+        assert result["version"] == settings.app_version
 
 
 class TestHealthEndpoint:

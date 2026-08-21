@@ -33,6 +33,12 @@ CMD ["python", "-m", "pytest"]
 # ── Production / runtime target (default) ───────────────────────────────────
 FROM base AS runtime
 
+# Platform version injected by CI (from scripts/ci-version.sh). Empty for
+# local builds; the app then falls back to the static version in
+# app/version.py (see app/config.py: app_version).
+ARG APP_VERSION=""
+ENV APP_VERSION=${APP_VERSION}
+
 # Expose port
 EXPOSE 8000
 

@@ -143,7 +143,7 @@ async def lifespan(app: FastAPI):
 _app_kwargs = {
     "title": settings.app_name,
     "description": "NukeLab Platform v2.0 API",
-    "version": "2.0.0",
+    "version": settings.app_version,
     "debug": settings.app_debug,
     "root_path": "/api",
     "lifespan": lifespan,
@@ -296,7 +296,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
 @app.get("/")
 async def root():
-    return {"message": f"Welcome to {settings.app_name} API", "version": "2.0.0"}
+    return {"message": f"Welcome to {settings.app_name} API", "version": settings.app_version}
 
 
 @app.get("/health")

@@ -8,6 +8,7 @@ import os
 import pytest
 
 from app.config import Settings
+from app.version import __version__
 
 
 class TestProductionUserAuthKeyValidation:
@@ -120,3 +121,31 @@ class TestApiDocsDefaults:
 
     def test_explicit_disable_in_development(self):
         assert Settings(app_env="development", api_docs_enabled=False).api_docs_enabled is False
+
+
+class TestAppVersion:
+    """APP_VERSION (injected as a Docker build arg in CI) overrides the static
+    fallback from app/version.py; empty values fall back."""
+
+    def test_default_is_static_fallback(self, monkeypatch):
+        monkeypatch.delenv("APP_VERSION", raising=False)
+        assert Settings().app_version == __version__
+
+    def test_env_override_wins(self, monkeypatch):
+        monkeypatch.setenv("APP_VERSION", "9.9.9-ci")
+        assert Settings().app_version == "9.9.9-ci"
+
+    def test_empty_env_falls_back(self, monkeypatch):
+        """Local Docker builds set APP_VERSION to an empty string."""
+        monkeypatch.setenv("APP_VERSION", "")
+        assert Settings().app_version == __version__
+
+    def test_otel_service_version_defaults_to_app_version(self, monkeypatch):
+        monkeypatch.setenv("APP_VERSION", "9.9.9-ci")
+        monkeypatch.delenv("OTEL_SERVICE_VERSION", raising=False)
+        assert Settings().otel_service_version == "9.9.9-ci"
+
+    def test_otel_service_version_explicit_override(self, monkeypatch):
+        monkeypatch.setenv("APP_VERSION", "9.9.9-ci")
+        monkeypatch.setenv("OTEL_SERVICE_VERSION", "custom")
+        assert Settings().otel_service_version == "custom"
