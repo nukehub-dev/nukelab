@@ -73,6 +73,8 @@ services:
         build:
             context: ./backend
             dockerfile: Dockerfile
+            args:
+                - APP_VERSION=${NUKELAB_VERSION:-}
         container_name: nukelab-backend
         environment:
             - APP_NAME=${APP_NAME:-NukeLab}
@@ -344,6 +346,8 @@ services:
         build:
             context: ./backend
             dockerfile: Dockerfile
+            args:
+                - APP_VERSION=${NUKELAB_VERSION:-}
         container_name: nukelab-celery-worker
         command: celery -A app.worker worker --loglevel=info -P threads -c 4
         environment:
@@ -418,6 +422,8 @@ services:
         build:
             context: ./backend
             dockerfile: Dockerfile
+            args:
+                - APP_VERSION=${NUKELAB_VERSION:-}
         container_name: nukelab-celery-beat
         command: celery -A app.worker beat --loglevel=info --schedule /tmp/celerybeat-schedule
         environment:

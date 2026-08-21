@@ -61,6 +61,7 @@ See [IMPLEMENTATION-PHASES.md](IMPLEMENTATION-PHASES.md) for the full phase-by-p
 
 - Kubernetes migration (Helm, HPA, PVCs, Network Policies, Pod Security Standards)
 - Blue-green/rollback deployment automation
+- Pull-based production deploys — compose consumes tagged GHCR images instead of rebuilding from source on the prod host (see DECISION-LOG.md, 2026-08-21)
 - Marketplace / plugin system
 
 Pursue Kubernetes only after saturating a single large server (32+ cores, 128GB+ RAM) and proving distribution is required.

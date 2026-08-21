@@ -186,6 +186,16 @@ init_env() {
     else
         die "No environment file found.\n\n  cp .env.example .env.development"
     fi
+
+    # Default the platform version used by compose build args (APP_VERSION in
+    # backend/Dockerfile) to the resolved NukeLab version, stripped of the
+    # leading "v" so it matches the bare-semver image tags CI produces. An
+    # explicit NUKELAB_VERSION in the environment or an env file wins.
+    if [ -z "${NUKELAB_VERSION:-}" ]; then
+        local _nv
+        _nv="$(_nukelab_version)"
+        export NUKELAB_VERSION="${_nv#v}"
+    fi
 }
 
 # ─── Container Engine ─────────────────────────────────────────────────────-

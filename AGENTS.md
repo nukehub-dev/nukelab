@@ -130,6 +130,9 @@ Notes:
   them into semver image tags plus `latest` in CI, and CI injects the resolved
   version into the backend image via the `APP_VERSION` build arg (runtime
   resolution: `settings.app_version`, fallback `backend/app/version.py`).
+  Local compose builds get the same treatment: `nukelabctl` exports
+  `NUKELAB_VERSION` (VERSION file / git describe) and `compose.yml` passes it
+  as the `APP_VERSION` build arg.
 - Cut a release with `scripts/bump-version.sh X.Y.Z` — it syncs `VERSION`,
   `frontend/package.json`, and `CHANGELOG.md` (the backend version is dynamic
   via `APP_VERSION`; `backend/app/version.py` stays `0.0.0-dev`), then prints

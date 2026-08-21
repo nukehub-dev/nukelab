@@ -24,6 +24,12 @@ release version.
   `/health/status`, and the OpenTelemetry service version resolve via
   `settings.app_version`; empty or unset `APP_VERSION` falls back to the
   static literal in `app/version.py`.
+- Compose builds bake the platform version into locally built backend images:
+  `nukelabctl` exports `NUKELAB_VERSION` (from the `VERSION` file / git tag,
+  overridable via the env file) and `compose.yml` passes it as the
+  `APP_VERSION` build arg to the backend and celery images, so stacks
+  deployed with `nukelabctl` report the checkout version instead of
+  `0.0.0-dev`.
 
 ### Changed
 

@@ -13,6 +13,7 @@ All files under `scripts/`, plus the top-level `nukelabctl` dispatcher.
 - Bash 4+; modules in `scripts/manage.d/*.sh` are sourced by the dispatcher, not executed directly.
 - Tracked shell scripts (`nukelabctl`, `**/*.sh`) must be mode `100755` in the git index — prod pulls rely on it. Filesystems without Unix permissions (NTFS) record new files as `100644`; fix with `git update-index --chmod=+x <file>`. `selftest` enforces this. On such filesystems, invoke via `bash nukelabctl ...` when the on-disk exec bit cannot be set.
 - `scripts/lib.sh` is the single source of truth for shared helpers (env loading, engine detection, state persistence, logging, venv provisioning).
+- `init_env` exports `NUKELAB_VERSION` (from `_nukelab_version`, leading `v` stripped to match bare-semver image tags) when unset; `compose.yml` build args (`APP_VERSION`) consume it so locally built backend images report the checkout version. An explicit `NUKELAB_VERSION` in the environment or env file wins.
 - Each management command exposes `cmd_<name>`, `help_<name>`, and `parse_<name>_args` when it accepts flags.
 - Security scanning helpers live in `scripts/security/`.
 
