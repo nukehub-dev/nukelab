@@ -222,7 +222,7 @@ class TestSettingsValidation:
         """off/auto/enforce are accepted."""
         from app.config import Settings
 
-        settings = Settings(DB_SCHEMA_GUARD=mode)
+        settings = Settings(db_schema_guard=mode)
         assert settings.db_schema_guard == mode
 
     def test_invalid_db_schema_guard_value_rejected(self):
@@ -230,4 +230,4 @@ class TestSettingsValidation:
         from app.config import Settings
 
         with pytest.raises(ValueError, match="DB_SCHEMA_GUARD"):
-            Settings(DB_SCHEMA_GUARD="warn-only")
+            Settings(db_schema_guard="warn-only")
