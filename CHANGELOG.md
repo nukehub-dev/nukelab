@@ -13,6 +13,8 @@ release version.
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-08-22
+
 ### Added
 
 - Pull-based production deploys: pin `NUKELAB_VERSION` or `NUKELAB_IMAGE_TAG`
