@@ -144,6 +144,11 @@ cmd_start() {
     else
         step "Starting production stack..."
 
+        if [ "${NUKELAB_PULL_DEPLOY:-false}" = "true" ]; then
+            step "Pulling pinned registry images..."
+            _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" pull backend frontend
+        fi
+
         local _prod_backend_services
         _prod_backend_services=$(_backend_services)
 

@@ -119,7 +119,10 @@ _manage_sh_complete() {
 			esac
 		fi
 		;;
-	update | pull | e2e | db-migrate | db-shell | backup | selftest | install-completion | help | security | init-user-auth-keys | rotate-user-auth-key | cleanup-user-auth-keys)
+	update)
+		COMPREPLY=($(compgen -W "--cache --build ${global_flags[*]}" -- "$cur"))
+		;;
+	pull | e2e | db-migrate | db-shell | backup | selftest | install-completion | help | security | init-user-auth-keys | rotate-user-auth-key | cleanup-user-auth-keys)
 		COMPREPLY=($(compgen -W "${global_flags[*]}" -- "$cur"))
 		;;
 	*)

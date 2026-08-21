@@ -15,6 +15,12 @@ release version.
 
 ### Added
 
+- Pull-based production deploys: pin `NUKELAB_VERSION` or `NUKELAB_IMAGE_TAG`
+  to switch `nukelabctl up` / `update` from source builds to pulling tagged
+  `ghcr.io/nukehub-dev/nukelab-backend` and `-frontend` images. The three
+  backend services share one backend image; `update --build` forces a source
+  rebuild even in pull mode. Unpinned deploys keep today's source-build
+  behavior.
 - Release versioning: git tags (`vX.Y.Z`) are the single source of truth.
   `scripts/bump-version.sh` syncs the version across `VERSION`,
   `backend/app/version.py`, `frontend/package.json`, and this changelog.

@@ -75,6 +75,7 @@ services:
             dockerfile: Dockerfile
             args:
                 - APP_VERSION=${NUKELAB_VERSION:-}
+        image: ghcr.io/nukehub-dev/nukelab-backend:${NUKELAB_IMAGE_TAG:-latest}
         container_name: nukelab-backend
         environment:
             - APP_NAME=${APP_NAME:-NukeLab}
@@ -306,6 +307,7 @@ services:
             dockerfile: Dockerfile
             args:
                 - VITE_CDN_URL=${VITE_CDN_URL:-}
+        image: ghcr.io/nukehub-dev/nukelab-frontend:${NUKELAB_IMAGE_TAG:-latest}
         container_name: nukelab-frontend
         environment:
             - VITE_API_URL=${VITE_API_URL:-/api}
@@ -348,6 +350,7 @@ services:
             dockerfile: Dockerfile
             args:
                 - APP_VERSION=${NUKELAB_VERSION:-}
+        image: ghcr.io/nukehub-dev/nukelab-backend:${NUKELAB_IMAGE_TAG:-latest}
         container_name: nukelab-celery-worker
         command: celery -A app.worker worker --loglevel=info -P threads -c 4
         environment:
@@ -424,6 +427,7 @@ services:
             dockerfile: Dockerfile
             args:
                 - APP_VERSION=${NUKELAB_VERSION:-}
+        image: ghcr.io/nukehub-dev/nukelab-backend:${NUKELAB_IMAGE_TAG:-latest}
         container_name: nukelab-celery-beat
         command: celery -A app.worker beat --loglevel=info --schedule /tmp/celerybeat-schedule
         environment:

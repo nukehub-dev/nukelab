@@ -165,6 +165,14 @@ load_env_file() {
 # Exports NUKELAB_ENV_FILE so compose services can reference the active env file.
 init_env() {
     local dev_mode="${1:-false}"
+    local _explicit_version=false
+    local _explicit_image_tag=false
+
+    # Capture explicit operator pinning before env files are loaded.
+    # load_env_file never overwrites an already-set variable, so a value from
+    # the real shell environment wins over both .env and .env.development.
+    [ -n "${NUKELAB_VERSION:-}" ] && _explicit_version=true
+    [ -n "${NUKELAB_IMAGE_TAG:-}" ] && _explicit_image_tag=true
 
     if $dev_mode && [ -f .env.development ]; then
         # Dev mode: load the dev file first so dev values win over .env.
@@ -187,6 +195,11 @@ init_env() {
         die "No environment file found.\n\n  cp .env.example .env.development"
     fi
 
+    # Env files may also carry explicit pins; an already-set value is never
+    # overwritten, so non-empty here means the operator pinned it somewhere.
+    [ -n "${NUKELAB_VERSION:-}" ] && _explicit_version=true
+    [ -n "${NUKELAB_IMAGE_TAG:-}" ] && _explicit_image_tag=true
+
     # Default the platform version used by compose build args (APP_VERSION in
     # backend/Dockerfile) to the resolved NukeLab version, stripped of the
     # leading "v" so it matches the bare-semver image tags CI produces. An
@@ -195,6 +208,28 @@ init_env() {
         local _nv
         _nv="$(_nukelab_version)"
         export NUKELAB_VERSION="${_nv#v}"
+    fi
+
+    # Default the registry image tag consumed by compose.yml image:
+    # substitutions. When the operator explicitly pinned NUKELAB_VERSION, use
+    # it as the image tag unless NUKELAB_IMAGE_TAG was pinned separately.
+    # Unpinned deploys float on :latest, matching the pre-existing source-build
+    # behavior.
+    if [ -z "${NUKELAB_IMAGE_TAG:-}" ]; then
+        if $_explicit_version; then
+            export NUKELAB_IMAGE_TAG="$NUKELAB_VERSION"
+        else
+            export NUKELAB_IMAGE_TAG="latest"
+        fi
+    fi
+
+    # Pinning NUKELAB_VERSION or NUKELAB_IMAGE_TAG switches nukelabctl into
+    # pull-based deploys from the GitHub Container Registry.
+    if $_explicit_version || $_explicit_image_tag; then
+        export NUKELAB_PULL_DEPLOY=true
+        log "Pull-based deploy enabled ${DIM}(image tag: ${NUKELAB_IMAGE_TAG})${RESET}"
+    else
+        export NUKELAB_PULL_DEPLOY=false
     fi
 }
 
@@ -1060,6 +1095,28 @@ _backend_services() {
     # Print the list of backend services, including PgBouncer, monitoring, and
     # tracing overlays when enabled.
     local services="traefik postgres redis backend celery-worker celery-beat"
+    if _has_overlay "compose.pgbouncer.yml"; then
+        services="$services pgbouncer"
+    fi
+    if _has_overlay "compose.monitoring.yml"; then
+        services="$services prometheus grafana postgres-exporter redis-exporter node-exporter celery-exporter"
+    fi
+    if _has_overlay "compose.alertmanager.yml"; then
+        services="$services alertmanager"
+    fi
+    if _has_overlay "compose.tracing.yml"; then
+        services="$services otel-collector jaeger"
+    fi
+    echo "$services"
+}
+
+_pullable_infra_services() {
+    # Print pullable (non-buildable) infra services, including overlay services
+    # when enabled. The app services (backend, celery-worker, celery-beat,
+    # frontend) have both image: and build: blocks; in source-build mode their
+    # ghcr.io tags may be unavailable without registry auth, so infra pulls
+    # must exclude them. Pull-based deploy mode pulls them explicitly.
+    local services="traefik postgres redis"
     if _has_overlay "compose.pgbouncer.yml"; then
         services="$services pgbouncer"
     fi
