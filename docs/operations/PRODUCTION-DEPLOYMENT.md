@@ -30,6 +30,105 @@ NukeLab server containers enforce resource limits via Linux cgroups:
 
 **Key insight:** Cgroups *enforce* limits but `free`/`top`/`nproc` read `/proc` which shows host values by default. **lxcfs** virtualizes `/proc` to show cgroup-aware values.
 
+## Deploying from the GitHub Container Registry
+
+By default, production deploys build the backend and frontend images from source
+on the host. You can switch to pulling pre-built images from the GitHub
+Container Registry instead:
+
+1. Ensure the deploy host can read packages from `ghcr.io/nukehub-dev`.
+   The packages are public on GitHub; if your host requires authentication,
+   log in first:
+
+   ```bash
+   podman login ghcr.io   # or docker login ghcr.io
+   ```
+
+2. Pin the version you want to deploy in `.env`:
+
+   ```env
+   NUKELAB_VERSION=2.1.0
+   ```
+
+   Or pin only the image tag:
+
+   ```env
+   NUKELAB_IMAGE_TAG=2.1.0
+   ```
+
+   See `.env.example` for the full description of both variables.
+
+3. Run the normal lifecycle commands. `nukelabctl` detects the pin and pulls
+   the tagged `ghcr.io/nukehub-dev/nukelab-backend` and `-frontend` images
+   instead of rebuilding:
+
+   ```bash
+   ./nukelabctl up prod
+   ./nukelabctl update
+   ```
+
+   To force a source rebuild even in pull mode, use:
+
+   ```bash
+   ./nukelabctl update --build
+   ```
+
+4. Roll back by changing the pin and running `./nukelabctl update` again.
+
+When neither variable is pinned, deploys keep the source-build behavior.
+
+---
+
+## Rollback runbook
+
+Rolling back to a previous release is safe only when the database schema is
+compatible with the older image. Because `./nukelabctl db-migrate` takes an
+automatic pre-migration snapshot, you can restore the exact state from before
+the failed upgrade.
+
+1. Pin the previous release in `.env`:
+
+   ```env
+   NUKELAB_VERSION=2.0.0
+   ```
+
+2. Pull and restart the old images:
+
+   ```bash
+   ./nukelabctl update
+   ```
+
+3. Restore the pre-migration snapshot (taken automatically by `db-migrate`):
+
+   ```bash
+   ./nukelabctl restore backups/pre-migrate-2.1.0-<revision>-<timestamp>.dump
+   ```
+
+   Use `--yes` to skip the confirmation prompt in automation:
+
+   ```bash
+   ./nukelabctl restore --yes backups/pre-migrate-2.1.0-<revision>-<timestamp>.dump
+   ```
+
+4. Restart the backend so it boots against the restored schema:
+
+   ```bash
+   ./nukelabctl restart backend
+   ```
+
+The backend startup guard refuses to boot an old image on a newer schema: if
+you forget to restore the snapshot, the container logs an error naming the
+unknown Alembic revision and exits. In that case, restore the snapshot and
+restart again.
+
+**Avoiding rollback hazards:** split destructive migrations (column drops,
+renames, table deletions) across two releases using expand-contract:
+
+- Release N: add the new column/table and dual-write, but keep the old one.
+- Release N+1: remove the old column/table once no deployed image references it.
+
+This lets the previous release's code continue running on the newer schema.
+
 ---
 
 ## Cgroup Controllers

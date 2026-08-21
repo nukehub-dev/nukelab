@@ -190,7 +190,7 @@ async def platform_status():
     from app.services.oauth_service import oauth_service
 
     return {
-        "version": "2.0.0",
+        "version": settings.app_version,
         "features": {
             "auth_mode": settings.auth_mode,
             "oauth_enabled": oauth_service.is_configured

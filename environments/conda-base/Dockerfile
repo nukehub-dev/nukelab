@@ -5,7 +5,8 @@
 # domain-specific scientific toolchain images. Keeping this separate from
 # workspace means IDE updates do not force a rebuild of heavy C++/Fortran
 # scientific stacks.
-ARG BASE_IMAGE=ghcr.io/nukelab/base:v1.0.0
+ARG REGISTRY=ghcr.io/nukehub-dev
+ARG BASE_IMAGE=${REGISTRY}/base:v1.0.0
 
 FROM $BASE_IMAGE
 

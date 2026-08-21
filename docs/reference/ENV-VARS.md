@@ -23,6 +23,9 @@ Both `.env` and `.env.development` are gitignored. `.env.example` is the only en
 | `APP_URL` | Public application URL |
 | `FRONTEND_URL` | Optional separate frontend URL for Vite dev server |
 | `APP_TIMEZONE` | Default timezone |
+| `NUKELAB_VERSION` | Version baked into locally built backend images (`APP_VERSION` build arg); defaults to `VERSION` file / git tag. Pinning this switches `nukelabctl` to pull-based deploys |
+| `NUKELAB_IMAGE_TAG` | Exact registry image tag to deploy (`ghcr.io/nukehub-dev/nukelab-backend` / `-frontend`); defaults to the pinned `NUKELAB_VERSION` in pull mode, or `latest` in source-build mode |
+| `NUKELAB_PULL_DEPLOY` | Set automatically by `nukelabctl`: `true` when `NUKELAB_VERSION` or `NUKELAB_IMAGE_TAG` is pinned, otherwise `false` |
 
 ### Security
 

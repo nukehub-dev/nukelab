@@ -108,7 +108,8 @@ jobs:
         uses: aquasecurity/trivy-action@v0.36.0
         continue-on-error: true
         with:
-          image-ref: 'nukelab-backend:latest'
+          # compose.yml tags locally built images with the ghcr.io name.
+          image-ref: 'ghcr.io/nukehub-dev/nukelab-backend:latest'
           format: 'sarif'
           output: 'trivy-backend.sarif'
           severity: 'HIGH,CRITICAL'
@@ -117,17 +118,20 @@ jobs:
         uses: aquasecurity/trivy-action@v0.36.0
         continue-on-error: true
         with:
-          image-ref: 'nukelab-frontend:latest'
+          image-ref: 'ghcr.io/nukehub-dev/nukelab-frontend:latest'
           format: 'sarif'
           output: 'trivy-frontend.sarif'
           severity: 'HIGH,CRITICAL'
 
       - name: Merge SARIF files
+        id: merge
         run: |
           python3 -c "
-          import json, glob
+          import json, glob, os
           runs = []
           for f in glob.glob('trivy-*.sarif'):
+              if f == 'trivy-merged.sarif':
+                  continue
               runs.extend(json.load(open(f)).get('runs', []))
           if not runs:
               merged = {'\$schema': 'https://json.schemastore.org/sarif-2.1.0.json', 'version': '2.1.0', 'runs': []}
@@ -139,11 +143,16 @@ jobs:
               for run in runs:
                   merged['runs'][0]['results'].extend(run.get('results', []))
           json.dump(merged, open('trivy-merged.sarif', 'w'), indent=2)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as fh:
+              fh.write('runs=%d\n' % len(merged['runs']))
           "
 
       - name: Upload Trivy SARIF
         uses: github/codeql-action/upload-sarif@v4
-        if: always()
+        # The code-scanning API rejects a SARIF payload with zero runs
+        # ("1 item required; only 0 were supplied") — skip the upload when
+        # both scans failed to produce a report instead of failing the job.
+        if: always() && steps.merge.outputs.runs != '0'
         with:
           sarif_file: trivy-merged.sarif
 

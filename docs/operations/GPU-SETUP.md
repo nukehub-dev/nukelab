@@ -86,11 +86,11 @@ GPU's memory pool and can OOM each other.
    Or pull a published image:
 
    ```bash
-   docker pull ghcr.io/nukelab/gpu:v1.0.0
+   docker pull ghcr.io/nukehub-dev/gpu:v1.0.0
    ```
 
 2. In the admin UI, create an **Environment** record pointing at the image
-   (e.g. `ghcr.io/nukelab/gpu:v1.0.0`).
+   (e.g. `ghcr.io/nukehub-dev/gpu:v1.0.0`).
 3. Create or edit a **Plan** with **GPU** (`gpu_limit`) greater than 0. With
    exclusive allocation enabled, `gpu_limit` counts whole physical GPUs per
    server; keep the sum of concurrent GPU usage within the `GPU_DEVICES` pool.

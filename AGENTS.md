@@ -124,6 +124,30 @@ Notes:
   path/to/file.test.ts` directly. See `frontend/AGENTS.md` for frontend
   conventions.
 
+## Releases
+
+- Version source of truth: git tags (`vX.Y.Z`). `scripts/ci-version.sh` turns
+  them into semver image tags plus `latest` in CI, and CI injects the resolved
+  version into the backend image via the `APP_VERSION` build arg (runtime
+  resolution: `settings.app_version`, fallback `backend/app/version.py`).
+  Local compose builds get the same treatment: `nukelabctl` exports
+  `NUKELAB_VERSION` (VERSION file / git describe) and `compose.yml` passes it
+  as the `APP_VERSION` build arg.
+- Production hosts can deploy by pinning `NUKELAB_VERSION` or
+  `NUKELAB_IMAGE_TAG` so `nukelabctl up` / `update` pull tagged images from
+  `ghcr.io/nukehub-dev/nukelab-backend` and `-frontend` instead of rebuilding
+  from source. Unpinned deploys keep the source-build path.
+- Rollback safety: `./nukelabctl db-migrate` takes an automatic pre-migration
+  snapshot, and the backend startup guard refuses to boot an old image on a
+  newer schema. To roll back, pin the previous release, run `./nukelabctl
+  update`, restore the `backups/pre-migrate-*` snapshot, and restart.
+- Cut a release with `scripts/bump-version.sh X.Y.Z` — it syncs `VERSION`,
+  `frontend/package.json`, and `CHANGELOG.md` (the backend version is dynamic
+  via `APP_VERSION`; `backend/app/version.py` stays `0.0.0-dev`), then prints
+  the commit/tag/push commands (it never runs them).
+- Record notable changes in the root `CHANGELOG.md` (Keep a Changelog format,
+  `[Unreleased]` section).
+
 ## Architecture pointer
 
 High-level layout; see the Child NAD Index below for domain-specific details.
