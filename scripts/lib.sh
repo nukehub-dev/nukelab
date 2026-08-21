@@ -251,6 +251,18 @@ init_env() {
         export NUKELAB_VERSION="${_nv#v}"
     fi
 
+    # Production guard: refuse to operate with the unresolved development
+    # fallback version. A production stack must be pinned to a real release
+    # via VERSION, a git tag, or an explicit NUKELAB_VERSION / NUKELAB_IMAGE_TAG.
+    if [ "${APP_ENV:-}" = "production" ] && [ "$NUKELAB_VERSION" = "0.0.0-dev" ]; then
+        die "Production deployments require a release version, but the resolved version is 0.0.0-dev.\n\n\
+Resolve this by one of:\n\
+  - Create a VERSION file: echo '2.0.0' > VERSION\n\
+  - Check out a git tag (vX.Y.Z)\n\
+  - Set NUKELAB_VERSION explicitly in the environment or env file\n\
+  - Set NUKELAB_IMAGE_TAG explicitly when pulling pre-built images"
+    fi
+
     # Default the registry image tag consumed by compose.yml image:
     # substitutions. When the operator explicitly pinned NUKELAB_VERSION, use
     # it as the image tag unless NUKELAB_IMAGE_TAG was pinned separately.

@@ -176,6 +176,10 @@ High-level layout; see the Child NAD Index below for domain-specific details.
   Run `./nukelabctl check-env` to detect missing or stale keys, and
   `./nukelabctl sync-env` to non-destructively append missing keys from
   `.env.example` while preserving local values and secrets.
+- **Production deployments must be version-pinned**. When `APP_ENV=production`,
+  `nukelabctl` refuses to boot if the resolved version is `0.0.0-dev`. Pin a
+  release with a `VERSION` file, a git tag, or an explicit `NUKELAB_VERSION`
+  / `NUKELAB_IMAGE_TAG` (use the latter when pulling pre-built GHCR images).
 
 ## Security & penetration testing
 
