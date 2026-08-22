@@ -585,7 +585,7 @@ Users attempting to open a server immediately after the UI indicated it was runn
 **Description:**
 Spawned server containers previously mounted two shared read-only named volumes whose backing directories lived on the host's XFS data partition: `nukelab-server-secrets` at `/etc/nukelab/auth` and `nukelab-cpu-lib` at `/usr/local/lib/nukelab`. Because those directories had no XFS project quota, the kernel reported filesystem-wide totals for them through `statfs`, so `df` inside any user container disclosed the host data partition's total size and usage. The same leak class previously affected `/etc/hosts`, `/etc/hostname`, and `/etc/resolv.conf` before container metadata was moved onto a dedicated loopback filesystem.
 
-The `nukelab-cpu-lib` volume has been eliminated: `libnukelab_cpu.so` is now built into the `nukelab-base` image during the image build, so `/usr/local/lib/nukelab` is no longer a shared named volume mount. Only `nukelab-server-secrets` at `/etc/nukelab/auth` remains as a shared named volume.
+The `nukelab-cpu-lib` volume has been eliminated: `libnukelab_cpu.so` is now built into the `nukelab-environment-base` image during the image build, so `/usr/local/lib/nukelab` is no longer a shared named volume mount. Only `nukelab-server-secrets` at `/etc/nukelab/auth` remains as a shared named volume.
 
 **Prerequisites:**
 
@@ -601,7 +601,7 @@ The `nukelab-cpu-lib` volume has been eliminated: `libnukelab_cpu.so` is now bui
 Any authenticated user could read the host's total storage capacity and current usage from inside their server container. This was reconnaissance information only: no file data was exposed, the mounts were read-only, and per-user quota enforcement was unaffected.
 
 **Remediation:**
-Eliminated the `nukelab-cpu-lib` shared volume by baking `libnukelab_cpu.so` into `nukelab-base` via a Dockerfile build stage. For the remaining `nukelab-server-secrets` volume, attach a small XFS project quota (100M hard limit, project ID below the backend's dynamic range of 10000+) to its `_data` directory on the host so `statfs` reports the quota size instead of the filesystem totals. Step-by-step procedure: `docs/operations/PRODUCTION-DEPLOYMENT.md`, section "Hide host storage size on shared named volumes". Optionally also set per-container writable-layer limits (`storage_opt: {"size": ...}`) at spawn time so the container root (`overlay` on `/`) stops revealing the host root partition size.
+Eliminated the `nukelab-cpu-lib` shared volume by baking `libnukelab_cpu.so` into `nukelab-environment-base` via a Dockerfile build stage. For the remaining `nukelab-server-secrets` volume, attach a small XFS project quota (100M hard limit, project ID below the backend's dynamic range of 10000+) to its `_data` directory on the host so `statfs` reports the quota size instead of the filesystem totals. Step-by-step procedure: `docs/operations/PRODUCTION-DEPLOYMENT.md`, section "Hide host storage size on shared named volumes". Optionally also set per-container writable-layer limits (`storage_opt: {"size": ...}`) at spawn time so the container root (`overlay` on `/`) stops revealing the host root partition size.
 
 **Retest Criteria:**
 

@@ -120,8 +120,8 @@ if $SBOM_IMAGES; then
             "nukelab-backend:latest"
             "nukelab-frontend:latest"
             "nukelab-auth-sidecar:latest"
-            "nukelab-base:latest"
-            "nukelab-workspace:latest"
+            "nukelab-environment-base:latest"
+            "nukelab-environment-workspace:latest"
         )
         for image in "${images[@]}"; do
             image_exists=false

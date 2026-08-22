@@ -456,7 +456,7 @@ The loopback fix above covers Docker's per-container metadata files, but spawned
 |---|---|---|---|
 | `/etc/nukelab/auth` | `nukelab-server-secrets` | Server-auth public key | `backend/app/container/spawner.py` |
 
-`libnukelab_cpu.so` is baked into the `nukelab-base` image at `/usr/local/lib/nukelab/libnukelab_cpu.so`, so it is no longer mounted from a shared volume.
+`libnukelab_cpu.so` is baked into the `nukelab-environment-base` image at `/usr/local/lib/nukelab/libnukelab_cpu.so`, so it is no longer mounted from a shared volume.
 
 This directory has no XFS project quota, so the kernel reports filesystem-wide totals for it and `df` inside any user container leaks the host data partition's size and usage:
 

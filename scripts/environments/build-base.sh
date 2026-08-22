@@ -14,4 +14,4 @@ source "$DIR/../../scripts/lib.sh"
 log "Building CPU mask library image (required by the base image)"
 _run_quiet_unless_verbose bash "$DIR/../resources/build-cpu-lib.sh" "$@"
 
-build_environment_image "$DIR" "base image" "base" "nukelab-base:latest" "$@"
+build_environment_image "$DIR" "base image" "base" "nukelab-environment-base:latest" "$@"

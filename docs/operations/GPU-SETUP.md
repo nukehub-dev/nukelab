@@ -76,7 +76,7 @@ GPU's memory pool and can OOM each other.
 ## Using GPUs
 
 1. Build or pull the CUDA environment image from the `nukelab-environments`
-   repository (it extends `nukelab-workspace` with the CUDA toolkit):
+   repository (it extends `nukelab-environment-workspace` with the CUDA toolkit):
 
    ```bash
    cd /path/to/nukelab-environments

@@ -31,10 +31,10 @@ jobs:
             nukelab-backend
             nukelab-frontend
             nukelab-auth-sidecar
-            nukelab-base
-            nukelab-conda-base
-            nukelab-workspace
-            nukelab-dev
+            nukelab-environment-base
+            nukelab-environment-conda-base
+            nukelab-environment-workspace
+            nukelab-environment-dev
           )
           {
             echo ""

@@ -6,7 +6,7 @@ Docker image definitions for the NukeLab platform runtime images (`base`,
 `conda-base`, `workspace`, and `dev`). Domain-specific scientific computing
 stacks (`radiation-transport`, `gpu-toolkit`, `moose`, `cardinal`, `openfoam`)
 live as toolchain images in the separate `nukelab-environments` repository and
-are mounted into `nukelab-workspace` at container start time.
+are mounted into `nukelab-environment-workspace` at container start time.
 
 ## Ownership
 
@@ -33,7 +33,7 @@ All files under `environments/`.
 The platform uses **runtime composition** to combine the workspace runtime with
 scientific toolchains:
 
-1. The backend spawns a container from `nukelab-workspace`.
+1. The backend spawns a container from `nukelab-environment-workspace`.
 2. If the selected `EnvironmentTemplate` has a `tool_image`, the backend mounts
    a shared named volume (copied once per node from that toolchain image,
    typically at `/opt/nuke`) read-only into the workspace container. The
@@ -54,7 +54,7 @@ manifest-based env injection.
 
 - `nukelab-environments` — domain-specific scientific computing toolchain
   images (`radiation-transport`, `gpu-toolkit`, `moose`, `cardinal`, `openfoam`)
-  that extend the published `nukelab-conda-base` image.
+  that extend the published `nukelab-environment-conda-base` image.
 
 ## Work Guidance
 

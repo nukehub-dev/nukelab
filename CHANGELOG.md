@@ -81,7 +81,7 @@ section.
 
 - CI/CD workflow now triggers on `v*.*.*` tags and builds/pushes release
   images when a tag is pushed, including platform environment images
-  (`nukelab-base`, `nukelab-conda-base`, `nukelab-workspace`, `nukelab-dev`).
+  (`nukelab-environment-base`, `nukelab-environment-conda-base`, `nukelab-environment-workspace`, `nukelab-environment-dev`).
   The `build-images` job and per-matrix `Build and push` step both run for tag
   pushes regardless of path-filter results, and the path-filter `any` rule is
   updated so version-only changes trigger builds. A new `Release` workflow

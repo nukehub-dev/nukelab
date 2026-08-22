@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 
 const BASE_URL = 'http://localhost:8080'
-const WORKSPACE_IMAGE = 'nukelab-workspace:latest'
+const WORKSPACE_IMAGE = 'nukelab-environment-workspace:latest'
 
 async function getAuthToken(): Promise<string> {
   const res = await fetch(`${BASE_URL}/api/auth/login`, {

@@ -6,7 +6,7 @@
 # workspace means IDE updates do not force a rebuild of heavy C++/Fortran
 # scientific stacks.
 ARG REGISTRY=ghcr.io/nukehub-dev
-ARG BASE_IMAGE=${REGISTRY}/base:v1.0.0
+ARG BASE_IMAGE=${REGISTRY}/nukelab-environment-base:v1.0.0
 
 FROM $BASE_IMAGE
 

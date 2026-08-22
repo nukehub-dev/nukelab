@@ -288,7 +288,7 @@ jobs:
         env:
           GITHUB_REF: ${{ github.ref }}
           GITHUB_SHA: ${{ github.sha }}
-          IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/nukelab-base
+          IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/nukelab-environment-base
 
       - name: Build and push cpu-lib
         if: needs.changes.outputs.env-base == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
@@ -307,7 +307,7 @@ jobs:
         with:
           context: ./environments/base
           dockerfile: ./environments/base/Dockerfile
-          image: ghcr.io/${{ github.repository_owner }}/nukelab-base
+          image: ghcr.io/${{ github.repository_owner }}/nukelab-environment-base
           version: ${{ steps.meta.outputs.version }}
           build-args: AUTH_SIDECAR_IMAGE=ghcr.io/${{ github.repository_owner }}/nukelab-auth-sidecar:${{ steps.meta.outputs.version }}
           cache-scope: base
@@ -319,9 +319,9 @@ jobs:
         with:
           context: ./environments/conda-base
           dockerfile: ./environments/conda-base/Dockerfile
-          image: ghcr.io/${{ github.repository_owner }}/nukelab-conda-base
+          image: ghcr.io/${{ github.repository_owner }}/nukelab-environment-conda-base
           version: ${{ steps.meta.outputs.version }}
-          build-args: BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/nukelab-base:${{ steps.meta.outputs.version }}
+          build-args: BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/nukelab-environment-base:${{ steps.meta.outputs.version }}
           cache-scope: conda-base
           push: ${{ github.event_name == 'push' }}
 
@@ -331,9 +331,9 @@ jobs:
         with:
           context: ./environments/workspace
           dockerfile: ./environments/workspace/Dockerfile
-          image: ghcr.io/${{ github.repository_owner }}/nukelab-workspace
+          image: ghcr.io/${{ github.repository_owner }}/nukelab-environment-workspace
           version: ${{ steps.meta.outputs.version }}
-          build-args: BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/nukelab-conda-base:${{ steps.meta.outputs.version }}
+          build-args: BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/nukelab-environment-conda-base:${{ steps.meta.outputs.version }}
           cache-scope: workspace
           push: ${{ github.event_name == 'push' }}
 
@@ -343,8 +343,8 @@ jobs:
         with:
           context: ./environments/dev
           dockerfile: ./environments/dev/Dockerfile
-          image: ghcr.io/${{ github.repository_owner }}/nukelab-dev
+          image: ghcr.io/${{ github.repository_owner }}/nukelab-environment-dev
           version: ${{ steps.meta.outputs.version }}
-          build-args: BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/nukelab-conda-base:${{ steps.meta.outputs.version }}
+          build-args: BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/nukelab-environment-conda-base:${{ steps.meta.outputs.version }}
           cache-scope: dev
           push: ${{ github.event_name == 'push' }}

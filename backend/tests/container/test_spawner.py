@@ -511,7 +511,7 @@ class TestSpawnSuccess:
 
     @pytest.mark.asyncio
     async def test_spawn_image_fallback_on_pull_failure(self, fresh_spawner):
-        """spawn should fallback to nukelab-base:latest when image inspect and pull both fail."""
+        """spawn should fallback to nukelab-environment-base:latest when image inspect and pull both fail."""
         fresh_spawner.container_client.image_exists = mock.AsyncMock(return_value=False)
         fresh_spawner.container_client.pull_image = mock.AsyncMock(
             side_effect=Exception("pull failed")
@@ -525,7 +525,7 @@ class TestSpawnSuccess:
             )
 
         call_kwargs = fresh_spawner.container_client.create_container.await_args.kwargs
-        assert call_kwargs["image"] == "nukelab-base:latest"
+        assert call_kwargs["image"] == "nukelab-environment-base:latest"
 
     @pytest.mark.asyncio
     async def test_spawn_image_pull_when_not_local(self, fresh_spawner):

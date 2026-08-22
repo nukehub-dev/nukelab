@@ -38,7 +38,7 @@ Synthesis only activates when a CPU restriction is visible; otherwise the real `
 
 ## Setup
 
-`libnukelab_cpu.so` is built into the `nukelab-base` image during the image build. No runtime setup or manual steps are needed.
+`libnukelab_cpu.so` is built into the `nukelab-environment-base` image during the image build. No runtime setup or manual steps are needed.
 
 To rebuild the library image locally:
 
@@ -51,7 +51,7 @@ To rebuild just the `.so` for development/testing, run `make` from `resources/li
 ## How It Works
 
 1. `scripts/resources/build-cpu-lib.sh` builds a local `nukelab-cpu-lib` image that compiles `libnukelab_cpu.c` into `/libnukelab_cpu.so`
-2. The `nukelab-base` Dockerfile copies that `.so` to `/usr/local/lib/nukelab/libnukelab_cpu.so`
+2. The `nukelab-environment-base` Dockerfile copies that `.so` to `/usr/local/lib/nukelab/libnukelab_cpu.so`
 3. The backend injects `/etc/profile.d/nukelab-cpu.sh` into every spawned container via `put_archive` — env vars for login shells
 4. Container starts with `NUKELAB_CPU_COUNT=N` (matches plan allocation) and `LD_PRELOAD=/usr/local/lib/nukelab/libnukelab_cpu.so`
 5. Any program calling `sysconf()` gets the plan's CPU count, and any program reading `/proc/stat` gets the container's CPU usage, not the host's

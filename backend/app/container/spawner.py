@@ -252,8 +252,8 @@ class ServerSpawner:
                     await container_client.pull_image(image)
                 except Exception:
                     # Fallback to base image if specific env not built
-                    # (nukelab-base has nginx and stays running)
-                    image = "nukelab-base:latest"
+                    # (nukelab-environment-base has nginx and stays running)
+                    image = "nukelab-environment-base:latest"
 
             # If a toolchain image is configured, prepare a volume from it and
             # mount it into the runtime container. This decouples heavy scientific

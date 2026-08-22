@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=nukelab-conda-base:latest
+ARG BASE_IMAGE=nukelab-environment-conda-base:latest
 
 FROM $BASE_IMAGE
 
