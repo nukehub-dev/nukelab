@@ -297,6 +297,7 @@ jobs:
           context: ./resources/lib/nukelab
           file: ./resources/lib/nukelab/Dockerfile
           push: false
+          load: true
           tags: nukelab-cpu-lib:latest
           cache-from: type=gha,scope=cpu-lib
           cache-to: type=gha,mode=max,scope=cpu-lib
