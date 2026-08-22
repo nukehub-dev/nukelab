@@ -260,7 +260,7 @@ jobs:
   build-environments:
     name: Build & push environment images
     runs-on: ubuntu-latest
-    needs: build-images
+    needs: [build-images, changes]
     if: |
       !cancelled() &&
       !contains(needs.*.result, 'cancelled') &&
