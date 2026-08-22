@@ -150,7 +150,7 @@ cmd_selftest() {
     _t "loadtest help lists k6-stress" bash -c './nukelabctl loadtest --help | grep -q "k6-stress"' || _increment_failures
 
     # Diagnostics commands
-    _t "version command" bash -c './nukelabctl version | grep -q "NukeLab v2.0"' || _increment_failures
+    _t "version command" bash -c './nukelabctl version | grep -q "NukeLab $(_nukelab_version)"' || _increment_failures
     _t "doctor command" bash -c './nukelabctl doctor --skip-port-check >/dev/null 2>&1' || _increment_failures
 
     # Error trap reports the failing command and location
