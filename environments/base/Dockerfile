@@ -1,8 +1,16 @@
 ARG AUTH_SIDECAR_IMAGE=nukelab-auth-sidecar:latest
-ARG CPU_LIB_IMAGE=nukelab-cpu-lib:latest
 
 FROM ${AUTH_SIDECAR_IMAGE} AS auth-sidecar
-FROM ${CPU_LIB_IMAGE} AS cpu-lib
+
+# Build the CPU mask library inline. The source lives at
+# resources/lib/nukelab/libnukelab_cpu.c relative to the repository root.
+FROM debian:13@sha256:3a953985c225a97dfb5a8f1ddc6a3ecefefc35ef51f537075e08941305045a1e AS cpu-lib-builder
+RUN apt-get update && apt-get install -y \
+    gcc \
+    libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
+COPY resources/lib/nukelab/libnukelab_cpu.c /src/libnukelab_cpu.c
+RUN gcc -shared -fPIC -o /libnukelab_cpu.so /src/libnukelab_cpu.c -ldl
 
 FROM debian:13@sha256:3a953985c225a97dfb5a8f1ddc6a3ecefefc35ef51f537075e08941305045a1e
 
@@ -32,17 +40,16 @@ RUN groupadd -r nukelab -g 65532 && \
 # users so the hardened non-root runtime can still launch it.
 COPY --from=auth-sidecar --chmod=755 /auth-sidecar /usr/local/bin/auth-sidecar
 
-# Copy the CPU mask library from the locally-built cpu-lib image. The cpu-lib
-# image is built in resources/lib/nukelab and consumed here as a build stage;
-# it is not published to the registry on its own.
-COPY --from=cpu-lib --chmod=644 /libnukelab_cpu.so /usr/local/lib/nukelab/libnukelab_cpu.so
+# Copy the CPU mask library from the inline build stage. The .so is baked into
+# the base image; no separate cpu-lib image is published.
+COPY --from=cpu-lib-builder --chmod=644 /libnukelab_cpu.so /usr/local/lib/nukelab/libnukelab_cpu.so
 
 # Copy shared nginx config
-COPY nginx.conf /etc/nginx/nginx.conf
+COPY environments/base/nginx.conf /etc/nginx/nginx.conf
 
 # Starting page served while the environment app is still booting (see
 # error_page 5xx directive in nginx.conf)
-COPY starting.html /usr/share/nginx/html/starting.html
+COPY environments/base/starting.html /usr/share/nginx/html/starting.html
 
 # Prepare directories so nginx can run as the non-root nukelab user.
 # When the backend enables ReadonlyRootfs, these paths are mounted as tmpfs.
@@ -57,18 +64,18 @@ EXPOSE 8080
 
 # Make login and interactive shells show the human username instead of the
 # fixed hardened-runtime account in the prompt and $USER/$HOME.
-COPY nukelab-prompt.sh /etc/profile.d/nukelab-prompt.sh
-COPY skel-bashrc-snippet.sh /tmp/skel-bashrc-snippet.sh
+COPY environments/base/nukelab-prompt.sh /etc/profile.d/nukelab-prompt.sh
+COPY environments/base/skel-bashrc-snippet.sh /tmp/skel-bashrc-snippet.sh
 RUN chmod 644 /etc/profile.d/nukelab-prompt.sh && \
     cat /tmp/skel-bashrc-snippet.sh >> /etc/skel/.bashrc && \
     rm /tmp/skel-bashrc-snippet.sh
 
 # Start nginx and the configured application command
-COPY --chmod=755 start.sh /start.sh
+COPY --chmod=755 environments/base/start.sh /start.sh
 CMD ["/start.sh"]
 
 # Healthcheck probe script. The backend injects the healthcheck at container
 # create time (docker_driver.py) — image-level HEALTHCHECK is not used: OCI
 # image format drops it and Kubernetes ignores it. Child images declare their
 # app probe via ENV NUKELAB_HEALTH_PROBE_URLS (see healthcheck.sh).
-COPY --chmod=755 healthcheck.sh /usr/local/bin/nukelab-healthcheck.sh
+COPY --chmod=755 environments/base/healthcheck.sh /usr/local/bin/nukelab-healthcheck.sh

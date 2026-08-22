@@ -1,0 +1,7 @@
+# Build context for images that build from the repository root
+# (currently environments/base/Dockerfile). Ignore everything except the
+# files explicitly copied by those Dockerfiles.
+**
+
+!environments/base/**
+!resources/lib/nukelab/libnukelab_cpu.c

@@ -9,9 +9,21 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" > /dev/null 2>&1 && pwd)"
 # shellcheck source=scripts/lib.sh
 source "$DIR/../../scripts/lib.sh"
 
-# The base image embeds the CPU mask library built by scripts/resources/build-cpu-lib.sh,
-# so build that image first whenever the base image is requested.
-log "Building CPU mask library image (required by the base image)"
-_run_quiet_unless_verbose bash "$DIR/../resources/build-cpu-lib.sh" "$@"
+# The base Dockerfile builds the CPU mask library inline from
+# resources/lib/nukelab/libnukelab_cpu.c, so the build context must be the
+# repository root instead of environments/base.
+ROOT_DIR="$(cd "$DIR/../.." > /dev/null 2>&1 && pwd)"
 
-build_environment_image "$DIR" "base image" "base" "nukelab-environment-base:latest" "$@"
+if [ -z "${CONTAINER_ENGINE:-}" ]; then
+    detect_engine
+fi
+
+log "Building NukeLab base image..."
+cd "$ROOT_DIR"
+$CONTAINER_ENGINE build \
+    -t "nukelab-environment-base:latest" \
+    -f "environments/base/Dockerfile" \
+    "$@" \
+    .
+
+log_ok "base image built successfully!"
