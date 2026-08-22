@@ -7,9 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Releases are cut with `scripts/bump-version.sh X.Y.Z`, which stamps the
 `[Unreleased]` section below and syncs the version across `VERSION`,
-`backend/app/version.py`, and `frontend/package.json`. Git tags (`vX.Y.Z`)
+`frontend/package.json`, and `frontend/package-lock.json`. Git tags (`vX.Y.Z`)
 are the release source of truth; CI builds container images tagged with the
-release version.
+release version and drafts a GitHub Release from the matching changelog
+section.
 
 ## [Unreleased]
 
@@ -75,6 +76,13 @@ release version.
   changelog are bumped at release time).
 - `frontend/package.json` version set from `0.0.0` placeholder to the
   platform version.
+
+### Fixed
+
+- CI/CD workflow now triggers on `v*.*.*` tags and builds/pushes release images
+  when a tag is pushed. The `build-images` job and per-matrix `Build and push`
+  step both run for tag pushes regardless of path-filter results, and a draft
+  GitHub Release is created from the matching `CHANGELOG.md` section.
 
 ## [2.0.0]
 
