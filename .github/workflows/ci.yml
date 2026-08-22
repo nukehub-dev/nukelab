@@ -243,10 +243,16 @@ jobs:
     name: Create GitHub Release
     needs: build-images
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
     permissions:
       contents: write
     steps:
+      - name: Debug ref context
+        run: |
+          echo "github.ref=${{ github.ref }}"
+          echo "github.ref_name=${{ github.ref_name }}"
+          echo "github.ref_type=${{ github.ref_type }}"
+
       - name: Checkout
         # Needed for CHANGELOG.md (the release body is extracted from it).
         uses: actions/checkout@v6
