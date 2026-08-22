@@ -38,19 +38,25 @@ Synthesis only activates when a CPU restriction is visible; otherwise the real `
 
 ## Setup
 
-Run `./nukelabctl start` or `./nukelabctl build` — it creates the volume and builds `libnukelab_cpu.so` automatically. No manual steps needed.
+`libnukelab_cpu.so` is built into the `nukelab-base` image during the image build. No runtime setup or manual steps are needed.
+
+To rebuild the library image locally:
+
+```bash
+./scripts/resources/build-cpu-lib.sh
+```
+
+To rebuild just the `.so` for development/testing, run `make` from `resources/lib/nukelab/` (requires `gcc` and `libc6-dev`).
 
 ## How It Works
 
-1. `./nukelabctl start` creates a named Docker volume `nukelab-cpu-lib` and compiles `libnukelab_cpu.c` into it via a temporary `gcc` container
-2. The backend injects two files into every spawned container via `put_archive`:
-   - `/etc/ld.so.preload` — system-wide library preload (root-only, survives any env clearing)
-   - `/etc/profile.d/nukelab-cpu.sh` — env vars for login shells
-3. The volume is mounted read-only into every spawned container at `/usr/local/lib/nukelab/`
+1. `scripts/resources/build-cpu-lib.sh` builds a local `nukelab-cpu-lib` image that compiles `libnukelab_cpu.c` into `/libnukelab_cpu.so`
+2. The `nukelab-base` Dockerfile copies that `.so` to `/usr/local/lib/nukelab/libnukelab_cpu.so`
+3. The backend injects `/etc/profile.d/nukelab-cpu.sh` into every spawned container via `put_archive` — env vars for login shells
 4. Container starts with `NUKELAB_CPU_COUNT=N` (matches plan allocation) and `LD_PRELOAD=/usr/local/lib/nukelab/libnukelab_cpu.so`
 5. Any program calling `sysconf()` gets the plan's CPU count, and any program reading `/proc/stat` gets the container's CPU usage, not the host's
 
-**Zero configuration required** — no environment variables, no host bind mounts, no hardcoded paths, no host toolchain, no per-container copy overhead.
+**Zero runtime configuration required** — no environment variables, no host bind mounts, no hardcoded paths, no deploy-time compiler, no per-container copy overhead.
 
 ## Limitations
 

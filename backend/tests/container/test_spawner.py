@@ -167,54 +167,6 @@ class TestContainerClientCpuMasking:
         assert env["OMP_NUM_THREADS"] == env["NUKELAB_CPU_COUNT"]
 
     @pytest.mark.asyncio
-    async def test_cpu_lib_volume_mounted_when_ready(self):
-        """Container should mount nukelab-cpu-lib volume when available."""
-        from app.container.client import ContainerClient
-
-        client = ContainerClient()
-        client.client = MagicMock()
-        client.client.containers.create = AsyncMock(return_value=MagicMock())
-        client._cpu_lib_volume_ready = True
-
-        with patch.object(client, "_check_storage_support", return_value=False):
-            with patch.object(client, "_check_lxcfs_support", return_value=[]):
-                with patch.object(client, "_get_available_controllers", return_value=set()):
-                    await client.create_container(
-                        name="test-cpu",
-                        image="hello-world",
-                    )
-
-        config = client.client.containers.create.call_args[0][0]
-        mounts = config["HostConfig"].get("Mounts", [])
-        cpu_mounts = [m for m in mounts if m.get("Source") == "nukelab-cpu-lib"]
-        assert len(cpu_mounts) == 1, f"Expected cpu-lib mount, got: {mounts}"
-        assert cpu_mounts[0]["Target"] == "/usr/local/lib/nukelab"
-        assert cpu_mounts[0]["ReadOnly"] is True
-
-    @pytest.mark.asyncio
-    async def test_cpu_lib_volume_not_mounted_when_missing(self):
-        """Container should not crash when cpu-lib volume is unavailable."""
-        from app.container.client import ContainerClient
-
-        client = ContainerClient()
-        client.client = MagicMock()
-        client.client.containers.create = AsyncMock(return_value=MagicMock())
-        client._cpu_lib_volume_ready = False
-
-        with patch.object(client, "_check_storage_support", return_value=False):
-            with patch.object(client, "_check_lxcfs_support", return_value=[]):
-                with patch.object(client, "_get_available_controllers", return_value=set()):
-                    await client.create_container(
-                        name="test-no-cpu",
-                        image="hello-world",
-                    )
-
-        config = client.client.containers.create.call_args[0][0]
-        mounts = config["HostConfig"].get("Mounts", [])
-        cpu_mounts = [m for m in mounts if m.get("Source") == "nukelab-cpu-lib"]
-        assert len(cpu_mounts) == 0, f"Did not expect cpu-lib mount, got: {mounts}"
-
-    @pytest.mark.asyncio
     async def test_cpu_files_injected_via_put_archive(self):
         """_inject_cpu_files should write /etc/ld.so.preload and profile script."""
         from app.container.client import ContainerClient

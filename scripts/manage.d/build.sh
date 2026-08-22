@@ -37,8 +37,6 @@ parse_build_args() {
 }
 
 cmd_build() {
-    setup_cpu_lib_volume
-
     step "Building..."
 
     if [ "$TARGET" = "env" ]; then

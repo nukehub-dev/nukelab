@@ -10,12 +10,15 @@ All files under `resources/`.
 
 ## Local Contracts
 
-- C source and Makefile under `resources/lib/nukelab/`.
-- Compiled artifacts (`.so`) may be committed when stable; source of truth is the Makefile.
+- C source, Makefile, and Dockerfile under `resources/lib/nukelab/`.
+- `libnukelab_cpu.so` is gitignored; the canonical build happens in the `nukelab-cpu-lib` image built by `scripts/resources/build-cpu-lib.sh`.
+- `environments/base/Dockerfile` consumes the `nukelab-cpu-lib` image via `COPY --from`.
+- Source of truth for compilation flags is the Makefile; keep it in sync with `resources/lib/nukelab/Dockerfile`.
 
 ## Work Guidance
 
-- Build with `make` from `resources/lib/nukelab/`.
+- Build the image with `./scripts/resources/build-cpu-lib.sh`.
+- Build locally with `make` from `resources/lib/nukelab/` for development/testing.
 - Update `README.md` when build steps or ABI change.
 - Keep the library focused on deterministic, side-effect-free helper operations.
 

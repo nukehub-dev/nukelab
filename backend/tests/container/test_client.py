@@ -208,32 +208,6 @@ class TestCheckLxcfsSupport:
             assert client._lxcfs_support is True
 
 
-class TestEnsureCpuLibVolume:
-    @pytest.mark.asyncio
-    async def test_already_ready(self):
-        client = ContainerClient()
-        client._cpu_lib_volume_ready = True
-        client.client = mock.AsyncMock()
-        await client._ensure_cpu_lib_volume()
-        client.client.volumes.get.assert_not_awaited()
-
-    @pytest.mark.asyncio
-    async def test_volume_exists(self):
-        client = ContainerClient()
-        client.client = mock.AsyncMock()
-        await client._ensure_cpu_lib_volume()
-        client.client.volumes.get.assert_awaited_once_with("nukelab-cpu-lib")
-        assert client._cpu_lib_volume_ready is True
-
-    @pytest.mark.asyncio
-    async def test_volume_missing(self):
-        client = ContainerClient()
-        client.client = mock.AsyncMock()
-        client.client.volumes.get.side_effect = Exception("not found")
-        await client._ensure_cpu_lib_volume()
-        assert client._cpu_lib_volume_ready is False
-
-
 class TestCheckStorageSupport:
     @pytest.mark.asyncio
     async def test_caches_result(self):
@@ -295,7 +269,6 @@ class TestCreateContainer:
         with (
             mock.patch.object(client, "_get_available_controllers", return_value=set()),
             mock.patch.object(client, "_check_lxcfs_support", return_value=False),
-            mock.patch.object(client, "_ensure_cpu_lib_volume"),
         ):
             result = await client.create_container("test-1", "nginx:latest")
             assert result == mock_container.id
@@ -310,7 +283,6 @@ class TestCreateContainer:
         with (
             mock.patch.object(client, "_get_available_controllers", return_value=set()),
             mock.patch.object(client, "_check_lxcfs_support", return_value=False),
-            mock.patch.object(client, "_ensure_cpu_lib_volume"),
         ):
             await client.create_container("test-1", "nginx:latest", ports={"80": "8080"})
             config = client.client.containers.create.call_args[0][0]
@@ -324,7 +296,6 @@ class TestCreateContainer:
         with (
             mock.patch.object(client, "_get_available_controllers", return_value=set()),
             mock.patch.object(client, "_check_lxcfs_support", return_value=False),
-            mock.patch.object(client, "_ensure_cpu_lib_volume"),
         ):
             await client.create_container("test-1", "nginx:latest", volumes={"/host": "/container"})
             config = client.client.containers.create.call_args[0][0]
@@ -337,7 +308,6 @@ class TestCreateContainer:
         with (
             mock.patch.object(client, "_get_available_controllers", return_value=set()),
             mock.patch.object(client, "_check_lxcfs_support", return_value=False),
-            mock.patch.object(client, "_ensure_cpu_lib_volume"),
         ):
             await client.create_container(
                 "test-1", "nginx:latest", volumes={"/host": {"bind": "/container", "mode": "rw"}}
@@ -352,7 +322,6 @@ class TestCreateContainer:
         with (
             mock.patch.object(client, "_get_available_controllers", return_value={"cpu", "cpuset"}),
             mock.patch.object(client, "_check_lxcfs_support", return_value=False),
-            mock.patch.object(client, "_ensure_cpu_lib_volume"),
             mock.patch("os.cpu_count", return_value=8),
         ):
             await client.create_container("test-1", "nginx:latest", cpu_limit=2.0)
@@ -367,7 +336,6 @@ class TestCreateContainer:
         with (
             mock.patch.object(client, "_get_available_controllers", return_value=set()),
             mock.patch.object(client, "_check_lxcfs_support", return_value=False),
-            mock.patch.object(client, "_ensure_cpu_lib_volume"),
         ):
             await client.create_container("test-1", "nginx:latest", cpu_limit=2.0)
             config = client.client.containers.create.call_args[0][0]
@@ -381,7 +349,6 @@ class TestCreateContainer:
         with (
             mock.patch.object(client, "_get_available_controllers", return_value={"memory"}),
             mock.patch.object(client, "_check_lxcfs_support", return_value=False),
-            mock.patch.object(client, "_ensure_cpu_lib_volume"),
         ):
             await client.create_container("test-1", "nginx:latest", memory_limit="512m")
             config = client.client.containers.create.call_args[0][0]
@@ -395,7 +362,6 @@ class TestCreateContainer:
         with (
             mock.patch.object(client, "_get_available_controllers", return_value=set()),
             mock.patch.object(client, "_check_lxcfs_support", return_value=False),
-            mock.patch.object(client, "_ensure_cpu_lib_volume"),
         ):
             await client.create_container("test-1", "nginx:latest", memory_limit="512m")
             config = client.client.containers.create.call_args[0][0]
@@ -408,7 +374,6 @@ class TestCreateContainer:
         with (
             mock.patch.object(client, "_get_available_controllers", return_value=set()),
             mock.patch.object(client, "_check_lxcfs_support", return_value=False),
-            mock.patch.object(client, "_ensure_cpu_lib_volume"),
             mock.patch.object(client, "_check_storage_support", return_value=True),
         ):
             await client.create_container("test-1", "nginx:latest", disk_limit="10m")
@@ -422,7 +387,6 @@ class TestCreateContainer:
         with (
             mock.patch.object(client, "_get_available_controllers", return_value=set()),
             mock.patch.object(client, "_check_lxcfs_support", return_value=False),
-            mock.patch.object(client, "_ensure_cpu_lib_volume"),
             mock.patch.object(client, "_check_storage_support", return_value=False),
         ):
             await client.create_container("test-1", "nginx:latest", disk_limit="10m")
@@ -436,7 +400,6 @@ class TestCreateContainer:
         client._lxcfs_support = True
         with (
             mock.patch.object(client, "_get_available_controllers", return_value=set()),
-            mock.patch.object(client, "_ensure_cpu_lib_volume"),
             mock.patch("os.path.exists", return_value=True),
         ):
             await client.create_container("test-1", "nginx:latest")
@@ -445,27 +408,12 @@ class TestCreateContainer:
             assert any("lxcfs" in b for b in binds)
 
     @pytest.mark.asyncio
-    async def test_cpu_lib_volume_mounted(self, client):
-        mock_container = mock.AsyncMock()
-        client.client.containers.create = mock.AsyncMock(return_value=mock_container)
-        client._cpu_lib_volume_ready = True
-        with (
-            mock.patch.object(client, "_get_available_controllers", return_value=set()),
-            mock.patch.object(client, "_check_lxcfs_support", return_value=False),
-        ):
-            await client.create_container("test-1", "nginx:latest")
-            config = client.client.containers.create.call_args[0][0]
-            mounts = config["HostConfig"].get("Mounts", [])
-            assert any(m["Source"] == "nukelab-cpu-lib" for m in mounts)
-
-    @pytest.mark.asyncio
     async def test_injects_cpu_files(self, client):
         mock_container = mock.AsyncMock()
         client.client.containers.create = mock.AsyncMock(return_value=mock_container)
         with (
             mock.patch.object(client, "_get_available_controllers", return_value=set()),
             mock.patch.object(client, "_check_lxcfs_support", return_value=False),
-            mock.patch.object(client, "_ensure_cpu_lib_volume"),
         ):
             await client.create_container("test-1", "nginx:latest", cpu_limit=2.0)
             mock_container.put_archive.assert_awaited_once()
@@ -477,7 +425,6 @@ class TestCreateContainer:
         with (
             mock.patch.object(client, "_get_available_controllers", return_value=set()),
             mock.patch.object(client, "_check_lxcfs_support", return_value=False),
-            mock.patch.object(client, "_ensure_cpu_lib_volume"),
         ):
             await client.create_container(
                 "test-1",

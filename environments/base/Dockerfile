@@ -1,6 +1,8 @@
 ARG AUTH_SIDECAR_IMAGE=nukelab-auth-sidecar:latest
+ARG CPU_LIB_IMAGE=nukelab-cpu-lib:latest
 
 FROM ${AUTH_SIDECAR_IMAGE} AS auth-sidecar
+FROM ${CPU_LIB_IMAGE} AS cpu-lib
 
 FROM debian:13@sha256:3a953985c225a97dfb5a8f1ddc6a3ecefefc35ef51f537075e08941305045a1e
 
@@ -29,6 +31,9 @@ RUN groupadd -r nukelab -g 65532 && \
 # Copy auth sidecar binary from services build and make it executable by all
 # users so the hardened non-root runtime can still launch it.
 COPY --from=auth-sidecar --chmod=755 /auth-sidecar /usr/local/bin/auth-sidecar
+
+# Copy the CPU mask library from the locally-built cpu-lib image.
+COPY --from=cpu-lib --chmod=644 /libnukelab_cpu.so /usr/local/lib/nukelab/libnukelab_cpu.so
 
 # Copy shared nginx config
 COPY nginx.conf /etc/nginx/nginx.conf

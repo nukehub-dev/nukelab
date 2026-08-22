@@ -72,8 +72,6 @@ cmd_start() {
     _require_other_stack_stopped
     _warn_stale_containers
 
-    setup_cpu_lib_volume
-
     # Generate dynamic config files from templates before compose reads them.
     local _env_file=".env"
     if $USE_DEV_MODE && [ -f ".env.development" ]; then

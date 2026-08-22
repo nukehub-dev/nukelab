@@ -37,9 +37,6 @@ def _map_error(e: aiodocker.DockerError) -> ContainerDriverError:
 
 
 class DockerDriver(ContainerDriver):
-    VOLUME_CPU_LIB = "nukelab-cpu-lib"
-    CPU_LIB_TARGET = "/usr/local/lib/nukelab"
-
     # Toolchain volume composition.
     TOOLCHAIN_TARGET = "/toolchain-target"
     TOOLCHAIN_MANIFEST_FILE = "nukelab-toolchain.json"
@@ -52,7 +49,6 @@ class DockerDriver(ContainerDriver):
         self._available_cgroup_controllers: set[str] | None = None
         self._storage_support: bool | None = None
         self._lxcfs_support: bool | None = None
-        self._cpu_lib_volume_ready: bool = False
         self._is_podman: bool | None = None
 
     async def connect(self):
@@ -232,24 +228,6 @@ class DockerDriver(ContainerDriver):
             await container.put_archive("/etc", tar_buffer.read())
         except Exception as e:
             logger.warning(f"Failed to inject CPU system files: {e}")
-
-    async def _ensure_cpu_lib_volume(self) -> None:
-        """Ensure the CPU mask library volume is mounted into containers.
-
-        The volume is created and populated by nukelabctl during startup.
-        The backend only checks for its existence and mounts it.
-        """
-        if self._cpu_lib_volume_ready:
-            return
-
-        try:
-            await self.client.volumes.get(self.VOLUME_CPU_LIB)
-            self._cpu_lib_volume_ready = True
-        except Exception:
-            logger.warning(
-                f"Volume {self.VOLUME_CPU_LIB} not found. "
-                f"Run './nukelabctl start' or './nukelabctl build' to create it."
-            )
 
     async def _check_storage_support(self) -> bool:
         """Check if storage limits are supported (requires XFS with pquota, ZFS, etc.)"""
@@ -478,19 +456,6 @@ class DockerDriver(ContainerDriver):
                 logger.info(
                     f"Applied GPU request: {device_request.get('DeviceIDs') or gpu_limit} NVIDIA GPU(s)"
                 )
-
-        # --- CPU mask library volume (read-only) ---
-        await self._ensure_cpu_lib_volume()
-        if self._cpu_lib_volume_ready:
-            config["HostConfig"].setdefault("Mounts", [])
-            config["HostConfig"]["Mounts"].append(
-                {
-                    "Type": "volume",
-                    "Source": self.VOLUME_CPU_LIB,
-                    "Target": self.CPU_LIB_TARGET,
-                    "ReadOnly": True,
-                }
-            )
 
         # --- Container runtime hardening ---
         if settings.container_hardening_enabled:

@@ -26,7 +26,6 @@ def _make_driver(
     controllers: set[str] | None = None,
     storage: bool = False,
     lxcfs: bool = False,
-    cpu_lib_ready: bool = False,
 ):
     """Build a DockerDriver with detection caches preset and a mocked client."""
     driver = DockerDriver()
@@ -34,9 +33,6 @@ def _make_driver(
     driver._available_cgroup_controllers = controllers if controllers is not None else set()
     driver._storage_support = storage
     driver._lxcfs_support = lxcfs
-    driver._cpu_lib_volume_ready = cpu_lib_ready
-    if not cpu_lib_ready:
-        driver.client.volumes.get = mock.AsyncMock(side_effect=Exception("missing"))
     container = mock.AsyncMock()
     container.id = "cid-1"
     driver.client.containers.create = mock.AsyncMock(return_value=container)
@@ -246,22 +242,6 @@ class TestCreateContainerMisc:
             await driver.create_container("dup-1", "img:latest")
 
         assert exc_info.value.status == 409
-
-    @pytest.mark.asyncio
-    async def test_cpu_lib_volume_mounted_when_ready(self, hardening_off):
-        driver, _ = _make_driver(cpu_lib_ready=True)
-
-        await driver.create_container("vol-1", "img:latest")
-
-        config = driver.client.containers.create.call_args[0][0]
-        assert config["HostConfig"]["Mounts"] == [
-            {
-                "Type": "volume",
-                "Source": DockerDriver.VOLUME_CPU_LIB,
-                "Target": DockerDriver.CPU_LIB_TARGET,
-                "ReadOnly": True,
-            }
-        ]
 
     @pytest.mark.asyncio
     async def test_lxcfs_binds_created_when_no_other_binds(self, monkeypatch, hardening_off):

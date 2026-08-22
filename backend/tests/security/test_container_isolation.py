@@ -156,7 +156,6 @@ class TestContainerHardening:
         client.client = MagicMock()
         client.client.containers = MagicMock()
         client.client.containers.create = AsyncMock(return_value=MagicMock())
-        client._cpu_lib_volume_ready = False
         client._lxcfs_support = False
 
         await client.create_container(name="test", image="hello-world")
@@ -176,7 +175,6 @@ class TestContainerHardening:
         client.client = MagicMock()
         client.client.containers = MagicMock()
         client.client.containers.create = AsyncMock(return_value=MagicMock())
-        client._cpu_lib_volume_ready = False
         client._lxcfs_support = False
 
         await client.create_container(name="test", image="hello-world")
@@ -196,7 +194,6 @@ class TestContainerHardening:
         client.client = MagicMock()
         client.client.containers = MagicMock()
         client.client.containers.create = AsyncMock(return_value=MagicMock())
-        client._cpu_lib_volume_ready = False
         client._lxcfs_support = False
 
         await client.create_container(name="test", image="hello-world")
@@ -219,7 +216,6 @@ class TestContainerHardening:
         client.client = MagicMock()
         client.client.containers = MagicMock()
         client.client.containers.create = AsyncMock(return_value=MagicMock())
-        client._cpu_lib_volume_ready = False
         client._lxcfs_support = False
 
         await client.create_container(name="test", image="hello-world")
