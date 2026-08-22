@@ -1,5 +1,7 @@
 ARG AUTH_SIDECAR_IMAGE=nukelab-auth-sidecar:latest
 
+FROM ${AUTH_SIDECAR_IMAGE} AS auth-sidecar
+
 FROM debian:13@sha256:3a953985c225a97dfb5a8f1ddc6a3ecefefc35ef51f537075e08941305045a1e
 
 LABEL maintainer="NukeLab <nukehub.org>"
@@ -26,7 +28,7 @@ RUN groupadd -r nukelab -g 65532 && \
 
 # Copy auth sidecar binary from services build and make it executable by all
 # users so the hardened non-root runtime can still launch it.
-COPY --from=${AUTH_SIDECAR_IMAGE} --chmod=755 /auth-sidecar /usr/local/bin/auth-sidecar
+COPY --from=auth-sidecar --chmod=755 /auth-sidecar /usr/local/bin/auth-sidecar
 
 # Copy shared nginx config
 COPY nginx.conf /etc/nginx/nginx.conf
