@@ -69,6 +69,8 @@ jobs:
               - 'compose*.yml'
               - 'scripts/**'
               - 'infrastructure/**'
+              - '.github/workflows/ci.yml'
+              - 'VERSION'
 
   lint-backend:
     name: Lint Backend
@@ -166,7 +168,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [changes, lint-backend, lint-frontend, test-backend]
     if: |
-      (success() || failure()) &&
+      !cancelled() &&
       !contains(needs.*.result, 'cancelled') &&
       (needs.changes.outputs.any == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')) &&
       needs.lint-backend.result != 'failure' &&
