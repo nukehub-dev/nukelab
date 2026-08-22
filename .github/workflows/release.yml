@@ -27,6 +27,14 @@ jobs:
           if [ ! -s release-notes.md ]; then
             echo "No curated CHANGELOG.md section found for $VERSION — see the commit log." > release-notes.md
           fi
+          {
+            echo ""
+            echo "## Container images"
+            echo ""
+            echo "- \"ghcr.io/${{ github.repository_owner }}/nukelab-backend:${VERSION}\""
+            echo "- \"ghcr.io/${{ github.repository_owner }}/nukelab-frontend:${VERSION}\""
+            echo "- \"ghcr.io/${{ github.repository_owner }}/nukelab-auth-sidecar:${VERSION}\""
+          } >> release-notes.md
           cat release-notes.md
 
       - name: Create Release

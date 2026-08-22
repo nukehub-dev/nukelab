@@ -84,7 +84,7 @@ section.
   step both run for tag pushes regardless of path-filter results, and the
   path-filter `any` rule is updated so version-only changes trigger builds. A
   new `Release` workflow creates a draft GitHub Release from the matching
-  `CHANGELOG.md` section.
+  `CHANGELOG.md` section and appends the published container image references.
 
 ## [2.0.0]
 
