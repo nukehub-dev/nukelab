@@ -1,0 +1,43 @@
+name: Build and push environment image
+description: Build and push a single NukeLab environment image to GHCR.
+
+inputs:
+  context:
+    description: Build context path
+    required: true
+  dockerfile:
+    description: Path to the Dockerfile
+    required: true
+  image:
+    description: Full image name without tag
+    required: true
+  version:
+    description: Version tag to apply
+    required: true
+  build-args:
+    description: Additional build arguments
+    required: false
+    default: ''
+  cache-scope:
+    description: Cache scope name
+    required: true
+  push:
+    description: Whether to push the image
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: Build and push ${{ inputs.image }}
+      uses: docker/build-push-action@v7
+      with:
+        context: ${{ inputs.context }}
+        file: ${{ inputs.dockerfile }}
+        push: ${{ inputs.push == 'true' }}
+        tags: |
+          ${{ inputs.image }}:${{ inputs.version }}
+          ${{ inputs.image }}:latest
+        build-args: ${{ inputs.build-args }}
+        cache-from: type=gha,scope=${{ inputs.cache-scope }}
+        cache-to: type=gha,mode=max,scope=${{ inputs.cache-scope }}
