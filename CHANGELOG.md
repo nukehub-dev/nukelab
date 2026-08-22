@@ -81,10 +81,10 @@ section.
 
 - CI/CD workflow now triggers on `v*.*.*` tags and builds/pushes release images
   when a tag is pushed. The `build-images` job and per-matrix `Build and push`
-  step both run for tag pushes regardless of path-filter results, and a draft
-  GitHub Release is created from the matching `CHANGELOG.md` section. The
-  path-filter `any` rule and job `if` condition are updated so skipped lint/test
-  jobs do not block release builds.
+  step both run for tag pushes regardless of path-filter results, and the
+  path-filter `any` rule is updated so version-only changes trigger builds. A
+  new `Release` workflow creates a draft GitHub Release from the matching
+  `CHANGELOG.md` section.
 
 ## [2.0.0]
 

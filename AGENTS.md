@@ -146,9 +146,10 @@ Notes:
   (the backend version is dynamic via `APP_VERSION`;
   `backend/app/version.py` stays `0.0.0-dev`), then prints the commit/tag/push
   commands (it never runs them).
-- Pushing a `v*.*.*` tag triggers CI to build and push the release images and
-  to create a **draft** GitHub Release. The release body is extracted from the
-  matching `## [X.Y.Z]` section in `CHANGELOG.md`, so keep it curated.
+- Pushing a `v*.*.*` tag triggers two workflows: `CI/CD` builds and pushes the
+  release images, and `Release` creates a **draft** GitHub Release. The release
+  body is extracted from the matching `## [X.Y.Z]` section in `CHANGELOG.md`,
+  so keep it curated.
 - Record notable changes in the root `CHANGELOG.md` (Keep a Changelog format,
   `[Unreleased]` section).
 
