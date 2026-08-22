@@ -27,17 +27,34 @@ jobs:
           if [ ! -s release-notes.md ]; then
             echo "No curated CHANGELOG.md section found for $VERSION — see the commit log." > release-notes.md
           fi
+          IMAGES=(
+            nukelab-backend
+            nukelab-frontend
+            nukelab-auth-sidecar
+            nukelab-base
+            nukelab-conda-base
+            nukelab-workspace
+            nukelab-dev
+          )
           {
             echo ""
             echo "## Container images"
             echo ""
-            echo "- \"ghcr.io/${{ github.repository_owner }}/nukelab-backend:${VERSION}\""
-            echo "- \"ghcr.io/${{ github.repository_owner }}/nukelab-frontend:${VERSION}\""
-            echo "- \"ghcr.io/${{ github.repository_owner }}/nukelab-auth-sidecar:${VERSION}\""
-            echo "- \"ghcr.io/${{ github.repository_owner }}/nukelab-base:${VERSION}\""
-            echo "- \"ghcr.io/${{ github.repository_owner }}/nukelab-conda-base:${VERSION}\""
-            echo "- \"ghcr.io/${{ github.repository_owner }}/nukelab-workspace:${VERSION}\""
-            echo "- \"ghcr.io/${{ github.repository_owner }}/nukelab-dev:${VERSION}\""
+            echo "| Image | Tag |"
+            echo "|-------|-----|"
+            for img in "${IMAGES[@]}"; do
+              echo "| \`ghcr.io/${{ github.repository_owner }}/${img}\` | \`${VERSION}\` |"
+            done
+            echo ""
+            echo "All images are also tagged as \`latest\`."
+            echo ""
+            echo "### Pull all images"
+            echo ""
+            echo '```bash'
+            for img in "${IMAGES[@]}"; do
+              echo "docker pull ghcr.io/${{ github.repository_owner }}/${img}:${VERSION}"
+            done
+            echo '```'
           } >> release-notes.md
           cat release-notes.md
 
