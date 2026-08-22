@@ -32,7 +32,9 @@ RUN groupadd -r nukelab -g 65532 && \
 # users so the hardened non-root runtime can still launch it.
 COPY --from=auth-sidecar --chmod=755 /auth-sidecar /usr/local/bin/auth-sidecar
 
-# Copy the CPU mask library from the locally-built cpu-lib image.
+# Copy the CPU mask library from the locally-built cpu-lib image. The cpu-lib
+# image is built in resources/lib/nukelab and consumed here as a build stage;
+# it is not published to the registry on its own.
 COPY --from=cpu-lib --chmod=644 /libnukelab_cpu.so /usr/local/lib/nukelab/libnukelab_cpu.so
 
 # Copy shared nginx config
