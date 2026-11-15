@@ -8,22 +8,17 @@ Global resource pool service for tracking platform-wide resource availability.
 import uuid
 from typing import Any
 
-from sqlalchemy import and_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models.server import Server
 from app.models.server_plan import ServerPlan
 from app.models.server_queue import ServerQueue
 
 
 class ResourcePoolService:
-    """
-    Track global resource availability across the platform.
-
-    Platform hardware constraints:
-    - Total CPU: 34 cores
-    - Total RAM: 68GB
-    """
+    """Track configured allocatable budgets, including starting reservations."""
 
     # Platform-wide resource limits
     TOTAL_CPU = 34.0
@@ -32,6 +27,9 @@ class ResourcePoolService:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+        self.TOTAL_CPU = settings.resource_pool_cpu
+        self.TOTAL_MEMORY_MB = settings.resource_pool_memory_mib
+        self.TOTAL_DISK_MB = settings.resource_pool_disk_mib
 
     async def get_available_resources(self) -> dict[str, Any]:
         """Get currently available resources"""
@@ -123,30 +121,29 @@ class ResourcePoolService:
         else:
             return int(float(mem_str))
 
-    async def get_queue_position(self, queue_entry_id: str) -> int:
-        """Get position in queue for a given queue entry"""
+    async def get_queue_position(self, queue_entry_id: str) -> int | None:
+        """One-based priority order; missing and terminal requests have no position."""
+        entry_id = uuid.UUID(queue_entry_id)
         result = await self.db.execute(
-            select(ServerQueue)
-            .where(
-                and_(ServerQueue.status == "pending", ServerQueue.id != uuid.UUID(queue_entry_id))
+            select(ServerQueue.id)
+            .where(ServerQueue.status == "pending")
+            .order_by(
+                ServerQueue.priority.desc(), ServerQueue.requested_at.asc(), ServerQueue.id.asc()
             )
-            .order_by(ServerQueue.priority.desc(), ServerQueue.requested_at.asc())
         )
-        entries = result.scalars().all()
-
-        # Find position
-        for idx, entry in enumerate(entries):
-            if str(entry.id) == queue_entry_id:
-                return idx + 1
-
-        return 0
+        for position, candidate_id in enumerate(result.scalars().all(), start=1):
+            if candidate_id == entry_id:
+                return position
+        return None
 
     async def get_next_in_queue(self) -> ServerQueue | None:
         """Get the next queued server that can be started"""
         result = await self.db.execute(
             select(ServerQueue)
             .where(ServerQueue.status == "pending")
-            .order_by(ServerQueue.priority.desc(), ServerQueue.requested_at.asc())
+            .order_by(
+                ServerQueue.priority.desc(), ServerQueue.requested_at.asc(), ServerQueue.id.asc()
+            )
         )
         entries = result.scalars().all()
 

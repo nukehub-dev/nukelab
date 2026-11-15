@@ -48,6 +48,27 @@ class TestFactory:
         assert driver1.client is not None
 
     @pytest.mark.asyncio
+    async def test_fresh_driver_closes_partially_connected_client(self):
+        driver = mock.Mock(
+            connect=mock.AsyncMock(side_effect=ContainerDriverError("connect failed")),
+            close=mock.AsyncMock(),
+        )
+        with mock.patch.object(factory, "_create_driver", return_value=driver):
+            with pytest.raises(ContainerDriverError, match="connect failed"):
+                await factory.get_fresh_driver()
+        driver.close.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_fresh_driver_preserves_connect_error_if_close_fails(self):
+        driver = mock.Mock(
+            connect=mock.AsyncMock(side_effect=ContainerDriverError("connect failed")),
+            close=mock.AsyncMock(side_effect=RuntimeError("close failed")),
+        )
+        with mock.patch.object(factory, "_create_driver", return_value=driver):
+            with pytest.raises(ContainerDriverError, match="connect failed"):
+                await factory.get_fresh_driver()
+
+    @pytest.mark.asyncio
     async def test_unknown_runtime_raises_clear_error(self, reset_factory, monkeypatch):
         monkeypatch.setattr(settings, "container_runtime", "kubernetes")
         with pytest.raises(ContainerDriverError, match="Unknown CONTAINER_RUNTIME"):

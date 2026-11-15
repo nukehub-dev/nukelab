@@ -21,6 +21,11 @@ All files under `backend/` except generated artifacts (`.venv-dev`, `__pycache__
 - `app/services/gpu_allocator.py` owns exclusive GPU device reservations (table `gpu_allocations`, active only when `GPU_DEVICES` lists CDI device names); every code path that stops or deletes a server must release its devices, and every GPU spawn path must allocate first.
 - `alembic/` owns database migrations; use Alembic commands to generate and test upgrades/downgrades.
 - `tests/` mirrors the `app/` structure; security regressions go in `tests/security/`.
+- `services/admission_service.py` owns transaction admission locking: callers use Read Committed, acquire the lock before fresh accounting queries, flush reservations without internal commits, then commit before runtime I/O. It does not reserve resources by itself.
+- `services/operation_runner.py` owns long-operation loops and task-local DB/driver resources. Deadlines join cooperative cancellation; uncertain external outcomes retain reservations until runtime reconciliation. Existing tasks still require migration from their legacy runner before using this boundary.
+- Queue request/claim primitives live in `services/server_queue_service.py` and typed DTOs in `schemas/server_queue.py`. The separate queue router stays unregistered until creation and workers use the same atomic admission/claim protocol; do not expose cancellation while the old worker can bypass it.
+- Approved revision/provenance primitives require current-template authorization callbacks, immutable image selection, and observed launch identity checks. Public manifests contain environment-variable names only; repository digest metadata alone never establishes portability. Launch capture/recreation integration remains required.
+- Volume intents use admission serialization followed by sorted volume locks and refreshed reads. Backup/restore remains unavailable until every writer/start path participates and runtime attachment checks are integrated. Archive extraction accepts relative symlinks without parent components and hardlinks to earlier regular files; runtime helper limits and termination are required in addition to archive validation.
 
 ## Work Guidance
 

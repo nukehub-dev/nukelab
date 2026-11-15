@@ -175,6 +175,19 @@ Background tasks handle cleanup:
 
 ## Code locations
 
+The transaction-owned admission primitive in
+`backend/app/services/admission_service.py` requires Read Committed and acquires a
+transaction advisory lock in a separate statement before resource/name queries.
+Callers must persist reservations and commit before runtime I/O. The queue claim
+and volume-intent services use this primitive, but existing server lifecycle paths
+still require integration before admission is guaranteed across the platform.
+
+`backend/app/services/operation_runner.py` provides loop-owned DB/driver resources
+and joined cooperative cancellation for long operations. A deadline reports an
+uncertain external outcome; it does not release runtime or volume protection.
+Legacy tasks still use their existing runner. The separate queue resource router
+is unregistered until those workers honor atomic claims and cancellation.
+
 | Responsibility | File |
 |---|---|
 | API routes | `backend/app/api/servers.py` |

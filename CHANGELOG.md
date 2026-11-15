@@ -14,8 +14,20 @@ section.
 
 ## [Unreleased]
 
+### Added
+
+- Backend foundations for durable queue requests, approved environment revisions,
+  launch provenance, transaction-owned admission, and exclusive volume operations.
+  Launch/worker integration and user-facing recovery/recreation remain pending.
+- Bounded archive validation and extraction into fresh destinations, with checksum,
+  path/link, metadata, expansion and ownership checks.
+- Configurable allocatable CPU, memory and disk budgets and queue policy settings.
+
 ### Fixed
 
+- Queue positions now use deterministic priority ordering and return no position
+  for missing or terminal requests.
+- Fresh runtime drivers close partially initialized clients after connection failure.
 - Lint commands now propagate backend and frontend tool failures out of their
   subshells, including `--fix`, so later successful checks cannot mask failures.
 - The CPU-mask write-open regression compares native kernel behavior with and

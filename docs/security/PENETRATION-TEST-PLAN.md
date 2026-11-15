@@ -309,6 +309,7 @@ The following scripts should be created as part of the engagement to enable repe
 - `backend/tests/security/test_bfla.py` — privilege-escalation matrix across all roles.
 - `backend/tests/security/test_auth_tokens.py` — JWT manipulation and token-scope abuse.
 - `backend/tests/security/test_credit_race.py` — concurrent credit/spawn race tests.
+- `backend/tests/security/test_volume_archive.py` — implemented helper regressions for checksum corruption, path/link traversal, special members, metadata/expansion quotas, and private staging. Backup runtime/API integration remains unavailable and requires separate attachment, authorization, helper hardening, and writer-exclusion acceptance.
 - `backend/tests/security/test_container_isolation.py` — runtime container escape/isolation checks.
 - `scripts/run-pentest-scans.sh` — orchestrates Trivy, ZAP, Nuclei, and custom pytest suites. Implemented.
 - `frontend/e2e/security/*.spec.ts` — Playwright tests for CSRF, XSS, and role-based UI hiding. Implemented (`frontend/e2e/security/frontend-security.spec.ts`).

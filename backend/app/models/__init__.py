@@ -11,6 +11,9 @@ __all__ = [
     "CreditTransaction",
     "DailyServerMetric",
     "EnvironmentTemplate",
+    "EnvironmentRevision",
+    "ServerLaunchRecord",
+    "VolumeOperation",
     "GpuAllocation",
     "HealthCheck",
     "LoginEvent",
@@ -48,6 +51,7 @@ from app.models.credit_request import CreditRequest as CreditRequest
 from app.models.credit_request import CreditRequestMessage as CreditRequestMessage
 from app.models.credit_transaction import CreditTransaction as CreditTransaction
 from app.models.daily_server_metric import DailyServerMetric as DailyServerMetric
+from app.models.environment_revision import EnvironmentRevision as EnvironmentRevision
 from app.models.environment_template import EnvironmentTemplate as EnvironmentTemplate
 from app.models.gpu_allocation import GpuAllocation as GpuAllocation
 from app.models.health_check import HealthCheck as HealthCheck
@@ -62,6 +66,7 @@ from app.models.request_metric import RequestMetric as RequestMetric
 from app.models.resource_quota import ResourceQuota as ResourceQuota
 from app.models.server import Server as Server
 from app.models.server_access_token import ServerAccessToken as ServerAccessToken
+from app.models.server_launch_record import ServerLaunchRecord as ServerLaunchRecord
 from app.models.server_metric import ServerMetric as ServerMetric
 from app.models.server_plan import ServerPlan as ServerPlan
 from app.models.server_queue import ServerQueue as ServerQueue
@@ -74,5 +79,6 @@ from app.models.system_setting import SystemSetting as SystemSetting
 from app.models.user import User as User
 from app.models.volume import Volume as Volume
 from app.models.volume_backup import VolumeBackup as VolumeBackup
+from app.models.volume_operation import VolumeOperation as VolumeOperation
 from app.models.workspace_invitation import WorkspaceInvitation as WorkspaceInvitation
 from app.models.workspace_volume import WorkspaceVolume as WorkspaceVolume

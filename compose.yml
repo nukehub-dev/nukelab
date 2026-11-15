@@ -181,6 +181,12 @@ services:
             - GPU_ENABLED=${GPU_ENABLED:-false}
             - GPU_CDI_DEVICE=${GPU_CDI_DEVICE:-nvidia.com/gpu=all}
             - GPU_DEVICES=${GPU_DEVICES:-}
+            - RESOURCE_POOL_CPU=${RESOURCE_POOL_CPU:-34}
+            - RESOURCE_POOL_MEMORY_MIB=${RESOURCE_POOL_MEMORY_MIB:-69632}
+            - RESOURCE_POOL_DISK_MIB=${RESOURCE_POOL_DISK_MIB:-2048000}
+            - QUEUE_TIMEOUT_SECONDS=${QUEUE_TIMEOUT_SECONDS:-3600}
+            - QUEUE_MAX_PENDING_PER_OWNER=${QUEUE_MAX_PENDING_PER_OWNER:-5}
+            - QUEUE_MAX_PENDING_TOTAL=${QUEUE_MAX_PENDING_TOTAL:-500}
             # Container runtime driver (docker covers Podman; kubernetes reserved)
             - CONTAINER_RUNTIME=${CONTAINER_RUNTIME:-docker}
             # Email / SMTP configuration
@@ -386,6 +392,12 @@ services:
             - GPU_ENABLED=${GPU_ENABLED:-false}
             - GPU_CDI_DEVICE=${GPU_CDI_DEVICE:-nvidia.com/gpu=all}
             - GPU_DEVICES=${GPU_DEVICES:-}
+            - RESOURCE_POOL_CPU=${RESOURCE_POOL_CPU:-34}
+            - RESOURCE_POOL_MEMORY_MIB=${RESOURCE_POOL_MEMORY_MIB:-69632}
+            - RESOURCE_POOL_DISK_MIB=${RESOURCE_POOL_DISK_MIB:-2048000}
+            - QUEUE_TIMEOUT_SECONDS=${QUEUE_TIMEOUT_SECONDS:-3600}
+            - QUEUE_MAX_PENDING_PER_OWNER=${QUEUE_MAX_PENDING_PER_OWNER:-5}
+            - QUEUE_MAX_PENDING_TOTAL=${QUEUE_MAX_PENDING_TOTAL:-500}
             - CONTAINER_RUNTIME=${CONTAINER_RUNTIME:-docker}
             # Email / SMTP configuration — required: notification emails are
             # sent by Celery tasks running in this worker, not by the API.

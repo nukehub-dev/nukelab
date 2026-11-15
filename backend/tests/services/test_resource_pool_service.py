@@ -162,9 +162,9 @@ class TestResourcePoolServiceQueue:
         await db_session.commit()
 
         service = ResourcePoolService(db_session)
-        # Position of q1 among pending items excluding itself
+        # Pending positions include the request itself.
         pos = await service.get_queue_position(str(q1.id))
-        assert pos == 0
+        assert pos == 1
 
     @pytest.mark.asyncio
     async def test_get_next_in_queue_empty(self, db_session):

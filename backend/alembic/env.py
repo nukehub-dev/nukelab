@@ -27,6 +27,9 @@ if config.config_file_name is not None:
 
 # add your model's MetaData object here
 # for 'autogenerate' support
+from app.models.environment_revision import EnvironmentRevision
+from app.models.server_launch_record import ServerLaunchRecord
+from app.models.volume_operation import VolumeOperation
 from app.db.base import Base
 from app.models.user import User
 from app.models.server import Server

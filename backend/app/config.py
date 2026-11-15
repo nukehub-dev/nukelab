@@ -5,7 +5,7 @@ import os
 from typing import Any
 from urllib.parse import urlparse, urlunparse
 
-from pydantic import field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings
 
 from app.version import __version__
@@ -174,6 +174,14 @@ class Settings(BaseSettings):
     # plan's gpu_limit exclusively reserves one device per server. When empty,
     # gpu_cdi_device is used as-is for every GPU server (shared legacy mode).
     gpu_devices: str = ""
+
+    # Allocatable budgets, independent of instantaneous host telemetry.
+    resource_pool_cpu: float = Field(default=34.0, gt=0, allow_inf_nan=False)
+    resource_pool_memory_mib: int = Field(default=68 * 1024, gt=0)
+    resource_pool_disk_mib: int = Field(default=2000 * 1024, gt=0)
+    queue_timeout_seconds: int = Field(default=3600, gt=0)
+    queue_max_pending_per_owner: int = Field(default=5, gt=0)
+    queue_max_pending_total: int = Field(default=500, gt=0)
 
     @property
     def gpu_device_list(self) -> list[str]:

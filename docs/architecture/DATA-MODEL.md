@@ -4,6 +4,19 @@ This document describes the core entities and schema conventions. For the full S
 
 ## Entity overview
 
+Workflow schema additions are additive. `environment_revisions` stores approved
+configuration fingerprints and separate runtime/toolchain identities;
+`server_launch_records` stores append-only launch generations. Revision services
+recheck current authorization and revocation. A legacy server without a captured
+record remains unrecorded; today's template is not historical evidence.
+
+`server_queue` can retain versioned launch intent, a plan snapshot, expiry, claim
+token and resulting server identity. Null payload/version identifies legacy intent
+that the new claim primitive refuses to launch. `volume_operations` persists
+writer/mount intents and exclusive backup/restore protection, including uncertain
+executor outcomes. These foundations do not enable end-to-end recreation or volume
+recovery; runtime and API integration remains required.
+
 ```
 +---------+     +---------+     +-------------+       +---------+
 |  User   |---->|  Role   |     | Environment |       |  Plan   |

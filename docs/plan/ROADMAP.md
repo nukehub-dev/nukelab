@@ -65,23 +65,23 @@ See [IMPLEMENTATION-PHASES.md](IMPLEMENTATION-PHASES.md) for the full phase-by-p
 | Capability | Status | Implemented evidence | Remaining scope |
 | --- | --- | --- | --- |
 | Environment image build/publish | Complete | `.github/workflows/ci.yml`, `scripts/ci-version.sh` | Scheduled base-image digest refresh and scientific image validation are separate follow-ups; scientific image ownership is in the separate environments repository |
-| Reproducible environments | Partial | `EnvironmentTemplate.image` / `tool_image` / `tool_mounts`; driver toolchain manifests and image-ID/digest cache stamps | Persist resolved runtime/toolchain versions per server; export/recreate a pinned setup; surface degraded toolchain preparation |
+| Reproducible environments | Partial | Approved revision/launch models, strict manifest schema, `environment_revision_service.py`, `server_provenance_service.py`; existing driver composition | Integrate immutable image resolution/caches and launch capture; expose export/recreate API/UI; runtime verification |
 | Database backup/restore | Complete | `scripts/manage.d/backup.sh`, `restore.sh`, `db-migrate.sh`; backend schema guard | Automated recovery drills and broader disaster-recovery policy |
-| User volume backup/restore | Future | `VolumeBackup`, `ServerPlan.allow_snapshots`, backup notification helper are scaffolding | Backup/restore service, API, tasks, UI, consistency rules, and retention |
-| Resource queue experience | Partial | `ServerQueue`, `process_server_queue`, queue-status endpoint | Correct position calculation; user queue view/cancellation, bottleneck guidance, GPU-aware waiting policy |
+| User volume backup/restore | Partial | `VolumeBackup` scaffolding plus durable `volume_operation_service.py` and bounded `volume_archive_service.py` extraction foundation | Backup capture/storage/retention, runtime helper and attachment checks, all writer/start guards, API/tasks/UI; recovery remains unavailable |
+| Resource queue experience | Partial | Durable request/claim fields, typed queue DTOs, transaction-owned queue primitives, corrected deterministic positions, configured resource budgets | Replace legacy launch/worker integration; register the owner queue router only after claims/cancellation are respected; user queue UI and GPU-aware waiting |
 | Batch scientific jobs | Future | Existing schedules support server start/stop/restart; Celery runs platform tasks | User command submissions, job records, exit status, logs, artifacts, retries, and parameter sweeps |
 | Workload secrets | Future | Platform signing keys, OAuth token encryption, and template environment variables already exist | Scoped credential storage, authorization, redaction, and workload injection; template variables are ordinary JSON, not a secret store |
 | Deployment automation | Partial | Tagged pulls, explicit restart workflow, migration snapshots, schema guard | Automated health verification, traffic cutover, and rollback; zero-downtime deployment is not implemented |
 | Browser end-to-end tests | Partial | `frontend/e2e/`, Playwright config, `scripts/manage.d/e2e.sh` | Execute against an isolated stack in CI; run frontend unit tests in CI too |
 | Independent penetration assessment | Future | Internal findings, remediation records, security regression tests, and scan workflow exist | External assessment and retest before public launch |
 
-## Proposed next priorities
+## Current priorities
 
-These are Future proposals, not committed release scope.
+Queue reliability, reproducible environments, private offline volume recovery, and frontend test CI are accepted implementation scope. Backend foundations are present; the end-to-end workflows remain incomplete.
 
-1. **Finish existing workflows** — Fix queue positions and add a queue view/cancellation; wire existing frontend tests into CI.
-2. **Research reproducibility** — Persist resolved image/toolchain identities and provide export/recreate; extend existing composition rather than rebuilding image publishing.
-3. **Research data recovery** — Deliver user volume backup/restore and verify database recovery through isolated drills.
+1. **Finish existing workflows (In Progress)** — Integrate atomic launch/queue admission and add a queue view/cancellation; wire existing frontend tests into CI.
+2. **Research reproducibility (In Progress)** — Persist resolved image/toolchain identities and provide export/recreate; extend existing composition rather than rebuilding image publishing.
+3. **Research data recovery (In Progress)** — Deliver user volume backup/restore and verify database recovery through isolated drills.
 4. **Batch jobs** — Add a minimal command-based job lifecycle, then parameter sweeps after single jobs are reliable.
 5. **Scoped workload secrets** — Separate credentials from ordinary template configuration; choose the storage/integration approach during design.
 6. **Public-launch readiness** — Independent penetration assessment and a verified deployment/recovery procedure.

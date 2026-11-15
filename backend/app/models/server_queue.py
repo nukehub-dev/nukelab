@@ -4,7 +4,7 @@
 import uuid
 
 from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from app.core.time_utils import utc_now
 from app.db.base import Base
@@ -24,7 +24,7 @@ class ServerQueue(Base):
         UUID(as_uuid=True), ForeignKey("server_plans.id", ondelete="CASCADE"), nullable=False
     )
 
-    # Status: pending, scheduled, starting, failed, cancelled
+    # Status: pending, scheduled, starting, started, failed, cancelled
     status = Column(String(50), default="pending", nullable=False)
     priority = Column(Integer, default=0)
 
@@ -35,6 +35,22 @@ class ServerQueue(Base):
     requested_cpu = Column(Float, nullable=True)
     requested_memory = Column(String(20), nullable=True)
     requested_disk = Column(String(20), nullable=True)
+
+    # Durable launch intent. NULL payload/version identifies unrecoverable legacy requests.
+    request_payload = Column(JSONB, nullable=True)
+    request_version = Column(Integer, nullable=True)
+    plan_snapshot = Column(JSONB, nullable=True)
+    revision_id = Column(UUID(as_uuid=True), nullable=True)
+    requested_gpu = Column(Integer, nullable=False, default=0, server_default="0")
+    expires_at = Column(DateTime, nullable=True, index=True)
+    claimed_at = Column(DateTime, nullable=True)
+    claim_token = Column(UUID(as_uuid=True), nullable=True)
+    server_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("servers.id", ondelete="SET NULL", name="fk_server_queue_server_id"),
+        nullable=True,
+    )
+    reason_code = Column(String(64), nullable=True)
 
     # Timestamps
     requested_at = Column(DateTime, default=utc_now)
