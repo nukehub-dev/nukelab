@@ -2,6 +2,8 @@
 
 This document records the original v2.0 implementation plan and current delivery status. Phases 1–5 and 7–10 are complete. Phase 6 (Kubernetes/production hardening) remains partially deferred.
 
+**Last code review:** November 15, 2026. This review checked the capabilities below against source code; it did not rerun tests, benchmarks, or a production deployment. See [ROADMAP.md](ROADMAP.md) for the current capability gaps.
+
 ## Phase 1: Foundation & Scaffolding
 
 **Status**: Complete ✅
@@ -54,7 +56,7 @@ This document records the original v2.0 implementation plan and current delivery
 - Notification center (20+ types)
 - Maintenance mode
 - Two-layer rate limiting
-- Backup & restore
+- Operator database backup/restore (`scripts/manage.d/backup.sh`, `restore.sh`); user volume backup/restore remains Future (the `VolumeBackup` model and `allow_snapshots` flag are scaffolding only)
 - Bulk operations
 - IP allowlist/blocklist
 - CSRF protection and security headers
@@ -62,7 +64,7 @@ This document records the original v2.0 implementation plan and current delivery
 
 ## Phase 6: Production Hardening & Kubernetes
 
-**Status**: Partial — Docker/Podman production readiness complete; Kubernetes deferred
+**Status**: Partial — Docker/Podman hardening implemented; deployment automation, CI browser tests, external assessment, and Kubernetes remain open
 
 ### Completed
 
@@ -74,14 +76,22 @@ This document records the original v2.0 implementation plan and current delivery
 - Structured logging, Prometheus/Grafana, OpenTelemetry, Sentry
 - CI/CD pipeline with GitHub Actions
 - Load testing infrastructure
+- Playwright browser specs and local runner (`frontend/e2e/`, `frontend/playwright.config.ts`, `scripts/manage.d/e2e.sh`); CI execution remains Future
+- Versioned core/environment image builds and GHCR publishing (`.github/workflows/ci.yml`)
+- Pull-based deployment preparation, pre-migration database backups, and schema-compatibility guard (`scripts/manage.d/update.sh`, `db-migrate.sh`, `backend/app/db/schema_guard.py`)
 
 ### Deferred
 
 - Kubernetes manifests and Helm chart
 - Sealed Secrets / Vault integration
 - Blue-green deployment automation
-- E2E Playwright tests
-- Penetration test
+- Independent penetration assessment; internal findings and regression coverage already exist
+
+### Remaining delivery gaps
+
+- CI execution of existing frontend unit and Playwright tests: Future; the frontend CI job currently lints, formats, and builds only
+- Automated deployment health verification and rollback: Future; `update` prepares images and instructs the operator to restart
+- Scheduled base-image digest refresh: Future; image build/publish and security scanning already exist
 
 ## Phase 7: Production Hardening — Quick Wins
 
@@ -98,7 +108,7 @@ This document records the original v2.0 implementation plan and current delivery
 
 ## Phase 8: Load Testing & Performance Validation
 
-**Status**: Delivered ✅
+**Status**: Complete — load-testing infrastructure delivered; current performance results were not revalidated in the November code review
 
 - Locust + k6 hybrid setup
 - Five test profiles: smoke, baseline, stress, spike, endurance
@@ -136,4 +146,8 @@ This document records the original v2.0 implementation plan and current delivery
 
 ## Known tech debt
 
-None currently tracked here. Security findings live in `docs/security/PENETRATION-TEST-FINDINGS.md` and `docs/security/PENETRATION-TEST-REMEDIATION.md`.
+- Queue position: `ResourcePoolService.get_queue_position()` excludes the target entry before searching for it, returning zero; `test_get_queue_position` currently asserts zero. Correct the position contract and regression together before exposing richer queue UX. Status: Future.
+- Queue UX: processing and a status API exist, but no dedicated queue view/cancellation workflow was found in the reviewed frontend/API. Status: Partial.
+- Recovery: database backup/restore is implemented; user volume backup/restore has only model/flag scaffolding. Status: Partial.
+
+Security findings live in [PENETRATION-TEST-FINDINGS.md](../security/PENETRATION-TEST-FINDINGS.md) and [PENETRATION-TEST-REMEDIATION.md](../security/PENETRATION-TEST-REMEDIATION.md).

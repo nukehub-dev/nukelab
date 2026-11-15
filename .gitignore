@@ -7,6 +7,9 @@
 # But allow example template
 !.env.example
 
+# Local research, working plans, and reference clones
+/.research/
+
 # Python
 __pycache__/
 *.py[cod]

@@ -13,7 +13,8 @@ All files under `docs/plan/`. The `docs/AGENTS.md` owns the top-level docs index
 - Markdown documents; ASCII diagrams are preferred so they remain readable offline and diff-friendly.
 - Internal links must be relative.
 - Do not duplicate architecture, operations, or security details that already exist under `docs/architecture/`, `docs/operations/`, or `docs/security/`. Link instead.
-- Roadmap items must indicate status (`Complete`, `In Progress`, `Deferred`, `Future`).
+- Roadmap items must indicate status (`Complete`, `Partial`, `In Progress`, `Deferred`, `Future`). `Partial` means runnable pieces exist but the stated end-to-end capability is incomplete.
+- Implementation status must cite repository evidence. Models, flags, notification helpers, or test files alone do not establish a delivered workflow. Distinguish tests present from tests wired into CI, and static inspection from executed verification.
 - Decision log entries must include date, decision, rationale, and current status.
 
 ## Structure
@@ -27,7 +28,7 @@ All files under `docs/plan/`. The `docs/AGENTS.md` owns the top-level docs index
 ## Work guidance
 
 - Update `ROADMAP.md` after each release or milestone.
-- Move completed phases into `IMPLEMENTATION-PHASES.md` and mark them complete.
+- Keep `IMPLEMENTATION-PHASES.md` as the existing historical delivery summary and correct stale capability claims. Do not append temporary execution phases or cycle logs; keep current shared priorities in `ROADMAP.md` and follow the root local-research rule for working materials.
 - Record new reversible decisions in `DECISION-LOG.md`; update status if a decision is revised.
 - Prefer deletion over stale historical notes; move historical context to an explicit "Historical" appendix with a removal date.
 

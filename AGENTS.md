@@ -80,6 +80,10 @@ Default section order:
 
 When the user requests a durable behavior change, record it here or in the relevant child `AGENTS.md`.
 
+- Use a root `.research/` workspace for local research and working plans, following the NucleIDE layout: `studies/`, `plans/`, and `clones/`. The entire workspace is git-ignored. Keep shared roadmap status and accepted decisions in `docs/plan/`; committed documentation and code must not depend on local research files.
+- Keep temporary implementation phases, cycle numbers, plan/research IDs, execution checklists, research reports, and agent progress logs inside the ignored research workspace. Do not add them to source identifiers, comments, test names, product UI, or committed docs; describe durable behavior and contracts instead. Committed code and docs must not link to or cite local research files. This rule does not prohibit domain concepts such as server plans or simulation cycles, or the existing shared roadmap and historical delivery summary.
+- Root NAD owns the local research workflow; initialize a local `AGENTS.md` in that workspace to describe its materials and verification when creating it.
+
 ---
 
 ## NukeLab Project Guidance
@@ -258,6 +262,7 @@ These checks are off by default because they require process/registry changes
 
 ## Child NAD Index
 
+- `.research/AGENTS.md` — Local-only research materials and working plans; created locally, git-ignored, with the root research workflow applying when absent.
 - `backend/AGENTS.md` — Python FastAPI backend, models, migrations, tests.
 - `docs/AGENTS.md` — Project documentation: architecture, operations, security, development, reference guides, and planning.
 - `environments/AGENTS.md` — User environment Docker image definitions.

@@ -1,8 +1,12 @@
 # NukeLab Roadmap
 
-**Status**: Phases 1–5, 7, and 8 complete. Platform is production-hardened on Docker/Podman.  
-**Last Updated**: June 30, 2026  
+**Status**: Phases 1–5 and 7–10 delivered; phase 6 remains Partial. Docker/Podman hardening is implemented; launch readiness requires separate verification.
+
+**Last Updated**: November 15, 2026
+
 **Tech Stack**: Vite + React 19 SPA, FastAPI (Python 3.13), PostgreSQL 17, Redis, Traefik v3, Docker/Podman
+
+The capability review below is based on repository inspection, not a fresh test run or live deployment. Release metadata currently declares v2.1.0; git tags remain the release source of truth.
 
 ## Recent milestones
 
@@ -37,6 +41,10 @@
 - **Exclusive GPU Allocator** — Whole-GPU reservations (`gpu_allocations`) with race-safe booking and recreate-on-start (`GPU_DEVICES`)
 - **Container Runtime Driver Layer** — `ContainerDriver` ABC with Docker/Podman as the first driver (`CONTAINER_RUNTIME`); prepares the k3s/Kubernetes migration
 - **Pull-based Production Deploys** — Pin `NUKELAB_VERSION` or `NUKELAB_IMAGE_TAG` to deploy tagged `ghcr.io/nukehub-dev/nukelab-backend` / `-frontend` images without rebuilding from source
+- **Notification Improvements** — Action links, bulk deletion, and Web Push delivery (phase 9)
+- **Storage Monitoring** — Postgres, Redis, and volume storage summaries, alerts, and dashboards (phase 10)
+- **Environment Image Publishing** — CI builds/version-tags/publishes base, conda-base, workspace, and dev images to GHCR
+- **Upgrade Recovery Foundations** — Pre-migration database snapshots and backend schema-compatibility guard
 
 See [IMPLEMENTATION-PHASES.md](IMPLEMENTATION-PHASES.md) for the full phase-by-phase record.
 
@@ -46,23 +54,44 @@ See [IMPLEMENTATION-PHASES.md](IMPLEMENTATION-PHASES.md) for the full phase-by-p
 - **Server** — `health_status`, `health_check_config`, `last_health_check`, `status_reason`, `stopped_by`, `stop_reason`
 - **ServerQueue** — `requested_cpu`, `requested_memory`, `requested_disk`
 
-## Test coverage
+## Verification status
 
-- 2,600+ backend tests passing
-- Coverage spans auth, RBAC, servers, volumes, workspaces, credits, plans, environments, admin, bulk ops, security middleware, caching, logging, graceful shutdown, and rate limiting.
+- Backend tests are wired into CI; test counts and current pass rates were not revalidated in this review.
+- Frontend unit tests and Playwright specs exist. `.github/workflows/ci.yml` currently runs frontend lint/format/build, with no frontend test job.
+- Load-test tooling exists; its presence does not establish current production capacity.
 
-## Active priorities
+## Capability review
 
-1. **Environment image build pipeline** — automated builds, registry integration, image versioning, base-image updates
-2. **Blue-green deployment** — zero-downtime deploy strategy
-3. **Secret management** — HashiCorp Vault or sealed secrets integration
-4. **Penetration testing** — third-party assessment before public production launch
+| Capability | Status | Implemented evidence | Remaining scope |
+| --- | --- | --- | --- |
+| Environment image build/publish | Complete | `.github/workflows/ci.yml`, `scripts/ci-version.sh` | Scheduled base-image digest refresh and scientific image validation are separate follow-ups; scientific image ownership is in the separate environments repository |
+| Reproducible environments | Partial | `EnvironmentTemplate.image` / `tool_image` / `tool_mounts`; driver toolchain manifests and image-ID/digest cache stamps | Persist resolved runtime/toolchain versions per server; export/recreate a pinned setup; surface degraded toolchain preparation |
+| Database backup/restore | Complete | `scripts/manage.d/backup.sh`, `restore.sh`, `db-migrate.sh`; backend schema guard | Automated recovery drills and broader disaster-recovery policy |
+| User volume backup/restore | Future | `VolumeBackup`, `ServerPlan.allow_snapshots`, backup notification helper are scaffolding | Backup/restore service, API, tasks, UI, consistency rules, and retention |
+| Resource queue experience | Partial | `ServerQueue`, `process_server_queue`, queue-status endpoint | Correct position calculation; user queue view/cancellation, bottleneck guidance, GPU-aware waiting policy |
+| Batch scientific jobs | Future | Existing schedules support server start/stop/restart; Celery runs platform tasks | User command submissions, job records, exit status, logs, artifacts, retries, and parameter sweeps |
+| Workload secrets | Future | Platform signing keys, OAuth token encryption, and template environment variables already exist | Scoped credential storage, authorization, redaction, and workload injection; template variables are ordinary JSON, not a secret store |
+| Deployment automation | Partial | Tagged pulls, explicit restart workflow, migration snapshots, schema guard | Automated health verification, traffic cutover, and rollback; zero-downtime deployment is not implemented |
+| Browser end-to-end tests | Partial | `frontend/e2e/`, Playwright config, `scripts/manage.d/e2e.sh` | Execute against an isolated stack in CI; run frontend unit tests in CI too |
+| Independent penetration assessment | Future | Internal findings, remediation records, security regression tests, and scan workflow exist | External assessment and retest before public launch |
+
+## Proposed next priorities
+
+These are Future proposals, not committed release scope.
+
+1. **Finish existing workflows** — Fix queue positions and add a queue view/cancellation; wire existing frontend tests into CI.
+2. **Research reproducibility** — Persist resolved image/toolchain identities and provide export/recreate; extend existing composition rather than rebuilding image publishing.
+3. **Research data recovery** — Deliver user volume backup/restore and verify database recovery through isolated drills.
+4. **Batch jobs** — Add a minimal command-based job lifecycle, then parameter sweeps after single jobs are reliable.
+5. **Scoped workload secrets** — Separate credentials from ordinary template configuration; choose the storage/integration approach during design.
+6. **Public-launch readiness** — Independent penetration assessment and a verified deployment/recovery procedure.
 
 ## Deferred goals
 
-- Kubernetes migration (Helm, HPA, PVCs, Network Policies, Pod Security Standards)
-- Blue-green/rollback deployment automation
-- Marketplace / plugin system
+- **Deferred:** Kubernetes migration (Helm, HPA, PVCs, Network Policies, Pod Security Standards)
+- **Deferred:** Blue-green traffic cutover and automatic rollback; existing tagged-image deployment and database recovery foundations are already implemented
+- **Deferred:** Marketplace / plugin system
+- **Deferred:** Vault / sealed-secrets integration; workload secret requirements should be established before choosing an integration
 
 Pursue Kubernetes only after saturating a single large server (32+ cores, 128GB+ RAM) and proving distribution is required.
 
