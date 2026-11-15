@@ -26,6 +26,7 @@ All files under `scripts/`, plus the top-level `nukelabctl` dispatcher.
   `check-env` is read-only; `sync-env` appends missing keys without overwriting
   existing values and never removes stale keys without operator consent.
 - Security scanning helpers live in `scripts/security/`.
+- `lint` aggregates failures across selected targets and exits nonzero if any tool fails, including failures inside backend/frontend subshells. A later successful formatter or target must not erase an earlier failure; `--fix` follows the same exit-status contract.
 
 ## Work Guidance
 

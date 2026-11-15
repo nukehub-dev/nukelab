@@ -38,12 +38,8 @@ class TestCheckSchemaCompatibility:
 
         engine = _make_engine(rows=[("abc123",)])
 
-        with mock.patch(
-            "app.db.schema_guard.ScriptDirectory"
-        ) as mock_script_dir_cls:
-            mock_script_dir_cls.return_value.walk_revisions.return_value = [
-                FakeScript("abc123")
-            ]
+        with mock.patch("app.db.schema_guard.ScriptDirectory") as mock_script_dir_cls:
+            mock_script_dir_cls.return_value.walk_revisions.return_value = [FakeScript("abc123")]
             result = await check_schema_compatibility(engine, "/app/alembic")
 
         assert result.ok is True
@@ -58,12 +54,8 @@ class TestCheckSchemaCompatibility:
 
         engine = _make_engine(rows=[("newer_rev",)])
 
-        with mock.patch(
-            "app.db.schema_guard.ScriptDirectory"
-        ) as mock_script_dir_cls:
-            mock_script_dir_cls.return_value.walk_revisions.return_value = [
-                FakeScript("abc123")
-            ]
+        with mock.patch("app.db.schema_guard.ScriptDirectory") as mock_script_dir_cls:
+            mock_script_dir_cls.return_value.walk_revisions.return_value = [FakeScript("abc123")]
             result = await check_schema_compatibility(engine, "/app/alembic")
 
         assert result.ok is False
@@ -76,9 +68,7 @@ class TestCheckSchemaCompatibility:
 
         engine = _make_engine(rows=[("rev1",), ("rev2",)])
 
-        with mock.patch(
-            "app.db.schema_guard.ScriptDirectory"
-        ) as mock_script_dir_cls:
+        with mock.patch("app.db.schema_guard.ScriptDirectory") as mock_script_dir_cls:
             mock_script_dir_cls.return_value.walk_revisions.return_value = [
                 FakeScript("rev1"),
                 FakeScript("rev2"),
@@ -94,9 +84,7 @@ class TestCheckSchemaCompatibility:
         from app.db.schema_guard import check_schema_compatibility
 
         engine = _make_engine(
-            execute_side_effect=Exception(
-                "relation 'alembic_version' does not exist"
-            )
+            execute_side_effect=Exception("relation 'alembic_version' does not exist")
         )
 
         result = await check_schema_compatibility(engine, "/app/alembic")
@@ -187,12 +175,15 @@ class TestRunSchemaGuard:
         from app.db.schema_guard import run_schema_guard
 
         engine = mock.AsyncMock()
-        with mock.patch(
-            "app.db.schema_guard.check_schema_compatibility",
-            return_value=mock.Mock(
-                ok=False, unknown_revisions=("newer_rev",), db_revisions=("newer_rev",)
+        with (
+            mock.patch(
+                "app.db.schema_guard.check_schema_compatibility",
+                return_value=mock.Mock(
+                    ok=False, unknown_revisions=("newer_rev",), db_revisions=("newer_rev",)
+                ),
             ),
-        ), mock.patch("app.db.schema_guard.logger") as mock_logger:
+            mock.patch("app.db.schema_guard.logger") as mock_logger,
+        ):
             await run_schema_guard(engine, "/app/alembic", "auto", "development")
 
         mock_logger.warning.assert_called_once()
@@ -204,9 +195,10 @@ class TestRunSchemaGuard:
         from app.db.schema_guard import run_schema_guard
 
         engine = mock.AsyncMock()
-        with mock.patch(
-            "app.db.schema_guard.check_schema_compatibility"
-        ) as mock_check, mock.patch("app.db.schema_guard.logger") as mock_logger:
+        with (
+            mock.patch("app.db.schema_guard.check_schema_compatibility") as mock_check,
+            mock.patch("app.db.schema_guard.logger") as mock_logger,
+        ):
             await run_schema_guard(engine, "/app/alembic", "off", "production")
 
         mock_check.assert_not_called()

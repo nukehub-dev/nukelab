@@ -79,15 +79,17 @@ cmd_lint() {
         ruff_bin=$(_ensure_ruff)
 
         (
-            cd "$DIR/backend"
+            local _target_exit=0
+            cd "$DIR/backend" || exit 1
             if $LINT_FIX; then
-                "$ruff_bin" check --fix app tests || _exit=$?
-                "$ruff_bin" format app tests || _exit=$?
+                "$ruff_bin" check --fix app tests || _target_exit=$?
+                "$ruff_bin" format app tests || _target_exit=$?
             else
-                "$ruff_bin" check app tests || _exit=$?
-                "$ruff_bin" format --check app tests || _exit=$?
+                "$ruff_bin" check app tests || _target_exit=$?
+                "$ruff_bin" format --check app tests || _target_exit=$?
             fi
-        )
+            exit "$_target_exit"
+        ) || _exit=$?
     fi
 
     if [ "$TARGET" = "frontend" ] || [ "$TARGET" = "all" ]; then
@@ -98,17 +100,19 @@ cmd_lint() {
         fi
 
         (
-            cd "$DIR/frontend"
+            local _target_exit=0
+            cd "$DIR/frontend" || exit 1
             [ -d node_modules ] || die "Run: ./nukelabctl install frontend"
 
             if $LINT_FIX; then
-                npm run lint -- --fix || _exit=$?
-                npm run format || _exit=$?
+                npm run lint -- --fix || _target_exit=$?
+                npm run format || _target_exit=$?
             else
-                npm run lint || _exit=$?
-                npm run format:check || _exit=$?
+                npm run lint || _target_exit=$?
+                npm run format:check || _target_exit=$?
             fi
-        )
+            exit "$_target_exit"
+        ) || _exit=$?
     fi
 
     if [ "$TARGET" = "shell" ] || [ "$TARGET" = "all" ]; then

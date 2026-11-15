@@ -31,10 +31,51 @@ _increment_failures() {
     failures=$((failures + 1))
 }
 
+# Exercise tool failures without invoking linters or requiring project dependencies.
+_selftest_lint_exit_status() (
+    source "$DIR/scripts/manage.d/lint.sh"
+
+    local fixture_dir lint_failure lint_status expected_failure
+    fixture_dir=$(mktemp -d) || exit 1
+    DIR="$fixture_dir"
+    trap 'rmdir "$DIR/frontend/node_modules" "$DIR/frontend" "$DIR/backend" "$DIR"' EXIT
+    mkdir -p "$DIR/backend" "$DIR/frontend/node_modules" || exit 1
+
+    step() { :; }
+    ok() { :; }
+    die() { exit 1; }
+    _ensure_ruff() { printf '%s\n' _selftest_ruff; }
+    _selftest_ruff() { [[ "$lint_failure" != "ruff-$1" ]]; }
+    npm() { [[ "$lint_failure" != "npm-${2%%:*}" ]]; }
+    _lint_shell() { return 0; }
+    _lint_markdown() { return 0; }
+
+    for LINT_FIX in false true; do
+        for TARGET in backend frontend all; do
+            for lint_failure in none ruff-check ruff-format npm-lint npm-format; do
+                expected_failure=0
+                case "$TARGET:$lint_failure" in
+                    backend:ruff-* | frontend:npm-* | all:ruff-* | all:npm-*) expected_failure=1 ;;
+                esac
+                lint_status=0
+                (cmd_lint) > /dev/null 2>&1 || lint_status=$?
+                if [[ "$expected_failure" = 0 && "$lint_status" != 0 ]] \
+                    || [[ "$expected_failure" = 1 && "$lint_status" = 0 ]]; then
+                    printf 'Unexpected lint status: target=%s fix=%s failure=%s status=%s\n' \
+                        "$TARGET" "$LINT_FIX" "$lint_failure" "$lint_status" >&2
+                    exit 1
+                fi
+            done
+        done
+    done
+)
+
 cmd_selftest() {
     step "Running nukelabctl self-test"
 
     local failures=0
+
+    _t "lint preserves tool failures across subshells and later checks" _selftest_lint_exit_status || _increment_failures
 
     # Help output
     # Help output (the ASCII banner spells lowercase "nukelab"; match the

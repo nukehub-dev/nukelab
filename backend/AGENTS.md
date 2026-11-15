@@ -162,6 +162,7 @@ Prefer `require_permissions` for simple endpoint-level checks. Use `PermissionCh
 - Run backend tests with `./nukelabctl test backend [pytest args]`.
 - Add regression tests for every confirmed security finding under `tests/security/`.
 - Use the existing fixtures in `conftest.py` for DB sessions, test clients, and Celery config.
+- Native CPU-mask passthrough tests compare the preloaded binary with an unpreloaded baseline under the same user and container; do not assume write-mode `/proc/stat` opens fail for root. Compare open success/failure, errno, and descriptor access mode without writing to procfs.
 - Security tests that mock the Docker client should run with `--confcutdir=tests/security` to avoid the root Postgres/Redis fixtures.
 
 ### Common pitfalls

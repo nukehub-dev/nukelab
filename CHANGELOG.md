@@ -14,6 +14,13 @@ section.
 
 ## [Unreleased]
 
+### Fixed
+
+- Lint commands now propagate backend and frontend tool failures out of their
+  subshells, including `--fix`, so later successful checks cannot mask failures.
+- The CPU-mask write-open regression compares native kernel behavior with and
+  without the library, allowing the test to run correctly as root in containers.
+
 ## [2.1.0] - 2026-08-22
 
 ### Added

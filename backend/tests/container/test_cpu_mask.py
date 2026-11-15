@@ -288,13 +288,18 @@ class TestProcStatVirtualization:
         assert per_cpu == os.cpu_count()
 
     def test_write_open_not_intercepted(self, compiled_so, stat_binary):
-        """Write-mode opens must keep the kernel's semantics (read-only file)."""
+        """Write-mode opens must preserve the unmodified kernel behavior."""
         program = r"""
         #include <fcntl.h>
+        #include <errno.h>
         #include <stdio.h>
+        #include <unistd.h>
         int main(void) {
             int fd = open("/proc/stat", O_WRONLY);
-            printf("%d\n", fd < 0 ? 0 : 1);
+            int error = fd < 0 ? errno : 0;
+            int mode = fd < 0 ? -1 : (fcntl(fd, F_GETFL) & O_ACCMODE);
+            printf("%d %d %d\n", fd < 0 ? 0 : 1, error, mode);
+            if (fd >= 0) close(fd);
             return 0;
         }
         """
@@ -306,8 +311,14 @@ class TestProcStatVirtualization:
         subprocess.run(["gcc", "-o", bin_path, src], check=True)
         os.remove(src)
 
-        result = run_with_preload(bin_path, compiled_so, {"NUKELAB_CPU_COUNT": "2"})
-        os.remove(bin_path)
+        try:
+            baseline_env = os.environ.copy()
+            baseline_env.pop("LD_PRELOAD", None)
+            baseline = subprocess.run([bin_path], capture_output=True, text=True, env=baseline_env)
+            result = run_with_preload(bin_path, compiled_so, {"NUKELAB_CPU_COUNT": "2"})
+        finally:
+            os.remove(bin_path)
 
-        assert result.returncode == 0
-        assert result.stdout.strip() == "0"
+        assert baseline.returncode == 0, baseline.stderr
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip() == baseline.stdout.strip()

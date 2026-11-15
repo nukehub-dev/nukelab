@@ -333,9 +333,7 @@ class Settings(BaseSettings):
         """Reject unsupported schema-guard modes."""
         allowed = {"off", "auto", "enforce"}
         if value not in allowed:
-            raise ValueError(
-                f"DB_SCHEMA_GUARD must be one of {sorted(allowed)}, got {value!r}"
-            )
+            raise ValueError(f"DB_SCHEMA_GUARD must be one of {sorted(allowed)}, got {value!r}")
         return value
 
     @model_validator(mode="after")
