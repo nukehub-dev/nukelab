@@ -175,18 +175,28 @@ Background tasks handle cleanup:
 
 ## Code locations
 
-The transaction-owned admission primitive in
-`backend/app/services/admission_service.py` requires Read Committed and acquires a
-transaction advisory lock in a separate statement before resource/name queries.
-Callers must persist reservations and commit before runtime I/O. The queue claim
-and volume-intent services use this primitive, but existing server lifecycle paths
-still require integration before admission is guaranteed across the platform.
+`backend/app/services/server_launch_service.py` provides the shared normalized
+launch boundary. It resolves approved images outside admission locks, then rechecks
+current authorization, plan terms, quota, credits and volume access. Admission uses
+Read Committed and a separate transaction advisory-lock statement before fresh
+accounting. It commits a stable starting server, immutable provisioning intent, and GPU/mount reservations
+before provisioning; waiting requests retain their full intent without provisioning
+volumes or charging credits.
 
-`backend/app/services/operation_runner.py` provides loop-owned DB/driver resources
-and joined cooperative cancellation for long operations. A deadline reports an
-uncertain external outcome; it does not release runtime or volume protection.
-Legacy tasks still use their existing runner. The separate queue resource router
-is unregistered until those workers honor atomic claims and cancellation.
+Reserved runtime names derive from the stable server UUID, independent of display-name
+case. Finalization refreshes the locked server row before accepting a concurrent
+state change. The reserved spawner selects exact local image IDs and immutable toolchain caches,
+requires readiness, and preserves existing runtimes for explicit reconciliation.
+Successful provisioning updates the reserved ORM server and captures observed
+runtime identity and a sanitized manifest. Unknown outcomes retain protection.
+`server_queue_dispatch_service.py` provides bounded first-fit dispatch, legacy
+resubmit handling and fenced uncertain outcomes. Its synchronous runner owns one
+operation loop, DB session and driver, joining cooperative cancellation on deadlines.
+
+These orchestration services are not yet selected by the existing API and scheduled
+queue task. Lifecycle start/recreate paths must participate in admission and captured
+revision selection before cutover. The separate queue resource router remains
+unregistered while the legacy worker can bypass atomic claims and cancellation.
 
 | Responsibility | File |
 |---|---|

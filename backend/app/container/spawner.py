@@ -21,8 +21,8 @@ logger = get_logger(__name__)
 
 
 class ServerSpawner:
-    def __init__(self):
-        self.container_client: ContainerDriver | None = None
+    def __init__(self, driver: ContainerDriver | None = None):
+        self.container_client: ContainerDriver | None = driver
 
     async def _get_container_client(self):
         if not self.container_client:
@@ -68,6 +68,7 @@ class ServerSpawner:
         server_id: str | None = None,
         tool_image: str | None = None,
         tool_mounts: list[str] | None = None,
+        resolved_images: dict | None = None,
     ) -> Server:
         """Spawn a new server container with persistent volume(s)
 
@@ -97,6 +98,38 @@ class ServerSpawner:
             max_len=240,
         )
 
+        if resolved_images is not None:
+            # Runtime identity follows the reserved UUID, independent of display-name case/renames.
+            container_name = "nukelab-launch-" + str(uuid.UUID(server_id))
+            if not volume_mounts:
+                raise ContainerDriverError("Reserved launch requires explicit volume mounts")
+            from app.schemas.environment_manifest import ImageIdentity
+
+            runtime = ImageIdentity.model_validate(resolved_images["runtime"])
+            actual = await container_client.resolve_image(runtime.local_id)
+            if any(
+                actual[key] != getattr(runtime, key) for key in ("local_id", "os", "architecture")
+            ):
+                raise ContainerDriverError("Pinned runtime artifact does not match approval")
+            image = runtime.local_id
+            selected_toolchain = resolved_images.get("toolchain")
+            if bool(selected_toolchain) != bool(tool_image):
+                raise ContainerDriverError("Required toolchain selection does not match approval")
+            if selected_toolchain:
+                pinned_toolchain = ImageIdentity.model_validate(selected_toolchain)
+                tool_image = pinned_toolchain.local_id
+                observed_toolchain = await container_client.resolve_image(tool_image)
+                if any(
+                    observed_toolchain[key] != getattr(pinned_toolchain, key)
+                    for key in ("local_id", "os", "architecture")
+                ):
+                    raise ContainerDriverError("Pinned toolchain artifact does not match approval")
+            existing_id = await container_client.get_container_by_name(container_name)
+            if existing_id:
+                raise ContainerDriverError(
+                    "Existing runtime requires explicit launch reconciliation"
+                )
+
         # Short DNS-safe alias for the backend health probe. Container names can
         # exceed the 63-byte DNS label limit, so resolving the full name fails.
         health_alias = f"srv-{server_id[:8]}"
@@ -105,17 +138,18 @@ class ServerSpawner:
         # from a previous failed stop/start/restart), remove it before attempting to
         # create a new one. This keeps the database and runtime state consistent and
         # prevents DockerError(500, "name already in use").
-        try:
-            existing_id = await container_client.get_container_by_name(container_name)
-            if existing_id:
-                logger.warning(
-                    "Found existing container %s before spawn; removing it", container_name
-                )
-                await container_client.delete_container(existing_id, force=True)
-                # Wait briefly for container to release the name.
-                await asyncio.sleep(0.5)
-        except Exception:
-            pass
+        if resolved_images is None:
+            try:
+                existing_id = await container_client.get_container_by_name(container_name)
+                if existing_id:
+                    logger.warning(
+                        "Found existing container %s before spawn; removing it", container_name
+                    )
+                    await container_client.delete_container(existing_id, force=True)
+                    # Wait briefly for container to release the name.
+                    await asyncio.sleep(0.5)
+            except Exception:
+                pass
 
         # Build Docker volumes dict from multiple mounts
         volumes = {}
@@ -141,7 +175,13 @@ class ServerSpawner:
                     mount_path = home_mount_path
 
                 # Get volume name from database
-                if vol_id:
+                if resolved_images is not None:
+                    volume_name = mount.get("volume_name")
+                    if not volume_name or not re.fullmatch(
+                        r"[A-Za-z0-9][A-Za-z0-9_.-]*", volume_name
+                    ):
+                        raise ContainerDriverError("Reserved volume name is missing or invalid")
+                elif vol_id:
                     from sqlalchemy import select
 
                     from app.db.session import async_session
@@ -163,7 +203,10 @@ class ServerSpawner:
                         suffix="data",
                     )
 
-                await self._ensure_volume(volume_name)
+                if resolved_images is None or mount.get("auto_created", False):
+                    await self._ensure_volume(volume_name)
+                elif await container_client.get_volume(volume_name) is None:
+                    raise ContainerDriverError("Reserved data volume is missing")
 
                 mount_mode = "ro" if mode == "read_only" else "rw"
                 volumes[volume_name] = {"bind": mount_path, "mode": mount_mode}
@@ -247,7 +290,7 @@ class ServerSpawner:
 
         try:
             # Check if image exists locally first, then try to pull
-            if not await container_client.image_exists(image):
+            if resolved_images is None and not await container_client.image_exists(image):
                 try:
                     await container_client.pull_image(image)
                 except Exception:
@@ -259,7 +302,7 @@ class ServerSpawner:
             # mount it into the runtime container. This decouples heavy scientific
             # stacks from the workspace runtime image so workspace updates do not
             # force toolchain rebuilds.
-            if tool_image:
+            if tool_image and resolved_images is None:
                 if not await container_client.image_exists(tool_image):
                     try:
                         await container_client.pull_image(tool_image)
@@ -274,12 +317,25 @@ class ServerSpawner:
             if tool_image:
                 # Use one shared volume per toolchain image so heavy scientific
                 # stacks are copied once per node, not once per server spawn.
-                tool_volume_name = make_toolchain_volume_name(tool_image)
                 mounts = tool_mounts or ["/opt/nuke"]
-                try:
-                    manifest = await container_client.prepare_toolchain_volume(
-                        tool_image, tool_volume_name, mounts
+                tool_volume_name = (
+                    container_client.immutable_toolchain_cache_name(
+                        resolved_images["toolchain"], mounts
                     )
+                    if resolved_images is not None
+                    else make_toolchain_volume_name(tool_image)
+                )
+                try:
+                    if resolved_images is not None:
+                        manifest = await container_client.prepare_immutable_toolchain_volume(
+                            tool_image, tool_volume_name, mounts
+                        )
+                        if manifest.get("mounts", mounts) != mounts:
+                            raise ContainerDriverError("Toolchain layout does not match approval")
+                    else:
+                        manifest = await container_client.prepare_toolchain_volume(
+                            tool_image, tool_volume_name, mounts
+                        )
                     for mount_path in manifest.get("mounts", mounts):
                         volumes[tool_volume_name] = {"bind": mount_path, "mode": "ro"}
                     # Expand env vars against the runtime image's default env so
@@ -299,6 +355,8 @@ class ServerSpawner:
                         expanded = self._expand_env_vars(value, {**image_env, **environment})
                         environment.setdefault(key, expanded)
                 except Exception as e:
+                    if resolved_images is not None:
+                        raise
                     logger.error(
                         "TOOLCHAIN_DEGRADED: failed to prepare toolchain image %s: %s; "
                         "server %s spawns WITHOUT the toolchain",
@@ -352,8 +410,12 @@ class ServerSpawner:
             # This MUST run before waiting for the health endpoint: /start.sh
             # aborts if /home/{username} is not writable within ~10s, so nginx
             # never starts and the health probe never succeeds in time.
-            mount_paths_to_fix = [home_mount_path]
+            mount_paths_to_fix = [] if resolved_images is not None else [home_mount_path]
             for mount in volume_mounts or []:
+                if resolved_images is not None and (
+                    mount.get("mode") == "read_only" or not mount.get("auto_created", False)
+                ):
+                    continue
                 mount_path = mount.get("mount_path", "/data")
                 if mount_path and mount_path not in mount_paths_to_fix:
                     mount_paths_to_fix.append(mount_path)
@@ -414,6 +476,9 @@ class ServerSpawner:
                         container_name,
                     )
 
+            if resolved_images is not None and not (ready and traefik_ready):
+                raise ContainerDriverError("Pinned runtime did not become ready")
+
             # Determine primary volume_id from volume_mounts if provided
             primary_volume_id = None
             if volume_mounts:
@@ -443,9 +508,17 @@ class ServerSpawner:
                 created_at=datetime.now(UTC).replace(tzinfo=None),
             )
 
+            if resolved_images is not None:
+                server._observed_toolchain_identity = (
+                    observed_toolchain if selected_toolchain else None
+                )
             return server
 
         except Exception as e:
+            if resolved_images is not None:
+                # The orchestration owner reconciles runtime identity and protection.
+                # A failed waiter cannot authorize deleting an existing container.
+                raise ContainerDriverError("Reserved launch requires runtime reconciliation") from e
             # Cleanup on failure
             try:
                 await container_client.delete_container(container_name, force=True)

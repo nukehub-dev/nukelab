@@ -4,7 +4,10 @@ This document describes the core entities and schema conventions. For the full S
 
 ## Entity overview
 
-Workflow schema additions are additive. `environment_revisions` stores approved
+Workflow schema additions are additive. `server_launch_intents` persists the selected
+revision, complete request, named mounts, original username and claim metadata in
+the reservation transaction so a fresh session can reconstruct exact launch intent.
+It is private orchestration data, distinct from successful launch provenance. `environment_revisions` stores approved
 configuration fingerprints and separate runtime/toolchain identities;
 `server_launch_records` stores append-only launch generations. Revision services
 recheck current authorization and revocation. A legacy server without a captured

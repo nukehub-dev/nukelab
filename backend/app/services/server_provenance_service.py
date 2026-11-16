@@ -49,7 +49,8 @@ def build_manifest(
         template_label=template_label,
         runtime=runtime,
         toolchain=toolchain,
-        toolchain_mounts=revision.configuration.get("tool_mounts", []),
+        toolchain_mounts=revision.configuration.get("tool_mounts")
+        or (["/opt/nuke"] if toolchain else []),
         environment_variable_names=sorted(revision.configuration.get("environment_variables", {})),
         resources=resources,
         volume_requirements=volumes or [],

@@ -56,7 +56,7 @@ See [IMPLEMENTATION-PHASES.md](IMPLEMENTATION-PHASES.md) for the full phase-by-p
 
 ## Verification status
 
-- Backend tests are wired into CI; test counts and current pass rates were not revalidated in this review.
+- Backend unit/service/API tests and the coverage floor are wired into CI. Real daemon fixtures are separately opt-in with `--run-container-integration`; their presence does not establish browser or production acceptance.
 - Frontend unit tests and Playwright specs exist. `.github/workflows/ci.yml` currently runs frontend lint/format/build, with no frontend test job.
 - Load-test tooling exists; its presence does not establish current production capacity.
 
@@ -65,10 +65,10 @@ See [IMPLEMENTATION-PHASES.md](IMPLEMENTATION-PHASES.md) for the full phase-by-p
 | Capability | Status | Implemented evidence | Remaining scope |
 | --- | --- | --- | --- |
 | Environment image build/publish | Complete | `.github/workflows/ci.yml`, `scripts/ci-version.sh` | Scheduled base-image digest refresh and scientific image validation are separate follow-ups; scientific image ownership is in the separate environments repository |
-| Reproducible environments | Partial | Approved revision/launch models, strict manifest schema, `environment_revision_service.py`, `server_provenance_service.py`; existing driver composition | Integrate immutable image resolution/caches and launch capture; expose export/recreate API/UI; runtime verification |
+| Reproducible environments | Partial | Approved revision/launch services and manifests; local image resolution, immutable toolchain caches and reserved spawner; `server_launch_service.py` captures verified runtime identity | Cut over API and all lifecycle paths to pinned launch/recreation; expose export/recreate UI; registry portability and combined runtime verification |
 | Database backup/restore | Complete | `scripts/manage.d/backup.sh`, `restore.sh`, `db-migrate.sh`; backend schema guard | Automated recovery drills and broader disaster-recovery policy |
 | User volume backup/restore | Partial | `VolumeBackup` scaffolding plus durable `volume_operation_service.py` and bounded `volume_archive_service.py` extraction foundation | Backup capture/storage/retention, runtime helper and attachment checks, all writer/start guards, API/tasks/UI; recovery remains unavailable |
-| Resource queue experience | Partial | Durable request/claim fields, typed queue DTOs, transaction-owned queue primitives, corrected deterministic positions, configured resource budgets | Replace legacy launch/worker integration; register the owner queue router only after claims/cancellation are respected; user queue UI and GPU-aware waiting |
+| Resource queue experience | Partial | Versioned intent and typed DTOs, shared launch reservations and bounded dispatch service, deterministic positions, configured budgets | Replace legacy launch/worker integration; register the owner queue router only after claims/cancellation are respected; user queue UI and GPU-aware waiting |
 | Batch scientific jobs | Future | Existing schedules support server start/stop/restart; Celery runs platform tasks | User command submissions, job records, exit status, logs, artifacts, retries, and parameter sweeps |
 | Workload secrets | Future | Platform signing keys, OAuth token encryption, and template environment variables already exist | Scoped credential storage, authorization, redaction, and workload injection; template variables are ordinary JSON, not a secret store |
 | Deployment automation | Partial | Tagged pulls, explicit restart workflow, migration snapshots, schema guard | Automated health verification, traffic cutover, and rollback; zero-downtime deployment is not implemented |

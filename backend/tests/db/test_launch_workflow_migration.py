@@ -19,8 +19,13 @@ from app.config import settings
 from app.db.base import Base
 
 PREVIOUS_REVISION = "34ce1a62ffe8"
-WORKFLOW_REVISION = "c4d8e2f019ab"
-NEW_TABLES = {"environment_revisions", "server_launch_records", "volume_operations"}
+WORKFLOW_REVISION = "d731a8f4c092"
+NEW_TABLES = {
+    "environment_revisions",
+    "server_launch_records",
+    "volume_operations",
+    "server_launch_intents",
+}
 
 
 async def admin_connection():
@@ -83,6 +88,10 @@ def test_fresh_upgrade_downgrade_and_reupgrade(migration_database):
     assert ScriptDirectory.from_config(config).get_heads() == [WORKFLOW_REVISION]
     command.upgrade(config, "head")
     assert NEW_TABLES <= asyncio.run(tables(name))
+    command.downgrade(config, "-1")
+    assert "server_launch_intents" not in asyncio.run(tables(name))
+    assert NEW_TABLES - {"server_launch_intents"} <= asyncio.run(tables(name))
+    command.upgrade(config, "head")
     command.downgrade(config, PREVIOUS_REVISION)
     assert NEW_TABLES.isdisjoint(asyncio.run(tables(name)))
     command.upgrade(config, "head")

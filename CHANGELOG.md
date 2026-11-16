@@ -16,6 +16,13 @@ section.
 
 ### Added
 
+- Shared launch orchestration reserves server, GPU and volume-mount identities
+  before provisioning, with pinned runtime/toolchain artifacts and bounded queue
+  dispatch. Existing API/worker activation remains pending lifecycle integration.
+- Immutable toolchain cache preparation verifies artifact, platform and layout;
+  live caches are never repopulated and uncertain helpers retain their locks.
+  An opt-in isolated container test rehearses tag replacement while a reader
+  keeps the original cache mounted.
 - Backend foundations for durable queue requests, approved environment revisions,
   launch provenance, transaction-owned admission, and exclusive volume operations.
   Launch/worker integration and user-facing recovery/recreation remain pending.

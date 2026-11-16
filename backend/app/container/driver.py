@@ -20,6 +20,9 @@ Contract for implementations:
   driver must synthesize the same shape (e.g. from cAdvisor metrics).
 """
 
+import hashlib
+import json
+import re
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -35,6 +38,23 @@ class ContainerDriverError(Exception):
         super().__init__(message)
         self.message = message
         self.status = status
+
+
+class ImageResolutionError(ContainerDriverError):
+    """An approved local artifact could not be resolved without substitution."""
+
+    def __init__(self, code: str, status: int | None = None):
+        super().__init__(code, status=status)
+        self.code = code
+
+
+class ImmutableToolchainCacheError(ContainerDriverError):
+    """A cache cannot be reused safely; uncertain helpers retain their lock."""
+
+    def __init__(self, code: str, *, outcome_unknown: bool = False):
+        super().__init__(code)
+        self.code = code
+        self.outcome_unknown = outcome_unknown
 
 
 class ContainerDriver(ABC):
@@ -55,6 +75,63 @@ class ContainerDriver(ABC):
     @abstractmethod
     async def pull_image(self, image: str):
         """Pull a container image."""
+
+    @abstractmethod
+    async def resolve_image(self, image: str) -> dict:
+        """Inspect an existing local artifact, returning a plain immutable identity.
+
+        Return requested_reference, canonical local_id (sha256:<hex>),
+        repository_digests, os, architecture and registry_verified=False.
+        Local metadata never establishes registry retrievability. Never pull,
+        change tags or substitute another artifact when the selection is missing.
+        """
+
+    @staticmethod
+    def immutable_toolchain_cache_name(identity: dict, mount_paths: list[str]) -> str:
+        """Key one immutable cache by local artifact, platform and approved layout."""
+        if (
+            not isinstance(identity, dict)
+            or not isinstance(identity.get("local_id"), str)
+            or not re.fullmatch(r"sha256:[a-f0-9]{64}", identity["local_id"])
+            or any(
+                not isinstance(identity.get(key), str)
+                or not re.fullmatch(r"[a-zA-Z0-9_-]{1,32}", identity[key])
+                for key in ("os", "architecture")
+            )
+            or not isinstance(mount_paths, list)
+            or len(mount_paths) != 1
+            or not isinstance(mount_paths[0], str)
+            or not re.fullmatch(r"/[A-Za-z0-9][A-Za-z0-9._/-]*", mount_paths[0])
+            or any(part in ("", ".", "..") for part in mount_paths[0].split("/")[1:])
+            or mount_paths[0] == "/toolchain-target"
+            or mount_paths[0].startswith("/toolchain-target/")
+        ):
+            raise ImmutableToolchainCacheError("invalid_toolchain_layout")
+        key = json.dumps(
+            {
+                "version": 1,
+                "local_id": identity["local_id"],
+                "os": identity["os"],
+                "architecture": identity["architecture"],
+                "mount_paths": mount_paths,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return "nukelab-toolchain-v2-" + hashlib.sha256(key.encode()).hexdigest()
+
+    @abstractmethod
+    async def prepare_immutable_toolchain_volume(
+        self, image: str, cache_name: str, mount_paths: list[str]
+    ) -> dict:
+        """Populate a new identity-keyed cache, or verify and reuse an existing one.
+
+        image must be a pinned local ID or repository digest. Obtain cache_name
+        from immutable_toolchain_cache_name with resolve_image's identity.
+        Existing caches are never wiped/repopulated, including incomplete ones.
+        Unknown lock/helper outcomes require reconciliation, never TTL takeover.
+        Returns the validated toolchain manifest; required failure is fatal.
+        """
 
     @abstractmethod
     async def create_container(
