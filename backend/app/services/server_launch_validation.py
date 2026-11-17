@@ -24,6 +24,7 @@ from app.schemas.server_launch import (
     NormalizedVolumeMount,
     VolumeMode,
     VolumeSelection,
+    validate_mount_destination,
 )
 from app.services.quota_service import QuotaService
 from app.services.volume_access_service import VolumeAccessService
@@ -92,6 +93,8 @@ async def validate_launch_volumes(
     user: User,
     request: NormalizedLaunchRequest,
     plan: ServerPlan,
+    *,
+    protected_mount_paths=(),
 ) -> list[NormalizedVolumeMount]:
     """Validate stored capacity, current access/status, and total new reservation.
 
@@ -123,6 +126,10 @@ async def validate_launch_volumes(
     total_capacity = new_capacity = 0
     validated = []
     for mount in request.volume_mounts:
+        try:
+            validate_mount_destination(mount.mount_path, protected_paths=protected_mount_paths)
+        except ValueError:
+            raise LaunchValidationError("invalid_mount_path", 422) from None
         if mount.volume_id == "":
             capacity = mount.max_size_bytes or plan_bytes
             if capacity > plan_bytes:

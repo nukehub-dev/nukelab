@@ -318,3 +318,22 @@ reconciliation command are not yet available; do not manually expire reservation
 on a timer or blindly retry runtime mutations. Record the evidence and use a
 reviewed repair procedure or restore the verified pre-migration snapshot with its
 matching image version.
+
+## Retaining captured environment artifacts
+
+Environment exports describe approved artifacts and logical data mounts; they do
+not contain image bytes, variable values or user-volume data. Current local-only
+recreation requires the exact images to remain on the original engine and a
+matching approved revision on this installation. Pruning those images can make a
+recorded launch unavailable for recreation even though its history/export remains
+readable. Retain required images and immutable toolchain caches; inspect overall
+storage usage before cleanup. Automatic cache garbage collection and verified
+registry portability are not implemented.
+
+Recreation fails explicitly for unavailable artifacts rather than substituting a
+newer tag. Revoking a revision or disabling its approved environment prevents new
+recreation while preserving recorded history. An earlier preview is advisory;
+current approval, access, quota, credits, capacity and explicit volume selections
+are checked again when work is submitted. A manifest does not restore data: use
+only supported verified recovery procedures, and never treat an export as a data
+backup.

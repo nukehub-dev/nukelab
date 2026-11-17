@@ -17,6 +17,9 @@ All files under `frontend/` except generated artifacts (`node_modules/`, `dist/`
 - Server creation returns `Server | QueuedServerAcceptance`; discriminate on `queued: true` before reading server identity. Accepted requests keep their saved name/configuration and navigate to `/servers?tab=queue&request=<id>`. Deployment dialogs initialize only when opened, preserve selections through failed requests/catalog refreshes, and prevent duplicate pending submits.
 - `src/hooks/use-server-queue.ts` owns capability-gated owner queue queries and cancellation. Queue keys include owner identity and are cleared/cancelled on account changes and logout. Query `/server-queue/capabilities` before exposing queue controls; unsupported deployments must not query queue records. Active requests refresh every five seconds with bounded failure backoff and pause in hidden tabs. Cancel only server-confirmed pending requests, refresh on conflicts, and show priority position without promising a start time.
 
+- `src/hooks/use-server-provenance.ts` owns capability-gated owner history and recreation queries. Provenance and plan/volume catalogs are actor-scoped, cleared on account changes, and protected against late responses. The detail panel labels records as the last verified launch and shows current server status rather than implying an uncertain replacement is verified.
+- Environment export downloads sanitized server-returned JSON for the displayed launch. Source recreation and manifest import require server validation followed by a new name, current plan and explicit fresh/existing volume bindings; no source volume IDs are copied automatically. Validation is a preview, never an authorization grant. Final recreation uses the same Server-or-Queued response contract as deployment.
+
 ## Work Guidance
 
 ### Project structure

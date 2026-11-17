@@ -466,3 +466,20 @@ Use CVSS 4.0 with the following mapping:
   is proven before replacement guards or allocations are released.
 - Run runtime races only on an isolated daemon. Unit/database regressions do not
   replace the combined browser/runtime acceptance exercise.
+
+## Provenance and manifest recreation checks
+
+- Verify read/manage scopes and separate read/write permissions on metadata
+  preview, including management-only tokens and dynamic role overrides (PENT-NKL-016).
+- Tamper image identity, environment names, toolchain layout, schema version,
+  privileged fields and raw environment values. Reject before runtime side effects.
+- Confirm owned source IDs, JWT/reason/audit requirements for foreign history,
+  saved redaction and historical readability after revocation.
+- Verify submitted volume paths/modes match the preview and remain explicitly
+  bound to currently permitted volumes. Reject system/toolchain mount overlaps.
+- Revoke approval or remove pinned images between preview and submit; revalidate
+  without mutable-tag fallback or accidental reservations on preflight failure.
+- Exercise account changes during preview, export and accepted recreation so late
+  responses cannot populate another actor's UI or navigate for that account.
+- Rehearse tag/template changes and actual file/image identities against an
+  isolated runtime; mocked browser responses do not prove artifact portability.

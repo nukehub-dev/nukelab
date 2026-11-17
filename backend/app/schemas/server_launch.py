@@ -4,6 +4,8 @@
 """Persistable launch intent shared by direct and deferred server creation."""
 
 import posixpath
+from collections.abc import Iterable
+from pathlib import PurePosixPath
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -11,6 +13,24 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 VolumeMode = Literal["read_only", "read_write"]
 VolumeSelection = UUID | Literal[""]
+
+
+_PROTECTED_MOUNT_PATHS = (
+    "/proc",
+    "/sys",
+    "/dev",
+    "/etc/nukelab/auth",
+    "/usr/local/lib/nukelab",
+)
+
+
+def validate_mount_destination(path: str, *, protected_paths: Iterable[str] = ()) -> None:
+    """User data must not hide runtime security mounts or approved toolchain data."""
+    target = PurePosixPath(path)
+    for root in (*_PROTECTED_MOUNT_PATHS, *protected_paths):
+        protected = PurePosixPath(root)
+        if target == protected or target in protected.parents or protected in target.parents:
+            raise ValueError("Volume mount overlaps a protected container path")
 
 
 class NormalizedVolumeMount(BaseModel):
@@ -35,6 +55,7 @@ class NormalizedVolumeMount(BaseModel):
         path = "/" + posixpath.normpath(value).lstrip("/")
         if path == "/":
             raise ValueError("Cannot mount over the container root")
+        validate_mount_destination(path)
         return path
 
 

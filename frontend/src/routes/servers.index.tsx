@@ -61,6 +61,8 @@ import { Select, SelectItem } from '../components/ui/select'
 import { useConfirmDialog } from '../components/ui/confirm-dialog'
 import { ScheduleDialog } from '../components/server/schedule-dialog'
 import { DeployServerDialog } from '../components/server/deploy-server-dialog'
+import { RecreateServerDialog } from '../components/server/recreate-server-dialog'
+import { useProvenanceCapabilities } from '../hooks/use-server-provenance'
 
 export const Route = createFileRoute('/servers/')({
   component: ServersPage,
@@ -71,6 +73,9 @@ function ServersPage() {
   const search = Route.useSearch()
   const navigate = Route.useNavigate()
   const capabilities = useQueueCapabilities()
+  const provenanceCapabilities = useProvenanceCapabilities()
+  const canRecreate = useAuthStore((state) => state.hasPermission(PERMISSIONS.SERVERS_WRITE_OWN))
+  const [importOpen, setImportOpen] = useState(false)
   const canReadQueue = useAuthStore((state) => state.hasPermission(PERMISSIONS.SERVERS_READ_OWN))
   const queueEnabled = canReadQueue && capabilities.data?.enabled === true
   const viewingQueue = search.tab === 'queue' && queueEnabled
@@ -815,6 +820,13 @@ function ServersPage() {
           },
         ]}
       >
+        {canRecreate && provenanceCapabilities.data?.enabled === true && (
+          <div className="flex justify-end">
+            <Button variant="outline" onClick={() => setImportOpen(true)}>
+              Import environment
+            </Button>
+          </div>
+        )}
         {queueEnabled && (
           <nav aria-label="Server sections" className="flex gap-2 mb-4">
             <Button
@@ -891,6 +903,8 @@ function ServersPage() {
           />
         )}
       </ResourcePageLayout>
+
+      <RecreateServerDialog open={importOpen} onOpenChange={setImportOpen} />
 
       <DeployServerDialog
         open={dialogOpen}

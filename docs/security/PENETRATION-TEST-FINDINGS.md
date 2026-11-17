@@ -713,3 +713,29 @@ logout or subsequent items.
 
 Retest `backend/tests/security/test_logout_lifecycle_fencing.py` and auth API
 transport regressions, then race logout against replacement on an isolated daemon.
+
+### PENT-NKL-016: Recreation preview omitted metadata read authorization
+
+**Severity:** Medium
+
+**CVSS 3.1:** 4.3 (`AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:N/A:N`)
+
+**Status:** Remediated before release
+
+**Opened:** 2026-11-17
+
+**Owner:** Backend Eng
+
+**Component:** `backend/app/api/server_provenance.py`
+
+The new preview initially required management permission/scope while returning a
+saved source manifest. A management-only token with an owned launch ID could read
+metadata that history/export correctly denied without read scope. Preview now
+requires separate read and write permission checks and both read/manage scopes.
+Final recreation still accepts manage scope without returning source metadata.
+History marks read-only tokens ineligible to recreate; private metadata responses
+use no-store caching. This was found and corrected before the feature was released.
+
+Retest `backend/tests/security/test_provenance_recreation.py`: management-only and
+read-only tokens cannot preview; combined scopes can; a dynamic write-only role
+cannot preview; authorized final creation retains its normal management boundary.

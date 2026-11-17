@@ -35,7 +35,11 @@ from app.models.server_volume import ServerVolume
 from app.models.user import User
 from app.models.volume import Volume
 from app.models.volume_operation import VolumeOperation
-from app.schemas.environment_manifest import ImageIdentity, ManifestResources, VolumeRequirement
+from app.schemas.environment_manifest import (
+    ImageIdentity,
+    ManifestResources,
+    VolumeRequirement,
+)
 from app.schemas.server_launch import NormalizedLaunchRequest
 from app.schemas.server_queue import QueuedServerResponse
 from app.services.admission_service import acquire_admission_lock
@@ -55,7 +59,10 @@ from app.services.server_operation_service import (
     create_operation,
     finish_operation,
 )
-from app.services.server_provenance_service import ServerProvenanceService, build_manifest
+from app.services.server_provenance_service import (
+    ServerProvenanceService,
+    build_manifest,
+)
 from app.services.server_queue_service import QueueError, ServerQueueService
 from app.services.volume_operation_service import (
     ACTIVE_STATES as ACTIVE_VOLUME_STATES,
@@ -184,7 +191,8 @@ class ServerLaunchService:
             )
         if identities[1] is not None:
             self.driver.immutable_toolchain_cache_name(
-                identities[1].model_dump(mode="json"), configuration["tool_mounts"] or ["/opt/nuke"]
+                identities[1].model_dump(mode="json"),
+                configuration["tool_mounts"] or ["/opt/nuke"],
             )
         async with self.db.begin():
             await acquire_admission_lock(self.db)
@@ -261,7 +269,15 @@ class ServerLaunchService:
                 raise LaunchError("quota_exceeded", 429)
             if settings.credits_enabled and (owner.nuke_balance or 0) < (plan.cost_per_hour or 0):
                 raise LaunchError("insufficient_credits", 402)
-            mounts = await validate_launch_volumes(self.db, owner, request, plan)
+            mounts = await validate_launch_volumes(
+                self.db,
+                owner,
+                request,
+                plan,
+                protected_mount_paths=(revision.configuration.get("tool_mounts") or ["/opt/nuke"])
+                if revision.toolchain_identity
+                else (),
+            )
             request = request.model_copy(update={"volume_mounts": mounts})
             pool = ResourcePoolService(self.db)
             gpu_allocator = GpuAllocatorService(self.db)
@@ -550,7 +566,10 @@ class ServerLaunchService:
             ):
                 raise LaunchError("launch_in_progress")
             server = await self.db.get(
-                Server, reservation.server_id, populate_existing=True, with_for_update=True
+                Server,
+                reservation.server_id,
+                populate_existing=True,
+                with_for_update=True,
             )
             if (
                 server is None
@@ -654,7 +673,9 @@ class ServerLaunchService:
                 )
                 operation = (
                     await self.db.get(
-                        ServerLaunchOperation, reservation.operation_id, populate_existing=True
+                        ServerLaunchOperation,
+                        reservation.operation_id,
+                        populate_existing=True,
                     )
                     if reservation.operation_id
                     else None
@@ -663,7 +684,8 @@ class ServerLaunchService:
                     raise LaunchError("launch_intent_unavailable")
                 previous = await self.db.get(Server, reservation.server_id, populate_existing=True)
                 record = await self.db.get(
-                    ServerLaunchRecord, reservation.operation_id or reservation.server_id
+                    ServerLaunchRecord,
+                    reservation.operation_id or reservation.server_id,
                 )
                 if operation is not None and operation.state in (
                     "executing",
@@ -785,7 +807,9 @@ class ServerLaunchService:
                     raise LaunchError("launch_in_progress")
                 if reservation.operation_id is not None:
                     operation = await self.db.get(
-                        ServerLaunchOperation, reservation.operation_id, populate_existing=True
+                        ServerLaunchOperation,
+                        reservation.operation_id,
+                        populate_existing=True,
                     )
                     if (
                         operation is None
@@ -926,6 +950,56 @@ class ServerLaunchService:
             if not isinstance(exc, Exception):
                 raise
             raise LaunchError("recovery_required", 503) from exc
+
+    async def submit_pinned(
+        self,
+        owner_id: uuid.UUID,
+        request: NormalizedLaunchRequest,
+        revision_id: uuid.UUID,
+    ):
+        """Recreate an approved selection without resolving or substituting a mutable tag."""
+        await self._clear_read_transaction()
+        async with self.db.begin():
+            await acquire_admission_lock(self.db)
+            owner, plan, _ = await self._policy(owner_id, request)
+            revision = await self._revisions(owner_id).require_available(revision_id)
+            if revision.template_id != request.environment_id:
+                raise LaunchError("revision_unavailable")
+            if settings.credits_enabled and (owner.nuke_balance or 0) < (plan.cost_per_hour or 0):
+                raise LaunchError("insufficient_credits", 402)
+            runtime = ImageIdentity.model_validate(revision.runtime_identity)
+            toolchain = (
+                ImageIdentity.model_validate(revision.toolchain_identity)
+                if revision.toolchain_identity
+                else None
+            )
+            roots = (
+                (revision.configuration.get("tool_mounts") or ["/opt/nuke"]) if toolchain else []
+            )
+            await validate_launch_volumes(
+                self.db, owner, request, plan, protected_mount_paths=roots
+            )
+        # Immutable local identity is the only lookup key; never pull the original tag.
+        for approved in (runtime, toolchain):
+            if approved is None:
+                continue
+            if not await self.driver.image_exists(approved.local_id):
+                raise LaunchError("artifact_missing", 409)
+            actual = ImageIdentity.model_validate(
+                await self.driver.resolve_image(approved.local_id)
+            )
+            if (actual.local_id, actual.os, actual.architecture) != (
+                approved.local_id,
+                approved.os,
+                approved.architecture,
+            ):
+                raise LaunchError("revision_unavailable")
+        if toolchain:
+            self.driver.immutable_toolchain_cache_name(toolchain.model_dump(mode="json"), roots)
+        reservation = await self.reserve(owner_id, request, revision_id)
+        if isinstance(reservation, QueuedServerResponse):
+            return reservation
+        return await self.provision(reservation)
 
     async def submit(self, owner_id: uuid.UUID, request: NormalizedLaunchRequest):
         revision_id = await self.resolve_revision(owner_id, request)

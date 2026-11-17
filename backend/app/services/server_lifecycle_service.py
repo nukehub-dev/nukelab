@@ -20,12 +20,21 @@ from app.models.server_queue import ServerQueue
 from app.models.server_volume import ServerVolume
 from app.models.user import User
 from app.models.volume import Volume
+from app.schemas.server_launch import NormalizedVolumeMount
 from app.services.admission_service import acquire_admission_lock
 from app.services.gpu_allocator import GpuAllocatorService
 from app.services.quota_service import QuotaService
 from app.services.resource_pool_service import ResourcePoolService
-from app.services.server_launch_service import LaunchError, LaunchReservation, ServerLaunchService
-from app.services.server_launch_validation import normalize_launch_request, validate_launch_volumes
+from app.services.server_launch_service import (
+    LaunchError,
+    LaunchReservation,
+    ServerLaunchService,
+)
+from app.services.server_launch_validation import (
+    LaunchValidationError,
+    normalize_launch_request,
+    validate_launch_volumes,
+)
 from app.services.server_operation_service import (
     ACTIVE_STATES,
     claim_operation,
@@ -141,7 +150,13 @@ class ServerLifecycleService(ServerLaunchService):
             raise LaunchError("request_already_exists")
 
     async def reserve_existing(
-        self, server_id, *, owner_id=None, request=None, action="start", expected_version=None
+        self,
+        server_id,
+        *,
+        owner_id=None,
+        request=None,
+        action="start",
+        expected_version=None,
     ):
         if action not in ("start", "restart", "update"):
             raise ValueError("Invalid lifecycle action")
@@ -244,6 +259,10 @@ class ServerLifecycleService(ServerLaunchService):
 
                 access = VolumeAccessService(self.db)
                 for mount in previous:
+                    try:
+                        NormalizedVolumeMount.canonical_mount_path(mount["mount_path"])
+                    except ValueError:
+                        raise LaunchValidationError("invalid_mount_path", 422) from None
                     volume = await self.db.get(
                         Volume, uuid.UUID(mount["volume_id"]), populate_existing=True
                     )
@@ -280,7 +299,17 @@ class ServerLifecycleService(ServerLaunchService):
                     plan.cost_per_hour or 0
                 ):
                     raise LaunchError("insufficient_credits", 402)
-                selections = await validate_launch_volumes(self.db, owner, request, plan)
+                selections = await validate_launch_volumes(
+                    self.db,
+                    owner,
+                    request,
+                    plan,
+                    protected_mount_paths=(
+                        revision.configuration.get("tool_mounts") or ["/opt/nuke"]
+                    )
+                    if revision.toolchain_identity
+                    else (),
+                )
                 request = request.model_copy(update={"volume_mounts": selections})
                 mounts = []
                 for selection in selections:
@@ -469,7 +498,11 @@ class ServerLifecycleService(ServerLaunchService):
             await self.db.rollback()
             async with self.db.begin():
                 await finish_operation(
-                    self.db, operation_id, token, "uncertain", reason_code="recovery_required"
+                    self.db,
+                    operation_id,
+                    token,
+                    "uncertain",
+                    reason_code="recovery_required",
                 )
                 server = await self.db.get(Server, server_id)
                 if server and server.status == "starting":
@@ -479,7 +512,12 @@ class ServerLifecycleService(ServerLaunchService):
             raise LaunchError("recovery_required", 503) from exc
 
     async def start(
-        self, server_id, owner_id=None, request=None, action="start", expected_version=None
+        self,
+        server_id,
+        owner_id=None,
+        request=None,
+        action="start",
+        expected_version=None,
     ):
         reservation = await self.reserve_existing(
             server_id,
@@ -496,7 +534,10 @@ class ServerLifecycleService(ServerLaunchService):
 
     async def restart(self, server_id, owner_id=None, *, expected_version=None):
         return await self.start(
-            server_id, owner_id=owner_id, action="restart", expected_version=expected_version
+            server_id,
+            owner_id=owner_id,
+            action="restart",
+            expected_version=expected_version,
         )
 
     async def update(self, server_id, changes, owner_id=None):
@@ -576,7 +617,15 @@ class ServerLifecycleService(ServerLaunchService):
                 raise LaunchError("launch_in_progress")
             owner, plan, environment = await self._policy(server.user_id, request)
             await self._name_available(owner.id, server.id, request.name)
-            selected = await validate_launch_volumes(self.db, owner, request, plan)
+            selected = await validate_launch_volumes(
+                self.db,
+                owner,
+                request,
+                plan,
+                protected_mount_paths=(environment.tool_mounts or ["/opt/nuke"])
+                if environment.tool_image
+                else (),
+            )
             request = request.model_copy(update={"volume_mounts": selected})
             old = await self._mounts(server, owner.username)
             operation_id = uuid.uuid4()
@@ -684,7 +733,9 @@ class ServerLifecycleService(ServerLaunchService):
                         volume, mount["mount_path"], owner.username, mounted=False
                     )
                 from app.models.volume_operation import VolumeOperation
-                from app.services.volume_operation_service import transition_volume_operation
+                from app.services.volume_operation_service import (
+                    transition_volume_operation,
+                )
 
                 guards = (
                     await self.db.scalars(
@@ -713,6 +764,10 @@ class ServerLifecycleService(ServerLaunchService):
             await self.db.rollback()
             async with self.db.begin():
                 await finish_operation(
-                    self.db, operation_id, token, "uncertain", reason_code="recovery_required"
+                    self.db,
+                    operation_id,
+                    token,
+                    "uncertain",
+                    reason_code="recovery_required",
                 )
             raise

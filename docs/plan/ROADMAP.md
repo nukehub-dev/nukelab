@@ -65,7 +65,7 @@ See [IMPLEMENTATION-PHASES.md](IMPLEMENTATION-PHASES.md) for the full phase-by-p
 | Capability | Status | Implemented evidence | Remaining scope |
 | --- | --- | --- | --- |
 | Environment image build/publish | Complete | `.github/workflows/ci.yml`, `scripts/ci-version.sh` | Scheduled base-image digest refresh and scientific image validation are separate follow-ups; scientific image ownership is in the separate environments repository |
-| Reproducible environments | Partial | Approved revision/launch services and manifests; local image resolution, immutable toolchain caches and reserved spawner; shared launch/lifecycle services capture verified runtime generations and retain uncertain reservations | Read/export/validated-recreation APIs and UI; registry portability and combined runtime verification |
+| Reproducible environments | Partial | Approved immutable revisions/caches and verified generations; capability-gated provenance, sanitized export, validated source/import recreation APIs and owner UI | Verified registry portability, cross-installation approval matching and combined real-runtime/browser acceptance |
 | Database backup/restore | Complete | `scripts/manage.d/backup.sh`, `restore.sh`, `db-migrate.sh`; backend schema guard | Automated recovery drills and broader disaster-recovery policy |
 | User volume backup/restore | Partial | `VolumeBackup` scaffolding plus durable `volume_operation_service.py` and bounded `volume_archive_service.py` extraction foundation | Backup capture/storage/retention, runtime helper and attachment checks, all writer/start guards, API/tasks/UI; recovery remains unavailable |
 | Resource queue experience | Partial | Typed 202 acceptance, atomic API/worker admission, owner queue UI/cancellation, GPU-aware waiting and rotating bounded dispatch | Combined real-stack browser/runtime acceptance and worker-crash reconciliation rehearsal |
@@ -80,7 +80,7 @@ See [IMPLEMENTATION-PHASES.md](IMPLEMENTATION-PHASES.md) for the full phase-by-p
 Queue reliability, reproducible environments, private offline volume recovery, and frontend test CI are accepted implementation scope. Backend foundations are present; the end-to-end workflows remain incomplete.
 
 1. **Finish existing workflows (In Progress)** — Verify the integrated launch/queue and owner cancellation flows against an isolated stack; wire frontend tests into CI.
-2. **Research reproducibility (In Progress)** — Persist resolved image/toolchain identities and provide export/recreate; extend existing composition rather than rebuilding image publishing.
+2. **Research reproducibility (In Progress)** — Verify the implemented capture/export/recreate workflow against real runtimes and add verified registry portability; extend existing composition rather than rebuilding image publishing.
 3. **Research data recovery (In Progress)** — Deliver user volume backup/restore and verify database recovery through isolated drills.
 4. **Batch jobs** — Add a minimal command-based job lifecycle, then parameter sweeps after single jobs are reliable.
 5. **Scoped workload secrets** — Separate credentials from ordinary template configuration; choose the storage/integration approach during design.

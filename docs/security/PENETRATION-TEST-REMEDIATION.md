@@ -129,3 +129,11 @@ PENT-NKL-015 is owned by Backend Eng. Logout stops now use verified termination,
 with an active-operation/GPU regression in
 `backend/tests/security/test_logout_lifecycle_fencing.py`. Combined runtime retest
 remains required.
+
+## Provenance preview metadata authorization
+
+PENT-NKL-016 is owned by Backend Eng and was remediated before release. Preview
+requires separate read/write permissions and both scopes. Regression coverage is
+in `backend/tests/security/test_provenance_recreation.py`; metadata responses use
+private no-store caching and read-only token eligibility reflects missing manage
+scope. Final recreation rechecks current approval and uses ordinary admission.

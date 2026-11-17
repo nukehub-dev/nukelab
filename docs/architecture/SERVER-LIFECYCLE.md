@@ -81,6 +81,41 @@ retain atomic locks without TTL takeover. Existing data and read-only mounts are
 not chmodded as part of launch. Repository digest metadata alone does not prove
 registry portability.
 
+## Provenance, export and approved recreation
+
+The server detail page shows the last verified launch, requested/observed artifact
+identities, capture time and recorded limitations. A newer starting or uncertain
+replacement does not make an older record proof of the current runtime. Legacy
+servers without records remain explicitly unrecorded. Exports select the displayed
+immutable launch and return its saved sanitized manifest, never today's template
+or a raw runtime inspection. Revocation blocks recreation while retaining history.
+
+`server_recreation_service.py` validates either an owned source launch or a bounded
+strict manifest against an existing approved revision. Imports do not create
+approval or grant access. The owner UI supports source recreation and imported
+JSON; API cross-user history retains JWT/reason/audit rules, while source launch
+IDs remain owner-only. Read-only owners can inspect/export without creating work.
+
+Preview requires both read and write permissions/scopes because it discloses
+saved metadata. Final submission rechecks current approval and uses the normal
+write/manage boundary. A preview grants no permission, capacity or artifact lease.
+History/export and preview responses use private no-store caching. A read-scoped
+API token is not advertised as eligible to recreate without manage scope.
+
+Recreation asks for a new name, current plan and a deliberate fresh/existing volume
+for each logical requirement. Paths and modes match the validated preview; home
+aliases map to the actor's home, and source volume IDs are never copied. Imported
+resource descriptions and variable names grant no entitlement or environment-value
+override. Data destinations cannot overlap system security mounts or approved
+read-only toolchain roots, including parent and child paths.
+
+`submit_pinned()` verifies exact local artifact identity/platform before reservation
+and invokes the same direct/queued admission boundary. It does not resolve or pull
+the original mutable tag. Missing artifacts fail explicitly. The current driver
+records local-only identities; repository digests alone are not registry
+verification, and matching approval on a different installation is not automated.
+A manifest neither backs up user files nor freezes host drivers/external services.
+
 ## Worker ownership and recovery
 
 Runtime-capable Celery tasks use `operation_runner.py` with a task-local loop,
@@ -108,5 +143,5 @@ for upgrade and investigation requirements.
 | Scheduling and health | `services/schedule_service.py`, `services/health_check_service.py` |
 | Task ownership | `tasks.py`, `worker.py`, `services/operation_runner.py` |
 
-Volume backup capture/storage/retention, recovery APIs/UI, provenance read/export/recreate
-APIs/UI and combined real-stack acceptance remain separate delivery gates.
+Volume backup capture/storage/retention, recovery APIs/UI, verified registry
+portability and combined real-stack acceptance remain separate delivery gates.

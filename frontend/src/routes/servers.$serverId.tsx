@@ -37,6 +37,7 @@ import { useAuthStore } from '../stores/auth-store'
 import { LogViewer } from '../components/log-viewer'
 import { TasksTable } from '../components/tasks-table'
 import { ScheduleDialog } from '../components/server/schedule-dialog'
+import { ServerProvenancePanel } from '../components/server/server-provenance-panel'
 import { useServerMetrics } from '../hooks/use-server-metrics'
 import { formatDate, formatBytes, formatPlanResource, cn } from '../lib/utils'
 import { counterRate } from '../lib/metrics-rates'
@@ -585,6 +586,8 @@ function ServerDetailPage() {
           )}
         </div>
       </motion.div>
+
+      <ServerProvenancePanel server={server} />
 
       {/* Tabs */}
       <div className="flex items-center gap-1 border-b border-border">

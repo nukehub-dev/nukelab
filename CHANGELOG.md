@@ -16,6 +16,9 @@ section.
 
 ### Added
 
+- Saved launch provenance and sanitized environment export, with owner recreation
+  and manifest import through currently approved revisions, plans and explicit
+  volume choices. The UI shows the last verified launch and local-only limits.
 - Owner-scoped waiting requests with typed queued acceptance, capability-gated
   queue polling, pending cancellation and duplicate-request navigation.
 - Durable fenced lifecycle operations for start, restart, resize, stop and delete;
@@ -29,13 +32,16 @@ section.
   keeps the original cache mounted.
 - Backend foundations for durable queue requests, approved environment revisions,
   launch provenance, transaction-owned admission, and exclusive volume operations.
-  User-facing volume recovery and provenance export/recreation remain pending.
+  User-facing volume recovery remains pending.
 - Bounded archive validation and extraction into fresh destinations, with checksum,
   path/link, metadata, expansion and ownership checks.
 - Configurable allocatable CPU, memory and disk budgets and queue policy settings.
 
 ### Fixed
 
+- Recreation preview requires read and manage permissions/scopes so management
+  tokens cannot read saved manifests through a metadata preview.
+- Data mounts cannot shadow platform security paths or approved toolchain roots.
 - Home-volume sharing warnings survive lifecycle edits and server deletion;
   resumed legacy mounts retain their usage history.
 - Delayed runtime status reads cannot overwrite a newer lifecycle reservation.
