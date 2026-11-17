@@ -5,13 +5,11 @@
 
 Covers the gpu_devices config parsing, GpuAllocatorService pool bookkeeping
 (allocate / release / available / reconcile), the quota pool-exhaustion
-check, and the create-server API failure path releasing its reservation.
+check, and the create-server API preserving uncertain launch reservations.
 """
 
-import contextlib
 import uuid as uuid_mod
 from datetime import timedelta
-from unittest import mock
 
 import pytest
 import pytest_asyncio
@@ -23,10 +21,12 @@ from app.models.environment_template import EnvironmentTemplate
 from app.models.gpu_allocation import GpuAllocation
 from app.models.resource_quota import ResourceQuota
 from app.models.server import Server
+from app.models.server_launch_operation import ServerLaunchOperation
 from app.models.server_plan import ServerPlan
-from app.models.volume import Volume
+from app.models.server_queue import ServerQueue
 from app.services.gpu_allocator import GpuAllocatorService
 from app.services.quota_service import QuotaService
+from tests.api.servers.conftest import server_api_runtime as server_api_runtime
 
 POOL = "nvidia.com/gpu=0,nvidia.com/gpu=1"
 
@@ -234,7 +234,7 @@ class TestQuotaGpuPoolCheck:
 
 
 @pytest_asyncio.fixture
-async def gpu_plan_env(db_session):
+async def gpu_plan_env(db_session, test_user):
     """A GPU plan and environment for create-server API tests."""
     plan = ServerPlan(
         id=uuid_mod.uuid4(),
@@ -255,160 +255,107 @@ async def gpu_plan_env(db_session):
         slug=f"gpu-env-{uuid_mod.uuid4().hex[:8]}",
         image="test-image",
     )
-    db_session.add_all([plan, env])
+    quota = ResourceQuota(user_id=test_user.id, max_gpu_total=2)
+    db_session.add_all([plan, env, quota])
     await db_session.commit()
     return plan, env
 
 
-def _create_server_mocks(db_session, spawn_side_effect):
-    """Context manager mocking every service create_server touches."""
-
-    @contextlib.contextmanager
-    def _stack():
-        with (
-            mock.patch("app.api.servers.spawner.spawn", side_effect=spawn_side_effect),
-            mock.patch("app.services.quota_service.QuotaService") as mock_quota_cls,
-            mock.patch("app.services.resource_pool_service.ResourcePoolService") as mock_pool_cls,
-            mock.patch("app.services.credit_service.CreditService") as mock_credit_cls,
-            mock.patch("app.services.volume_service.VolumeService") as mock_vol_cls,
-            mock.patch("app.services.volume_access_service.VolumeAccessService") as mock_access_cls,
-        ):
-            mock_quota = mock_quota_cls.return_value
-            mock_quota.check_spawn_allowed = mock.AsyncMock(return_value={"allowed": True})
-            mock_quota.check_volume_creation_allowed = mock.AsyncMock(
-                return_value={"allowed": True}
-            )
-            mock_quota.increment_usage = mock.AsyncMock()
-
-            mock_pool = mock_pool_cls.return_value
-            mock_pool.can_fit = mock.AsyncMock(return_value=True)
-
-            mock_credit = mock_credit_cls.return_value
-            mock_credit.check_sufficient_credits = mock.AsyncMock(return_value=True)
-
-            mock_vol = mock_vol_cls.return_value
-
-            async def create_vol_side_effect(*, name, display_name, owner_id, max_size_bytes):
-                vol = Volume(
-                    name=name,
-                    display_name=display_name,
-                    owner_id=owner_id,
-                    size_bytes=max_size_bytes or 1000,
-                )
-                db_session.add(vol)
-                await db_session.commit()
-                await db_session.refresh(vol)
-                return vol
-
-            mock_vol.create_volume = mock.AsyncMock(side_effect=create_vol_side_effect)
-            mock_vol.record_mount = mock.AsyncMock()
-            mock_vol.mark_home_volume = mock.AsyncMock()
-            mock_vol.check_volumes_quota = mock.AsyncMock(return_value={"allowed": True})
-            mock_vol._parse_memory = mock.Mock(return_value=10737418240)
-
-            mock_access = mock_access_cls.return_value
-            mock_access.can_access_volume = mock.AsyncMock(return_value=True)
-
-            yield
-
-    return _stack()
-
-
 class TestCreateServerGpuAllocation:
-    """Exclusive pool behavior of POST /api/servers/."""
+    """Exclusive pool admission through the real launch service and a fake driver."""
 
     @pytest.mark.asyncio
     async def test_create_reserves_and_forwards_gpu_devices(
-        self, client, user_token, test_user, db_session, gpu_plan_env, gpu_pool, monkeypatch
+        self,
+        client,
+        user_token,
+        db_session,
+        gpu_plan_env,
+        gpu_pool,
+        monkeypatch,
+        server_api_runtime,
     ):
         monkeypatch.setattr(settings, "gpu_enabled", True)
         plan, env = gpu_plan_env
-
-        captured = {}
-
-        async def fake_spawn(**kwargs):
-            captured.update(kwargs)
-            return Server(
-                id=uuid_mod.UUID(kwargs["server_id"]),
-                name=kwargs["server_name"],
-                user_id=test_user.id,
-                environment_id=env.id,
-                container_id="container-gpu",
-                image=env.image,
-                status="running",
-                allocated_cpu=plan.cpu_limit,
-                allocated_memory=plan.memory_limit,
-                allocated_disk=plan.disk_limit,
-                allocated_gpu=plan.gpu_limit,
-                external_url="http://test/url",
-            )
-
-        ctx = _create_server_mocks(db_session, fake_spawn)
-        with ctx:
-            response = await client.post(
-                "/api/servers/",
-                headers={"Authorization": f"Bearer {user_token}"},
-                json={
-                    "name": "gpu-server",
-                    "plan_id": str(plan.id),
-                    "environment_id": str(env.id),
-                },
-            )
-
-        assert response.status_code == 200, f"Response: {response.text}"
-        assert captured["gpu"] == 1
-        assert captured["gpu_devices"] == ["nvidia.com/gpu=0"]
-
-        result = await db_session.execute(select(func.count()).select_from(GpuAllocation))
-        assert result.scalar() == 1
+        request = {"name": "gpu-server", "plan_id": str(plan.id), "environment_id": str(env.id)}
+        response = await client.post(
+            "/api/servers/", headers={"Authorization": f"Bearer {user_token}"}, json=request
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["allocated_gpu"] == 1
+        config = server_api_runtime.create_container.call_args.kwargs
+        assert config["gpu_limit"] == 1 and config["gpu_devices"] == ["nvidia.com/gpu=0"]
+        allocation = await db_session.scalar(select(GpuAllocation))
+        assert str(allocation.server_id) == response.json()["id"]
+        assert allocation.device == "nvidia.com/gpu=0"
 
     @pytest.mark.asyncio
-    async def test_create_releases_allocation_when_spawn_fails(
-        self, client, user_token, test_user, db_session, gpu_plan_env, gpu_pool, monkeypatch
+    async def test_uncertain_create_keeps_gpu_allocation_until_runtime_reconciled(
+        self,
+        client,
+        user_token,
+        db_session,
+        gpu_plan_env,
+        gpu_pool,
+        monkeypatch,
+        server_api_runtime,
     ):
         monkeypatch.setattr(settings, "gpu_enabled", True)
         plan, env = gpu_plan_env
-
-        ctx = _create_server_mocks(db_session, Exception("spawn boom"))
-        with ctx:
-            response = await client.post(
-                "/api/servers/",
-                headers={"Authorization": f"Bearer {user_token}"},
-                json={
-                    "name": "gpu-server",
-                    "plan_id": str(plan.id),
-                    "environment_id": str(env.id),
-                },
-            )
-
-        assert response.status_code == 500, f"Response: {response.text}"
-
-        # The reservation made before spawning must be gone.
-        result = await db_session.execute(select(func.count()).select_from(GpuAllocation))
-        assert result.scalar() == 0
+        request = {"name": "gpu-server", "plan_id": str(plan.id), "environment_id": str(env.id)}
+        server_api_runtime.create_container.side_effect = RuntimeError("unknown create outcome")
+        response = await client.post(
+            "/api/servers/", headers={"Authorization": f"Bearer {user_token}"}, json=request
+        )
+        assert response.status_code == 503, response.text
+        assert response.json()["detail"]["code"] == "recovery_required"
+        allocation = await db_session.scalar(select(GpuAllocation))
+        assert allocation is not None and allocation.device == "nvidia.com/gpu=0"
+        reserved = await db_session.get(Server, allocation.server_id)
+        assert reserved.status == "starting" and reserved.status_reason == "recovery_required"
+        operation = await db_session.get(ServerLaunchOperation, reserved.id)
+        assert operation.state == "uncertain"
+        server_api_runtime.delete_container.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_create_fails_with_429_when_pool_exhausted(
-        self, client, user_token, test_user, db_session, gpu_plan_env, gpu_pool, monkeypatch
+    async def test_exhausted_pool_queues_request_without_allocating_devices(
+        self,
+        client,
+        user_token,
+        admin_user,
+        db_session,
+        gpu_plan_env,
+        gpu_pool,
+        monkeypatch,
+        server_api_runtime,
     ):
         monkeypatch.setattr(settings, "gpu_enabled", True)
         plan, env = gpu_plan_env
-
-        # Occupy the only device (pool has 2, occupy both via two servers).
+        request = {"name": "gpu-server", "plan_id": str(plan.id), "environment_id": str(env.id)}
+        holder = Server(
+            id=uuid_mod.uuid4(),
+            name="other-owner-gpu-holder",
+            user_id=admin_user.id,
+            status="running",
+            allocated_gpu=2,
+        )
+        db_session.add(holder)
+        await db_session.commit()
+        holder_id = holder.id
         allocator = GpuAllocatorService(db_session)
-        assert await allocator.allocate(str(uuid_mod.uuid4()), 2) is not None
-
-        ctx = _create_server_mocks(db_session, Exception("should not be called"))
-        with ctx:
-            response = await client.post(
-                "/api/servers/",
-                headers={"Authorization": f"Bearer {user_token}"},
-                json={
-                    "name": "gpu-server",
-                    "plan_id": str(plan.id),
-                    "environment_id": str(env.id),
-                },
-            )
-
-        assert response.status_code == 429, f"Response: {response.text}"
-        assert "No GPUs available" in response.json()["detail"]
+        assert await allocator.allocate(str(holder_id), 2) == [
+            "nvidia.com/gpu=0",
+            "nvidia.com/gpu=1",
+        ]
+        response = await client.post(
+            "/api/servers/", headers={"Authorization": f"Bearer {user_token}"}, json=request
+        )
+        assert response.status_code == 202, response.text
+        assert response.json()["queued"] is True
+        queued = await db_session.get(ServerQueue, uuid_mod.UUID(response.json()["queue_id"]))
+        assert queued.reason_code == "gpu_wait" and queued.requested_gpu == 1
+        assert queued.request_payload["volume_mounts"][0]["volume_id"] == ""
+        allocations = list(await db_session.scalars(select(GpuAllocation)))
+        assert len(allocations) == 2 and {row.server_id for row in allocations} == {holder_id}
+        assert await db_session.scalar(select(func.count()).select_from(Server)) == 1
+        server_api_runtime.create_container.assert_not_awaited()

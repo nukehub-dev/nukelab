@@ -7,9 +7,7 @@ from unittest import mock
 
 import pytest
 
-from app.models.environment_template import EnvironmentTemplate
 from app.models.server import Server
-from app.models.server_plan import ServerPlan
 
 # ─────────────────────────────────────────────────────────────
 # POST /logout — stop_on_logout branches
@@ -17,164 +15,62 @@ from app.models.server_plan import ServerPlan
 
 
 class TestLogoutStopOnLogout:
-    """Tests for logout with stop_on_logout preference."""
+    """Logout uses the same verified termination boundary as other callers."""
 
     @pytest.mark.asyncio
-    async def test_logout_stop_on_logout_running_server(
+    @pytest.mark.parametrize("failure", [False, True])
+    async def test_logout_delegates_and_survives_a_failed_item(
+        self, client, user_token, test_user, db_session, failure
+    ):
+        from app.services.server_launch_service import LaunchError
+
+        owner_id = test_user.id
+        test_user.preferences = {"stop_on_logout": True}
+        rows = [
+            Server(
+                name=f"logout-{i}", user_id=owner_id, status="running", container_id=f"runtime-{i}"
+            )
+            for i in range(2)
+        ]
+        db_session.add_all(rows)
+        await db_session.commit()
+        identifiers = [row.id for row in rows]
+
+        async def stop(identifier, owner_id=None):
+            if failure and identifier == identifiers[0]:
+                await db_session.rollback()
+                raise LaunchError("launch_in_progress")
+            row = await db_session.get(Server, identifier)
+            row.status = "stopped"
+            return row
+
+        with (
+            mock.patch("app.api.auth.get_driver", new=mock.AsyncMock(return_value=object())),
+            mock.patch("app.api.auth.ServerTerminationService") as service,
+        ):
+            service.return_value.stop = mock.AsyncMock(side_effect=stop)
+            response = await client.post(
+                "/api/auth/logout", headers={"Authorization": f"Bearer {user_token}"}
+            )
+        assert response.status_code == 200
+        assert service.return_value.stop.await_args_list == [
+            mock.call(identifier, owner_id=owner_id) for identifier in identifiers
+        ]
+        await db_session.refresh(rows[1])
+        assert rows[1].status == "stopped"
+
+    @pytest.mark.asyncio
+    async def test_logout_without_preference_has_no_runtime_mutation(
         self, client, user_token, test_user, db_session
     ):
-        """Logout should stop running servers when stop_on_logout is True."""
-        # Create a running server
-        plan = ServerPlan(
-            name="stop-plan",
-            slug="stop-plan",
-            cpu_limit=1,
-            memory_limit="1g",
-            disk_limit="10g",
-            is_public=True,
-            is_active=True,
-            cost_per_hour=0,
-            visible_to_roles=["user"],
-        )
-        env = EnvironmentTemplate(name="stop-env", slug="stop-env", image="test:latest")
-        db_session.add_all([plan, env])
-        await db_session.commit()
-        await db_session.refresh(plan)
-        await db_session.refresh(env)
-
-        server = Server(
-            name="stop-srv",
-            user_id=test_user.id,
-            status="running",
-            container_id="stop-cid",
-            plan_id=plan.id,
-            environment_id=env.id,
-        )
-        db_session.add(server)
-        test_user.preferences = {"stop_on_logout": True}
-        await db_session.commit()
-        await db_session.refresh(server)
-
-        with mock.patch("app.api.auth.spawner.get_status", return_value="running"):
-            with mock.patch("app.api.auth.spawner.delete", return_value=True):
-                with mock.patch("app.services.credit_service.CreditService") as mock_credit_cls:
-                    mock_credit_cls.return_value.reconcile_server_billing = mock.AsyncMock()
-                    with mock.patch("app.services.quota_service.QuotaService") as mock_quota_cls:
-                        mock_quota_cls.return_value.decrement_usage = mock.AsyncMock()
-                        with mock.patch(
-                            "app.services.notification_service.NotificationService"
-                        ) as mock_notif_cls:
-                            mock_notif_cls.return_value.server_stopped = mock.AsyncMock()
-                            with mock.patch("app.api.auth.broadcast_server_status_change"):
-                                response = await client.post(
-                                    "/api/auth/logout",
-                                    headers={"Authorization": f"Bearer {user_token}"},
-                                )
-
-        assert response.status_code == 200
-        # Spawner.delete should be called for running containers
-        # CreditService/QuotaService/NotificationService are imported locally
-        # inside the logout loop and are harder to mock consistently
-
-    @pytest.mark.asyncio
-    async def test_logout_stop_on_logout_already_stopped(
-        self, client, user_token, test_user, db_session
-    ):
-        """Logout should skip servers already stopped by spawner."""
-        server = Server(
-            name="stopped-srv",
-            user_id=test_user.id,
-            status="running",
-            container_id="stopped-cid",
-        )
-        db_session.add(server)
-        test_user.preferences = {"stop_on_logout": True}
-        await db_session.commit()
-
-        with mock.patch("app.api.auth.spawner.get_status", return_value="stopped"):
-            with mock.patch("app.api.auth.spawner.delete") as mock_delete:
-                response = await client.post(
-                    "/api/auth/logout",
-                    headers={"Authorization": f"Bearer {user_token}"},
-                )
-
-        assert response.status_code == 200
-        mock_delete.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_logout_stop_on_logout_unknown_status(
-        self, client, user_token, test_user, db_session
-    ):
-        """Logout should leave server running when runtime status is unknown."""
-        server = Server(
-            name="unknown-srv",
-            user_id=test_user.id,
-            status="running",
-            container_id="unknown-cid",
-        )
-        db_session.add(server)
-        test_user.preferences = {"stop_on_logout": True}
-        await db_session.commit()
-        await db_session.refresh(server)
-
-        with mock.patch("app.api.auth.spawner.get_status", return_value="unknown"):
-            with mock.patch("app.api.auth.spawner.delete") as mock_delete:
-                response = await client.post(
-                    "/api/auth/logout",
-                    headers={"Authorization": f"Bearer {user_token}"},
-                )
-
-        assert response.status_code == 200
-        mock_delete.assert_not_called()
-        await db_session.refresh(server)
-        assert server.status == "running"
-        assert server.container_id == "unknown-cid"
-
-    @pytest.mark.asyncio
-    async def test_logout_stop_on_logout_spawner_exception(
-        self, client, user_token, test_user, db_session
-    ):
-        """Logout should continue even if spawner raises exception."""
-        server = Server(
-            name="fail-srv",
-            user_id=test_user.id,
-            status="running",
-            container_id="fail-cid",
-        )
-        db_session.add(server)
-        test_user.preferences = {"stop_on_logout": True}
-        await db_session.commit()
-
-        with mock.patch("app.api.auth.spawner.get_status", return_value="running"):
-            with mock.patch("app.api.auth.spawner.delete", side_effect=Exception("docker down")):
-                response = await client.post(
-                    "/api/auth/logout",
-                    headers={"Authorization": f"Bearer {user_token}"},
-                )
-
-        assert response.status_code == 200
-
-    @pytest.mark.asyncio
-    async def test_logout_no_stop_on_logout(self, client, user_token, test_user, db_session):
-        """Logout should not stop servers when stop_on_logout is False."""
-        server = Server(
-            name="keep-srv",
-            user_id=test_user.id,
-            status="running",
-            container_id="keep-cid",
-        )
-        db_session.add(server)
         test_user.preferences = {"stop_on_logout": False}
         await db_session.commit()
-
-        with mock.patch("app.api.auth.spawner.get_status") as mock_status:
+        with mock.patch("app.api.auth.ServerTerminationService") as service:
             response = await client.post(
-                "/api/auth/logout",
-                headers={"Authorization": f"Bearer {user_token}"},
+                "/api/auth/logout", headers={"Authorization": f"Bearer {user_token}"}
             )
-
         assert response.status_code == 200
-        mock_status.assert_not_called()
+        service.assert_not_called()
 
 
 # ─────────────────────────────────────────────────────────────

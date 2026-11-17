@@ -33,7 +33,7 @@ class QueueEntryResponse(BaseModel):
     position: int | None = Field(default=None, ge=1)
     reason_code: str | None = None
     message: str
-    requested_at: datetime
+    requested_at: datetime | None
     expires_at: datetime | None = None
     started_at: datetime | None = None
     server_id: UUID | None = None

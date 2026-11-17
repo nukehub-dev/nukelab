@@ -27,7 +27,6 @@ from app.models.server import Server
 from app.models.user import User
 from app.models.volume import Volume
 from app.services.credit_service import CreditService
-from app.services.notification_service import broadcast_server_status_change
 from app.services.token_revocation_service import token_revocation_service
 from app.services.user_service import UserService
 from app.services.volume_service import VolumeService
@@ -372,117 +371,61 @@ async def bulk_server_action(
     _jwt=Depends(require_jwt_auth()),
     db: AsyncSession = Depends(get_db),
 ):
-    """Perform bulk action on servers (batch fetch, single commit)."""
+    """Apply independently fenced lifecycle actions; report per-server failures."""
     from uuid import UUID
 
-    from app.container.spawner import spawner
+    from app.api.servers import (
+        _invalidate_server_list_cache,
+        _perform_server_delete,
+        _perform_server_start,
+        _perform_server_stop,
+    )
 
-    # Validate action up front
     if body.action not in ("start", "stop", "delete"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unknown action: {body.action}"
-        )
-
-    results = {"success": [], "failed": []}
-    affected_user_ids: set[str] = set()
-    status_changes: list[tuple[str, str, str]] = []  # (user_id, server_id, status)
-    gpu_release_ids: list[str] = []  # servers whose GPU devices release after commit
-
-    # Validate UUIDs
+        raise HTTPException(status_code=400, detail=f"Unknown action: {body.action}")
     try:
-        server_uuids = [UUID(sid) for sid in body.server_ids]
+        ids = [UUID(value) for value in body.server_ids]
     except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid server ID format"
-        )
-
-    # Batch fetch all servers
-    result = await db.execute(select(Server).where(Server.id.in_(server_uuids)))
-    servers = {str(s.id): s for s in result.scalars().all()}
-
-    # Track missing servers
-    missing = set(body.server_ids) - set(servers)
-    for sid in missing:
-        results["failed"].append({"server_id": sid, "error": "Server not found"})
-
-    # Process actions
-    for server_id in body.server_ids:
-        if server_id in missing:
-            continue
-
-        server = servers[server_id]
+        raise HTTPException(status_code=400, detail="Invalid server ID format")
+    results = {"success": [], "failed": []}
+    owners = set()
+    for server_uuid in ids:
+        sid = str(server_uuid)
         try:
+            server = await db.scalar(
+                select(Server)
+                .where(Server.id == server_uuid)
+                .execution_options(populate_existing=True)
+            )
+            if server is None:
+                results["failed"].append({"server_id": sid, "error": "Server not found"})
+                continue
+            owners.add(str(server.user_id))
             if body.action == "start":
-                if server.container_id:
-                    from app.api.servers import _gpu_requires_recreate, _respawn_server_container
-
-                    if await _gpu_requires_recreate(db, server):
-                        # GPU server: never plain-start a container with stale
-                        # baked-in DeviceRequests — its exclusive device rows
-                        # were released on bulk stop and may be reassigned.
-                        # Recreate with the devices it owns; a dry pool fails
-                        # this entry (recorded below) without starting it.
-                        new_server = await _respawn_server_container(server, db, server.name)
-                        server.container_id = new_server.container_id
-                        server.image = new_server.image
-                        server.volume_id = new_server.volume_id
-                        server.external_url = new_server.external_url
-                    else:
-                        if not await spawner.start(server.container_id):
-                            raise Exception("Failed to start container")
-                    server.status = "running"
-                    status_changes.append((str(server.user_id), server_id, "running"))
+                await _perform_server_start(server, db, current_user, sid)
             elif body.action == "stop":
-                if server.container_id:
-                    if not await spawner.stop(server.container_id):
-                        raise Exception("Failed to stop container")
-                    server.status = "stopped"
-                    status_changes.append((str(server.user_id), server_id, "stopped"))
-                    gpu_release_ids.append(server_id)
-            elif body.action == "delete":
-                user_id = str(server.user_id)
-                if server.container_id:
-                    if not await spawner.delete(server.container_id):
-                        raise Exception("Failed to delete container")
-                await db.delete(server)
-                affected_user_ids.add(user_id)
-                gpu_release_ids.append(server_id)
-
-            if body.action in ("start", "stop"):
-                affected_user_ids.add(str(server.user_id))
-            results["success"].append(server_id)
-        except Exception as e:
-            results["failed"].append({"server_id": server_id, "error": str(e)})
-
-    # Single atomic commit for all successful DB changes
-    await db.commit()
-
-    # Release exclusive GPU devices for stopped/deleted servers (idempotent;
-    # done after the atomic commit so a release failure cannot break it).
-    if gpu_release_ids:
-        from app.services.gpu_allocator import GpuAllocatorService
-
-        for sid in gpu_release_ids:
-            try:
-                await GpuAllocatorService(db).release(sid)
-            except Exception:
-                logger.exception("Failed to release GPU devices for server %s", sid)
-
-    # Broadcast status changes after successful commit
-    for user_id, sid, srv_status in status_changes:
-        await broadcast_server_status_change(user_id, sid, srv_status)
-
-    # Invalidate caches for all affected users + admin lists
-    from app.api.servers import _invalidate_server_list_cache
-
-    for uid in affected_user_ids:
-        await _invalidate_server_list_cache(uid)
-
-    return {
-        "message": f"Processed {len(body.server_ids)} servers",
-        "action": body.action,
-        "results": results,
-    }
+                await _perform_server_stop(server, db, sid)
+            else:
+                await _perform_server_delete(server, db, sid)
+            results["success"].append(sid)
+        except HTTPException as error:
+            await db.rollback()
+            detail = error.detail
+            results["failed"].append(
+                {
+                    "server_id": sid,
+                    "error": detail.get("code", "operation_failed")
+                    if isinstance(detail, dict)
+                    else detail,
+                }
+            )
+        except Exception:
+            await db.rollback()
+            logger.exception("Admin server lifecycle action failed", extra={"server_id": sid})
+            results["failed"].append({"server_id": sid, "error": "operation_failed"})
+    for owner_id in owners:
+        await _invalidate_server_list_cache(owner_id)
+    return {"message": f"Processed {len(ids)} servers", "action": body.action, "results": results}
 
 
 # ========== Credit Management (Admin) ==========

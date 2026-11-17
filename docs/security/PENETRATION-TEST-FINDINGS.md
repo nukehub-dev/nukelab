@@ -660,3 +660,56 @@ Endpoint now mirrors `GET /users/{user_id}`: self-view allowed; other users requ
 
 - OWASP API1:2023 Broken Object Level Authorization
 - `backend/app/core/permissions.py`
+
+### PENT-NKL-014: Delayed status observations could invalidate lifecycle reservations
+
+**Severity:** Medium
+
+**CVSS 3.1:** 4.3 (`AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:L/A:N`)
+
+**Status:** Remediated; combined runtime retest pending
+
+**Opened:** 2026-11-16
+
+**Owner:** Backend Eng
+
+**Component:** `backend/app/api/servers.py`
+
+A read-side runtime probe could finish after another lifecycle action reserved or
+replaced a server. Applying that stale result could mark protected work stopped
+and undermine resource accounting. The probe now skips reserved starting/stopping
+states and checks container identity, row version and active journal under
+admission before applying an observation. Runtime probe failure preserves loaded
+state; database failures are not swallowed as a successful status refresh. Paused
+runtimes retain accounting because they still hold host memory.
+
+Health probes also compare sampled container/version under admission before
+persisting results and hand that version to restart admission; failure streaks
+are scoped to each runtime container.
+
+Retest `backend/tests/security/test_server_status_fencing.py` and
+`backend/tests/security/test_health_observation_fencing.py`, including delayed
+observations during generation, container and journal changes. Also rehearse
+concurrent browser reads and lifecycle actions against an isolated runtime.
+
+### PENT-NKL-015: Logout runtime mutations bypassed lifecycle fencing
+
+**Severity:** Medium
+
+**CVSS 3.1:** 4.3 (`AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:L/A:N`)
+
+**Status:** Remediated; combined runtime retest pending
+
+**Opened:** 2026-11-16
+
+**Owner:** Backend Eng
+
+Logout's optional server shutdown used direct runtime calls and independent GPU
+release. A concurrent replacement could finish before logout wrote its stale
+result, losing the newer server state and reservation. Logout now delegates to
+verified termination and preserves active/uncertain claims. Token revocation
+commits before lifecycle transaction ownership; one failed server does not block
+logout or subsequent items.
+
+Retest `backend/tests/security/test_logout_lifecycle_fencing.py` and auth API
+transport regressions, then race logout against replacement on an isolated daemon.

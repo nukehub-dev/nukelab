@@ -39,7 +39,10 @@ import { useEnvironments } from '../hooks/use-environments'
 import { usePlans } from '../hooks/use-plans'
 import { useVolumes } from '../hooks/use-volumes'
 import { useDataTable } from '../hooks/use-data-table'
-import { useAuthStore } from '../stores/auth-store'
+import { useAuthStore, PERMISSIONS } from '../stores/auth-store'
+import { isQueuedServer, parseQueueSearch } from '../lib/server-queue'
+import { useQueueCapabilities } from '../hooks/use-server-queue'
+import { ServerQueuePanel } from '../components/server/server-queue-panel'
 import { formatDate, formatBytes, formatPlanResource, parseMemoryString } from '../lib/utils'
 import type { Server as ServerType } from '../types/api'
 import {
@@ -61,9 +64,16 @@ import { DeployServerDialog } from '../components/server/deploy-server-dialog'
 
 export const Route = createFileRoute('/servers/')({
   component: ServersPage,
+  validateSearch: parseQueueSearch,
 })
 
 function ServersPage() {
+  const search = Route.useSearch()
+  const navigate = Route.useNavigate()
+  const capabilities = useQueueCapabilities()
+  const canReadQueue = useAuthStore((state) => state.hasPermission(PERMISSIONS.SERVERS_READ_OWN))
+  const queueEnabled = canReadQueue && capabilities.data?.enabled === true
+  const viewingQueue = search.tab === 'queue' && queueEnabled
   const { confirm, dialog } = useConfirmDialog()
   const { data: servers = [], isLoading, isError, error } = useServers()
   const {
@@ -805,48 +815,81 @@ function ServersPage() {
           },
         ]}
       >
-        {/* Servers Table - Always paginated flat view for performance */}
-        <DataTable
-          columns={columns}
-          data={paginatedServers}
-          totalCount={sortedServers.length}
-          pageCount={pageCount}
-          page={tableState.page}
-          limit={tableState.limit}
-          sorting={sorting}
-          rowSelection={rowSelection}
-          columnFilters={columnFilters}
-          columnVisibility={columnVisibility}
-          globalFilter={tableState.search}
-          isLoading={isLoading}
-          isError={isError}
-          errorMessage={error?.message}
-          onPageChange={setPage}
-          onLimitChange={setLimit}
-          onSortingChange={setSorting}
-          onRowSelectionChange={setRowSelection}
-          onColumnFiltersChange={setColumnFilters}
-          onColumnVisibilityChange={setColumnVisibility}
-          onGlobalFilterChange={setSearch}
-          getRowId={(row) => row.id}
-          bulkActions={bulkActions}
-          filters={filters}
-          searchable
-          searchPlaceholder="Search by name or status..."
-          mobileCardRenderer={mobileCardRenderer}
-          emptyState={
-            <EmptyState
-              icon={Server}
-              title="No servers yet"
-              description="Deploy your first simulation server to get started."
-              action={{
-                label: 'Deploy Server',
-                onClick: () => setDialogOpen(true),
-                icon: Plus,
-              }}
-            />
-          }
-        />
+        {queueEnabled && (
+          <nav aria-label="Server sections" className="flex gap-2 mb-4">
+            <Button
+              variant={!viewingQueue ? 'default' : 'outline'}
+              aria-current={!viewingQueue ? 'page' : undefined}
+              onClick={() => navigate({ search: {} })}
+            >
+              Servers
+            </Button>
+            <Button
+              variant={viewingQueue ? 'default' : 'outline'}
+              aria-current={viewingQueue ? 'page' : undefined}
+              onClick={() => navigate({ search: { tab: 'queue' } })}
+            >
+              Waiting requests
+            </Button>
+          </nav>
+        )}
+        {search.tab === 'queue' && !queueEnabled && (
+          <p role="status" className="mb-4 text-sm text-muted-foreground">
+            {capabilities.isPending
+              ? 'Checking request availability…'
+              : 'Waiting requests are currently unavailable.'}
+          </p>
+        )}
+        {viewingQueue ? (
+          <ServerQueuePanel
+            requestId={search.request}
+            plans={plans}
+            environments={environments}
+            onSelect={(request) => navigate({ search: { tab: 'queue', request } })}
+          />
+        ) : (
+          <DataTable
+            columns={columns}
+            data={paginatedServers}
+            totalCount={sortedServers.length}
+            pageCount={pageCount}
+            page={tableState.page}
+            limit={tableState.limit}
+            sorting={sorting}
+            rowSelection={rowSelection}
+            columnFilters={columnFilters}
+            columnVisibility={columnVisibility}
+            globalFilter={tableState.search}
+            isLoading={isLoading}
+            isError={isError}
+            errorMessage={error?.message}
+            onPageChange={setPage}
+            onLimitChange={setLimit}
+            onSortingChange={setSorting}
+            onRowSelectionChange={setRowSelection}
+            onColumnFiltersChange={setColumnFilters}
+            onColumnVisibilityChange={setColumnVisibility}
+            onGlobalFilterChange={setSearch}
+            getRowId={(row) => row.id}
+            bulkActions={bulkActions}
+            filters={filters}
+            searchable
+            searchPlaceholder="Search by name or status..."
+            mobileCardRenderer={mobileCardRenderer}
+            emptyState={
+              <EmptyState
+                icon={Server}
+                title="No servers yet"
+                description="Deploy your first simulation server to get started."
+                action={{
+                  label: 'Deploy Server',
+                  onClick: () => setDialogOpen(true),
+                  icon: Plus,
+                }}
+              />
+            }
+          />
+        )}
       </ResourcePageLayout>
 
       <DeployServerDialog
@@ -860,10 +903,18 @@ function ServersPage() {
         defaultEnvironmentId={defaultEnvironmentId}
         isPending={createServer.isPending}
         error={createServer.error}
+        onViewQueued={(request) => {
+          setDialogOpen(false)
+          void navigate({ search: { tab: 'queue', request } })
+        }}
         onDeploy={(data) => {
           createServer.mutate(data, {
-            onSuccess: () => {
+            onSuccess: (result) => {
+              if (useAuthStore.getState().user?.id !== user?.id) return
               setDialogOpen(false)
+              if (isQueuedServer(result)) {
+                void navigate({ search: { tab: 'queue', request: result.queue_id } })
+              }
             },
           })
         }}

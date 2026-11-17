@@ -303,106 +303,29 @@ class TestBulkServerAction:
         assert "Invalid server ID format" in exc_info.value.detail
 
     @pytest.mark.asyncio
-    async def test_stop_releases_gpu_even_when_release_fails(self):
-        server = _server()
+    @pytest.mark.parametrize("action,gpu", [("stop", 1), ("start", 1), ("start", 0), ("delete", 0)])
+    async def test_actions_delegate_to_the_same_shared_lifecycle_boundary(self, action, gpu):
+        server = _server(allocated_gpu=gpu)
         sid = str(server.id)
-        body = BulkServerActionRequest(action="stop", server_ids=[sid])
-        db = _db([_result(scalars=[server])])
-
-        allocator = mock.AsyncMock()
-        allocator.release.side_effect = RuntimeError("gpu release boom")
+        body = BulkServerActionRequest(action=action, server_ids=[sid])
+        db = _db([])
+        db.scalar = mock.AsyncMock(return_value=server)
+        actor = _admin_user()
         with (
-            mock.patch("app.container.spawner.spawner") as mock_spawner,
-            mock.patch("app.services.gpu_allocator.GpuAllocatorService", return_value=allocator),
             mock.patch(
-                "app.api.servers._invalidate_server_list_cache", new=mock.AsyncMock()
-            ) as mock_invalidate,
-            mock.patch("app.api.admin.broadcast_server_status_change") as mock_broadcast,
+                f"app.api.servers._perform_server_{action}", new_callable=mock.AsyncMock
+            ) as helper,
+            mock.patch(
+                "app.api.servers._invalidate_server_list_cache", new_callable=mock.AsyncMock
+            ) as invalidate,
         ):
-            mock_spawner.stop = mock.AsyncMock()
             response = await _unwrap(bulk_server_action)(
-                mock.Mock(), body, current_user=_admin_user(), db=db
+                mock.Mock(), body, current_user=actor, db=db
             )
-
-        mock_spawner.stop.assert_awaited_once_with("cid-123")
-        assert server.status == "stopped"
         assert response["results"]["success"] == [sid]
-        allocator.release.assert_awaited_once_with(sid)
-        mock_broadcast.assert_awaited_once_with(str(server.user_id), sid, "stopped")
-        mock_invalidate.assert_awaited_once_with(str(server.user_id))
-
-    @pytest.mark.asyncio
-    async def test_start_gpu_server_respawns_container(self):
-        server = _server()
-        sid = str(server.id)
-        body = BulkServerActionRequest(action="start", server_ids=[sid])
-        db = _db([_result(scalars=[server])])
-
-        new_server = mock.Mock(
-            container_id="cid-new",
-            image="img:v2",
-            volume_id=uuid.uuid4(),
-            external_url="https://srv.example.com",
-        )
-        with (
-            mock.patch("app.container.spawner.spawner") as mock_spawner,
-            mock.patch(
-                "app.api.servers._gpu_requires_recreate",
-                new=mock.AsyncMock(return_value=True),
-            ),
-            mock.patch(
-                "app.api.servers._respawn_server_container",
-                new=mock.AsyncMock(return_value=new_server),
-            ) as mock_respawn,
-            mock.patch(
-                "app.services.gpu_allocator.GpuAllocatorService",
-                return_value=mock.AsyncMock(),
-            ),
-            mock.patch("app.api.servers._invalidate_server_list_cache", new=mock.AsyncMock()),
-            mock.patch("app.api.admin.broadcast_server_status_change"),
-        ):
-            mock_spawner.start = mock.AsyncMock()
-            response = await _unwrap(bulk_server_action)(
-                mock.Mock(), body, current_user=_admin_user(), db=db
-            )
-
-        mock_respawn.assert_awaited_once()
-        mock_spawner.start.assert_not_awaited()
-        assert server.container_id == "cid-new"
-        assert server.image == "img:v2"
-        assert server.volume_id == new_server.volume_id
-        assert server.external_url == "https://srv.example.com"
-        assert server.status == "running"
-        assert response["results"]["success"] == [sid]
-
-    @pytest.mark.asyncio
-    async def test_start_plain_container_uses_spawner(self):
-        server = _server()
-        sid = str(server.id)
-        body = BulkServerActionRequest(action="start", server_ids=[sid])
-        db = _db([_result(scalars=[server])])
-
-        with (
-            mock.patch("app.container.spawner.spawner") as mock_spawner,
-            mock.patch(
-                "app.api.servers._gpu_requires_recreate",
-                new=mock.AsyncMock(return_value=False),
-            ),
-            mock.patch(
-                "app.services.gpu_allocator.GpuAllocatorService",
-                return_value=mock.AsyncMock(),
-            ),
-            mock.patch("app.api.servers._invalidate_server_list_cache", new=mock.AsyncMock()),
-            mock.patch("app.api.admin.broadcast_server_status_change"),
-        ):
-            mock_spawner.start = mock.AsyncMock()
-            response = await _unwrap(bulk_server_action)(
-                mock.Mock(), body, current_user=_admin_user(), db=db
-            )
-
-        mock_spawner.start.assert_awaited_once_with("cid-123")
-        assert server.status == "running"
-        assert response["results"]["success"] == [sid]
+        expected = (server, db, actor, sid) if action == "start" else (server, db, sid)
+        helper.assert_awaited_once_with(*expected)
+        invalidate.assert_awaited_once_with(str(server.user_id))
 
     @pytest.mark.asyncio
     async def test_per_server_exception_and_missing_ids(self):
@@ -410,27 +333,51 @@ class TestBulkServerAction:
         sid = str(server.id)
         missing_sid = str(uuid.uuid4())
         body = BulkServerActionRequest(action="stop", server_ids=[sid, missing_sid])
-        db = _db([_result(scalars=[server])])
+        db = _db([])
+        db.scalar = mock.AsyncMock(side_effect=[server, None])
 
         with (
-            mock.patch("app.container.spawner.spawner") as mock_spawner,
             mock.patch(
-                "app.services.gpu_allocator.GpuAllocatorService",
-                return_value=mock.AsyncMock(),
+                "app.api.servers._perform_server_stop",
+                new=mock.AsyncMock(side_effect=RuntimeError("private Docker diagnostic")),
             ),
             mock.patch("app.api.servers._invalidate_server_list_cache", new=mock.AsyncMock()),
-            mock.patch("app.api.admin.broadcast_server_status_change"),
         ):
-            mock_spawner.stop = mock.AsyncMock(side_effect=RuntimeError("docker down"))
             response = await _unwrap(bulk_server_action)(
                 mock.Mock(), body, current_user=_admin_user(), db=db
             )
 
         assert response["results"]["success"] == []
         failed = {f["server_id"]: f["error"] for f in response["results"]["failed"]}
-        assert failed[sid] == "docker down"
+        assert failed[sid] == "operation_failed"
         assert failed[missing_sid] == "Server not found"
-        db.commit.assert_awaited_once()
+        db.rollback.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_structured_lifecycle_error_is_a_sanitized_per_item_code(self):
+        server = _server()
+        sid = str(server.id)
+        db = _db([])
+        db.scalar = mock.AsyncMock(return_value=server)
+        with (
+            mock.patch(
+                "app.api.servers._perform_server_stop",
+                new=mock.AsyncMock(
+                    side_effect=HTTPException(409, detail={"code": "launch_in_progress"})
+                ),
+            ),
+            mock.patch(
+                "app.api.servers._invalidate_server_list_cache", new_callable=mock.AsyncMock
+            ),
+        ):
+            response = await _unwrap(bulk_server_action)(
+                mock.Mock(),
+                BulkServerActionRequest(action="stop", server_ids=[sid]),
+                current_user=_admin_user(),
+                db=db,
+            )
+        assert response["results"]["failed"] == [{"server_id": sid, "error": "launch_in_progress"}]
+        db.rollback.assert_awaited_once()
 
 
 # ----------------------------------------------------------------------

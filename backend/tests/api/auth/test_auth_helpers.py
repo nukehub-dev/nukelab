@@ -167,63 +167,6 @@ class TestLogout:
         )
         assert response.status_code == 200
 
-    @pytest.mark.asyncio
-    async def test_logout_stop_on_logout(self, client, test_user, db_session):
-        from app.api.auth import create_refresh_token_for_user
-        from app.models.server import Server
-        from app.models.server_plan import ServerPlan
-
-        test_user.preferences = {"stop_on_logout": True}
-
-        plan = ServerPlan(
-            name="logout-plan",
-            slug="logout-plan",
-            cpu_limit=1.0,
-            memory_limit="512m",
-            disk_limit="10g",
-            is_active=True,
-        )
-        db_session.add(plan)
-        await db_session.flush()
-
-        server = Server(
-            name="srv-logout",
-            user_id=test_user.id,
-            status="running",
-            container_id="c1",
-            plan_id=plan.id,
-        )
-        db_session.add(server)
-        await db_session.flush()
-
-        rt = await create_refresh_token_for_user(str(test_user.id), db_session)
-        await db_session.commit()
-
-        with mock.patch("app.api.auth.spawner.get_status", return_value="running"):
-            with mock.patch("app.api.auth.spawner.delete", return_value=True):
-                with mock.patch("app.services.credit_service.CreditService") as MockCS:
-                    cs_inst = MockCS.return_value
-                    cs_inst.reconcile_server_billing = mock.AsyncMock()
-                    with mock.patch("app.services.quota_service.QuotaService") as MockQS:
-                        qs_inst = MockQS.return_value
-                        qs_inst.decrement_usage = mock.AsyncMock()
-                        with mock.patch("app.api.auth.NotificationService") as MockNS:
-                            ns_inst = MockNS.return_value
-                            ns_inst.server_stopped = mock.AsyncMock()
-                            with mock.patch(
-                                "app.api.auth.broadcast_server_status_change", mock.AsyncMock()
-                            ):
-                                response = await client.post(
-                                    "/api/auth/logout",
-                                    headers={"Authorization": "Bearer dummy"},
-                                    json={"refresh_token": rt},
-                                )
-
-        assert response.status_code == 200
-        cs_inst.reconcile_server_billing.assert_awaited_once()
-        qs_inst.decrement_usage.assert_awaited_once()
-        ns_inst.server_stopped.assert_awaited_once()
-
 
 class TestCustomHTTPBearer:
     """Direct tests for CustomHTTPBearer."""

@@ -14,24 +14,27 @@ from copy import deepcopy
 from dataclasses import dataclass
 from datetime import timedelta
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.container.driver import ContainerDriver
+from app.container.driver import ContainerDriver, ContainerDriverError
 from app.container.spawner import ServerSpawner
 from app.core.permissions import Permission
 from app.core.security import has_permission
 from app.core.time_utils import utc_now
 from app.models.environment_template import EnvironmentTemplate
+from app.models.gpu_allocation import GpuAllocation
 from app.models.server import Server
 from app.models.server_launch_intent import ServerLaunchIntent
+from app.models.server_launch_operation import ServerLaunchOperation
 from app.models.server_launch_record import ServerLaunchRecord
 from app.models.server_plan import ServerPlan
 from app.models.server_queue import ServerQueue
 from app.models.server_volume import ServerVolume
 from app.models.user import User
 from app.models.volume import Volume
+from app.models.volume_operation import VolumeOperation
 from app.schemas.environment_manifest import ImageIdentity, ManifestResources, VolumeRequirement
 from app.schemas.server_launch import NormalizedLaunchRequest
 from app.schemas.server_queue import QueuedServerResponse
@@ -47,9 +50,20 @@ from app.services.plan_service import PlanService
 from app.services.quota_service import QuotaService
 from app.services.resource_pool_service import ResourcePoolService
 from app.services.server_launch_validation import validate_launch_volumes
+from app.services.server_operation_service import (
+    claim_operation,
+    create_operation,
+    finish_operation,
+)
 from app.services.server_provenance_service import ServerProvenanceService, build_manifest
 from app.services.server_queue_service import QueueError, ServerQueueService
-from app.services.volume_operation_service import acquire_volume_operations
+from app.services.volume_operation_service import (
+    ACTIVE_STATES as ACTIVE_VOLUME_STATES,
+)
+from app.services.volume_operation_service import (
+    acquire_volume_operations,
+    transition_volume_operation,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +87,9 @@ class LaunchReservation:
     mounts: list[dict]
     queue_id: uuid.UUID | None = None
     claim_token: uuid.UUID | None = None
+    operation_id: uuid.UUID | None = None
+    generation: int = 1
+    previous_container_id: str | None = None
 
 
 def plan_snapshot(plan: ServerPlan) -> dict:
@@ -96,6 +113,13 @@ class ServerLaunchService:
             raise RuntimeError("Launch service requires a clean session")
         if self.db.in_transaction():
             await self.db.rollback()
+
+    @staticmethod
+    def _remember_volume_use(volume, mount_path, username, *, mounted=True):
+        if mounted:
+            volume.last_mounted_at = utc_now()
+        if mount_path == f"/home/{username}":
+            volume.labels = {**(volume.labels or {}), "was_home_volume": True}
 
     async def _policy(self, owner_id, request):
         owner = await self.db.scalar(
@@ -219,6 +243,15 @@ class ServerLaunchService:
             )
             if other_request is not None:
                 raise QueueError("request_already_exists", 409, other_request)
+            active_name = await self.db.scalar(
+                select(ServerLaunchOperation.id).where(
+                    ServerLaunchOperation.owner_id == owner_id,
+                    ServerLaunchOperation.state.in_(["prepared", "executing", "uncertain"]),
+                    ServerLaunchOperation.request_payload["name"].astext == request.name,
+                )
+            )
+            if active_name is not None:
+                raise LaunchError("request_already_exists")
             quota = QuotaService(self.db)
             if not (
                 await quota.check_spawn_allowed(
@@ -284,9 +317,7 @@ class ServerLaunchService:
                     await self.db.flush()
                 else:
                     volume = await self.db.get(Volume, mount.volume_id)
-                volume.last_mounted_at = utc_now()
-                if mount.mount_path == f"/home/{owner.username}":
-                    volume.labels = {**(volume.labels or {}), "was_home_volume": True}
+                self._remember_volume_use(volume, mount.mount_path, owner.username)
                 stored_mounts.append(
                     {
                         **mount.model_dump(mode="json"),
@@ -357,6 +388,26 @@ class ServerLaunchService:
                     claim_token=claim_token,
                 )
             )
+            await create_operation(
+                self.db,
+                server_id=server_id,
+                owner_id=owner_id,
+                action="create",
+                operation_id=server_id,
+                revision_id=revision_id,
+                request_payload=request.model_dump(mode="json"),
+                mounts=stored_mounts,
+                gpu_devices=devices,
+                username=owner.username,
+                environment_slug=environment.slug,
+                resources={
+                    "cpu": plan.cpu_limit,
+                    "memory": plan.memory_limit,
+                    "disk": plan.disk_limit,
+                    "gpu": plan.gpu_limit or 0,
+                },
+                generation=1,
+            )
             await quota.increment_usage(str(owner_id), str(plan.id), commit=False)
             return LaunchReservation(
                 server_id,
@@ -369,9 +420,13 @@ class ServerLaunchService:
                 stored_mounts,
                 queue_id,
                 claim_token,
+                server_id,
             )
 
     async def _stored_reservation(self, server_id, owner_id) -> LaunchReservation:
+        operation = await self.db.get(ServerLaunchOperation, server_id, populate_existing=True)
+        if operation is not None:
+            return await self._operation_reservation(operation.id, owner_id)
         intent = await self.db.scalar(
             select(ServerLaunchIntent)
             .where(
@@ -398,6 +453,178 @@ class ServerLaunchService:
             intent.claim_token,
         )
 
+    async def _operation_reservation(self, operation_id, owner_id) -> LaunchReservation:
+        operation = await self.db.get(ServerLaunchOperation, operation_id, populate_existing=True)
+        if (
+            operation is None
+            or operation.owner_id != owner_id
+            or operation.action not in ("create", "start", "restart", "update")
+            or operation.revision_id is None
+            or operation.request_payload is None
+            or operation.generation is None
+        ):
+            raise LaunchError("launch_intent_unavailable")
+        initial = await self.db.get(ServerLaunchIntent, operation.server_id)
+        return LaunchReservation(
+            operation.server_id,
+            operation.owner_id,
+            operation.revision_id,
+            NormalizedLaunchRequest.model_validate(deepcopy(operation.request_payload)),
+            operation.username,
+            operation.environment_slug or "",
+            list(operation.gpu_devices),
+            deepcopy(operation.mounts),
+            initial.queue_id if initial and operation.action == "create" else None,
+            initial.claim_token if initial and operation.action == "create" else None,
+            operation.id,
+            operation.generation,
+            operation.previous_container_id,
+        )
+
+    async def load_operation_reservation(
+        self, operation_id: uuid.UUID, owner_id: uuid.UUID
+    ) -> LaunchReservation:
+        """Load exact journal intent without authorizing a second executor."""
+        await self._clear_read_transaction()
+        async with self.db.begin():
+            return await self._operation_reservation(operation_id, owner_id)
+
+    async def _remove_previous_runtime(self, reservation: LaunchReservation):
+        """Remove only this operation's verified, stopped predecessor by exact ID."""
+        container_id = reservation.previous_container_id
+        if not container_id:
+            return
+
+        async def inspect_previous():
+            try:
+                info = await self.driver.get_container_info(container_id)
+            except ContainerDriverError as exc:
+                if exc.status == 404:
+                    return None
+                raise LaunchError("runtime_inspection_unavailable", 503) from exc
+            labels = info.get("Config", {}).get("Labels") or {}
+            if labels.get("nukelab.server.id") != str(reservation.server_id) or labels.get(
+                "nukelab.user.id"
+            ) != str(reservation.owner_id):
+                raise LaunchError("runtime_identity_mismatch", 503)
+            if not isinstance(info.get("State", {}).get("Running"), bool):
+                raise LaunchError("runtime_inspection_unavailable", 503)
+            return info
+
+        previous = await inspect_previous()
+        if previous is None:
+            return
+        if previous["State"]["Running"]:
+            try:
+                await self.driver.stop_container(container_id)
+            except ContainerDriverError as exc:
+                if exc.status == 404:
+                    return
+                if exc.status != 304:
+                    raise
+            previous = await inspect_previous()
+            if previous is None:
+                return
+            if previous["State"]["Running"]:
+                raise LaunchError("runtime_still_running", 503)
+        try:
+            await self.driver.delete_container(container_id, force=False)
+        except ContainerDriverError as exc:
+            if exc.status != 404:
+                raise
+
+    async def _checkpoint_previous_runtime_gone(self, reservation, fencing_token):
+        """Move accounting/membership only after verified predecessor termination."""
+        async with self.db.begin():
+            await acquire_admission_lock(self.db)
+            operation = await self.db.get(
+                ServerLaunchOperation,
+                reservation.operation_id,
+                populate_existing=True,
+                with_for_update=True,
+            )
+            if (
+                operation is None
+                or operation.fencing_token != fencing_token
+                or operation.state != "executing"
+            ):
+                raise LaunchError("launch_in_progress")
+            server = await self.db.get(
+                Server, reservation.server_id, populate_existing=True, with_for_update=True
+            )
+            if (
+                server is None
+                or server.status != "starting"
+                or server.user_id != reservation.owner_id
+            ):
+                raise LaunchError("launch_in_progress")
+            desired = {uuid.UUID(mount["volume_id"]) for mount in operation.mounts}
+            prior_ids = set(
+                (
+                    await self.db.scalars(
+                        select(ServerLaunchOperation.id).where(
+                            ServerLaunchOperation.server_id == server.id
+                        )
+                    )
+                ).all()
+            ) | {server.id}
+            guards = (
+                await self.db.scalars(
+                    select(VolumeOperation)
+                    .where(
+                        VolumeOperation.operation_id.in_(prior_ids),
+                        VolumeOperation.kind == "mount",
+                        VolumeOperation.state.in_(ACTIVE_VOLUME_STATES),
+                    )
+                    .order_by(VolumeOperation.volume_id, VolumeOperation.operation_id)
+                )
+            ).all()
+            for guard in guards:
+                if guard.operation_id == operation.id and guard.volume_id in desired:
+                    continue
+                await transition_volume_operation(
+                    self.db,
+                    operation_id=guard.operation_id,
+                    volume_id=guard.volume_id,
+                    fencing_token=guard.fencing_token,
+                    state="succeeded",
+                    executor_terminated=True,
+                )
+            await self.db.execute(
+                delete(GpuAllocation).where(
+                    GpuAllocation.server_id == server.id,
+                    GpuAllocation.device.not_in(operation.gpu_devices),
+                )
+            )
+            await self.db.execute(delete(ServerVolume).where(ServerVolume.server_id == server.id))
+            self.db.add_all(
+                [
+                    ServerVolume(
+                        server_id=server.id,
+                        volume_id=uuid.UUID(mount["volume_id"]),
+                        mount_path=mount["mount_path"],
+                        mode=mount["mode"],
+                        is_primary=mount["is_primary"],
+                    )
+                    for mount in operation.mounts
+                ]
+            )
+            if not operation.mounts:
+                raise LaunchError("volume_unavailable")
+            primary = next(
+                (mount for mount in operation.mounts if mount.get("is_primary")),
+                operation.mounts[0],
+            )
+            server.volume_id = uuid.UUID(primary["volume_id"])
+            server.volume_mode = primary["mode"]
+            for key in ("cpu", "memory", "disk", "gpu"):
+                setattr(server, "allocated_" + key, operation.resources[key])
+            server.name = reservation.request.name
+            server.plan_id = reservation.request.plan_id
+            server.environment_id = reservation.request.environment_id
+            server.container_id = None
+            await self.db.flush()
+
     async def load_reservation(
         self, server_id: uuid.UUID, owner_id: uuid.UUID
     ) -> LaunchReservation:
@@ -412,20 +639,55 @@ class ServerLaunchService:
 
     async def provision(self, reservation: LaunchReservation) -> Server:
         """Use pinned images and the reserved identity; preserve protection on errors."""
+        claimed = False
+        fencing_token = None
         try:
+            await self._clear_read_transaction()
             async with self.db.begin():
-                reservation = await self._stored_reservation(
-                    reservation.server_id, reservation.owner_id
+                await acquire_admission_lock(self.db)
+                reservation = (
+                    await self._operation_reservation(
+                        reservation.operation_id, reservation.owner_id
+                    )
+                    if reservation.operation_id is not None
+                    else await self._stored_reservation(reservation.server_id, reservation.owner_id)
                 )
+                operation = (
+                    await self.db.get(
+                        ServerLaunchOperation, reservation.operation_id, populate_existing=True
+                    )
+                    if reservation.operation_id
+                    else None
+                )
+                if operation is None:
+                    raise LaunchError("launch_intent_unavailable")
                 previous = await self.db.get(Server, reservation.server_id, populate_existing=True)
-                record = await self.db.get(ServerLaunchRecord, reservation.server_id)
-                if previous is not None and previous.status == "running" and record is not None:
+                record = await self.db.get(
+                    ServerLaunchRecord, reservation.operation_id or reservation.server_id
+                )
+                if operation is not None and operation.state in (
+                    "executing",
+                    "uncertain",
+                    "failed",
+                ):
+                    raise LaunchError("launch_in_progress")
+                if (
+                    previous is not None
+                    and record is not None
+                    and (
+                        (operation is not None and operation.state == "succeeded")
+                        or (operation is None and previous.status == "running")
+                    )
+                ):
                     if (
                         previous.user_id != reservation.owner_id
+                        or record.server_id != reservation.server_id
                         or record.revision_id != reservation.revision_id
                     ):
                         raise LaunchError("launch_in_progress")
                     return previous
+                if operation is not None and operation.state != "prepared":
+                    raise LaunchError("launch_in_progress")
                 revision = await self._revisions(reservation.owner_id).require_available(
                     reservation.revision_id
                 )
@@ -437,14 +699,32 @@ class ServerLaunchService:
                 )
                 configuration = dict(revision.configuration)
                 server = await self.db.get(Server, reservation.server_id)
-                if server is None or server.status != "starting" or server.container_id:
+                if (
+                    server is None
+                    or server.status != "starting"
+                    or (
+                        server.container_id is not None
+                        and server.container_id != reservation.previous_container_id
+                    )
+                ):
                     raise LaunchError("launch_in_progress")
-                resources = {
-                    "cpu": server.allocated_cpu,
-                    "memory": server.allocated_memory,
-                    "disk": server.allocated_disk,
-                    "gpu": server.allocated_gpu,
-                }
+                resources = (
+                    deepcopy(operation.resources)
+                    if operation is not None
+                    else {
+                        "cpu": server.allocated_cpu,
+                        "memory": server.allocated_memory,
+                        "disk": server.allocated_disk,
+                        "gpu": server.allocated_gpu,
+                    }
+                )
+                if operation is not None:
+                    fencing_token = operation.fencing_token
+                    if await claim_operation(self.db, operation.id, fencing_token) is None:
+                        raise LaunchError("launch_in_progress")
+            claimed = True
+            await self._remove_previous_runtime(reservation)
+            await self._checkpoint_previous_runtime_gone(reservation, fencing_token)
             from app.services.xfs_quota_service import xfs_quota_service
 
             for mount in reservation.mounts:
@@ -479,6 +759,7 @@ class ServerLaunchService:
                     "runtime": runtime.model_dump(mode="json"),
                     "toolchain": toolchain.model_dump(mode="json") if toolchain else None,
                 },
+                launch_operation_id=str(reservation.operation_id),
                 **resources,
             )
             actual = await self.driver.get_container_info(spawned.container_id)
@@ -502,8 +783,33 @@ class ServerLaunchService:
                 )
                 if server is None or server.status != "starting":
                     raise LaunchError("launch_in_progress")
+                if reservation.operation_id is not None:
+                    operation = await self.db.get(
+                        ServerLaunchOperation, reservation.operation_id, populate_existing=True
+                    )
+                    if (
+                        operation is None
+                        or operation.fencing_token != fencing_token
+                        or operation.state != "executing"
+                    ):
+                        raise LaunchError("launch_in_progress")
                 for key in ("container_id", "image", "external_url", "health_status"):
                     setattr(server, key, getattr(spawned, key))
+                for key in ("cpu", "memory", "disk", "gpu"):
+                    setattr(server, "allocated_" + key, resources[key])
+                server.plan_id = reservation.request.plan_id
+                server.environment_id = reservation.request.environment_id
+                # A metadata-only volume is initialized once, by its owning launch.
+                for mount in reservation.mounts:
+                    volume = await self.db.get(Volume, uuid.UUID(mount["volume_id"]))
+                    if volume is not None and (volume.labels or {}).get(
+                        "initialize_for_server"
+                    ) == str(server.id):
+                        volume.labels = {
+                            key: value
+                            for key, value in volume.labels.items()
+                            if key != "initialize_for_server"
+                        }
                 server.status = "running"
                 server.status_reason = None
                 server.started_at = server.last_activity = server.last_billed_at = utc_now()
@@ -545,10 +851,10 @@ class ServerLaunchService:
                 await ServerProvenanceService(
                     self.db, self._revisions(reservation.owner_id)
                 ).record_launch(
-                    operation_id=reservation.server_id,
+                    operation_id=reservation.operation_id or reservation.server_id,
                     server_id=server.id,
                     owner_id=reservation.owner_id,
-                    generation=1,
+                    generation=reservation.generation,
                     manifest=manifest,
                     actual_runtime=actual_runtime,
                     actual_toolchain=actual_toolchain,
@@ -565,15 +871,47 @@ class ServerLaunchService:
                     queue.status = "started"
                     queue.started_at = server.started_at
                     queue.reason_code = None
+                if reservation.operation_id is not None:
+                    finished = await finish_operation(
+                        self.db,
+                        reservation.operation_id,
+                        fencing_token,
+                        "succeeded",
+                        runtime_verified=True,
+                    )
+                    if finished is None:
+                        raise LaunchError("launch_in_progress")
                 return server
         except BaseException as exc:
             await self.db.rollback()
+            if not claimed:
+                raise
             # A failed waiter is not evidence that its container/helper terminated.
             async with self.db.begin():
+                await acquire_admission_lock(self.db)
+                if reservation.operation_id is not None:
+                    recovered = await finish_operation(
+                        self.db,
+                        reservation.operation_id,
+                        fencing_token,
+                        "uncertain",
+                        reason_code="recovery_required",
+                    )
+                else:
+                    recovered = None
                 server = await self.db.get(Server, reservation.server_id)
-                if server is not None and server.status == "starting":
+                if (
+                    recovered is not None
+                    and recovered.state == "uncertain"
+                    and server is not None
+                    and server.status == "starting"
+                ):
                     server.status_reason = "recovery_required"
-                if reservation.queue_id:
+                if (
+                    reservation.queue_id
+                    and recovered is not None
+                    and recovered.state == "uncertain"
+                ):
                     queue = await self.db.get(ServerQueue, reservation.queue_id)
                     if (
                         queue is not None

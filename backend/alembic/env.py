@@ -30,6 +30,7 @@ if config.config_file_name is not None:
 from app.models.environment_revision import EnvironmentRevision
 from app.models.server_launch_record import ServerLaunchRecord
 from app.models.server_launch_intent import ServerLaunchIntent
+from app.models.server_launch_operation import ServerLaunchOperation
 from app.models.volume_operation import VolumeOperation
 from app.db.base import Base
 from app.models.user import User

@@ -69,6 +69,7 @@ class ServerSpawner:
         tool_image: str | None = None,
         tool_mounts: list[str] | None = None,
         resolved_images: dict | None = None,
+        launch_operation_id: str | None = None,
     ) -> Server:
         """Spawn a new server container with persistent volume(s)
 
@@ -246,6 +247,9 @@ class ServerSpawner:
             "nukelab.user.id": user_id,
             "nukelab.user.name": username,
         }
+
+        if launch_operation_id is not None:
+            labels["nukelab.launch.id"] = str(uuid.UUID(launch_operation_id))
 
         # Internal port exposed by hardened dev/nginx images (unprivileged 8080).
         # Images that already run their service on a different port must be matched

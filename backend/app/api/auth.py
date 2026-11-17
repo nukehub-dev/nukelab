@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
-from app.container.spawner import spawner
+from app.container.factory import get_driver
 from app.core import token_signing
 from app.core.permissions import Permission
 from app.core.security import get_user_permissions, has_permission
@@ -39,6 +39,7 @@ from app.models.refresh_token import RefreshToken
 from app.models.server import Server
 from app.models.user import User
 from app.services.notification_service import NotificationService, broadcast_server_status_change
+from app.services.server_termination_service import ServerTerminationService
 
 logger = logging.getLogger(__name__)
 
@@ -637,97 +638,45 @@ async def logout_endpoint(
             # revocation and cookie cleanup.
             pass
 
-    # Stop all running servers if user preference is enabled
-    if user:
-        prefs = user.preferences or {}
-        if prefs.get("stop_on_logout", False):
-            result = await db.execute(
-                select(Server).where(
-                    Server.user_id == user.id, Server.status.in_(["running", "healthy"])
-                )
-            )
-            servers = result.scalars().all()
-
-            for server in servers:
-                if server.container_id:
-                    try:
-                        actual_status = await spawner.get_status(server.container_id)
-                        if actual_status == "unknown":
-                            # Runtime lookup failed (e.g. socket timeout). Do not
-                            # mark the server stopped: the container may still be
-                            # running.
-                            logger.warning(
-                                "Could not determine runtime status of server "
-                                "%s (container %s) on logout; skipping stop",
-                                server.id,
-                                server.container_id,
-                            )
-                            continue
-
-                        if actual_status == "stopped":
-                            server.status = "stopped"
-                            server.container_id = None
-                            await _release_gpu_devices(db, server.id)
-                            continue
-
-                        if not await spawner.delete(server.container_id):
-                            # Runtime delete failed (logged by spawner). Do
-                            # not mark the server stopped: the container may
-                            # still be running. The idle/auto-stop tasks will
-                            # retry later.
-                            logger.warning(
-                                "Could not delete container %s for server %s on "
-                                "logout; skipping stop",
-                                server.container_id,
-                                server.id,
-                            )
-                            continue
-                        server.container_id = None
-                        server.status = "stopped"
-                        server.stopped_at = datetime.now(UTC).replace(tzinfo=None)
-                        await _release_gpu_devices(db, server.id)
-
-                        # Reconcile billing
-                        if server.plan_id:
-                            from app.models.server_plan import ServerPlan
-                            from app.services.credit_service import CreditService
-
-                            credit_service = CreditService(db)
-                            plan_result = await db.execute(
-                                select(ServerPlan).where(ServerPlan.id == server.plan_id)
-                            )
-                            plan = plan_result.scalar_one_or_none()
-                            if plan:
-                                await credit_service.reconcile_server_billing(server, plan)
-
-                        # Decrement quota
-                        if server.plan_id:
-                            from app.services.quota_service import QuotaService
-
-                            quota_service = QuotaService(db)
-                            await quota_service.decrement_usage(
-                                user_id=str(user.id), plan_id=str(server.plan_id)
-                            )
-
-                        # Notify user
-                        notif_service = NotificationService(db)
-                        await notif_service.server_stopped(
-                            user_id=user.id,
-                            server_name=server.name,
-                            reason="logged out",
-                            server_id=str(server.id),
-                        )
-
-                        await broadcast_server_status_change(user.id, str(server.id), "stopped")
-                    except Exception:
-                        logger.exception(f"Failed to stop server {server.id} on logout")
-                        continue
-
-            await db.commit()
-
-    # Revoke refresh token (reuse already-verified rt to avoid double bcrypt)
+    # Persist revocation before lifecycle methods take ownership of transactions.
+    oauth_logout = bool(user and user.oauth_provider == "oauth")
+    owner_id = user.id if user else None
+    stop_on_logout = bool(user and (user.preferences or {}).get("stop_on_logout", False))
     if body and body.refresh_token and rt:
         await revoke_refresh_token(db=db, rt=rt)
+
+    if stop_on_logout:
+        server_ids = list(
+            await db.scalars(
+                select(Server.id).where(
+                    Server.user_id == owner_id, Server.status.in_(["running", "healthy"])
+                )
+            )
+        )
+        for server_id in server_ids:
+            try:
+                server = await ServerTerminationService(db, await get_driver()).stop(
+                    server_id, owner_id=owner_id
+                )
+                name, plan_id = server.name, server.plan_id
+                if plan_id:
+                    from app.models.server_plan import ServerPlan
+                    from app.services.credit_service import CreditService
+
+                    plan = await db.get(ServerPlan, plan_id)
+                    if plan:
+                        await CreditService(db).reconcile_server_billing(server, plan)
+                await db.commit()
+                await NotificationService(db).server_stopped(
+                    user_id=owner_id,
+                    server_name=name,
+                    reason="logged out",
+                    server_id=str(server_id),
+                )
+                await broadcast_server_status_change(owner_id, str(server_id), "stopped")
+            except Exception:
+                await db.rollback()
+                logger.exception("Failed to stop server %s on logout", server_id)
 
     content: dict = {"message": "Logged out successfully"}
 
@@ -735,7 +684,7 @@ async def logout_endpoint(
     # end-session URL so the SSO session is terminated too (OIDC RP-initiated
     # logout) — otherwise the IdP session cookie would silently re-authenticate
     # the user on the next login.
-    if user and user.oauth_provider == "oauth" and settings.auth_mode in ("oauth", "both"):
+    if oauth_logout and settings.auth_mode in ("oauth", "both"):
         from app.services.oauth_service import oauth_service
 
         if oauth_service.is_configured:

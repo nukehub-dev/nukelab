@@ -453,3 +453,16 @@ Use CVSS 4.0 with the following mapping:
 **Prepared for:** NukeLab Security Review  
 **Prepared by:** Security Engineering  
 **Date:** 2026-06-28
+
+## Lifecycle admission and queue concurrency checks
+
+- Race delayed list/detail runtime probes against start, stop and replacement;
+  verify reservations and newer generations remain authoritative (PENT-NKL-014).
+- Race queue cancellation against dispatch claims; verify owner scoping and a
+  single executor, including repeated delivery and account switches in the UI.
+- Kill a worker at each persisted journal boundary. Confirm uncertain runtime
+  outcomes retain GPU/mount/resource protection without TTL takeover.
+- Verify wrong owner/server runtime labels fail closed and predecessor removal
+  is proven before replacement guards or allocations are released.
+- Run runtime races only on an isolated daemon. Unit/database regressions do not
+  replace the combined browser/runtime acceptance exercise.

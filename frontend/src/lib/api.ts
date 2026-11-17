@@ -3,12 +3,15 @@
 
 import { QueryClient } from '@tanstack/react-query'
 import { captureException } from './sentry'
+import { isQueueId } from './server-queue'
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
 export class ApiError extends Error {
   status: number
   retryAfter?: number
+  code?: string
+  queueId?: string
 
   constructor(message: string, status: number, retryAfter?: number) {
     super(message)
@@ -115,6 +118,24 @@ function extractErrorDetail(body: unknown, fallback: string): string {
   if (body && typeof body === 'object') {
     const { detail, message } = body as { detail?: unknown; message?: unknown }
     if (typeof detail === 'string' && detail) return detail
+    if (detail && typeof detail === 'object' && 'code' in detail) {
+      const messages: Record<string, string> = {
+        request_already_exists: 'A server or waiting request already uses this name.',
+        launch_in_progress: 'Launch is already in progress. Refresh the request to see its status.',
+        configuration_changed:
+          'The selected configuration changed. Review your selections and submit again.',
+        permission_revoked: 'You no longer have permission for this request.',
+        volume_busy: 'A selected volume is busy. Try again when its operation finishes.',
+        quota_exceeded: 'This request exceeds your current quota.',
+        insufficient_credits: 'You do not have enough credits to start this server.',
+        queue_limit_exceeded: 'The waiting request limit has been reached. Try again later.',
+        revision_unavailable: 'The selected environment revision is unavailable.',
+        artifact_missing: 'A required environment image is unavailable.',
+        recovery_required:
+          'The launch outcome needs operator verification. Check its status before submitting again.',
+      }
+      return messages[String(detail.code)] ?? fallback
+    }
     // FastAPI validation errors arrive as a list of { loc, msg, type } objects.
     if (Array.isArray(detail) && detail.length > 0) {
       return detail
@@ -157,9 +178,15 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
     // Try to get detailed error message from response body
     let detail = response.statusText
     let retryAfter: number | undefined
+    let code: string | undefined
+    let queueId: string | undefined
     try {
       const body = await response.json()
       detail = extractErrorDetail(body, response.statusText)
+      if (body?.detail && typeof body.detail === 'object') {
+        code = typeof body.detail.code === 'string' ? body.detail.code : undefined
+        queueId = isQueueId(body.detail.queue_id) ? body.detail.queue_id : undefined
+      }
       if (response.status === 429 && body.retry_after) {
         retryAfter = body.retry_after
         detail = `${detail} Retry in ${body.retry_after}s.`
@@ -168,6 +195,8 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
       // ignore JSON parse errors
     }
     const error = new ApiError(detail, response.status, retryAfter)
+    error.code = code
+    error.queueId = queueId
     // Capture server errors (5xx) in Sentry
     if (response.status >= 500) {
       captureException(error, {

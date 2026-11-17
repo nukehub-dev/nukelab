@@ -65,10 +65,10 @@ See [IMPLEMENTATION-PHASES.md](IMPLEMENTATION-PHASES.md) for the full phase-by-p
 | Capability | Status | Implemented evidence | Remaining scope |
 | --- | --- | --- | --- |
 | Environment image build/publish | Complete | `.github/workflows/ci.yml`, `scripts/ci-version.sh` | Scheduled base-image digest refresh and scientific image validation are separate follow-ups; scientific image ownership is in the separate environments repository |
-| Reproducible environments | Partial | Approved revision/launch services and manifests; local image resolution, immutable toolchain caches and reserved spawner; `server_launch_service.py` captures verified runtime identity | Cut over API and all lifecycle paths to pinned launch/recreation; expose export/recreate UI; registry portability and combined runtime verification |
+| Reproducible environments | Partial | Approved revision/launch services and manifests; local image resolution, immutable toolchain caches and reserved spawner; shared launch/lifecycle services capture verified runtime generations and retain uncertain reservations | Read/export/validated-recreation APIs and UI; registry portability and combined runtime verification |
 | Database backup/restore | Complete | `scripts/manage.d/backup.sh`, `restore.sh`, `db-migrate.sh`; backend schema guard | Automated recovery drills and broader disaster-recovery policy |
 | User volume backup/restore | Partial | `VolumeBackup` scaffolding plus durable `volume_operation_service.py` and bounded `volume_archive_service.py` extraction foundation | Backup capture/storage/retention, runtime helper and attachment checks, all writer/start guards, API/tasks/UI; recovery remains unavailable |
-| Resource queue experience | Partial | Versioned intent and typed DTOs, shared launch reservations and bounded dispatch service, deterministic positions, configured budgets | Replace legacy launch/worker integration; register the owner queue router only after claims/cancellation are respected; user queue UI and GPU-aware waiting |
+| Resource queue experience | Partial | Typed 202 acceptance, atomic API/worker admission, owner queue UI/cancellation, GPU-aware waiting and rotating bounded dispatch | Combined real-stack browser/runtime acceptance and worker-crash reconciliation rehearsal |
 | Batch scientific jobs | Future | Existing schedules support server start/stop/restart; Celery runs platform tasks | User command submissions, job records, exit status, logs, artifacts, retries, and parameter sweeps |
 | Workload secrets | Future | Platform signing keys, OAuth token encryption, and template environment variables already exist | Scoped credential storage, authorization, redaction, and workload injection; template variables are ordinary JSON, not a secret store |
 | Deployment automation | Partial | Tagged pulls, explicit restart workflow, migration snapshots, schema guard | Automated health verification, traffic cutover, and rollback; zero-downtime deployment is not implemented |
@@ -79,7 +79,7 @@ See [IMPLEMENTATION-PHASES.md](IMPLEMENTATION-PHASES.md) for the full phase-by-p
 
 Queue reliability, reproducible environments, private offline volume recovery, and frontend test CI are accepted implementation scope. Backend foundations are present; the end-to-end workflows remain incomplete.
 
-1. **Finish existing workflows (In Progress)** — Integrate atomic launch/queue admission and add a queue view/cancellation; wire existing frontend tests into CI.
+1. **Finish existing workflows (In Progress)** — Verify the integrated launch/queue and owner cancellation flows against an isolated stack; wire frontend tests into CI.
 2. **Research reproducibility (In Progress)** — Persist resolved image/toolchain identities and provide export/recreate; extend existing composition rather than rebuilding image publishing.
 3. **Research data recovery (In Progress)** — Deliver user volume backup/restore and verify database recovery through isolated drills.
 4. **Batch jobs** — Add a minimal command-based job lifecycle, then parameter sweeps after single jobs are reliable.

@@ -14,6 +14,7 @@ __all__ = [
     "EnvironmentRevision",
     "ServerLaunchRecord",
     "ServerLaunchIntent",
+    "ServerLaunchOperation",
     "VolumeOperation",
     "GpuAllocation",
     "HealthCheck",
@@ -68,6 +69,7 @@ from app.models.resource_quota import ResourceQuota as ResourceQuota
 from app.models.server import Server as Server
 from app.models.server_access_token import ServerAccessToken as ServerAccessToken
 from app.models.server_launch_intent import ServerLaunchIntent as ServerLaunchIntent
+from app.models.server_launch_operation import ServerLaunchOperation as ServerLaunchOperation
 from app.models.server_launch_record import ServerLaunchRecord as ServerLaunchRecord
 from app.models.server_metric import ServerMetric as ServerMetric
 from app.models.server_plan import ServerPlan as ServerPlan

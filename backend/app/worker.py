@@ -141,7 +141,7 @@ celery_app.conf.update(
         },
         "process-server-queue": {
             "task": "app.tasks.process_server_queue",
-            "schedule": 30.0,  # Every 30 seconds
+            "schedule": float(settings.queue_tick_seconds),
         },
         "evaluate-schedules": {
             "task": "app.tasks.evaluate_schedules",

@@ -24,6 +24,13 @@ def _http_error(exc: QueueError) -> HTTPException:
     return HTTPException(status_code=exc.status_code, detail={"code": exc.code})
 
 
+@router.get("/capabilities", dependencies=[Depends(require_scopes("servers:read"))])
+async def queue_capabilities(
+    current_user: Annotated[User, Depends(require_permissions(Permission.SERVERS_READ_OWN))],
+):
+    return {"enabled": True}
+
+
 @router.get(
     "", response_model=QueuePageResponse, dependencies=[Depends(require_scopes("servers:read"))]
 )

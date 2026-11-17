@@ -3,7 +3,7 @@
 
 import uuid
 
-from sqlalchemy import JSON, Column, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import JSON, Column, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -13,6 +13,7 @@ from app.db.base import Base
 
 class Server(Base):
     __tablename__ = "servers"
+    __table_args__ = (UniqueConstraint("user_id", "name", name="uq_servers_owner_name"),)
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String(255), nullable=False)

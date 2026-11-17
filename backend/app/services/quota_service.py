@@ -191,7 +191,7 @@ class QuotaService:
         # Get all active servers for user
         conditions = [
             Server.user_id == uuid.UUID(user_id),
-            Server.status.in_(["running", "starting"]),
+            Server.status.in_(["running", "starting", "stopping"]),
         ]
         if exclude_server_id:
             conditions.append(Server.id != uuid.UUID(exclude_server_id))
@@ -302,7 +302,7 @@ class QuotaService:
         plan_conditions = [
             Server.user_id == uuid.UUID(user_id),
             Server.plan_id == uuid.UUID(plan_id),
-            Server.status.in_(["running", "starting"]),
+            Server.status.in_(["running", "starting", "stopping"]),
         ]
         if exclude_server_id:
             plan_conditions.append(Server.id != uuid.UUID(exclude_server_id))

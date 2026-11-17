@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
 // SPDX-License-Identifier: BSD-2-Clause
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
+import { ApiError } from '../../lib/api'
 import { HardDrive, Plus, X, AlertTriangle } from 'lucide-react'
 import {
   Dialog,
@@ -50,6 +51,7 @@ interface DeployServerDialogProps {
   defaultEnvironmentId?: string
   isPending: boolean
   error?: Error | null
+  onViewQueued?: (queueId: string) => void
   onDeploy: (data: DeployServerData) => void
 }
 
@@ -65,6 +67,7 @@ export function DeployServerDialog({
   isPending,
   error,
   onDeploy,
+  onViewQueued,
 }: DeployServerDialogProps) {
   const [deployForm, setDeployForm] = useState({
     name: '',
@@ -76,8 +79,11 @@ export function DeployServerDialog({
   ])
   const [visibleError, setVisibleError] = useState<string | null>(null)
 
+  const wasOpen = useRef(false)
   useEffect(() => {
-    if (open) {
+    const opening = open && !wasOpen.current
+    wasOpen.current = open
+    if (opening) {
       const planId = defaultPlanId && plans.some((p) => p.id === defaultPlanId) ? defaultPlanId : ''
       const envId =
         defaultEnvironmentId && environments.some((e) => e.id === defaultEnvironmentId)
@@ -121,6 +127,7 @@ export function DeployServerDialog({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    if (isPending) return
     setVisibleError(null)
 
     if (!deployForm.name.trim()) {
@@ -192,7 +199,22 @@ export function DeployServerDialog({
           {visibleError && (
             <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
               <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-destructive">{visibleError}</p>
+              <div className="space-y-2">
+                <p className="text-sm text-destructive">{visibleError}</p>
+                {error instanceof ApiError &&
+                  error.code === 'request_already_exists' &&
+                  error.queueId &&
+                  onViewQueued && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onViewQueued(error.queueId!)}
+                    >
+                      View existing request
+                    </Button>
+                  )}
+              </div>
             </div>
           )}
           <div className="space-y-2">

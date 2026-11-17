@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
 // SPDX-License-Identifier: BSD-2-Clause
 
-import { createFileRoute, Link } from '@tanstack/react-router'
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
+import { isQueuedServer } from '../lib/server-queue'
 import { UserLink } from '../components/admin/user-link'
 import {
   Server,
@@ -57,6 +58,7 @@ function AdminServersPage() {
 }
 
 function AdminServersContent({ enableManagement }: { enableManagement: boolean }) {
+  const navigate = useNavigate()
   const density = useThemeStore((state) => state.density)
   const { confirm, dialog } = useConfirmDialog()
   const { data: servers = [], isLoading, isError, error } = useServers()
@@ -787,10 +789,21 @@ function AdminServersContent({ enableManagement }: { enableManagement: boolean }
         defaultEnvironmentId={user?.preferences?.default_environment as string | undefined}
         isPending={createServer.isPending}
         error={createServer.error}
+        onViewQueued={(request) => {
+          setDialogOpen(false)
+          void navigate({ to: '/servers', search: { tab: 'queue', request } })
+        }}
         onDeploy={(data) => {
           createServer.mutate(data, {
-            onSuccess: () => {
+            onSuccess: (result) => {
+              if (useAuthStore.getState().user?.id !== user?.id) return
               setDialogOpen(false)
+              if (isQueuedServer(result)) {
+                void navigate({
+                  to: '/servers',
+                  search: { tab: 'queue', request: result.queue_id },
+                })
+              }
             },
           })
         }}

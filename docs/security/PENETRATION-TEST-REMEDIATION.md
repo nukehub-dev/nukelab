@@ -116,3 +116,16 @@ The 339 unsigned commits already on `main` cannot be re-signed without rewriting
 ---
 
 **Pending:** PENT-NKL-007 (commit signing). Enable GPG or SSH signing for all maintainers and turn on branch-protection "Require signed commits" for `main`. PENT-NKL-006 (base image digest pinning) is closed and enforced in `.github/workflows/security.yml`.
+
+## Lifecycle status observation fencing
+
+PENT-NKL-014 is owned by Backend Eng. Status probes now apply only under admission
+with unchanged container/version and no active lifecycle journal. Health probes
+use the same authority checks and version-aware restart admission. Regression
+coverage is in `backend/tests/security/test_server_status_fencing.py`; an isolated
+combined runtime retest remains required before release acceptance.
+
+PENT-NKL-015 is owned by Backend Eng. Logout stops now use verified termination,
+with an active-operation/GPU regression in
+`backend/tests/security/test_logout_lifecycle_fencing.py`. Combined runtime retest
+remains required.

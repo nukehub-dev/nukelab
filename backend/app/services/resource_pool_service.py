@@ -56,7 +56,7 @@ class ResourcePoolService:
     async def _get_allocated_resources(self) -> dict[str, float]:
         """Get resources allocated by running servers"""
         result = await self.db.execute(
-            select(Server).where(Server.status.in_(["running", "starting"]))
+            select(Server).where(Server.status.in_(["running", "starting", "stopping"]))
         )
         servers = result.scalars().all()
 

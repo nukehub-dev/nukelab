@@ -77,8 +77,13 @@ async def bulk_server_action(
 
     for server_id in body.server_ids:
         try:
+            await db.refresh(current_user)
             # Get server
-            result = await db.execute(select(Server).where(Server.id == server_id))
+            result = await db.execute(
+                select(Server)
+                .where(Server.id == server_id)
+                .execution_options(populate_existing=True)
+            )
             server = result.scalar_one_or_none()
 
             if not server:
@@ -160,8 +165,18 @@ async def bulk_server_action(
             succeeded.append(server_id)
 
         except HTTPException as e:
-            failed.append({"server_id": server_id, "error": e.detail})
+            await db.rollback()
+            detail = e.detail
+            failed.append(
+                {
+                    "server_id": server_id,
+                    "error": detail.get("code", "operation_failed")
+                    if isinstance(detail, dict)
+                    else str(detail),
+                }
+            )
         except Exception as e:
+            await db.rollback()
             failed.append({"server_id": server_id, "error": str(e)})
 
     # Invalidate server list caches for affected users and admin lists

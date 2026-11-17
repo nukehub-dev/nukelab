@@ -34,6 +34,7 @@ from app.api import (
     quotas,
     schedules,
     search,
+    server_queue,
     servers,
     system,
     tokens,
@@ -282,6 +283,7 @@ app.add_middleware(TracingEnrichmentMiddleware)
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(users.router, prefix="/users", tags=["users"])
 app.include_router(servers.router, prefix="/servers", tags=["servers"])
+app.include_router(server_queue.router, prefix="/server-queue", tags=["server-queue"])
 app.include_router(tokens.router, prefix="/tokens", tags=["tokens"])
 app.include_router(credits.router, prefix="/credits", tags=["credits"])
 app.include_router(credit_requests.router, prefix="/credit-requests", tags=["credit-requests"])

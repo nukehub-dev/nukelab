@@ -3,7 +3,7 @@
 
 import uuid
 
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Index, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from app.core.time_utils import utc_now
@@ -12,6 +12,15 @@ from app.db.base import Base
 
 class ServerQueue(Base):
     __tablename__ = "server_queue"
+    __table_args__ = (
+        Index(
+            "uq_server_queue_active_owner_name",
+            "user_id",
+            "server_name",
+            unique=True,
+            postgresql_where=text("status IN ('pending', 'starting')"),
+        ),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)

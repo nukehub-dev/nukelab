@@ -123,7 +123,7 @@ class GpuAllocatorService:
         """Drop allocation rows whose server no longer needs them.
 
         Safety net for crashed releases: removes rows older than
-        _RECONCILE_GRACE whose server is gone, is not running/starting, or
+        _RECONCILE_GRACE whose server is gone, is not running/starting/stopping, or
         has allocated_gpu == 0. Fresh rows are kept so in-flight spawns are
         not reaped mid-create. commit=False flushes cleanup without committing
         the caller's transaction; ordinary admission does not invoke cleanup.
@@ -150,7 +150,7 @@ class GpuAllocatorService:
             row.id
             for row in candidates
             if row.server_id not in servers
-            or servers[row.server_id].status not in ("running", "starting")
+            or servers[row.server_id].status not in ("running", "starting", "stopping")
             or not servers[row.server_id].allocated_gpu
         ]
         if stale_ids:

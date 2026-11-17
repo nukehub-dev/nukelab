@@ -16,22 +16,31 @@ section.
 
 ### Added
 
+- Owner-scoped waiting requests with typed queued acceptance, capability-gated
+  queue polling, pending cancellation and duplicate-request navigation.
+- Durable fenced lifecycle operations for start, restart, resize, stop and delete;
+  pinned launch generations and reservations survive uncertain runtime outcomes.
 - Shared launch orchestration reserves server, GPU and volume-mount identities
   before provisioning, with pinned runtime/toolchain artifacts and bounded queue
-  dispatch. Existing API/worker activation remains pending lifecycle integration.
+  dispatch selected by creation APIs and queue workers.
 - Immutable toolchain cache preparation verifies artifact, platform and layout;
   live caches are never repopulated and uncertain helpers retain their locks.
   An opt-in isolated container test rehearses tag replacement while a reader
   keeps the original cache mounted.
 - Backend foundations for durable queue requests, approved environment revisions,
   launch provenance, transaction-owned admission, and exclusive volume operations.
-  Launch/worker integration and user-facing recovery/recreation remain pending.
+  User-facing volume recovery and provenance export/recreation remain pending.
 - Bounded archive validation and extraction into fresh destinations, with checksum,
   path/link, metadata, expansion and ownership checks.
 - Configurable allocatable CPU, memory and disk budgets and queue policy settings.
 
 ### Fixed
 
+- Home-volume sharing warnings survive lifecycle edits and server deletion;
+  resumed legacy mounts retain their usage history.
+- Delayed runtime status reads cannot overwrite a newer lifecycle reservation.
+- Queue scans rotate through bounded batches so an early non-fitting batch does
+  not permanently hide later requests.
 - Queue positions now use deterministic priority ordering and return no position
   for missing or terminal requests.
 - Fresh runtime drivers close partially initialized clients after connection failure.

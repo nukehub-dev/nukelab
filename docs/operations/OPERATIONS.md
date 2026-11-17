@@ -292,3 +292,29 @@ VITE_SENTRY_DSN=https://xxx@yyy.ingest.sentry.io/zzz
 ### 8.3 Disable Error Tracking
 
 Leave both DSNs empty (default). The SDKs initialize as no-ops with zero runtime cost.
+
+## Lifecycle journal upgrades and uncertain operations
+
+Drain API requests and stop old Celery workers/Beat before deploying the journal
+migration. Mixed old/new runtime writers are unsupported: old workers do not
+honor new claims, mount guards or cancellation. Take the normal pre-migration
+snapshot, reconcile in-flight legacy launches, then run the migration and start
+the matching API/worker images together.
+
+Migration preflight refuses duplicate owner/server names, conflicting active queue
+names and unidentified legacy in-flight queue entries. Resolve those records with
+runtime evidence before retrying; the migration does not silently delete user
+servers. Pending legacy requests without a normalized payload are cancelled with
+a resubmit reason. Incomplete historic launches become protected uncertain
+operations; only matching owner/server/revision/generation evidence permits a
+completed journal backfill.
+
+For `recovery_required` or an uncertain journal, first establish that the original
+executor has terminated. Inspect the UUID-based runtime name, managed owner/server
+labels, actual image identity, mount attachments and GPU assignments. A database
+row with no container ID does not prove no container exists. Keep reservations
+until the runtime outcome is established. Automated adoption and an operator
+reconciliation command are not yet available; do not manually expire reservations
+on a timer or blindly retry runtime mutations. Record the evidence and use a
+reviewed repair procedure or restore the verified pre-migration snapshot with its
+matching image version.

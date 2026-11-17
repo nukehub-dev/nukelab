@@ -8,6 +8,7 @@ from uuid import uuid4
 
 import pytest
 
+from app.core.time_utils import utc_now
 from app.schemas.server_launch import NormalizedLaunchRequest
 from app.services.environment_revision_service import ConfigurationChanged, RevisionUnavailable
 from app.services.server_launch_service import LaunchError
@@ -36,6 +37,8 @@ def candidate(**overrides):
         request_payload=payload,
         request_version=1,
         revision_id=uuid4(),
+        priority=0,
+        requested_at=utc_now(),
         **overrides,
     )
 
@@ -55,6 +58,8 @@ def setup_dispatcher():
         rollback=AsyncMock(),
         begin=MagicMock(return_value=context),
         scalars=AsyncMock(return_value=rows),
+        scalar=AsyncMock(return_value=None),
+        flush=AsyncMock(),
         execute=AsyncMock(return_value=SimpleNamespace(rowcount=1)),
     )
     launch = MagicMock(reserve=AsyncMock(), provision=AsyncMock(), resolve_revision=AsyncMock())
@@ -66,6 +71,7 @@ def setup_dispatcher():
         patch(
             "app.services.server_queue_dispatch_service.ServerQueueService.expire_pending", expire
         ),
+        patch("app.services.server_queue_dispatch_service.acquire_admission_lock", AsyncMock()),
     ):
         yield SimpleNamespace(
             service=ServerQueueDispatchService(db, MagicMock()),
@@ -85,8 +91,8 @@ async def test_empty_scan_expires_pending_only_and_bounds_order(setup_dispatcher
     assert result.scanned == 0
     statement = setup.db.scalars.call_args.args[0]
     sql = str(statement)
-    assert "server_queue.priority DESC, server_queue.requested_at ASC, server_queue.id ASC" in sql
-    assert statement.compile().params["param_1"] == 20
+    assert "DESC, server_queue.requested_at ASC NULLS LAST, server_queue.id ASC" in sql
+    assert 20 in statement.compile().params.values()
     assert statement.get_execution_options()["populate_existing"]
     setup.launch.reserve.assert_not_awaited()
 

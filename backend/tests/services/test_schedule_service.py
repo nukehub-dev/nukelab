@@ -338,300 +338,254 @@ class TestScheduleServiceDue:
         assert result == []
 
 
+@pytest.fixture
+def schedule_inputs(db_session, test_user):
+    owner_id = test_user.id
+
+    async def create(action="start", status="stopped", container_id="old-container", plan_id=None):
+        server = Server(
+            name=f"scheduled-{uuid_mod.uuid4().hex}",
+            user_id=owner_id,
+            status=status,
+            container_id=container_id,
+            plan_id=plan_id,
+        )
+        db_session.add(server)
+        await db_session.flush()
+        schedule = ServerSchedule(
+            server_id=server.id,
+            user_id=owner_id,
+            action=action,
+            cron_expression="0 9 * * *",
+            timezone="UTC",
+            next_run_at=datetime.now(UTC).replace(tzinfo=None),
+            is_active=True,
+        )
+        db_session.add(schedule)
+        await db_session.commit()
+        return server.id, schedule.id, owner_id, schedule
+
+    return create
+
+
 class TestScheduleServiceExecute:
-    """Tests for execute_schedule."""
+    @pytest.mark.asyncio
+    async def test_missing_server_disables_schedule(self, db_session, schedule_inputs):
+        _, schedule_id, _, schedule = await schedule_inputs()
+        result = Mock()
+        result.scalar_one_or_none.return_value = None
+        with patch.object(db_session, "execute", AsyncMock(return_value=result)):
+            outcome = await ScheduleService(db_session).execute_schedule(schedule)
+        assert outcome == {"success": False, "error": "Server not found"}
+        stored = await db_session.get(ServerSchedule, schedule_id, populate_existing=True)
+        assert not stored.is_active
 
     @pytest.mark.asyncio
-    async def test_execute_schedule_server_not_found(self, db_session, test_user):
-        """Should mark schedule inactive when server missing."""
-        from unittest.mock import patch
+    @pytest.mark.parametrize(
+        "action,initial,expected",
+        [
+            ("start", "stopped", "running"),
+            ("stop", "running", "stopped"),
+            ("restart", "running", "running"),
+        ],
+    )
+    async def test_actions_use_guarded_boundary_and_close_driver(
+        self, db_session, schedule_inputs, action, initial, expected
+    ):
+        from types import SimpleNamespace
 
-        server = Server(name="tmp", user_id=test_user.id, status="stopped")
-        db_session.add(server)
-        await db_session.flush()
+        from sqlalchemy import select
 
-        sched = ServerSchedule(
-            server_id=server.id,
-            user_id=test_user.id,
-            action="start",
-            cron_expression="0 9 * * *",
-            next_run_at=datetime.now(UTC).replace(tzinfo=None),
-            is_active=True,
+        from app.models.notification import Notification
+
+        server_id, schedule_id, owner_id, schedule = await schedule_inputs(action, initial)
+        runtime = SimpleNamespace(close=AsyncMock())
+
+        async def perform(id_, owner_id=None):
+            assert id_ == server_id
+            # Shared lifecycle expires all read-only identities before admission.
+            await db_session.rollback()
+            server = await db_session.get(Server, id_, populate_existing=True)
+            server.status = expected
+            server.container_id = None if expected == "stopped" else "new-container"
+            await db_session.commit()
+            return server
+
+        lifecycle = Mock(
+            start=AsyncMock(side_effect=perform), restart=AsyncMock(side_effect=perform)
         )
-        db_session.add(sched)
-        await db_session.commit()
-
-        service = ScheduleService(db_session)
-
-        # Mock the server query to return None
-        async def mock_execute(stmt):
-            class MockResult:
-                def scalar_one_or_none(self):
-                    return None
-
-            return MockResult()
-
-        with patch.object(db_session, "execute", side_effect=mock_execute):
-            result = await service.execute_schedule(sched)
-
-        assert result["success"] is False
-        assert "Server not found" in result["error"]
-        assert sched.is_active is False
-
-    @pytest.mark.asyncio
-    async def test_execute_schedule_start_no_container(self, db_session, test_user):
-        """Start action with no container_id should report missing."""
-        server = Server(name="srv", user_id=test_user.id, status="stopped", container_id=None)
-        db_session.add(server)
-        await db_session.flush()
-
-        sched = ServerSchedule(
-            server_id=server.id,
-            user_id=test_user.id,
-            action="start",
-            cron_expression="0 9 * * *",
-            next_run_at=datetime.now(UTC).replace(tzinfo=None),
-            is_active=True,
-        )
-        db_session.add(sched)
-        await db_session.commit()
-
-        service = ScheduleService(db_session)
-        result = await service.execute_schedule(sched)
-        assert result["success"] is False
-        assert (
-            "container missing" in result["message"].lower()
-            or "cannot auto-start" in result["message"]
-        )
-
-    @pytest.mark.asyncio
-    async def test_execute_schedule_start_stopped_container(self, db_session, test_user):
-        """Start action with stopped container should start it."""
-        server = Server(name="srv", user_id=test_user.id, status="stopped", container_id="cid-123")
-        db_session.add(server)
-        await db_session.flush()
-
-        sched = ServerSchedule(
-            server_id=server.id,
-            user_id=test_user.id,
-            action="start",
-            cron_expression="0 9 * * *",
-            next_run_at=datetime.now(UTC).replace(tzinfo=None),
-            is_active=True,
-        )
-        db_session.add(sched)
-        await db_session.commit()
-
-        service = ScheduleService(db_session)
-        mock_spawner = Mock()
-        mock_spawner.get_status = AsyncMock(return_value="stopped")
-        mock_spawner.start = AsyncMock()
-
+        termination = Mock(stop=AsyncMock(side_effect=perform))
         with (
-            patch("app.container.spawner.spawner", mock_spawner),
             patch(
-                "app.services.schedule_service.broadcast_server_status_change",
-                new_callable=AsyncMock,
+                "app.services.schedule_service.get_fresh_driver", AsyncMock(return_value=runtime)
             ),
+            patch("app.services.schedule_service.ServerLifecycleService", return_value=lifecycle),
+            patch(
+                "app.services.schedule_service.ServerTerminationService", return_value=termination
+            ),
+            patch("app.services.schedule_service.broadcast_server_status_change", AsyncMock()),
         ):
-            result = await service.execute_schedule(sched)
-
-        assert result["success"] is True
-        assert "started" in result["message"].lower()
-        mock_spawner.start.assert_awaited_once_with("cid-123")
-        assert server.status == "running"
-
-    @pytest.mark.asyncio
-    async def test_execute_schedule_start_already_running(self, db_session, test_user):
-        """Start action with already running container does nothing."""
-        server = Server(name="srv", user_id=test_user.id, status="running", container_id="cid-123")
-        db_session.add(server)
-        await db_session.flush()
-
-        sched = ServerSchedule(
-            server_id=server.id,
-            user_id=test_user.id,
-            action="start",
-            cron_expression="0 9 * * *",
-            next_run_at=datetime.now(UTC).replace(tzinfo=None),
-            is_active=True,
-        )
-        db_session.add(sched)
-        await db_session.commit()
-
-        service = ScheduleService(db_session)
-        mock_spawner = Mock()
-        mock_spawner.get_status = AsyncMock(return_value="running")
-
-        with patch("app.container.spawner.spawner", mock_spawner):
-            result = await service.execute_schedule(sched)
-
-        assert result["success"] is False
-        mock_spawner.start.assert_not_called()
+            outcome = await ScheduleService(db_session).execute_schedule(schedule)
+        assert outcome["success"] is True
+        boundary = termination.stop if action == "stop" else getattr(lifecycle, action)
+        if action == "stop":
+            boundary.assert_awaited_once_with(server_id, owner_id)
+        else:
+            boundary.assert_awaited_once_with(server_id, owner_id=owner_id)
+        stored = await db_session.get(ServerSchedule, schedule_id, populate_existing=True)
+        assert stored.run_count == 1 and stored.last_run_at is not None
+        assert stored.next_run_at > stored.last_run_at
+        notifications = (
+            await db_session.scalars(select(Notification).where(Notification.user_id == owner_id))
+        ).all()
+        assert len(notifications) == 1
+        runtime.close.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_execute_schedule_stop(self, db_session, test_user):
-        """Stop action should stop running server."""
-        server = Server(name="srv", user_id=test_user.id, status="running", container_id="cid-123")
-        db_session.add(server)
-        await db_session.flush()
+    async def test_start_without_container_still_uses_shared_recreation_policy(
+        self, db_session, schedule_inputs
+    ):
+        from types import SimpleNamespace
 
-        sched = ServerSchedule(
-            server_id=server.id,
-            user_id=test_user.id,
-            action="stop",
-            cron_expression="0 9 * * *",
-            next_run_at=datetime.now(UTC).replace(tzinfo=None),
-            is_active=True,
-        )
-        db_session.add(sched)
-        await db_session.commit()
-
-        service = ScheduleService(db_session)
-        mock_spawner = Mock()
-        mock_spawner.delete = AsyncMock()
-
+        server_id, _, owner_id, schedule = await schedule_inputs(container_id=None)
+        runtime = SimpleNamespace(close=AsyncMock())
+        launched = SimpleNamespace(container_id="recreated-runtime")
+        lifecycle = Mock(start=AsyncMock(return_value=launched))
         with (
-            patch("app.container.spawner.spawner", mock_spawner),
             patch(
-                "app.services.schedule_service.broadcast_server_status_change",
-                new_callable=AsyncMock,
+                "app.services.schedule_service.get_fresh_driver", AsyncMock(return_value=runtime)
             ),
-            patch("app.services.quota_service.QuotaService") as mock_quota_cls,
+            patch("app.services.schedule_service.ServerLifecycleService", return_value=lifecycle),
+            patch("app.services.schedule_service.broadcast_server_status_change", AsyncMock()),
         ):
-            mock_quota = Mock()
-            mock_quota.decrement_usage = AsyncMock()
-            mock_quota_cls.return_value = mock_quota
-            result = await service.execute_schedule(sched)
-
-        assert result["success"] is True
-        assert "stopped" in result["message"].lower()
-        mock_spawner.delete.assert_awaited_once_with("cid-123")
-        assert server.status == "stopped"
+            outcome = await ScheduleService(db_session).execute_schedule(schedule)
+        assert outcome["success"]
+        lifecycle.start.assert_awaited_once_with(server_id, owner_id=owner_id)
+        runtime.close.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_execute_schedule_stop_with_plan_billing(self, db_session, test_user):
-        """Stop action should reconcile billing when plan exists."""
+    async def test_already_running_start_is_noop(self, db_session, schedule_inputs):
+        _, schedule_id, _, schedule = await schedule_inputs(status="running")
+        with patch("app.services.schedule_service.get_fresh_driver", AsyncMock()) as factory:
+            outcome = await ScheduleService(db_session).execute_schedule(schedule)
+        assert outcome["success"] is False
+        factory.assert_not_awaited()
+        stored = await db_session.get(ServerSchedule, schedule_id, populate_existing=True)
+        assert stored.run_count == 1
+
+    @pytest.mark.asyncio
+    async def test_runtime_failure_is_sanitized_and_driver_closed(
+        self, db_session, schedule_inputs
+    ):
+        from types import SimpleNamespace
+
+        from app.services.server_launch_service import LaunchError
+
+        _, schedule_id, _, schedule = await schedule_inputs()
+        runtime = SimpleNamespace(close=AsyncMock())
+        lifecycle = Mock(start=AsyncMock(side_effect=LaunchError("launch_in_progress", 409)))
+        with (
+            patch(
+                "app.services.schedule_service.get_fresh_driver", AsyncMock(return_value=runtime)
+            ),
+            patch("app.services.schedule_service.ServerLifecycleService", return_value=lifecycle),
+        ):
+            outcome = await ScheduleService(db_session).execute_schedule(schedule)
+        assert outcome == {"success": False, "error": "launch_in_progress"}
+        runtime.close.assert_awaited_once()
+        stored = await db_session.get(ServerSchedule, schedule_id, populate_existing=True)
+        assert stored.run_count == 0
+
+    @pytest.mark.asyncio
+    async def test_stop_reconciles_billing_after_guarded_termination(
+        self, db_session, schedule_inputs
+    ):
+        from types import SimpleNamespace
+
         from app.models.server_plan import ServerPlan
 
-        server = Server(
-            name="srv",
-            user_id=test_user.id,
-            status="running",
-            container_id="cid-123",
-            plan_id=uuid_mod.uuid4(),
-        )
-        db_session.add(server)
-        await db_session.flush()
-
         plan = ServerPlan(
-            id=server.plan_id,
-            name="test",
-            slug="test",
-            cpu_limit=1.0,
-            memory_limit="512m",
-            disk_limit="10g",
+            name="schedule-billing",
+            slug="schedule-billing",
+            cpu_limit=1,
+            memory_limit="1g",
+            disk_limit="1g",
             cost_per_hour=1,
         )
         db_session.add(plan)
-        await db_session.flush()
-
-        sched = ServerSchedule(
-            server_id=server.id,
-            user_id=test_user.id,
-            action="stop",
-            cron_expression="0 9 * * *",
-            next_run_at=datetime.now(UTC).replace(tzinfo=None),
-            is_active=True,
-        )
-        db_session.add(sched)
         await db_session.commit()
-
-        service = ScheduleService(db_session)
-        mock_spawner = Mock()
-        mock_spawner.delete = AsyncMock()
-        mock_credit = Mock()
-        mock_credit.reconcile_server_billing = AsyncMock()
-
+        plan_id = plan.id
+        server_id, _, _, schedule = await schedule_inputs(
+            action="stop", status="running", plan_id=plan_id
+        )
+        server = await db_session.get(Server, server_id)
+        runtime = SimpleNamespace(close=AsyncMock())
+        termination = Mock(stop=AsyncMock(return_value=server))
+        credit = Mock(reconcile_server_billing=AsyncMock())
         with (
-            patch("app.container.spawner.spawner", mock_spawner),
             patch(
-                "app.services.schedule_service.broadcast_server_status_change",
-                new_callable=AsyncMock,
+                "app.services.schedule_service.get_fresh_driver", AsyncMock(return_value=runtime)
             ),
-            patch("app.services.credit_service.CreditService", return_value=mock_credit),
-            patch("app.services.quota_service.QuotaService") as mock_quota_cls,
+            patch(
+                "app.services.schedule_service.ServerTerminationService", return_value=termination
+            ),
+            patch("app.services.credit_service.CreditService", return_value=credit),
+            patch("app.services.schedule_service.broadcast_server_status_change", AsyncMock()),
         ):
-            mock_quota = Mock()
-            mock_quota.decrement_usage = AsyncMock()
-            mock_quota_cls.return_value = mock_quota
-            result = await service.execute_schedule(sched)
-
-        assert result["success"] is True
-        mock_credit.reconcile_server_billing.assert_awaited_once()
-        mock_quota.decrement_usage.assert_awaited_once()
+            outcome = await ScheduleService(db_session).execute_schedule(schedule)
+        assert outcome["success"]
+        credit.reconcile_server_billing.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_execute_schedule_restart(self, db_session, test_user):
-        """Restart action should stop then start container."""
-        server = Server(name="srv", user_id=test_user.id, status="running", container_id="cid-123")
-        db_session.add(server)
-        await db_session.flush()
+    async def test_multiple_due_schedules_survive_session_expiration(
+        self, db_session, schedule_inputs
+    ):
+        from types import SimpleNamespace
 
-        sched = ServerSchedule(
-            server_id=server.id,
-            user_id=test_user.id,
-            action="restart",
-            cron_expression="0 9 * * *",
-            next_run_at=datetime.now(UTC).replace(tzinfo=None),
-            is_active=True,
-        )
-        db_session.add(sched)
-        await db_session.commit()
-
+        first_id, _, _, _ = await schedule_inputs()
+        second_id, _, _, _ = await schedule_inputs()
         service = ScheduleService(db_session)
-        mock_spawner = Mock()
-        mock_spawner.stop = AsyncMock()
-        mock_spawner.start = AsyncMock()
+        schedules = await service.get_due_schedules()
+        runtime = SimpleNamespace(close=AsyncMock())
+        seen = []
 
+        async def launch(server_id, owner_id=None):
+            seen.append(server_id)
+            await db_session.rollback()
+            server = await db_session.get(Server, server_id, populate_existing=True)
+            server.status = "running"
+            await db_session.commit()
+            return server
+
+        lifecycle = Mock(start=AsyncMock(side_effect=launch))
         with (
-            patch("app.container.spawner.spawner", mock_spawner),
             patch(
-                "app.services.schedule_service.broadcast_server_status_change",
-                new_callable=AsyncMock,
+                "app.services.schedule_service.get_fresh_driver", AsyncMock(return_value=runtime)
             ),
+            patch("app.services.schedule_service.ServerLifecycleService", return_value=lifecycle),
+            patch("app.services.schedule_service.broadcast_server_status_change", AsyncMock()),
         ):
-            result = await service.execute_schedule(sched)
-
-        assert result["success"] is True
-        assert "restarted" in result["message"].lower()
-        mock_spawner.stop.assert_awaited_once_with("cid-123")
-        mock_spawner.start.assert_awaited_once_with("cid-123")
+            for schedule in schedules:
+                assert (await service.execute_schedule(schedule))["success"]
+        assert set(seen) == {first_id, second_id}
+        assert runtime.close.await_count == 2
 
     @pytest.mark.asyncio
-    async def test_execute_schedule_exception(self, db_session, test_user):
-        """Exception during execution should rollback and return error."""
-        server = Server(name="srv", user_id=test_user.id, status="running", container_id="cid-123")
-        db_session.add(server)
-        await db_session.flush()
+    async def test_cancellation_propagates_and_closes_action_driver(
+        self, db_session, schedule_inputs
+    ):
+        import asyncio
+        from types import SimpleNamespace
 
-        sched = ServerSchedule(
-            server_id=server.id,
-            user_id=test_user.id,
-            action="restart",
-            cron_expression="0 9 * * *",
-            next_run_at=datetime.now(UTC).replace(tzinfo=None),
-            is_active=True,
-        )
-        db_session.add(sched)
-        await db_session.commit()
-
-        service = ScheduleService(db_session)
-        mock_spawner = Mock()
-        mock_spawner.stop = AsyncMock(side_effect=Exception("docker error"))
-
-        with patch("app.container.spawner.spawner", mock_spawner):
-            result = await service.execute_schedule(sched)
-
-        assert result["success"] is False
-        assert "docker error" in result["error"]
+        _, _, _, schedule = await schedule_inputs()
+        runtime = SimpleNamespace(close=AsyncMock())
+        lifecycle = Mock(start=AsyncMock(side_effect=asyncio.CancelledError()))
+        with (
+            patch(
+                "app.services.schedule_service.get_fresh_driver", AsyncMock(return_value=runtime)
+            ),
+            patch("app.services.schedule_service.ServerLifecycleService", return_value=lifecycle),
+        ):
+            with pytest.raises(asyncio.CancelledError):
+                await ScheduleService(db_session).execute_schedule(schedule)
+        runtime.close.assert_awaited_once()

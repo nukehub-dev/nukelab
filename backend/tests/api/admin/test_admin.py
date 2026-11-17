@@ -428,14 +428,18 @@ class TestBulkServerActionBranches:
         )
         db_session.add(server)
         await db_session.commit()
+        sid = str(server.id)
 
         response = await client.post(
             "/api/admin/servers/bulk-action",
             headers={"Authorization": f"Bearer {admin_token}"},
-            json={"action": "start", "server_ids": [str(server.id)]},
+            json={"action": "start", "server_ids": [sid]},
         )
         assert response.status_code == 200
-        assert str(server.id) in response.json()["results"]["success"]
+        assert response.json()["results"]["success"] == []
+        assert response.json()["results"]["failed"] == [
+            {"server_id": sid, "error": "revision_unavailable"}
+        ]
 
     @pytest.mark.asyncio
     async def test_bulk_server_unknown_action(self, client, admin_token, test_user, db_session):
@@ -816,16 +820,24 @@ class TestAdminServerManagementExtended:
         db_session.add(s)
         await db_session.commit()
 
-        with mock.patch("app.container.spawner.spawner") as mock_spawner:
-            mock_spawner.start = mock.AsyncMock()
-            with mock.patch("app.api.admin.broadcast_server_status_change") as mock_bc:
-                mock_bc.return_value = None
-                response = await client.post(
-                    "/api/admin/servers/bulk-action",
-                    headers={"Authorization": f"Bearer {admin_token}"},
-                    json={"action": "start", "server_ids": [str(s.id)]},
-                )
+        sid = str(s.id)
+        with (
+            mock.patch("app.api.servers.ServerLifecycleService") as lifecycle,
+            mock.patch("app.api.servers.get_driver", new_callable=mock.AsyncMock),
+            mock.patch("app.api.servers.NotificationService", return_value=mock.AsyncMock()),
+            mock.patch(
+                "app.api.servers.broadcast_server_status_change", new_callable=mock.AsyncMock
+            ),
+        ):
+            lifecycle.return_value.start = mock.AsyncMock(return_value=mock.Mock(status="running"))
+            response = await client.post(
+                "/api/admin/servers/bulk-action",
+                headers={"Authorization": f"Bearer {admin_token}"},
+                json={"action": "start", "server_ids": [sid]},
+            )
         assert response.status_code == 200
+        assert response.json()["results"]["success"] == [sid]
+        lifecycle.return_value.start.assert_awaited_once_with(uuid_mod.UUID(sid))
 
 
 class TestAdminCreditManagement:
@@ -1283,7 +1295,7 @@ class TestServersBulkAction:
 
     @pytest.mark.asyncio
     async def test_servers_bulk_action_delete(self, client, admin_token, test_user, db_session):
-        """Delete action should call delete_container and not broadcast."""
+        """Delete uses shared termination and does not broadcast a live state."""
         plan = ServerPlan(
             name="bulk-plan",
             slug="bulk-plan",
@@ -1313,24 +1325,32 @@ class TestServersBulkAction:
         await db_session.commit()
         await db_session.refresh(server)
 
-        with mock.patch("app.container.spawner.spawner") as mock_spawner:
-            mock_spawner.delete = mock.AsyncMock(return_value=True)
-            with mock.patch("app.api.admin.broadcast_server_status_change") as mock_bc:
-                response = await client.post(
-                    "/api/admin/servers/bulk-action",
-                    headers={"Authorization": f"Bearer {admin_token}"},
-                    json={"action": "delete", "server_ids": [str(server.id)]},
-                )
+        sid = str(server.id)
+        with (
+            mock.patch("app.api.servers.ServerTerminationService") as termination,
+            mock.patch("app.api.servers.get_driver", new_callable=mock.AsyncMock),
+            mock.patch("app.api.servers.NotificationService", return_value=mock.AsyncMock()),
+            mock.patch(
+                "app.api.servers.broadcast_server_status_change", new_callable=mock.AsyncMock
+            ) as broadcast,
+        ):
+            termination.return_value.delete = mock.AsyncMock()
+            response = await client.post(
+                "/api/admin/servers/bulk-action",
+                headers={"Authorization": f"Bearer {admin_token}"},
+                json={"action": "delete", "server_ids": [sid]},
+            )
 
         assert response.status_code == 200
-        mock_spawner.delete.assert_awaited_once_with("bulk-cid")
-        mock_bc.assert_not_called()
+        assert response.json()["results"]["success"] == [sid]
+        termination.return_value.delete.assert_awaited_once_with(uuid_mod.UUID(sid))
+        broadcast.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_servers_bulk_action_spawner_exception(
+    async def test_servers_bulk_action_service_exception(
         self, client, admin_token, test_user, db_session
     ):
-        """Spawner exception should be caught per server."""
+        """Unexpected service failures stay per item and do not leak diagnostics."""
         plan = ServerPlan(
             name="bulk-plan2",
             slug="bulk-plan2",
@@ -1360,8 +1380,13 @@ class TestServersBulkAction:
         await db_session.commit()
         await db_session.refresh(server)
 
-        with mock.patch("app.container.spawner.spawner") as mock_spawner:
-            mock_spawner.stop = mock.AsyncMock(side_effect=Exception("docker down"))
+        with (
+            mock.patch("app.api.servers.ServerTerminationService") as termination,
+            mock.patch("app.api.servers.get_driver", new_callable=mock.AsyncMock),
+        ):
+            termination.return_value.stop = mock.AsyncMock(
+                side_effect=Exception("private runtime diagnostic")
+            )
             response = await client.post(
                 "/api/admin/servers/bulk-action",
                 headers={"Authorization": f"Bearer {admin_token}"},
@@ -1371,7 +1396,7 @@ class TestServersBulkAction:
         assert response.status_code == 200
         data = response.json()
         assert len(data["results"]["failed"]) == 1
-        assert "docker down" in data["results"]["failed"][0]["error"].lower()
+        assert data["results"]["failed"][0]["error"] == "operation_failed"
 
 
 # ─────────────────────────────────────────────────────────────
