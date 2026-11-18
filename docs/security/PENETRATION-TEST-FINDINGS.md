@@ -37,6 +37,7 @@
 | PENT-NKL-011 | Backend reports server running before container is ready | Medium | Backend / Container Orchestration | Closed | Security Eng | Backend Eng | 2026-06-28 | 2026-06-28 |
 | PENT-NKL-012 | Shared read-only volumes leak host storage size and usage | Low | Container Security / Information Disclosure | Open | Security Eng | Platform Eng | 2026-07-15 | |
 | PENT-NKL-013 | User resource stats endpoint missing authorization check | Medium | API1:2023 BOLA / Information Disclosure | Closed | Security Eng | Backend Eng | 2026-07-29 | 2026-07-29 |
+| PENT-NKL-018 | Queue-admitted containers bypassed runtime hardening settings | Medium | Container Security / Configuration | Retest Ready | Security Eng | Backend Eng | 2026-11-18 | |
 
 ---
 
@@ -766,3 +767,31 @@ Retest `backend/tests/security/test_volume_mutation_exclusion.py` and the driver
 regressions, including daemon failure and ambiguous post-delete inspection.
 An isolated daemon failure drill must confirm physical data, ownership records
 and reservations remain protected until absence is established.
+
+### PENT-NKL-018: Queue-admitted containers bypassed runtime hardening settings
+
+**Severity:** Medium
+
+**CVSS 3.1:** 6.5 (`AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N`)
+
+**Status:** Retest Ready
+
+**Opened:** 2026-11-18
+
+**Owner:** Backend Eng
+
+**Component:** `compose.yml`, `backend/app/container/docker_driver.py`
+
+`celery-worker` runs queue dispatch, scheduled starts and health restarts, but
+Compose did not pass `CONTAINER_HARDENING_ENABLED`, `DEV_MODE`, server-auth
+settings or the public URL to that container. The worker therefore defaulted
+hardening off and created queue-admitted servers as root with no capability
+drop, writable rootfs and no no-new-privileges policy, while API-created
+servers remained hardened. Environment parity, queue admission and the
+read-only-rootfs `/home` tmpfs are now supplied to the worker; the combined
+real-stack acceptance scenario inspects the admitted container image and
+verifies the runtime identity and volume data.
+
+Retest the combined browser/worker/runtime scenario and inspect a
+queue-admitted container with `./nukelabctl verify-hardening` on an isolated
+stack. Also verify scheduled and health-restart spawns use the same settings.

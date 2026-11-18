@@ -313,8 +313,12 @@ source permissions. Shared/live backups, archive upload/download and remote back
 storage are outside this workflow.
 
 Recovery is disabled until both storage paths in [`.env.example`](../../.env.example)
-are configured and the trusted local helper image is available. Build that image
-using [the helper instructions](../../services/volume-helper/README.md). Provision
+are configured and the trusted helper image is available. Release images are
+published as `ghcr.io/nukehub-dev/nukelab-volume-helper:<version>` and tagged
+`latest`; a pull-based deployment can set `VOLUME_BACKUP_HELPER_IMAGE` to that
+image and run `./nukelabctl pull` (or `update`). For a local source build, build
+the helper using
+[the helper instructions](../../services/volume-helper/README.md). Provision
 an absolute artifact directory owned by UID/GID 65532 with mode `0700`; configure
 `VOLUME_BACKUP_HOST_PATH` as its daemon-host path and
 `VOLUME_BACKUP_STORAGE_PATH` as the path inside API and worker containers. These
@@ -322,6 +326,12 @@ must name the same bind mount. API, worker and scheduler receive the configurati
 through Compose. The service resolves the helper to a local immutable image ID;
 it never pulls an image during admission. Rootless runtimes must map the storage
 ownership correctly for container UID 65532.
+
+API and worker containers may bind the private backup storage root itself; those
+trusted platform mounts are not treated as workload attachments. User runtime
+containers that mount the volume, or a parent/child path aliasing it, still block
+backup and deletion. Artifact cleanup also ignores the platform storage-root bind,
+so retained and corrupted backups remain deletable through the owner API.
 
 Storage admission reserves conservative archive and staging space against owner,
 global and physical-free-space limits before work begins. The estimate includes

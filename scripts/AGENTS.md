@@ -17,6 +17,7 @@ All files under `scripts/`, plus the top-level `nukelabctl` dispatcher.
 - `init_env` also exports `NUKELAB_IMAGE_TAG` (defaults to the pinned `NUKELAB_VERSION` in pull mode, or `latest` in source-build mode) and `NUKELAB_PULL_DEPLOY`. Setting `NUKELAB_VERSION` or `NUKELAB_IMAGE_TAG` explicitly switches `nukelabctl up` / `update` to pull pre-built images from `ghcr.io/nukehub-dev/nukelab-backend` and `-frontend` instead of building from source.
 - `update` has a `--build` escape hatch that forces a source rebuild even when `NUKELAB_PULL_DEPLOY=true`. In source-build mode `update` and `pull` pull base images for the pullable infra services only, via `_pullable_infra_services`.
 - `_pullable_infra_services` returns the pullable (non-buildable) infra services (`traefik postgres redis` + enabled overlay services) as a word-split list, mirroring `_backend_services`. App services (`backend`, `celery-worker`, `celery-beat`, `frontend`) are excluded so unpinned ghcr.io images are never pulled without registry auth; pull mode pulls them explicitly.
+- `_pull_volume_helper_image` pulls a remotely qualified `VOLUME_BACKUP_HELPER_IMAGE` after `pull`/`update` and treats failure as non-fatal; local helper tags are built from this checkout. Published helper images use `ghcr.io/nukehub-dev/nukelab-volume-helper`.
 - Each management command exposes `cmd_<name>`, `help_<name>`, and `parse_<name>_args` when it accepts flags.
 - Environment-file helpers live in `scripts/lib.sh`:
   - `load_env_file` exports active KEY=VALUE lines from a file.
@@ -25,7 +26,7 @@ All files under `scripts/`, plus the top-level `nukelabctl` dispatcher.
 - `check-env` and `sync-env` compare local env files against `.env.example`.
   `check-env` is read-only; `sync-env` appends missing keys without overwriting
   existing values and never removes stale keys without operator consent.
-- Security scanning helpers live in `scripts/security/`.
+- Security scanning helpers live in `scripts/security/`; container image scans and SBOMs include the volume helper when it is built locally.
 - `lint` aggregates failures across selected targets and exits nonzero if any tool fails, including failures inside backend/frontend subshells. A later successful formatter or target must not erase an earlier failure; `--fix` follows the same exit-status contract.
 
 ## Work Guidance
@@ -58,4 +59,4 @@ All files under `scripts/`, plus the top-level `nukelabctl` dispatcher.
 
 ## Child NAD Index
 
-- None
+- `ci/AGENTS.md` — Reproducible CI helpers for the disposable browser-e2e stack.

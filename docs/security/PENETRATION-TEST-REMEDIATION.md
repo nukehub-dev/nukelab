@@ -143,3 +143,4 @@ scope. Final recreation rechecks current approval and uses ordinary admission.
 | Finding ID | Owner | Status | Evidence / retest |
 |---|---|---|---|
 | PENT-NKL-017 | Backend Eng | Remediated before release; isolated retest required | `docker_driver.py`, `volume_service.py`, `test_volume_mutation_exclusion.py`; inject daemon inspection/deletion failure and verify protected ownership and quota remain |
+| PENT-NKL-018 | Backend Eng | Retest ready | `compose.yml` worker env parity; combined browser/worker/runtime scenario; inspect a queue-admitted container with `./nukelabctl verify-hardening` and verify scheduled/health spawns |

@@ -84,6 +84,17 @@ class VolumeRecoveryRuntime:
         except Exception:
             raise RuntimeRecoveryError("helper_unavailable", executor_terminated=True) from None
 
+    @staticmethod
+    def _platform_container(info):
+        """Trusted orchestration containers may bind the private storage root."""
+        labels = (info.get("Config") or {}).get("Labels") or {}
+        return labels.get("com.docker.compose.service") in {
+            "backend",
+            "celery-worker",
+            "celery-beat",
+            "backend-test",
+        }
+
     async def assert_detached(self, volume_name):
         try:
             volume = await self.driver.get_volume(volume_name)
@@ -108,6 +119,13 @@ class VolumeRecoveryRuntime:
                 if not isinstance(container, dict) or not isinstance(container.get("Id"), str):
                     raise ValueError("inspection unavailable")
                 info = await self.driver.get_container_info(container["Id"])
+                # Platform services bind the whole storage root (for example,
+                # VOLUME_STORAGE_PATH equals the daemon's volume root). They
+                # are trusted orchestration containers, not user workloads,
+                # and their parent-path bind must not mark every child volume
+                # as attached.
+                if self._platform_container(info):
+                    continue
                 mounts = info.get("Mounts")
                 if not isinstance(mounts, list):
                     raise ValueError("inspection unavailable")
@@ -483,9 +501,17 @@ class VolumeRecoveryRuntime:
         host = Path(self._host(relative))
         try:
             for info in await self.driver.list_containers(all=True):
-                if not isinstance(info.get("Mounts"), list):
+                if not isinstance(info, dict):
                     raise ValueError("inspection unavailable")
-                for mount in info["Mounts"]:
+                details = info
+                if isinstance(info.get("Id"), str):
+                    details = await self.driver.get_container_info(info["Id"])
+                if self._platform_container(details):
+                    continue
+                mounts = info.get("Mounts")
+                if not isinstance(mounts, list):
+                    raise ValueError("inspection unavailable")
+                for mount in mounts:
                     if mount.get("Type") == "bind":
                         source = Path(mount.get("Source", ""))
                         if source == host or host in source.parents or source in host.parents:

@@ -16,6 +16,19 @@ section.
 
 ### Added
 
+- Required frontend test CI: Vitest units, Vite-only account-switch specs, a
+  disposable real-stack browser suite (including direct gateway access), and the
+  workspace/IDE gateway image job now block image publication. The browser jobs
+  build the real base runtime, approve A/B fixture images, publish Playwright
+  failure artifacts and clean up only their own stack resources.
+- A combined real-stack acceptance scenario covers approved environment A, an
+  offline private-volume backup and restore into a new volume, queued recreation
+  with a capacity wait, owner/privacy checks, actual runtime identity, restored
+  file hashes and a corrupted-artifact failure drill.
+- The trusted volume helper is built, scanned, version-tagged and published as
+  `ghcr.io/nukehub-dev/nukelab-volume-helper`; `pull`/`update` fetch an explicitly
+  configured remote helper image.
+
 - Owner-scoped offline private-volume backups and restore into new private volumes,
   with bounded storage, retention, protected recovery history and capability-gated UI.
   Requires an operator-configured private artifact bind and trusted local helper image.
@@ -42,6 +55,22 @@ section.
 
 ### Fixed
 
+- Queue-, schedule- and health-admitted servers now receive the same container
+  hardening, server-auth, public URL and runtime settings as API-created
+  servers; the Celery worker no longer silently spawns unhardened runtimes.
+- A newly created empty private volume selected by a launch is initialized for
+  the non-root runtime once; existing data volumes keep their permissions.
+- Read-only runtime root filesystems provide a writable `/home`, so servers that
+  mount only explicit data volumes can start.
+- Recovery attachment/artifact checks ignore trusted platform containers that
+  bind the private storage root, so child volumes can detach and retained
+  backups can be deleted.
+- Traefik is upgraded to a release compatible with Docker Engine 29's minimum
+  API version, and Kombu is pinned to the version compatible with the pinned
+  redis-py.
+- Frontend permission evaluation now expands `*_read_all`/`*_write_all` grants
+  into their owner-scoped implications, matching backend RBAC so admins can use
+  queue, provenance and recovery controls.
 - Runtime volume data ignores no longer hide volume API regression tests.
 - Backup retention skips active restore pins and unsupported artifacts before
   applying its batch limit, so older pinned copies cannot block later cleanup.

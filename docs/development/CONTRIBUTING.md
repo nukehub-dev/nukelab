@@ -87,8 +87,28 @@ Do not duplicate information that already lives in `.env.example`, generated API
 
 ```bash
 cd frontend
-npm run test
+npm run test:unit
+npm run test        # Playwright; starts Vite by default
 ```
+
+CI runs four non-overlapping browser selections: `@vite-only` account-switch
+specs against Vite with mocked HTTP, ordinary real-stack specs against a
+disposable production build, the `@workspace` IDE gateway spec against a locally
+built workspace image, and the `@combined` provenance/recovery/recreation
+scenario with `E2E_COMBINED=1`. For a local disposable stack, use:
+
+```bash
+./nukelabctl --skip-port-check build env base
+./scripts/ci/e2e-stack.sh build
+./scripts/ci/e2e-stack.sh start
+./scripts/ci/e2e-stack.sh wait
+cd frontend
+E2E_EXTERNAL_SERVER=1 BASE_URL=http://127.0.0.1:8080 \
+E2E_RUNTIME_IMAGE=nukelab-e2e-runtime:a npx playwright test --grep-invert "@workspace|@vite-only"
+```
+
+Stop the stack with `./scripts/ci/e2e-stack.sh stop`. External mode must use
+`E2E_EXTERNAL_SERVER=1` so Playwright does not also start Vite.
 
 ### Security regression tests
 

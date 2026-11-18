@@ -1163,6 +1163,22 @@ _backend_services() {
     echo "$services"
 }
 
+# Pull an explicitly configured remote volume helper image. Local helper names
+# such as `nukelab-volume-helper:latest` are built from this checkout and are
+# intentionally skipped. Failures stay non-fatal: recovery capability remains
+# unavailable until an operator provides the image.
+_pull_volume_helper_image() {
+    local image="${VOLUME_BACKUP_HELPER_IMAGE:-}"
+    [ -n "$image" ] || return 0
+    case "$image" in
+        ghcr.io/* | docker.io/* | *.*/*)
+            log "Pulling volume helper image: $image"
+            $CONTAINER_ENGINE pull "$image" \
+                || warn "Could not pull volume helper image: $image"
+            ;;
+    esac
+}
+
 _pullable_infra_services() {
     # Print pullable (non-buildable) infra services, including overlay services
     # when enabled. The app services (backend, celery-worker, celery-beat,

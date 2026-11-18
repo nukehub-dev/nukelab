@@ -151,8 +151,8 @@ Notes:
   `backend/app/version.py` stays `0.0.0-dev`), then prints the commit/tag/push
   commands (it never runs them).
 - Pushing a `v*.*.*` tag triggers two workflows: `CI/CD` builds and pushes the
-  release images (backend, frontend, auth-sidecar, base, conda-base, workspace,
-  dev), and `Release` creates a **draft** GitHub Release. The release body is
+  release images (backend, frontend, auth-sidecar, volume-helper, base,
+  conda-base, workspace, dev), and `Release` creates a **draft** GitHub Release. The release body is
   extracted from the matching `## [X.Y.Z]` section in `CHANGELOG.md`, so keep
   it curated.
 - Record notable changes in the root `CHANGELOG.md` (Keep a Changelog format,
@@ -182,6 +182,16 @@ High-level layout; see the Child NAD Index below for domain-specific details.
   config used by background tasks (e.g. `SMTP_*`) must be passed to
   `celery-worker` in `compose.yml`, not only to `backend` — otherwise it fails
   silently in prod while request-path features (like the SMTP test) still work.
+- **Queue, schedule and health tasks also spawn servers from `celery-worker`.**
+  Pass runtime/security settings there too, not just to `backend`:
+  `CONTAINER_HARDENING_ENABLED`, `CONTAINER_RUNTIME`, `SERVER_AUTH_*`,
+  `APP_URL`/`PUBLIC_URL`, `DEV_MODE`/`APP_ENV`, GPU and resource-pool settings.
+  A missing value changes behavior only on background-admitted launches.
+- **Frontend CI is a required gate.** `CI/CD` runs Vitest unit tests, Vite-only
+  mocked browser tests, the external disposable browser stack and the
+  workspace/IDE stack before publishing images. Use
+  `scripts/ci/e2e-stack.sh` for the same local stack build/start/stop flow;
+  browser failures block image publication.
 - **`.env` and `.env.development` drift out of date** as `.env.example` evolves.
   Run `./nukelabctl check-env` to detect missing or stale keys, and
   `./nukelabctl sync-env` to non-destructively append missing keys from

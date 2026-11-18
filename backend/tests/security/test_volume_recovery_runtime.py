@@ -209,6 +209,24 @@ async def test_delete_refuses_live_or_stopped_helper_artifact_bind(runtime):
 
 
 @pytest.mark.asyncio
+async def test_delete_ignores_platform_storage_root_bind(runtime):
+    backup = str(uuid4())
+    path = runtime.storage_root / "backups" / backup
+    path.mkdir(parents=True)
+    runtime.driver.list_containers.return_value = [
+        {
+            "Id": "backend-container",
+            "Mounts": [{"Type": "bind", "Source": "/trusted/backups"}],
+        }
+    ]
+    runtime.driver.get_container_info.return_value = {
+        "Config": {"Labels": {"com.docker.compose.service": "backend"}}
+    }
+    await runtime.delete_artifact(backup)
+    assert not path.exists()
+
+
+@pytest.mark.asyncio
 async def test_delete_unknown_inspection_preserves_artifacts(runtime):
     backup = str(uuid4())
     path = runtime.storage_root / "backups" / backup
@@ -246,6 +264,16 @@ async def test_unmanaged_bind_alias_blocks_detached_volume(runtime, source):
     }
     with pytest.raises(RuntimeRecoveryError, match="volume_attached"):
         await runtime.assert_detached("source")
+
+
+@pytest.mark.asyncio
+async def test_platform_storage_root_bind_does_not_mark_child_volume_attached(runtime):
+    runtime.driver.list_containers.return_value = [{"Id": "backend"}]
+    runtime.driver.get_container_info.return_value = {
+        "Config": {"Labels": {"com.docker.compose.service": "backend"}},
+        "Mounts": [{"Type": "bind", "Source": "/var/lib/docker/volumes"}],
+    }
+    await runtime.assert_detached("source")
 
 
 @pytest.mark.asyncio

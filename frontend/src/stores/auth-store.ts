@@ -106,14 +106,92 @@ function getRoleLevel(role?: string): number {
  * First checks actual permissions array from backend (supports dynamic permission changes).
  * Falls back to role-based checks for backwards compatibility.
  */
+// Mirror backend permission implications (app/core/roles.py). The API sends
+// the raw role grants, so an admin with servers:read_all must still satisfy
+// owner-scoped UI checks such as servers:read_own.
+const PERMISSION_IMPLICATIONS: Record<string, string[]> = {
+  [PERMISSIONS.ALL]: [
+    PERMISSIONS.USERS_READ,
+    PERMISSIONS.USERS_CREATE,
+    PERMISSIONS.USERS_UPDATE,
+    PERMISSIONS.USERS_DELETE,
+    PERMISSIONS.USERS_IMPERSONATE,
+    PERMISSIONS.SERVERS_READ_OWN,
+    PERMISSIONS.SERVERS_WRITE_OWN,
+    PERMISSIONS.SERVERS_READ_ALL,
+    PERMISSIONS.SERVERS_WRITE_ALL,
+    PERMISSIONS.SERVERS_ACCESS_OTHERS,
+    PERMISSIONS.ENVIRONMENT_CREATE,
+    PERMISSIONS.ENVIRONMENT_READ,
+    PERMISSIONS.ENVIRONMENT_UPDATE,
+    PERMISSIONS.ENVIRONMENT_DELETE,
+    PERMISSIONS.PLAN_CREATE,
+    PERMISSIONS.PLAN_READ,
+    PERMISSIONS.PLAN_UPDATE,
+    PERMISSIONS.PLAN_DELETE,
+    PERMISSIONS.QUOTA_READ,
+    PERMISSIONS.QUOTA_UPDATE,
+    PERMISSIONS.CREDITS_READ_OWN,
+    PERMISSIONS.CREDITS_READ_ALL,
+    PERMISSIONS.CREDITS_GRANT,
+    PERMISSIONS.CREDITS_DEDUCT,
+    PERMISSIONS.ANALYTICS_READ_OWN,
+    PERMISSIONS.ANALYTICS_READ,
+    PERMISSIONS.WORKSPACES_READ_OWN,
+    PERMISSIONS.WORKSPACES_WRITE_OWN,
+    PERMISSIONS.WORKSPACES_READ_ALL,
+    PERMISSIONS.WORKSPACES_WRITE_ALL,
+    PERMISSIONS.VOLUMES_READ_OWN,
+    PERMISSIONS.VOLUMES_WRITE_OWN,
+    PERMISSIONS.VOLUMES_READ_ALL,
+    PERMISSIONS.VOLUMES_WRITE_ALL,
+    PERMISSIONS.AUDIT_READ,
+    PERMISSIONS.ADMIN_ACCESS,
+  ],
+  [PERMISSIONS.SERVERS_READ_ALL]: [PERMISSIONS.SERVERS_READ_OWN],
+  [PERMISSIONS.SERVERS_WRITE_ALL]: [
+    PERMISSIONS.SERVERS_WRITE_OWN,
+    PERMISSIONS.SERVERS_READ_ALL,
+    PERMISSIONS.SERVERS_READ_OWN,
+  ],
+  [PERMISSIONS.SERVERS_ACCESS_OTHERS]: [PERMISSIONS.SERVERS_READ_ALL, PERMISSIONS.SERVERS_READ_OWN],
+  [PERMISSIONS.VOLUMES_READ_ALL]: [PERMISSIONS.VOLUMES_READ_OWN],
+  [PERMISSIONS.VOLUMES_WRITE_ALL]: [
+    PERMISSIONS.VOLUMES_WRITE_OWN,
+    PERMISSIONS.VOLUMES_READ_ALL,
+    PERMISSIONS.VOLUMES_READ_OWN,
+  ],
+  [PERMISSIONS.WORKSPACES_READ_ALL]: [PERMISSIONS.WORKSPACES_READ_OWN],
+  [PERMISSIONS.WORKSPACES_WRITE_ALL]: [
+    PERMISSIONS.WORKSPACES_WRITE_OWN,
+    PERMISSIONS.WORKSPACES_READ_ALL,
+    PERMISSIONS.WORKSPACES_READ_OWN,
+  ],
+  [PERMISSIONS.CREDITS_READ_ALL]: [PERMISSIONS.CREDITS_READ_OWN],
+}
+
+function expandPermissions(permissions: string[]): Set<string> {
+  const expanded = new Set(permissions)
+  const pending = [...permissions]
+  while (pending.length > 0) {
+    const current = pending.pop()
+    if (!current) continue
+    for (const implied of PERMISSION_IMPLICATIONS[current] ?? []) {
+      if (!expanded.has(implied)) {
+        expanded.add(implied)
+        pending.push(implied)
+      }
+    }
+  }
+  return expanded
+}
+
 function checkPermission(user: User | null, permission: string): boolean {
   if (!user || !user.is_active) return false
 
   // If backend sent permissions, use them (robust, supports dynamic changes)
   if (user.permissions && user.permissions.length > 0) {
-    // Super admin wildcard
-    if (user.permissions.includes(PERMISSIONS.ALL)) return true
-    return user.permissions.includes(permission)
+    return expandPermissions(user.permissions).has(permission)
   }
 
   // Fallback: role-based check (for backwards compatibility or if permissions not loaded yet)

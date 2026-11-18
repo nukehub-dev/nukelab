@@ -58,6 +58,17 @@ and GPU guards until the exact predecessor is verified gone. Runtime mutations
 check managed owner/server labels. Reserved names derive from the stable server
 UUID rather than the display name.
 
+Queue dispatch, schedules, health restarts and lifecycle enforcement execute in
+`celery-worker`, so that container receives the same runtime/security settings as
+the API (`CONTAINER_HARDENING_ENABLED`, runtime selection, server-auth keys,
+public URL, GPU and resource-pool limits). Missing worker configuration changes
+only background-admitted launches and can silently produce different containers.
+A newly created private volume selected for launch receives a one-time mount-root
+permission initialization for the non-root runtime; existing data volumes are
+never relabeled or recursively chmodded. The read-only root filesystem includes
+a writable `/home`, so a server with only explicit non-home data mounts can
+initialize its runtime home; without a home volume that home is ephemeral.
+
 `server_termination_service.py` reserves stop/delete before I/O, verifies runtime
 identity and removal, then releases GPU/mount guards and updates accounting under
 the fence. A running server with a missing container ID cannot be declared stopped

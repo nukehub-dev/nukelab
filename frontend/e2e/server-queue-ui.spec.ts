@@ -295,7 +295,7 @@ test('read-only user can inspect a waiting request without cancellation controls
   await expect(dialog).toHaveCount(0)
 })
 
-test('late deployment acceptance cannot publish an old-owner request after account change', async ({
+test('@vite-only late deployment acceptance cannot publish an old-owner request after account change', async ({
   page,
 }) => {
   await mockQueue(page)

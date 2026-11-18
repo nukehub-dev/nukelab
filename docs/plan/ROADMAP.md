@@ -2,7 +2,7 @@
 
 **Status**: Phases 1–5 and 7–10 delivered; phase 6 remains Partial. Docker/Podman hardening is implemented; launch readiness requires separate verification.
 
-**Last Updated**: November 15, 2026
+**Last Updated**: November 18, 2026
 
 **Tech Stack**: Vite + React 19 SPA, FastAPI (Python 3.13), PostgreSQL 17, Redis, Traefik v3, Docker/Podman
 
@@ -43,7 +43,9 @@ The capability review below is based on repository inspection, not a fresh test 
 - **Pull-based Production Deploys** — Pin `NUKELAB_VERSION` or `NUKELAB_IMAGE_TAG` to deploy tagged `ghcr.io/nukehub-dev/nukelab-backend` / `-frontend` images without rebuilding from source
 - **Notification Improvements** — Action links, bulk deletion, and Web Push delivery (phase 9)
 - **Storage Monitoring** — Postgres, Redis, and volume storage summaries, alerts, and dashboards (phase 10)
-- **Environment Image Publishing** — CI builds/version-tags/publishes base, conda-base, workspace, and dev images to GHCR
+- **Environment Image Publishing** — CI builds/version-tags/publishes base, conda-base, workspace, dev and volume-helper images to GHCR
+- **Frontend Test CI** — Required Vitest, Vite-only mocked-browser, disposable real-stack and workspace/IDE browser jobs block image publication
+- **Combined Recovery Acceptance** — A real-runtime Playwright scenario covers approved provenance A, offline volume backup/restore, queued recreation with capacity wait, owner privacy, identity checks and a corrupted-artifact failure drill
 - **Upgrade Recovery Foundations** — Pre-migration database snapshots and backend schema-compatibility guard
 
 See [IMPLEMENTATION-PHASES.md](IMPLEMENTATION-PHASES.md) for the full phase-by-phase record.
@@ -57,7 +59,8 @@ See [IMPLEMENTATION-PHASES.md](IMPLEMENTATION-PHASES.md) for the full phase-by-p
 ## Verification status
 
 - Backend unit/service/API tests and the coverage floor are wired into CI. Real daemon fixtures are separately opt-in with `--run-container-integration`; their presence does not establish browser or production acceptance.
-- Frontend unit tests and Playwright specs exist. `.github/workflows/ci.yml` currently runs frontend lint/format/build, with no frontend test job.
+- Frontend CI runs Vitest and three Playwright selections: Vite-only mocked account-switch specs, real-stack browser flows with a disposable stack, and the workspace/IDE gateway against a locally built environment image. Image publishing depends on those required checks.
+- The combined provenance/offline-recovery/queued-recreation scenario passes against a local disposable Docker stack. Remote GitHub Actions runner validation and worker-crash reconciliation remain release gates.
 - Load-test tooling exists; its presence does not establish current production capacity.
 
 ## Capability review
@@ -65,23 +68,23 @@ See [IMPLEMENTATION-PHASES.md](IMPLEMENTATION-PHASES.md) for the full phase-by-p
 | Capability | Status | Implemented evidence | Remaining scope |
 | --- | --- | --- | --- |
 | Environment image build/publish | Complete | `.github/workflows/ci.yml`, `scripts/ci-version.sh` | Scheduled base-image digest refresh and scientific image validation are separate follow-ups; scientific image ownership is in the separate environments repository |
-| Reproducible environments | Partial | Approved immutable revisions/caches and verified generations; capability-gated provenance, sanitized export, validated source/import recreation APIs and owner UI | Verified registry portability, cross-installation approval matching and combined real-runtime/browser acceptance |
+| Reproducible environments | Partial | Approved immutable revisions/caches and verified generations; capability-gated provenance, sanitized export, validated source/import recreation APIs and owner UI; combined real-runtime acceptance suite | Verified registry portability, cross-installation approval matching and remote CI validation |
 | Database backup/restore | Complete | `scripts/manage.d/backup.sh`, `restore.sh`, `db-migrate.sh`; backend schema guard | Automated recovery drills and broader disaster-recovery policy |
-| User volume backup/restore | Partial | Owner-scoped offline private-volume admission/API/tasks/UI, bounded helper capture/restore, retention, restore pins and writer exclusion (`volume_backup_service.py`, `volume_recovery_runtime.py`, `services/volume-helper/`) | Combined real-stack/browser recovery acceptance and isolated failure drills; operator storage/helper configuration required |
-| Resource queue experience | Partial | Typed 202 acceptance, atomic API/worker admission, owner queue UI/cancellation, GPU-aware waiting and rotating bounded dispatch | Combined real-stack browser/runtime acceptance and worker-crash reconciliation rehearsal |
+| User volume backup/restore | Partial | Owner-scoped offline private-volume admission/API/tasks/UI, bounded helper capture/restore, retention, restore pins and writer exclusion (`volume_backup_service.py`, `volume_recovery_runtime.py`, `services/volume-helper/`); combined real-stack restore and corrupt-artifact drill | Remote CI validation, worker-crash reconciliation and operator storage/helper configuration |
+| Resource queue experience | Partial | Typed 202 acceptance, atomic API/worker admission, owner queue UI/cancellation, GPU-aware waiting and rotating bounded dispatch; combined real-stack queued recreation/cancellation acceptance | Remote CI validation and worker-crash reconciliation rehearsal |
 | Batch scientific jobs | Future | Existing schedules support server start/stop/restart; Celery runs platform tasks | User command submissions, job records, exit status, logs, artifacts, retries, and parameter sweeps |
 | Workload secrets | Future | Platform signing keys, OAuth token encryption, and template environment variables already exist | Scoped credential storage, authorization, redaction, and workload injection; template variables are ordinary JSON, not a secret store |
 | Deployment automation | Partial | Tagged pulls, explicit restart workflow, migration snapshots, schema guard | Automated health verification, traffic cutover, and rollback; zero-downtime deployment is not implemented |
-| Browser end-to-end tests | Partial | `frontend/e2e/`, Playwright config, `scripts/manage.d/e2e.sh` | Execute against an isolated stack in CI; run frontend unit tests in CI too |
+| Browser end-to-end tests | Partial | `frontend/e2e/`, dual-mode Playwright config, `scripts/ci/e2e-stack.sh`, required unit/mocked/external/workspace CI jobs and combined acceptance suite | Remote GitHub Actions runner validation and flake observation |
 | Independent penetration assessment | Future | Internal findings, remediation records, security regression tests, and scan workflow exist | External assessment and retest before public launch |
 
 ## Current priorities
 
-Queue reliability, reproducible environments, private offline volume recovery, and frontend test CI are accepted implementation scope. Queue, approved recreation and offline private-volume recovery have application flows; integrated CI and release acceptance remain incomplete.
+Queue reliability, reproducible environments, private offline volume recovery, and frontend test CI are accepted implementation scope. Queue, approved recreation and offline private-volume recovery have application flows and a combined real-stack acceptance suite; remote CI execution, crash reconciliation and release preparation remain.
 
-1. **Finish existing workflows (In Progress)** — Verify the integrated launch/queue and owner cancellation flows against an isolated stack; wire frontend tests into CI.
-2. **Research reproducibility (In Progress)** — Verify the implemented capture/export/recreate workflow against real runtimes and add verified registry portability; extend existing composition rather than rebuilding image publishing.
-3. **Research data recovery (In Progress)** — Deliver user volume backup/restore and verify database recovery through isolated drills.
+1. **Finish existing workflows (In Progress)** — Exercise the required browser jobs on remote CI, then verify worker-crash reconciliation and release gates.
+2. **Research reproducibility (In Progress)** — Add verified registry portability and cross-installation approval; extend existing composition rather than rebuilding image publishing.
+3. **Research data recovery (In Progress)** — Verify database recovery and worker interruption through isolated drills.
 4. **Batch jobs** — Add a minimal command-based job lifecycle, then parameter sweeps after single jobs are reliable.
 5. **Scoped workload secrets** — Separate credentials from ordinary template configuration; choose the storage/integration approach during design.
 6. **Public-launch readiness** — Independent penetration assessment and a verified deployment/recovery procedure.

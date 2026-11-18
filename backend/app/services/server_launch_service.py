@@ -333,6 +333,30 @@ class ServerLaunchService:
                     await self.db.flush()
                 else:
                     volume = await self.db.get(Volume, mount.volume_id)
+                    if volume is None:
+                        raise LaunchError("volume_unavailable")
+                    # A newly created empty volume has a root-owned Docker
+                    # volume root. Mark it for one-time mount-root permission
+                    # setup so the hardened runtime can write to it. Never
+                    # touch volumes that already hold data or are attached.
+                    if (
+                        mount.mode == "read_write"
+                        and (volume.size_bytes or 0) == 0
+                        and await self.db.scalar(
+                            select(ServerVolume.server_id)
+                            .where(ServerVolume.volume_id == volume.id)
+                            .limit(1)
+                        )
+                        is None
+                    ):
+                        volume.labels = {
+                            **(volume.labels or {}),
+                            "initialize_for_server": str(server_id),
+                        }
+                        # The spawner uses this persisted flag for its one-time
+                        # mount-root setup, including after a queue claim or
+                        # recoverable redelivery.
+                        auto_created = True
                 self._remember_volume_use(volume, mount.mount_path, owner.username)
                 stored_mounts.append(
                     {
@@ -758,11 +782,12 @@ class ServerLaunchService:
                             "nukelab.user.id": str(reservation.owner_id),
                         },
                     )
-                    quota_set = xfs_quota_service.set_quota(
-                        mount["volume_name"], mount["max_size_bytes"]
-                    )
-                    if settings.xfs_quota_enabled and not quota_set:
-                        raise LaunchError("volume_quota_unavailable", 503)
+                    if mount.get("max_size_bytes"):
+                        quota_set = xfs_quota_service.set_quota(
+                            mount["volume_name"], mount["max_size_bytes"]
+                        )
+                        if settings.xfs_quota_enabled and not quota_set:
+                            raise LaunchError("volume_quota_unavailable", 503)
             # Spawner receives only service-resolved volume names; no new DB/client loop.
             spawned = await self.spawner.spawn(
                 user_id=str(reservation.owner_id),

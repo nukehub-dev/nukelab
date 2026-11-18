@@ -7,24 +7,28 @@ on:
     paths:
       - 'backend/**'
       - 'frontend/**'
-      - 'services/auth-sidecar/**'
+      - 'services/**'
       - 'environments/**'
+      - 'resources/**'
       - 'compose*.yml'
       - 'scripts/**'
       - 'infrastructure/**'
       - '.github/workflows/ci.yml'
+      - '.dockerignore'
       - 'VERSION'
   pull_request:
     branches: [main, develop]
     paths:
       - 'backend/**'
       - 'frontend/**'
-      - 'services/auth-sidecar/**'
+      - 'services/**'
       - 'environments/**'
+      - 'resources/**'
       - 'compose*.yml'
       - 'scripts/**'
       - 'infrastructure/**'
       - '.github/workflows/ci.yml'
+      - '.dockerignore'
   workflow_dispatch:
 
 concurrency:
@@ -43,7 +47,10 @@ jobs:
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
+      services: ${{ steps.filter.outputs.services }}
       auth-sidecar: ${{ steps.filter.outputs.auth-sidecar }}
+      volume-helper: ${{ steps.filter.outputs.volume-helper }}
+      resources: ${{ steps.filter.outputs.resources }}
       environments: ${{ steps.filter.outputs.environments }}
       env-base: ${{ steps.filter.outputs.env-base }}
       env-conda-base: ${{ steps.filter.outputs.env-conda-base }}
@@ -63,12 +70,24 @@ jobs:
               - 'backend/**'
             frontend:
               - 'frontend/**'
+            services:
+              - 'services/**'
             auth-sidecar:
               - 'services/auth-sidecar/**'
+            volume-helper:
+              - 'services/volume-helper/**'
+              - 'backend/app/services/volume_archive_service.py'
+              - '.dockerignore'
+            resources:
+              - 'resources/**'
             environments:
               - 'environments/**'
+              - 'resources/**'
+              - '.dockerignore'
             env-base:
               - 'environments/base/**'
+              - 'resources/**'
+              - '.dockerignore'
             env-conda-base:
               - 'environments/conda-base/**'
             env-workspace:
@@ -82,19 +101,21 @@ jobs:
             any:
               - 'backend/**'
               - 'frontend/**'
-              - 'services/auth-sidecar/**'
+              - 'services/**'
               - 'environments/**'
+              - 'resources/**'
               - 'compose*.yml'
               - 'scripts/**'
               - 'infrastructure/**'
               - '.github/workflows/ci.yml'
+              - '.dockerignore'
               - 'VERSION'
 
   lint-backend:
     name: Lint Backend
     runs-on: ubuntu-latest
     needs: changes
-    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.compose == 'true' || github.event_name == 'workflow_dispatch'
+    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.compose == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -112,7 +133,7 @@ jobs:
     name: Lint Frontend
     runs-on: ubuntu-latest
     needs: changes
-    if: needs.changes.outputs.frontend == 'true' || needs.changes.outputs.compose == 'true' || github.event_name == 'workflow_dispatch'
+    if: needs.changes.outputs.frontend == 'true' || needs.changes.outputs.compose == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -140,11 +161,106 @@ jobs:
         working-directory: ./frontend
         run: npm run build
 
+  test-frontend-unit:
+    name: Test Frontend Unit
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true' || needs.changes.outputs.compose == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: ./frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Run unit tests
+        working-directory: ./frontend
+        run: npm run test:unit
+
+  test-frontend-mocked-browser:
+    name: Test Frontend Mocked Browser
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true' || needs.changes.outputs.compose == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: ./frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        working-directory: ./frontend
+        run: npx playwright install --with-deps chromium
+
+      # These specs import the running Vite source modules to simulate a
+      # mid-request account switch, so they run against Vite with mocked HTTP
+      # rather than the production bundle. Real-stack coverage is provided by
+      # the external browser jobs below.
+      - name: Run Vite-only mocked browser tests
+        working-directory: ./frontend
+        run: npx playwright test --reporter=list --grep "@vite-only"
+
+  test-volume-helper:
+    name: Test Volume Helper
+    runs-on: ubuntu-latest
+    needs: changes
+    if: |
+      needs.changes.outputs['volume-helper'] == 'true' ||
+      needs.changes.outputs.compose == 'true' ||
+      github.event_name == 'workflow_dispatch' ||
+      startsWith(github.ref, 'refs/tags/v')
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install test runner
+        run: python -m pip install --disable-pip-version-check pytest
+
+      - name: Run helper unit tests
+        run: python -m pytest services/volume-helper/test_helper.py --confcutdir=services/volume-helper
+
+      - name: Build helper image
+        run: |
+          docker build \
+            --file services/volume-helper/Dockerfile \
+            --tag nukelab-volume-helper:ci \
+            .
+
+      - name: Run real hardened helper test
+        env:
+          NUKELAB_VOLUME_HELPER_TEST_IMAGE: nukelab-volume-helper:ci
+        run: python -m pytest services/volume-helper/test_docker.py --confcutdir=services/volume-helper
+
   test-backend:
     name: Test Backend
     runs-on: ubuntu-latest
     needs: changes
-    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.compose == 'true' || github.event_name == 'workflow_dispatch'
+    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.compose == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     env:
       CONTAINER_ENGINE: docker
     steps:
@@ -181,17 +297,323 @@ jobs:
         run: |
           ./nukelabctl stop dev || true
 
+  test-browser:
+    name: Test Browser
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.any == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    timeout-minutes: 120
+    env:
+      CONTAINER_ENGINE: docker
+      APP_ENV: development
+      APP_URL: http://127.0.0.1:8080
+      DEV_MODE: "true"
+      VOLUME_BACKUP_STORAGE_PATH: /var/lib/nukelab/volume-backups
+      VOLUME_BACKUP_HELPER_IMAGE: nukelab-volume-helper:ci
+      RESOURCE_POOL_CPU: "4"
+      RESOURCE_POOL_MEMORY_MIB: "6144"
+      RESOURCE_POOL_DISK_MIB: "40960"
+      QUEUE_TICK_SECONDS: "2"
+      CONTAINER_HARDENING_ENABLED: "true"
+      GPU_ENABLED: "false"
+      RATE_LIMIT_ENABLED: "false"
+      PROMETHEUS_ENABLED: "false"
+      GRAFANA_ENABLED: "false"
+      ALERTMANAGER_ENABLED: "false"
+      TRACING_ENABLED: "false"
+      SMTP_HOST: 127.0.0.1
+      SMTP_PORT: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: ./frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        working-directory: ./frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          backup_dir="$RUNNER_TEMP/nukelab-volume-backups"
+          mkdir -p "$backup_dir"
+          sudo chown -R 65532:65532 "$backup_dir"
+          sudo chmod 0700 "$backup_dir"
+          # The host-side volume browser reads the daemon's named-volume root.
+          # GitHub's runner user is in the docker group but the parent path is
+          # not always traversable; make only the ephemeral runner's volume
+          # root readable by the preflight and backend mount.
+          volume_root="$(docker info --format '{{.DockerRootDir}}/volumes')"
+          sudo mkdir -p "$volume_root"
+          sudo chmod 0755 "$volume_root"
+          {
+            echo "VOLUME_BACKUP_HOST_PATH=$backup_dir"
+            echo "VOLUME_STORAGE_PATH=$volume_root"
+          } >> "$GITHUB_ENV"
+
+      - name: Build e2e stack images
+        run: ./scripts/ci/e2e-stack.sh build
+
+      - name: Start disposable stack
+        run: ./scripts/ci/e2e-stack.sh start
+
+      - name: Wait for stack readiness
+        run: ./scripts/ci/e2e-stack.sh wait
+
+      - name: Run browser tests
+        working-directory: ./frontend
+        env:
+          E2E_EXTERNAL_SERVER: "1"
+          BASE_URL: http://127.0.0.1:8080
+          E2E_COMBINED: "1"
+          E2E_RUNTIME_IMAGE: nukelab-e2e-runtime:a
+          E2E_RUNTIME_IMAGE_B: nukelab-e2e-runtime:b
+          TEST_ADMIN_USERNAME: admin
+          TEST_ADMIN_PASSWORD: admin123
+          E2E_VOLUME_BACKUP_HOST_PATH: ${{ runner.temp }}/nukelab-volume-backups
+          PLAYWRIGHT_HTML_OPEN: never
+        run: npx playwright test --reporter=list,html --grep-invert "@workspace|@vite-only"
+
+      - name: Collect stack logs
+        if: failure()
+        run: |
+          mkdir -p "$RUNNER_TEMP/nukelab-ci-logs"
+          docker ps -a --filter "name=^nukelab-" \
+            --format '{{.Names}}\t{{.Status}}' \
+            > "$RUNNER_TEMP/nukelab-ci-logs/containers.txt" || true
+          for name in nukelab-traefik nukelab-postgres nukelab-redis \
+            nukelab-backend nukelab-celery-worker nukelab-celery-beat nukelab-frontend; do
+            if docker inspect "$name" > /dev/null 2>&1; then
+              docker logs --tail 400 "$name" > "$RUNNER_TEMP/nukelab-ci-logs/${name}.log" 2>&1 || true
+            fi
+          done
+
+      - name: Upload Playwright report and logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-browser
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+            ${{ runner.temp }}/nukelab-ci-logs/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Stop disposable stack
+        if: always()
+        run: ./scripts/ci/e2e-stack.sh stop
+
+      - name: Remove run-created resources
+        if: always()
+        run: |
+          set +e
+          ids=$(
+            {
+              docker ps -aq --filter "label=com.docker.compose.project=nukelab"
+              docker ps -aq --filter "label=nukelab.managed=true"
+            } | sort -u
+          )
+          if [ -n "$ids" ]; then
+            docker rm -f $ids > /dev/null 2>&1
+          fi
+          volumes=$(
+            {
+              docker volume ls -q --filter "label=com.docker.compose.project=nukelab"
+              docker volume ls -q --filter "label=nukelab.managed=true"
+            } | sort -u
+          )
+          if [ -n "$volumes" ]; then
+            docker volume rm -f $volumes > /dev/null 2>&1
+          fi
+          docker network rm nukelab-network > /dev/null 2>&1
+          docker image rm -f nukelab-e2e-runtime:a nukelab-e2e-runtime:b nukelab-volume-helper:ci > /dev/null 2>&1
+          sudo rm -rf "$RUNNER_TEMP/nukelab-volume-backups"
+          exit 0
+
+  test-browser-workspace:
+    name: Test Browser Workspace
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.any == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
+    timeout-minutes: 90
+    env:
+      CONTAINER_ENGINE: docker
+      APP_ENV: development
+      APP_URL: http://127.0.0.1:8080
+      DEV_MODE: "true"
+      VOLUME_BACKUP_STORAGE_PATH: /var/lib/nukelab/volume-backups
+      VOLUME_BACKUP_HELPER_IMAGE: nukelab-volume-helper:ci
+      RESOURCE_POOL_CPU: "4"
+      RESOURCE_POOL_MEMORY_MIB: "6144"
+      RESOURCE_POOL_DISK_MIB: "40960"
+      QUEUE_TICK_SECONDS: "2"
+      CONTAINER_HARDENING_ENABLED: "true"
+      GPU_ENABLED: "false"
+      RATE_LIMIT_ENABLED: "false"
+      PROMETHEUS_ENABLED: "false"
+      GRAFANA_ENABLED: "false"
+      ALERTMANAGER_ENABLED: "false"
+      TRACING_ENABLED: "false"
+      SMTP_HOST: 127.0.0.1
+      SMTP_PORT: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: ./frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        working-directory: ./frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          backup_dir="$RUNNER_TEMP/nukelab-volume-backups"
+          mkdir -p "$backup_dir"
+          sudo chown -R 65532:65532 "$backup_dir"
+          sudo chmod 0700 "$backup_dir"
+          # The host-side volume browser reads the daemon's named-volume root.
+          # GitHub's runner user is in the docker group but the parent path is
+          # not always traversable; make only the ephemeral runner's volume
+          # root readable by the preflight and backend mount.
+          volume_root="$(docker info --format '{{.DockerRootDir}}/volumes')"
+          sudo mkdir -p "$volume_root"
+          sudo chmod 0755 "$volume_root"
+          {
+            echo "VOLUME_BACKUP_HOST_PATH=$backup_dir"
+            echo "VOLUME_STORAGE_PATH=$volume_root"
+          } >> "$GITHUB_ENV"
+
+      - name: Build e2e stack and workspace images
+        run: ./scripts/ci/e2e-stack.sh build --workspace
+
+      - name: Start disposable stack
+        run: ./scripts/ci/e2e-stack.sh start
+
+      - name: Wait for stack readiness
+        run: ./scripts/ci/e2e-stack.sh wait
+
+      - name: Run workspace browser tests
+        working-directory: ./frontend
+        env:
+          E2E_EXTERNAL_SERVER: "1"
+          BASE_URL: http://127.0.0.1:8080
+          E2E_WORKSPACE_IMAGE: nukelab-environment-workspace:latest
+          TEST_ADMIN_USERNAME: admin
+          TEST_ADMIN_PASSWORD: admin123
+          E2E_VOLUME_BACKUP_HOST_PATH: ${{ runner.temp }}/nukelab-volume-backups
+          PLAYWRIGHT_HTML_OPEN: never
+        run: npx playwright test --reporter=list,html --grep "@workspace"
+
+      - name: Collect stack logs
+        if: failure()
+        run: |
+          mkdir -p "$RUNNER_TEMP/nukelab-ci-logs"
+          docker ps -a --filter "name=^nukelab-" \
+            --format '{{.Names}}\t{{.Status}}' \
+            > "$RUNNER_TEMP/nukelab-ci-logs/containers.txt" || true
+          for name in nukelab-traefik nukelab-postgres nukelab-redis \
+            nukelab-backend nukelab-celery-worker nukelab-celery-beat nukelab-frontend; do
+            if docker inspect "$name" > /dev/null 2>&1; then
+              docker logs --tail 400 "$name" > "$RUNNER_TEMP/nukelab-ci-logs/${name}.log" 2>&1 || true
+            fi
+          done
+
+      - name: Upload Playwright report and logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-workspace
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+            ${{ runner.temp }}/nukelab-ci-logs/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Stop disposable stack
+        if: always()
+        run: ./scripts/ci/e2e-stack.sh stop
+
+      - name: Remove run-created resources
+        if: always()
+        run: |
+          set +e
+          ids=$(
+            {
+              docker ps -aq --filter "label=com.docker.compose.project=nukelab"
+              docker ps -aq --filter "label=nukelab.managed=true"
+            } | sort -u
+          )
+          if [ -n "$ids" ]; then
+            docker rm -f $ids > /dev/null 2>&1
+          fi
+          volumes=$(
+            {
+              docker volume ls -q --filter "label=com.docker.compose.project=nukelab"
+              docker volume ls -q --filter "label=nukelab.managed=true"
+            } | sort -u
+          )
+          if [ -n "$volumes" ]; then
+            docker volume rm -f $volumes > /dev/null 2>&1
+          fi
+          docker network rm nukelab-network > /dev/null 2>&1
+          docker image rm -f nukelab-e2e-runtime:a nukelab-e2e-runtime:b nukelab-volume-helper:ci nukelab-environment-workspace:latest > /dev/null 2>&1
+          sudo rm -rf "$RUNNER_TEMP/nukelab-volume-backups"
+          exit 0
+
   build-images:
     name: Build & push images
     runs-on: ubuntu-latest
-    needs: [changes, lint-backend, lint-frontend, test-backend]
+    needs: [changes, lint-backend, lint-frontend, test-frontend-unit, test-frontend-mocked-browser, test-volume-helper, test-backend, test-browser, test-browser-workspace]
     if: |
       !cancelled() &&
       !contains(needs.*.result, 'cancelled') &&
+      needs.changes.result == 'success' &&
       (needs.changes.outputs.any == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')) &&
       needs.lint-backend.result != 'failure' &&
       needs.lint-frontend.result != 'failure' &&
-      needs.test-backend.result != 'failure'
+      needs.test-frontend-unit.result != 'failure' &&
+      needs.test-frontend-mocked-browser.result != 'failure' &&
+      needs.test-volume-helper.result != 'failure' &&
+      needs.test-backend.result != 'failure' &&
+      needs.test-browser.result == 'success' &&
+      needs.test-browser-workspace.result == 'success'
     strategy:
       fail-fast: false
       matrix:
@@ -209,6 +631,10 @@ jobs:
             context: ./services/auth-sidecar
             dockerfile: ./services/auth-sidecar/Dockerfile
             image: ghcr.io/${{ github.repository_owner }}/nukelab-auth-sidecar
+          - name: volume-helper
+            context: .
+            dockerfile: ./services/volume-helper/Dockerfile
+            image: ghcr.io/${{ github.repository_owner }}/nukelab-volume-helper
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -238,6 +664,7 @@ jobs:
           (matrix.name == 'backend' && needs.changes.outputs.backend == 'true') ||
           (matrix.name == 'frontend' && needs.changes.outputs.frontend == 'true') ||
           (matrix.name == 'auth-sidecar' && needs.changes.outputs.auth-sidecar == 'true') ||
+          (matrix.name == 'volume-helper' && needs.changes.outputs['volume-helper'] == 'true') ||
           needs.changes.outputs.compose == 'true' ||
           github.event_name == 'workflow_dispatch' ||
           startsWith(github.ref, 'refs/tags/v')
@@ -264,8 +691,9 @@ jobs:
     if: |
       !cancelled() &&
       !contains(needs.*.result, 'cancelled') &&
+      needs.changes.result == 'success' &&
       (needs.changes.outputs.environments == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')) &&
-      needs.build-images.result != 'failure'
+      needs.build-images.result == 'success'
     steps:
       - name: Checkout
         uses: actions/checkout@v6

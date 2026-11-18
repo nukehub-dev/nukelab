@@ -13,6 +13,7 @@ python-multipart==0.0.31
 redis==5.2.0
 msgpack==1.2.1
 celery==5.4.0
+kombu==5.4.0
 aiodocker==0.24.0
 python-socketio==5.16.2
 psutil==5.9.8

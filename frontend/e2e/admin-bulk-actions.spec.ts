@@ -1,36 +1,44 @@
 import { test, expect } from '@playwright/test'
-import { loginAsAdmin, ADMIN_USERNAME, ADMIN_PASSWORD } from './helpers/auth'
+import { loginAsAdmin } from './helpers/auth'
 import {
-  apiLogin,
-  getOrCreateTestEnvironment,
-  getPlanId,
+  adminLogin,
   createServer,
-  listServers,
+  createTestEnvironment,
+  deactivateEnvironment,
   deleteServer,
+  getPlanBySlug,
 } from './helpers/api'
+import { E2E_RUNTIME_IMAGE, uniqueName } from './helpers/runtime'
 
 test.describe('Admin bulk server actions', () => {
-  let serverId: string
+  let serverId: string | undefined
   let serverName: string
+  let environmentId: string | undefined
 
   test.beforeAll(async ({ request }) => {
-    const { access_token } = await apiLogin(request, ADMIN_USERNAME, ADMIN_PASSWORD)
-    const envId = await getOrCreateTestEnvironment(request, access_token)
-    const planId = await getPlanId(request, access_token)
-    serverName = `e2e-bulk-${Date.now()}`
+    const { access_token } = await adminLogin(request)
+    const environment = await createTestEnvironment(request, access_token, {
+      prefix: 'e2e-bulk-env',
+      image: E2E_RUNTIME_IMAGE,
+    })
+    environmentId = environment.id
+    const plan = await getPlanBySlug(request, access_token, 'small')
+    serverName = uniqueName('e2e-bulk')
     const server = await createServer(request, access_token, {
       name: serverName,
-      plan_id: planId,
-      environment_id: envId,
+      plan_id: plan.id,
+      environment_id: environment.id,
     })
     serverId = server.id
   })
 
   test.afterAll(async ({ request }) => {
-    const { access_token } = await apiLogin(request, ADMIN_USERNAME, ADMIN_PASSWORD)
-    const servers = await listServers(request, access_token)
-    const testServers = servers.filter((s) => s.name.startsWith('e2e-bulk-'))
-    await Promise.all(testServers.map((s) => deleteServer(request, access_token, s.id)))
+    const { access_token } = await adminLogin(request)
+    try {
+      if (serverId) await deleteServer(request, access_token, serverId)
+    } finally {
+      if (environmentId) await deactivateEnvironment(request, access_token, environmentId)
+    }
   })
 
   test('admin can select, stop, and delete a server in bulk', async ({ page }) => {
@@ -54,7 +62,7 @@ test.describe('Admin bulk server actions', () => {
     const statusText = (await row.textContent()) || ''
     if (statusText.toLowerCase().includes('running')) {
       await page.getByTestId('bulk-action-stop').click()
-      await expect(row).toContainText('stopped', { timeout: 60000 })
+      await expect(row).toContainText(/stopped/i, { timeout: 60000 })
       await page.getByTestId(`select-server-${serverId}`).click()
     }
 

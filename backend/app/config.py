@@ -217,6 +217,7 @@ class Settings(BaseSettings):
     container_no_new_privileges: bool = True
     container_readonly_tmpfs_paths: list[str] = [
         "/tmp",  # nosec: B108  # intentional container tmpfs mount, not host temp
+        "/home",  # writable home for explicit non-home volume layouts
         "/var/tmp",  # nosec: B108
         "/var/run",  # nosec: B108
         "/var/log/nginx",  # nosec: B108

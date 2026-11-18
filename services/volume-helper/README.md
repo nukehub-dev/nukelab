@@ -1,6 +1,9 @@
 # Volume recovery helper
 
-Build from the repository root:
+Release images are published as
+`ghcr.io/nukehub-dev/nukelab-volume-helper:<version>` (and `latest`). Pin
+`VOLUME_BACKUP_HELPER_IMAGE` to that reference for pull-based deployments, or
+build locally from the repository root:
 
 ```bash
 docker build -f services/volume-helper/Dockerfile -t nukelab-volume-helper:latest .

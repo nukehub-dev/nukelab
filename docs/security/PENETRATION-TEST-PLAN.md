@@ -249,11 +249,11 @@ Phase 10: Remediation Support & Retest
 | ID | Test | Target | Expected Result |
 |----|------|--------|-----------------|
 | CICD-01 | Dependency vulnerability scanning | `./nukelabctl security` | `pip-audit` and `npm audit` pass; no ignored criticals |
-| CICD-02 | Container image scanning in CI | `.github/workflows/security.yml` | Trivy/Grype gate on backend/frontend/env images |
+| CICD-02 | Container image scanning in CI | `.github/workflows/security.yml` | Trivy/Grype gate on backend/frontend/env/volume-helper images |
 | CICD-03 | Secret scanning in repository | Gitleaks/TruffleHog scan | No active secrets in git history. TruffleHog runs with `--exclude-detectors=Lob`: its `test_` key pattern false-positives on Python test function names and NukeLab never uses the Lob API |
 | CICD-04 | Signed commits / artifact signing | Git config, GHCR images | Commits signed; images signed with Cosign (target state). Implemented: signed-commits check warns until enforced; Cosign signing workflow in `.github/workflows/security.yml` |
 | CICD-04a | Git commit signing verification | `.github/workflows/security.yml` | CI runs `./nukelabctl security --signed-commits` on every push/PR; warns during transition, fails once branch protection requires signed commits |
-| CICD-04b | Container image signing with Cosign | `.github/workflows/security.yml` | Built backend/frontend/auth-sidecar images are signed with Cosign keyless signing using GitHub OIDC; signatures published to GHCR |
+| CICD-04b | Container image signing with Cosign | `.github/workflows/security.yml` | Target state: built backend/frontend/auth-sidecar/volume-helper images are signed with Cosign keyless signing using GitHub OIDC; signatures published to GHCR. Not yet implemented |
 | CICD-04c | Cosign signature verification | `.github/workflows/security.yml` / downstream consumers | Published image signatures can be verified with `cosign verify --certificate-identity-regexp` and policy enforced in deployment workflows |
 | CICD-05 | Workflow permissions | `.github/workflows/*.yml` | Minimal `permissions`, no `pull_request_target` abuse |
 | CICD-06 | Base image pinning | Dockerfiles | All external base images pinned by digest; verified by `./nukelabctl security --check-base-images` |
@@ -309,8 +309,9 @@ The following scripts should be created as part of the engagement to enable repe
 - `backend/tests/security/test_bfla.py` — privilege-escalation matrix across all roles.
 - `backend/tests/security/test_auth_tokens.py` — JWT manipulation and token-scope abuse.
 - `backend/tests/security/test_credit_race.py` — concurrent credit/spawn race tests.
-- `backend/tests/container/test_image_identity.py` and `test_reserved_spawner.py` — immutable identity/cache, fail-closed required toolchain/readiness, existing-data preservation and uncertain helper regressions. Reserved-launch orchestration is not yet selected by public API/worker entry points.
-- `backend/tests/security/test_volume_archive.py` — implemented helper regressions for checksum corruption, path/link traversal, special members, metadata/expansion quotas, and private staging. Recovery API/runtime integration adds owner/scope checks, durable writer exclusion, all-container attachment checks and fixed hardened helpers. Verify disabled capability behavior, restore pins, uncertain executor protection and bounded storage in the focused recovery tests; combined isolated runtime acceptance remains required.
+- `backend/tests/container/test_image_identity.py` and `test_reserved_spawner.py` — immutable identity/cache, fail-closed required toolchain/readiness, existing-data preservation and uncertain helper regressions. Creation APIs and queue workers select the reserved orchestration boundary; the combined browser/worker/runtime scenario verifies admitted identity.
+- Queue, schedule and health tasks run in `celery-worker`; verify its Compose environment carries the same hardening/auth/runtime settings as `backend`, then inspect a queue-admitted container with `./nukelabctl verify-hardening`.
+- `backend/tests/security/test_volume_archive.py` — implemented helper regressions for checksum corruption, path/link traversal, special members, metadata/expansion quotas, and private staging. Recovery API/runtime integration adds owner/scope checks, durable writer exclusion, all-container attachment checks and fixed hardened helpers. Verify disabled capability behavior, restore pins, uncertain executor protection and bounded storage in the focused recovery tests; the combined isolated runtime scenario and corrupt-artifact drill pass locally and are wired into required CI.
 - `backend/tests/security/test_container_isolation.py` — runtime container escape/isolation checks.
 - `scripts/run-pentest-scans.sh` — orchestrates Trivy, ZAP, Nuclei, and custom pytest suites. Implemented.
 - `frontend/e2e/security/*.spec.ts` — Playwright tests for CSRF, XSS, and role-based UI hiding. Implemented (`frontend/e2e/security/frontend-security.spec.ts`).

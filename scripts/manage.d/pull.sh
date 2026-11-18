@@ -14,6 +14,7 @@ cmd_pull() {
         # shellcheck disable=SC2086
         $COMPOSE "${COMPOSE_ARGS[@]}" pull $(_pullable_infra_services)
     fi
+    _pull_volume_helper_image
     ok "Images pulled"
 }
 

@@ -309,6 +309,7 @@ _run_trivy() {
         "nukelab-environment-base:latest"
         "nukelab-environment-workspace:latest"
         "nukelab-auth-sidecar:latest"
+        "nukelab-volume-helper:latest"
     )
     for _image in "${_images[@]}"; do
         local _image_exists=false

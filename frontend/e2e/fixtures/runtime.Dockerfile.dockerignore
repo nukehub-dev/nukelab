@@ -1,0 +1,7 @@
+# Dockerfile-specific context filter for runtime.Dockerfile.
+#
+# The repository-root .dockerignore excludes everything except the base
+# runtime build inputs. This file takes precedence for this Dockerfile so the
+# fixture artifacts can be copied from a repository-root build context.
+**
+!frontend/e2e/fixtures/**

@@ -31,6 +31,7 @@ jobs:
             nukelab-backend
             nukelab-frontend
             nukelab-auth-sidecar
+            nukelab-volume-helper
             nukelab-environment-base
             nukelab-environment-conda-base
             nukelab-environment-workspace

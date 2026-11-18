@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { loginAsAdmin } from './helpers/auth'
+import { uniqueName } from './helpers/runtime'
 
 // Uses the admin login (the only auth fixture available); admins hold credits:read_own,
 // so the user-facing flow at /settings/credits works the same.
@@ -9,6 +10,11 @@ test.describe('Credit requests', () => {
     await page.goto('/settings/credits')
 
     const requestButton = page.getByTestId('request-credits-button')
+    // Login notifications can sit above the page controls until their timer
+    // expires. Wait for the live region to clear instead of forcing clicks.
+    await expect(page.getByTestId('toast-container').locator(':scope > div')).toHaveCount(0, {
+      timeout: 15000,
+    })
 
     // Idempotency: cancel any open request left over from a previous run.
     if (await requestButton.isDisabled()) {
@@ -20,7 +26,7 @@ test.describe('Credit requests', () => {
     // Submit a new request
     await requestButton.click()
     await page.getByTestId('credit-request-amount').fill('100')
-    await page.getByTestId('credit-request-reason').fill('E2E test credit request')
+    await page.getByTestId('credit-request-reason').fill(uniqueName('e2e credit request'))
     await page.getByTestId('credit-request-submit').click()
 
     // It appears in "My Requests" as pending and blocks further requests

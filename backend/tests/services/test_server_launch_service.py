@@ -188,6 +188,44 @@ async def test_reservation_persists_server_mounts_and_guard_before_runtime(
 
 
 @pytest.mark.asyncio
+async def test_new_empty_selected_volume_is_marked_for_one_time_initialization(
+    db_session, launch_fixture
+):
+    volume = Volume(
+        id=uuid.uuid4(),
+        name="existing-empty-volume",
+        display_name="Existing empty volume",
+        owner_id=launch_fixture.owner_id,
+        visibility="private",
+        max_size_bytes=1024**3,
+        size_bytes=0,
+        status="active",
+    )
+    db_session.add(volume)
+    await db_session.flush()
+    await db_session.commit()
+
+    request = normalize_launch_request(
+        {
+            "name": "existing-volume-launch",
+            "plan_id": str(launch_fixture.plan_id),
+            "environment_id": str(launch_fixture.environment_id),
+            "volume_id": str(volume.id),
+            "volume_mode": "read_write",
+        },
+        username=launch_fixture.username,
+    )
+    service = ServerLaunchService(db_session, runtime_driver())
+    revision_id = await service.resolve_revision(launch_fixture.owner_id, request)
+    outcome = await service.reserve(launch_fixture.owner_id, request, revision_id)
+
+    assert isinstance(outcome, LaunchReservation)
+    assert outcome.mounts[0]["auto_created"] is True
+    refreshed = await db_session.get(Volume, volume.id, populate_existing=True)
+    assert refreshed.labels["initialize_for_server"] == str(outcome.server_id)
+
+
+@pytest.mark.asyncio
 async def test_exhausted_exclusive_gpu_pool_waits_with_gpu_reason(
     db_session, launch_fixture, monkeypatch
 ):

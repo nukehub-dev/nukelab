@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
-import { ADMIN_USERNAME, ADMIN_PASSWORD } from './helpers/auth'
+import { ADMIN_PASSWORD, ADMIN_USERNAME } from './helpers/auth'
+import { uniqueName } from './helpers/runtime'
 
 test.describe('Login flow', () => {
   test('admin can log in with local credentials', async ({ page }) => {
@@ -19,7 +20,10 @@ test.describe('Login flow', () => {
   test('shows error for invalid credentials', async ({ page }) => {
     await page.goto('/login')
 
-    await page.getByTestId('login-username').locator('visible=true').fill('admin')
+    await page
+      .getByTestId('login-username')
+      .locator('visible=true')
+      .fill(uniqueName('missing-user'))
     await page.getByTestId('login-password').locator('visible=true').fill('wrong-password')
     await page.getByTestId('login-submit').locator('visible=true').click()
 

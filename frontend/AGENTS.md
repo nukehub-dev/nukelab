@@ -129,6 +129,11 @@ function AdminCreditsPage() {
 
 - `npm run test` runs Playwright e2e tests. Write e2e specs for critical user flows.
 - `npm run test:unit` runs Vitest unit tests (colocated `*.test.ts` under `src/`). Add unit tests for pure helpers in `src/lib/` and `src/hooks/`.
+- Playwright has two modes. Local development is the default: Vite starts on `http://localhost:5173`. Set `E2E_EXTERNAL_SERVER=1` to target a prestarted single-origin stack through `BASE_URL` (normally `http://localhost:8080`); this mode must omit the Vite `webServer`. Never point `BASE_URL` at a prestarted stack while leaving external mode off.
+- `frontend/e2e/fixtures/runtime.Dockerfile` builds disposable runtime A/B images from `nukelab-environment-base`. Keep the fixture image aligned with the real base runtime (`/start.sh`, nginx port 8080, auth sidecar, non-root contract); it is not a generic `nginx:alpine` substitute.
+- Real-stack specs use unique per-run users, environments, volumes and servers, and clean up only resources they created. The shared helpers in `frontend/e2e/helpers/` own login, API calls, readiness polling and unique names.
+- Playwright tags select coverage in CI: `@workspace` runs against the built IDE image, `@combined` runs the provenance + offline recovery + queued recreation scenario when `E2E_COMBINED=1`, and `@vite-only` identifies account-switch tests that import running Vite source modules and therefore run against Vite with mocked HTTP. Do not replace these with production-bundle stubs.
+- CI runs `test:unit`, the Vite-only mocked browser set, the disposable external stack, and the workspace/IDE stack as required gates. Failure artifacts are limited to Playwright reports, traces and targeted container logs; never upload env files or raw tokens.
 
 ### Build and service worker
 

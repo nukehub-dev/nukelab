@@ -1,77 +1,95 @@
 import { test, expect } from '@playwright/test'
-import { loginAsAdmin, ADMIN_USERNAME, ADMIN_PASSWORD } from './helpers/auth'
+import { loginAsAdmin } from './helpers/auth'
 import {
-  apiLogin,
-  getOrCreateTestEnvironment,
-  getPlanId,
+  adminLogin,
+  createTestEnvironment,
+  deactivateEnvironment,
+  deleteServerEventually,
+  getPlanBySlug,
   listServers,
-  deleteServer,
 } from './helpers/api'
+import { E2E_RUNTIME_IMAGE, uniqueName } from './helpers/runtime'
 
 test.describe('Server lifecycle', () => {
-  let _testEnvId: string
-  let _planId: string
-  const serverName = `e2e-server-${Date.now()}`
+  test.describe.configure({ timeout: 180_000 })
+
+  const serverName = uniqueName('e2e-server')
+  let environmentId: string | undefined
+  let planId: string | undefined
 
   test.beforeAll(async ({ request }) => {
-    const { access_token } = await apiLogin(request, ADMIN_USERNAME, ADMIN_PASSWORD)
-    _testEnvId = await getOrCreateTestEnvironment(request, access_token)
-    _planId = await getPlanId(request, access_token)
+    const { access_token } = await adminLogin(request)
+    const environment = await createTestEnvironment(request, access_token, {
+      prefix: 'e2e-lifecycle-env',
+      image: E2E_RUNTIME_IMAGE,
+    })
+    environmentId = environment.id
+    planId = (await getPlanBySlug(request, access_token, 'small')).id
   })
 
   test.afterAll(async ({ request }) => {
-    const { access_token } = await apiLogin(request, ADMIN_USERNAME, ADMIN_PASSWORD)
-    const servers = await listServers(request, access_token)
-    const testServers = servers.filter((s) => s.name.startsWith('e2e-server-'))
-    await Promise.all(testServers.map((s) => deleteServer(request, access_token, s.id)))
+    const { access_token } = await adminLogin(request)
+    try {
+      const servers = await listServers(request, access_token)
+      const created = servers.filter((server) => server.name === serverName)
+      for (const server of created) {
+        await deleteServerEventually(request, access_token, server.id)
+      }
+    } finally {
+      if (environmentId) await deactivateEnvironment(request, access_token, environmentId)
+    }
   })
 
-  test('admin can deploy and stop a server', async ({ page }) => {
+  test('admin can deploy and stop a server', async ({ page, request }) => {
     await loginAsAdmin(page)
 
     await page.goto('/servers')
     await page.getByTestId('action-deploy').click()
 
-    // Dialog renders both mobile (first) and desktop (second) shells; use desktop drawer.
-    const desktopForm = page.getByTestId('deploy-form').nth(1)
+    // Responsive dialogs mount a single form shell on the active viewport.
+    const desktopForm = page.getByTestId('deploy-form').first()
     await expect(desktopForm).toBeVisible()
 
-    await page.getByTestId('deploy-server-name').nth(1).fill(serverName)
+    await page.getByTestId('deploy-server-name').first().fill(serverName)
 
-    await page.getByTestId('deploy-server-plan-trigger').nth(1).click()
-    await page.waitForTimeout(500)
+    await page.getByTestId('deploy-server-plan-trigger').first().click()
     const planOption = page
-      .locator('[data-testid="select-dropdown"] button', {
-        hasText: 'Small (2 CPU / 4g / 20 GB disk)',
-      })
+      .getByTestId(`deploy-server-plan-${planId}`)
+      .locator('visible=true')
       .first()
-    await planOption.waitFor({ timeout: 5000 })
+    await expect(planOption).toBeVisible({ timeout: 5000 })
     await planOption.click()
 
-    await page.getByTestId('deploy-server-environment-trigger').nth(1).click()
-    await page.waitForTimeout(500)
-    const envOption = page
-      .locator('[data-testid="select-dropdown"] button', { hasText: 'E2E Default (e2e-default)' })
+    await page.getByTestId('deploy-server-environment-trigger').first().click()
+    const environmentOption = page
+      .getByTestId(`deploy-server-environment-${environmentId}`)
+      .locator('visible=true')
       .first()
-    await envOption.waitFor({ timeout: 5000 })
-    await envOption.click()
+    await expect(environmentOption).toBeVisible({ timeout: 5000 })
+    await environmentOption.click()
 
-    await page.getByTestId('deploy-server-submit').nth(1).click()
+    await page.getByTestId('deploy-server-submit').first().click()
 
-    await expect(desktopForm).not.toBeVisible({ timeout: 15000 })
+    await expect(desktopForm).not.toBeVisible({ timeout: 60000 })
 
     const row = page.getByTestId(new RegExp(`table-row-.*`))
     const serverRow = row.filter({ hasText: serverName })
     // Table defaults to mobile card view; the TR is present but hidden. Use visible card text.
     await expect(page.getByText(serverName).locator('visible=true')).toBeVisible({ timeout: 30000 })
-    await expect(serverRow).toContainText(/running|pending|stopped|error|Start & Open/, {
+    await expect(serverRow).toContainText(/running|pending|stopped|error|start & open/i, {
       timeout: 60000,
     })
 
-    const stopButton = page.getByTestId(new RegExp(`stop-server-.*`)).first()
+    const { access_token } = await adminLogin(request)
+    const created = (await listServers(request, access_token)).find(
+      (server) => server.name === serverName
+    )
+    if (!created) throw new Error(`Server ${serverName} was not created`)
+
+    const stopButton = page.getByTestId(`stop-server-${created.id}`).locator('visible=true').first()
     if (await stopButton.isVisible().catch(() => false)) {
       await stopButton.click()
-      await expect(serverRow).toContainText('stopped', { timeout: 60000 })
+      await expect(serverRow).toContainText(/stopped/i, { timeout: 60000 })
     }
   })
 })

@@ -381,7 +381,7 @@ test('read-only owner can inspect and export but cannot recreate or import', asy
   await expect(page.getByRole('button', { name: 'Import environment', exact: true })).toHaveCount(0)
 })
 
-test('late recreation acceptance cannot navigate or toast for another account', async ({
+test('@vite-only late recreation acceptance cannot navigate or toast for another account', async ({
   page,
 }) => {
   const state = await fixture(page, { delayed: true, queued: true })
@@ -413,7 +413,10 @@ test('recreation can explicitly bind an accessible shared read-only dataset', as
   await page.getByRole('button', { name: 'Recreate environment', exact: true }).click()
   await configure(page)
   await page.getByTestId('recreate-volume-1-trigger').click()
-  await page.getByRole('button', { name: 'Public reference data', exact: false }).click()
+  await page
+    .getByTestId('recreate-volume-1')
+    .getByRole('button', { name: 'Public reference data', exact: false })
+    .click()
   await page.getByTestId('recreate-submit').click()
   await expect(page).toHaveURL(/tab=queue/)
   expect(state.submissions[0]).toMatchObject({

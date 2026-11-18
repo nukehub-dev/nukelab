@@ -1,7 +1,7 @@
 services:
     # Reverse Proxy
     traefik:
-        image: docker.io/library/traefik:v3.1
+        image: docker.io/library/traefik:v3.6.16
         container_name: nukelab-traefik
         command:
             - --configFile=/etc/traefik/traefik.yml
@@ -393,6 +393,23 @@ services:
             - PGBOUNCER_ENABLED=${PGBOUNCER_ENABLED:-false}
             - DATABASE_PGBOUNCER_URL=${DATABASE_PGBOUNCER_URL:-}
             - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+            - APP_ENV=${APP_ENV:-development}
+            - DEV_MODE=${DEV_MODE:-true}
+            - APP_URL=${APP_URL:-http://localhost:8080}
+            - PUBLIC_URL=${APP_URL:-http://localhost:8080}
+            - DOCKER_NETWORK=${DOCKER_NETWORK:-nukelab-network}
+            - TRAEFIK_INTERNAL_URL=${TRAEFIK_INTERNAL_URL:-http://traefik:80}
+            # Container runtime hardening must match the API container:
+            # queue, schedule, health and bulk tasks create servers here.
+            - CONTAINER_HARDENING_ENABLED=${CONTAINER_HARDENING_ENABLED:-true}
+            # Server auth configuration used when spawning scheduled/queued runtimes.
+            - SERVER_AUTH_ENABLED=${SERVER_AUTH_ENABLED:-true}
+            - SERVER_AUTH_SECRETS_DIR=${SERVER_AUTH_SECRETS_DIR:-/run/server-secrets}
+            - SERVER_AUTH_TOKEN_TTL=${SERVER_AUTH_TOKEN_TTL:-300}
+            - SERVER_AUTH_KEY_ALGORITHM=${SERVER_AUTH_KEY_ALGORITHM:-RS256}
+            - SERVER_AUTH_KEY_ROTATION_DAYS=${SERVER_AUTH_KEY_ROTATION_DAYS:-30}
+            - SERVER_AUTH_MAX_TOKENS_PER_MINUTE=${SERVER_AUTH_MAX_TOKENS_PER_MINUTE:-10}
+            - SERVER_AUTH_AUDIT_LOG=${SERVER_AUTH_AUDIT_LOG:-true}
             - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret}
             # User auth - asymmetric EdDSA (Ed25519) signing for access tokens
             - USER_AUTH_KEY_ALGORITHM=${USER_AUTH_KEY_ALGORITHM:-EdDSA}

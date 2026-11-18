@@ -288,7 +288,9 @@ test('read-only owner can inspect history but not create restore or deletion req
   await expect(page.getByRole('button', { name: 'Delete backup', exact: true })).toHaveCount(0)
 })
 
-test('late backup acceptance cannot toast or populate another owner history', async ({ page }) => {
+test('@vite-only late backup acceptance cannot toast or populate another owner history', async ({
+  page,
+}) => {
   const state = await fixture(page, { delayedCreate: true })
   await page.goto('/volumes')
   await page.getByRole('button', { name: 'Backups for Private data' }).click()
