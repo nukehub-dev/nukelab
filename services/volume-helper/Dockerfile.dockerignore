@@ -1,0 +1,9 @@
+**
+!backend/
+!backend/app/
+!backend/app/services/
+!backend/app/services/volume_archive_service.py
+!services/
+!services/volume-helper/
+!services/volume-helper/helper.py
+!services/volume-helper/Dockerfile

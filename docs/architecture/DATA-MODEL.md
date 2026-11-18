@@ -17,8 +17,18 @@ record remains unrecorded; today's template is not historical evidence.
 token and resulting server identity. Null payload/version identifies legacy intent
 that the new claim primitive refuses to launch. `volume_operations` persists
 writer/mount intents and exclusive backup/restore protection, including uncertain
-executor outcomes. These foundations do not enable end-to-end recreation or volume
-recovery; runtime and API integration remains required.
+executor outcomes. Owner APIs and task orchestration use these records for
+queueing, approved recreation and offline private-volume recovery. Runtime
+uncertainty preserves protection until explicit verified reconciliation.
+
+`volume_backups` records source metadata, archive format/checksum and bounded
+completion counts, operation fence, storage reservation and expiry. Its nullable
+source foreign key uses `SET NULL` so completed copies survive source deletion.
+Legacy backup rows without a verified format/checksum are never restore points.
+`volume_restores` pins a backup and stores the stable new destination identity,
+quota/storage reservation, fence and terminal outcome. Active or uncertain restore
+rows prevent artifact deletion and retention. Restoring/failed destinations stay
+inaccessible; only verified success activates the new volume.
 
 ```
 +---------+     +---------+     +-------------+       +---------+
@@ -182,12 +192,11 @@ Persistent storage attached to servers or shared by workspaces.
 class Volume:
     id: UUID
     name: str
-    user_id: UUID               # Owner
-    max_size_bytes: int
-    used_bytes: int
-    mount_path: str
-    is_active: bool
-    is_archived: bool
+    owner_id: UUID
+    visibility: str             # private, workspace, public
+    max_size_bytes: int | None
+    size_bytes: int
+    status: str                 # active, over_limit, archived, restoring, restore_failed, deleting
     created_at: datetime
     updated_at: datetime
 ```

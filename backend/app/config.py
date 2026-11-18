@@ -161,6 +161,17 @@ class Settings(BaseSettings):
     docker_pull_policy: str = "if-not-present"
     volume_storage_path: str = ""
 
+    volume_backup_storage_path: str = ""
+    volume_backup_host_path: str = ""
+    volume_backup_helper_image: str = "nukelab-volume-helper:latest"
+    volume_backup_retention_days: int = Field(default=30, gt=0)
+    volume_backup_max_per_volume: int = Field(default=20, gt=0)
+    volume_backup_max_owner_bytes: int = Field(default=100 * 1024**3, gt=0)
+    volume_backup_max_total_bytes: int = Field(default=1024**4, gt=0)
+    volume_backup_max_logical_bytes: int = Field(default=64 * 1024**3, gt=0)
+    volume_backup_max_members: int = Field(default=100000, gt=0)
+    volume_backup_timeout_seconds: int = Field(default=1800, gt=0)
+
     # Container runtime driver ("docker" covers Docker and Podman via the
     # Docker-compatible API; "kubernetes" is reserved for a future k3s driver).
     container_runtime: str = "docker"

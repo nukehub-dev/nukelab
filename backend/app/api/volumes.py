@@ -23,6 +23,7 @@ from app.models.user import User
 from app.services.notification_service import NotificationService
 from app.services.quota_service import QuotaService
 from app.services.volume_access_service import VolumeAccessService
+from app.services.volume_mutation_service import volume_writer
 from app.services.volume_service import VolumeService
 
 router = APIRouter()
@@ -323,6 +324,8 @@ async def list_volume_files(
     volume = await volume_service.get_volume(volume_id)
     if not volume:
         raise HTTPException(status_code=404, detail="Volume not found")
+    if volume.status in ("restoring", "restore_failed", "deleting"):
+        raise HTTPException(409, {"code": "volume_busy"})
 
     if not await volume_access.can_access_volume(volume_id, str(current_user.id), "read_only"):
         checker = PermissionChecker(current_user)
@@ -435,43 +438,44 @@ async def delete_volume_file(
         checker = PermissionChecker(current_user)
         checker.require(Permission.ADMIN_ACCESS)
 
-    try:
-        base_path = _get_volume_base_path(volume.name)
-        target_path = secure_path(base_path, path)
+    async with volume_writer(db, volume_id, actor_id=current_user.id) as volume:
+        try:
+            base_path = _get_volume_base_path(volume.name)
+            target_path = secure_path(base_path, path)
 
-        if not target_path.exists():
-            raise HTTPException(status_code=404, detail="Path not found")
+            if not target_path.exists():
+                raise HTTPException(status_code=404, detail="Path not found")
 
-        # Safety: don't allow deleting the root of the volume
-        if target_path == base_path.resolve():
-            raise HTTPException(status_code=403, detail="Cannot delete volume root")
+            # Safety: don't allow deleting the root of the volume
+            if target_path == base_path.resolve():
+                raise HTTPException(status_code=403, detail="Cannot delete volume root")
 
-        if target_path.is_dir():
-            import shutil
+            if target_path.is_dir():
+                import shutil
 
-            shutil.rmtree(target_path)
-        else:
-            target_path.unlink()
+                shutil.rmtree(target_path)
+            else:
+                target_path.unlink()
 
-        return {"message": "Deleted", "path": path}
+            return {"message": "Deleted", "path": path}
 
-    except HTTPException:
-        raise
-    except OSError as e:
-        if e.errno == 30:  # Read-only file system
+        except HTTPException:
+            raise
+        except OSError as e:
+            if e.errno == 30:  # Read-only file system
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Volume is read-only. Cannot modify files.",
+                )
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Volume is read-only. Cannot modify files.",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to delete file or directory.",
             )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to delete file or directory.",
-        )
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to delete file or directory.",
-        )
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to delete file or directory.",
+            )
 
 
 @router.get("/{volume_id}/download")
@@ -491,6 +495,8 @@ async def download_volume_file(
     volume = await volume_service.get_volume(volume_id)
     if not volume:
         raise HTTPException(status_code=404, detail="Volume not found")
+    if volume.status in ("restoring", "restore_failed", "deleting"):
+        raise HTTPException(409, {"code": "volume_busy"})
 
     if not await volume_access.can_access_volume(volume_id, str(current_user.id), "read_only"):
         checker = PermissionChecker(current_user)

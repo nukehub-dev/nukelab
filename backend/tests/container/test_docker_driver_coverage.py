@@ -336,19 +336,37 @@ class TestVolumeAndImageWrappers:
         driver.client.volumes.get = mock.AsyncMock(return_value=volume)
         assert await driver.get_volume("vol-1") == {"Name": "vol-1"}
 
-        driver.client.volumes.get = mock.AsyncMock(side_effect=Exception("missing"))
+        driver.client.volumes.get = mock.AsyncMock(
+            side_effect=aiodocker.DockerError(404, {"message": "missing"})
+        )
         assert await driver.get_volume("vol-1") is None
+        for failure in (
+            aiodocker.DockerError(500, {"message": "daemon failure"}),
+            RuntimeError("offline"),
+        ):
+            driver.client.volumes.get.side_effect = failure
+            with pytest.raises(ContainerDriverError):
+                await driver.get_volume("vol-1")
 
     @pytest.mark.asyncio
-    async def test_delete_volume_best_effort(self):
+    async def test_delete_volume_verified_absence(self):
         driver, _ = _make_driver()
         volume = mock.AsyncMock()
         driver.client.volumes.get = mock.AsyncMock(return_value=volume)
         await driver.delete_volume("vol-1")
         volume.delete.assert_awaited_once()
 
-        driver.client.volumes.get = mock.AsyncMock(side_effect=Exception("missing"))
-        await driver.delete_volume("vol-1")  # must not raise
+        driver.client.volumes.get = mock.AsyncMock(
+            side_effect=aiodocker.DockerError(404, {"message": "missing"})
+        )
+        await driver.delete_volume("vol-1")
+        for failure in (
+            aiodocker.DockerError(500, {"message": "daemon failure"}),
+            RuntimeError("offline"),
+        ):
+            driver.client.volumes.get.side_effect = failure
+            with pytest.raises(ContainerDriverError):
+                await driver.delete_volume("vol-1")
 
     @pytest.mark.asyncio
     async def test_list_images_success(self):

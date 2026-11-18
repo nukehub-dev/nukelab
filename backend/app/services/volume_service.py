@@ -21,6 +21,7 @@ from app.core.logging import get_logger
 from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
 from app.models.volume import Volume
 from app.models.workspace_volume import WorkspaceVolume
+from app.services.volume_mutation_service import guarded_volume_metadata
 from app.services.xfs_quota_service import xfs_quota_service
 
 logger = get_logger(__name__)
@@ -353,6 +354,7 @@ class VolumeService:
                     f"Free up {volume.size_bytes - max_size_bytes} bytes first."
                 )
 
+    @guarded_volume_metadata
     async def update_volume(
         self,
         volume_id: str,
@@ -385,34 +387,120 @@ class VolumeService:
         return volume
 
     async def delete_volume(self, volume_id: str) -> bool:
-        """Delete a volume (only if not mounted by any server)"""
-        volume = await self.get_volume(volume_id)
-        if not volume:
-            return False
+        """Delete only an unattached volume; retain uncertainty instead of orphaning data."""
+        import uuid
 
+        from sqlalchemy import delete
+
+        from app.models.server import Server
         from app.models.server_volume import ServerVolume
-
-        mount_count = await self.db.execute(
-            select(func.count()).where(ServerVolume.volume_id == volume.id)
+        from app.models.volume_operation import VolumeOperation
+        from app.services.admission_service import acquire_admission_lock
+        from app.services.volume_operation_service import (
+            ACTIVE_STATES,
+            acquire_volume_operations,
+            transition_volume_operation,
         )
-        mount_count_value = mount_count.scalar()
-        if mount_count_value > 0:
-            raise ValueError(f"Volume is still mounted by {mount_count_value} server(s)")
 
-        # Remove XFS project quota (best-effort, do before Docker delete)
-        xfs_quota_service.remove_quota(volume.name)
-
-        # Delete Docker volume
-        container_client = await get_container_client()
+        if self.db.new or self.db.dirty or self.db.deleted:
+            raise RuntimeError("Volume deletion requires a clean session")
+        if self.db.in_transaction():
+            await self.db.commit()
+        identifier, operation_id = uuid.UUID(str(volume_id)), uuid.uuid4()
+        async with self.db.begin():
+            await acquire_admission_lock(self.db)
+            volume = await self.db.get(
+                Volume, identifier, populate_existing=True, with_for_update=True
+            )
+            if volume is None:
+                return False
+            if volume.status == "restoring" or await self.db.scalar(
+                select(VolumeOperation.operation_id)
+                .where(
+                    VolumeOperation.volume_id == identifier,
+                    VolumeOperation.state.in_(ACTIVE_STATES),
+                )
+                .limit(1)
+            ):
+                raise HTTPException(409, {"code": "volume_busy"})
+            if await self.db.scalar(
+                select(ServerVolume.server_id).where(ServerVolume.volume_id == identifier).limit(1)
+            ) or await self.db.scalar(
+                select(Server.id).where(Server.volume_id == identifier).limit(1)
+            ):
+                raise ValueError("Volume is still mounted or selected by a server")
+            guard = (
+                await acquire_volume_operations(
+                    self.db,
+                    volume_ids=[identifier],
+                    owner_id=volume.owner_id,
+                    operation_id=operation_id,
+                    kind="writer",
+                )
+            )[0]
+            token, name, previous_status = guard.fencing_token, volume.name, volume.status
+            volume.status = "deleting"
+        mutating = False
         try:
-            await container_client.delete_volume(volume.name)
-        except Exception:
-            pass
+            driver = await get_container_client()
+            from app.services.volume_recovery_runtime import (
+                RuntimeRecoveryError,
+                VolumeRecoveryRuntime,
+            )
 
-        # Delete database record
-        await self.db.delete(volume)
-        await self.db.commit()
-        return True
+            try:
+                await VolumeRecoveryRuntime(driver).assert_detached(name)
+            except RuntimeRecoveryError as error:
+                raise ValueError(error.code) from error
+            mutating = True
+            try:
+                await driver.delete_volume(name)
+            except ContainerDriverError as error:
+                if error.status != 404:
+                    raise
+            if await driver.get_volume(name) is not None:
+                raise ContainerDriverError("Volume removal could not be verified")
+            async with self.db.begin():
+                await transition_volume_operation(
+                    self.db,
+                    operation_id=operation_id,
+                    volume_id=identifier,
+                    fencing_token=token,
+                    state="succeeded",
+                    executor_terminated=True,
+                )
+                await self.db.execute(
+                    delete(VolumeOperation).where(
+                        VolumeOperation.volume_id == identifier,
+                        VolumeOperation.state.not_in(ACTIVE_STATES),
+                    )
+                )
+                current = await self.db.get(Volume, identifier, populate_existing=True)
+                await self.db.delete(current)
+            try:
+                xfs_quota_service.remove_quota(name)
+            except Exception:
+                logger.exception("Failed to remove quota after verified volume deletion")
+            return True
+        except BaseException as error:
+            await self.db.rollback()
+            async with self.db.begin():
+                await transition_volume_operation(
+                    self.db,
+                    operation_id=operation_id,
+                    volume_id=identifier,
+                    fencing_token=token,
+                    state="recovery_required" if mutating else "failed",
+                    executor_terminated=not mutating,
+                )
+                if not mutating:
+                    current = await self.db.get(Volume, identifier)
+                    current.status = previous_status
+            if not isinstance(error, Exception):
+                raise
+            if isinstance(error, ValueError) and not mutating:
+                raise
+            raise HTTPException(503, {"code": "volume_recovery_required"}) from error
 
     async def update_volume_size(self, volume_id: str) -> int | None:
         """Update volume size from filesystem"""

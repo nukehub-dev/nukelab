@@ -37,6 +37,7 @@ def mock_docker_client():
     mock_container_client = mock.AsyncMock()
     mock_container_client.client = mock_client
     mock_container_client.list_containers = mock.AsyncMock(return_value=[])
+    mock_container_client.get_volume = mock.AsyncMock(return_value=None)
     mock_container_client.create_container = mock.AsyncMock(return_value=mock.Mock(id="mock-cid"))
     mock_container_client.start_container = mock.AsyncMock()
     mock_container_client.get_container_logs = mock.AsyncMock(return_value="mock logs")

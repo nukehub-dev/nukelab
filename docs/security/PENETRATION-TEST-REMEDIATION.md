@@ -137,3 +137,9 @@ requires separate read/write permissions and both scopes. Regression coverage is
 in `backend/tests/security/test_provenance_recreation.py`; metadata responses use
 private no-store caching and read-only token eligibility reflects missing manage
 scope. Final recreation rechecks current approval and uses ordinary admission.
+
+### Volume runtime deletion proof
+
+| Finding ID | Owner | Status | Evidence / retest |
+|---|---|---|---|
+| PENT-NKL-017 | Backend Eng | Remediated before release; isolated retest required | `docker_driver.py`, `volume_service.py`, `test_volume_mutation_exclusion.py`; inject daemon inspection/deletion failure and verify protected ownership and quota remain |

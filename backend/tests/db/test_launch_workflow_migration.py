@@ -19,13 +19,14 @@ from app.config import settings
 from app.db.base import Base
 
 PREVIOUS_REVISION = "34ce1a62ffe8"
-WORKFLOW_REVISION = "e1840b2c6a39"
+WORKFLOW_REVISION = "f6b29a41d7c8"
 NEW_TABLES = {
     "environment_revisions",
     "server_launch_records",
     "volume_operations",
     "server_launch_intents",
     "server_launch_operations",
+    "volume_restores",
 }
 
 
@@ -90,8 +91,8 @@ def test_fresh_upgrade_downgrade_and_reupgrade(migration_database):
     command.upgrade(config, "head")
     assert NEW_TABLES <= asyncio.run(tables(name))
     command.downgrade(config, "-1")
-    assert "server_launch_operations" not in asyncio.run(tables(name))
-    assert NEW_TABLES - {"server_launch_operations"} <= asyncio.run(tables(name))
+    assert "volume_restores" not in asyncio.run(tables(name))
+    assert NEW_TABLES - {"volume_restores"} <= asyncio.run(tables(name))
     command.upgrade(config, "head")
     command.downgrade(config, PREVIOUS_REVISION)
     assert NEW_TABLES.isdisjoint(asyncio.run(tables(name)))
@@ -139,10 +140,11 @@ def test_upgrade_preserves_legacy_rows_without_inventing_payload(migration_datab
             row = await connection.fetchrow("SELECT * FROM server_queue WHERE id=$1", queue)
             assert row["request_payload"] is None and row["request_version"] is None
             assert row["requested_gpu"] == 0
-            assert (
-                await connection.fetchval("SELECT count(*) FROM volume_backups WHERE id=$1", backup)
-                == 1
-            )
+            saved = await connection.fetchrow("SELECT * FROM volume_backups WHERE id=$1", backup)
+            assert saved["reserved_bytes"] == 0
+            assert saved["format_version"] is None
+            assert saved["sha256"] is None
+            assert saved["source_volume_id"] is None
         finally:
             await connection.close()
 

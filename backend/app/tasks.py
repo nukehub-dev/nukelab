@@ -1252,3 +1252,132 @@ def cleanup_expired_allowance_overrides(self):
     except Exception as e:
         logger.exception("Fatal error in cleanup_expired_allowance_overrides: %s", e)
         return f"Fatal error: {e}"
+
+
+def enqueue_volume_recovery(kind: str, operation_id: str):
+    """Best-effort delivery; committed pending intents also have a bounded dispatcher."""
+    if kind not in ("backup", "restore", "delete"):
+        raise ValueError("Invalid recovery operation")
+    return process_volume_recovery.delay(kind, operation_id)
+
+
+@celery_app.task(bind=True)
+def process_volume_recovery(self, kind: str, operation_id: str):
+    import uuid
+
+    async def execute():
+        from app.services.volume_backup_service import VolumeBackupService
+        from app.services.volume_recovery_runtime import VolumeRecoveryRuntime
+
+        identifier = uuid.UUID(operation_id)
+        async with operation_resources() as resources:
+            service = VolumeBackupService(resources.db, VolumeRecoveryRuntime(resources.driver))
+            from app.models.volume_backup import VolumeBackup
+            from app.models.volume_restore import VolumeRestore
+
+            model = VolumeRestore if kind == "restore" else VolumeBackup
+            before = await resources.db.get(model, identifier)
+            before_status = before.status if before else None
+            operation = {
+                "backup": service.execute_backup,
+                "restore": service.execute_restore,
+                "delete": service.execute_delete,
+            }.get(kind)
+            if operation is None:
+                raise ValueError("Invalid recovery operation")
+            result = await operation(identifier)
+            if (
+                result.status in ("completed", "failed", "recovery_required")
+                and result.status != before_status
+            ):
+                try:
+                    row = await resources.db.get(model, identifier, populate_existing=True)
+                    if row is not None and row.user_id is not None:
+                        from app.services.notification_service import NotificationService
+
+                        await NotificationService(resources.db).create(
+                            user_id=row.user_id,
+                            title="Volume recovery completed"
+                            if result.status == "completed"
+                            else "Volume recovery needs attention",
+                            message="Your volume recovery operation completed."
+                            if result.status == "completed"
+                            else "Inspect backup history for the recovery outcome.",
+                            type="volume",
+                            severity="info" if result.status == "completed" else "warning",
+                            action_url="/volumes",
+                            event_key="volume_recovery_completed"
+                            if result.status == "completed"
+                            else "volume_recovery_failed",
+                        )
+                except Exception:
+                    logger.exception("Recovery notification delivery failed")
+            return result.model_dump(mode="json")
+
+    return run_operation(execute, timeout_seconds=settings.volume_backup_timeout_seconds + 30)
+
+
+@celery_app.task(bind=True)
+def dispatch_volume_recovery(self):
+    """Deliver bounded pending work and expired unpinned artifacts without TTL takeover."""
+
+    async def dispatch():
+        from sqlalchemy import select
+
+        from app.models.volume_backup import VolumeBackup
+        from app.models.volume_restore import VolumeRestore
+        from app.services.volume_backup_service import VolumeBackupService
+        from app.services.volume_recovery_runtime import VolumeRecoveryRuntime
+
+        if not settings.volume_backup_storage_path or not settings.volume_backup_host_path:
+            return "Volume recovery is disabled"
+        async with operation_resources() as resources:
+            db = resources.db
+            service = VolumeBackupService(db, VolumeRecoveryRuntime(resources.driver))
+            expired = await service.retention_candidates(limit=20)
+            for identifier in expired:
+                try:
+                    await service.expire_backup(identifier)
+                except Exception:
+                    await db.rollback()
+                    logger.warning("Backup retention admission deferred")
+            backups = list(
+                (
+                    await db.execute(
+                        select(VolumeBackup.id, VolumeBackup.status)
+                        .where(
+                            VolumeBackup.status.in_(["pending", "deleting"]),
+                            VolumeBackup.helper_identity.is_(None)
+                            | ~VolumeBackup.helper_identity.startswith("delete:"),
+                        )
+                        .order_by(VolumeBackup.created_at, VolumeBackup.id)
+                        .limit(20)
+                    )
+                ).all()
+            )
+            restores = list(
+                await db.scalars(
+                    select(VolumeRestore.id)
+                    .where(VolumeRestore.status == "pending")
+                    .order_by(VolumeRestore.created_at, VolumeRestore.id)
+                    .limit(20)
+                )
+            )
+        dispatched = 0
+        for identifier, state in backups:
+            try:
+                enqueue_volume_recovery(
+                    "delete" if state == "deleting" else "backup", str(identifier)
+                )
+                dispatched += 1
+            except Exception:
+                logger.warning("Durable backup remains pending delivery")
+        for identifier in restores:
+            try:
+                enqueue_volume_recovery("restore", str(identifier))
+                dispatched += 1
+            except Exception:
+                logger.warning("Durable restore remains pending delivery")
+        return f"Dispatched {dispatched} volume recovery operations"
+
+    return run_operation(dispatch, timeout_seconds=settings.volume_backup_timeout_seconds)

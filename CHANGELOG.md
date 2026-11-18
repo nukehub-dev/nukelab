@@ -16,6 +16,10 @@ section.
 
 ### Added
 
+- Owner-scoped offline private-volume backups and restore into new private volumes,
+  with bounded storage, retention, protected recovery history and capability-gated UI.
+  Requires an operator-configured private artifact bind and trusted local helper image.
+
 - Saved launch provenance and sanitized environment export, with owner recreation
   and manifest import through currently approved revisions, plans and explicit
   volume choices. The UI shows the last verified launch and local-only limits.
@@ -32,12 +36,15 @@ section.
   keeps the original cache mounted.
 - Backend foundations for durable queue requests, approved environment revisions,
   launch provenance, transaction-owned admission, and exclusive volume operations.
-  User-facing volume recovery remains pending.
 - Bounded archive validation and extraction into fresh destinations, with checksum,
   path/link, metadata, expansion and ownership checks.
 - Configurable allocatable CPU, memory and disk budgets and queue policy settings.
 
 ### Fixed
+
+- Runtime volume data ignores no longer hide volume API regression tests.
+- Backup retention skips active restore pins and unsupported artifacts before
+  applying its batch limit, so older pinned copies cannot block later cleanup.
 
 - Recreation preview requires read and manage permissions/scopes so management
   tokens cannot read saved manifests through a metadata preview.

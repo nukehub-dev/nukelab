@@ -480,6 +480,8 @@ class TestVolumeServiceDelete:
             mock_client = mock.AsyncMock()
             mock_docker_vol = mock.AsyncMock()
             mock_client.client.volumes.get = mock.AsyncMock(return_value=mock_docker_vol)
+            mock_client.list_containers.return_value = []
+            mock_client.get_volume.return_value = None
             mock_get_client.return_value = mock_client
 
             result = await vol_service.delete_volume(str(vol.id))

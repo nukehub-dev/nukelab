@@ -302,3 +302,49 @@ docker exec -i nukelab-postgres pg_dump -U nukelab -d nukelab -Fc > backup.dump
 # Parallel restore (4 jobs)
 docker exec -i nukelab-postgres pg_restore -U nukelab -d nukelab -j 4 < backup.dump
 ```
+
+## Private user-volume recovery
+
+The Volumes page provides owner backup history and restoration into a **new private
+volume**. Sources must be private, unassociated with any workspace, and detached
+from every runtime container, including stopped or unmanaged containers. Stop and
+remove attachments explicitly before requesting a backup. Capture never changes
+source permissions. Shared/live backups, archive upload/download and remote backup
+storage are outside this workflow.
+
+Recovery is disabled until both storage paths in [`.env.example`](../../.env.example)
+are configured and the trusted local helper image is available. Build that image
+using [the helper instructions](../../services/volume-helper/README.md). Provision
+an absolute artifact directory owned by UID/GID 65532 with mode `0700`; configure
+`VOLUME_BACKUP_HOST_PATH` as its daemon-host path and
+`VOLUME_BACKUP_STORAGE_PATH` as the path inside API and worker containers. These
+must name the same bind mount. API, worker and scheduler receive the configuration
+through Compose. The service resolves the helper to a local immutable image ID;
+it never pulls an image during admission. Rootless runtimes must map the storage
+ownership correctly for container UID 65532.
+
+Storage admission reserves conservative archive and staging space against owner,
+global and physical-free-space limits before work begins. The estimate includes
+three copies of the bounded logical input plus per-member overhead; a source's
+configured size limit can therefore require a larger owner budget even when its
+current contents are small. Defaults and limits are documented in `.env.example`.
+Incomplete artifacts cannot be restored. Completed copies expire under the
+configured retention policy; active or uncertain restores pin the archive.
+
+A restore reserves ordinary volume quota immediately. Its new volume remains
+inaccessible until archive validation and runtime completion are verified. A
+failed destination remains protected and can be explicitly deleted; it is never
+published as a complete restore. Completed copies remain available after source
+volume deletion. Account deletion requires cleanup of volumes, servers, backups
+and outstanding recovery operations first.
+
+Pending work survives broker delivery failure and is scanned for redelivery.
+`recovery_required` means runtime termination or cleanup could not be proved;
+retain the artifact, destination and operation guard while investigating. Do not
+clear guards, delete operation rows, reuse helper names or treat elapsed time as
+proof of termination. Stop and inspect the operation-labelled helper and verify
+attachments/storage before any operator repair. Automatic crash adoption and a
+supported operator reconciliation command remain future work.
+
+These local recovery copies share the host's failure domain. Keep database
+backups and an independently managed off-host storage backup policy as well.

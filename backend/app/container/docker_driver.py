@@ -670,13 +670,121 @@ class DockerDriver(ContainerDriver):
         except aiodocker.DockerError as e:
             raise _map_error(e) from e
 
-    async def list_containers(self, filters: dict | None = None) -> list[dict]:
+    async def list_containers(
+        self, filters: dict | None = None, *, all: bool = False
+    ) -> list[dict]:
         """List containers as inspect-shaped dicts."""
         try:
-            containers = await self.client.containers.list(filters=filters)
+            containers = (
+                await self.client.containers.list(filters=filters, all=True)
+                if all
+                else await self.client.containers.list(filters=filters)
+            )
             return [await container.show() for container in containers]
         except aiodocker.DockerError as e:
             raise _map_error(e) from e
+
+    async def create_recovery_helper(self, *, name, image, command, mounts, labels, limits):
+        import uuid
+        from pathlib import PurePosixPath
+
+        try:
+            operation_id = str(uuid.UUID(labels["nukelab.recovery.operation"]))
+            uuid.UUID(labels["nukelab.recovery.fence"])
+        except (KeyError, ValueError, TypeError, AttributeError):
+            raise ContainerDriverError("Invalid recovery identity") from None
+        if name != "nukelab-recovery-" + operation_id or not re.fullmatch(
+            r"sha256:[a-f0-9]{64}", image
+        ):
+            raise ContainerDriverError("Invalid recovery identity")
+        if (
+            not isinstance(command, list)
+            or not command
+            or any(not isinstance(arg, str) or "\x00" in arg for arg in command)
+        ):
+            raise ContainerDriverError("Invalid recovery command")
+        allowed = {"/source": True, "/archive": True, "/target": False, "/artifact": False}
+        targets = set()
+        for mount in mounts:
+            if (
+                set(mount) != {"Type", "Source", "Target", "ReadOnly"}
+                or mount["Target"] not in allowed
+                or mount["ReadOnly"] is not allowed[mount["Target"]]
+                or mount["Target"] in targets
+            ):
+                raise ContainerDriverError("Invalid recovery mount")
+            targets.add(mount["Target"])
+            source = mount["Source"]
+            if mount["Type"] == "volume":
+                if not isinstance(source, str) or not re.fullmatch(
+                    r"[A-Za-z0-9][A-Za-z0-9_.-]*", source
+                ):
+                    raise ContainerDriverError("Invalid recovery mount")
+            elif mount["Type"] == "bind":
+                if (
+                    mount["Target"] not in ("/archive", "/artifact")
+                    or not isinstance(source, str)
+                    or not source.startswith("/")
+                    or ".." in PurePosixPath(source).parts
+                    or "\x00" in source
+                ):
+                    raise ContainerDriverError("Invalid recovery mount")
+            else:
+                raise ContainerDriverError("Invalid recovery mount")
+        if "/artifact" not in targets or ("/source" in targets) == ("/target" in targets):
+            raise ContainerDriverError("Invalid recovery mounts")
+        memory = limits.get("memory_bytes", 1024**3)
+        if type(memory) is not int or not 64 * 1024**2 <= memory <= 4 * 1024**3:
+            raise ContainerDriverError("Invalid recovery limits")
+        mounts = [
+            {
+                **mount,
+                **(
+                    {"VolumeOptions": {"NoCopy": mount["Target"] == "/source"}}
+                    if mount["Type"] == "volume"
+                    else {}
+                ),
+            }
+            for mount in mounts
+        ]
+        config = {
+            "Image": image,
+            "Cmd": command,
+            "User": "65532:65532",
+            "Labels": labels,
+            "Env": ["PYTHONDONTWRITEBYTECODE=1", "PYTHONUNBUFFERED=1"],
+            "Healthcheck": {"Test": ["NONE"]},
+            "HostConfig": {
+                "Mounts": mounts,
+                "ReadonlyRootfs": True,
+                "CapDrop": ["ALL"],
+                "SecurityOpt": ["no-new-privileges:true"],
+                "NetworkMode": "none",
+                "Memory": memory,
+                "NanoCpus": 1000000000,
+                "PidsLimit": 64,
+                "Tmpfs": {"/tmp": "rw,nosuid,nodev,noexec,size=67108864,mode=1777"},
+                "RestartPolicy": {"Name": "no"},
+            },
+        }
+        try:
+            helper = await self.client.containers.create(config=config, name=name)
+            return helper.id
+        except aiodocker.DockerError as error:
+            raise _map_error(error) from error
+
+    async def wait_recovery_helper(self, container_id, timeout):
+        import asyncio
+
+        try:
+            helper = await self.client.containers.get(container_id)
+            result = await asyncio.wait_for(helper.wait(), timeout=timeout)
+            code = result.get("StatusCode")
+            if type(code) is not int:
+                raise ContainerDriverError("Unknown recovery helper result")
+            return code
+        except aiodocker.DockerError as error:
+            raise _map_error(error) from error
 
     async def get_container_stats(self, container_id: str) -> dict:
         """Return one raw Docker-stats-shaped dict for a container."""
@@ -813,16 +921,23 @@ class DockerDriver(ContainerDriver):
         try:
             volume = await self.client.volumes.get(name)
             return await volume.show()
-        except Exception:
-            return None
+        except aiodocker.DockerError as error:
+            if error.status == 404:
+                return None
+            raise _map_error(error) from error
+        except Exception as error:
+            raise ContainerDriverError("Volume inspection failed") from error
 
     async def delete_volume(self, name: str):
-        """Delete a volume (best-effort; errors are swallowed)."""
+        """Delete a volume; only verified absence is an idempotent success."""
         try:
             volume = await self.client.volumes.get(name)
             await volume.delete()
-        except Exception:
-            pass
+        except aiodocker.DockerError as error:
+            if error.status != 404:
+                raise _map_error(error) from error
+        except Exception as error:
+            raise ContainerDriverError("Volume deletion failed") from error
 
     async def _read_toolchain_manifest(
         self, image: str, volume_name: str

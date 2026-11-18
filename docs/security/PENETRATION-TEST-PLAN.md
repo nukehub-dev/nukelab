@@ -310,7 +310,7 @@ The following scripts should be created as part of the engagement to enable repe
 - `backend/tests/security/test_auth_tokens.py` — JWT manipulation and token-scope abuse.
 - `backend/tests/security/test_credit_race.py` — concurrent credit/spawn race tests.
 - `backend/tests/container/test_image_identity.py` and `test_reserved_spawner.py` — immutable identity/cache, fail-closed required toolchain/readiness, existing-data preservation and uncertain helper regressions. Reserved-launch orchestration is not yet selected by public API/worker entry points.
-- `backend/tests/security/test_volume_archive.py` — implemented helper regressions for checksum corruption, path/link traversal, special members, metadata/expansion quotas, and private staging. Backup runtime/API integration remains unavailable and requires separate attachment, authorization, helper hardening, and writer-exclusion acceptance.
+- `backend/tests/security/test_volume_archive.py` — implemented helper regressions for checksum corruption, path/link traversal, special members, metadata/expansion quotas, and private staging. Recovery API/runtime integration adds owner/scope checks, durable writer exclusion, all-container attachment checks and fixed hardened helpers. Verify disabled capability behavior, restore pins, uncertain executor protection and bounded storage in the focused recovery tests; combined isolated runtime acceptance remains required.
 - `backend/tests/security/test_container_isolation.py` — runtime container escape/isolation checks.
 - `scripts/run-pentest-scans.sh` — orchestrates Trivy, ZAP, Nuclei, and custom pytest suites. Implemented.
 - `frontend/e2e/security/*.spec.ts` — Playwright tests for CSRF, XSS, and role-based UI hiding. Implemented (`frontend/e2e/security/frontend-security.spec.ts`).
@@ -483,3 +483,18 @@ Use CVSS 4.0 with the following mapping:
   responses cannot populate another actor's UI or navigate for that account.
 - Rehearse tag/template changes and actual file/image identities against an
   isolated runtime; mocked browser responses do not prove artifact portability.
+
+### Private-volume recovery controls
+
+- Reject foreign/private-workspace/shared/live or stopped-container-attached sources;
+  inspect unmanaged containers too and fail closed on unknown runtime state.
+- Race backup admission against launch, file deletion, sharing, metadata and deletion;
+  only one exclusive operation may commit. No locks span runtime I/O.
+- Restore corrupted/path-traversing/oversized archives only into new protected targets;
+  verify failed and incomplete destinations cannot be browsed or mounted.
+- Verify fixed immutable helper image, UID/GID 65532, no network/capabilities/socket,
+  read-only root/source mounts, resource limits and timeout termination proof.
+- Crash or lose daemon responses at create/start/wait/delete; retained guards and
+  reservations require explicit verified recovery, never elapsed-time takeover.
+- Verify active restores pin retention/deletion, broker redelivery is idempotent,
+  and no API response exposes host paths, archive bytes or helper diagnostics.

@@ -739,3 +739,30 @@ use no-store caching. This was found and corrected before the feature was releas
 Retest `backend/tests/security/test_provenance_recreation.py`: management-only and
 read-only tokens cannot preview; combined scopes can; a dynamic write-only role
 cannot preview; authorized final creation retains its normal management boundary.
+
+### PENT-NKL-017: Volume deletion mistook runtime failure for absence
+
+**Severity:** Medium
+
+**CVSS 3.1:** 4.9 (`AV:N/AC:L/PR:H/UI:N/S:U/C:N/I:H/A:N`)
+
+**Status:** Remediated before release; isolated failure retest required
+
+**Opened:** 2026-11-18
+
+**Owner:** Backend Eng
+
+**Component:** `backend/app/container/docker_driver.py`, `backend/app/services/volume_service.py`
+
+The runtime adapter swallowed deletion errors and returned no volume for every
+inspection failure. Database cleanup could consequently discard ownership and
+quota records while sensitive physical storage remained. Deletion now commits a
+durable exclusive operation first, rejects every observed container attachment,
+and removes metadata only after verified runtime absence. Only a daemon `404`
+means absence; other errors retain a protected operation and require recovery.
+Account deletion also requires explicit resource cleanup.
+
+Retest `backend/tests/security/test_volume_mutation_exclusion.py` and the driver
+regressions, including daemon failure and ambiguous post-delete inspection.
+An isolated daemon failure drill must confirm physical data, ownership records
+and reservations remain protected until absence is established.

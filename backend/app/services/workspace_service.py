@@ -17,6 +17,7 @@ from app.models.user import User
 from app.models.volume import Volume
 from app.models.workspace_invitation import WorkspaceInvitation
 from app.models.workspace_volume import WorkspaceVolume
+from app.services.volume_mutation_service import guarded_volume_metadata
 
 
 class WorkspaceService:
@@ -346,6 +347,7 @@ class WorkspaceService:
 
     # ========== Volume Management ==========
 
+    @guarded_volume_metadata
     async def add_volume(
         self,
         workspace_id: str,
@@ -362,6 +364,7 @@ class WorkspaceService:
         await self.db.refresh(workspace_volume)
         return workspace_volume
 
+    @guarded_volume_metadata
     async def remove_volume(self, workspace_id: str, volume_id: str) -> bool:
         """Remove a volume from a workspace"""
         result = await self.db.execute(
@@ -380,6 +383,7 @@ class WorkspaceService:
         await self.db.commit()
         return True
 
+    @guarded_volume_metadata
     async def update_volume_role(
         self, workspace_id: str, volume_id: str, role: str
     ) -> WorkspaceVolume | None:

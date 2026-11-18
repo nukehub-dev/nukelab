@@ -78,6 +78,16 @@ services:
         image: ghcr.io/nukehub-dev/nukelab-backend:${NUKELAB_IMAGE_TAG:-latest}
         container_name: nukelab-backend
         environment:
+            - VOLUME_BACKUP_HOST_PATH=${VOLUME_BACKUP_HOST_PATH:-}
+            - VOLUME_BACKUP_STORAGE_PATH=${VOLUME_BACKUP_STORAGE_PATH:-}
+            - VOLUME_BACKUP_HELPER_IMAGE=${VOLUME_BACKUP_HELPER_IMAGE:-nukelab-volume-helper:latest}
+            - VOLUME_BACKUP_RETENTION_DAYS=${VOLUME_BACKUP_RETENTION_DAYS:-30}
+            - VOLUME_BACKUP_MAX_PER_VOLUME=${VOLUME_BACKUP_MAX_PER_VOLUME:-20}
+            - VOLUME_BACKUP_MAX_OWNER_BYTES=${VOLUME_BACKUP_MAX_OWNER_BYTES:-107374182400}
+            - VOLUME_BACKUP_MAX_TOTAL_BYTES=${VOLUME_BACKUP_MAX_TOTAL_BYTES:-1099511627776}
+            - VOLUME_BACKUP_MAX_LOGICAL_BYTES=${VOLUME_BACKUP_MAX_LOGICAL_BYTES:-68719476736}
+            - VOLUME_BACKUP_MAX_MEMBERS=${VOLUME_BACKUP_MAX_MEMBERS:-100000}
+            - VOLUME_BACKUP_TIMEOUT_SECONDS=${VOLUME_BACKUP_TIMEOUT_SECONDS:-1800}
             - APP_NAME=${APP_NAME:-NukeLab}
             - APP_ENV=${APP_ENV:-development}
             - APP_DEBUG=${APP_DEBUG:-true}
@@ -221,6 +231,7 @@ services:
             - XFS_PROJECT_ID_START=${XFS_PROJECT_ID_START:-10000}
             - XFS_PROJECTS_FILE=${XFS_PROJECTS_FILE:-/data/xfs/projects.nukelab}
         volumes:
+            - ${VOLUME_BACKUP_HOST_PATH:-./backups/user-volumes}:${VOLUME_BACKUP_STORAGE_PATH:-/var/lib/nukelab/volume-backups}:rw
             - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:Z
             - /var/lib/lxcfs:/var/lib/lxcfs:ro
             - ${VOLUME_STORAGE_PATH:?VOLUME_STORAGE_PATH must be set in .env}:${VOLUME_STORAGE_PATH}:rw
@@ -363,6 +374,16 @@ services:
         container_name: nukelab-celery-worker
         command: celery -A app.worker worker --loglevel=info -P threads -c 4
         environment:
+            - VOLUME_BACKUP_HOST_PATH=${VOLUME_BACKUP_HOST_PATH:-}
+            - VOLUME_BACKUP_STORAGE_PATH=${VOLUME_BACKUP_STORAGE_PATH:-}
+            - VOLUME_BACKUP_HELPER_IMAGE=${VOLUME_BACKUP_HELPER_IMAGE:-nukelab-volume-helper:latest}
+            - VOLUME_BACKUP_RETENTION_DAYS=${VOLUME_BACKUP_RETENTION_DAYS:-30}
+            - VOLUME_BACKUP_MAX_PER_VOLUME=${VOLUME_BACKUP_MAX_PER_VOLUME:-20}
+            - VOLUME_BACKUP_MAX_OWNER_BYTES=${VOLUME_BACKUP_MAX_OWNER_BYTES:-107374182400}
+            - VOLUME_BACKUP_MAX_TOTAL_BYTES=${VOLUME_BACKUP_MAX_TOTAL_BYTES:-1099511627776}
+            - VOLUME_BACKUP_MAX_LOGICAL_BYTES=${VOLUME_BACKUP_MAX_LOGICAL_BYTES:-68719476736}
+            - VOLUME_BACKUP_MAX_MEMBERS=${VOLUME_BACKUP_MAX_MEMBERS:-100000}
+            - VOLUME_BACKUP_TIMEOUT_SECONDS=${VOLUME_BACKUP_TIMEOUT_SECONDS:-1800}
             - DATABASE_USER=${DATABASE_USER:-nukelab}
             - DATABASE_PASSWORD=${DATABASE_PASSWORD:-nukelab123}
             - DATABASE_NAME=${DATABASE_NAME:-nukelab}
@@ -421,6 +442,7 @@ services:
             - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY:-}
             - VAPID_SUBJECT=${VAPID_SUBJECT:-}
         volumes:
+            - ${VOLUME_BACKUP_HOST_PATH:-./backups/user-volumes}:${VOLUME_BACKUP_STORAGE_PATH:-/var/lib/nukelab/volume-backups}:rw
             - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
             - ${VOLUME_STORAGE_PATH:-/var/lib/docker/volumes}:${VOLUME_STORAGE_PATH:-/var/lib/docker/volumes}:rw
             - user-secrets:${USER_AUTH_SECRETS_DIR:-/run/user-secrets}
@@ -449,6 +471,16 @@ services:
         container_name: nukelab-celery-beat
         command: celery -A app.worker beat --loglevel=info --schedule /tmp/celerybeat-schedule
         environment:
+            - VOLUME_BACKUP_HOST_PATH=${VOLUME_BACKUP_HOST_PATH:-}
+            - VOLUME_BACKUP_STORAGE_PATH=${VOLUME_BACKUP_STORAGE_PATH:-}
+            - VOLUME_BACKUP_HELPER_IMAGE=${VOLUME_BACKUP_HELPER_IMAGE:-nukelab-volume-helper:latest}
+            - VOLUME_BACKUP_RETENTION_DAYS=${VOLUME_BACKUP_RETENTION_DAYS:-30}
+            - VOLUME_BACKUP_MAX_PER_VOLUME=${VOLUME_BACKUP_MAX_PER_VOLUME:-20}
+            - VOLUME_BACKUP_MAX_OWNER_BYTES=${VOLUME_BACKUP_MAX_OWNER_BYTES:-107374182400}
+            - VOLUME_BACKUP_MAX_TOTAL_BYTES=${VOLUME_BACKUP_MAX_TOTAL_BYTES:-1099511627776}
+            - VOLUME_BACKUP_MAX_LOGICAL_BYTES=${VOLUME_BACKUP_MAX_LOGICAL_BYTES:-68719476736}
+            - VOLUME_BACKUP_MAX_MEMBERS=${VOLUME_BACKUP_MAX_MEMBERS:-100000}
+            - VOLUME_BACKUP_TIMEOUT_SECONDS=${VOLUME_BACKUP_TIMEOUT_SECONDS:-1800}
             - QUEUE_TICK_SECONDS=${QUEUE_TICK_SECONDS:-30}
             - DATABASE_USER=${DATABASE_USER:-nukelab}
             - DATABASE_PASSWORD=${DATABASE_PASSWORD:-nukelab123}
@@ -473,6 +505,7 @@ services:
             - XFS_PROJECT_ID_START=${XFS_PROJECT_ID_START:-10000}
             - XFS_PROJECTS_FILE=${XFS_PROJECTS_FILE:-/data/xfs/projects.nukelab}
         volumes:
+            - ${VOLUME_BACKUP_HOST_PATH:-./backups/user-volumes}:${VOLUME_BACKUP_STORAGE_PATH:-/var/lib/nukelab/volume-backups}:rw
             - user-secrets:${USER_AUTH_SECRETS_DIR:-/run/user-secrets}
             - server-secrets:${SERVER_AUTH_SECRETS_DIR:-/run/server-secrets}
         networks:
@@ -482,6 +515,14 @@ services:
             - postgres
         restart: unless-stopped
         stop_grace_period: 20s
+
+    volume-helper:
+        profiles: [recovery-build]
+        image: ${VOLUME_BACKUP_HELPER_IMAGE:-nukelab-volume-helper:latest}
+        build:
+            context: .
+            dockerfile: services/volume-helper/Dockerfile
+        network_mode: none
 
 volumes:
     postgres-data:

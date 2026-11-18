@@ -201,8 +201,26 @@ class ContainerDriver(ABC):
         """
 
     @abstractmethod
-    async def list_containers(self, filters: dict | None = None) -> list[dict]:
+    async def list_containers(
+        self, filters: dict | None = None, *, all: bool = False
+    ) -> list[dict]:
         """List containers as inspect-shaped dicts (Config.Labels, Id, State)."""
+
+    async def create_recovery_helper(
+        self,
+        *,
+        name: str,
+        image: str,
+        command: list[str],
+        mounts: list[dict],
+        labels: dict,
+        limits: dict,
+    ) -> str:
+        """Create an unstarted, hardened helper; unsupported drivers fail closed."""
+        raise ContainerDriverError("Volume recovery helpers are unsupported")
+
+    async def wait_recovery_helper(self, container_id: str, timeout: float) -> int:
+        raise ContainerDriverError("Volume recovery helpers are unsupported")
 
     @abstractmethod
     async def get_container_stats(self, container_id: str) -> dict:
@@ -258,11 +276,11 @@ class ContainerDriver(ABC):
 
     @abstractmethod
     async def get_volume(self, name: str) -> dict | None:
-        """Return volume info, or None when it does not exist."""
+        """Return volume info; only verified absence returns None. Raise on unknown state."""
 
     @abstractmethod
     async def delete_volume(self, name: str):
-        """Delete a volume (best-effort; errors are swallowed)."""
+        """Delete a volume; verified absence is idempotent, runtime failures raise."""
 
     @abstractmethod
     async def prepare_toolchain_volume(

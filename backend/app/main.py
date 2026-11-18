@@ -40,6 +40,7 @@ from app.api import (
     system,
     tokens,
     users,
+    volume_backups,
     volumes,
     workspaces,
 )
@@ -302,6 +303,7 @@ app.include_router(bulk.router, prefix="/bulk", tags=["bulk"])
 app.include_router(health.router, prefix="/health", tags=["health"])
 app.include_router(system.router, prefix="/system", tags=["system"])
 app.include_router(schedules.router, prefix="/schedules", tags=["schedules"])
+app.include_router(volume_backups.router, tags=["volume-backups"])
 app.include_router(volumes.router, prefix="/volumes", tags=["volumes"])
 app.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
 app.include_router(workspaces.router, prefix="/workspaces", tags=["workspaces"])

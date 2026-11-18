@@ -143,5 +143,9 @@ for upgrade and investigation requirements.
 | Scheduling and health | `services/schedule_service.py`, `services/health_check_service.py` |
 | Task ownership | `tasks.py`, `worker.py`, `services/operation_runner.py` |
 
-Volume backup capture/storage/retention, recovery APIs/UI, verified registry
-portability and combined real-stack acceptance remain separate delivery gates.
+Offline private-volume recovery shares the volume operation guard with launch,
+file mutation, sharing and deletion. The separate helper captures only detached
+private volumes and restores into a new protected destination. See
+[recovery operations](../operations/BACKUP-RESTORE.md#private-user-volume-recovery).
+Verified registry portability, automatic crash adoption and combined real-stack
+acceptance remain separate delivery gates.

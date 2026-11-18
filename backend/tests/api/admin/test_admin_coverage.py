@@ -95,6 +95,14 @@ class _BrokenSecurityUser:
 
 
 class TestBulkUserAction:
+    @pytest.fixture(autouse=True)
+    def mock_resource_cleanup_check(self):
+        with mock.patch(
+            "app.services.user_service.UserService.prepare_user_deletion",
+            new_callable=mock.AsyncMock,
+        ) as cleanup_check:
+            yield cleanup_check
+
     @pytest.mark.asyncio
     async def test_invalid_user_id_format(self):
         body = BulkActionRequest(action="disable", user_ids=["not-a-uuid"])

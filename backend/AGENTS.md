@@ -32,7 +32,9 @@ All files under `backend/` except generated artifacts (`.venv-dev`, `__pycache__
 - Recreation accepts a bounded strict manifest matching an existing approved revision or an owned launch, a current plan, a new name and explicit volume choices. Bindings preserve the preview's normalized ordered paths/modes; no source volume IDs, environment values or historical resource entitlements are imported. `submit_pinned()` verifies exact local image identity/platform outside admission before reserving; absent artifacts never fall back to mutable tags.
 - Shared mount validation rejects user-data overlap with system security paths and the selected approved toolchain roots, including ancestor/descendant overlaps. Preview and final launch use the same validator; historical exports remain readable when an old destination is no longer supported.
 - Home mount history (`was_home_volume`) survives server edits/deletion so sharing warnings remain visible; launch/resume records `last_mounted_at`, while offline selection changes preserve the home marker without inventing runtime use.
-- Volume intents use admission serialization followed by sorted volume locks and refreshed reads. Backup/restore remains unavailable until every writer/start path participates and runtime attachment checks are integrated. Archive extraction accepts relative symlinks without parent components and hardlinks to earlier regular files; runtime helper limits and termination are required in addition to archive validation.
+- Volume intents use admission serialization followed by sorted volume locks and refreshed reads. `volume_mutation_service.py` guards file deletion, metadata and workspace sharing changes; launch mount intents participate in the same exclusion. Runtime deletion requires verified absence; unknown outcomes retain the guard. User deletion requires explicit resource cleanup.
+- `volume_backup_service.py` owns owner-only offline private-volume recovery admission, bounded storage reservations, immutable operation identities, retention and restore pins. `volume_recovery_runtime.py` owns fixed hardened helper mounts, all-container attachment checks and termination/cleanup proof. API/worker storage paths must refer to the same operator-owned private bind; missing storage/helper disables admission without breaking unrelated startup. No TTL takeover or automatic source stop is permitted.
+- Restore always allocates a new quota-reserved volume. Only verified complete destinations become active; failed destinations remain inaccessible until explicitly deleted. Archive extraction accepts relative symlinks without parent components and hardlinks to earlier regular files; runtime limits and termination proof supplement archive validation. Artifact metadata stays readable when recovery is disabled, and completed copies survive source deletion.
 
 ## Work Guidance
 
@@ -173,6 +175,7 @@ Prefer `require_permissions` for simple endpoint-level checks. Use `PermissionCh
 ### Testing
 
 - Run backend tests with `./nukelabctl test backend [pytest args]`.
+- Volume API regressions live in `tests/api/volumes/` and must remain tracked; the root runtime-data ignore rule is `/volumes/`, never an unanchored `volumes/`.
 - Add regression tests for every confirmed security finding under `tests/security/`.
 - Use the existing fixtures in `conftest.py` for DB sessions, test clients, and Celery config.
 - Native CPU-mask passthrough tests compare the preloaded binary with an unpreloaded baseline under the same user and container; do not assume write-mode `/proc/stat` opens fail for root. Compare open success/failure, errno, and descriptor access mode without writing to procfs.

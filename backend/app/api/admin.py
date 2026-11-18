@@ -221,6 +221,7 @@ async def bulk_user_action(
             if uid in missing:
                 continue
             try:
+                await UserService(db).prepare_user_deletion(user)
                 await db.delete(user)
                 results["success"].append(uid)
                 deleted_users.append(user)

@@ -30,6 +30,9 @@ import {
 import { useCurrentUser } from '../hooks/use-current-user'
 import { useThemeStore } from '../stores/theme-store'
 import { FileBrowser } from '../components/volume-file-browser'
+import { VolumeBackupPanel } from '../components/volume/volume-backup-panel'
+import { useRecoveryCapabilities } from '../hooks/use-volume-backups'
+import { PERMISSIONS, useAuthStore } from '../stores/auth-store'
 import { SkeletonCard } from '../components/feedback/skeleton'
 import { EmptyState } from '../components/feedback/empty-state'
 import { Card, CardContent } from '../components/ui/card'
@@ -69,6 +72,7 @@ function VolumeCard({
   onRefresh,
   isRefreshing,
   isOwner,
+  onBackups,
 }: {
   volume: Volume
   index: number
@@ -78,6 +82,7 @@ function VolumeCard({
   onRefresh?: () => void
   isRefreshing?: boolean
   isOwner: boolean
+  onBackups?: () => void
 }) {
   const { density } = useThemeStore()
   const compact = density === 'compact'
@@ -132,6 +137,16 @@ function VolumeCard({
                   Shared
                 </span>
               )}
+              {volume.status === 'restore_failed' && (
+                <span role="status" className="text-xs text-muted-foreground">
+                  Restore failed · delete this incomplete volume to clean up
+                </span>
+              )}
+              {volume.status === 'restoring' && (
+                <span role="status" className="text-xs text-muted-foreground">
+                  Restoring · unavailable until verified
+                </span>
+              )}
               {volume.visibility !== 'private' && (
                 <span
                   className={cn(
@@ -144,9 +159,25 @@ function VolumeCard({
                   {volume.visibility}
                 </span>
               )}
+              {onBackups && isOwner && (
+                <Tooltip content="Backup history">
+                  <button
+                    type="button"
+                    aria-label={`Backups for ${volume.display_name}`}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onBackups()
+                    }}
+                    className="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    <Database className="w-3.5 h-3.5" />
+                  </button>
+                </Tooltip>
+              )}
               {onRefresh && isOwner && (
                 <Tooltip content="Refresh size">
                   <button
+                    aria-label="Refresh size"
                     onClick={(e) => {
                       e.stopPropagation()
                       onRefresh()
@@ -161,6 +192,7 @@ function VolumeCard({
               {onBrowse && (
                 <Tooltip content="Browse files">
                   <button
+                    aria-label="Browse volume"
                     onClick={(e) => {
                       e.stopPropagation()
                       onBrowse()
@@ -174,6 +206,7 @@ function VolumeCard({
               {onEdit && isOwner && (
                 <Tooltip content="Edit volume">
                   <button
+                    aria-label="Edit volume"
                     onClick={(e) => {
                       e.stopPropagation()
                       onEdit()
@@ -187,6 +220,7 @@ function VolumeCard({
               {onDelete && isOwner && volume.server_count === 0 && (
                 <Tooltip content="Delete volume">
                   <button
+                    aria-label="Delete volume"
                     onClick={(e) => {
                       e.stopPropagation()
                       onDelete()
@@ -278,6 +312,17 @@ type OwnershipFilter = 'all' | 'mine' | 'shared'
 type SortOption = 'name' | 'size' | 'created' | 'updated'
 
 function VolumesPage() {
+  const recovery = useRecoveryCapabilities()
+  const recoveryOwner = useAuthStore((state) => state.user?.id)
+  const recoverySupported =
+    recovery.isError || (!!recovery.data && recovery.data.reason_code !== 'unsupported')
+  const canReadBackups = useAuthStore((state) => state.hasPermission(PERMISSIONS.VOLUMES_READ_OWN))
+  const [backupView, setBackupView] = useState<{
+    ownerId?: string
+    volumeId?: string
+    volumeName?: string
+  } | null>(null)
+
   const { data: volumes = [], isLoading } = useVolumes()
   const { data: currentUser } = useCurrentUser()
   const createVolume = useCreateVolume()
@@ -543,6 +588,17 @@ function VolumesPage() {
           },
         ]}
       >
+        {canReadBackups && recoverySupported && (
+          <div className="flex items-center justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setBackupView({ ownerId: recoveryOwner })}
+            >
+              Backup history
+            </Button>
+          </div>
+        )}
         {/* Toolbar: Search + Filters + Sort */}
         {!isLoading && volumes.length > 0 && (
           <motion.div
@@ -651,10 +707,36 @@ function VolumesPage() {
                   volume={volume}
                   index={index}
                   isOwner={volume.owner_id === currentUser?.id}
-                  onDelete={() => handleDelete(volume)}
-                  onBrowse={() => setBrowsingVolume({ id: volume.id, name: volume.display_name })}
-                  onEdit={() => handleEdit(volume)}
-                  onRefresh={() => handleRefreshSize(volume.id)}
+                  onBackups={
+                    canReadBackups && recoverySupported && volume.owner_id === recoveryOwner
+                      ? () =>
+                          setBackupView({
+                            ownerId: recoveryOwner,
+                            volumeId: volume.id,
+                            volumeName: volume.display_name,
+                          })
+                      : undefined
+                  }
+                  onDelete={
+                    !['restoring', 'deleting'].includes(volume.status)
+                      ? () => handleDelete(volume)
+                      : undefined
+                  }
+                  onBrowse={
+                    ['active', 'over_limit'].includes(volume.status)
+                      ? () => setBrowsingVolume({ id: volume.id, name: volume.display_name })
+                      : undefined
+                  }
+                  onEdit={
+                    ['active', 'over_limit'].includes(volume.status)
+                      ? () => handleEdit(volume)
+                      : undefined
+                  }
+                  onRefresh={
+                    ['active', 'over_limit'].includes(volume.status)
+                      ? () => handleRefreshSize(volume.id)
+                      : undefined
+                  }
                   isRefreshing={refreshingIds.has(volume.id)}
                 />
               ))}
@@ -671,6 +753,14 @@ function VolumesPage() {
         />
       </ResourcePageLayout>
 
+      <VolumeBackupPanel
+        open={!!backupView && backupView.ownerId === recoveryOwner}
+        onOpenChange={(open) => {
+          if (!open) setBackupView(null)
+        }}
+        volumeId={backupView?.volumeId}
+        volumeName={backupView?.volumeName}
+      />
       {/* Create Volume Dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
         <DialogContent>

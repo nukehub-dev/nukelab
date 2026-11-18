@@ -51,6 +51,7 @@ from app.models.server_metric import ServerMetric
 from app.models.system_metric import SystemMetric
 from app.models.volume import Volume
 from app.models.volume_backup import VolumeBackup
+from app.models.volume_restore import VolumeRestore
 from app.models.shared_workspace import SharedWorkspace, WorkspaceMember
 from app.models.workspace_volume import WorkspaceVolume
 from app.models.workspace_invitation import WorkspaceInvitation

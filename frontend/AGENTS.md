@@ -20,6 +20,9 @@ All files under `frontend/` except generated artifacts (`node_modules/`, `dist/`
 - `src/hooks/use-server-provenance.ts` owns capability-gated owner history and recreation queries. Provenance and plan/volume catalogs are actor-scoped, cleared on account changes, and protected against late responses. The detail panel labels records as the last verified launch and shows current server status rather than implying an uncertain replacement is verified.
 - Environment export downloads sanitized server-returned JSON for the displayed launch. Source recreation and manifest import require server validation followed by a new name, current plan and explicit fresh/existing volume bindings; no source volume IDs are copied automatically. Validation is a preview, never an authorization grant. Final recreation uses the same Server-or-Queued response contract as deployment.
 
+- `src/hooks/use-volume-backups.ts` owns actor-scoped recovery capability, eligibility, backup and restore history. Unsupported deployments hide recovery controls; supported but disabled storage/helper configuration keeps owner history readable while disabling mutations. Active records poll with hidden-tab and failure backoff, and account changes clear their cache and suppress late mutation feedback.
+- Volume backup/history uses backend private/offline eligibility and action flags rather than server counts. Restores require a deliberate new name/capacity, retain retry request identities, never overwrite source data, and show destinations for use only after completion. Deleted-source backups remain reachable through global history; no archive upload/download or automatic workload stopping is exposed.
+
 ## Work Guidance
 
 ### Project structure
