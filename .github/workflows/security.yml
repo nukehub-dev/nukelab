@@ -108,7 +108,7 @@ jobs:
         run: |
           $CONTAINER_ENGINE build \
             --file services/volume-helper/Dockerfile \
-            --tag nukelab-volume-helper:scan \
+            --tag nukelab-volume-helper:latest \
             .
 
       - name: Run Trivy image scans
@@ -134,7 +134,7 @@ jobs:
         uses: aquasecurity/trivy-action@v0.36.0
         continue-on-error: true
         with:
-          image-ref: 'nukelab-volume-helper:scan'
+          image-ref: 'nukelab-volume-helper:latest'
           format: 'sarif'
           output: 'trivy-volume-helper.sarif'
           severity: 'HIGH,CRITICAL'

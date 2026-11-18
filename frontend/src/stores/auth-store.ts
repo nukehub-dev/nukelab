@@ -189,8 +189,11 @@ function expandPermissions(permissions: string[]): Set<string> {
 function checkPermission(user: User | null, permission: string): boolean {
   if (!user || !user.is_active) return false
 
-  // If backend sent permissions, use them (robust, supports dynamic changes)
+  // If backend sent permissions, use them (robust, supports dynamic changes).
+  // Keep the wildcard check independent of the implication map so a newly
+  // added backend permission is still available to super admins.
   if (user.permissions && user.permissions.length > 0) {
+    if (user.permissions.includes(PERMISSIONS.ALL)) return true
     return expandPermissions(user.permissions).has(permission)
   }
 

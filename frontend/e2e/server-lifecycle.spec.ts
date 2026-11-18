@@ -7,6 +7,7 @@ import {
   deleteServerEventually,
   getPlanBySlug,
   listServers,
+  waitForServerStatus,
 } from './helpers/api'
 import { E2E_RUNTIME_IMAGE, uniqueName } from './helpers/runtime'
 
@@ -74,22 +75,23 @@ test.describe('Server lifecycle', () => {
 
     const row = page.getByTestId(new RegExp(`table-row-.*`))
     const serverRow = row.filter({ hasText: serverName })
-    // Table defaults to mobile card view; the TR is present but hidden. Use visible card text.
-    await expect(page.getByText(serverName).locator('visible=true')).toBeVisible({ timeout: 30000 })
-    await expect(serverRow).toContainText(/running|pending|stopped|error|start & open/i, {
-      timeout: 60000,
-    })
 
     const { access_token } = await adminLogin(request)
     const created = (await listServers(request, access_token)).find(
       (server) => server.name === serverName
     )
     if (!created) throw new Error(`Server ${serverName} was not created`)
+    await waitForServerStatus(request, access_token, created.id, ['running'], {
+      timeoutMs: 120_000,
+    })
+
+    // Table defaults to mobile card view; the TR is present but hidden. Use visible card text.
+    await expect(page.getByText(serverName).locator('visible=true')).toBeVisible({ timeout: 30000 })
+    await expect(serverRow).toContainText(/running/i, { timeout: 60_000 })
 
     const stopButton = page.getByTestId(`stop-server-${created.id}`).locator('visible=true').first()
-    if (await stopButton.isVisible().catch(() => false)) {
-      await stopButton.click()
-      await expect(serverRow).toContainText(/stopped/i, { timeout: 60000 })
-    }
+    await expect(stopButton).toBeVisible({ timeout: 30_000 })
+    await stopButton.click()
+    await expect(serverRow).toContainText(/stopped/i, { timeout: 60_000 })
   })
 })

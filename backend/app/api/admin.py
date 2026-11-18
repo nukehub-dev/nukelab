@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, desc, func, select
+from sqlalchemy import and_, desc, func, inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import get_current_user, limiter, require_jwt_auth
@@ -19,8 +19,9 @@ from app.config import settings
 from app.core.cache import cache_get_or_set, cache_track_key
 from app.core.permissions import Permission
 from app.core.roles import ROLE_PERMISSIONS, VALID_ROLES, get_role_permissions
+from app.core.security import has_permission
 from app.db.session import get_db
-from app.dependencies import require_permissions
+from app.dependencies import PermissionChecker, require_permissions
 from app.models.activity_log import ActivityLog
 from app.models.credit_transaction import CreditTransaction
 from app.models.server import Server
@@ -56,6 +57,7 @@ class BulkActionRequest(BaseModel):
 class BulkServerActionRequest(BaseModel):
     action: str  # start, stop, delete
     server_ids: list[str]
+    reason: str | None = None
 
 
 class BulkCreditGrantRequest(BaseModel):
@@ -376,11 +378,16 @@ async def bulk_server_action(
     from uuid import UUID
 
     from app.api.servers import (
+        _audit_cross_user_access,
         _invalidate_server_list_cache,
         _perform_server_delete,
         _perform_server_start,
         _perform_server_stop,
     )
+
+    # This admin route is broader than the owner bulk route; require the
+    # cross-user server grant in addition to the admin dashboard grant.
+    PermissionChecker(current_user).require(Permission.SERVERS_WRITE_ALL)
 
     if body.action not in ("start", "stop", "delete"):
         raise HTTPException(status_code=400, detail=f"Unknown action: {body.action}")
@@ -390,9 +397,17 @@ async def bulk_server_action(
         raise HTTPException(status_code=400, detail="Invalid server ID format")
     results = {"success": [], "failed": []}
     owners = set()
+    cross_user_allowed = has_permission(
+        current_user, Permission.SERVERS_WRITE_ALL
+    ) or has_permission(current_user, Permission.SERVERS_ACCESS_OTHERS)
     for server_uuid in ids:
         sid = str(server_uuid)
         try:
+            # Shared lifecycle services may roll back the session, expiring the
+            # dependency-loaded actor. Refresh before the next item's authority
+            # check rather than failing the rest of a valid bulk request.
+            if inspect(current_user).expired:
+                await db.refresh(current_user)
             server = await db.scalar(
                 select(Server)
                 .where(Server.id == server_uuid)
@@ -402,6 +417,17 @@ async def bulk_server_action(
                 results["failed"].append({"server_id": sid, "error": "Server not found"})
                 continue
             owners.add(str(server.user_id))
+            if str(server.user_id) != str(current_user.id):
+                if not cross_user_allowed:
+                    results["failed"].append({"server_id": sid, "error": "Permission denied"})
+                    continue
+                await _audit_cross_user_access(
+                    server,
+                    current_user,
+                    db,
+                    f"server.bulk_{body.action}",
+                    body.reason,
+                )
             if body.action == "start":
                 await _perform_server_start(server, db, current_user, sid)
             elif body.action == "stop":

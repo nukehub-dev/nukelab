@@ -38,6 +38,7 @@
 | PENT-NKL-012 | Shared read-only volumes leak host storage size and usage | Low | Container Security / Information Disclosure | Open | Security Eng | Platform Eng | 2026-07-15 | |
 | PENT-NKL-013 | User resource stats endpoint missing authorization check | Medium | API1:2023 BOLA / Information Disclosure | Closed | Security Eng | Backend Eng | 2026-07-29 | 2026-07-29 |
 | PENT-NKL-018 | Queue-admitted containers bypassed runtime hardening settings | Medium | Container Security / Configuration | Retest Ready | Security Eng | Backend Eng | 2026-11-18 | |
+| PENT-NKL-019 | Admin bulk lifecycle bypassed cross-user grant and audit | High | Broken Access Control / Audit | Retest Ready | Security Eng | Backend Eng | 2026-11-18 | |
 
 ---
 
@@ -795,3 +796,31 @@ verifies the runtime identity and volume data.
 Retest the combined browser/worker/runtime scenario and inspect a
 queue-admitted container with `./nukelabctl verify-hardening` on an isolated
 stack. Also verify scheduled and health-restart spawns use the same settings.
+
+### PENT-NKL-019: Admin bulk lifecycle bypassed cross-user grant and audit
+
+**Severity:** High
+
+**CVSS 3.1:** 7.2 (`AV:N/AC:L/PR:H/UI:N/S:U/C:N/I:H/A:H`)
+
+**Status:** Retest Ready
+
+**Opened:** 2026-11-18
+
+**Owner:** Backend Eng
+
+**Component:** `backend/app/api/admin.py`
+
+The admin bulk start/stop/delete endpoint required only `ADMIN_ACCESS`. It
+called the shared lifecycle helpers for arbitrary owners without requiring
+`SERVERS_WRITE_ALL`/`SERVERS_ACCESS_OTHERS`, without a cross-user reason, and
+without the audit/notification applied by the owner bulk endpoint. A role
+granted admin dashboard access but not server-write authority could therefore
+mutate other users' runtimes silently.
+
+The endpoint now requires `SERVERS_WRITE_ALL`, accepts a cross-user reason, and
+runs the shared cross-user audit/notification before the action. Regression:
+`backend/tests/security/test_admin_bulk_authorization.py`.
+
+Retest with a role holding `ADMIN_ACCESS` but not server-write permission, and
+with a foreign server without/with a reason, on an isolated stack.

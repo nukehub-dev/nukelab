@@ -74,7 +74,13 @@ def _db(results):
 
 
 def _admin_user():
-    return mock.Mock(id=uuid.uuid4(), username="admin", email="admin@example.com")
+    return mock.Mock(
+        id=uuid.uuid4(),
+        username="admin",
+        email="admin@example.com",
+        role="admin",
+        is_active=True,
+    )
 
 
 class _BrokenSecurityUser:
@@ -290,6 +296,10 @@ def _server(**overrides):
 
 
 class TestBulkServerAction:
+    @pytest.fixture(autouse=True)
+    def _audit_cross_user(self, monkeypatch):
+        monkeypatch.setattr("app.api.servers._audit_cross_user_access", mock.AsyncMock())
+
     @pytest.mark.asyncio
     async def test_unknown_action(self):
         body = BulkServerActionRequest(action="explode", server_ids=[])

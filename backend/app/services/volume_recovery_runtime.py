@@ -416,12 +416,17 @@ class VolumeRecoveryRuntime:
             result = self._metadata(work, operation, fence, backup, action, limits)
             if action == "capture":
                 digest = hashlib.sha256()
-                with (backup_dir / "archive.tar.gz").open("rb") as source:
+                archive_path = backup_dir / "archive.tar.gz"
+                descriptor = os.open(archive_path, os.O_RDONLY | os.O_NOFOLLOW)
+                with os.fdopen(descriptor, "rb") as source:
+                    info = os.fstat(source.fileno())
+                    if not stat.S_ISREG(info.st_mode) or info.st_uid != 65532:
+                        raise RuntimeRecoveryError("artifact_corrupt")
                     for chunk in iter(lambda: source.read(65536), b""):
                         digest.update(chunk)
                 if (
                     digest.hexdigest() != result["sha256"]
-                    or (backup_dir / "archive.tar.gz").stat().st_size != result["compressed_bytes"]
+                    or info.st_size != result["compressed_bytes"]
                 ):
                     raise RuntimeRecoveryError("artifact_corrupt")
             elif result["sha256"] != checksum:

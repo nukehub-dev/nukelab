@@ -16,8 +16,9 @@ remain owned by `.github/workflows/` and their respective domains.
 - `e2e-stack.sh` takes exactly one subcommand: `build [--workspace]`, `start`,
   `wait`, `stop`, or `fixtures`. Unknown subcommands and flags exit non-zero.
 - `build` builds the backend/frontend compose images, the volume helper, the
-  base environment, and fixture A/B; `--workspace` also builds `conda-base` and
-  `workspace`. `fixtures` builds only the A/B runtime images.
+  base environment, and fixture A/B; `--workspace` builds `base`, `conda-base`
+  and `workspace` instead, without the helper/fixtures the IDE suite does not
+  use. `fixtures` builds only the A/B runtime images.
 - `start` runs `./nukelabctl start all --no-build`; `wait` polls the backend
   health endpoint, the frontend origin, and admin login with a bounded
   deadline; `stop` uses `./nukelabctl stop all --include-servers` and then

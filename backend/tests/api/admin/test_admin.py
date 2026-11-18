@@ -433,7 +433,7 @@ class TestBulkServerActionBranches:
         response = await client.post(
             "/api/admin/servers/bulk-action",
             headers={"Authorization": f"Bearer {admin_token}"},
-            json={"action": "start", "server_ids": [sid]},
+            json={"action": "start", "server_ids": [sid], "reason": "admin bulk test"},
         )
         assert response.status_code == 200
         assert response.json()["results"]["success"] == []
@@ -1338,7 +1338,7 @@ class TestServersBulkAction:
             response = await client.post(
                 "/api/admin/servers/bulk-action",
                 headers={"Authorization": f"Bearer {admin_token}"},
-                json={"action": "delete", "server_ids": [sid]},
+                json={"action": "delete", "server_ids": [sid], "reason": "admin bulk test"},
             )
 
         assert response.status_code == 200
@@ -1390,7 +1390,11 @@ class TestServersBulkAction:
             response = await client.post(
                 "/api/admin/servers/bulk-action",
                 headers={"Authorization": f"Bearer {admin_token}"},
-                json={"action": "stop", "server_ids": [str(server.id)]},
+                json={
+                    "action": "stop",
+                    "server_ids": [str(server.id)],
+                    "reason": "admin bulk test",
+                },
             )
 
         assert response.status_code == 200

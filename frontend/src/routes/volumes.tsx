@@ -315,7 +315,7 @@ function VolumesPage() {
   const recovery = useRecoveryCapabilities()
   const recoveryOwner = useAuthStore((state) => state.user?.id)
   const recoverySupported =
-    recovery.isError || (!!recovery.data && recovery.data.reason_code !== 'unsupported')
+    !recovery.isError && !!recovery.data && recovery.data.reason_code !== 'unsupported'
   const canReadBackups = useAuthStore((state) => state.hasPermission(PERMISSIONS.VOLUMES_READ_OWN))
   const [backupView, setBackupView] = useState<{
     ownerId?: string

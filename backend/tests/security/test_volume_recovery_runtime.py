@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 import hashlib
+import os
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -66,7 +67,11 @@ async def test_capture_uses_pinned_identity_readonly_mount_and_proves_exit(runti
     }
 
     async def completed(*args, **kwargs):
-        (runtime.storage_root / "backups" / ids[2] / "archive.tar.gz").write_bytes(payload)
+        archive = runtime.storage_root / "backups" / ids[2] / "archive.tar.gz"
+        archive.write_bytes(payload)
+        # The production helper writes this artifact as the fixed runtime UID.
+        if os.geteuid() == 0:
+            os.chown(archive, 65532, 65532)
         return 0
 
     runtime.driver.wait_recovery_helper.side_effect = completed

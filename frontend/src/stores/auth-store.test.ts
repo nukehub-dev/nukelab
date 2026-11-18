@@ -51,4 +51,10 @@ describe('auth permission expansion', () => {
 
     expect(useAuthStore.getState().hasPermission(PERMISSIONS.SERVERS_WRITE_OWN)).toBe(false)
   })
+
+  it('lets the wildcard grant satisfy permissions added after this map', () => {
+    useAuthStore.getState().setUser(makeUser([PERMISSIONS.ALL], 'super_admin'))
+
+    expect(useAuthStore.getState().hasPermission('future:permission')).toBe(true)
+  })
 })

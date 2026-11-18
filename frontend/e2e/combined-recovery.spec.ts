@@ -512,8 +512,12 @@ async function cleanupQueues(request: APIRequestContext, token: string): Promise
 }
 
 test.describe('combined release acceptance', () => {
+  // CI must exercise this required release gate even if an environment wiring
+  // mistake removes E2E_COMBINED. Local external runs stay opt-in.
+  const CI_EXTERNAL =
+    (process.env.CI === 'true' || process.env.CI === '1') && process.env.E2E_EXTERNAL_SERVER === '1'
   test.skip(
-    !COMBINED_ENABLED,
+    !COMBINED_ENABLED && !CI_EXTERNAL,
     'Set E2E_COMBINED=1 against a disposable stack to run the combined release scenario.'
   )
   // This is a stateful, expensive acceptance run: a silent retry would leave a
@@ -1028,9 +1032,10 @@ test.describe('combined release acceptance', () => {
           members: artifact.completion.member_count,
         }
       } catch (error) {
-        test.info().annotations.push({
-          type: 'combined-checksum',
-          description: `Runner could not read the private artifact; checksum integrity is proven by the successful restore instead: ${String(error)}`,
+        // A configured backup root is part of the release contract. Do not
+        // downgrade an unreadable/mislaid artifact to an advisory annotation.
+        throw new Error(`Configured backup artifact is unreadable: ${String(error)}`, {
+          cause: error,
         })
       }
     } else {

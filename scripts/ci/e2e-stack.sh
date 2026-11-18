@@ -183,17 +183,17 @@ build_stack() {
     ./nukelabctl build backend
     ./nukelabctl build frontend
 
-    _build_helper
-
     if [ "$with_workspace" = "true" ]; then
+        # The workspace suite does not use the volume helper or A/B fixtures.
+        # Keep this job independent of recovery-helper build failures.
         log "Building base, conda-base and workspace environment images..."
         ./nukelabctl build env base conda-base workspace
     else
+        _build_helper
         log "Building base environment image..."
         ./nukelabctl build env base
+        _build_fixtures
     fi
-
-    _build_fixtures
 }
 
 start_stack() {
@@ -258,13 +258,14 @@ stop_stack() {
     # Stop spawned servers, recovery helpers, and toolchain helpers that may
     # outlive the compose stack. Only containers carrying the platform-managed
     # label are touched; unrelated host containers are left alone.
+    local project="${COMPOSE_PROJECT_NAME:-nukelab}"
     local -a ids=()
     local id
     while IFS= read -r id; do
         [ -n "$id" ] && ids+=("$id")
     done < <(
         {
-            $CONTAINER_ENGINE ps -q --filter "label=com.docker.compose.project=nukelab" || true
+            $CONTAINER_ENGINE ps -q --filter "label=com.docker.compose.project=${project}" || true
             $CONTAINER_ENGINE ps -q --filter "label=nukelab.managed=true" || true
         } 2> /dev/null | sort -u
     )

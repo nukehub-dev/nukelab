@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
 // SPDX-License-Identifier: BSD-2-Clause
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError, queryClient } from '../lib/api'
 import { canCancelQueuedRequest, isQueueActive, queuePollInterval } from '../lib/server-queue'
@@ -59,14 +59,22 @@ function useRefreshLaunchedServers(
   selected?: ServerQueueEntry
 ) {
   const client = useQueryClient()
+  const observedStarted = useRef<Set<string>>(new Set())
   useEffect(() => {
-    if (
-      entries?.some((entry) => entry.status === 'started' && entry.server_id) ||
-      (selected?.status === 'started' && selected.server_id)
-    ) {
-      for (const queryKey of [['servers'], ['dashboard'], ['quota'], ['usage'], ['volumes']]) {
-        void client.invalidateQueries({ queryKey })
-      }
+    const current = new Set<string>()
+    for (const entry of entries ?? []) {
+      if (entry.status === 'started' && entry.server_id) current.add(entry.server_id)
+    }
+    if (selected?.status === 'started' && selected.server_id) {
+      current.add(selected.server_id)
+    }
+    const changed =
+      current.size !== observedStarted.current.size ||
+      [...current].some((serverId) => !observedStarted.current.has(serverId))
+    if (!changed) return
+    observedStarted.current = current
+    for (const queryKey of [['servers'], ['dashboard'], ['quota'], ['usage'], ['volumes']]) {
+      void client.invalidateQueries({ queryKey })
     }
   }, [entries, selected, client])
 }

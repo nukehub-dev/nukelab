@@ -648,6 +648,25 @@ class ServerLifecycleService(ServerLaunchService):
                     await self.db.flush()
                 else:
                     volume = await self.db.get(Volume, selection.volume_id)
+                    if volume is None:
+                        raise LaunchError("volume_unavailable")
+                    # A newly created empty volume selected by an offline
+                    # edit needs the same one-time mount-root setup as create.
+                    if (
+                        selection.mode == "read_write"
+                        and (volume.size_bytes or 0) == 0
+                        and await self.db.scalar(
+                            select(ServerVolume.server_id)
+                            .where(ServerVolume.volume_id == volume.id)
+                            .limit(1)
+                        )
+                        is None
+                    ):
+                        volume.labels = {
+                            **(volume.labels or {}),
+                            "initialize_for_server": str(server.id),
+                        }
+                        auto = True
                 mounts.append(
                     {
                         **selection.model_dump(mode="json"),
@@ -693,7 +712,7 @@ class ServerLifecycleService(ServerLaunchService):
                     await self.driver.ensure_volume(
                         mount["volume_name"], labels={"nukelab.managed": "true"}
                     )
-                    if (
+                    if mount.get("max_size_bytes") and (
                         not xfs_quota_service.set_quota(
                             mount["volume_name"], mount["max_size_bytes"]
                         )
@@ -727,11 +746,16 @@ class ServerLifecycleService(ServerLaunchService):
                 )
                 server.volume_id = uuid.UUID(mounts[0]["volume_id"])
                 server.volume_mode = mounts[0]["mode"]
+                server.allocated_cpu = plan.cpu_limit
+                server.allocated_memory = plan.memory_limit
+                server.allocated_disk = plan.disk_limit
+                server.allocated_gpu = plan.gpu_limit or 0
                 for mount in mounts:
                     volume = await self.db.get(Volume, uuid.UUID(mount["volume_id"]))
                     self._remember_volume_use(
                         volume, mount["mount_path"], owner.username, mounted=False
                     )
+                await QuotaService(self.db).recalculate_usage(str(owner.id), commit=False)
                 from app.models.volume_operation import VolumeOperation
                 from app.services.volume_operation_service import (
                     transition_volume_operation,

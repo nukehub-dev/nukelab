@@ -337,19 +337,37 @@ export async function downloadFileHash(
   return { digest: sha256(body), size: body.length }
 }
 
-const CONTAINER_ENGINE = process.env.CONTAINER_ENGINE || 'docker'
+let detectedEngine: string | undefined
+
+function containerEngine(): string {
+  if (process.env.CONTAINER_ENGINE) return process.env.CONTAINER_ENGINE
+  if (detectedEngine) return detectedEngine
+  for (const candidate of ['docker', 'podman']) {
+    try {
+      execFileSync(candidate, ['version', '--format', '{{.Server.Version}}'], {
+        encoding: 'utf8',
+        timeout: 10_000,
+      })
+      detectedEngine = candidate
+      return candidate
+    } catch {
+      // Try the next supported engine.
+    }
+  }
+  throw new Error('No reachable Docker or Podman engine; set CONTAINER_ENGINE.')
+}
 
 export function runDocker(args: string[], timeout = 120_000): string {
+  const engine = containerEngine()
   try {
-    return execFileSync(CONTAINER_ENGINE, args, { encoding: 'utf8', timeout }).trim()
+    return execFileSync(engine, args, { encoding: 'utf8', timeout }).trim()
   } catch (error) {
     const failure = error as { stderr?: Buffer | string; stdout?: Buffer | string; message: string }
     const stderr = failure.stderr?.toString().trim()
     const stdout = failure.stdout?.toString().trim()
-    throw new Error(
-      `${CONTAINER_ENGINE} ${args.join(' ')} failed: ${stderr || stdout || failure.message}`,
-      { cause: error }
-    )
+    throw new Error(`${engine} ${args.join(' ')} failed: ${stderr || stdout || failure.message}`, {
+      cause: error,
+    })
   }
 }
 
@@ -580,7 +598,7 @@ export function inspectVolume(containerId: string, seed: SeedManifest): VolumeIn
 }
 
 export function artifactDirectory(hostRoot: string, backupId: string): string {
-  return path.join(hostRoot, 'backups', backupId)
+  return path.join(hostRoot, 'backups', safeBackupId(backupId))
 }
 
 function artifactHelperImage(): string {

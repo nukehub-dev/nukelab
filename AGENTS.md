@@ -188,10 +188,10 @@ High-level layout; see the Child NAD Index below for domain-specific details.
   `APP_URL`/`PUBLIC_URL`, `DEV_MODE`/`APP_ENV`, GPU and resource-pool settings.
   A missing value changes behavior only on background-admitted launches.
 - **Frontend CI is a required gate.** `CI/CD` runs Vitest unit tests, Vite-only
-  mocked browser tests, the external disposable browser stack and the
-  workspace/IDE stack before publishing images. Use
-  `scripts/ci/e2e-stack.sh` for the same local stack build/start/stop flow;
-  browser failures block image publication.
+  mocked browser tests, the external disposable browser stack, the workspace/IDE
+  stack and the trusted volume-helper unit/runtime tests before publishing
+  images. Use `scripts/ci/e2e-stack.sh` for the same local stack
+  build/start/stop flow; browser or helper failures block image publication.
 - **`.env` and `.env.development` drift out of date** as `.env.example` evolves.
   Run `./nukelabctl check-env` to detect missing or stale keys, and
   `./nukelabctl sync-env` to non-destructively append missing keys from

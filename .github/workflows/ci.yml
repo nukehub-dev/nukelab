@@ -377,6 +377,12 @@ jobs:
       - name: Wait for stack readiness
         run: ./scripts/ci/e2e-stack.sh wait
 
+      - name: Verify combined suite is collected
+        working-directory: ./frontend
+        run: |
+          npx playwright test --list --grep "@combined" | tee /tmp/nukelab-combined-list.txt
+          grep -q "captures A, backs up and restores V" /tmp/nukelab-combined-list.txt
+
       - name: Run browser tests
         working-directory: ./frontend
         env:

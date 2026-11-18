@@ -70,7 +70,13 @@ section.
   redis-py.
 - Frontend permission evaluation now expands `*_read_all`/`*_write_all` grants
   into their owner-scoped implications, matching backend RBAC so admins can use
-  queue, provenance and recovery controls.
+  queue, provenance and recovery controls, while a wildcard grant still covers
+  future permissions.
+- Admin bulk server actions now require server-write authority, a cross-user
+  reason and the shared audit/notification path; they no longer bypass the
+  owner bulk authorization contract.
+- Offline server edits initialize newly selected empty volumes for the hardened
+  runtime and refresh plan allocations and quota usage immediately.
 - Runtime volume data ignores no longer hide volume API regression tests.
 - Backup retention skips active restore pins and unsupported artifacts before
   applying its batch limit, so older pinned copies cannot block later cleanup.

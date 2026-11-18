@@ -144,3 +144,4 @@ scope. Final recreation rechecks current approval and uses ordinary admission.
 |---|---|---|---|
 | PENT-NKL-017 | Backend Eng | Remediated before release; isolated retest required | `docker_driver.py`, `volume_service.py`, `test_volume_mutation_exclusion.py`; inject daemon inspection/deletion failure and verify protected ownership and quota remain |
 | PENT-NKL-018 | Backend Eng | Retest ready | `compose.yml` worker env parity; combined browser/worker/runtime scenario; inspect a queue-admitted container with `./nukelabctl verify-hardening` and verify scheduled/health spawns |
+| PENT-NKL-019 | Backend Eng | Retest ready | `api/admin.py` requires write-all plus cross-user reason/audit; `tests/security/test_admin_bulk_authorization.py`; retest a limited admin role |
