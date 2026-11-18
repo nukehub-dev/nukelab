@@ -1670,16 +1670,10 @@ test.describe('combined release acceptance', () => {
       return
     }
 
-    let artifact
-    try {
-      artifact = readArtifactEvidence(hostRoot, backupId)
-    } catch (error) {
-      test.skip(
-        true,
-        `The backup artifact is not readable from the runner (${String(error)}); corrupt-artifact drill skipped.`
-      )
-      return
-    }
+    // A configured backup root is part of the CI contract. If the artifact is
+    // still unreadable through the runner/daemon fallback, fail instead of
+    // silently dropping the required corruption drill.
+    const artifact = readArtifactEvidence(hostRoot, backupId)
     expect(artifact.digest).toBe(artifact.completion.sha256)
 
     const tempRoot = mkdtempSync(path.join(tmpdir(), 'nukelab-combined-artifact-'))

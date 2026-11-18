@@ -646,7 +646,15 @@ export function readArtifactEvidence(hostRoot: string, backupId: string): Artifa
       completion,
     }
   } catch (error) {
-    if (!(error instanceof Error && 'code' in error && error.code === 'EACCES')) throw error
+    if (
+      !(
+        error instanceof Error &&
+        'code' in error &&
+        (error.code === 'EACCES' || error.code === 'EPERM')
+      )
+    ) {
+      throw error
+    }
     const id = safeBackupId(backupId)
     const digest = dockerArtifactShell(
       hostRoot,
@@ -678,7 +686,15 @@ export function corruptArtifact(hostRoot: string, backupId: string): void {
       closeSync(descriptor)
     }
   } catch (error) {
-    if (!(error instanceof Error && 'code' in error && error.code === 'EACCES')) throw error
+    if (
+      !(
+        error instanceof Error &&
+        'code' in error &&
+        (error.code === 'EACCES' || error.code === 'EPERM')
+      )
+    ) {
+      throw error
+    }
     const id = safeBackupId(backupId)
     dockerArtifactShell(
       hostRoot,
