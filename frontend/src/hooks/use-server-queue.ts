@@ -6,13 +6,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError, queryClient } from '../lib/api'
 import { canCancelQueuedRequest, isQueueActive, queuePollInterval } from '../lib/server-queue'
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store'
-import type { ServerQueueEntry, ServerQueuePage } from '../types/server-queue'
+import type { QueueStatus, ServerQueueEntry, ServerQueuePage } from '../types/server-queue'
 
 export const queueKeys = {
   owner: (ownerId: string | undefined) => ['server-queue', ownerId] as const,
   capabilities: (ownerId: string | undefined) => ['server-queue', ownerId, 'capabilities'] as const,
-  list: (ownerId: string | undefined, page: number) =>
-    ['server-queue', ownerId, 'list', page] as const,
+  list: (ownerId: string | undefined, page: number, statuses?: readonly QueueStatus[]) =>
+    statuses && statuses.length > 0
+      ? (['server-queue', ownerId, 'list', page, statuses] as const)
+      : (['server-queue', ownerId, 'list', page] as const),
   detail: (ownerId: string | undefined, id: string | undefined) =>
     ['server-queue', ownerId, 'detail', id] as const,
 }
@@ -79,16 +81,29 @@ function useRefreshLaunchedServers(
   }, [entries, selected, client])
 }
 
-export function useServerQueue(page: number, enabled: boolean) {
+/**
+ * Owner-scoped queue list. `statuses` narrows the query server-side, and `poll`
+ * keeps only views that can change without user action live.
+ */
+export function useServerQueue(
+  page: number,
+  enabled: boolean,
+  statuses?: readonly QueueStatus[],
+  poll = true
+) {
   const ownerId = useAuthStore((state) => state.user?.id)
   const query = useQuery({
-    queryKey: queueKeys.list(ownerId, page),
-    queryFn: () => api.get<ServerQueuePage>(`/server-queue?page=${page}&page_size=25`),
+    queryKey: queueKeys.list(ownerId, page, statuses),
+    queryFn: () => {
+      const params = new URLSearchParams({ page: String(page), page_size: '25' })
+      for (const status of statuses ?? []) params.append('status', status)
+      return api.get<ServerQueuePage>(`/server-queue?${params.toString()}`)
+    },
     enabled: !!ownerId && enabled,
     retry: false,
     refetchOnWindowFocus: true,
     refetchInterval: (query) =>
-      unavailable(query.state.error)
+      unavailable(query.state.error) || !poll
         ? false
         : queuePollInterval(
             !query.state.data || query.state.data.items.some(isQueueActive),

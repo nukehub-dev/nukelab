@@ -588,70 +588,78 @@ function VolumesPage() {
           },
         ]}
       >
-        {canReadBackups && recoverySupported && (
-          <div className="flex items-center justify-end">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setBackupView({ ownerId: recoveryOwner })}
-            >
-              Backup history
-            </Button>
-          </div>
-        )}
-        {/* Toolbar: Search + Filters + Sort */}
-        {!isLoading && volumes.length > 0 && (
+        {/* Toolbar: Search + Filters + Sort + Recovery */}
+        {((!isLoading && volumes.length > 0) || (canReadBackups && recoverySupported)) && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={springs.gentle}
-            className="flex flex-col lg:flex-row items-start lg:items-center gap-3"
+            className="flex flex-col lg:flex-row lg:flex-wrap items-start lg:items-center gap-3"
           >
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none z-10" />
-              <Input
-                placeholder="Search volumes..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-              />
-            </div>
+            {!isLoading && volumes.length > 0 && (
+              <>
+                <div className="relative flex-1 max-w-sm">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none z-10" />
+                  <Input
+                    placeholder="Search volumes..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
 
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* Ownership filter pills */}
-              <div className="flex items-center bg-input/80 border border-input/50 rounded-lg p-0.5">
-                {(['all', 'mine', 'shared'] as OwnershipFilter[]).map((filter) => (
-                  <button
-                    key={filter}
-                    onClick={() => setOwnershipFilter(filter)}
-                    className={cn(
-                      'px-3 py-1.5 rounded-md text-xs font-medium transition-all',
-                      ownershipFilter === filter
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground'
-                    )}
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Ownership filter pills */}
+                  <div className="flex items-center bg-input/80 border border-input/50 rounded-lg p-0.5">
+                    {(['all', 'mine', 'shared'] as OwnershipFilter[]).map((filter) => (
+                      <button
+                        key={filter}
+                        onClick={() => setOwnershipFilter(filter)}
+                        className={cn(
+                          'px-3 py-1.5 rounded-md text-xs font-medium transition-all',
+                          ownershipFilter === filter
+                            ? 'bg-background text-foreground shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground'
+                        )}
+                      >
+                        {filter === 'all' && `All (${volumes.length})`}
+                        {filter === 'mine' &&
+                          `Mine (${volumes.filter((v) => v.owner_id === currentUser?.id).length})`}
+                        {filter === 'shared' &&
+                          `Shared (${volumes.filter((v) => v.owner_id !== currentUser?.id).length})`}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Sort dropdown */}
+                  <Select
+                    value={sortBy}
+                    onChange={(value) => setSortBy(value as SortOption)}
+                    className="w-36"
                   >
-                    {filter === 'all' && `All (${volumes.length})`}
-                    {filter === 'mine' &&
-                      `Mine (${volumes.filter((v) => v.owner_id === currentUser?.id).length})`}
-                    {filter === 'shared' &&
-                      `Shared (${volumes.filter((v) => v.owner_id !== currentUser?.id).length})`}
-                  </button>
-                ))}
-              </div>
+                    <SelectItem value="created">Newest</SelectItem>
+                    <SelectItem value="updated">Recently Updated</SelectItem>
+                    <SelectItem value="name">Name</SelectItem>
+                    <SelectItem value="size">Size</SelectItem>
+                  </Select>
+                </div>
+              </>
+            )}
 
-              {/* Sort dropdown */}
-              <Select
-                value={sortBy}
-                onChange={(value) => setSortBy(value as SortOption)}
-                className="w-36"
-              >
-                <SelectItem value="created">Newest</SelectItem>
-                <SelectItem value="updated">Recently Updated</SelectItem>
-                <SelectItem value="name">Name</SelectItem>
-                <SelectItem value="size">Size</SelectItem>
-              </Select>
-            </div>
+            {canReadBackups && recoverySupported && (
+              <div className="flex w-full justify-end sm:w-auto lg:ml-auto">
+                <Button
+                  type="button"
+                  variant="outline"
+                  aria-label="Backup history"
+                  onClick={() => setBackupView({ ownerId: recoveryOwner })}
+                  className="border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 hover:text-primary"
+                >
+                  <Database className="h-4 w-4" />
+                  Backup history
+                </Button>
+              </div>
+            )}
           </motion.div>
         )}
 

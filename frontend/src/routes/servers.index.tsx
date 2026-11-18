@@ -19,6 +19,8 @@ import {
   Pencil,
   Calendar,
   AlertTriangle,
+  Clock,
+  Import,
 } from 'lucide-react'
 import { Tooltip } from '../components/ui/tooltip'
 import { Checkbox } from '../components/ui/checkbox'
@@ -43,7 +45,7 @@ import { useAuthStore, PERMISSIONS } from '../stores/auth-store'
 import { isQueuedServer, parseQueueSearch } from '../lib/server-queue'
 import { useQueueCapabilities } from '../hooks/use-server-queue'
 import { ServerQueuePanel } from '../components/server/server-queue-panel'
-import { formatDate, formatBytes, formatPlanResource, parseMemoryString } from '../lib/utils'
+import { formatDate, formatBytes, formatPlanResource, parseMemoryString, cn } from '../lib/utils'
 import type { Server as ServerType } from '../types/api'
 import {
   Dialog,
@@ -75,6 +77,7 @@ function ServersPage() {
   const capabilities = useQueueCapabilities()
   const provenanceCapabilities = useProvenanceCapabilities()
   const canRecreate = useAuthStore((state) => state.hasPermission(PERMISSIONS.SERVERS_WRITE_OWN))
+  const canImportEnvironment = canRecreate && provenanceCapabilities.data?.enabled === true
   const [importOpen, setImportOpen] = useState(false)
   const canReadQueue = useAuthStore((state) => state.hasPermission(PERMISSIONS.SERVERS_READ_OWN))
   const queueEnabled = canReadQueue && capabilities.data?.enabled === true
@@ -820,30 +823,55 @@ function ServersPage() {
           },
         ]}
       >
-        {canRecreate && provenanceCapabilities.data?.enabled === true && (
-          <div className="flex justify-end">
-            <Button variant="outline" onClick={() => setImportOpen(true)}>
-              Import environment
-            </Button>
+        {(queueEnabled || canImportEnvironment) && (
+          <div
+            className={cn(
+              'flex flex-col gap-3 sm:flex-row sm:items-center',
+              queueEnabled ? 'sm:justify-between' : 'sm:justify-end'
+            )}
+          >
+            {queueEnabled && (
+              <nav
+                aria-label="Server sections"
+                className="flex w-fit items-center gap-0.5 rounded-lg border border-input/50 bg-input/80 p-0.5"
+              >
+                <button
+                  type="button"
+                  aria-current={!viewingQueue ? 'page' : undefined}
+                  onClick={() => navigate({ search: {} })}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all',
+                    !viewingQueue
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <Server className="h-3.5 w-3.5" aria-hidden="true" />
+                  Servers
+                </button>
+                <button
+                  type="button"
+                  aria-current={viewingQueue ? 'page' : undefined}
+                  onClick={() => navigate({ search: { tab: 'queue' } })}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all',
+                    viewingQueue
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+                  Waiting requests
+                </button>
+              </nav>
+            )}
+            {canImportEnvironment && (
+              <Button variant="outline" onClick={() => setImportOpen(true)}>
+                <Import className="h-4 w-4" aria-hidden="true" />
+                Import environment
+              </Button>
+            )}
           </div>
-        )}
-        {queueEnabled && (
-          <nav aria-label="Server sections" className="flex gap-2 mb-4">
-            <Button
-              variant={!viewingQueue ? 'default' : 'outline'}
-              aria-current={!viewingQueue ? 'page' : undefined}
-              onClick={() => navigate({ search: {} })}
-            >
-              Servers
-            </Button>
-            <Button
-              variant={viewingQueue ? 'default' : 'outline'}
-              aria-current={viewingQueue ? 'page' : undefined}
-              onClick={() => navigate({ search: { tab: 'queue' } })}
-            >
-              Waiting requests
-            </Button>
-          </nav>
         )}
         {search.tab === 'queue' && !queueEnabled && (
           <p role="status" className="mb-4 text-sm text-muted-foreground">
