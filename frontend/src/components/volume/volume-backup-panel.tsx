@@ -59,6 +59,7 @@ interface Props {
 }
 
 type StatusTone = 'healthy' | 'pending' | 'stopped' | 'error' | 'warning'
+type HistoryView = 'backups' | 'restores'
 
 const statusTones: Record<BackupStatus | RestoreStatus, StatusTone> = {
   pending: 'pending',
@@ -94,6 +95,7 @@ function RecoveryHistory({
   const canManage = useAuthStore((state) => state.hasPermission(PERMISSIONS.VOLUMES_WRITE_OWN))
   const [page, setPage] = useState(1)
   const [restorePage, setRestorePage] = useState(1)
+  const [view, setView] = useState<HistoryView | null>(null)
   const [description, setDescription] = useState('')
   const [restoring, setRestoring] = useState<VolumeBackup | null>(null)
   const [failure, setFailure] = useState<unknown>(null)
@@ -138,6 +140,7 @@ function RecoveryHistory({
       createRequest.current = null
       setDescription('')
       setPage(1)
+      setView('backups')
       useToastStore.getState().addToast({
         type: 'info',
         title: 'Backup requested',
@@ -180,12 +183,6 @@ function RecoveryHistory({
     }
   }
 
-  const backupPages = backups.data
-    ? Math.max(1, Math.ceil(backups.data.total / Math.max(1, backups.data.page_size)))
-    : null
-  const restorePages = restores.data
-    ? Math.max(1, Math.ceil(restores.data.total / Math.max(1, restores.data.page_size)))
-    : null
   const backupTotalLabel = backups.data
     ? backups.data.total.toLocaleString()
     : backups.isPending
@@ -196,17 +193,10 @@ function RecoveryHistory({
     : restores.isPending
       ? '…'
       : '—'
-  const backupHint = backups.data
-    ? `Page ${page} of ${backupPages ?? 1}`
-    : backups.isPending
-      ? 'Loading history'
-      : 'Unavailable'
-  const restoreHint = restores.data
-    ? `Page ${restorePage} of ${restorePages ?? 1}`
-    : restores.isPending
-      ? 'Loading history'
-      : 'Unavailable'
   const refreshing = capabilities.isFetching || backups.isFetching || restores.isFetching
+  const defaultView: HistoryView =
+    backups.data?.total === 0 && (restores.data?.total ?? 0) > 0 ? 'restores' : 'backups'
+  const activeView: HistoryView = view ?? defaultView
 
   return (
     <>
@@ -220,7 +210,7 @@ function RecoveryHistory({
               <div className="min-w-0 flex-1 space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <DialogTitle className="text-xl">
-                    {volumeName ? `Backups · ${volumeName}` : 'Volume backup history'}
+                    {volumeName ? `Recovery · ${volumeName}` : 'Volume recovery history'}
                   </DialogTitle>
                   <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-emerald-400">
                     <ShieldCheck className="h-3 w-3" />
@@ -442,278 +432,284 @@ function RecoveryHistory({
           )}
 
           {supported && (
-            <div className="grid grid-cols-1 divide-y divide-border/40 overflow-hidden rounded-xl border border-border/50 bg-surface/40 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-              <SummaryStat
-                icon={Archive}
-                label="Backups"
-                value={backupTotalLabel}
-                hint={backupHint}
-              />
-              <SummaryStat
-                icon={History}
-                label="Restores"
-                value={restoreTotalLabel}
-                hint={restoreHint}
-              />
-              <SummaryStat
-                icon={CalendarClock}
-                label="Retention"
-                value="Per record"
-                hint="Expiry shown on each backup"
-              />
-            </div>
-          )}
-
-          {supported && (
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-start">
-              <section aria-label="Backups" className="min-w-0 space-y-3">
-                <SectionHeading
+            <div className="space-y-3">
+              <div
+                role="tablist"
+                aria-label="Recovery history views"
+                className="grid grid-cols-1 gap-2 sm:grid-cols-2"
+              >
+                <HistoryTab
+                  id="recovery-tab-backups"
+                  panelId="recovery-panel-backups"
                   icon={Archive}
-                  title="Backups"
-                  total={backups.data?.total}
-                  caption={
-                    volumeName
-                      ? `Recovery points for ${volumeName}`
-                      : 'All retained recovery points'
-                  }
+                  label="Backups"
+                  hint="Retained recovery points"
+                  count={backupTotalLabel}
+                  selected={activeView === 'backups'}
+                  onSelect={() => setView('backups')}
                 />
-                {backups.isPending && (
-                  <SectionState
-                    icon={Loader2}
-                    spinning
-                    role="status"
-                    title="Loading backup history…"
-                    description="Retained recovery points will appear here."
-                  />
-                )}
-                {backups.isError && (
-                  <SectionState
-                    icon={AlertTriangle}
-                    tone="danger"
-                    role="alert"
-                    title="Backup history unavailable"
-                    description="Displayed records may be out of date. Select Refresh to try again."
-                  />
-                )}
-                {backups.data?.items.length === 0 && (
-                  <SectionState
-                    icon={Archive}
-                    title="No backups yet"
-                    description={
-                      volumeId
-                        ? 'Request a backup above once this private volume is offline.'
-                        : 'Backups appear here after you request one from a private volume. Deleted-source recovery points stay reachable in this history.'
-                    }
-                  />
-                )}
-                {backups.data?.items.map((backup) => (
-                  <article
-                    key={backup.id}
-                    data-testid={`backup-${backup.id}`}
-                    className={cn(
-                      'space-y-3 rounded-xl border p-3.5',
-                      !backup.source_volume_id
-                        ? 'border-dashed border-border/60 bg-surface/25'
-                        : 'border-border/50 bg-surface/40'
-                    )}
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <h4 className="truncate text-sm font-semibold">
-                          {backup.source_display_name}
-                        </h4>
-                        {backup.description ? (
-                          <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-                            {backup.description}
-                          </p>
-                        ) : null}
+                <HistoryTab
+                  id="recovery-tab-restores"
+                  panelId="recovery-panel-restores"
+                  icon={History}
+                  label="Restores"
+                  hint="New private destinations"
+                  count={restoreTotalLabel}
+                  selected={activeView === 'restores'}
+                  onSelect={() => setView('restores')}
+                />
+              </div>
+              <p className="flex items-center gap-1.5 px-1 text-[11px] text-muted-foreground">
+                <CalendarClock className="h-3 w-3 shrink-0" />
+                Backup retention: expiry is shown on each record.
+              </p>
+
+              {activeView === 'backups' ? (
+                <div
+                  id="recovery-panel-backups"
+                  role="tabpanel"
+                  aria-labelledby="recovery-tab-backups"
+                  className="min-w-0 space-y-3"
+                >
+                  {backups.isPending && (
+                    <SectionState
+                      icon={Loader2}
+                      spinning
+                      role="status"
+                      title="Loading backup history…"
+                      description="Retained recovery points will appear here."
+                    />
+                  )}
+                  {backups.isError && (
+                    <SectionState
+                      icon={AlertTriangle}
+                      tone="danger"
+                      role="alert"
+                      title="Backup history unavailable"
+                      description="Displayed records may be out of date. Select Refresh to try again."
+                    />
+                  )}
+                  {backups.data?.items.length === 0 && (
+                    <SectionState
+                      icon={Archive}
+                      title="No backups yet"
+                      description={
+                        volumeId
+                          ? 'Request a backup above once this private volume is offline.'
+                          : 'Backups appear here after you request one from a private volume. Deleted-source recovery points stay reachable in this history.'
+                      }
+                    />
+                  )}
+                  {backups.data?.items.map((backup) => (
+                    <article
+                      key={backup.id}
+                      data-testid={`backup-${backup.id}`}
+                      className={cn(
+                        'space-y-3 rounded-xl border p-3.5',
+                        !backup.source_volume_id
+                          ? 'border-dashed border-border/60 bg-surface/25'
+                          : 'border-border/50 bg-surface/40'
+                      )}
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <h4 className="truncate text-sm font-semibold">
+                            {backup.source_display_name}
+                          </h4>
+                          {backup.description ? (
+                            <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                              {backup.description}
+                            </p>
+                          ) : null}
+                        </div>
+                        <RecoveryStatusBadge status={backup.status} />
                       </div>
-                      <RecoveryStatusBadge status={backup.status} />
-                    </div>
-                    {!backup.source_volume_id && (
-                      <div className="flex items-start gap-2 rounded-lg border border-amber-500/15 bg-amber-500/[0.05] px-3 py-2">
-                        <DatabaseBackup className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
-                        <p className="text-xs font-medium leading-relaxed text-foreground/80">
-                          Source volume deleted{' '}
-                          <span className="font-normal text-muted-foreground">
-                            · retained recovery point
-                          </span>
+                      {!backup.source_volume_id && (
+                        <div className="flex items-start gap-2 rounded-lg border border-amber-500/15 bg-amber-500/[0.05] px-3 py-2">
+                          <DatabaseBackup className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
+                          <p className="text-xs font-medium leading-relaxed text-foreground/80">
+                            Source volume deleted{' '}
+                            <span className="font-normal text-muted-foreground">
+                              · retained recovery point
+                            </span>
+                          </p>
+                        </div>
+                      )}
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
+                        <MetaItem
+                          icon={Clock}
+                          label="Created"
+                          value={formatDate(backup.created_at)}
+                        />
+                        <MetaItem
+                          icon={CalendarClock}
+                          label="Expires"
+                          value={backup.expires_at ? formatDate(backup.expires_at) : 'No expiry'}
+                        />
+                        <MetaItem
+                          icon={Archive}
+                          label="Archive size"
+                          value={
+                            backup.compressed_bytes !== null
+                              ? formatBytes(backup.compressed_bytes)
+                              : 'Not measured'
+                          }
+                        />
+                        <MetaItem
+                          icon={Database}
+                          label="Logical data"
+                          value={
+                            backup.logical_bytes !== null
+                              ? formatBytes(backup.logical_bytes)
+                              : 'Not measured'
+                          }
+                        />
+                        <MetaItem
+                          icon={HardDrive}
+                          label="Member count"
+                          value={
+                            backup.member_count !== null
+                              ? `${backup.member_count.toLocaleString()} entries`
+                              : 'Not measured'
+                          }
+                        />
+                      </div>
+                      <div className="flex items-start gap-2 rounded-lg bg-background/50 px-3 py-2">
+                        <Info className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground/70" />
+                        <p className="text-xs leading-relaxed text-muted-foreground">
+                          {backup.message}
                         </p>
                       </div>
-                    )}
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
-                      <MetaItem
-                        icon={Clock}
-                        label="Created"
-                        value={formatDate(backup.created_at)}
-                      />
-                      <MetaItem
-                        icon={CalendarClock}
-                        label="Expires"
-                        value={backup.expires_at ? formatDate(backup.expires_at) : 'No expiry'}
-                      />
-                      <MetaItem
-                        icon={Archive}
-                        label="Archive size"
-                        value={
-                          backup.compressed_bytes !== null
-                            ? formatBytes(backup.compressed_bytes)
-                            : 'Not measured'
-                        }
-                      />
-                      <MetaItem
-                        icon={Database}
-                        label="Logical data"
-                        value={
-                          backup.logical_bytes !== null
-                            ? formatBytes(backup.logical_bytes)
-                            : 'Not measured'
-                        }
-                      />
-                      <MetaItem
-                        icon={HardDrive}
-                        label="Member count"
-                        value={
-                          backup.member_count !== null
-                            ? `${backup.member_count.toLocaleString()} entries`
-                            : 'Not measured'
-                        }
-                      />
-                    </div>
-                    <div className="flex items-start gap-2 rounded-lg bg-background/50 px-3 py-2">
-                      <Info className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground/70" />
+                      {enabled && canManage && (backup.can_restore || backup.can_delete) ? (
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                          {backup.can_delete && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={actions.remove.isPending}
+                              onClick={() => void remove(backup)}
+                              className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              {backup.status === 'delete_failed'
+                                ? 'Retry deletion'
+                                : 'Delete backup'}
+                            </Button>
+                          )}
+                          {backup.can_restore && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setRestoring(backup)}
+                              className="border-primary/30 text-primary hover:bg-primary/10 hover:text-primary"
+                            >
+                              <RotateCcw className="h-3.5 w-3.5" />
+                              Restore to new volume
+                            </Button>
+                          )}
+                        </div>
+                      ) : null}
+                    </article>
+                  ))}
+                  <Pagination
+                    page={page}
+                    total={backups.data?.total ?? 0}
+                    size={backups.data?.page_size ?? 10}
+                    onPage={setPage}
+                  />
+                </div>
+              ) : (
+                <div
+                  id="recovery-panel-restores"
+                  role="tabpanel"
+                  aria-labelledby="recovery-tab-restores"
+                  className="min-w-0 space-y-3"
+                >
+                  {restores.isPending && (
+                    <SectionState
+                      icon={Loader2}
+                      spinning
+                      role="status"
+                      title="Loading restore history…"
+                      description="Accepted restores will appear here."
+                    />
+                  )}
+                  {restores.isError && (
+                    <SectionState
+                      icon={AlertTriangle}
+                      tone="danger"
+                      role="alert"
+                      title="Restore history unavailable"
+                      description="Refresh to find accepted requests after a connection failure."
+                    />
+                  )}
+                  {restores.data?.items.length === 0 && (
+                    <SectionState
+                      icon={History}
+                      title="No restores yet"
+                      description="Restores create a separate private volume and never overwrite the source."
+                    />
+                  )}
+                  {restores.data?.items.map((restore) => (
+                    <article
+                      key={restore.id}
+                      data-testid={`restore-${restore.id}`}
+                      className="space-y-2.5 rounded-xl border border-border/50 bg-surface/40 p-3.5"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <p className="min-w-0 flex-1 break-words text-sm font-medium">
+                          {restore.destination_display_name}
+                        </p>
+                        <RecoveryStatusBadge status={restore.status} />
+                      </div>
                       <p className="text-xs leading-relaxed text-muted-foreground">
-                        {backup.message}
+                        {restore.message}
                       </p>
-                    </div>
-                    {enabled && canManage && (backup.can_restore || backup.can_delete) ? (
-                      <div className="flex flex-wrap items-center justify-end gap-2">
-                        {backup.can_delete && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            disabled={actions.remove.isPending}
-                            onClick={() => void remove(backup)}
-                            className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            {backup.status === 'delete_failed' ? 'Retry deletion' : 'Delete backup'}
-                          </Button>
-                        )}
-                        {backup.can_restore && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setRestoring(backup)}
-                            className="border-primary/30 text-primary hover:bg-primary/10 hover:text-primary"
-                          >
-                            <RotateCcw className="h-3.5 w-3.5" />
-                            Restore to new volume
-                          </Button>
-                        )}
-                      </div>
-                    ) : null}
-                  </article>
-                ))}
-                <Pagination
-                  page={page}
-                  total={backups.data?.total ?? 0}
-                  size={backups.data?.page_size ?? 10}
-                  onPage={setPage}
-                />
-              </section>
-
-              <section aria-label="Restore history" className="min-w-0 space-y-3">
-                <SectionHeading
-                  icon={History}
-                  title="Restores"
-                  total={restores.data?.total}
-                  caption="New private destinations"
-                />
-                {restores.isPending && (
-                  <SectionState
-                    icon={Loader2}
-                    spinning
-                    role="status"
-                    title="Loading restore history…"
-                    description="Accepted restores will appear here."
-                  />
-                )}
-                {restores.isError && (
-                  <SectionState
-                    icon={AlertTriangle}
-                    tone="danger"
-                    role="alert"
-                    title="Restore history unavailable"
-                    description="Refresh to find accepted requests after a connection failure."
-                  />
-                )}
-                {restores.data?.items.length === 0 && (
-                  <SectionState
-                    icon={History}
-                    title="No restores yet"
-                    description="Restores create a separate private volume and never overwrite the source."
-                  />
-                )}
-                {restores.data?.items.map((restore) => (
-                  <article
-                    key={restore.id}
-                    data-testid={`restore-${restore.id}`}
-                    className="space-y-2.5 rounded-xl border border-border/50 bg-surface/40 p-3.5"
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <p className="min-w-0 flex-1 break-words text-sm font-medium">
-                        {restore.destination_display_name}
+                      <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                        <Clock className="h-3 w-3" />
+                        Requested {formatDate(restore.created_at)}
                       </p>
-                      <RecoveryStatusBadge status={restore.status} />
-                    </div>
-                    <p className="text-xs leading-relaxed text-muted-foreground">
-                      {restore.message}
-                    </p>
-                    <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                      <Clock className="h-3 w-3" />
-                      Requested {formatDate(restore.created_at)}
-                    </p>
-                    {restore.status === 'completed' ? (
-                      <div className="space-y-2 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.06] p-2.5">
-                        <div className="flex items-start gap-1.5">
-                          <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" />
-                          <p className="text-xs leading-relaxed text-foreground/80">
-                            {restore.destination_display_name} is ready. Your original volume was
-                            not changed.
-                          </p>
+                      {restore.status === 'completed' ? (
+                        <div className="space-y-2 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.06] p-2.5">
+                          <div className="flex items-start gap-1.5">
+                            <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                            <p className="text-xs leading-relaxed text-foreground/80">
+                              {restore.destination_display_name} is ready. Your original volume was
+                              not changed.
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-3 pl-5">
+                            <Link
+                              to="/volumes"
+                              onClick={() => onOpenChange(false)}
+                              className="text-xs font-medium text-primary hover:underline"
+                            >
+                              View volumes
+                            </Link>
+                            <Link
+                              to="/servers"
+                              className="text-xs font-medium text-primary hover:underline"
+                            >
+                              Use in a server
+                            </Link>
+                          </div>
                         </div>
-                        <div className="flex flex-wrap items-center gap-3 pl-5">
-                          <Link
-                            to="/volumes"
-                            onClick={() => onOpenChange(false)}
-                            className="text-xs font-medium text-primary hover:underline"
-                          >
-                            View volumes
-                          </Link>
-                          <Link
-                            to="/servers"
-                            className="text-xs font-medium text-primary hover:underline"
-                          >
-                            Use in a server
-                          </Link>
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-muted-foreground">
-                        <ShieldCheck className="mt-0.5 h-3 w-3 shrink-0" />
-                        The destination is unavailable for use until verification completes.
-                      </p>
-                    )}
-                  </article>
-                ))}
-                <Pagination
-                  page={restorePage}
-                  total={restores.data?.total ?? 0}
-                  size={restores.data?.page_size ?? 10}
-                  onPage={setRestorePage}
-                />
-              </section>
+                      ) : (
+                        <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                          <ShieldCheck className="mt-0.5 h-3 w-3 shrink-0" />
+                          The destination is unavailable for use until verification completes.
+                        </p>
+                      )}
+                    </article>
+                  ))}
+                  <Pagination
+                    page={restorePage}
+                    total={restores.data?.total ?? 0}
+                    size={restores.data?.page_size ?? 10}
+                    onPage={setRestorePage}
+                  />
+                </div>
+              )}
             </div>
           )}
           <DialogClose onClick={() => onOpenChange(false)} />
@@ -728,6 +724,7 @@ function RecoveryHistory({
           onAccepted={() => {
             setRestoring(null)
             setRestorePage(1)
+            setView('restores')
             void restores.refetch()
           }}
         />
@@ -741,57 +738,65 @@ function RecoveryStatusBadge({ status }: { status: BackupStatus | RestoreStatus 
   return <StatusBadge status={statusTones[status]} label={recoveryStatusLabel(status)} size="sm" />
 }
 
-function SummaryStat({
+function HistoryTab({
+  id,
+  panelId,
   icon: Icon,
   label,
-  value,
   hint,
+  count,
+  selected,
+  onSelect,
 }: {
+  id: string
+  panelId: string
   icon: LucideIcon
   label: string
-  value: string
   hint: string
+  count: string
+  selected: boolean
+  onSelect: () => void
 }) {
   return (
-    <div className="min-w-0 px-3 py-2.5">
-      <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-        <Icon className="h-3 w-3 shrink-0" />
-        <span className="truncate">{label}</span>
-      </div>
-      <p className="mt-0.5 truncate text-sm font-semibold">{value}</p>
-      <p className="truncate text-[10px] text-muted-foreground">{hint}</p>
-    </div>
-  )
-}
-
-function SectionHeading({
-  icon: Icon,
-  title,
-  total,
-  caption,
-}: {
-  icon: LucideIcon
-  title: string
-  total?: number
-  caption: string
-}) {
-  return (
-    <div className="flex items-start justify-between gap-3">
-      <div className="flex min-w-0 items-center gap-2.5">
-        <div className="shrink-0 rounded-lg bg-primary/10 p-2 text-primary">
-          <Icon className="h-4 w-4" />
-        </div>
-        <div className="min-w-0">
-          <h3 className="text-sm font-semibold">{title}</h3>
-          <p className="truncate text-[11px] text-muted-foreground">{caption}</p>
-        </div>
-      </div>
-      {typeof total === 'number' && (
-        <span className="shrink-0 rounded-full border border-border/50 bg-surface/50 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-          {total.toLocaleString()}
-        </span>
+    <button
+      id={id}
+      type="button"
+      role="tab"
+      aria-selected={selected}
+      aria-controls={selected ? panelId : undefined}
+      onClick={onSelect}
+      className={cn(
+        'flex min-w-0 items-center gap-3 rounded-xl border p-3 text-left transition-colors focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none',
+        selected
+          ? 'border-primary/30 bg-primary/[0.07] ring-1 ring-primary/10'
+          : 'border-border/50 bg-surface/40 hover:border-border hover:bg-surface/60'
       )}
-    </div>
+    >
+      <span
+        className={cn(
+          'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl',
+          selected ? 'bg-primary/15 text-primary' : 'bg-muted/40 text-muted-foreground'
+        )}
+      >
+        <Icon className="h-4 w-4" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center justify-between gap-2">
+          <span className="truncate text-sm font-semibold">{label}</span>
+          <span
+            className={cn(
+              'shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium tabular-nums',
+              selected
+                ? 'border-primary/20 bg-primary/10 text-primary'
+                : 'border-border/50 bg-surface/50 text-muted-foreground'
+            )}
+          >
+            {count}
+          </span>
+        </span>
+        <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{hint}</span>
+      </span>
+    </button>
   )
 }
 

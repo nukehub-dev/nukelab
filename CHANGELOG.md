@@ -38,6 +38,8 @@ section.
   volume choices. The UI shows the last verified launch and local-only limits.
 - Owner-scoped waiting requests with typed queued acceptance, capability-gated
   queue polling, pending cancellation and duplicate-request navigation.
+- Dashboard first-run guidance for users without servers, with a direct link
+  that opens the deploy flow instead of leaving new users to find it.
 - Durable fenced lifecycle operations for start, restart, resize, stop and delete;
   pinned launch generations and reservations survive uncertain runtime outcomes.
 - Shared launch orchestration reserves server, GPU and volume-mount identities
@@ -53,8 +55,19 @@ section.
   path/link, metadata, expansion and ownership checks.
 - Configurable allocatable CPU, memory and disk budgets and queue policy settings.
 
+### Changed
+
+- The 2.2 waiting-request, environment-provenance and volume-recovery surfaces
+  now follow the platform's bubble cards, semantic status pills, compact
+  metadata, responsive drawers and mobile layouts.
+- Volume recovery history uses full-width Backups/Restores tabs, opens
+  restore-only volumes on Restores and avoids duplicating the summary grid.
+
 ### Fixed
 
+- Notification toasts deduplicate by notification id and suppress recent replay
+  on shell remounts, so queue/usage/volume page switches no longer repeat the
+  same server-start event.
 - Queue-, schedule- and health-admitted servers now receive the same container
   hardening, server-auth, public URL and runtime settings as API-created
   servers; the Celery worker no longer silently spawns unhardened runtimes.

@@ -20,10 +20,13 @@ export function isQueueId(value: unknown): value is string {
 export function parseQueueSearch(search: Record<string, unknown>): {
   tab?: 'queue'
   request?: string
+  deploy?: true
 } {
+  const deploy = search.deploy === true || search.deploy === '1' || search.deploy === 'true'
   return {
     ...(search.tab === 'queue' ? { tab: 'queue' as const } : {}),
     ...(search.tab === 'queue' && isQueueId(search.request) ? { request: search.request } : {}),
+    ...(deploy ? { deploy: true as const } : {}),
   }
 }
 

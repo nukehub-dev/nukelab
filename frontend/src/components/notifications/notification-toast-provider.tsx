@@ -12,6 +12,33 @@ import type { Notification, NotificationListResponse } from '../../hooks/use-not
 import type { Server } from '../../types/api'
 
 const STORAGE_KEY = 'nukelab-last-notification-toast'
+const SHOWN_IDS_KEY = 'nukelab-shown-notification-ids'
+const MAX_SHOWN_IDS = 200
+
+function getShownNotificationIds(): Set<string> {
+  try {
+    const raw = sessionStorage.getItem(SHOWN_IDS_KEY)
+    if (!raw) return new Set()
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return new Set()
+    return new Set(
+      parsed.filter((id): id is string => typeof id === 'string').slice(-MAX_SHOWN_IDS)
+    )
+  } catch {
+    return new Set()
+  }
+}
+
+function rememberShownNotification(id: string) {
+  try {
+    const ids = getShownNotificationIds()
+    ids.add(id)
+    sessionStorage.setItem(SHOWN_IDS_KEY, JSON.stringify(Array.from(ids).slice(-MAX_SHOWN_IDS)))
+  } catch {
+    // Session storage can be unavailable in privacy modes; the in-memory ref
+    // still deduplicates events for the current page lifetime.
+  }
+}
 
 function getLastToastTime(): string {
   const stored = localStorage.getItem(STORAGE_KEY)
@@ -43,6 +70,7 @@ export function useNotificationToasts() {
   const lastToastTimeRef = useRef<string>(getLastToastTime())
   const lastCacheRefreshRef = useRef<string>(getLastToastTime())
   const mountedAtRef = useRef<string>(new Date().toISOString())
+  const shownIdsRef = useRef<Set<string>>(getShownNotificationIds())
   const { info, success, warning, error } = useToast()
 
   const { isConnected, subscribe, unsubscribe, onMessage } = useSharedWebSocket()
@@ -84,18 +112,29 @@ export function useNotificationToasts() {
     (notification: Notification, source: 'websocket' | 'poll' = 'websocket') => {
       if (!notification?.created_at) return
 
-      // Deduplicate against both the last toasted notification and the time this
-      // component mounted. The mount guard prevents polling from flooding the
-      // user with old unread notifications when the app first loads.
-      const cutoff = new Date(
-        Math.max(
-          parseUtcDate(lastToastTimeRef.current).getTime(),
-          parseUtcDate(mountedAtRef.current).getTime()
-        ) - CLOCK_SKEW_TOLERANCE_MS
-      ).toISOString()
+      // An id can arrive through both the WebSocket and the polling fallback,
+      // or through a shell remount. Never show the same notification twice.
+      if (notification.id && shownIdsRef.current.has(notification.id)) return
 
-      if (parseUtcDate(notification.created_at).getTime() <= parseUtcDate(cutoff).getTime()) {
-        return
+      // Polling fetches unread notifications. Suppress the old-unread backlog
+      // when the shell mounts, but do not apply this cutoff to live WebSocket
+      // events: a notification created during mount is still new.
+      const createdAt = parseUtcDate(notification.created_at).getTime()
+      if (source === 'poll') {
+        const mountCutoff = parseUtcDate(mountedAtRef.current).getTime() - CLOCK_SKEW_TOLERANCE_MS
+        if (createdAt <= mountCutoff) return
+      }
+
+      // Legacy fallback for payloads without an id. Real notifications always
+      // carry one; keep the timestamp guard for defensive compatibility.
+      if (!notification.id) {
+        const cutoff = new Date(
+          Math.max(
+            parseUtcDate(lastToastTimeRef.current).getTime(),
+            parseUtcDate(mountedAtRef.current).getTime()
+          ) - CLOCK_SKEW_TOLERANCE_MS
+        ).toISOString()
+        if (createdAt <= parseUtcDate(cutoff).getTime()) return
       }
 
       // Show toast based on severity
@@ -112,9 +151,14 @@ export function useNotificationToasts() {
         console.log(`[notification-toast] ${source}`, notification)
       }
 
+      if (notification.id) {
+        shownIdsRef.current.add(notification.id)
+        rememberShownNotification(notification.id)
+      }
+
       toastFn(notification.title, notification.message)
 
-      // Update last toast time
+      // Update the legacy timestamp watermark for payloads without an id.
       lastToastTimeRef.current = notification.created_at
       setLastToastTime(notification.created_at)
     },

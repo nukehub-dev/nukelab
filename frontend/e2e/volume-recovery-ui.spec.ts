@@ -44,6 +44,19 @@ function backup(): VolumeBackup {
     can_delete: true,
   }
 }
+function restoreRecord(): VolumeRestore {
+  return {
+    id: ids.restore,
+    backup_id: ids.backup,
+    status: 'completed',
+    reason_code: null,
+    message: 'Integrity verified.',
+    destination_volume_id: ids.destination,
+    destination_display_name: 'Recovered experiment',
+    created_at: '2026-11-17T13:00:00',
+    completed_at: '2026-11-17T13:01:00',
+  }
+}
 async function fixture(
   page: Page,
   options: {
@@ -55,12 +68,14 @@ async function fixture(
     deleteConflict?: boolean
     volumeStatus?: string
     delayedCreate?: boolean
+    noBackups?: boolean
+    existingRestore?: boolean
   } = {}
 ) {
   const actor = { ...owner, ...(options.readonly ? { permissions: ['volumes:read_own'] } : {}) }
   const state = {
-    backups: [backup()],
-    restores: [] as VolumeRestore[],
+    backups: options.noBackups ? ([] as VolumeBackup[]) : [backup()],
+    restores: options.existingRestore ? [restoreRecord()] : ([] as VolumeRestore[]),
     creates: [] as Record<string, unknown>[],
     restoreRequests: [] as Record<string, unknown>[],
     deletes: 0,
@@ -246,6 +261,10 @@ test('deleted-source backup restores only into a new private destination and sur
   await page.getByTestId('restore-volume-name').fill('Recovered experiment')
   await page.getByTestId('restore-volume-size').fill('1')
   await page.getByTestId('restore-backup-submit').click()
+  await expect(page.getByRole('tab', { name: /^Restores/ })).toHaveAttribute(
+    'aria-selected',
+    'true'
+  )
   await expect(page.getByTestId(`restore-${ids.restore}`)).toBeVisible()
   await expect(page.getByRole('link', { name: 'Use in a server' })).toHaveCount(0)
   expect(state.restoreRequests[0]).toMatchObject({
@@ -254,6 +273,7 @@ test('deleted-source backup restores only into a new private destination and sur
   })
   await page.reload()
   await page.getByRole('button', { name: 'Backup history', exact: true }).click()
+  await page.getByRole('tab', { name: /^Restores/ }).click()
   await expect(page.getByTestId(`restore-${ids.restore}`)).toBeVisible()
   state.restores[0] = {
     ...state.restores[0],
@@ -264,6 +284,23 @@ test('deleted-source backup restores only into a new private destination and sur
   await page.getByRole('button', { name: 'Refresh backup history' }).click()
   await expect(page.getByText('Recovered experiment is ready.', { exact: false })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Use in a server' })).toBeVisible()
+})
+
+test('restore-only history opens on Restores and keeps an explicit tab choice', async ({
+  page,
+}) => {
+  await fixture(page, { noBackups: true, existingRestore: true })
+  await openHistory(page)
+  const backupsTab = page.getByRole('tab', { name: /^Backups/ })
+  const restoresTab = page.getByRole('tab', { name: /^Restores/ })
+  await expect(restoresTab).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByTestId(`restore-${ids.restore}`)).toBeVisible()
+  await expect(page.getByText('Recovered experiment is ready.', { exact: false })).toBeVisible()
+  await backupsTab.click()
+  await expect(backupsTab).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByText('No backups yet', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Refresh backup history' }).click()
+  await expect(backupsTab).toHaveAttribute('aria-selected', 'true')
 })
 
 test('restore-pinned deletion conflict retains the backup and refreshes its actions', async ({

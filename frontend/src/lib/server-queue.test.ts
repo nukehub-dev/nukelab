@@ -46,6 +46,35 @@ describe('request navigation', () => {
   })
 })
 
+describe('deploy deep link', () => {
+  it('accepts explicit deploy intent', () => {
+    expect(parseQueueSearch({ deploy: true })).toEqual({ deploy: true })
+    expect(parseQueueSearch({ deploy: '1' })).toEqual({ deploy: true })
+    expect(parseQueueSearch({ deploy: 'true' })).toEqual({ deploy: true })
+  })
+
+  it('ignores unsupported deploy values', () => {
+    expect(parseQueueSearch({ deploy: false })).toEqual({})
+    expect(parseQueueSearch({ deploy: 'false' })).toEqual({})
+    expect(parseQueueSearch({ deploy: '0' })).toEqual({})
+    expect(parseQueueSearch({ deploy: 1 })).toEqual({})
+    expect(parseQueueSearch({ deploy: ['true'] })).toEqual({})
+    expect(parseQueueSearch({ deploy: { value: true } })).toEqual({})
+  })
+
+  it('retains queue context alongside deploy', () => {
+    expect(parseQueueSearch({ tab: 'queue', request: id, deploy: '1' })).toEqual({
+      tab: 'queue',
+      request: id,
+      deploy: true,
+    })
+    expect(parseQueueSearch({ tab: 'queue', request: '../../secret', deploy: true })).toEqual({
+      tab: 'queue',
+      deploy: true,
+    })
+  })
+})
+
 describe('pending cancellation', () => {
   it('requires both pending status and current server-provided permission', () => {
     expect(canCancelQueuedRequest({ status: 'pending', can_cancel: true })).toBe(true)

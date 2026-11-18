@@ -17,6 +17,7 @@ import {
   FolderOpen,
   CreditCard,
   ArrowRight,
+  Rocket,
 } from 'lucide-react'
 import { FloatingHeader } from '../components/layout/floating-header'
 import { StatCard } from '../components/data/stat-card'
@@ -27,7 +28,8 @@ import { useAuthStore, PERMISSIONS } from '../stores/auth-store'
 import { SkeletonCard } from '../components/feedback/skeleton'
 import { MetricsDashboard } from '../components/charts/metrics-dashboard'
 import { UserServerMetrics } from '../components/charts/user-server-metrics'
-import { formatDate } from '../lib/utils'
+import { buttonVariants } from '../components/ui/button-variants'
+import { cn, formatDate } from '../lib/utils'
 
 export const Route = createFileRoute('/')({
   component: DashboardPage,
@@ -35,7 +37,7 @@ export const Route = createFileRoute('/')({
 
 function DashboardPage() {
   const { data: dashboard, isLoading, isError, error } = useDashboard()
-  const { data: servers = [] } = useServers()
+  const { data: servers = [], isLoading: serversLoading, isError: serversError } = useServers()
   const hasPermission = useAuthStore((state) => state.hasPermission)
   const canAccessAdmin = hasPermission(PERMISSIONS.ADMIN_ACCESS)
   const canViewSystemMetrics = hasPermission(PERMISSIONS.ADMIN_ACCESS)
@@ -47,6 +49,8 @@ function DashboardPage() {
     () => (userId ? servers.filter((s) => s.user_id === userId) : servers),
     [servers, userId]
   )
+
+  const showFirstRun = Boolean(userId) && !serversLoading && !serversError && myServers.length === 0
 
   const myRunningServers = myServers.filter((s) => s.status === 'running')
 
@@ -89,6 +93,89 @@ function DashboardPage() {
               Retry
             </button>
           </motion.div>
+        )}
+
+        {/* First-run onboarding */}
+        {showFirstRun && (
+          <motion.section
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, ease: 'easeOut' }}
+            aria-labelledby="first-run-heading"
+            className="bubble relative overflow-hidden p-6 lg:p-8"
+          >
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-transparent"
+            />
+            <div className="relative flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+              <div className="max-w-xl space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20">
+                    <Rocket className="h-5 w-5" />
+                  </div>
+                  <span className="text-xs font-semibold uppercase tracking-widest text-primary">
+                    Get started
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  <h2 id="first-run-heading" className="text-xl font-semibold lg:text-2xl">
+                    Create your first simulation server
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    Choose a plan, runtime environment and storage to launch your workspace. You can
+                    start small and adjust resources later.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Link
+                    to="/servers"
+                    search={{ deploy: true }}
+                    className={cn(
+                      buttonVariants({ size: 'lg' }),
+                      'group shadow-lg shadow-primary/20'
+                    )}
+                  >
+                    <Rocket className="h-4 w-4" aria-hidden="true" />
+                    Deploy your first server
+                    <ArrowRight
+                      className="h-4 w-4 transition-transform group-hover:translate-x-0.5"
+                      aria-hidden="true"
+                    />
+                  </Link>
+                  <Link
+                    to="/plans"
+                    className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    Browse plans
+                  </Link>
+                </div>
+              </div>
+              <div className="grid w-full gap-2 sm:grid-cols-3 lg:max-w-md">
+                {[
+                  { icon: CreditCard, title: 'Choose a plan', detail: 'CPU, memory and disk' },
+                  { icon: Boxes, title: 'Pick an environment', detail: 'Prebuilt or custom image' },
+                  { icon: HardDrive, title: 'Attach storage', detail: 'Persistent volumes' },
+                ].map((step, index) => (
+                  <div
+                    key={step.title}
+                    className="rounded-xl border border-border/50 bg-background/40 p-3"
+                  >
+                    <div className="mb-2 flex items-center justify-between">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <step.icon className="h-3.5 w-3.5" />
+                      </div>
+                      <span className="text-xs font-semibold text-muted-foreground">
+                        {String(index + 1).padStart(2, '0')}
+                      </span>
+                    </div>
+                    <p className="text-xs font-medium">{step.title}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">{step.detail}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </motion.section>
         )}
 
         {/* Admin: Platform Overview */}
@@ -241,18 +328,33 @@ function DashboardPage() {
                   color: 'bg-chart-4/10 text-chart-4',
                   href: '/plans',
                 },
-              ].map((action) => (
-                <Link
-                  key={action.label}
-                  to={action.href}
-                  className="flex flex-col items-center gap-3 p-4 rounded-xl border border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-all duration-100 group"
-                >
-                  <div className={`p-3 rounded-lg ${action.color}`}>
-                    <action.icon className="w-5 h-5" />
-                  </div>
-                  <span className="text-sm font-medium">{action.label}</span>
-                </Link>
-              ))}
+              ].map((action) => {
+                const content = (
+                  <>
+                    <div className={`p-3 rounded-lg ${action.color}`}>
+                      <action.icon className="w-5 h-5" />
+                    </div>
+                    <span className="text-sm font-medium">{action.label}</span>
+                  </>
+                )
+                const className =
+                  'flex flex-col items-center gap-3 p-4 rounded-xl border border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-all duration-100 group'
+
+                return action.label === 'Deploy Server' ? (
+                  <Link
+                    key={action.label}
+                    to="/servers"
+                    search={{ deploy: true }}
+                    className={className}
+                  >
+                    {content}
+                  </Link>
+                ) : (
+                  <Link key={action.label} to={action.href} className={className}>
+                    {content}
+                  </Link>
+                )
+              })}
             </div>
           </div>
         </section>

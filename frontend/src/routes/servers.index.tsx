@@ -279,6 +279,15 @@ function ServersPage() {
     return () => window.removeEventListener('new-server', handleNewServer)
   }, [])
 
+  // Deep link from the dashboard first-run card: open the deploy dialog once,
+  // then strip the flag so closing or refreshing does not reopen it.
+  useEffect(() => {
+    if (search.deploy !== true) return
+    const { deploy: _deploy, ...queueSearch } = search
+    queueMicrotask(() => setDialogOpen(true))
+    void navigate({ search: queueSearch, replace: true })
+  }, [search, navigate])
+
   // Filter to only current user's servers
   const myServers = servers.filter((server) => !user || server.user_id === user.id)
 
