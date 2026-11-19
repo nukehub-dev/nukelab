@@ -103,55 +103,55 @@ For point-in-time recovery (PITR), enable WAL archiving in `compose.yml`:
 
 ## 2. Restore Procedures
 
-### 2.1 Full Restore (Fresh Environment)
+### 2.1 Full Restore (Existing Host)
+
+`./nukelabctl restore` drops and recreates the database with `WITH (FORCE)`,
+restores the dump, and stamps the current image's Alembic head.
+
+Before restoring, stop workers/Beat or enable maintenance mode so no writes
+occur during the drop/recreate. Keep Postgres and the backend container running;
+`restore` uses the backend image for the Alembic stamp.
 
 ```bash
-# 1. Stop the backend to prevent writes during restore
-./nukelabctl stop
-
-# 2. Drop and recreate the database
-./nukelabctl exec postgres psql -U nukelab -c "DROP DATABASE IF EXISTS nukelab;"
-./nukelabctl exec postgres psql -U nukelab -c "CREATE DATABASE nukelab;"
-
-# 3. Restore from backup
-docker exec -i nukelab-postgres psql -U nukelab -d nukelab < nukelab-backup-YYYYMMDD.sql
-
-# 4. Stamp alembic version so migrations don't try to re-run
-./nukelabctl exec backend python -m alembic stamp 8298b4bb8ada
-
-# 5. Restart services
+# 1. Ensure the stack is running (Postgres and backend are required)
 ./nukelabctl start
 
-# 6. Verify
+# 2. Restore; the command asks for confirmation unless --yes is supplied
+./nukelabctl restore backups/nukelab_backup_YYYYMMDD_HHMMSS.sql
+
+# 3. Restart so the backend reconnects cleanly
+./nukelabctl restart
+
+# 4. Verify
 ./nukelabctl exec backend python scripts/db_profiler.py table-sizes
 ./nukelabctl exec backend python scripts/db_profiler.py partitions --table activity_logs
-# Verify partition health via admin monitoring endpoint
-curl -s -H "Authorization: Bearer $ADMIN_TOKEN" http://localhost:8080/api/admin/health/monitoring | jq '.system.services.partitions'
+curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
+  http://localhost:8080/api/admin/health/monitoring \
+  | jq '.system.services.partitions'
 ```
+
+For a rollback to an older release, use `--stamp <previous-revision>` with the
+revision recorded in the pre-migration snapshot filename; see the rollback
+runbook in [PRODUCTION-DEPLOYMENT.md](PRODUCTION-DEPLOYMENT.md#rollback-runbook).
 
 ### 2.2 Restore to a New Host (Migration)
 
 ```bash
-# 1. Start fresh postgres container
+# 1. Install the stack and start it with the same pinned release
 ./nukelabctl start
 
-# 2. Wait for postgres to be ready
-until ./nukelabctl exec postgres pg_isready -U nukelab; do sleep 1; done
+# 2. Copy the dump to the new host, then restore it
+./nukelabctl restore backups/nukelab_backup_YYYYMMDD_HHMMSS.sql
 
-# 3. Create database and user
-./nukelabctl exec postgres psql -U postgres -c "CREATE DATABASE nukelab;"
-./nukelabctl exec postgres psql -U postgres -d nukelab -c "CREATE USER nukelab WITH PASSWORD 'nukelab123';"
-./nukelabctl exec postgres psql -U postgres -d nukelab -c "GRANT ALL PRIVILEGES ON DATABASE nukelab TO nukelab;"
-
-# 4. Restore
-docker exec -i nukelab-postgres psql -U nukelab -d nukelab < nukelab-backup-YYYYMMDD.sql
-
-# 5. Ensure partitions exist for current month
+# 3. Ensure partitions exist for the current month
 ./nukelabctl exec backend python scripts/db_profiler.py ensure-partitions --months-ahead 3
 
-# 6. Stamp alembic
-./nukelabctl exec backend python -m alembic stamp 8298b4bb8ada
+# 4. Restart and verify
+./nukelabctl restart
 ```
+
+The restore command creates the database and applies the current image's
+Alembic head, so do not pre-create the database/user with `POSTGRES_*` values.
 
 ### 2.3 Partial Restore (Single Table Recovery)
 
@@ -220,41 +220,36 @@ done
 
 ## 4. Automated Backups
 
-### 4.1 Celery Beat Scheduled Task
+### 4.1 Host Cron or systemd Timer
 
-Add to `app/worker.py` `beat_schedule`:
+The supported backup entry point is `./nukelabctl backup`, which writes to the
+repository's `backups/` directory through the running Postgres container. Run it
+from a host timer, not from a Celery task.
 
-```python
-'daily-backup': {
-    'task': 'app.tasks.run_database_backup',
-    'schedule': crontab(hour=2, minute=0),  # Daily at 2 AM
-},
+```cron
+# /etc/cron.d/nukelab-backup
+0 2 * * * root cd /opt/nukelab && ./nukelabctl backup >> /var/log/nukelab-backup.log 2>&1
 ```
 
-And create the task in `app/tasks.py`:
-
-```python
-@celery_app.task(bind=True)
-def run_database_backup(self):
-    import subprocess
-    from datetime import datetime
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"/backups/nukelab-backup-{timestamp}.sql"
-    result = subprocess.run(
-        ["pg_dump", "-U", "nukelab", "-d", "nukelab", "--clean", "--if-exists"],
-        capture_output=True, text=True,
-    )
-    with open(filename, "w") as f:
-        f.write(result.stdout)
-    return f"Backup saved to {filename} ({len(result.stdout)} bytes)"
-```
+Copy completed dumps off-host with your normal backup tooling. A database dump
+inside the same host failure domain is not sufficient disaster recovery.
 
 ### 4.2 Retention
 
+`./nukelabctl backup` writes `backups/nukelab_backup-*.sql`; pre-migration
+snapshots are `backups/pre-migrate-*.dump`. Retain both patterns and keep an
+off-host copy:
+
 ```bash
-# Keep last 30 days of backups
-find /backups -name "nukelab-backup-*.sql" -mtime +30 -delete
+# Example: keep the last 30 days of routine and pre-migration backups
+find /opt/nukelab/backups -type f \
+  \( -name "nukelab_backup-*.sql" -o -name "pre-migrate-*.dump" \) \
+  -mtime +30 -delete
 ```
+
+User-volume recovery retention is separate and controlled by
+`VOLUME_BACKUP_RETENTION_DAYS` and `VOLUME_BACKUP_MAX_PER_VOLUME` in
+`.env.example`.
 
 ---
 
@@ -265,7 +260,7 @@ After any restore, verify:
 - [ ] `./nukelabctl exec backend python scripts/db_profiler.py table-sizes` shows expected tables
 - [ ] `./nukelabctl exec backend python scripts/db_profiler.py partitions --table activity_logs` shows partitions
 - [ ] Admin monitoring endpoint shows healthy partitions: `curl -s -H "Authorization: Bearer $ADMIN_TOKEN" http://localhost:8080/api/admin/health/monitoring | jq '.system.services.partitions.status'`
-- [ ] `./nukelabctl exec backend alembic current` shows `8298b4bb8ada (head)`
+- [ ] `./nukelabctl exec backend alembic current` shows the current head
 - [ ] Application starts without errors
 - [ ] Login works (verifies users table)
 - [ ] Server list loads (verifies servers + cache)

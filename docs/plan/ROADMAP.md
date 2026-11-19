@@ -2,7 +2,7 @@
 
 **Status**: Phases 1–5 and 7–10 delivered; phase 6 remains Partial. Docker/Podman hardening is implemented; launch readiness requires separate verification.
 
-**Last Updated**: November 18, 2026
+**Last Updated**: November 19, 2026
 
 **Tech Stack**: Vite + React 19 SPA, FastAPI (Python 3.13), PostgreSQL 17, Redis, Traefik v3, Docker/Podman
 
@@ -47,6 +47,7 @@ The capability review below is based on repository inspection, not a fresh test 
 - **Frontend Test CI** — Required Vitest, Vite-only mocked-browser, disposable real-stack and workspace/IDE browser jobs block image publication
 - **Combined Recovery Acceptance** — A real-runtime Playwright scenario covers approved provenance A, offline volume backup/restore, queued recreation with capacity wait, owner privacy, identity checks and a corrupted-artifact failure drill
 - **Upgrade Recovery Foundations** — Pre-migration database snapshots and backend schema-compatibility guard
+- **Admin Catalog Setup** — `/admin/setup` first-run checklist, user-visible seeded plans, last-plan safety guard, and truthful dashboard/deploy prerequisite states
 
 See [IMPLEMENTATION-PHASES.md](IMPLEMENTATION-PHASES.md) for the full phase-by-phase record.
 
@@ -59,7 +60,7 @@ See [IMPLEMENTATION-PHASES.md](IMPLEMENTATION-PHASES.md) for the full phase-by-p
 ## Verification status
 
 - Backend unit/service/API tests and the coverage floor are wired into CI. Real daemon fixtures are separately opt-in with `--run-container-integration`; their presence does not establish browser or production acceptance.
-- Frontend CI runs Vitest and three Playwright selections: Vite-only mocked account-switch specs, real-stack browser flows with a disposable stack, and the workspace/IDE gateway against a locally built environment image. Image publishing depends on those required checks.
+- Frontend CI runs Vitest plus the required Vite-only mocked-browser, disposable real-stack and workspace/IDE gateway browser jobs; the combined provenance/recovery/recreation acceptance run is enabled with `E2E_COMBINED=1`. Image publishing depends on those checks.
 - The combined provenance/offline-recovery/queued-recreation scenario passes against a local disposable Docker stack. Remote GitHub Actions runner validation and worker-crash reconciliation remain release gates.
 - Load-test tooling exists; its presence does not establish current production capacity.
 

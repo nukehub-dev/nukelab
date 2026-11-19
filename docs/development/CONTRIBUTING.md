@@ -10,10 +10,10 @@ Thank you for contributing to NukeLab. This document describes the workflow, con
 
 ## Development workflow
 
-1. Create a feature branch from `develop`:
+1. Create a feature branch from `main`:
 
    ```bash
-   git checkout develop
+   git checkout main
    git pull
    git checkout -b feature/your-feature-name
    ```
@@ -32,7 +32,7 @@ Thank you for contributing to NukeLab. This document describes the workflow, con
 
 5. Commit with a clear message explaining what changed and why.
 
-6. Push and open a pull request against `develop`.
+6. Push and open a pull request against `main`.
 
 ## Code conventions
 
@@ -48,7 +48,7 @@ Thank you for contributing to NukeLab. This document describes the workflow, con
 
 ### Frontend (TypeScript / React)
 
-- Node.js 22+
+- Node.js 24+
 - Format and lint with the project's `npm run lint` and `npm run format:check`
 - Use TanStack Router for routes and TanStack Query for server state
 - Keep components focused; lift shared logic into hooks
@@ -56,11 +56,14 @@ Thank you for contributing to NukeLab. This document describes the workflow, con
 
 ### Shell scripts
 
-- Run `shellcheck` and `shfmt`
-- Prefer `#!/usr/bin/env bash`
-- Use `set -euo pipefail` and `IFS=$'\n\t'`
-- Source shared helpers from `scripts/lib.sh`
-- Add new `nukelabctl` commands as files under `scripts/manage.d/`
+- Run `shellcheck` and `shfmt` (`./nukelabctl lint shell`).
+- Standalone scripts use `#!/usr/bin/env bash`. Files under `scripts/manage.d/`
+  use `#!/bin/bash` and are sourced by `nukelabctl`; do not add global
+  `set -euo pipefail`, `IFS`, or replacement traps inside them because the
+  dispatcher owns those settings.
+- Source shared helpers from `scripts/lib.sh`.
+- Register new `nukelabctl` commands in the dispatcher, help text and
+  bash-completion file, not just under `scripts/manage.d/`.
 
 ## Documentation
 
@@ -95,10 +98,11 @@ CI runs four non-overlapping browser selections: `@vite-only` account-switch
 specs against Vite with mocked HTTP, ordinary real-stack specs against a
 disposable production build, the `@workspace` IDE gateway spec against a locally
 built workspace image, and the `@combined` provenance/recovery/recreation
-scenario with `E2E_COMBINED=1`. For a local disposable stack, use:
+scenario with `E2E_COMBINED=1`. For a local disposable stack, stop the dev stack
+first (dev and production share container names), then build/start:
 
 ```bash
-./nukelabctl --skip-port-check build env base
+./nukelabctl dev stop
 ./scripts/ci/e2e-stack.sh build
 ./scripts/ci/e2e-stack.sh start
 ./scripts/ci/e2e-stack.sh wait
@@ -107,8 +111,12 @@ E2E_EXTERNAL_SERVER=1 BASE_URL=http://127.0.0.1:8080 \
 E2E_RUNTIME_IMAGE=nukelab-e2e-runtime:a npx playwright test --grep-invert "@workspace|@vite-only"
 ```
 
-Stop the stack with `./scripts/ci/e2e-stack.sh stop`. External mode must use
-`E2E_EXTERNAL_SERVER=1` so Playwright does not also start Vite.
+The combined scenario additionally needs `E2E_COMBINED=1`, the
+`VOLUME_BACKUP_*` helper/storage settings, and a helper-readable backup
+directory owned by UID 65532. Stop the stack with
+`./scripts/ci/e2e-stack.sh stop`. External mode must use
+`E2E_EXTERNAL_SERVER=1` so Playwright does not also start Vite. See
+`scripts/ci/AGENTS.md` for the stack contract.
 
 ### Security regression tests
 
@@ -130,9 +138,10 @@ Add support for custom server idle timeouts
 
 ## Pull request checklist
 
-- [ ] Branch is based on the latest `develop`
+- [ ] Branch is based on the latest `main`
 - [ ] `lint all` passes
 - [ ] `test all` passes (or failing tests are unrelated and noted)
+- [ ] Frontend browser tests pass for changed UI flows (or the relevant CI job is noted)
 - [ ] `selftest` passes
 - [ ] Documentation updated for user-facing or architectural changes
 - [ ] No secrets, credentials, or personal data committed

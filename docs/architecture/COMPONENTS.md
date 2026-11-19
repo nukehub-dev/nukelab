@@ -9,12 +9,14 @@ This document describes the major runtime components, their responsibilities, an
 | Reverse proxy | Traefik v3 | Dynamic routing, TLS termination, WebSocket proxying, rate limiting |
 | Frontend | Vite + React 19 SPA | Dashboard, user portal, real-time monitoring UI |
 | Backend API | FastAPI (Python 3.13) | Auth, user/server/environment/plan management, Docker orchestration, metrics |
-| Container client | Docker SDK via `ContainerClient` | Low-level container operations: create, start, stop, delete, logs, stats |
+| Container runtime driver | `ContainerDriver` ABC + `DockerDriver` (`aiodocker`) | Low-level container operations: create, start, stop, delete, logs, stats; Docker covers Podman-compatible engines |
 | Server spawner | `ServerSpawner` | High-level server lifecycle coordination: volumes, images, labels, readiness |
 | Database | PostgreSQL 17 | Relational data, audit logs, metrics history with partitioning |
-| Cache / queue | Redis | Sessions, pub/sub, Celery broker, response cache, real-time message bus |
+| Cache / queue | Redis | Token denylist/revocation state, pub/sub, Celery broker, response cache, rate limits |
 | Background workers | Celery + Celery Beat | Billing, cleanup, scheduled tasks, notifications, maintenance windows |
 | User environments | NukeIDE (nginx + Theia) | Per-user interactive development environment with JWT proxy |
+| Auth sidecar | Go service on `127.0.0.1:8081` | Validates short-lived RS256 server tokens locally for nginx `auth_request` |
+| Volume recovery helper | Trusted Python helper container | Offline private-volume capture/restore with bounded archive validation |
 | Observability | Prometheus, Grafana, Alertmanager, Jaeger, OTel | Metrics, dashboards, alerts, distributed traces |
 
 ## Interaction matrix
@@ -32,9 +34,9 @@ Browser
   |                   |
   |                   +---> Docker/Podman daemon
   |                          |
-  |                          +---> ContainerClient / ServerSpawner
+  |                          +---> ContainerDriver / ServerSpawner
   |
-  +---> Traefik ---> NukeIDE container ---> nginx auth proxy ---> Theia
+  +---> Traefik ---> NukeIDE container ---> nginx auth sidecar ---> Theia
 ```
 
 ## Per-component responsibilities
@@ -43,7 +45,7 @@ Browser
 
 - Routes `/*` to the frontend container
 - Routes `/api/*` and `/ws` to the FastAPI backend
-- Discovers and routes `/user/{username}/{server_id}` to spawned user containers via Docker labels
+- Discovers and routes `/user/{username}/{server_name}` to spawned user containers via Docker labels
 - Terminates TLS (when configured)
 - Applies rate limits and security headers
 
@@ -61,18 +63,21 @@ Browser
 - Validates JWT access tokens signed with EdDSA (Ed25519)
 - Enforces RBAC through role and permission checks
 - Handles server spawn/start/stop/restart/delete requests
+- Owns durable queue admission, fenced lifecycle reservations, saved launch provenance and private-volume recovery workflows
 - Manages users, environments, plans, credits, quotas, workspaces, volumes, and notifications
 - Writes audit logs and request metrics
 - Exposes Prometheus metrics at `/api/metrics` when enabled
 - Implements graceful shutdown via `ShutdownCoordinator`
 
-### ContainerClient
+### Container runtime driver
 
-Location: `backend/app/container/client.py`
+Locations: `backend/app/container/driver.py`, `docker_driver.py`,
+`factory.py`. `client.py` is a backward-compatibility shim, not the runtime
+abstraction.
 
 Responsibilities:
 
-- Connect to the Docker/Podman socket
+- Connect to the Docker/Podman socket through `aiodocker`
 - Pull images
 - Create containers with cgroup limits, volume mounts, security options, and Traefik labels
 - Start, stop, and delete containers
@@ -80,6 +85,7 @@ Responsibilities:
 - Stream and fetch container logs
 - Collect container stats for metrics
 - Manage lxcfs mounts and CPU visibility helpers
+- Keep runtime failures explicit; stop/delete paths never report false success
 
 ### ServerSpawner
 
@@ -93,6 +99,38 @@ Responsibilities:
 - Generate container names and external URLs
 - Attach Traefik routing labels
 - Handle start/stop/delete lifecycle transitions and cleanup
+
+### Queue, provenance and recovery services
+
+Locations: `backend/app/services/server_queue_service.py`,
+`server_queue_dispatch_service.py`, `server_launch_service.py`,
+`server_launch_validation.py`, `server_lifecycle_service.py`,
+`server_provenance_service.py`, `server_recreation_service.py`,
+`volume_operation_service.py`, `volume_backup_service.py`,
+`volume_recovery_runtime.py`.
+
+Responsibilities:
+
+- Admit owner queue requests under resource-pool limits and dispatch bounded
+  batches with deterministic priority ordering.
+- Persist launch and lifecycle intent before runtime I/O, fence stale
+  generations, and retain reservations for uncertain outcomes.
+- Record the verified launch revision and sanitized manifest, and validate
+  recreation/import against current authorization and catalog state.
+- Capture and restore private volume archives through the trusted helper with
+  storage budgets, retention pins and writer exclusion.
+
+### Volume recovery helper
+
+Location: `services/volume-helper/helper.py`.
+
+Responsibilities:
+
+- Run as a hardened, non-root helper with no host capabilities.
+- Perform bounded archive validation and capture/restore only after the backend
+  authorizes the operation and excludes writers.
+- Restore into fresh volumes without overwriting source data or exposing source
+  volume identifiers.
 
 ### PostgreSQL
 
@@ -121,15 +159,18 @@ Responsibilities:
 - Process scheduled server start/stop actions
 - Send notifications (in-app, email, WebSocket)
 - Execute maintenance window enable/disable
-- Run periodic cleanup and health tasks
+- Dispatch durable queue batches and reconcile expired or uncertain launches
+- Run periodic cleanup, recovery retention and health tasks
 
 ### NukeIDE container
 
 Responsibilities:
 
 - Provide an interactive IDE (Theia) per user server
-- Validate server-scoped tokens in an nginx auth proxy
-- Enforce that only the owning user (or authorized support/admin) can access the IDE
+- Run nginx on port 8080 and validate server-scoped tokens through the local Go
+  auth sidecar on port 8081
+- Enforce that only the owning user (or a role with `servers:access_others`) can
+  access the IDE
 - Report container health to the backend
 
 ## Deployment overlays
@@ -138,7 +179,8 @@ Optional compose overlays extend the core stack:
 
 | Overlay file | Adds |
 |---|---|
-| `compose.monitoring.yml` | Prometheus, Grafana, Alertmanager, exporters |
+| `compose.monitoring.yml` | Prometheus, Grafana and exporters |
+| `compose.alertmanager.yml` | Alertmanager and its Traefik route |
 | `compose.pgbouncer.yml` | PgBouncer connection pooler |
 | `compose.monitoring-pgbouncer.yml` | PgBouncer metrics exporter |
 | `compose.tracing.yml` | OpenTelemetry collector and Jaeger |

@@ -15,7 +15,9 @@ monitoring, credit-based resource management, and dynamic container orchestratio
 
 ## Quick Start
 
-Requires Docker or Podman, compose, and Git.
+Requires Docker or Podman, compose, and Git. The hot-reload development stack
+additionally needs Node.js 24+ and npm; run `./nukelabctl install frontend`
+before `./nukelabctl dev`.
 
 ```bash
 git clone https://github.com/nukehub-dev/nukelab.git
@@ -34,9 +36,14 @@ After start:
 
 Default development login: `admin` / `admin123`.
 
+On a fresh install, sign in as an administrator and open **Administration →
+Setup** (`/admin/setup`) to publish an active public environment and make at
+least one plan available to users before deploying.
+
 For hot-reload development:
 
 ```bash
+./nukelabctl install frontend
 ./nukelabctl dev
 ```
 
@@ -55,13 +62,13 @@ for component responsibilities.
 | System overview and request flows | [docs/architecture/OVERVIEW.md](docs/architecture/OVERVIEW.md) |
 | Component responsibilities | [docs/architecture/COMPONENTS.md](docs/architecture/COMPONENTS.md) |
 | Authentication and authorization | [docs/architecture/AUTH.md](docs/architecture/AUTH.md) |
-| Server spawn/start/stop/delete lifecycle | [docs/architecture/SERVER-LIFECYCLE.md](docs/architecture/SERVER-LIFECYCLE.md) |
+| Queue, lifecycle, provenance and recreation | [docs/architecture/SERVER-LIFECYCLE.md](docs/architecture/SERVER-LIFECYCLE.md) |
 | Core data model | [docs/architecture/DATA-MODEL.md](docs/architecture/DATA-MODEL.md) |
 | Local development | [docs/development/LOCAL-DEV.md](docs/development/LOCAL-DEV.md) |
 | Contributing guidelines | [docs/development/CONTRIBUTING.md](docs/development/CONTRIBUTING.md) |
-| Operations (DB, backups, scaling) | [docs/operations/OPERATIONS.md](docs/operations/OPERATIONS.md) |
+| Operations (first-run setup, DB, backups, scaling) | [docs/operations/OPERATIONS.md](docs/operations/OPERATIONS.md) |
 | Production deployment | [docs/operations/PRODUCTION-DEPLOYMENT.md](docs/operations/PRODUCTION-DEPLOYMENT.md) |
-| Backup and restore | [docs/operations/BACKUP-RESTORE.md](docs/operations/BACKUP-RESTORE.md) |
+| Database and private-volume backup/restore | [docs/operations/BACKUP-RESTORE.md](docs/operations/BACKUP-RESTORE.md) |
 | Monitoring and observability | [docs/architecture/MONITORING.md](docs/architecture/MONITORING.md) |
 | Security test plans and findings | [docs/security/](docs/security/) |
 | Environment variables | [docs/reference/ENV-VARS.md](docs/reference/ENV-VARS.md) |

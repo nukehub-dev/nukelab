@@ -9,14 +9,98 @@ This guide covers configuring NukeLab for production environments where users mu
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [Cgroup Controllers](#cgroup-controllers)
-3. [lxcfs (Cgroup-Aware /proc)](#lxcfs)
-4. [Storage Quotas](#storage-quotas)
-5. [Docker vs Podman](#docker-vs-podman)
-6. [Verification](#verification)
-7. [Troubleshooting](#troubleshooting)
+2. [Prepare the production environment](#prepare-the-production-environment)
+3. [Deploying from the GitHub Container Registry](#deploying-from-the-github-container-registry)
+4. [Upgrade runbook](#upgrade-runbook)
+5. [Rollback runbook](#rollback-runbook)
+6. [Private volume recovery](#private-volume-recovery)
+7. [Cgroup Controllers](#cgroup-controllers)
+8. [lxcfs (Cgroup-Aware /proc)](#lxcfs)
+9. [Storage Quotas](#storage-quotas)
+10. [Docker vs Podman](#docker-vs-podman)
+11. [Verification](#verification)
+12. [Troubleshooting](#troubleshooting)
+13. [Traefik Security Hardening](#traefik-security-hardening)
+14. [Quick Production Checklist](#quick-production-checklist)
 
 ---
+
+## Prepare the production environment
+
+Start from `.env.example`, but do not deploy its development defaults. At
+minimum set:
+
+```env
+APP_ENV=production
+DEV_MODE=false
+APP_URL=https://lab.example.com
+CORS_ORIGINS=https://lab.example.com
+SESSION_SECURE=true
+AUTO_CREATE_TABLES=false
+DB_SCHEMA_GUARD=auto
+JWT_SECRET=<strong-random-secret>
+SESSION_SECRET=<strong-random-secret>
+DATABASE_PASSWORD=<strong-database-password>
+```
+
+Remove or rotate the development admin credentials and initialize the user-auth
+signing keys with `./nukelabctl init-user-auth-keys` before opening the platform
+to users. The dev admin (`DEV_ADMIN_USER` / `DEV_ADMIN_PASSWORD`) is only seeded
+when `DEV_MODE=true`; do not enable it in production.
+
+On a brand-new database, start the backend once and apply migrations before
+exposing traffic:
+
+```bash
+./nukelabctl start backend
+./nukelabctl db-migrate
+./nukelabctl restart
+```
+
+A fresh `DEV_MODE=false` install has no administrator. After the backend is
+running, create the first one with a one-off command and change its password
+after the first login:
+
+```bash
+./nukelabctl shell backend
+python - <<'PY'
+import asyncio
+import getpass
+
+from sqlalchemy import select
+
+from app.api.auth import get_password_hash
+from app.db.session import AsyncSessionLocal
+from app.models.user import User
+
+async def main() -> None:
+    username = input("Admin username: ").strip()
+    email = input("Admin email: ").strip()
+    password = getpass.getpass("Admin password: ")
+    async with AsyncSessionLocal() as db:
+        if await db.scalar(select(User).where(User.username == username)):
+            raise SystemExit("User already exists")
+        db.add(
+            User(
+                username=username,
+                email=email,
+                password_hash=get_password_hash(password),
+                role="admin",
+                is_active=True,
+                is_verified=True,
+                nuke_balance=10000,
+                daily_allowance=1000,
+            )
+        )
+        await db.commit()
+        print("Administrator created")
+
+asyncio.run(main())
+PY
+```
+
+See [USER-AUTH-KEYS.md](../security/USER-AUTH-KEYS.md) for key provisioning and
+[ENV-VARS.md](../reference/ENV-VARS.md) for the full environment reference.
 
 ## Overview
 
@@ -63,7 +147,7 @@ Container Registry instead:
    instead of rebuilding:
 
    ```bash
-   ./nukelabctl up prod
+   ./nukelabctl start
    ./nukelabctl update
    ```
 
@@ -79,6 +163,74 @@ When neither variable is pinned, deploys keep the source-build behavior.
 
 ---
 
+## Upgrade runbook
+
+1. Pin the new release and pull/build its images:
+
+   ```bash
+   ./nukelabctl update
+   ```
+
+2. Stop the old workers and Beat before running the schema migration. Use the
+   compose command for your engine, keeping the `nukelab` project/env:
+
+   ```bash
+   docker compose --env-file .env stop celery-worker celery-beat
+   # Podman: podman-compose --env-file .env stop celery-worker celery-beat
+   ```
+
+   Follow the lifecycle-journal drain requirements in
+   [OPERATIONS.md](OPERATIONS.md#lifecycle-journal-upgrades-and-uncertain-operations).
+   Old and new workers must not process the same durable queue/lifecycle schema
+   concurrently.
+
+3. Recreate only the backend from the new image so `db-migrate` uses the new
+   Alembic scripts, then take the snapshot and migrate:
+
+   ```bash
+   docker compose --env-file .env up -d --no-deps backend
+   ./nukelabctl db-migrate
+   ```
+
+   Include any enabled Compose overlays (`-f`/`COMPOSE_FILE`) so the recreated
+   backend uses the same environment. Keep `AUTO_CREATE_TABLES=false`; schema
+   changes are applied explicitly.
+
+4. Restart the API, workers and Beat together so they run the same image and
+   schema:
+
+   ```bash
+   ./nukelabctl restart
+   ```
+
+5. Verify `/api/health`, the admin setup checklist, and that no lifecycle
+   operation remains uncertain before resuming normal traffic.
+
+---
+
+## Private volume recovery
+
+Owner-scoped offline volume backup/restore is optional. It stays disabled until
+an operator configures a private host path and a trusted helper image:
+
+```env
+VOLUME_BACKUP_HOST_PATH=/srv/nukelab/volume-backups
+VOLUME_BACKUP_STORAGE_PATH=/var/lib/nukelab/volume-backups
+VOLUME_BACKUP_HELPER_IMAGE=ghcr.io/nukehub-dev/nukelab-volume-helper:<version>
+```
+
+`VOLUME_BACKUP_HOST_PATH` is the daemon-host path; `VOLUME_BACKUP_STORAGE_PATH`
+is the path inside the API and worker containers. Both must refer to the same
+bind mount. The helper image is built and published with the release images; a
+pull-based deployment can pin a specific tag.
+
+Recovery history remains readable when the configuration is missing, but
+backup and restore mutations are disabled. Storage budgets, retention and
+restore procedures are documented in
+[BACKUP-RESTORE.md](BACKUP-RESTORE.md#private-user-volume-recovery).
+
+---
+
 ## Rollback runbook
 
 Rolling back to a previous release is safe only when the database schema is
@@ -89,31 +241,37 @@ the failed upgrade.
 1. Pin the previous release in `.env`:
 
    ```env
-   NUKELAB_VERSION=2.0.0
+   NUKELAB_VERSION=<previous-version>
    ```
 
-2. Pull and restart the old images:
+2. Pull or rebuild the previous images. `update` does not recreate the running
+   containers:
 
    ```bash
    ./nukelabctl update
    ```
 
-3. Restore the pre-migration snapshot (taken automatically by `db-migrate`):
+3. Stop workers/Beat and place the API in maintenance mode before restoring.
+   Keep Postgres and the backend container running because `restore` uses the
+   backend image for the Alembic stamp.
+
+4. Restore the pre-migration snapshot and stamp the revision recorded in its
+   filename. The snapshot name is
+   `pre-migrate-<version>-<previous-revision>-<timestamp>.dump`:
 
    ```bash
-   ./nukelabctl restore backups/pre-migrate-2.1.0-<revision>-<timestamp>.dump
+   ./nukelabctl restore --yes --stamp <previous-revision> \
+     backups/pre-migrate-<previous-version>-<previous-revision>-<timestamp>.dump
    ```
 
-   Use `--yes` to skip the confirmation prompt in automation:
+   `--stamp` matters for rollback: the default `head` would label the restored
+   old schema with the newer image's head and make the old image fail the
+   startup schema guard.
+
+5. Restart the full stack so the API and workers boot from the pinned old image:
 
    ```bash
-   ./nukelabctl restore --yes backups/pre-migrate-2.1.0-<revision>-<timestamp>.dump
-   ```
-
-4. Restart the backend so it boots against the restored schema:
-
-   ```bash
-   ./nukelabctl restart backend
+   ./nukelabctl restart
    ```
 
 The backend startup guard refuses to boot an old image on a newer schema: if
@@ -234,9 +392,11 @@ services:
   backend:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./backend:/app:Z
       - /var/lib/lxcfs:/var/lib/lxcfs:ro  # <-- Add this
 ```
+
+Do not bind `./backend:/app` in production; that source mount belongs only to the
+development overlay and would shadow the built image.
 
 **NukeLab backend automatically detects lxcfs** and mounts these files into each user server container:
 
@@ -325,9 +485,9 @@ The device is mounted read-only into the backend and celery-worker containers vi
 NukeLab's XFS project quota service needs `xfsprogs` (`xfs_quota`, `xfs_io`) inside the backend container. The backend `Dockerfile` installs it; rebuild the image after pulling the change:
 
 ```bash
-./nukelabctl down
+./nukelabctl stop
 ./nukelabctl build backend
-./nukelabctl up prod
+./nukelabctl start
 ```
 
 ### ZFS
@@ -710,7 +870,6 @@ The `security-headers@file` middleware adds:
 - `Strict-Transport-Security` (HSTS, 1 year, includeSubDomains, preload)
 - `X-Frame-Options: SAMEORIGIN`
 - `X-Content-Type-Options: nosniff`
-- `X-XSS-Protection: 1; mode=block`
 - `Referrer-Policy: strict-origin-when-cross-origin`
 - `Permissions-Policy` (disables unused browser features)
 - `Server: NukeLab` (replaces fingerprinting header)
@@ -779,20 +938,22 @@ The `csp-header-strict@file` middleware removes `'unsafe-eval'` from `script-src
 To avoid HSTS lock-in while testing HTTPS:
 
 1. Set `forceSTSHeader: false` in `infrastructure/traefik/dynamic/middlewares.yml`
-2. Restart Traefik: `./nukelabctl restart traefik`
+2. Traefik's file provider reloads dynamic middleware changes automatically; no
+   restart is required.
 
 Once your TLS certificate is working, re-enable it.
 
 #### Traefik Dashboard in Production
 
-The Traefik dashboard (`api.insecure: true`) is enabled for development. **In production**, either:
-
-- Disable it entirely in `infrastructure/traefik/traefik.yml`
-- Or protect it behind an IP allowlist + basic-auth middleware
+The static Traefik configuration does not enable the dashboard or
+`api.insecure`. If you enable it for an environment, protect or disable it before
+production; do not expose the dashboard publicly.
 
 ### Admin Panel IP Allowlist
 
-The `admin-allowlist@file` middleware restricts access to `/admin` and `/api/admin/*` to private network ranges by default. **Override this in production** by editing `infrastructure/traefik/dynamic/middlewares.yml`:
+The `admin-allowlist@file` middleware is defined but not attached to a router by
+default. To restrict `/api/admin/*`, opt in by editing
+`infrastructure/traefik/dynamic/middlewares.yml` and adding the router labels:
 
 ```yaml
 admin-allowlist:
@@ -863,6 +1024,14 @@ done
 
 ## Quick Production Checklist
 
+- [ ] Release version pinned (`NUKELAB_VERSION` / `NUKELAB_IMAGE_TAG`) or a source tag available
+- [ ] User-auth signing keys initialized (`./nukelabctl init-user-auth-keys`)
+- [ ] Database migration snapshot and schema guard understood before upgrading
+- [ ] Admin setup checklist complete (`/admin/setup`)
+- [ ] Frontend unit/browser CI gates passed (see [CONTRIBUTING.md](../development/CONTRIBUTING.md))
+- [ ] Private volume recovery storage and helper configured, if used
+- [ ] Resource pools sized for the host (`RESOURCE_POOL_*`, `GPU_DEVICES`)
+- [ ] `celery-worker` and `celery-beat` healthy; queue/Beat intervals reviewed
 - [ ] Cgroup controllers enabled (`cpuset cpu memory`)
 - [ ] lxcfs installed and running
 - [ ] lxcfs mounted into backend container
@@ -874,7 +1043,7 @@ done
 - [ ] Storage quotas enforced (check with `podman inspect`)
 - [ ] Traefik DDoS protection active (very high thresholds — test with `ab -n 20000`)
 - [ ] FastAPI per-user rate limiting active (test authenticated user at tier limit)
-- [ ] Admin IP allowlist restricted to office/VPN ranges
+- [ ] Admin IP allowlist middleware attached, if used
 - [ ] HSTS headers present (`curl -I https://your-domain`)
 
 ---

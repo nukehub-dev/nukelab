@@ -3,11 +3,22 @@
 Release images are published as
 `ghcr.io/nukehub-dev/nukelab-volume-helper:<version>` (and `latest`). Pin
 `VOLUME_BACKUP_HELPER_IMAGE` to that reference for pull-based deployments, or
-build locally from the repository root:
+build locally with the CI helper, which applies the correct per-Dockerfile
+ignore handling for Docker and Podman:
+
+```bash
+./scripts/ci/e2e-stack.sh build
+```
+
+For a manual Docker/BuildKit build from the repository root:
 
 ```bash
 docker build -f services/volume-helper/Dockerfile -t nukelab-volume-helper:latest .
 ```
+
+On Podman versions that support it, add
+`--ignorefile services/volume-helper/Dockerfile.dockerignore` to keep the build
+context limited to the reviewed helper and archive sources.
 
 The backend resolves this trusted image to an immutable local ID before use.
 The runtime supplies fixed mounts, UUID operation identities, bounded limits and

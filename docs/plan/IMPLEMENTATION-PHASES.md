@@ -2,7 +2,7 @@
 
 This document records the original v2.0 implementation plan and current delivery status. Phases 1–5 and 7–10 are complete. Phase 6 (Kubernetes/production hardening) remains partially deferred.
 
-**Last code review:** November 15, 2026. This review checked the capabilities below against source code; it did not rerun tests, benchmarks, or a production deployment. See [ROADMAP.md](ROADMAP.md) for the current capability gaps.
+**Last code review:** November 19, 2026. This review checked the capabilities below against the 2.2 branch; it did not rerun benchmarks or a production deployment. See [ROADMAP.md](ROADMAP.md) for the current capability gaps.
 
 ## Phase 1: Foundation & Scaffolding
 
@@ -56,7 +56,7 @@ This document records the original v2.0 implementation plan and current delivery
 - Notification center (20+ types)
 - Maintenance mode
 - Two-layer rate limiting
-- Operator database backup/restore (`scripts/manage.d/backup.sh`, `restore.sh`); user volume backup/restore remains Future (the `VolumeBackup` model and `allow_snapshots` flag are scaffolding only)
+- Operator database backup/restore (`scripts/manage.d/backup.sh`, `restore.sh`); owner-scoped offline private-volume backup/restore with a trusted helper, bounded storage and new-volume restores (`services/volume-helper/`, `volume_backup_service.py`)
 - Bulk operations
 - IP allowlist/blocklist
 - CSRF protection and security headers
@@ -146,8 +146,14 @@ This document records the original v2.0 implementation plan and current delivery
 
 ## Known tech debt
 
-- Queue position: `ResourcePoolService.get_queue_position()` excludes the target entry before searching for it, returning zero; `test_get_queue_position` currently asserts zero. Correct the position contract and regression together before exposing richer queue UX. Status: Future.
-- Queue UX: processing and a status API exist, but no dedicated queue view/cancellation workflow was found in the reviewed frontend/API. Status: Partial.
-- Recovery: database backup/restore is implemented; user volume backup/restore has only model/flag scaffolding. Status: Partial.
+- Remote GitHub Actions validation of the new frontend unit, mocked-browser,
+  disposable real-stack and workspace/IDE jobs is still pending.
+- Worker-crash reconciliation and verified adoption/rejection of
+  `recovery_required` lifecycle records remain release gates.
+- Registry portability and cross-installation approval matching for saved
+  provenance remain open; local runtime acceptance is complete.
+- Automated deployment health verification and traffic cutover/rollback remain
+  future work; tagged images, migration snapshots and the schema guard are in
+  place.
 
 Security findings live in [PENETRATION-TEST-FINDINGS.md](../security/PENETRATION-TEST-FINDINGS.md) and [PENETRATION-TEST-REMEDIATION.md](../security/PENETRATION-TEST-REMEDIATION.md).

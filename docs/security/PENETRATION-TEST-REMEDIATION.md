@@ -1,12 +1,12 @@
 # NukeLab Penetration Test Remediation Tracker
 
-> **Status:** Template — populate during engagement  
+> **Status:** Active — internal findings  
 > **Plan:** `PENETRATION-TEST-PLAN.md`  
 > **Findings:** `PENETRATION-TEST-FINDINGS.md`
 
 ---
 
-## Active Remediations
+## Remediation register
 
 | Finding ID | Title | Owner | Due Date | Status | PR / Commit | Notes |
 |------------|-------|-------|----------|--------|-------------|-------|
@@ -15,13 +15,20 @@
 | PENT-NKL-003 | Container root filesystem is writable | Backend Eng | 2026-06-28 | Closed | `backend/app/container/client.py`, `backend/app/config.py`, `environments/base/nginx.conf` | `ReadonlyRootfs: true` with tmpfs mounts; live retest passed |
 | PENT-NKL-004 | NoNewPrivileges not enforced on containers | Backend Eng | 2026-06-28 | Closed | `backend/app/container/client.py`, `backend/app/config.py` | `SecurityOpt: ["no-new-privileges:true"]` applied when hardening enabled; live retest passed |
 | PENT-NKL-005 | python-socketio DoS via withheld binary attachments | Backend Eng | 2026-06-28 | Closed | `backend/requirements.txt` | Upgraded to `python-socketio==5.16.2`; `./nukelabctl security` passes |
-| PENT-NKL-006 | External base images not pinned by digest | Platform Eng | 2026-06-29 | Closed | `backend/Dockerfile`, `environments/base/Dockerfile`, `frontend/Dockerfile`, `services/auth-sidecar/Dockerfile`, `nukelab-environments/nuclear-base/Dockerfile`, `nukelab-environments/radiation-transport/Dockerfile` | Pinned all external base images by digest; `./nukelabctl security --check-base-images` passes; `.github/workflows/security.yml` enforces pinning in CI |
+| PENT-NKL-006 | External base images not pinned by digest | Platform Eng | 2026-06-29 | Closed | `backend/Dockerfile`, `environments/base/Dockerfile`, `frontend/Dockerfile`, `services/auth-sidecar/Dockerfile`, `services/volume-helper/Dockerfile` | Pinned all external base images by digest; `./nukelabctl security --check-base-images` passes. The optional check is not yet enforced by `.github/workflows/security.yml`. |
 | PENT-NKL-007 | Commits are not cryptographically signed | Platform Eng | 2026-07-12 | Open | `.github/workflows/security.yml` | Enable GPG or SSH commit signing for all maintainers and turn on branch-protection "Require signed commits" for `main`; CI job `signed-commits-check` is included and set to warn-only until enforcement is enabled |
 | PENT-NKL-008 | Auth sidecar ships vulnerable Go runtime and JWT library | Backend Eng | 2026-06-28 | Closed | `services/auth-sidecar/Dockerfile`, `services/auth-sidecar/go.mod` | Upgraded builder to `golang:1.25-alpine` and `golang-jwt/jwt/v5` to v5.2.2; Trivy reports 0 HIGH/CRITICAL findings |
 | PENT-NKL-009 | Auth sidecar mounts wrong server-auth public key volume | Backend Eng | 2026-06-28 | Closed | `backend/app/container/spawner.py`, `backend/tests/container/test_spawner.py` | Mount `nukelab-server-secrets` at `/etc/nukelab/auth`; end-to-end terminal access verified |
 | PENT-NKL-010 | Server gateway page reloads instead of opening terminal | Frontend Eng | 2026-06-28 | Closed | `frontend/src/routes/user.$username.$serverName.tsx`, `frontend/public/sw.js`, `frontend/public/sw.js.tpl` | Open terminal in new tab; bypass `/user/` in service worker; frontend rebuilt and redeployed |
 | PENT-NKL-011 | Backend reports server running before container is ready | Backend Eng | 2026-06-28 | Closed | `backend/app/container/spawner.py`, `backend/app/container/client.py`, `backend/app/config.py`, `backend/tests/container/test_client.py`, `backend/tests/container/test_spawner.py` | Wait for container `/health` before returning `running`; live spawn shows terminal accessible immediately after status flip |
-| PENT-NKL-012 | Shared read-only volumes leak host storage size and usage | Platform Eng | 2026-07-19 | Closed | `environments/base/Dockerfile`, `backend/app/container/docker_driver.py`, `docs/operations/PRODUCTION-DEPLOYMENT.md` | Eliminated the `nukelab-cpu-lib` shared volume by baking `libnukelab_cpu.so` into `nukelab-environment-base`; apply XFS project quota to remaining `nukelab-server-secrets` volume per PRODUCTION-DEPLOYMENT.md, then verify against the finding's retest criteria |
+| PENT-NKL-012 | Shared read-only volumes leak host storage size and usage | Platform Eng | 2026-07-19 | Closed | `environments/base/Dockerfile`, `backend/app/container/docker_driver.py`, `docs/operations/PRODUCTION-DEPLOYMENT.md` | Eliminated the `nukelab-cpu-lib` shared volume by baking `libnukelab_cpu.so` into `nukelab-environment-base`. XFS project quota for the remaining `nukelab-server-secrets` volume is a separate operator hardening recommendation in PRODUCTION-DEPLOYMENT.md, not a reopen condition. |
+| PENT-NKL-013 | User resource stats endpoint missing authorization check | Backend Eng | 2026-07-29 | Closed | `backend/tests/security/test_bola.py`, `backend/tests/api/users/test_user_detail_privacy.py` | Self/authorized roles allowed; other users denied |
+| PENT-NKL-014 | Delayed status observations could invalidate lifecycle reservations | Backend Eng | 2026-11-16 | Retest Ready | `backend/tests/security/test_server_status_fencing.py`, `backend/tests/security/test_health_observation_fencing.py` | Combined runtime retest pending |
+| PENT-NKL-015 | Logout runtime mutations bypassed lifecycle fencing | Backend Eng | 2026-11-16 | Retest Ready | `backend/tests/security/test_logout_lifecycle_fencing.py` | Combined runtime retest pending |
+| PENT-NKL-016 | Recreation preview omitted metadata read authorization | Backend Eng | 2026-11-17 | Closed | `backend/tests/security/test_provenance_recreation.py` | Preview requires read plus manage permission/scope; closed before release |
+| PENT-NKL-017 | Volume deletion mistook runtime failure for absence | Backend Eng | 2026-11-18 | Retest Ready | `backend/tests/security/test_volume_mutation_exclusion.py` | Isolated daemon failure retest remains required |
+| PENT-NKL-018 | Queue-admitted containers bypassed runtime hardening settings | Backend Eng | 2026-11-18 | Retest Ready | `compose.yml`, `frontend/e2e/combined-recovery.spec.ts` | Combined scenario verifies hardening; confirm server-auth/public-URL parity and scheduled/health spawns in the isolated retest |
+| PENT-NKL-019 | Admin bulk lifecycle bypassed cross-user grant and audit | Backend Eng | 2026-11-18 | Retest Ready | `backend/app/api/admin.py`, `backend/tests/security/test_admin_bulk_authorization.py` | Requires `SERVERS_WRITE_ALL`, cross-user reason and audit; limited-admin negative-permission regression is included. Isolated role retest remains required. |
 
 ---
 
@@ -115,7 +122,7 @@ The 339 unsigned commits already on `main` cannot be re-signed without rewriting
 
 ---
 
-**Pending:** PENT-NKL-007 (commit signing). Enable GPG or SSH signing for all maintainers and turn on branch-protection "Require signed commits" for `main`. PENT-NKL-006 (base image digest pinning) is closed and enforced in `.github/workflows/security.yml`.
+**Pending:** PENT-NKL-007 (commit signing process), PENT-NKL-014 and PENT-NKL-015 (combined runtime retest), PENT-NKL-017 (isolated daemon failure retest), PENT-NKL-018 (server-auth/public-URL and scheduled/health spawn parity), and PENT-NKL-019 (isolated limited-admin retest; the negative-permission regression is in place). PENT-NKL-016 and the base-image digest pinning fix are closed; base-image pinning is verified manually and is not yet a blocking CI gate.
 
 ## Lifecycle status observation fencing
 
@@ -138,7 +145,7 @@ in `backend/tests/security/test_provenance_recreation.py`; metadata responses us
 private no-store caching and read-only token eligibility reflects missing manage
 scope. Final recreation rechecks current approval and uses ordinary admission.
 
-### Volume runtime deletion proof
+### Runtime, recovery and authorization retests
 
 | Finding ID | Owner | Status | Evidence / retest |
 |---|---|---|---|

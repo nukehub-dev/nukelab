@@ -30,7 +30,7 @@ tracks GPU usage, and per-server metrics include GPU utilization.
 
 ## Enabling
 
-Set in `.env.production` / `.env.development`:
+Set in `.env` / `.env.development`:
 
 ```bash
 GPU_ENABLED=true

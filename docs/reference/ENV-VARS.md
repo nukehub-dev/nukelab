@@ -23,6 +23,7 @@ Both `.env` and `.env.development` are gitignored. `.env.example` is the only en
 | `APP_URL` | Public application URL |
 | `FRONTEND_URL` | Optional separate frontend URL for Vite dev server |
 | `APP_TIMEZONE` | Default timezone |
+| `API_DOCS_ENABLED` | Serve `/api/docs`, `/api/redoc`, and `/api/openapi.json`; disabled by default in production |
 | `NUKELAB_VERSION` | Version baked into locally built backend images (`APP_VERSION` build arg); defaults to `VERSION` file / git tag. Pinning this switches `nukelabctl` to pull-based deploys |
 | `NUKELAB_IMAGE_TAG` | Exact registry image tag to deploy (`ghcr.io/nukehub-dev/nukelab-backend` / `-frontend`); defaults to the pinned `NUKELAB_VERSION` in pull mode, or `latest` in source-build mode |
 | `NUKELAB_PULL_DEPLOY` | Set automatically by `nukelabctl`: `true` when `NUKELAB_VERSION` or `NUKELAB_IMAGE_TAG` is pinned, otherwise `false` |
@@ -44,6 +45,7 @@ Both `.env` and `.env.development` are gitignored. `.env.example` is the only en
 | `CSRF_PROTECTION_ENABLED` | Enable double-submit CSRF protection |
 | `CORS_ORIGINS` | Comma-separated allowed origins |
 | `CORS_ALLOW_CREDENTIALS` | Allow cookies across origins |
+| `CONTAINER_HARDENING_ENABLED` | Harden spawned server containers (non-root, no capabilities, read-only rootfs, no-new-privileges); defaults on outside dev mode |
 
 ### Rate Limiting
 
@@ -88,6 +90,8 @@ local-only.
 | `DATABASE_POOL_SIZE` / `DATABASE_POOL_MAX_OVERFLOW` / `DATABASE_POOL_TIMEOUT` / `DATABASE_POOL_RECYCLE` / `DATABASE_POOL_PRE_PING` | SQLAlchemy pool settings |
 | `DATABASE_QUERY_TIMEOUT_SECONDS` | Query abort threshold |
 | `DATABASE_ECHO` | Log all SQL |
+| `AUTO_CREATE_TABLES` | Create missing tables at startup for local development; set `false` in production and use `db-migrate` |
+| `DB_SCHEMA_GUARD` | `auto` (enforce in production, warn elsewhere), `enforce`, or `off` |
 | `OBSERVABILITY_SLOW_QUERY_THRESHOLD_MS` | Slow query log threshold |
 | `OBSERVABILITY_PG_STAT_STATEMENTS_ENABLED` | Track statements with pg_stat_statements |
 
@@ -115,6 +119,14 @@ local-only.
 | Variable | Description |
 |---|---|
 | `VITE_CDN_URL` | Optional CDN origin for static JS/CSS assets |
+| `VITE_ENABLE_PUSH_IN_DEV` | Register the push service worker while running Vite locally |
+
+### Web push
+
+| Variable | Description |
+|---|---|
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | VAPID key pair for browser push notifications |
+| `VAPID_SUBJECT` | `mailto:` or `https://` contact for the push subscription |
 
 ### Docker / Podman
 
@@ -131,7 +143,38 @@ local-only.
 | `GPU_ENABLED` | Enable NVIDIA GPU passthrough for user servers (see `docs/operations/GPU-SETUP.md`) |
 | `GPU_CDI_DEVICE` | CDI device spec used on Podman when `GPU_DEVICES` is empty (default `nvidia.com/gpu=all`) |
 | `GPU_DEVICES` | Comma-separated CDI device pool for exclusive GPU assignment (e.g. `nvidia.com/gpu=0,nvidia.com/gpu=1`); empty = shared mode |
+| `RESOURCE_POOL_CPU` | Allocatable CPU units for admitted servers |
+| `RESOURCE_POOL_MEMORY_MIB` | Allocatable memory in MiB |
+| `RESOURCE_POOL_DISK_MIB` | Allocatable disk in MiB |
+| `SERVER_LAUNCH_TIMEOUT_SECONDS` | Deadline for reserved launches and long-running lifecycle/recovery worker operations |
+| `QUEUE_DISPATCH_BATCH_SIZE` | Maximum queued requests a worker evaluates per batch |
+| `QUEUE_TICK_SECONDS` | Celery Beat interval for queue-dispatch ticks |
+| `QUEUE_TIMEOUT_SECONDS` | Maximum age of a waiting request before expiry |
+| `QUEUE_MAX_PENDING_PER_OWNER` | Maximum simultaneous pending requests per owner |
+| `QUEUE_MAX_PENDING_TOTAL` | Maximum simultaneous pending requests platform-wide |
 | `UPLOAD_DIR` | Container path for uploads |
+
+Waiting queue requests do not reserve compute from the resource pools. The
+values must reflect the actual host capacity available to NukeLab.
+
+### Volume recovery
+
+| Variable | Description |
+|---|---|
+| `VOLUME_BACKUP_HOST_PATH` | Absolute host path used by the trusted helper for private offline backups; empty disables recovery mutations |
+| `VOLUME_BACKUP_STORAGE_PATH` | Path inside API/worker containers that maps to the same bind mount |
+| `VOLUME_BACKUP_HELPER_IMAGE` | Trusted helper image; defaults to `nukelab-volume-helper:latest` |
+| `VOLUME_BACKUP_RETENTION_DAYS` | Age-based backup retention window |
+| `VOLUME_BACKUP_MAX_PER_VOLUME` | Maximum retained backups per volume |
+| `VOLUME_BACKUP_MAX_OWNER_BYTES` | Per-owner backup storage budget |
+| `VOLUME_BACKUP_MAX_TOTAL_BYTES` | Platform-wide backup storage budget |
+| `VOLUME_BACKUP_MAX_LOGICAL_BYTES` | Maximum logical size of one backup archive |
+| `VOLUME_BACKUP_MAX_MEMBERS` | Maximum number of archive members |
+| `VOLUME_BACKUP_TIMEOUT_SECONDS` | Helper operation timeout |
+
+Recovery requires the helper image and both storage paths to be configured;
+otherwise owner history remains readable but backup/restore actions are
+disabled. See [BACKUP-RESTORE.md](../operations/BACKUP-RESTORE.md).
 
 ### Server container authentication
 
@@ -143,14 +186,34 @@ local-only.
 | `SERVER_AUTH_KEY_ALGORITHM` | `RS256` or `ES256` |
 | `SERVER_AUTH_KEY_ROTATION_DAYS` | Automatic key rotation interval |
 | `SERVER_AUTH_MAX_TOKENS_PER_MINUTE` | Rate limit for server token issuance |
+| `SERVER_AUTH_AUDIT_LOG` | Record server-token issuance and access decisions in the audit log |
+
+### Credits
+
+| Variable | Description |
+|---|---|
+| `CREDITS_ENABLED` | Bill server usage with the NUKE credit system |
+| `CREDITS_INITIAL_BALANCE` | Balance granted to new users |
+| `CREDITS_DAILY_ALLOWANCE` | Default daily allowance for active users |
+| `CREDITS_MAX_BALANCE` | Maximum balance; `0` for unlimited |
+| `CREDITS_ROLLOVER` | Roll unused daily allowance into the next day |
+| `CREDITS_DAILY_ALLOWANCE_LOGIN_WINDOW_HOURS` | Required recent-login window for the daily allowance |
+
+### Maintenance
+
+| Variable | Description |
+|---|---|
+| `MAINTENANCE_MODE` | Reject normal requests with the maintenance response |
+| `MAINTENANCE_MESSAGE` | Message shown while maintenance mode is enabled |
 
 ### Monitoring
 
 | Variable | Description |
 |---|---|
-| `PROMETHEUS_ENABLED` | Expose `/api/metrics` |
-| `GRAFANA_ENABLED` | Start Grafana container |
-| `REQUEST_METRICS_STORE` | `prometheus`, `database`, or `both` |
+| `PROMETHEUS_ENABLED` | Expose `/api/metrics` and start the Prometheus overlay |
+| `GRAFANA_ENABLED` | Start the Grafana overlay |
+| `REQUEST_METRICS_ENABLED` | Enable request-metrics middleware |
+| `REQUEST_METRICS_STORE` | `db`, `prometheus`, or `both` |
 
 See `.env.example` for the full list, defaults, and inline documentation.
 

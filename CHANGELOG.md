@@ -28,11 +28,9 @@ section.
 - The trusted volume helper is built, scanned, version-tagged and published as
   `ghcr.io/nukehub-dev/nukelab-volume-helper`; `pull`/`update` fetch an explicitly
   configured remote helper image.
-
 - Owner-scoped offline private-volume backups and restore into new private volumes,
   with bounded storage, retention, protected recovery history and capability-gated UI.
   Requires an operator-configured private artifact bind and trusted local helper image.
-
 - Saved launch provenance and sanitized environment export, with owner recreation
   and manifest import through currently approved revisions, plans and explicit
   volume choices. The UI shows the last verified launch and local-only limits.
@@ -63,7 +61,7 @@ section.
 
 ### Changed
 
-- The 2.2 waiting-request, environment-provenance and volume-recovery surfaces
+- The new waiting-request, environment-provenance and volume-recovery surfaces
   now follow the platform's bubble cards, semantic status pills, compact
   metadata, responsive drawers and mobile layouts.
 - Volume recovery history uses full-width Backups/Restores tabs, opens
@@ -79,6 +77,9 @@ section.
   same server-start event.
 - Admin deep links and refreshes wait for the first profile fetch instead of
   redirecting to the dashboard while the persisted auth store is still empty.
+- `./nukelabctl restore` accepts `--stamp <revision>` so a pre-migration rollback
+  snapshot is stamped with the previous release's Alembic head instead of the
+  running image's head. Compose now passes `DB_SCHEMA_GUARD` from `.env`.
 - Queue-, schedule- and health-admitted servers now receive the same container
   hardening, server-auth, public URL and runtime settings as API-created
   servers; the Celery worker no longer silently spawns unhardened runtimes.
@@ -104,7 +105,6 @@ section.
 - Runtime volume data ignores no longer hide volume API regression tests.
 - Backup retention skips active restore pins and unsupported artifacts before
   applying its batch limit, so older pinned copies cannot block later cleanup.
-
 - Recreation preview requires read and manage permissions/scopes so management
   tokens cannot read saved manifests through a metadata preview.
 - Data mounts cannot shadow platform security paths or approved toolchain roots.
@@ -126,14 +126,16 @@ section.
 ### Added
 
 - Pull-based production deploys: pin `NUKELAB_VERSION` or `NUKELAB_IMAGE_TAG`
-  to switch `nukelabctl up` / `update` from source builds to pulling tagged
+  to switch `nukelabctl start` / `update` from source builds to pulling tagged
   `ghcr.io/nukehub-dev/nukelab-backend` and `-frontend` images. The three
   backend services share one backend image; `update --build` forces a source
   rebuild even in pull mode. Unpinned deploys keep today's source-build
   behavior.
 - Release versioning: git tags (`vX.Y.Z`) are the single source of truth.
-  `scripts/bump-version.sh` syncs the version across `VERSION`,
-  `backend/app/version.py`, `frontend/package.json`, and this changelog.
+  `scripts/bump-version.sh` syncs `VERSION`, `frontend/package.json`,
+  `frontend/package-lock.json`, and this changelog. The backend version stays
+  dynamic through `APP_VERSION`; `backend/app/version.py` remains the
+  `0.0.0-dev` fallback.
 - Dynamic version injection: CI image builds pass the resolved tag as the
   `APP_VERSION` build arg (`backend/Dockerfile`), so running containers
   report the exact image tag (`2.1.0`, `main`, `pr-42`). The API root,

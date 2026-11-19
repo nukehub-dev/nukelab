@@ -47,7 +47,12 @@ remain owned by `.github/workflows/` and their respective domains.
 - Do not print tokens, env files, or full compose configuration. CI uploads
   Playwright reports, traces, and targeted container logs on failure only.
 - CI browser jobs must keep `E2E_EXTERNAL_SERVER=1` and a fully started stack
-  behind `BASE_URL`; combined tests are enabled with `E2E_COMBINED=1`.
+  behind `BASE_URL`; combined tests are enabled with `E2E_COMBINED=1` and need
+  the `VOLUME_BACKUP_*` helper/storage settings plus a helper-readable backup
+  directory owned by UID 65532.
+- Stop a running dev stack (`./nukelabctl dev stop`) before `start`; the dev and
+  production stacks share container names and `nukelabctl start` refuses to run
+  while the other mode is active.
 - The workspace browser job builds `conda-base` and `workspace` and runs the
   `@workspace` tag before image publication.
 

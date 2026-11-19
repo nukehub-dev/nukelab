@@ -18,7 +18,9 @@ creates no user data volumes, running server or credit debit. Immediate success
 retains the normal server response.
 
 The owner-scoped `/server-queue` router exposes capability discovery, list/detail
-and pending cancellation. Claims and cancellation serialize under admission.
+and pending cancellation. Claims serialize under admission; cancellation is an
+atomic pending-only transition that loses to a claim and returns conflict once
+launch has started.
 `server_queue_dispatch_service.py` scans bounded batches in priority/time/ID order
 and persists a rotating cursor so non-fitting early requests cannot hide later
 candidates indefinitely. Positions describe ordering, not a guaranteed start time.
@@ -99,7 +101,9 @@ identities, capture time and recorded limitations. A newer starting or uncertain
 replacement does not make an older record proof of the current runtime. Legacy
 servers without records remain explicitly unrecorded. Exports select the displayed
 immutable launch and return its saved sanitized manifest, never today's template
-or a raw runtime inspection. Revocation blocks recreation while retaining history.
+or a raw runtime inspection. Revocation blocks recreation while retaining history;
+it is currently an operator/database procedure because no admin endpoint sets the
+revision's `revoked` flag.
 
 `server_recreation_service.py` validates either an owned source launch or a bounded
 strict manifest against an existing approved revision. Imports do not create
@@ -147,16 +151,22 @@ for upgrade and investigation requirements.
 | Responsibility | Location under `backend/app/` |
 |---|---|
 | HTTP and owner queue routes | `api/servers.py`, `api/server_queue.py` |
+| Provenance and recovery routes | `api/server_provenance.py`, `api/volume_backups.py` |
 | Admission and queue dispatch | `services/server_launch_service.py`, `services/server_queue_dispatch_service.py` |
+| Launch validation, recreation and provenance | `services/server_launch_validation.py`, `services/server_recreation_service.py`, `services/server_provenance_service.py` |
 | Existing-server operations | `services/server_lifecycle_service.py`, `services/server_termination_service.py` |
 | Action journal and fencing | `services/server_operation_service.py` |
+| Volume operation guard and recovery | `services/volume_operation_service.py`, `services/volume_backup_service.py`, `services/volume_recovery_runtime.py` |
 | Runtime composition and driver | `container/spawner.py`, `container/docker_driver.py` |
 | Scheduling and health | `services/schedule_service.py`, `services/health_check_service.py` |
 | Task ownership | `tasks.py`, `worker.py`, `services/operation_runner.py` |
 
 Offline private-volume recovery shares the volume operation guard with launch,
 file mutation, sharing and deletion. The separate helper captures only detached
-private volumes and restores into a new protected destination. See
+private volumes and restores into a new protected destination. Recovery
+orchestration runs in `celery-worker` and is configured with the
+`VOLUME_BACKUP_*` settings; see the environment reference for values. See
 [recovery operations](../operations/BACKUP-RESTORE.md#private-user-volume-recovery).
-Verified registry portability, automatic crash adoption and combined real-stack
-acceptance remain separate delivery gates.
+Verified registry portability, automatic crash adoption and remote CI validation
+remain separate delivery gates; the combined real-stack acceptance suite runs
+locally.

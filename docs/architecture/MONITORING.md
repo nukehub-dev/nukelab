@@ -37,10 +37,11 @@ faster.
 
 4. Open the UIs:
 
-   | Service     | URL                        | Default credentials          |
-   |-------------|----------------------------|------------------------------|
-   | Prometheus  | <http://localhost:9090>      | —                            |
-   | Grafana     | <http://localhost:3001>      | admin / `GRAFANA_ADMIN_PASSWORD` |
+   | Service     | URL                                  | Access |
+   |-------------|--------------------------------------|--------|
+   | Prometheus  | <http://localhost:8080/prometheus>    | Admin ForwardAuth |
+   | Grafana     | <http://localhost:8080/grafana>       | Admin ForwardAuth; Grafana's own login form is disabled |
+   | Alertmanager| <http://localhost:8080/alertmanager>  | Admin ForwardAuth (when enabled) |
 
 ---
 
@@ -90,6 +91,7 @@ The backend exposes application-level metrics at `/api/metrics` when
 | `nukelab_users_total` | Gauge | — | Registered users |
 | `nukelab_servers_total` | Gauge | `status` | Servers by status |
 | `nukelab_nuke_balance_total` | Gauge | — | Total NUKE balance across users |
+| `nukelab_container_status_lookup_failures_total` | Counter | — | Runtime status lookups that could not determine container state |
 
 Business gauges (`users_total`, `servers_total`, `nuke_balance_total`) are
 refreshed every 60 seconds by the Celery Beat task
@@ -160,7 +162,7 @@ OTEL_TRACES_ENABLED=true
 | Service | URL                     | Notes |
 |---------|-------------------------|-------|
 | Jaeger  | <http://localhost:8080/jaeger> | Traefik ForwardAuth (admin login) |
-| Grafana | <http://localhost:3001>    | Jaeger datasource provisioned automatically |
+| Grafana | <http://localhost:8080/grafana> | Admin ForwardAuth; Jaeger datasource provisioned automatically |
 
 ### Trace context propagation
 
@@ -202,13 +204,13 @@ skewed earlier benchmarks.
 
 | Environment variable | Default | Description |
 |----------------------|---------|-------------|
-| `PROMETHEUS_ENABLED` | `false` | Enable `/api/metrics` and the Prometheus container |
-| `PROMETHEUS_PORT` | `9090` | Host port for Prometheus UI |
+| `PROMETHEUS_ENABLED` | `false` | Enable `/api/metrics` and the Prometheus overlay |
 | `PROMETHEUS_RETENTION_TIME` | `15d` | TSDB retention |
-| `GRAFANA_ENABLED` | `false` | Enable the Grafana container |
-| `GRAFANA_PORT` | `3001` | Host port for Grafana UI |
-| `GRAFANA_ADMIN_USER` | `admin` | Grafana admin login |
-| `GRAFANA_ADMIN_PASSWORD` | `admin` | Grafana admin password |
+| `PROMETHEUS_EXTERNAL_URL` | `http://localhost:8080/prometheus` | Prometheus external URL behind Traefik |
+| `GRAFANA_ENABLED` | `false` | Enable the Grafana overlay |
+| `GRAFANA_ROOT_URL` | `http://localhost:8080/grafana` | Grafana root URL behind Traefik |
+| `ALERTMANAGER_ENABLED` | `false` | Enable the Alertmanager overlay |
+| `ALERTMANAGER_EXTERNAL_URL` | `http://localhost:8080/alertmanager` | Alertmanager external URL behind Traefik |
 | `REQUEST_METRICS_ENABLED` | `true` | Enable the request metrics middleware |
 | `REQUEST_METRICS_STORE` | `both` | `db` \| `prometheus` \| `both` |
 
@@ -216,14 +218,16 @@ skewed earlier benchmarks.
 
 ## Verifying the Stack
 
-1. Check the Prometheus targets page:
-   <http://localhost:9090/targets>
+1. Check the Prometheus targets page through Traefik:
+   <http://localhost:8080/prometheus/targets>
    `nukelab-backend` should be **UP**.
 
-2. Scrape the metrics endpoint directly:
+2. Query the metrics endpoint from inside the backend container (external
+   `/api/metrics` is protected by admin ForwardAuth):
 
    ```bash
-   curl -s http://localhost:8000/api/metrics | grep nukelab_http_requests_total
+   ./nukelabctl exec backend curl -s http://localhost:8000/api/metrics \
+     | grep nukelab_http_requests_total
    ```
 
 3. Run a load test and watch the dashboards:
@@ -236,8 +240,10 @@ skewed earlier benchmarks.
 
 ## Adding Alerts
 
-Grafana alerting can be configured through the UI or via provisioning files in
-`monitoring/grafana/provisioning/alerting/`. A typical starting rule:
+Grafana alerting can be configured through the UI or by adding provisioning
+files under `monitoring/grafana/provisioning/alerting/`; dashboard and
+datasource provisioning already live under `monitoring/grafana/provisioning/`.
+A typical starting rule:
 
 - **High error rate**: `rate(nukelab_http_requests_total{status_code=~"5.."}[1m]) /
   rate(nukelab_http_requests_total[1m]) > 0.05`
@@ -255,7 +261,7 @@ Grafana alerting can be configured through the UI or via provisioning files in
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
 | `nukelab-backend` target DOWN in Prometheus | `PROMETHEUS_ENABLED=false` or backend not on `nukelab-network` | Enable in `.env` and restart |
-| No data in Grafana dashboards | Prometheus not reachable | Check `PROMETHEUS_PORT` and Grafana datasource config |
+| No data in Grafana dashboards | Prometheus not reachable | Check the internal `prometheus:9090` datasource and overlay status |
 | `request_metrics` table still growing | `REQUEST_METRICS_STORE=both` or `db` | Set to `prometheus` for load tests |
 | Grafana dashboards missing | Provisioning path incorrect | Verify `monitoring/grafana/provisioning` is mounted read-only |
 
@@ -265,32 +271,22 @@ Grafana alerting can be configured through the UI or via provisioning files in
 
 ### 1. Protect the `/api/metrics` endpoint
 
-By default the metrics endpoint has no authentication. For any environment where
-Prometheus runs on a different host or the port is reachable by others, set a
-scrape token:
-
-```env
-PROMETHEUS_SCRAPE_TOKEN=your-long-random-token
-```
-
-When this variable is non-empty, `/api/metrics` requires:
-
-```
-Authorization: Bearer your-long-random-token
-```
-
-The Prometheus scrape config automatically uses the same token.
+Prometheus scrapes the backend directly over `nukelab-network`; external
+`/api/metrics` access is protected by the Traefik `monitoring-auth@file`
+middleware (admin ForwardAuth). The application endpoint itself has no bearer
+token check. Do not expose the backend container port directly.
 
 ### 2. Secure Grafana
 
-- Change `GRAFANA_ADMIN_PASSWORD` from the default.
-- Put Grafana behind Traefik with HTTPS in production.
+- Grafana is behind Traefik and uses ForwardAuth; its own login form and basic
+  auth are disabled.
+- Put the Traefik entrypoint behind HTTPS in production.
 - Disable public sign-ups (`GF_USERS_ALLOW_SIGN_UP=false` is already set).
 
 ### 3. Prometheus UI
 
-In production, do not expose Prometheus port `9090` publicly. Access it through
-a VPN, SSH tunnel, or an authenticated reverse proxy.
+Prometheus is exposed only through `/prometheus` behind admin ForwardAuth. Do
+not publish its container port directly.
 
 ---
 
@@ -308,7 +304,8 @@ Then restart:
 ./nukelabctl start
 ```
 
-Alertmanager will be available at `http://localhost:9093`.
+Alertmanager is available at `http://localhost:8080/alertmanager` behind admin
+ForwardAuth.
 
 The generated config (`monitoring/alertmanager/alertmanager.generated.yml`) is
 produced from `monitoring/alertmanager/alertmanager.yml.tpl` by `nukelabctl`.
@@ -356,7 +353,7 @@ When you move to k3s, the same instrumentation works without changes:
 | `monitoring/prometheus/prometheus.yml.tpl` | `ServiceMonitor` + `Prometheus` CRD |
 | `monitoring/prometheus/rules/nukelab.yml.tpl` | `PrometheusRule` CRD |
 | `monitoring/grafana/provisioning/dashboards/*.json` | Grafana dashboard ConfigMap |
-| `PROMETHEUS_SCRAPE_TOKEN` | Network policies or ServiceMonitor auth |
+| Network policy + admin ForwardAuth | Network policies or `ServiceMonitor` auth (no application scrape token) |
 
 For high-availability and long-term retention, add `remote_write` to
 Thanos, Mimir, Cortex, or Grafana Cloud.

@@ -8,7 +8,7 @@ This guide covers how to run NukeLab locally for development and debugging.
 - docker-compose or podman-compose
 - Git
 - 10 GB free disk space
-- Node.js 22 and npm (only if running the frontend outside containers)
+- Node.js 24 and npm (only if running the frontend outside containers)
 
 ## Initial setup
 
@@ -39,7 +39,7 @@ The dev stack uses the same container names as the production stack. `start` and
 ./nukelabctl dev start        # Start dev stack
 ./nukelabctl dev restart      # Restart dev stack
 ./nukelabctl dev logs backend # Stream backend logs
-./nukelabctl dev logs frontend# Stream frontend logs
+./nukelabctl dev logs frontend # Stream frontend logs
 ./nukelabctl dev stop         # Stop dev stack
 ```
 
@@ -63,6 +63,16 @@ When `DEV_MODE=true`, the first startup creates:
 - Password: `admin123`
 
 Change these in `.env.development` or create additional users through the admin UI.
+
+## First-run catalog setup
+
+Fresh installs seed Small/Medium/Large plans as visible to the `user` role, but
+environments are admin-created. Sign in as an administrator, open
+**Administration → Setup** (`/admin/setup`), publish an active public
+environment and confirm at least one plan is available to users before
+deploying. Private volume recovery remains disabled until the operator
+configures `VOLUME_BACKUP_HOST_PATH`, `VOLUME_BACKUP_STORAGE_PATH` and a trusted
+helper image; see [BACKUP-RESTORE.md](../operations/BACKUP-RESTORE.md).
 
 ## Access points
 
@@ -98,21 +108,27 @@ Log out and back in for the change to take effect.
 ## Running tests
 
 ```bash
-# Backend tests inside the test container
+# Frontend unit tests plus backend tests in the one-off container
 ./nukelabctl test all
 
 # Backend tests scoped to a file or directory
 ./nukelabctl test backend tests/api/servers/test_servers.py -x -v
 
-# Frontend unit tests
+# Frontend unit tests only
 cd frontend
+npm run test:unit
+
+# Playwright browser tests (starts Vite by default)
 npm run test
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the external disposable browser
+stack used by CI and the `E2E_EXTERNAL_SERVER=1` mode.
 
 ## Linting and formatting
 
 ```bash
-./nukelabctl lint all       # ruff + eslint/prettier + shellcheck/shfmt
+./nukelabctl lint all       # ruff + eslint/prettier + shellcheck/shfmt + markdown
 ./nukelabctl lint all --fix # Auto-fix where supported
 ./nukelabctl selftest       # nukelabctl sanity check
 ```
@@ -135,11 +151,16 @@ Check that `DOCKER_SOCKET` in `.env.development` matches your active socket, or 
 
 ### Database schema out of date
 
-The backend applies migrations on startup. To force a fresh migration:
+Startup only creates missing tables when `AUTO_CREATE_TABLES=true`; it does not
+upgrade existing columns. Apply Alembic migrations explicitly with the
+pre-migration snapshot (the backend container must be running):
 
 ```bash
-./nukelabctl exec backend alembic upgrade head
+./nukelabctl db-migrate
 ```
+
+For destructive or uncertain changes, take a backup first and review
+[BACKUP-RESTORE.md](../operations/BACKUP-RESTORE.md).
 
 ## Related documents
 

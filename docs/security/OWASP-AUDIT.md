@@ -2,7 +2,7 @@
 
 > **Scope:** OWASP Top 10 for Web Applications (2021) assessment of the NukeLab platform  
 > **Status:** Complete  
-> **Last Updated:** 2026-06-25  
+> **Last Updated:** 2026-11-19  
 > **Auditor:** Automated audit + code review  
 > **Tools Used:** Bandit, pip-audit, npm audit, Dependabot  
 
@@ -63,7 +63,7 @@ This document records the OWASP Top 10 audit performed against the NukeLab platf
 | SQL injection prevention (SQLAlchemy ORM + parameterized queries) | ✅ Implemented | All DB access via SQLAlchemy models/repositories |
 | Input validation with Pydantic v2 | ✅ Implemented | All API request/response schemas |
 | Command injection prevention in container spawning | ✅ Implemented | Docker SDK used directly; no shell interpolation |
-| Path traversal prevention | ✅ Implemented | `backend/app/core/security.py` `secure_path()` helper |
+| Path traversal prevention | ✅ Implemented | `backend/app/core/filesystem.py` `secure_path()` helper |
 | Avatar filename whitelist | ✅ Implemented | Avatar endpoint validates allowed extensions |
 | XSS: Content-Security-Policy header | ✅ Implemented | `backend/app/core/security_headers_asgi.py` |
 | Output encoding in frontend | ✅ Implemented | React 19 auto-escapes JSX output |
@@ -132,7 +132,7 @@ This document records the OWASP Top 10 audit performed against the NukeLab platf
 **Residual Gaps / Notes:**
 
 - pytest 8.3.5 in dev requirements has an accepted local-only tmpdir CVE (GHSA-6w46-j5rx-g56g); blocked from upgrade by pytest-asyncio compatibility. Ignored in CI via `--ignore-vuln`.
-- Container image scanning (Trivy/Grype) not yet integrated; recommended before production image builds.
+- Trivy SARIF scans run for backend, frontend and volume-helper images but are non-blocking (`continue-on-error`); Grype and environment-image scanning remain follow-ups.
 
 **Risk Rating:** Low
 

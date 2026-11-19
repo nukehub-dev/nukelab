@@ -40,15 +40,15 @@ All files under `docs/`. The `docs/AGENTS.md` owns the docs structure; each subf
 ## Verification
 
 - Manual review for accuracy and stale content.
-- CI runs markdown lint and link checks on pull requests.
-- Run `./nukelabctl lint shell` if any shell examples in docs are changed.
+- Run `./nukelabctl lint markdown` after documentation edits; it runs the same
+  Markdown lint and link checks as CI.
+- Run `./nukelabctl lint shell` if any shell scripts (not fenced examples) are
+  changed.
 
 ## Child NAD Index
 
-- `architecture/AGENTS.md` — future subfolder contract if architecture grows beyond these files
-- `operations/AGENTS.md` — future subfolder contract if operations docs grow
-- `security/AGENTS.md` — future subfolder contract if security docs grow
-- `development/AGENTS.md` — future subfolder contract if development docs grow
 - `plan/AGENTS.md` — roadmap, implementation phases, and decision log
 
-Currently these subfolders do not have dedicated `AGENTS.md` files except `plan/`; this document owns the remainder.
+`architecture/`, `operations/`, `security/`, and `development/` do not yet have
+dedicated child contracts; this document owns them until those boundaries
+warrant separate files.

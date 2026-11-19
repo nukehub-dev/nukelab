@@ -2,7 +2,7 @@
 
 > **Status:** Draft — Ready for review and scheduling  
 > **Version:** 1.0  
-> **Last Updated:** 2026-06-28  
+> **Last Updated:** 2026-11-19  
 > **Target:** Pre-production security validation before public launch  
 > **Engagement Type:** Full-stack black-box, grey-box, and white-box assessment  
 
@@ -10,7 +10,7 @@
 
 ## 1. Executive Summary
 
-NukeLab v2.0 is a multi-user scientific-computing platform built on **Vite + React 19 SPA**, **FastAPI**, **PostgreSQL 18**, **Redis**, **Traefik v3**, and **Docker/Podman**. The platform manages user identity, role-based access control, resource quotas, containerized IDE environments (NukeIDE/Theia), credit billing, audit logging, real-time monitoring, and shared workspaces.
+NukeLab v2.0 is a multi-user scientific-computing platform built on **Vite + React 19 SPA**, **FastAPI**, **PostgreSQL 17**, **Redis**, **Traefik v3**, and **Docker/Podman**. The platform manages user identity, role-based access control, resource quotas, containerized IDE environments (NukeIDE/Theia), credit billing, audit logging, real-time monitoring, and shared workspaces.
 
 An internal OWASP Top 10 audit (`OWASP-AUDIT.md`) has already been performed and rates the platform as **Pass ✅** with one medium residual risk (A08 — signed commits / artifact signing). However, a formal, independent penetration test is required before production launch to validate:
 
@@ -56,7 +56,7 @@ This document defines scope, methodology, test cases, tools, timeline, deliverab
 
 | Layer | Target | Notes |
 |-------|--------|-------|
-| **Frontend SPA** | `https://nukelab.example.com/app/*` | Vite + React 19, TanStack Router, TanStack Query, shadcn/ui |
+| **Frontend SPA** | `https://nukelab.example.com/app/*` | Vite + React 19, TanStack Router, TanStack Query, custom Tailwind components |
 | **Backend API** | `https://nukelab.example.com/api/*` | FastAPI, Pydantic v2, SQLAlchemy async |
 | **Auth Endpoints** | `/api/auth/*`, OAuth2 callback, refresh, logout | Local + NukeHub OAuth modes |
 | **User Containers** | `/user/{username}/{serverName}/*` | NukeIDE (Theia + Nginx JWT proxy) |
@@ -64,7 +64,7 @@ This document defines scope, methodology, test cases, tools, timeline, deliverab
 | **Metrics/Prometheus** | `/api/metrics` | Gated by Traefik ForwardAuth |
 | **Reverse Proxy** | Traefik v3 static + dynamic config | `infrastructure/traefik/` |
 | **Container Runtime** | Docker/Podman daemon, user containers, networks, volumes | Including capability drops, seccomp, AppArmor/SELinux |
-| **Database** | PostgreSQL 18 + PgBouncer | Credential storage, connection strings, access controls |
+| **Database** | PostgreSQL 17 + PgBouncer | Credential storage, connection strings, access controls |
 | **Cache/Queue** | Redis | Session storage, Celery broker, pub/sub |
 | **CI/CD** | `.github/workflows/*.yml`, container images, GHCR registry | Supply-chain and secret-exposure review |
 | **Source Code** | Full monorepo (white-box review) | `backend/`, `frontend/`, `environments/`, `scripts/` |
@@ -140,7 +140,7 @@ Phase 10: Remediation Support & Retest
 | CFG-05 | Review CSRF double-submit protection | `backend/app/middleware/csrf.py` | State-changing cookie-authenticated requests require matching token |
 | CFG-06 | Review IP allowlist/blocklist middleware | `backend/app/middleware/ip_restriction.py` | CIDR support; self-block prevention; auth/health exempt |
 | CFG-07 | Review request size limits | `backend/app/middleware/request_size_limit.py` | 10 MB default; chunked-transfer abort |
-| CFG-08 | Review path traversal prevention | `backend/app/core/security.py::secure_path()` | `Path.resolve()` + `relative_to()` validation; whitelist for avatars |
+| CFG-08 | Review path traversal prevention | `backend/app/core/filesystem.py::secure_path()` | `Path.resolve()` + `relative_to()` validation; whitelist for avatars |
 | CFG-09 | Review Docker spawner security options | `backend/app/container/spawner.py` | Non-root user, read-only root fs, no new privileges, capability drop, seccomp |
 | CFG-10 | Review Traefik TLS and middleware config | `infrastructure/traefik/traefik.yml`, `dynamic/*.yml` | TLS 1.3, no insecure dashboard, no browserXssFilter |
 | CFG-11 | Review environment variable and secret handling | `.env.example`, compose files, CI secrets | No hardcoded secrets; production validation refuses defaults |
@@ -249,12 +249,12 @@ Phase 10: Remediation Support & Retest
 | ID | Test | Target | Expected Result |
 |----|------|--------|-----------------|
 | CICD-01 | Dependency vulnerability scanning | `./nukelabctl security` | `pip-audit` and `npm audit` pass; no ignored criticals |
-| CICD-02 | Container image scanning in CI | `.github/workflows/security.yml` | Trivy/Grype gate on backend/frontend/env/volume-helper images |
+| CICD-02 | Container image scanning in CI | `.github/workflows/security.yml` | Non-blocking Trivy SARIF scans for backend, frontend and volume-helper images; Grype and environment-image scans are not integrated |
 | CICD-03 | Secret scanning in repository | Gitleaks/TruffleHog scan | No active secrets in git history. TruffleHog runs with `--exclude-detectors=Lob`: its `test_` key pattern false-positives on Python test function names and NukeLab never uses the Lob API |
-| CICD-04 | Signed commits / artifact signing | Git config, GHCR images | Commits signed; images signed with Cosign (target state). Implemented: signed-commits check warns until enforced; Cosign signing workflow in `.github/workflows/security.yml` |
-| CICD-04a | Git commit signing verification | `.github/workflows/security.yml` | CI runs `./nukelabctl security --signed-commits` on every push/PR; warns during transition, fails once branch protection requires signed commits |
+| CICD-04 | Signed commits / artifact signing | Git config, GHCR images | Target state: signed commits and Cosign-signed images. Implemented: signed-commits check warns until enforced. Cosign signing is not implemented. |
+| CICD-04a | Git commit signing verification | `.github/workflows/security.yml` | CI runs `./nukelabctl security --signed-commits` on every push/PR and warns during the transition; `continue-on-error` keeps it non-blocking until enforcement is enabled |
 | CICD-04b | Container image signing with Cosign | `.github/workflows/security.yml` | Target state: built backend/frontend/auth-sidecar/volume-helper images are signed with Cosign keyless signing using GitHub OIDC; signatures published to GHCR. Not yet implemented |
-| CICD-04c | Cosign signature verification | `.github/workflows/security.yml` / downstream consumers | Published image signatures can be verified with `cosign verify --certificate-identity-regexp` and policy enforced in deployment workflows |
+| CICD-04c | Cosign signature verification | `.github/workflows/security.yml` / downstream consumers | Future requirement once Cosign signing exists: verify with `cosign verify --certificate-identity-regexp` and enforce policy in deployment workflows |
 | CICD-05 | Workflow permissions | `.github/workflows/*.yml` | Minimal `permissions`, no `pull_request_target` abuse |
 | CICD-06 | Base image pinning | Dockerfiles | All external base images pinned by digest; verified by `./nukelabctl security --check-base-images` |
 | CICD-07 | SBOM generation | CI artifacts | CycloneDX/SPDX SBOM produced per release |
@@ -303,7 +303,7 @@ Phase 10: Remediation Support & Retest
 
 ### 6.3 Custom NukeLab Test Scripts
 
-The following scripts should be created as part of the engagement to enable repeatable retests:
+Existing and planned NukeLab test scripts for repeatable retests:
 
 - `backend/tests/security/test_bola.py` — automated BOLA sweeps across server/volume/workspace/credit endpoints.
 - `backend/tests/security/test_bfla.py` — privilege-escalation matrix across all roles.
@@ -418,11 +418,11 @@ Use CVSS 4.0 with the following mapping:
 | Rate Limiting | `backend/app/middleware/rate_limit.py` | Confirm tier enforcement and bypass resistance |
 | CSRF | `backend/app/middleware/csrf.py` | Validate double-submit on all state-changing routes |
 | Security Headers | `backend/app/core/security_headers_asgi.py` | Confirm headers on 200/400/500 responses |
-| Path Traversal | `backend/app/core/security.py::secure_path()` | Test traversal in file endpoints |
+| Path Traversal | `backend/app/core/filesystem.py::secure_path()` | Test traversal in file endpoints |
 | Container Security | `backend/app/container/spawner.py` | Verify non-root, capability drop, no docker socket |
 | Audit Logging | `backend/app/middleware/audit.py` | Confirm all privilege tests are logged |
 | Credit System | `backend/app/services/credit_service.py` | Race-condition and logic-abuse tests |
-| CORS | `backend/app/middleware/cors.py` / config | Verify production origin whitelist |
+| CORS | `backend/app/main.py` (`CORSMiddleware`) / config | Verify production origin whitelist |
 | IP Restrictions | `backend/app/middleware/ip_restriction.py` | Test CIDR matching and self-block prevention |
 
 ---

@@ -8,12 +8,17 @@ protected static page under `/usr/share/nginx/html/fixture/` plus
 
 ## Build
 
-The repository-root `.dockerignore` filters the default context, so this folder
-carries `runtime.Dockerfile.dockerignore` to re-include only the fixture
-artifacts. This relies on Dockerfile-specific ignore files (BuildKit, the
-default in current Docker). Build from the repository root (the Dockerfile uses
-repo-root-relative `COPY` paths) and make sure `nukelab-environment-base` is
-already built:
+The canonical build is the CI helper, which stages a temporary repo-shaped
+context so the root `.dockerignore` cannot exclude the fixture sources and
+builds both variants:
+
+```bash
+./scripts/ci/e2e-stack.sh fixtures
+```
+
+For a manual Docker/BuildKit build, build from the repository root (the
+Dockerfile uses repo-root-relative `COPY` paths) and make sure
+`nukelab-environment-base` is already built:
 
 ```bash
 docker build \

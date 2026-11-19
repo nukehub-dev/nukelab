@@ -225,8 +225,9 @@ Only implement when query profiling proves reads are the bottleneck. For most wo
 | `OBSERVABILITY_SLOW_QUERY_THRESHOLD_MS` | 100 | Log queries slower than this |
 | `OBSERVABILITY_PG_STAT_STATEMENTS_ENABLED` | true | Track query performance in Postgres |
 | `COMPOSE_OVERLAYS` | (empty) | Additional compose files (e.g., `compose.pgbouncer.yml`) |
-| `PGBOUNCER_MAX_CLIENT_CONN` | 1000 | Max app connections PgBouncer accepts |
-| `PGBOUNCER_DEFAULT_POOL_SIZE` | 20 | Real Postgres connections PgBouncer maintains |
+| `PGBOUNCER_MAX_CLIENT_CONN` | 20000 | Max app connections PgBouncer accepts |
+| `PGBOUNCER_DEFAULT_POOL_SIZE` | 100 | Real Postgres connections PgBouncer maintains |
+| `PGBOUNCER_MIN_POOL_SIZE` | 25 | Warm Postgres connections PgBouncer maintains |
 
 ### 6.2 Postgres Settings
 
@@ -311,6 +312,27 @@ The setup page remains available for later catalog reviews. Plan administration
 protects the last active plan and the last active plan available to users:
 deactivation, deletion or visibility changes that would leave zero usable plans
 are rejected with HTTP 409. Other plan fields remain editable at any time.
+
+## 10. Capacity and queue operations
+
+NukeLab admits new servers against configured allocatable budgets, not live
+host telemetry. Set `RESOURCE_POOL_CPU`, `RESOURCE_POOL_MEMORY_MIB` and
+`RESOURCE_POOL_DISK_MIB` to the capacity actually reserved for user servers.
+`GPU_DEVICES` defines the exclusive GPU pool when used.
+
+- Waiting requests consume no CPU, memory, disk or credits.
+- Requests expire after `QUEUE_TIMEOUT_SECONDS`.
+- `QUEUE_MAX_PENDING_PER_OWNER` and `QUEUE_MAX_PENDING_TOTAL` return 429 when
+  reached.
+- `celery-worker` dispatches bounded batches (`QUEUE_DISPATCH_BATCH_SIZE`) on
+  the Celery Beat interval (`QUEUE_TICK_SECONDS`). Keep Beat and the worker
+  running together; queue position is ordering, not a promised start time.
+- `SERVER_LAUNCH_TIMEOUT_SECONDS` is the deadline for reserved launches and
+  long-running lifecycle/recovery work.
+
+Monitor queue depth, expired requests and worker/Beat health. See
+[SERVER-LIFECYCLE.md](../architecture/SERVER-LIFECYCLE.md) for admission and
+fencing behavior.
 
 ## Lifecycle journal upgrades and uncertain operations
 

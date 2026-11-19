@@ -26,6 +26,7 @@ All files under `backend/` except generated artifacts (`.venv-dev`, `__pycache__
 - `server_operation_service.py` owns immutable per-action intent and fenced executor claims. A partial unique index permits only one prepared/executing/uncertain operation per server. Uncertain outcomes have no TTL takeover; stop/delete and resource release require runtime proof. Restarts retain the larger old/new reservation until the predecessor is verified gone. Status reads apply observations only if container identity, row version and active-operation checks remain authoritative under admission.
 - Quota/GPU helpers preserve their compatibility `commit=True` default. Admission callers use `commit=False`; quota recomputation counts persisted starting/stopping reservations exactly once and skips destructive GPU reconciliation. `include_gpu_pool=False` defers physical scarcity to admission while retaining user GPU quota enforcement.
 - Seeded plans remain editable, but the catalog cannot be made un-deployable: `services/plan_service.py` refuses update/deactivate/delete operations that would leave no active plan or no active plan available to the `user` role (409). Small/Medium/Large seed with `visible_to_roles=["user"]`; XLarge remains admin-only. The seeder only creates missing slugs and never overwrites admin edits.
+- Admin bulk server lifecycle requires server-write authority plus a cross-user reason, and must run the shared cross-user audit/notification path before mutation. `ADMIN_ACCESS` alone is insufficient; regression coverage lives in `tests/security/test_admin_bulk_authorization.py`.
 - `services/operation_runner.py` owns long-operation loops and task-local DB/driver resources. Deadlines join cooperative cancellation; uncertain external outcomes retain reservations until runtime reconciliation. Runtime-capable queue, lifecycle enforcement, scheduling and health tasks use this boundary with loop-owned fresh sessions/drivers.
 - Queue request/claim primitives live in `services/server_queue_service.py` and typed DTOs in `schemas/server_queue.py`. `server_queue_dispatch_service.py` supplies bounded first-fit dispatch with a durable rotating cursor and an operation-owned synchronous runner selected by the scheduled task. The registered queue router exposes capability discovery and owner-scoped list/detail/pending cancellation; cancellation and claims share admission serialization.
 - Approved revision/provenance primitives require current-template authorization callbacks, immutable image selection, and observed launch identity checks. Public manifests contain environment-variable names only; repository digest metadata alone never establishes portability. Launch/recreation selects captured revisions and records successive verified generations; legacy servers missing plan/environment selection can only resume an existing verified non-exclusive-GPU container. An unrecorded server with a valid selection captures its first verified revision on recreation; this does not backfill historic proof. The registered `api/server_provenance.py` and `services/server_recreation_service.py` expose saved history/export and approved recreation; registry portability remains separate work.
@@ -41,7 +42,7 @@ All files under `backend/` except generated artifacts (`.venv-dev`, `__pycache__
 
 ### Project structure
 
-- `app/api/v1/` — versioned API routers. Group endpoints by resource (e.g., `servers.py`, `users.py`).
+- `app/api/` — API routers mounted under `/api`. Group endpoints by resource (e.g., `servers.py`, `users.py`).
 - `app/services/` — business logic called by API routes and tasks. Keep routes thin; put logic here.
 - `app/models/` — SQLAlchemy ORM models. One model per file or one file per feature as the project already does.
 - `app/schemas/` — Pydantic request/response models shared between API and services.
@@ -57,7 +58,7 @@ All files under `backend/` except generated artifacts (`.venv-dev`, `__pycache__
 ### Adding an endpoint
 
 1. Define Pydantic request/response schemas in `app/schemas/`.
-2. Add the route handler in the appropriate `app/api/v1/` router.
+2. Add the route handler in the appropriate `app/api/` router.
 3. Implement business logic in `app/services/`. Inject the DB session via `app/dependencies.py`.
 4. Add tests in `tests/api/` or `tests/services/` mirroring the source path.
 5. Update OpenAPI-generated docs if the project exposes them.
@@ -184,6 +185,12 @@ Prefer `require_permissions` for simple endpoint-level checks. Use `PermissionCh
 - Native CPU-mask passthrough tests compare the preloaded binary with an unpreloaded baseline under the same user and container; do not assume write-mode `/proc/stat` opens fail for root. Compare open success/failure, errno, and descriptor access mode without writing to procfs.
 - Real container/image fixture tests are opt-in with `--run-container-integration`; they use unique ownership labels and remove only their own resources. Run against an isolated local/CI test daemon.
 - Security tests that mock the Docker client should run with `--confcutdir=tests/security` to avoid the root Postgres/Redis fixtures.
+- New lifecycle/queue/recovery suites:
+  - `tests/services/test_server_queue_service.py`, `test_server_queue_dispatch_service.py`, `test_queue_scan_cursor.py`, `tests/api/test_server_queue.py`;
+  - `tests/services/test_environment_provenance*.py`, `tests/api/servers/test_server_provenance.py`, `tests/security/test_provenance_recreation.py`;
+  - `tests/services/test_volume_backup_service.py`, `tests/security/test_volume_recovery_*.py`, `tests/tasks/test_volume_recovery_workers.py`.
+- Run `./nukelabctl test all` for the full suite; scope a suite with
+  `./nukelabctl test backend <path> -q`. Do not lower the coverage floor.
 
 ### Common pitfalls
 
