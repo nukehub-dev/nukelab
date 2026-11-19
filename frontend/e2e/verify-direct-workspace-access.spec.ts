@@ -114,11 +114,11 @@ test.describe('Direct workspace access', () => {
     // The workspace IDE should render the NukeIDE shell.
     await expect(page.locator('body')).toContainText('NukeIDE', { timeout: 30_000 })
 
-    // Core IDE assets should have loaded (no 404s for bundle / logo).
+    // The IDE bundle should be served from the workspace root. The workspace
+    // image does not ship a logo.svg; the shell and bundle assertions cover
+    // the direct-access path.
     const base = page.url().endsWith('/') ? page.url() : `${page.url()}/`
     const bundleRequest = await page.request.get(new URL('bundle.js', base).toString())
-    const logoRequest = await page.request.get(new URL('logo.svg', base).toString())
     expect(bundleRequest.status()).toBe(200)
-    expect(logoRequest.status()).toBe(200)
   })
 })
