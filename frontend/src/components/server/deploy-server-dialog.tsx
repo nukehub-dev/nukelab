@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 import { useState, useEffect, useMemo, useRef } from 'react'
+import { Link } from '@tanstack/react-router'
 import { ApiError } from '../../lib/api'
-import { HardDrive, Plus, X, AlertTriangle } from 'lucide-react'
+import { HardDrive, Plus, X, AlertTriangle, ArrowRight } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -18,6 +19,7 @@ import { Button } from '../ui/button'
 import { Select, SelectItem } from '../ui/select'
 import { Label } from '../ui/label'
 import { formatBytes, formatPlanResource, parseMemoryString } from '../../lib/utils'
+import { PERMISSIONS, useAuthStore } from '../../stores/auth-store'
 import type { Environment, Plan } from '../../types/api'
 import type { Volume } from '../../hooks/use-volumes'
 
@@ -78,6 +80,7 @@ export function DeployServerDialog({
     { volume_id: '', mount_path: '', mode: 'read_write', max_size_gb: 10 },
   ])
   const [visibleError, setVisibleError] = useState<string | null>(null)
+  const canAccessAdmin = useAuthStore((state) => state.hasPermission(PERMISSIONS.ADMIN_ACCESS))
 
   const wasOpen = useRef(false)
   useEffect(() => {
@@ -105,6 +108,9 @@ export function DeployServerDialog({
 
   const selectedPlan = plans.find((p) => p.id === deployForm.plan_id)
   const planDiskBytes = selectedPlan ? parseMemoryString(selectedPlan.disk_limit) : 0
+  const missingPlans = plans.length === 0
+  const missingEnvironments = environments.length === 0
+  const prerequisitesMissing = missingPlans || missingEnvironments
 
   const totalAllocatedBytes = useMemo(() => {
     return volumeMounts.reduce((sum, mount) => {
@@ -196,6 +202,51 @@ export function DeployServerDialog({
           className="space-y-4 mt-4"
           noValidate
         >
+          {prerequisitesMissing && (
+            <div
+              role="alert"
+              data-testid="deploy-prerequisites"
+              className="space-y-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4"
+            >
+              <div className="flex items-start gap-2">
+                <AlertTriangle
+                  className="mt-0.5 h-4 w-4 shrink-0 text-amber-400"
+                  aria-hidden="true"
+                />
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-amber-400">
+                    Deployment isn't available yet
+                  </p>
+                  <ul className="list-disc space-y-0.5 pl-4 text-sm text-muted-foreground">
+                    {missingPlans && <li>No active plans are available.</li>}
+                    {missingEnvironments && <li>No active environments are available.</li>}
+                  </ul>
+                </div>
+              </div>
+              {canAccessAdmin ? (
+                <div className="space-y-2 pl-6">
+                  <p className="text-sm text-muted-foreground">
+                    Publish a public environment and make a plan available to users, then try again.
+                  </p>
+                  <Link
+                    to="/admin/setup"
+                    className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+                  >
+                    Finish setup
+                    <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+                  </Link>
+                </div>
+              ) : (
+                <p className="pl-6 text-sm text-muted-foreground">
+                  Contact your NukeLab administrator or{' '}
+                  <Link to="/support" className="font-medium text-primary hover:underline">
+                    support
+                  </Link>{' '}
+                  to finish setting up deployment.
+                </p>
+              )}
+            </div>
+          )}
           {visibleError && (
             <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
               <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
@@ -447,7 +498,7 @@ export function DeployServerDialog({
             form="deploy-form"
             data-testid="deploy-server-submit"
             loading={isPending}
-            disabled={!isValid}
+            disabled={!isValid || prerequisitesMissing}
           >
             {isPending ? 'Deploying...' : 'Deploy'}
           </Button>

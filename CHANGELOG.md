@@ -40,6 +40,12 @@ section.
   queue polling, pending cancellation and duplicate-request navigation.
 - Dashboard first-run guidance for users without servers, with a direct link
   that opens the deploy flow instead of leaving new users to find it.
+- Admin first-run `/admin/setup` checklist for publishing an active public
+  environment, making plans available to users and testing the first launch.
+  Dashboard and deploy dialogs now show truthful prerequisite states when the
+  catalog is incomplete.
+- Fresh installs seed Small/Medium/Large plans visible to the `user` role;
+  XLarge remains admin-only. Re-seeding never overwrites admin edits.
 - Durable fenced lifecycle operations for start, restart, resize, stop and delete;
   pinned launch generations and reservations survive uncertain runtime outcomes.
 - Shared launch orchestration reserves server, GPU and volume-mount identities
@@ -62,12 +68,17 @@ section.
   metadata, responsive drawers and mobile layouts.
 - Volume recovery history uses full-width Backups/Restores tabs, opens
   restore-only volumes on Restores and avoids duplicating the summary grid.
+- Plan administration now refuses to remove the last active plan, or the last
+  active plan available to users, so the catalog cannot be made un-deployable.
+  Admins can still edit resources, pricing, names and other plan fields.
 
 ### Fixed
 
 - Notification toasts deduplicate by notification id and suppress recent replay
   on shell remounts, so queue/usage/volume page switches no longer repeat the
   same server-start event.
+- Admin deep links and refreshes wait for the first profile fetch instead of
+  redirecting to the dashboard while the persisted auth store is still empty.
 - Queue-, schedule- and health-admitted servers now receive the same container
   hardening, server-auth, public URL and runtime settings as API-created
   servers; the Celery worker no longer silently spawns unhardened runtimes.

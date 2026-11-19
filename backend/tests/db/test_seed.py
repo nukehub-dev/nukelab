@@ -78,6 +78,45 @@ class TestSeedPlans:
         assert plan.name == "Small"
 
     @pytest.mark.asyncio
+    async def test_default_plans_are_visible_to_users(self, db_session):
+        """Seeded user plans should be usable by the normal user role."""
+        await seed_plans(db_session)
+
+        from sqlalchemy import select
+
+        from app.models.server_plan import ServerPlan
+
+        result = await db_session.execute(select(ServerPlan))
+        plans = {plan.slug: plan for plan in result.scalars().all()}
+
+        for slug in ("small", "medium", "large"):
+            assert plans[slug].is_active is True
+            assert "user" in (plans[slug].visible_to_roles or [])
+        assert "user" not in (plans["xlarge"].visible_to_roles or [])
+
+    @pytest.mark.asyncio
+    async def test_does_not_overwrite_existing_plan_visibility(self, db_session):
+        """Re-seeding must preserve admin edits to existing plans."""
+        await seed_plans(db_session)
+
+        from sqlalchemy import select
+
+        from app.models.server_plan import ServerPlan
+
+        result = await db_session.execute(select(ServerPlan).where(ServerPlan.slug == "small"))
+        plan = result.scalar_one()
+        plan.visible_to_roles = []
+        plan.is_public = True
+        await db_session.commit()
+
+        await seed_plans(db_session)
+
+        result = await db_session.execute(select(ServerPlan).where(ServerPlan.slug == "small"))
+        plan = result.scalar_one()
+        assert plan.visible_to_roles == []
+        assert plan.is_public is True
+
+    @pytest.mark.asyncio
     async def test_skips_existing_plans(self, db_session):
         await seed_plans(db_session)
         # Run again

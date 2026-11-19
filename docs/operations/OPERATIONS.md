@@ -293,6 +293,25 @@ VITE_SENTRY_DSN=https://xxx@yyy.ingest.sentry.io/zzz
 
 Leave both DSNs empty (default). The SDKs initialize as no-ops with zero runtime cost.
 
+## 9. First-run catalog setup
+
+Fresh installs seed the Small/Medium/Large plans as visible to the `user` role;
+XLarge remains admin-only and can be published later if desired. Environments
+are intentionally not seeded, so an administrator must publish at least one
+active public environment before users can deploy.
+
+Use **Administration → Setup** (`/admin/setup`) for the first-run checklist:
+
+1. Publish or activate a public deployment environment.
+2. Make at least one active plan available to the `user` role.
+3. Create or invite users.
+4. Test the launch flow.
+
+The setup page remains available for later catalog reviews. Plan administration
+protects the last active plan and the last active plan available to users:
+deactivation, deletion or visibility changes that would leave zero usable plans
+are rejected with HTTP 409. Other plan fields remain editable at any time.
+
 ## Lifecycle journal upgrades and uncertain operations
 
 Drain API requests and stop old Celery workers/Beat before deploying the journal

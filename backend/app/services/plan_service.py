@@ -191,12 +191,111 @@ class PlanService:
 
         return plan
 
+    # ─── Plan Availability Guard ───
+
+    @staticmethod
+    def _is_user_usable(plan: ServerPlan) -> bool:
+        """Return True when a plan is active and exposed to the normal user role."""
+        if not plan.is_active:
+            return False
+        return bool(plan.is_public or "user" in (plan.visible_to_roles or []))
+
+    @staticmethod
+    def _as_uuid(plan_id: str | uuid.UUID) -> uuid.UUID:
+        return plan_id if isinstance(plan_id, uuid.UUID) else uuid.UUID(str(plan_id))
+
+    async def _has_other_active_plan(self, plan_id: str | uuid.UUID) -> bool:
+        """Return True when an active plan other than this one exists."""
+        result = await self.db.execute(
+            select(ServerPlan.id)
+            .where(
+                ServerPlan.is_active.is_(True),
+                ServerPlan.id != self._as_uuid(plan_id),
+            )
+            .limit(1)
+        )
+        return result.first() is not None
+
+    async def _has_other_user_usable_plan(self, plan_id: str | uuid.UUID) -> bool:
+        """Return True when another active plan is public or visible to users."""
+        result = await self.db.execute(
+            select(ServerPlan).where(
+                ServerPlan.is_active.is_(True),
+                ServerPlan.id != self._as_uuid(plan_id),
+            )
+        )
+        return any(self._is_user_usable(plan) for plan in result.scalars().all())
+
+    async def _ensure_plan_remains_usable(
+        self,
+        plan: ServerPlan,
+        *,
+        proposed_active: bool,
+        proposed_public: bool,
+        proposed_roles: list[str] | None,
+    ) -> None:
+        """Reject changes that would leave the platform without a usable plan.
+
+        The platform must keep at least one active plan and at least one active
+        plan that normal users can actually select. Plans that are already
+        inactive/private are never blocked from staying that way.
+        """
+        proposed_active = bool(proposed_active)
+        currently_active = bool(plan.is_active)
+
+        if (
+            currently_active
+            and not proposed_active
+            and not await self._has_other_active_plan(plan.id)
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Cannot deactivate or delete the last active plan. Activate another plan first."
+                ),
+            )
+
+        proposed_user_usable = proposed_active and bool(
+            proposed_public or "user" in (proposed_roles or [])
+        )
+        if (
+            self._is_user_usable(plan)
+            and not proposed_user_usable
+            and not await self._has_other_user_usable_plan(plan.id)
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Cannot remove the last plan available to users. "
+                    "Make another active plan public or visible to the 'user' role first."
+                ),
+            )
+
     async def update_plan(self, plan_id: str, **updates) -> ServerPlan:
         """Update server plan"""
 
         plan = await self.get_by_id(plan_id)
         if not plan:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")
+
+        # update_plan ignores None values, so a proposed state of None means
+        # "keep the current value".
+        proposed_active = updates.get("is_active")
+        if proposed_active is None:
+            proposed_active = plan.is_active
+        proposed_public = updates.get("is_public")
+        if proposed_public is None:
+            proposed_public = plan.is_public
+        proposed_roles = updates.get("visible_to_roles")
+        if proposed_roles is None:
+            proposed_roles = plan.visible_to_roles
+
+        await self._ensure_plan_remains_usable(
+            plan,
+            proposed_active=proposed_active,
+            proposed_public=proposed_public,
+            proposed_roles=proposed_roles,
+        )
 
         # Update fields
         for key, value in updates.items():
@@ -222,6 +321,13 @@ class PlanService:
         plan = await self.get_by_id(plan_id)
         if not plan:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan not found")
+
+        await self._ensure_plan_remains_usable(
+            plan,
+            proposed_active=False,
+            proposed_public=False,
+            proposed_roles=[],
+        )
 
         await self.db.delete(plan)
         await self.db.commit()

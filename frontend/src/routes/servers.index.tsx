@@ -95,10 +95,14 @@ function ServersPage() {
   } = useServerActions()
   const { bulkAction } = useBulkServerActions()
   const { prompt, dialog: reasonDialog } = useReasonDialog()
-  const { data: envData } = useEnvironments({ is_active: true, limit: 100 })
-  const { data: plansData } = usePlans({ is_active: true, limit: 100 })
+  const { data: envData, isPending: environmentsLoading } = useEnvironments({
+    is_active: true,
+    limit: 100,
+  })
+  const { data: plansData, isPending: plansLoading } = usePlans({ is_active: true, limit: 100 })
   const { data: volumesData } = useVolumes()
   const user = useAuthStore((state) => state.user)
+  const canAccessAdmin = useAuthStore((state) => state.hasPermission(PERMISSIONS.ADMIN_ACCESS))
 
   const {
     state: tableState,
@@ -258,6 +262,15 @@ function ServersPage() {
   const environments = envData?.data || []
   const plans = plansData?.data || []
   const volumes = volumesData || []
+  const catalogSettled = !environmentsLoading && !plansLoading
+  // Admins see the full catalog; normal users only receive plans/environments
+  // already filtered for their access, including direct/workspace grants.
+  const catalogReady = canAccessAdmin
+    ? plans.some(
+        (plan) =>
+          plan.is_active && (plan.is_public || (plan.visible_to_roles || []).includes('user'))
+      ) && environments.some((env) => env.is_active && env.is_public)
+    : plans.some((plan) => plan.is_active) && environments.some((env) => env.is_active)
 
   // Pre-fill deploy dialog with saved defaults
   const defaultPlanId = user?.preferences?.default_plan as string | undefined
@@ -897,47 +910,83 @@ function ServersPage() {
             onSelect={(request) => navigate({ search: { tab: 'queue', request } })}
           />
         ) : (
-          <DataTable
-            columns={columns}
-            data={paginatedServers}
-            totalCount={sortedServers.length}
-            pageCount={pageCount}
-            page={tableState.page}
-            limit={tableState.limit}
-            sorting={sorting}
-            rowSelection={rowSelection}
-            columnFilters={columnFilters}
-            columnVisibility={columnVisibility}
-            globalFilter={tableState.search}
-            isLoading={isLoading}
-            isError={isError}
-            errorMessage={error?.message}
-            onPageChange={setPage}
-            onLimitChange={setLimit}
-            onSortingChange={setSorting}
-            onRowSelectionChange={setRowSelection}
-            onColumnFiltersChange={setColumnFilters}
-            onColumnVisibilityChange={setColumnVisibility}
-            onGlobalFilterChange={setSearch}
-            getRowId={(row) => row.id}
-            bulkActions={bulkActions}
-            filters={filters}
-            searchable
-            searchPlaceholder="Search by name or status..."
-            mobileCardRenderer={mobileCardRenderer}
-            emptyState={
-              <EmptyState
-                icon={Server}
-                title="No servers yet"
-                description="Deploy your first simulation server to get started."
-                action={{
-                  label: 'Deploy Server',
-                  onClick: () => setDialogOpen(true),
-                  icon: Plus,
-                }}
-              />
-            }
-          />
+          <>
+            {catalogSettled &&
+              !catalogReady &&
+              !isLoading &&
+              !isError &&
+              myServers.length === 0 && (
+                <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 p-4">
+                  <AlertTriangle
+                    className="mt-0.5 h-4 w-4 shrink-0 text-amber-400"
+                    aria-hidden="true"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    {canAccessAdmin ? (
+                      <>
+                        Deployment prerequisites aren't complete yet.{' '}
+                        <Link
+                          to="/admin/setup"
+                          className="font-medium text-primary hover:underline"
+                        >
+                          Finish setup
+                        </Link>{' '}
+                        to publish an environment and a plan for users.
+                      </>
+                    ) : (
+                      <>
+                        Server deployment isn't available yet.{' '}
+                        <Link to="/support" className="font-medium text-primary hover:underline">
+                          Contact support
+                        </Link>{' '}
+                        if you need access.
+                      </>
+                    )}
+                  </p>
+                </div>
+              )}
+            <DataTable
+              columns={columns}
+              data={paginatedServers}
+              totalCount={sortedServers.length}
+              pageCount={pageCount}
+              page={tableState.page}
+              limit={tableState.limit}
+              sorting={sorting}
+              rowSelection={rowSelection}
+              columnFilters={columnFilters}
+              columnVisibility={columnVisibility}
+              globalFilter={tableState.search}
+              isLoading={isLoading}
+              isError={isError}
+              errorMessage={error?.message}
+              onPageChange={setPage}
+              onLimitChange={setLimit}
+              onSortingChange={setSorting}
+              onRowSelectionChange={setRowSelection}
+              onColumnFiltersChange={setColumnFilters}
+              onColumnVisibilityChange={setColumnVisibility}
+              onGlobalFilterChange={setSearch}
+              getRowId={(row) => row.id}
+              bulkActions={bulkActions}
+              filters={filters}
+              searchable
+              searchPlaceholder="Search by name or status..."
+              mobileCardRenderer={mobileCardRenderer}
+              emptyState={
+                <EmptyState
+                  icon={Server}
+                  title="No servers yet"
+                  description="Deploy your first simulation server to get started."
+                  action={{
+                    label: 'Deploy Server',
+                    onClick: () => setDialogOpen(true),
+                    icon: Plus,
+                  }}
+                />
+              }
+            />
+          </>
         )}
       </ResourcePageLayout>
 
