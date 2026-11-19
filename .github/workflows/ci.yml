@@ -362,7 +362,9 @@ jobs:
           # root readable by the preflight and backend mount.
           volume_root="$(docker info --format '{{.DockerRootDir}}/volumes')"
           sudo mkdir -p "$volume_root"
-          sudo chmod 0755 "$volume_root"
+          # The runner must be able to traverse the Docker root to stat the
+          # volume directory; chmod only the ephemeral runner's paths.
+          sudo chmod 0755 "$(dirname "$volume_root")" "$volume_root"
           {
             echo "VOLUME_BACKUP_HOST_PATH=$backup_dir"
             echo "VOLUME_STORAGE_PATH=$volume_root"
@@ -519,7 +521,9 @@ jobs:
           # root readable by the preflight and backend mount.
           volume_root="$(docker info --format '{{.DockerRootDir}}/volumes')"
           sudo mkdir -p "$volume_root"
-          sudo chmod 0755 "$volume_root"
+          # The runner must be able to traverse the Docker root to stat the
+          # volume directory; chmod only the ephemeral runner's paths.
+          sudo chmod 0755 "$(dirname "$volume_root")" "$volume_root"
           {
             echo "VOLUME_BACKUP_HOST_PATH=$backup_dir"
             echo "VOLUME_STORAGE_PATH=$volume_root"
