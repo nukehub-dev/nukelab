@@ -11,6 +11,40 @@ from app.models.server import Server
 
 
 @pytest.mark.asyncio
+async def test_admin_bulk_requires_server_write_all(client, admin_token, test_user, db_session):
+    """ADMIN_ACCESS alone must not allow cross-user lifecycle mutation."""
+    from app.core.permissions import Permission
+    from app.core.roles import ROLE_PERMISSIONS, _rebuild_expansion_cache
+
+    server = Server(
+        name="limited-admin-target",
+        user_id=test_user.id,
+        status="stopped",
+        container_id="limited-admin-container",
+    )
+    db_session.add(server)
+    await db_session.commit()
+
+    ROLE_PERMISSIONS["admin"] = [Permission.ADMIN_ACCESS]
+    _rebuild_expansion_cache()
+
+    with patch("app.api.servers._perform_server_start", new_callable=AsyncMock) as action:
+        response = await client.post(
+            "/api/admin/servers/bulk-action",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={
+                "action": "start",
+                "server_ids": [str(server.id)],
+                "reason": "Limited admin must still need server-write authority",
+            },
+        )
+
+    assert response.status_code == 403
+    assert Permission.SERVERS_WRITE_ALL in response.json()["detail"]
+    action.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_admin_bulk_requires_reason_and_audit_for_foreign_servers(
     client, admin_token, test_user, db_session
 ):

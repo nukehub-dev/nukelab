@@ -76,9 +76,10 @@ _manage_sh_complete() {
 		COMPREPLY=($(compgen -W "frontend backend shell all --fix -f ${global_flags[*]}" -- "$cur"))
 		;;
 	restore)
-		# restore takes a backup file path; --yes skips the confirmation.
+		# restore takes a backup file path; --yes skips confirmation and
+		# --stamp selects the Alembic revision for a rollback restore.
 		if [[ "$cur" == -* ]]; then
-			COMPREPLY=($(compgen -W "--yes -y ${global_flags[*]}" -- "$cur"))
+			COMPREPLY=($(compgen -W "--yes -y --stamp ${global_flags[*]}" -- "$cur"))
 		else
 			COMPREPLY=($(compgen -f -- "$cur"))
 		fi

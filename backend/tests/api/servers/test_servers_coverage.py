@@ -917,33 +917,29 @@ class TestListServersVolumeMountSerialization:
 
 class TestStartStopRestartMopUp:
     @pytest.mark.asyncio
-    async def test_restart_gpu_ensure_failure_propagates(
+    async def test_restart_launch_error_propagates(
         self, client, user_token, cov_server, cov_plan_env, db_session
     ):
-        """HTTPException inside the restart try-block re-raises (line 1507)."""
-        plan, _ = cov_plan_env
-        plan.gpu_limit = 1
-        cov_server.container_id = "cid-gpu-restart-429"
+        """LaunchError from the lifecycle service maps to its HTTP status."""
+        from app.services.server_launch_service import LaunchError
+
+        cov_server.container_id = "cid-restart-launch-error"
         cov_server.status = "running"
         cov_server.allocated_gpu = 1
         await db_session.commit()
 
         with (
-            mock.patch("app.api.servers.settings.credits_enabled", False),
-            mock.patch("app.services.gpu_allocator.GpuAllocatorService") as mock_alloc_cls,
-            mock.patch("app.api.servers.spawner.get_status", return_value="paused"),
-            mock.patch("app.api.servers.spawner.delete", new=mock.AsyncMock()),
-            mock.patch(
-                "app.api.servers._ensure_gpu_devices",
-                new=mock.AsyncMock(side_effect=HTTPException(status_code=429, detail="no gpu")),
-            ),
+            mock.patch("app.api.servers.spawner.get_status", return_value="running"),
+            mock.patch("app.api.servers.get_driver", new=mock.AsyncMock()),
+            mock.patch("app.api.servers.ServerLifecycleService") as service_cls,
         ):
-            alloc = mock_alloc_cls.return_value
-            alloc.enabled = mock.Mock(return_value=True)
-
+            service_cls.return_value.restart = mock.AsyncMock(
+                side_effect=LaunchError("gpu_wait", 409)
+            )
             response = await client.post(
                 f"/api/servers/{cov_server.id}/restart",
                 headers={"Authorization": f"Bearer {user_token}"},
             )
 
-        assert response.status_code == 429
+        assert response.status_code == 409
+        assert response.json()["detail"]["code"] == "gpu_wait"
