@@ -14,6 +14,8 @@ section.
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-11-20
+
 ### Added
 
 - Required frontend test CI: Vitest units, Vite-only account-switch specs, a
