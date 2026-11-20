@@ -1,193 +1,172 @@
 # NukeLab Server Lifecycle
 
-This document describes the lifecycle of a NukeLab server, from initial spawn request through deletion.
+Creation, queue dispatch, user/admin/bulk actions, logout stops, schedules and health restarts
+share admission and lifecycle services. Routes retain authentication, token scope,
+resource ownership, cross-user reason and audit checks.
 
-## Lifecycle states
+## Admission and waiting
 
-A server can be in one of these states:
+`server_launch_service.py` resolves approved immutable image identities outside
+admission locks, then rechecks current owner permissions, plan/environment access,
+credits, quota and volume access. Read Committed transactions acquire the shared
+admission lock before fresh accounting queries. Reservations commit before runtime I/O.
+
+Available capacity produces a stable `starting` server, immutable launch intent,
+GPU allocations and mount guards. Scarcity produces HTTP 202 with a typed queue
+request, preserving normalized volume paths, modes and explicit capacities. Waiting
+creates no user data volumes, running server or credit debit. Immediate success
+retains the normal server response.
+
+The owner-scoped `/server-queue` router exposes capability discovery, list/detail
+and pending cancellation. Claims serialize under admission; cancellation is an
+atomic pending-only transition that loses to a claim and returns conflict once
+launch has started.
+`server_queue_dispatch_service.py` scans bounded batches in priority/time/ID order
+and persists a rotating cursor so non-fitting early requests cannot hide later
+candidates indefinitely. Positions describe ordering, not a guaranteed start time.
+The frontend waiting tab polls active requests and links successful requests to
+the actual server name; account changes invalidate owner-scoped queue state.
+
+## Fenced lifecycle operations
+
+`server_operation_service.py` journals immutable action intent and a fencing token.
+A partial unique index permits one active prepared, executing or uncertain action
+per server. Only the successful prepared-to-executing claimant performs runtime I/O.
+Replays do not start another executor. Completion requires verified runtime or
+executor termination evidence; elapsed time alone never authorizes takeover.
 
 | State | Meaning |
 |---|---|
-| `pending` | Spawn request accepted, resources being allocated |
-| `starting` | Container is being created and started |
-| `running` | Container is active and accessible |
-| `stopping` | Stop request received, container is shutting down |
-| `stopped` | Container is stopped but the server record remains |
-| `error` | An error occurred during spawn or operation |
+| `starting` | Launch/replacement reserved; uncertainty may require reconciliation |
+| `running` | Runtime identity and readiness verified |
+| `stopping` | Termination reserved; resources remain protected until verified |
+| `stopped` | Termination verified or an existing stopped server retained |
+| `error` | Failed server state outside an active protected operation |
 
-## Spawn flow
+`server_lifecycle_service.py` implements start, restart and configuration edits.
+Starting an already running server is idempotent. Recreation uses the captured
+approved revision, even if the mutable environment template has changed. Explicit
+selection changes resolve a new approved revision. Each successful recreation
+records a new immutable launch generation. Image resolution and edits compare the
+initial server version again under admission, rejecting a stale selection if
+an intervening action has completed. Legacy servers missing plan/environment selection can resume an existing verified
+non-exclusive-GPU container; missing runtime identity cannot authorize recreation.
+An unrecorded server with a valid selection captures its first approved revision
+for a new recreation and records only that observed generation. No historic proof
+is backfilled from today's template.
 
-```
-User clicks "Spawn"
-        |
-        v
-POST /api/servers
-        |
-        v
-FastAPI validates auth, permissions, quota, credits
-        |
-        v
-ResourcePoolService checks available CPU, memory, disk
-        |
-        +---> Insufficient resources ---> Queue server request
-        |
-        +---> Resources available
-                |
-                v
-        ServerSpawner.spawn()
-                |
-                +---> Ensure persistent volume exists
-                |
-                +---> Pull runtime image if missing
-                |
-                +---> Pull toolchain image if configured
-                |
-                +---> Prepare shared toolchain volume from toolchain image
-                |     (one named volume per image ref, mounted read-only;
-                |     population is serialized via a lock container and a
-                |     stamp invalidates the volume when the image changes)
-                |
-                +---> Create container with plan limits
-                |     (NanoCpus, Memory, Cpuset, StorageOpt)
-                |
-                +---> Attach Traefik routing labels
-                |     traefik.http.routers.{name}.rule=Host(...) && PathPrefix(/user/{username}/{server_id})
-                |
-                +---> Start container
-                |
-                +---> Wait for readiness via HTTP health check
-                |
-                v
-        Update server status to running
-                |
-                v
-        Publish WebSocket event server.status_changed
-```
+Replacement holds the larger old/new resource reservation and the union of mount
+and GPU guards until the exact predecessor is verified gone. Runtime mutations
+check managed owner/server labels. Reserved names derive from the stable server
+UUID rather than the display name.
 
-### Toolchain volume composition
+Queue dispatch, schedules, health restarts and lifecycle enforcement execute in
+`celery-worker`, so that container receives the same runtime/security settings as
+the API (`CONTAINER_HARDENING_ENABLED`, runtime selection, server-auth keys,
+public URL, GPU and resource-pool limits). Missing worker configuration changes
+only background-admitted launches and can silently produce different containers.
+A newly created private volume selected for launch receives a one-time mount-root
+permission initialization for the non-root runtime; existing data volumes are
+never relabeled or recursively chmodded. The read-only root filesystem includes
+a writable `/home`, so a server with only explicit non-home data mounts can
+initialize its runtime home; without a home volume that home is ephemeral.
 
-When the selected environment template has a `tool_image`, the spawner mounts a
-shared named volume (`nukelab-toolchain-<image>-<hash>`) copied once per node
-from the toolchain image, read-only, into the workspace container. Population
-is serialized across processes (API workers and Celery tasks) by a lock
-container whose atomic name creation acts as the semaphore; stale locks older
-than 15 minutes are force-removed. After populating, the driver writes a stamp
-file (`.nukelab-toolchain-stamp.json`) recording the image ID and repo digests;
-a volume whose stamp does not match the current local image is wiped and
-re-populated, so re-pushed tags never serve stale content. The manifest-read
-and populate helper containers run hardened (dropped capabilities,
-no-new-privileges, read-only rootfs). Manifest `env_prepend` variables are
-prepended to the runtime container's existing values; plain `env` variables
-never override explicitly set ones. If toolchain preparation fails, the server
-spawns without the toolchain and an error-level `TOOLCHAIN_DEGRADED` message is
-logged.
+`server_termination_service.py` reserves stop/delete before I/O, verifies runtime
+identity and removal, then releases GPU/mount guards and updates accounting under
+the fence. A running server with a missing container ID cannot be declared stopped
+without evidence. Unknown outcomes return a sanitized error and retain protection.
+Billing reconciliation and notifications occur outside admission locks.
 
-## Start flow
+Status reads probe outside locks, then compare the observed container ID, row
+version and active operation under admission before applying a status change.
+They cannot convert an active `starting`/`stopping` reservation into a released state.
+Paused runtimes keep their compute/memory reservation because pausing does not
+release their host memory.
 
-Starting a stopped server reuses the existing container if possible. If the container is missing (for example, after a host restart), the spawner recreates it from the server record.
+## Runtime and toolchain identity
 
-```
-POST /api/servers/{id}/start
-        |
-        v
-Validate credits and quota
-        |
-        v
-Check existing container
-        |
-        +---> Container exists ---> Start it
-        |
-        +---> Container missing ---> Recreate from server record
-                |
-                v
-        Wait for readiness
-                |
-                v
-        Update status and emit event
-```
+The reserved spawner selects exact local image IDs, requires readiness and refuses
+destructive runtime adoption or missing existing data volumes. Readiness checks
+both the container endpoint and its public route through internal Traefik.
+Toolchain caches are keyed by immutable identity/platform/layout and mounted
+read-only. Incomplete or mismatched caches fail closed; uncertain helper outcomes
+retain atomic locks without TTL takeover. Existing data and read-only mounts are
+not chmodded as part of launch. Repository digest metadata alone does not prove
+registry portability.
 
-## Stop flow
+## Provenance, export and approved recreation
 
-```
-POST /api/servers/{id}/stop
-        |
-        v
-FastAPI records actor and reason
-        |
-        v
-ContainerClient.stop_container()
-        |
-        +---> Send SIGTERM with configurable timeout
-        |
-        +---> Force kill if timeout exceeded
-        |
-        v
-Update server status to stopped
-        |
-        v
-Emit server.status_changed event
-```
+The server detail page shows the last verified launch, requested/observed artifact
+identities, capture time and recorded limitations. A newer starting or uncertain
+replacement does not make an older record proof of the current runtime. Legacy
+servers without records remain explicitly unrecorded. Exports select the displayed
+immutable launch and return its saved sanitized manifest, never today's template
+or a raw runtime inspection. Revocation blocks recreation while retaining history;
+it is currently an operator/database procedure because no admin endpoint sets the
+revision's `revoked` flag.
 
-## Restart flow
+`server_recreation_service.py` validates either an owned source launch or a bounded
+strict manifest against an existing approved revision. Imports do not create
+approval or grant access. The owner UI supports source recreation and imported
+JSON; API cross-user history retains JWT/reason/audit rules, while source launch
+IDs remain owner-only. Read-only owners can inspect/export without creating work.
 
-Restart is implemented as a stop followed by a start, preserving the same server record and volumes.
+Preview requires both read and write permissions/scopes because it discloses
+saved metadata. Final submission rechecks current approval and uses the normal
+write/manage boundary. A preview grants no permission, capacity or artifact lease.
+History/export and preview responses use private no-store caching. A read-scoped
+API token is not advertised as eligible to recreate without manage scope.
 
-## Delete flow
+Recreation asks for a new name, current plan and a deliberate fresh/existing volume
+for each logical requirement. Paths and modes match the validated preview; home
+aliases map to the actor's home, and source volume IDs are never copied. Imported
+resource descriptions and variable names grant no entitlement or environment-value
+override. Data destinations cannot overlap system security mounts or approved
+read-only toolchain roots, including parent and child paths.
 
-```
-DELETE /api/servers/{id}
-        |
-        v
-Validate delete permission
-        |
-        v
-Stop container if running
-        |
-        v
-Delete container
-        |
-        v
-Optionally delete associated volumes (admin-only bulk action)
-        |
-        v
-Mark server as deleted or remove record
-        |
-        v
-Emit server.status_changed event
-```
+`submit_pinned()` verifies exact local artifact identity/platform before reservation
+and invokes the same direct/queued admission boundary. It does not resolve or pull
+the original mutable tag. Missing artifacts fail explicitly. The current driver
+records local-only identities; repository digests alone are not registry
+verification, and matching approval on a different installation is not automated.
+A manifest neither backs up user files nor freezes host drivers/external services.
 
-## Scheduling
+## Worker ownership and recovery
 
-Celery Beat runs cron-based schedules defined in `ServerSchedule`. When a schedule fires, Celery calls the same start/stop service methods used by the API, ensuring consistent validation and audit logging.
+Runtime-capable Celery tasks use `operation_runner.py` with a task-local loop,
+fresh DB sessions and a fresh driver. Cooperative cancellation is joined before
+resources close. Schedules, health restart, idle shutdown, billing enforcement,
+auto-stop and volume quota enforcement call the shared lifecycle services.
+Enforcement stops carry the observed server version into termination admission;
+health probes discard stale results and pass sampled authority into restart.
 
-## Health checks
+Uncertain operations remain protected and block conflicting mutations. Automated
+crash adoption and operator-facing reconciliation are not complete. Never clear
+an uncertain journal, mount guard or GPU reservation solely because a worker or
+HTTP deadline expired. See [operations guidance](../operations/OPERATIONS.md)
+for upgrade and investigation requirements.
 
-`HealthCheckService` periodically probes running containers. If a container is unhealthy, the backend can auto-restart it subject to rate limits. Health status is stored on the `Server` model and surfaced in the dashboard.
+## Code ownership
 
-## Resource cleanup
-
-Background tasks handle cleanup:
-
-- NUKE billing debits credits for running servers.
-- Idle servers are stopped after the configured `idle_timeout`.
-- Servers exceeding `max_runtime` are stopped automatically.
-- Expired guest accounts and stale notification records are pruned.
-
-## Code locations
-
-| Responsibility | File |
+| Responsibility | Location under `backend/app/` |
 |---|---|
-| API routes | `backend/app/api/servers.py` |
-| Spawn orchestration | `backend/app/container/spawner.py` |
-| Low-level container ops | `backend/app/container/client.py` |
-| Resource availability | `backend/app/services/resource_pool_service.py` |
-| Health checks | `backend/app/services/health_check_service.py` |
-| Scheduling | `backend/app/services/schedule_service.py` |
-| Background billing/cleanup | `backend/app/tasks.py` |
+| HTTP and owner queue routes | `api/servers.py`, `api/server_queue.py` |
+| Provenance and recovery routes | `api/server_provenance.py`, `api/volume_backups.py` |
+| Admission and queue dispatch | `services/server_launch_service.py`, `services/server_queue_dispatch_service.py` |
+| Launch validation, recreation and provenance | `services/server_launch_validation.py`, `services/server_recreation_service.py`, `services/server_provenance_service.py` |
+| Existing-server operations | `services/server_lifecycle_service.py`, `services/server_termination_service.py` |
+| Action journal and fencing | `services/server_operation_service.py` |
+| Volume operation guard and recovery | `services/volume_operation_service.py`, `services/volume_backup_service.py`, `services/volume_recovery_runtime.py` |
+| Runtime composition and driver | `container/spawner.py`, `container/docker_driver.py` |
+| Scheduling and health | `services/schedule_service.py`, `services/health_check_service.py` |
+| Task ownership | `tasks.py`, `worker.py`, `services/operation_runner.py` |
 
-## Related documents
-
-- [COMPONENTS.md](COMPONENTS.md) for how ContainerClient and ServerSpawner fit into the system
-- [AUTH.md](AUTH.md) for container access authentication
-- [DATA-MODEL.md](DATA-MODEL.md) for the Server entity and state fields
-- [operations/PRODUCTION-DEPLOYMENT.md](../operations/PRODUCTION-DEPLOYMENT.md) for cgroup and resource isolation details
+Offline private-volume recovery shares the volume operation guard with launch,
+file mutation, sharing and deletion. The separate helper captures only detached
+private volumes and restores into a new protected destination. Recovery
+orchestration runs in `celery-worker` and is configured with the
+`VOLUME_BACKUP_*` settings; see the environment reference for values. See
+[recovery operations](../operations/BACKUP-RESTORE.md#private-user-volume-recovery).
+Verified registry portability, automatic crash adoption and remote CI validation
+remain separate delivery gates; the combined real-stack acceptance suite runs
+locally.

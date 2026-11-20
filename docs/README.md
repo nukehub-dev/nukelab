@@ -26,7 +26,7 @@ This directory contains all durable documentation for the NukeLab platform. Docu
 | [architecture/OVERVIEW.md](architecture/OVERVIEW.md) | High-level system overview, request flow, and runtime boundaries |
 | [architecture/COMPONENTS.md](architecture/COMPONENTS.md) | Component responsibilities and interaction matrix |
 | [architecture/AUTH.md](architecture/AUTH.md) | Authentication and authorization flows: local JWT, OAuth, container access proxy |
-| [architecture/SERVER-LIFECYCLE.md](architecture/SERVER-LIFECYCLE.md) | Server spawn, start, stop, restart, delete, and scheduling flows |
+| [architecture/SERVER-LIFECYCLE.md](architecture/SERVER-LIFECYCLE.md) | Queue admission, fenced lifecycle, provenance/recreation, scheduling and worker recovery |
 | [architecture/DATA-MODEL.md](architecture/DATA-MODEL.md) | Core entities, relationships, and schema conventions |
 | [architecture/MONITORING.md](architecture/MONITORING.md) | Observability stack: Prometheus, Grafana, Alertmanager, Jaeger, OpenTelemetry |
 
@@ -34,9 +34,10 @@ This directory contains all durable documentation for the NukeLab platform. Docu
 
 | Document | Purpose |
 |---|---|
-| [operations/OPERATIONS.md](operations/OPERATIONS.md) | Day-to-day database operations, profiling, tuning, and scaling |
-| [operations/PRODUCTION-DEPLOYMENT.md](operations/PRODUCTION-DEPLOYMENT.md) | Production deployment, cgroup controllers, lxcfs, storage quotas |
-| [operations/BACKUP-RESTORE.md](operations/BACKUP-RESTORE.md) | Backup strategies, restore procedures, and disaster recovery |
+| [operations/OPERATIONS.md](operations/OPERATIONS.md) | First-run catalog setup, lifecycle upgrades, database operations, profiling, tuning and scaling |
+| [operations/PRODUCTION-DEPLOYMENT.md](operations/PRODUCTION-DEPLOYMENT.md) | Production deployment, cgroup controllers, lxcfs, storage quotas and optional volume recovery |
+| [operations/BACKUP-RESTORE.md](operations/BACKUP-RESTORE.md) | Database and private-volume backup, restore procedures and disaster recovery |
+| [operations/GPU-SETUP.md](operations/GPU-SETUP.md) | NVIDIA GPU passthrough and CDI configuration |
 | [operations/READ-REPLICAS.md](operations/READ-REPLICAS.md) | Read replica reference for future scaling |
 
 ### Security
@@ -55,6 +56,7 @@ This directory contains all durable documentation for the NukeLab platform. Docu
 |---|---|
 | [development/LOCAL-DEV.md](development/LOCAL-DEV.md) | Development stack, hot reload, and local tooling |
 | [development/CONTRIBUTING.md](development/CONTRIBUTING.md) | How to contribute: tests, lint, commit style, PR process |
+| [development/WEB-PUSH.md](development/WEB-PUSH.md) | Browser push notification setup and service-worker behavior |
 
 ### Reference
 

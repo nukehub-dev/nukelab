@@ -104,6 +104,13 @@ jobs:
       - name: Build core images
         run: ./nukelabctl build all
 
+      - name: Build volume helper image
+        run: |
+          $CONTAINER_ENGINE build \
+            --file services/volume-helper/Dockerfile \
+            --tag nukelab-volume-helper:latest \
+            .
+
       - name: Run Trivy image scans
         uses: aquasecurity/trivy-action@v0.36.0
         continue-on-error: true
@@ -121,6 +128,15 @@ jobs:
           image-ref: 'ghcr.io/nukehub-dev/nukelab-frontend:latest'
           format: 'sarif'
           output: 'trivy-frontend.sarif'
+          severity: 'HIGH,CRITICAL'
+
+      - name: Run Trivy image scan (volume helper)
+        uses: aquasecurity/trivy-action@v0.36.0
+        continue-on-error: true
+        with:
+          image-ref: 'nukelab-volume-helper:latest'
+          format: 'sarif'
+          output: 'trivy-volume-helper.sarif'
           severity: 'HIGH,CRITICAL'
 
       - name: Merge SARIF files
@@ -151,7 +167,7 @@ jobs:
         uses: github/codeql-action/upload-sarif@v4
         # The code-scanning API rejects a SARIF payload with zero runs
         # ("1 item required; only 0 were supplied") — skip the upload when
-        # both scans failed to produce a report instead of failing the job.
+        # every scan failed to produce a report instead of failing the job.
         if: always() && steps.merge.outputs.runs != '0'
         with:
           sarif_file: trivy-merged.sarif

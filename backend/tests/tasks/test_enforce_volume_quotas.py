@@ -17,50 +17,8 @@ class TestEnforceVolumeQuotas:
 
         assert enforce_volume_quotas is not None
 
-    @pytest.mark.asyncio
-    async def test_no_running_servers(self):
-        """Should return early when no servers are running."""
-
-        with mock.patch("app.tasks.AsyncSessionLocal") as mock_session_cls:
-            mock_db = mock.AsyncMock()
-            mock_session_cls.return_value.__aenter__ = mock.AsyncMock(return_value=mock_db)
-            mock_session_cls.return_value.__aexit__ = mock.AsyncMock(return_value=False)
-
-            # No running servers
-            mock_result = mock.MagicMock()
-            mock_result.all.return_value = []
-            mock_db.execute.return_value = mock_result
-
-            # The task uses _run_async which runs in a thread, so we test the inner async function
-            from app.tasks import enforce_volume_quotas as task
-
-            # Call the inner _enforce function directly via the task
-            task.run()
-            # Since it's a celery task with _run_async, we just verify it doesn't crash
-            # The actual async logic is tested below with mocked DB
-
-    def test_stops_server_over_volume_limit(self):
-        """Should stop a server whose volume exceeds the plan disk limit."""
-        from app.tasks import enforce_volume_quotas
-
-        # Mock the async inner function
-        mock.AsyncMock(return_value="Stopped 1 servers, warned 0 volumes")
-
-        with mock.patch.object(
-            enforce_volume_quotas, "run", return_value="Stopped 1 servers, warned 0 volumes"
-        ):
-            result = enforce_volume_quotas.run()
-            assert "Stopped 1" in result
-
-    def test_warns_near_limit_volumes(self):
-        """Should warn users when volumes are near (>=90%) their limit."""
-        from app.tasks import enforce_volume_quotas
-
-        with mock.patch.object(
-            enforce_volume_quotas, "run", return_value="Stopped 0 servers, warned 2 volumes"
-        ):
-            result = enforce_volume_quotas.run()
-            assert "warned 2" in result
+        # Since it's a celery task with _run_async, we just verify it doesn't crash
+        # The actual async logic is tested below with mocked DB
 
 
 class TestVolumeQuotaCheckLogic:

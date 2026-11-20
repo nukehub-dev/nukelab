@@ -111,6 +111,10 @@ celery_app.conf.update(
     worker_pool="threads",
     worker_concurrency=4,
     beat_schedule={
+        "dispatch-volume-recovery": {
+            "task": "app.tasks.dispatch_volume_recovery",
+            "schedule": 30.0,
+        },
         "collect-container-metrics": {
             "task": "app.tasks.collect_container_metrics",
             "schedule": 5.0,  # Every 5 seconds
@@ -141,7 +145,7 @@ celery_app.conf.update(
         },
         "process-server-queue": {
             "task": "app.tasks.process_server_queue",
-            "schedule": 30.0,  # Every 30 seconds
+            "schedule": float(settings.queue_tick_seconds),
         },
         "evaluate-schedules": {
             "task": "app.tasks.evaluate_schedules",

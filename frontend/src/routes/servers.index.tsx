@@ -19,6 +19,8 @@ import {
   Pencil,
   Calendar,
   AlertTriangle,
+  Clock,
+  Import,
 } from 'lucide-react'
 import { Tooltip } from '../components/ui/tooltip'
 import { Checkbox } from '../components/ui/checkbox'
@@ -39,8 +41,11 @@ import { useEnvironments } from '../hooks/use-environments'
 import { usePlans } from '../hooks/use-plans'
 import { useVolumes } from '../hooks/use-volumes'
 import { useDataTable } from '../hooks/use-data-table'
-import { useAuthStore } from '../stores/auth-store'
-import { formatDate, formatBytes, formatPlanResource, parseMemoryString } from '../lib/utils'
+import { useAuthStore, PERMISSIONS } from '../stores/auth-store'
+import { isQueuedServer, parseQueueSearch } from '../lib/server-queue'
+import { useQueueCapabilities } from '../hooks/use-server-queue'
+import { ServerQueuePanel } from '../components/server/server-queue-panel'
+import { formatDate, formatBytes, formatPlanResource, parseMemoryString, cn } from '../lib/utils'
 import type { Server as ServerType } from '../types/api'
 import {
   Dialog,
@@ -58,12 +63,25 @@ import { Select, SelectItem } from '../components/ui/select'
 import { useConfirmDialog } from '../components/ui/confirm-dialog'
 import { ScheduleDialog } from '../components/server/schedule-dialog'
 import { DeployServerDialog } from '../components/server/deploy-server-dialog'
+import { RecreateServerDialog } from '../components/server/recreate-server-dialog'
+import { useProvenanceCapabilities } from '../hooks/use-server-provenance'
 
 export const Route = createFileRoute('/servers/')({
   component: ServersPage,
+  validateSearch: parseQueueSearch,
 })
 
 function ServersPage() {
+  const search = Route.useSearch()
+  const navigate = Route.useNavigate()
+  const capabilities = useQueueCapabilities()
+  const provenanceCapabilities = useProvenanceCapabilities()
+  const canRecreate = useAuthStore((state) => state.hasPermission(PERMISSIONS.SERVERS_WRITE_OWN))
+  const canImportEnvironment = canRecreate && provenanceCapabilities.data?.enabled === true
+  const [importOpen, setImportOpen] = useState(false)
+  const canReadQueue = useAuthStore((state) => state.hasPermission(PERMISSIONS.SERVERS_READ_OWN))
+  const queueEnabled = canReadQueue && capabilities.data?.enabled === true
+  const viewingQueue = search.tab === 'queue' && queueEnabled
   const { confirm, dialog } = useConfirmDialog()
   const { data: servers = [], isLoading, isError, error } = useServers()
   const {
@@ -77,10 +95,14 @@ function ServersPage() {
   } = useServerActions()
   const { bulkAction } = useBulkServerActions()
   const { prompt, dialog: reasonDialog } = useReasonDialog()
-  const { data: envData } = useEnvironments({ is_active: true, limit: 100 })
-  const { data: plansData } = usePlans({ is_active: true, limit: 100 })
+  const { data: envData, isPending: environmentsLoading } = useEnvironments({
+    is_active: true,
+    limit: 100,
+  })
+  const { data: plansData, isPending: plansLoading } = usePlans({ is_active: true, limit: 100 })
   const { data: volumesData } = useVolumes()
   const user = useAuthStore((state) => state.user)
+  const canAccessAdmin = useAuthStore((state) => state.hasPermission(PERMISSIONS.ADMIN_ACCESS))
 
   const {
     state: tableState,
@@ -240,6 +262,15 @@ function ServersPage() {
   const environments = envData?.data || []
   const plans = plansData?.data || []
   const volumes = volumesData || []
+  const catalogSettled = !environmentsLoading && !plansLoading
+  // Admins see the full catalog; normal users only receive plans/environments
+  // already filtered for their access, including direct/workspace grants.
+  const catalogReady = canAccessAdmin
+    ? plans.some(
+        (plan) =>
+          plan.is_active && (plan.is_public || (plan.visible_to_roles || []).includes('user'))
+      ) && environments.some((env) => env.is_active && env.is_public)
+    : plans.some((plan) => plan.is_active) && environments.some((env) => env.is_active)
 
   // Pre-fill deploy dialog with saved defaults
   const defaultPlanId = user?.preferences?.default_plan as string | undefined
@@ -260,6 +291,15 @@ function ServersPage() {
     window.addEventListener('new-server', handleNewServer)
     return () => window.removeEventListener('new-server', handleNewServer)
   }, [])
+
+  // Deep link from the dashboard first-run card: open the deploy dialog once,
+  // then strip the flag so closing or refreshing does not reopen it.
+  useEffect(() => {
+    if (search.deploy !== true) return
+    const { deploy: _deploy, ...queueSearch } = search
+    queueMicrotask(() => setDialogOpen(true))
+    void navigate({ search: queueSearch, replace: true })
+  }, [search, navigate])
 
   // Filter to only current user's servers
   const myServers = servers.filter((server) => !user || server.user_id === user.id)
@@ -805,49 +845,152 @@ function ServersPage() {
           },
         ]}
       >
-        {/* Servers Table - Always paginated flat view for performance */}
-        <DataTable
-          columns={columns}
-          data={paginatedServers}
-          totalCount={sortedServers.length}
-          pageCount={pageCount}
-          page={tableState.page}
-          limit={tableState.limit}
-          sorting={sorting}
-          rowSelection={rowSelection}
-          columnFilters={columnFilters}
-          columnVisibility={columnVisibility}
-          globalFilter={tableState.search}
-          isLoading={isLoading}
-          isError={isError}
-          errorMessage={error?.message}
-          onPageChange={setPage}
-          onLimitChange={setLimit}
-          onSortingChange={setSorting}
-          onRowSelectionChange={setRowSelection}
-          onColumnFiltersChange={setColumnFilters}
-          onColumnVisibilityChange={setColumnVisibility}
-          onGlobalFilterChange={setSearch}
-          getRowId={(row) => row.id}
-          bulkActions={bulkActions}
-          filters={filters}
-          searchable
-          searchPlaceholder="Search by name or status..."
-          mobileCardRenderer={mobileCardRenderer}
-          emptyState={
-            <EmptyState
-              icon={Server}
-              title="No servers yet"
-              description="Deploy your first simulation server to get started."
-              action={{
-                label: 'Deploy Server',
-                onClick: () => setDialogOpen(true),
-                icon: Plus,
-              }}
+        {(queueEnabled || canImportEnvironment) && (
+          <div
+            className={cn(
+              'flex flex-col gap-3 sm:flex-row sm:items-center',
+              queueEnabled ? 'sm:justify-between' : 'sm:justify-end'
+            )}
+          >
+            {queueEnabled && (
+              <nav
+                aria-label="Server sections"
+                className="flex w-fit items-center gap-0.5 rounded-lg border border-input/50 bg-input/80 p-0.5"
+              >
+                <button
+                  type="button"
+                  aria-current={!viewingQueue ? 'page' : undefined}
+                  onClick={() => navigate({ search: {} })}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all',
+                    !viewingQueue
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <Server className="h-3.5 w-3.5" aria-hidden="true" />
+                  Servers
+                </button>
+                <button
+                  type="button"
+                  aria-current={viewingQueue ? 'page' : undefined}
+                  onClick={() => navigate({ search: { tab: 'queue' } })}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all',
+                    viewingQueue
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+                  Waiting requests
+                </button>
+              </nav>
+            )}
+            {canImportEnvironment && (
+              <Button variant="outline" onClick={() => setImportOpen(true)}>
+                <Import className="h-4 w-4" aria-hidden="true" />
+                Import environment
+              </Button>
+            )}
+          </div>
+        )}
+        {search.tab === 'queue' && !queueEnabled && (
+          <p role="status" className="mb-4 text-sm text-muted-foreground">
+            {capabilities.isPending
+              ? 'Checking request availability…'
+              : 'Waiting requests are currently unavailable.'}
+          </p>
+        )}
+        {viewingQueue ? (
+          <ServerQueuePanel
+            requestId={search.request}
+            plans={plans}
+            environments={environments}
+            onSelect={(request) => navigate({ search: { tab: 'queue', request } })}
+          />
+        ) : (
+          <>
+            {catalogSettled &&
+              !catalogReady &&
+              !isLoading &&
+              !isError &&
+              myServers.length === 0 && (
+                <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/10 p-4">
+                  <AlertTriangle
+                    className="mt-0.5 h-4 w-4 shrink-0 text-amber-400"
+                    aria-hidden="true"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    {canAccessAdmin ? (
+                      <>
+                        Deployment prerequisites aren't complete yet.{' '}
+                        <Link
+                          to="/admin/setup"
+                          className="font-medium text-primary hover:underline"
+                        >
+                          Finish setup
+                        </Link>{' '}
+                        to publish an environment and a plan for users.
+                      </>
+                    ) : (
+                      <>
+                        Server deployment isn't available yet.{' '}
+                        <Link to="/support" className="font-medium text-primary hover:underline">
+                          Contact support
+                        </Link>{' '}
+                        if you need access.
+                      </>
+                    )}
+                  </p>
+                </div>
+              )}
+            <DataTable
+              columns={columns}
+              data={paginatedServers}
+              totalCount={sortedServers.length}
+              pageCount={pageCount}
+              page={tableState.page}
+              limit={tableState.limit}
+              sorting={sorting}
+              rowSelection={rowSelection}
+              columnFilters={columnFilters}
+              columnVisibility={columnVisibility}
+              globalFilter={tableState.search}
+              isLoading={isLoading}
+              isError={isError}
+              errorMessage={error?.message}
+              onPageChange={setPage}
+              onLimitChange={setLimit}
+              onSortingChange={setSorting}
+              onRowSelectionChange={setRowSelection}
+              onColumnFiltersChange={setColumnFilters}
+              onColumnVisibilityChange={setColumnVisibility}
+              onGlobalFilterChange={setSearch}
+              getRowId={(row) => row.id}
+              bulkActions={bulkActions}
+              filters={filters}
+              searchable
+              searchPlaceholder="Search by name or status..."
+              mobileCardRenderer={mobileCardRenderer}
+              emptyState={
+                <EmptyState
+                  icon={Server}
+                  title="No servers yet"
+                  description="Deploy your first simulation server to get started."
+                  action={{
+                    label: 'Deploy Server',
+                    onClick: () => setDialogOpen(true),
+                    icon: Plus,
+                  }}
+                />
+              }
             />
-          }
-        />
+          </>
+        )}
       </ResourcePageLayout>
+
+      <RecreateServerDialog open={importOpen} onOpenChange={setImportOpen} />
 
       <DeployServerDialog
         open={dialogOpen}
@@ -860,10 +1003,18 @@ function ServersPage() {
         defaultEnvironmentId={defaultEnvironmentId}
         isPending={createServer.isPending}
         error={createServer.error}
+        onViewQueued={(request) => {
+          setDialogOpen(false)
+          void navigate({ search: { tab: 'queue', request } })
+        }}
         onDeploy={(data) => {
           createServer.mutate(data, {
-            onSuccess: () => {
+            onSuccess: (result) => {
+              if (useAuthStore.getState().user?.id !== user?.id) return
               setDialogOpen(false)
+              if (isQueuedServer(result)) {
+                void navigate({ search: { tab: 'queue', request: result.queue_id } })
+              }
             },
           })
         }}

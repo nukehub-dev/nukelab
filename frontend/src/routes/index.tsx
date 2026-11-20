@@ -17,17 +17,24 @@ import {
   FolderOpen,
   CreditCard,
   ArrowRight,
+  Rocket,
+  CheckCircle2,
+  AlertCircle,
+  ListChecks,
 } from 'lucide-react'
 import { FloatingHeader } from '../components/layout/floating-header'
 import { StatCard } from '../components/data/stat-card'
 
 import { useDashboard } from '../hooks/use-dashboard'
 import { useServers } from '../hooks/use-servers'
+import { usePlans } from '../hooks/use-plans'
+import { useEnvironments } from '../hooks/use-environments'
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store'
 import { SkeletonCard } from '../components/feedback/skeleton'
 import { MetricsDashboard } from '../components/charts/metrics-dashboard'
 import { UserServerMetrics } from '../components/charts/user-server-metrics'
-import { formatDate } from '../lib/utils'
+import { buttonVariants } from '../components/ui/button-variants'
+import { cn, formatDate } from '../lib/utils'
 
 export const Route = createFileRoute('/')({
   component: DashboardPage,
@@ -35,7 +42,12 @@ export const Route = createFileRoute('/')({
 
 function DashboardPage() {
   const { data: dashboard, isLoading, isError, error } = useDashboard()
-  const { data: servers = [] } = useServers()
+  const { data: servers = [], isLoading: serversLoading, isError: serversError } = useServers()
+  const { data: plansData, isPending: plansLoading } = usePlans({ is_active: true, limit: 100 })
+  const { data: environmentsData, isPending: environmentsLoading } = useEnvironments({
+    is_active: true,
+    limit: 100,
+  })
   const hasPermission = useAuthStore((state) => state.hasPermission)
   const canAccessAdmin = hasPermission(PERMISSIONS.ADMIN_ACCESS)
   const canViewSystemMetrics = hasPermission(PERMISSIONS.ADMIN_ACCESS)
@@ -47,6 +59,37 @@ function DashboardPage() {
     () => (userId ? servers.filter((s) => s.user_id === userId) : servers),
     [servers, userId]
   )
+
+  const plans = plansData?.data ?? []
+  const environments = environmentsData?.data ?? []
+  // Admins see the whole catalog, so check the baseline visibility for users.
+  // Normal users only receive plans/environments the API already filtered for
+  // their access, including direct/workspace grants.
+  const hasAvailablePlan = canAccessAdmin
+    ? plans.some(
+        (plan) =>
+          plan.is_active && (plan.is_public || (plan.visible_to_roles || []).includes('user'))
+      )
+    : plans.some((plan) => plan.is_active)
+  const hasPublicEnvironment = canAccessAdmin
+    ? environments.some((env) => env.is_active && env.is_public)
+    : environments.some((env) => env.is_active)
+  const catalogLoading = plansLoading || environmentsLoading
+  const catalogReady = !catalogLoading && hasAvailablePlan && hasPublicEnvironment
+
+  const hasNoServers = Boolean(userId) && !serversLoading && !serversError && myServers.length === 0
+  const showFirstRun = hasNoServers && catalogReady
+  const showSetupIncomplete = hasNoServers && !catalogLoading && !catalogReady
+  const missingSetup = [
+    !hasPublicEnvironment ? 'publish a public deployment environment' : null,
+    !hasAvailablePlan ? 'make an active plan available to users' : null,
+  ].filter((item): item is string => item !== null)
+  const userSetupMessage =
+    missingSetup.length === 2
+      ? 'A NukeLab administrator still needs to publish a public deployment environment and make an active plan available to users.'
+      : missingSetup.length === 1
+        ? `A NukeLab administrator still needs to ${missingSetup[0]} before servers can be deployed.`
+        : 'NukeLab is ready to deploy.'
 
   const myRunningServers = myServers.filter((s) => s.status === 'running')
 
@@ -89,6 +132,164 @@ function DashboardPage() {
               Retry
             </button>
           </motion.div>
+        )}
+
+        {/* Setup incomplete: guide admins to the checklist and tell users why deploy is unavailable */}
+        {showSetupIncomplete && (
+          <motion.section
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, ease: 'easeOut' }}
+            aria-labelledby="setup-incomplete-heading"
+            className="bubble relative overflow-hidden p-6 lg:p-8"
+          >
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 bg-gradient-to-br from-amber-500/10 via-transparent to-transparent"
+            />
+            <div className="relative flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+              <div className="max-w-xl space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/20">
+                    <ListChecks className="h-5 w-5" aria-hidden="true" />
+                  </div>
+                  <span className="text-xs font-semibold uppercase tracking-widest text-amber-400">
+                    {canAccessAdmin ? 'Setup required' : 'Deployment unavailable'}
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  <h2 id="setup-incomplete-heading" className="text-xl font-semibold lg:text-2xl">
+                    {canAccessAdmin ? 'Finish setting up NukeLab' : 'NukeLab setup is not complete'}
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    {canAccessAdmin
+                      ? 'Users cannot deploy until an active public environment and at least one plan available to users are in place.'
+                      : userSetupMessage}
+                  </p>
+                </div>
+                {canAccessAdmin ? (
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Link
+                      to="/admin/setup"
+                      className={cn(
+                        buttonVariants({ size: 'lg' }),
+                        'group shadow-lg shadow-primary/20'
+                      )}
+                    >
+                      <ListChecks className="h-4 w-4" aria-hidden="true" />
+                      Open setup checklist
+                      <ArrowRight
+                        className="h-4 w-4 transition-transform group-hover:translate-x-0.5"
+                        aria-hidden="true"
+                      />
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Link
+                      to="/support"
+                      className={cn(buttonVariants({ variant: 'outline' }), 'group')}
+                    >
+                      Contact support
+                      <ArrowRight
+                        className="h-4 w-4 transition-transform group-hover:translate-x-0.5"
+                        aria-hidden="true"
+                      />
+                    </Link>
+                  </div>
+                )}
+              </div>
+              {canAccessAdmin && (
+                <div className="grid w-full gap-2 sm:grid-cols-2 lg:max-w-md">
+                  <SetupStatusRow label="Active public environment" ready={hasPublicEnvironment} />
+                  <SetupStatusRow label="Active plan for users" ready={hasAvailablePlan} />
+                </div>
+              )}
+            </div>
+          </motion.section>
+        )}
+
+        {/* First-run onboarding */}
+        {showFirstRun && (
+          <motion.section
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, ease: 'easeOut' }}
+            aria-labelledby="first-run-heading"
+            className="bubble relative overflow-hidden p-6 lg:p-8"
+          >
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-transparent"
+            />
+            <div className="relative flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+              <div className="max-w-xl space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20">
+                    <Rocket className="h-5 w-5" />
+                  </div>
+                  <span className="text-xs font-semibold uppercase tracking-widest text-primary">
+                    Get started
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  <h2 id="first-run-heading" className="text-xl font-semibold lg:text-2xl">
+                    Create your first simulation server
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    Choose a plan, runtime environment and storage to launch your workspace. You can
+                    start small and adjust resources later.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Link
+                    to="/servers"
+                    search={{ deploy: true }}
+                    className={cn(
+                      buttonVariants({ size: 'lg' }),
+                      'group shadow-lg shadow-primary/20'
+                    )}
+                  >
+                    <Rocket className="h-4 w-4" aria-hidden="true" />
+                    Deploy your first server
+                    <ArrowRight
+                      className="h-4 w-4 transition-transform group-hover:translate-x-0.5"
+                      aria-hidden="true"
+                    />
+                  </Link>
+                  <Link
+                    to="/plans"
+                    className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    Browse plans
+                  </Link>
+                </div>
+              </div>
+              <div className="grid w-full gap-2 sm:grid-cols-3 lg:max-w-md">
+                {[
+                  { icon: CreditCard, title: 'Choose a plan', detail: 'CPU, memory and disk' },
+                  { icon: Boxes, title: 'Pick an environment', detail: 'Prebuilt or custom image' },
+                  { icon: HardDrive, title: 'Attach storage', detail: 'Persistent volumes' },
+                ].map((step, index) => (
+                  <div
+                    key={step.title}
+                    className="rounded-xl border border-border/50 bg-background/40 p-3"
+                  >
+                    <div className="mb-2 flex items-center justify-between">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <step.icon className="h-3.5 w-3.5" />
+                      </div>
+                      <span className="text-xs font-semibold text-muted-foreground">
+                        {String(index + 1).padStart(2, '0')}
+                      </span>
+                    </div>
+                    <p className="text-xs font-medium">{step.title}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">{step.detail}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </motion.section>
         )}
 
         {/* Admin: Platform Overview */}
@@ -241,18 +442,33 @@ function DashboardPage() {
                   color: 'bg-chart-4/10 text-chart-4',
                   href: '/plans',
                 },
-              ].map((action) => (
-                <Link
-                  key={action.label}
-                  to={action.href}
-                  className="flex flex-col items-center gap-3 p-4 rounded-xl border border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-all duration-100 group"
-                >
-                  <div className={`p-3 rounded-lg ${action.color}`}>
-                    <action.icon className="w-5 h-5" />
-                  </div>
-                  <span className="text-sm font-medium">{action.label}</span>
-                </Link>
-              ))}
+              ].map((action) => {
+                const content = (
+                  <>
+                    <div className={`p-3 rounded-lg ${action.color}`}>
+                      <action.icon className="w-5 h-5" />
+                    </div>
+                    <span className="text-sm font-medium">{action.label}</span>
+                  </>
+                )
+                const className =
+                  'flex flex-col items-center gap-3 p-4 rounded-xl border border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-all duration-100 group'
+
+                return action.label === 'Deploy Server' ? (
+                  <Link
+                    key={action.label}
+                    to="/servers"
+                    search={{ deploy: true }}
+                    className={className}
+                  >
+                    {content}
+                  </Link>
+                ) : (
+                  <Link key={action.label} to={action.href} className={className}>
+                    {content}
+                  </Link>
+                )
+              })}
             </div>
           </div>
         </section>
@@ -318,6 +534,24 @@ function DashboardPage() {
             </div>
           </div>
         </section>
+      </div>
+    </div>
+  )
+}
+
+function SetupStatusRow({ label, ready }: { label: string; ready: boolean }) {
+  return (
+    <div className="flex items-center gap-2 rounded-xl border border-border/50 bg-background/40 p-3">
+      {ready ? (
+        <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" aria-hidden="true" />
+      ) : (
+        <AlertCircle className="h-4 w-4 shrink-0 text-amber-400" aria-hidden="true" />
+      )}
+      <div className="min-w-0">
+        <p className="text-xs font-medium">{label}</p>
+        <p className={cn('text-xs', ready ? 'text-emerald-400' : 'text-amber-400')}>
+          {ready ? 'Ready' : 'Missing'}
+        </p>
       </div>
     </div>
   )

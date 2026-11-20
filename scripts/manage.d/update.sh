@@ -60,6 +60,8 @@ cmd_update() {
         _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" build "${UPDATE_BUILD_ARGS[@]}"
     fi
 
+    _pull_volume_helper_image
+
     ok "Update complete! Run './nukelabctl restart' to apply changes."
 }
 

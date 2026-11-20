@@ -11,7 +11,7 @@ All directories under `services/`.
 ## Local Contracts
 
 - Each service is a self-contained runtime with its own `Dockerfile`, source, and README.
-- Services are built via `scripts/services/build-*.sh` helpers or the CI/CD pipeline.
+- Services are built via their documented Docker build, `scripts/services/build-*.sh` helpers or the CI/CD pipeline.
 - Service-specific language conventions are owned by the child `AGENTS.md`.
 
 ## Work Guidance
@@ -26,4 +26,5 @@ All directories under `services/`.
 
 ## Child NAD Index
 
-- `auth-sidecar/` — Go-based authentication sidecar.
+- `auth-sidecar/AGENTS.md` — Go-based authentication sidecar.
+- `volume-helper/AGENTS.md` — Bounded offline private-volume archive capture and restore.

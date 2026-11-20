@@ -74,7 +74,7 @@ class TestBulkServerActions:
 
 
 class TestBulkServerLifecycle:
-    """Bulk server lifecycle tests with mocked spawner."""
+    """Bulk transport tests with mocked shared lifecycle helpers."""
 
     @pytest_asyncio.fixture
     async def stopped_server(self, db_session, test_user):
@@ -168,7 +168,7 @@ class TestBulkServerLifecycle:
 
     @pytest.mark.asyncio
     async def test_bulk_start_stopped_server(self, client: AsyncClient, user_token, stopped_server):
-        """Bulk start should call spawner start for a stopped server."""
+        """Bulk start delegates a stopped server to the shared start helper."""
         headers = {"Authorization": f"Bearer {user_token}"}
 
         with patch("app.api.bulk._perform_server_start", new_callable=AsyncMock) as mock_start:
@@ -207,7 +207,7 @@ class TestBulkServerLifecycle:
 
     @pytest.mark.asyncio
     async def test_bulk_stop_running_server(self, client: AsyncClient, user_token, running_server):
-        """Bulk stop should call spawner stop for a running server."""
+        """Bulk stop delegates a running server to the shared stop helper."""
         headers = {"Authorization": f"Bearer {user_token}"}
 
         with patch("app.api.bulk._perform_server_stop", new_callable=AsyncMock) as mock_stop:
@@ -245,7 +245,7 @@ class TestBulkServerLifecycle:
 
     @pytest.mark.asyncio
     async def test_bulk_restart_server(self, client: AsyncClient, user_token, running_server):
-        """Bulk restart should call spawner restart."""
+        """Bulk restart delegates to the shared restart helper."""
         headers = {"Authorization": f"Bearer {user_token}"}
 
         with patch("app.api.bulk._perform_server_restart", new_callable=AsyncMock) as mock_restart:
@@ -263,7 +263,7 @@ class TestBulkServerLifecycle:
 
     @pytest.mark.asyncio
     async def test_bulk_delete_server(self, client: AsyncClient, user_token, stopped_server):
-        """Bulk delete should call spawner delete."""
+        """Bulk delete delegates to the shared delete helper."""
         headers = {"Authorization": f"Bearer {user_token}"}
 
         with patch("app.api.bulk._perform_server_delete", new_callable=AsyncMock) as mock_delete:

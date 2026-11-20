@@ -19,6 +19,9 @@ from app.db.session import AsyncSessionLocal
 from app.services.alert_service import AlertService
 from app.services.health_check_service import HealthCheckService
 from app.services.metrics_collector import MetricsCollector
+from app.services.operation_runner import operation_resources, run_operation
+from app.services.server_queue_dispatch_service import run_queue_dispatch
+from app.services.server_termination_service import ServerTerminationService
 from app.services.system_metrics_collector import SystemMetricsCollector
 
 
@@ -72,6 +75,44 @@ async def _release_gpu_devices(db, server_id) -> None:
         await GpuAllocatorService(db).release(str(server_id))
     except Exception:
         logger.exception("Failed to release GPU devices for server %s", server_id)
+
+
+async def _stop_server_with_bookkeeping(
+    db,
+    driver,
+    server_id,
+    *,
+    stop_reason,
+    notification_reason,
+    reconcile_billing=True,
+    expected_version=None,
+):
+    """Terminate first; billing/notifications never run under admission locks."""
+    from app.models.server_plan import ServerPlan
+    from app.services.credit_service import CreditService
+    from app.services.notification_service import (
+        NotificationService,
+        broadcast_server_status_change,
+    )
+
+    server = await ServerTerminationService(db, driver).stop(
+        server_id,
+        **({"expected_version": expected_version} if expected_version is not None else {}),
+    )
+    owner_id, name, plan_id = server.user_id, server.name, server.plan_id
+    server.stop_reason = stop_reason
+    await db.commit()
+    if reconcile_billing and plan_id:
+        plan = await db.get(ServerPlan, plan_id, populate_existing=True)
+        if plan is not None:
+            await CreditService(db).reconcile_server_billing(server, plan)
+    await db.commit()
+    await NotificationService(db).server_stopped(
+        user_id=owner_id, server_name=name, reason=notification_reason, server_id=str(server_id)
+    )
+    await broadcast_server_status_change(
+        owner_id, str(server_id), "stopped", {"stop_reason": stop_reason}
+    )
 
 
 @celery_app.task(bind=True)
@@ -247,142 +288,68 @@ async def _fetch_sidecar_activity(server_ids: list[str]) -> dict[str, datetime]:
 
 @celery_app.task(bind=True)
 def shutdown_idle_servers(self):
-    """Stop servers that have been idle beyond user preference timeout"""
+    """Stop idle servers through the durable runtime termination boundary."""
 
-    async def _enforce():
+    async def enforce():
         from sqlalchemy import select
 
-        from app.container.spawner import spawner
         from app.models.server import Server
-        from app.models.server_plan import ServerPlan
         from app.models.user import User
-        from app.services.credit_service import CreditService
-        from app.services.notification_service import NotificationService
-        from app.services.quota_service import QuotaService
 
-        async with AsyncSessionLocal() as db:
-            stopped_count = 0
-
-            # Get all running servers with their users
-            result = await db.execute(
-                select(Server, User)
-                .join(User, Server.user_id == User.id)
-                .where(Server.status.in_(["running", "healthy"]))
+        async with operation_resources() as resources:
+            db = resources.db
+            rows = (
+                await db.execute(
+                    select(Server, User)
+                    .join(User, Server.user_id == User.id)
+                    .where(Server.status.in_(["running", "healthy"]))
+                )
+            ).all()
+            candidates = [
+                (server.id, dict(user.preferences or {}), bool(server.container_id))
+                for server, user in rows
+            ]
+            activity = await _fetch_sidecar_activity(
+                [str(id_) for id_, _, mounted in candidates if mounted]
             )
-            servers = result.all()
-
-            # Merge in real proxied traffic observed by each container's auth
-            # sidecar. Requests to the environment (IDE loads, terminal
-            # connects) never touch the API, so without this a server in active
-            # use can look idle — and a stale open SPA tab used to be the only
-            # thing keeping last_activity fresh.
-            sidecar_activity = await _fetch_sidecar_activity(
-                [str(server.id) for server, _ in servers if server.container_id]
-            )
-
-            for server, user in servers:
-                prefs = user.preferences or {}
-
-                # Skip if user disabled idle shutdown
+            stopped = 0
+            for server_id, prefs, _ in candidates:
                 if not prefs.get("idle_shutdown_enabled", True):
                     continue
-
-                timeout_mins = prefs.get("idle_shutdown_timeout", 15)
-                cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=timeout_mins)
-
-                # Determine last activity time, preferring the newest signal.
+                server = await db.get(Server, server_id, populate_existing=True)
+                if server is None or server.status not in ("running", "healthy"):
+                    continue
+                timeout = prefs.get("idle_shutdown_timeout", 15)
+                cutoff = utc_now() - timedelta(minutes=timeout)
                 last_activity = server.last_activity or server.started_at
-                sidecar_ts = sidecar_activity.get(str(server.id))
-                if sidecar_ts and (not last_activity or sidecar_ts > last_activity):
-                    last_activity = sidecar_ts
-                if sidecar_ts and (not server.last_activity or sidecar_ts > server.last_activity):
-                    # Persist so API/UI consumers see the traffic-based time too.
-                    server.last_activity = sidecar_ts
+                observed = activity.get(str(server_id))
+                if observed and (last_activity is None or observed > last_activity):
+                    last_activity = observed
+                if observed and (server.last_activity is None or observed > server.last_activity):
+                    server.last_activity = observed
                     await db.commit()
-                if not last_activity:
+                if last_activity is None or last_activity >= cutoff:
                     continue
-
-                if last_activity >= cutoff:
-                    continue
-
-                # Server is idle beyond user threshold — stop it
                 try:
-                    if server.container_id:
-                        actual_status = await spawner.get_status(server.container_id)
-                        if actual_status == "unknown":
-                            # Runtime lookup failed (e.g. socket timeout). Do not
-                            # mark the server stopped: the container may still be
-                            # running. Retry on the next task cycle.
-                            logger.warning(
-                                "Could not determine runtime status of idle server "
-                                "%s (container %s); skipping shutdown",
-                                server.id,
-                                server.container_id,
-                            )
-                            continue
-
-                        if actual_status == "stopped":
-                            server.status = "stopped"
-                            server.container_id = None
-                            await db.commit()
-                            await _release_gpu_devices(db, server.id)
-                            continue
-
-                        if not await spawner.delete(server.container_id):
-                            # Runtime delete failed (logged by spawner). Do
-                            # not mark the server stopped: the container may
-                            # still be running. Retry on the next task cycle.
-                            continue
-                        server.container_id = None
-
-                    server.status = "stopped"
-                    server.stopped_at = datetime.now(UTC).replace(tzinfo=None)
-                    server.stop_reason = "idle_timeout"
-                    server.expires_at = None
-                    await _release_gpu_devices(db, server.id)
-
-                    # Reconcile billing
-                    if server.plan_id:
-                        credit_service = CreditService(db)
-                        plan_result = await db.execute(
-                            select(ServerPlan).where(ServerPlan.id == server.plan_id)
-                        )
-                        plan = plan_result.scalar_one_or_none()
-                        if plan:
-                            await credit_service.reconcile_server_billing(server, plan)
-
-                    # Decrement quota
-                    if server.plan_id:
-                        quota_service = QuotaService(db)
-                        await quota_service.decrement_usage(
-                            user_id=str(user.id), plan_id=str(server.plan_id)
-                        )
-
                     await db.commit()
-
-                    # Notify user
-                    notif_service = NotificationService(db)
-                    await notif_service.server_stopped(
-                        user_id=user.id,
-                        server_name=server.name,
-                        reason=f"inactivity ({timeout_mins} minutes)",
-                        server_id=str(server.id),
+                    await _stop_server_with_bookkeeping(
+                        db,
+                        resources.driver,
+                        server_id,
+                        expected_version=server.updated_at,
+                        stop_reason="idle_timeout",
+                        notification_reason=f"inactivity ({timeout} minutes)",
                     )
-
-                    from app.services.notification_service import broadcast_server_status_change
-
-                    await broadcast_server_status_change(user.id, str(server.id), "stopped")
-                    stopped_count += 1
-
+                    stopped += 1
                 except Exception:
-                    logger.exception("Error auto-stopping idle server %s", server.id)
-
-            return f"Stopped {stopped_count} idle servers"
+                    await db.rollback()
+                    logger.exception("Error auto-stopping idle server %s", server_id)
+            return f"Stopped {stopped} idle servers"
 
     try:
-        return _run_async(_enforce())
-    except Exception as e:
-        return f"Error in idle shutdown enforcement: {e}"
+        return run_operation(enforce, timeout_seconds=settings.server_launch_timeout_seconds)
+    except Exception as exc:
+        return f"Error in idle shutdown enforcement: {exc}"
 
 
 @celery_app.task(bind=True)
@@ -409,18 +376,17 @@ def collect_system_metrics(self):
 
 @celery_app.task(bind=True)
 def check_container_health(self):
-    """Check health of all running containers"""
+    """Probe/restart using resources owned by this joined worker operation."""
 
-    async def _check():
-        async with AsyncSessionLocal() as db:
-            service = HealthCheckService(db)
-            await service.check_all_containers()
+    async def check():
+        async with operation_resources() as resources:
+            await HealthCheckService(resources.db).check_all_containers()
 
     try:
-        _run_async(_check())
+        run_operation(check, timeout_seconds=settings.server_launch_timeout_seconds)
         return "Health checks completed"
-    except Exception as e:
-        return f"Error checking health: {e}"
+    except Exception as exc:
+        return f"Error checking health: {exc}"
 
 
 @celery_app.task(bind=True)
@@ -441,458 +407,180 @@ def evaluate_alert_rules(self):
 
 @celery_app.task(bind=True)
 def process_nuke_billing(self):
-    """Periodic NUKE billing - deduct usage costs for running servers"""
+    """Bill running servers; depletion stops use verified durable termination."""
 
-    async def _bill():
-        from datetime import UTC, datetime
-
+    async def bill():
         from sqlalchemy import select
 
-        from app.config import settings
         from app.models.server import Server
         from app.models.server_plan import ServerPlan
         from app.models.user import User
         from app.services.credit_service import CreditService
-        from app.services.notification_service import (
-            NotificationService,
-            broadcast_server_status_change,
-        )
+        from app.services.notification_service import NotificationService
 
-        async with AsyncSessionLocal() as db:
-            credit_service = CreditService(db)
-
-            # Get all running servers with their plans
-            result = await db.execute(
-                select(Server, ServerPlan)
-                .join(ServerPlan, Server.plan_id == ServerPlan.id)
-                .where(Server.status == "running")
-            )
-            servers = result.all()
-
-            billed_count = 0
-            stopped_count = 0
-
-            for server, plan in servers:
-                if plan.cost_per_hour <= 0:
-                    continue
-
-                # Calculate billing amount (15 minutes = 0.25 hours)
-                billing_amount = int(plan.cost_per_hour * 0.25)
-                if billing_amount <= 0:
-                    billing_amount = 1  # Minimum 1 credit
-
-                # Get user balance
-                user_result = await db.execute(
-                    select(User.nuke_balance).where(User.id == server.user_id)
+        async with operation_resources() as resources:
+            db = resources.db
+            rows = (
+                await db.execute(
+                    select(Server, ServerPlan)
+                    .join(ServerPlan, Server.plan_id == ServerPlan.id)
+                    .where(Server.status == "running")
                 )
-                current_balance = user_result.scalar_one_or_none() or 0
-
-                if current_balance <= 0:
-                    # Auto-stop server if credits depleted
-                    if settings.server_auto_stop_on_depletion:
-                        from app.container.spawner import spawner
-
-                        try:
-                            if not await spawner.delete(server.container_id):
-                                # Runtime delete failed (logged by spawner). Do
-                                # not mark the server stopped: the container may
-                                # still be running. Retry on the next task cycle.
-                                continue
-                            server.container_id = None
-                            server.status = "stopped"
-                            server.stopped_at = datetime.now(UTC).replace(tzinfo=None)
-                            server.stop_reason = "credit_depleted"
-                            await _release_gpu_devices(db, server.id)
-
-                            # Reconcile exact billing for final partial interval
-                            await credit_service.reconcile_server_billing(server, plan)
-                            await broadcast_server_status_change(
-                                server.user_id,
-                                str(server.id),
-                                "stopped",
-                                {"stop_reason": "credit_depleted"},
-                            )
-
-                            # Notify user
-                            notif_service = NotificationService(db)
-                            await notif_service.server_stopped(
-                                user_id=server.user_id,
-                                server_name=server.name,
-                                reason="insufficient NUKE credits",
-                                server_id=str(server.id),
-                            )
-                            stopped_count += 1
-                        except Exception:
-                            logger.exception("Error stopping server %s", server.id)
+            ).all()
+            candidates = [(server.id, plan.id) for server, plan in rows]
+            billed = stopped = 0
+            for server_id, plan_id in candidates:
+                server = await db.get(Server, server_id, populate_existing=True)
+                plan = await db.get(ServerPlan, plan_id, populate_existing=True)
+                if (
+                    server is None
+                    or server.status != "running"
+                    or plan is None
+                    or plan.cost_per_hour <= 0
+                ):
                     continue
-
-                # Deduct credits
+                owner_id, name, rate = server.user_id, server.name, plan.cost_per_hour
+                balance = (
+                    await db.execute(select(User.nuke_balance).where(User.id == owner_id))
+                ).scalar_one_or_none() or 0
+                if balance <= 0:
+                    if settings.server_auto_stop_on_depletion:
+                        try:
+                            await db.commit()
+                            await _stop_server_with_bookkeeping(
+                                db,
+                                resources.driver,
+                                server_id,
+                                expected_version=server.updated_at,
+                                stop_reason="credit_depleted",
+                                notification_reason="insufficient NUKE credits",
+                            )
+                            stopped += 1
+                        except Exception:
+                            await db.rollback()
+                            logger.exception("Error stopping depleted server %s", server_id)
+                    continue
+                amount = max(1, int(rate * 0.25))
                 try:
-                    await credit_service.consume_credits(
-                        user_id=str(server.user_id),
-                        amount=billing_amount,
-                        description=f"Server usage: '{server.name}' (15 min at {plan.cost_per_hour} NUKE/hour)",
-                        server_id=str(server.id),
+                    await CreditService(db).consume_credits(
+                        user_id=str(owner_id),
+                        amount=amount,
+                        description=f"Server usage: '{name}' (15 min at {rate} NUKE/hour)",
+                        server_id=str(server_id),
                     )
-
-                    # Update server billing state
-                    server.total_cost = (server.total_cost or 0) + billing_amount
-                    server.last_billed_at = datetime.now(UTC).replace(tzinfo=None)
-                    billed_count += 1
-
-                    # Warn user if credits getting low
-                    new_balance = current_balance - billing_amount
-                    if new_balance <= plan.cost_per_hour * 2:
-                        notif_service = NotificationService(db)
-                        await notif_service.low_balance(user_id=server.user_id, balance=new_balance)
-
+                    server.total_cost = (server.total_cost or 0) + amount
+                    server.last_billed_at = utc_now()
+                    await db.commit()
+                    billed += 1
+                    if balance - amount <= rate * 2:
+                        await NotificationService(db).low_balance(
+                            user_id=owner_id, balance=balance - amount
+                        )
                 except Exception:
-                    logger.exception("Error billing server %s", server.id)
-
+                    await db.rollback()
+                    logger.exception("Error billing server %s", server_id)
             await db.commit()
-            return f"Billed {billed_count} servers, stopped {stopped_count} servers"
+            return f"Billed {billed} servers, stopped {stopped} servers"
 
     try:
-        return _run_async(_bill())
-    except Exception as e:
-        return f"Error in NUKE billing: {e}"
+        return run_operation(bill, timeout_seconds=settings.server_launch_timeout_seconds)
+    except Exception as exc:
+        return f"Error in NUKE billing: {exc}"
 
 
 @celery_app.task(bind=True)
 def enforce_auto_stop(self):
-    """Enforce max runtime limits on running servers"""
+    """Stop expired servers without releasing uncertain runtime reservations."""
 
-    async def _enforce():
-        from datetime import UTC, datetime
-
+    async def enforce():
         from sqlalchemy import select
 
-        from app.container.spawner import spawner
         from app.models.server import Server
-        from app.services.notification_service import (
-            NotificationService,
-            broadcast_server_status_change,
-        )
-        from app.services.quota_service import QuotaService
 
-        async with AsyncSessionLocal() as db:
-            quota_service = QuotaService(db)
-            stopped_count = 0
-
-            result = await db.execute(select(Server).where(Server.status == "running"))
-            servers = result.scalars().all()
-
-            for server in servers:
-                now = datetime.now(UTC).replace(tzinfo=None)
-
-                # Check max runtime
-                if not (server.expires_at and now >= server.expires_at):
+        async with operation_resources() as resources:
+            db = resources.db
+            rows = (
+                (await db.execute(select(Server).where(Server.status == "running"))).scalars().all()
+            )
+            server_ids = [server.id for server in rows]
+            stopped = 0
+            for server_id in server_ids:
+                server = await db.get(Server, server_id, populate_existing=True)
+                if (
+                    server is None
+                    or server.status != "running"
+                    or not server.expires_at
+                    or utc_now() < server.expires_at
+                ):
                     continue
-
                 try:
-                    if not await spawner.delete(server.container_id):
-                        # Runtime delete failed (logged by spawner). Do not
-                        # mark the server stopped: the container may still be
-                        # running. expires_at stays in the past, so the next
-                        # task cycle retries the stop.
-                        logger.warning(
-                            "Could not delete container %s for expired server %s; skipping stop",
-                            server.container_id,
-                            server.id,
-                        )
-                        continue
-                    server.container_id = None
-                    server.status = "stopped"
-                    server.stopped_at = now
-                    server.stop_reason = "max_runtime_exceeded"
-                    server.expires_at = None
-                    await _release_gpu_devices(db, server.id)
-                    await broadcast_server_status_change(
-                        server.user_id,
-                        str(server.id),
-                        "stopped",
-                        {"stop_reason": "max_runtime_exceeded"},
+                    await db.commit()
+                    await _stop_server_with_bookkeeping(
+                        db,
+                        resources.driver,
+                        server_id,
+                        expected_version=server.updated_at,
+                        stop_reason="max_runtime_exceeded",
+                        notification_reason="exceeded the maximum runtime limit",
+                        reconcile_billing=False,
                     )
-
-                    # Decrement quota usage
-                    if server.plan_id:
-                        await quota_service.decrement_usage(
-                            user_id=str(server.user_id), plan_id=str(server.plan_id)
-                        )
-
-                    # Notify user
-                    notif_service = NotificationService(db)
-                    await notif_service.server_stopped(
-                        user_id=server.user_id,
-                        server_name=server.name,
-                        reason="exceeded the maximum runtime limit",
-                        server_id=str(server.id),
-                    )
-                    stopped_count += 1
+                    stopped += 1
                 except Exception:
-                    logger.exception("Error auto-stopping server %s", server.id)
-
-            await db.commit()
-            return f"Stopped {stopped_count} servers"
+                    await db.rollback()
+                    logger.exception("Error auto-stopping expired server %s", server_id)
+            return f"Stopped {stopped} servers"
 
     try:
-        return _run_async(_enforce())
-    except Exception as e:
-        return f"Error in auto-stop enforcement: {e}"
+        return run_operation(enforce, timeout_seconds=settings.server_launch_timeout_seconds)
+    except Exception as exc:
+        return f"Error in auto-stop enforcement: {exc}"
 
 
 @celery_app.task(bind=True)
 def process_server_queue(self):
-    """Process queued servers - start next in line when resources free up"""
-
-    async def _process():
-        from datetime import UTC, datetime, timedelta
-
-        from sqlalchemy import select
-
-        from app.config import settings
-        from app.container.spawner import spawner
-        from app.models.server_plan import ServerPlan
-        from app.models.server_queue import ServerQueue
-        from app.models.user import User
-        from app.services.credit_service import CreditService
-        from app.services.notification_service import NotificationService
-        from app.services.quota_service import QuotaService
-        from app.services.resource_pool_service import ResourcePoolService
-
-        async with AsyncSessionLocal() as db:
-            resource_pool = ResourcePoolService(db)
-            credit_service = CreditService(db)
-            quota_service = QuotaService(db)
-
-            started_count = 0
-            timeout_count = 0
-
-            # Remove timed-out queue entries (older than 1 hour)
-            timeout_threshold = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1)
-            result = await db.execute(
-                select(ServerQueue).where(
-                    ServerQueue.status == "pending", ServerQueue.requested_at < timeout_threshold
-                )
-            )
-            timed_out = result.scalars().all()
-
-            for entry in timed_out:
-                entry.status = "cancelled"
-                entry.error_message = "Queue timeout - server was not started within 1 hour"
-
-                notif_service = NotificationService(db)
-                await notif_service.queue_timeout(
-                    user_id=entry.user_id, server_name=entry.server_name
-                )
-                timeout_count += 1
-
-            # Process queue - try to start next available server
-            while True:
-                next_entry = await resource_pool.get_next_in_queue()
-                if not next_entry:
-                    break
-
-                # Get plan details
-                plan_result = await db.execute(
-                    select(ServerPlan).where(ServerPlan.id == next_entry.plan_id)
-                )
-                plan = plan_result.scalar_one_or_none()
-
-                if not plan or not plan.is_active:
-                    next_entry.status = "failed"
-                    next_entry.error_message = "Plan no longer available"
-                    continue
-
-                # Get user
-                user_result = await db.execute(select(User).where(User.id == next_entry.user_id))
-                user = user_result.scalar_one_or_none()
-
-                if not user or not user.is_active:
-                    next_entry.status = "failed"
-                    next_entry.error_message = "User not found or inactive"
-                    continue
-
-                # Check quota
-                quota_check = await quota_service.check_spawn_allowed(
-                    user_id=str(next_entry.user_id), plan_id=str(next_entry.plan_id)
-                )
-
-                if not quota_check["allowed"]:
-                    next_entry.status = "failed"
-                    next_entry.error_message = quota_check["reason"]
-                    continue
-
-                # Check credits
-                if settings.credits_enabled and plan.cost_per_hour > 0:
-                    has_credits = await credit_service.check_sufficient_credits(
-                        user_id=str(next_entry.user_id), required=plan.cost_per_hour
-                    )
-                    if not has_credits:
-                        next_entry.status = "failed"
-                        next_entry.error_message = "Insufficient NUKE credits"
-                        continue
-
-                gpu_server_id = None
-                try:
-                    # Look up environment details
-                    from app.models.environment_template import EnvironmentTemplate
-
-                    env_result = await db.execute(
-                        select(EnvironmentTemplate).where(
-                            EnvironmentTemplate.id == next_entry.environment_id
-                        )
-                    )
-                    environment = env_result.scalar_one_or_none()
-                    env_slug = environment.slug if environment else "dev"
-                    env_image = environment.image if environment else None
-
-                    # Reserve exclusive GPU devices (when the pool is
-                    # configured) before charging credits, using the same
-                    # allocate-or-fail helper as the API spawn paths. A dry
-                    # pool fails the entry cleanly with a clear reason.
-                    import uuid
-
-                    from app.api.servers import _ensure_gpu_devices
-
-                    gpu_server_id = str(uuid.uuid4())
-                    try:
-                        gpu_devices = await _ensure_gpu_devices(
-                            db, gpu_server_id, plan.gpu_limit or 0
-                        )
-                    except HTTPException as e:
-                        next_entry.status = "failed"
-                        next_entry.error_message = e.detail
-                        continue
-
-                    # Deduct credits
-                    if settings.credits_enabled and plan.cost_per_hour > 0:
-                        await credit_service.consume_credits(
-                            user_id=str(next_entry.user_id),
-                            amount=plan.cost_per_hour,
-                            description=f"Initial spawn cost for queued server '{next_entry.server_name}'",
-                        )
-
-                    # Spawn the server
-                    server = await spawner.spawn(
-                        user_id=str(next_entry.user_id),
-                        username=user.username,
-                        server_name=next_entry.server_name,
-                        environment=env_slug,
-                        environment_id=str(next_entry.environment_id),
-                        image=env_image,
-                        tool_image=environment.tool_image if environment else None,
-                        tool_mounts=environment.tool_mounts if environment else None,
-                        cpu=next_entry.requested_cpu or plan.cpu_limit,
-                        memory=next_entry.requested_memory or plan.memory_limit,
-                        disk=next_entry.requested_disk or plan.disk_limit,
-                        gpu=plan.gpu_limit or 0,
-                        gpu_devices=gpu_devices,
-                        server_id=gpu_server_id,
-                    )
-
-                    server.plan_id = next_entry.plan_id
-                    server.last_activity = datetime.now(UTC).replace(tzinfo=None)
-
-                    # Set expiration based on user's max_server_runtime preference
-                    prefs = user.preferences or {}
-                    if prefs.get("max_server_runtime_enabled", True):
-                        max_runtime_minutes = prefs.get("max_server_runtime")
-                        if max_runtime_minutes is None:
-                            max_runtime_seconds = settings.server_max_runtime
-                        else:
-                            try:
-                                max_runtime_seconds = int(max_runtime_minutes) * 60
-                            except (TypeError, ValueError):
-                                max_runtime_seconds = settings.server_max_runtime
-
-                        if max_runtime_seconds > 0:
-                            server.expires_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(
-                                seconds=max_runtime_seconds
-                            )
-
-                    db.add(server)
-                    await db.commit()
-                    await db.refresh(server)
-
-                    # Increment quota
-                    await quota_service.increment_usage(
-                        user_id=str(next_entry.user_id), plan_id=str(next_entry.plan_id)
-                    )
-
-                    # Update queue entry
-                    next_entry.status = "started"
-                    next_entry.started_at = datetime.now(UTC).replace(tzinfo=None)
-
-                    # Notify user
-                    notif_service = NotificationService(db)
-                    await notif_service.server_started(
-                        user_id=next_entry.user_id,
-                        server_name=next_entry.server_name,
-                        server_id=str(server.id),
-                    )
-                    started_count += 1
-
-                except Exception as e:
-                    # Free any devices reserved above before recording the failure.
-                    if gpu_server_id:
-                        await _release_gpu_devices(db, gpu_server_id)
-
-                    next_entry.status = "failed"
-                    next_entry.error_message = str(e)
-                    next_entry.retry_count += 1
-
-                    # Notify user of failure
-                    notif_service = NotificationService(db)
-                    await notif_service.server_failed(
-                        user_id=next_entry.user_id,
-                        server_name=next_entry.server_name,
-                        error=str(e),
-                        server_id=gpu_server_id,
-                    )
-
-            await db.commit()
-            return f"Started {started_count} queued servers, timed out {timeout_count} entries"
-
+    """Dispatch complete preserved requests through atomic shared admission."""
     try:
-        return _run_async(_process())
-    except Exception as e:
-        return f"Error processing queue: {e}"
+        result = run_queue_dispatch(
+            timeout_seconds=settings.server_launch_timeout_seconds,
+            batch_size=settings.queue_dispatch_batch_size,
+        )
+        return f"Started {result.started} queued servers, timed out {result.expired} entries"
+    except Exception as exc:
+        return f"Error processing queue: {exc}"
 
 
 @celery_app.task(bind=True)
 def evaluate_schedules(self):
-    """Evaluate and execute due server schedules"""
+    """Evaluate schedules within one joined loop-owned operation."""
 
-    async def _evaluate():
-        from app.db.session import AsyncSessionLocal
+    async def evaluate():
+        from sqlalchemy import inspect
+
         from app.services.schedule_service import ScheduleService
 
-        async with AsyncSessionLocal() as db:
-            service = ScheduleService(db)
-            due_schedules = await service.get_due_schedules()
-
-            executed_count = 0
-            failed_count = 0
-
-            for schedule in due_schedules:
+        async with operation_resources() as resources:
+            service = ScheduleService(resources.db)
+            schedules = await service.get_due_schedules()
+            candidates = [(inspect(schedule).identity[0], schedule) for schedule in schedules]
+            executed = failed = 0
+            for schedule_id, schedule in candidates:
                 try:
                     result = await service.execute_schedule(schedule)
                     if result.get("success"):
-                        executed_count += 1
+                        executed += 1
                     else:
-                        failed_count += 1
-                        logger.error("Schedule %s failed: %s", schedule.id, result.get("error"))
+                        failed += 1
+                        logger.error("Schedule %s failed: %s", schedule_id, result.get("error"))
                 except Exception:
-                    failed_count += 1
-                    logger.exception("Error executing schedule %s", schedule.id)
-
-            return f"Executed {executed_count} schedules, {failed_count} failed"
+                    await resources.db.rollback()
+                    failed += 1
+                    logger.exception("Error executing schedule %s", schedule_id)
+            return f"Executed {executed} schedules, {failed} failed"
 
     try:
-        return _run_async(_evaluate())
-    except Exception as e:
-        return f"Error evaluating schedules: {e}"
+        return run_operation(evaluate, timeout_seconds=settings.server_launch_timeout_seconds)
+    except Exception as exc:
+        return f"Error evaluating schedules: {exc}"
 
 
 @celery_app.task(bind=True)
@@ -1173,26 +861,20 @@ def enforce_volume_quotas(self):
     """
 
     async def _enforce():
-        from datetime import UTC, datetime
 
         from sqlalchemy import select
         from sqlalchemy.orm import selectinload
 
-        from app.container.spawner import spawner
         from app.models.server import Server
         from app.models.server_plan import ServerPlan
         from app.models.server_volume import ServerVolume
         from app.models.user import User
-        from app.services.credit_service import CreditService
-        from app.services.notification_service import (
-            NotificationService,
-            broadcast_server_status_change,
-        )
-        from app.services.quota_service import QuotaService
+        from app.services.notification_service import NotificationService
         from app.services.volume_service import VolumeService
         from app.services.xfs_quota_service import xfs_quota_service
 
-        async with AsyncSessionLocal() as db:
+        async with operation_resources() as resources:
+            db = resources.db
             volume_service = VolumeService(db)
             xfs_available = xfs_quota_service._xfs_quota_available()
             stopped_count = 0
@@ -1210,7 +892,20 @@ def enforce_volume_quotas(self):
             )
             servers = result.all()
 
-            for server, plan, user in servers:
+            server_ids = [server.id for server, _, _ in servers]
+            for server_id in server_ids:
+                current = await db.execute(
+                    select(Server, ServerPlan, User)
+                    .join(ServerPlan, Server.plan_id == ServerPlan.id)
+                    .join(User, Server.user_id == User.id)
+                    .where(Server.id == server_id, Server.status.in_(["running", "healthy"]))
+                    .options(selectinload(Server.volume_mounts).selectinload(ServerVolume.volume))
+                    .execution_options(populate_existing=True)
+                )
+                row = current.one_or_none()
+                if row is None:
+                    continue
+                server, plan, user = row
                 should_stop = False
                 over_limit_volumes = []
 
@@ -1252,7 +947,7 @@ def enforce_volume_quotas(self):
 
                     # Check against plan disk limit
                     # A single volume exceeding the plan limit is a violation
-                    if size_bytes > plan_bytes:
+                    if plan_bytes and size_bytes > plan_bytes:
                         should_stop = True
                         over_limit_volumes.append(
                             f"'{volume.display_name or volume.name}' "
@@ -1275,72 +970,24 @@ def enforce_volume_quotas(self):
                             )
                             warned_count += 1
 
+                # Preserve measured sizes/status before the lifecycle boundary
+                # checks for unrelated pending changes and closes read transactions.
+                await db.commit()
                 if should_stop:
                     try:
-                        if server.container_id:
-                            actual_status = await spawner.get_status(server.container_id)
-                            if actual_status == "unknown":
-                                # Runtime lookup failed (e.g. socket timeout). Do
-                                # not mark the server stopped: the container may
-                                # still be running. Retry on the next task cycle.
-                                logger.warning(
-                                    "Could not determine runtime status of server "
-                                    "%s (container %s) during volume quota "
-                                    "enforcement; skipping stop",
-                                    server.id,
-                                    server.container_id,
-                                )
-                                continue
-                            if actual_status == "stopped":
-                                server.status = "stopped"
-                                server.container_id = None
-                            else:
-                                if not await spawner.delete(server.container_id):
-                                    # Runtime delete failed (logged by
-                                    # spawner). Do not mark the server
-                                    # stopped: the container may still be
-                                    # running. Retry on the next task cycle.
-                                    continue
-                                server.container_id = None
-
-                        server.status = "stopped"
-                        server.stopped_at = datetime.now(UTC).replace(tzinfo=None)
-                        server.stop_reason = "volume_quota_exceeded"
-                        await _release_gpu_devices(db, server.id)
-
-                        # Reconcile billing
-                        if server.plan_id:
-                            credit_service = CreditService(db)
-                            await credit_service.reconcile_server_billing(server, plan)
-
-                        # Decrement quota
-                        if server.plan_id:
-                            quota_service = QuotaService(db)
-                            await quota_service.decrement_usage(
-                                user_id=str(user.id), plan_id=str(server.plan_id)
-                            )
-
-                        await db.commit()
-
-                        # Notify user
-                        notif_service = NotificationService(db)
-                        await notif_service.server_stopped(
-                            user_id=user.id,
-                            server_name=server.name,
-                            reason=f"volume quota exceeded: {', '.join(over_limit_volumes)}",
-                            server_id=str(server.id),
-                        )
-                        await broadcast_server_status_change(
-                            user.id,
-                            str(server.id),
-                            "stopped",
-                            {"stop_reason": "volume_quota_exceeded"},
+                        await _stop_server_with_bookkeeping(
+                            db,
+                            resources.driver,
+                            server_id,
+                            expected_version=server.updated_at,
+                            stop_reason="volume_quota_exceeded",
+                            notification_reason=f"volume quota exceeded: {', '.join(over_limit_volumes)}",
                         )
                         stopped_count += 1
-
                     except Exception:
+                        await db.rollback()
                         logger.exception(
-                            "Error stopping server %s for volume quota violation", server.id
+                            "Error stopping server %s for volume quota violation", server_id
                         )
 
             await db.commit()
@@ -1350,7 +997,7 @@ def enforce_volume_quotas(self):
             )
 
     try:
-        return _run_async(_enforce())
+        return run_operation(_enforce, timeout_seconds=settings.server_launch_timeout_seconds)
     except Exception as e:
         return f"Error in volume quota enforcement: {e}"
 
@@ -1605,3 +1252,132 @@ def cleanup_expired_allowance_overrides(self):
     except Exception as e:
         logger.exception("Fatal error in cleanup_expired_allowance_overrides: %s", e)
         return f"Fatal error: {e}"
+
+
+def enqueue_volume_recovery(kind: str, operation_id: str):
+    """Best-effort delivery; committed pending intents also have a bounded dispatcher."""
+    if kind not in ("backup", "restore", "delete"):
+        raise ValueError("Invalid recovery operation")
+    return process_volume_recovery.delay(kind, operation_id)
+
+
+@celery_app.task(bind=True)
+def process_volume_recovery(self, kind: str, operation_id: str):
+    import uuid
+
+    async def execute():
+        from app.services.volume_backup_service import VolumeBackupService
+        from app.services.volume_recovery_runtime import VolumeRecoveryRuntime
+
+        identifier = uuid.UUID(operation_id)
+        async with operation_resources() as resources:
+            service = VolumeBackupService(resources.db, VolumeRecoveryRuntime(resources.driver))
+            from app.models.volume_backup import VolumeBackup
+            from app.models.volume_restore import VolumeRestore
+
+            model = VolumeRestore if kind == "restore" else VolumeBackup
+            before = await resources.db.get(model, identifier)
+            before_status = before.status if before else None
+            operation = {
+                "backup": service.execute_backup,
+                "restore": service.execute_restore,
+                "delete": service.execute_delete,
+            }.get(kind)
+            if operation is None:
+                raise ValueError("Invalid recovery operation")
+            result = await operation(identifier)
+            if (
+                result.status in ("completed", "failed", "recovery_required")
+                and result.status != before_status
+            ):
+                try:
+                    row = await resources.db.get(model, identifier, populate_existing=True)
+                    if row is not None and row.user_id is not None:
+                        from app.services.notification_service import NotificationService
+
+                        await NotificationService(resources.db).create(
+                            user_id=row.user_id,
+                            title="Volume recovery completed"
+                            if result.status == "completed"
+                            else "Volume recovery needs attention",
+                            message="Your volume recovery operation completed."
+                            if result.status == "completed"
+                            else "Inspect backup history for the recovery outcome.",
+                            type="volume",
+                            severity="info" if result.status == "completed" else "warning",
+                            action_url="/volumes",
+                            event_key="volume_recovery_completed"
+                            if result.status == "completed"
+                            else "volume_recovery_failed",
+                        )
+                except Exception:
+                    logger.exception("Recovery notification delivery failed")
+            return result.model_dump(mode="json")
+
+    return run_operation(execute, timeout_seconds=settings.volume_backup_timeout_seconds + 30)
+
+
+@celery_app.task(bind=True)
+def dispatch_volume_recovery(self):
+    """Deliver bounded pending work and expired unpinned artifacts without TTL takeover."""
+
+    async def dispatch():
+        from sqlalchemy import select
+
+        from app.models.volume_backup import VolumeBackup
+        from app.models.volume_restore import VolumeRestore
+        from app.services.volume_backup_service import VolumeBackupService
+        from app.services.volume_recovery_runtime import VolumeRecoveryRuntime
+
+        if not settings.volume_backup_storage_path or not settings.volume_backup_host_path:
+            return "Volume recovery is disabled"
+        async with operation_resources() as resources:
+            db = resources.db
+            service = VolumeBackupService(db, VolumeRecoveryRuntime(resources.driver))
+            expired = await service.retention_candidates(limit=20)
+            for identifier in expired:
+                try:
+                    await service.expire_backup(identifier)
+                except Exception:
+                    await db.rollback()
+                    logger.warning("Backup retention admission deferred")
+            backups = list(
+                (
+                    await db.execute(
+                        select(VolumeBackup.id, VolumeBackup.status)
+                        .where(
+                            VolumeBackup.status.in_(["pending", "deleting"]),
+                            VolumeBackup.helper_identity.is_(None)
+                            | ~VolumeBackup.helper_identity.startswith("delete:"),
+                        )
+                        .order_by(VolumeBackup.created_at, VolumeBackup.id)
+                        .limit(20)
+                    )
+                ).all()
+            )
+            restores = list(
+                await db.scalars(
+                    select(VolumeRestore.id)
+                    .where(VolumeRestore.status == "pending")
+                    .order_by(VolumeRestore.created_at, VolumeRestore.id)
+                    .limit(20)
+                )
+            )
+        dispatched = 0
+        for identifier, state in backups:
+            try:
+                enqueue_volume_recovery(
+                    "delete" if state == "deleting" else "backup", str(identifier)
+                )
+                dispatched += 1
+            except Exception:
+                logger.warning("Durable backup remains pending delivery")
+        for identifier in restores:
+            try:
+                enqueue_volume_recovery("restore", str(identifier))
+                dispatched += 1
+            except Exception:
+                logger.warning("Durable restore remains pending delivery")
+        return f"Dispatched {dispatched} volume recovery operations"
+
+    return run_operation(dispatch, timeout_seconds=settings.volume_backup_timeout_seconds)

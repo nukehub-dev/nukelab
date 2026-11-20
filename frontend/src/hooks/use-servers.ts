@@ -2,11 +2,16 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from '@tanstack/react-router'
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { api } from '../lib/api'
 import { computeTaskRates, type TaskSnapshot } from '../lib/task-rates'
 import { useToastStore } from '../stores/toast-store'
 import type { Server } from '../types/api'
+import type { QueuedServerAcceptance } from '../types/server-queue'
+import { isQueuedServer } from '../lib/server-queue'
+import { useAuthStore } from '../stores/auth-store'
+import { queueKeys } from './use-server-queue'
 
 export function useServers() {
   return useQuery({
@@ -66,6 +71,7 @@ type PendingOperation = {
 
 export function useServerActions() {
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
 
   const [pendingOps, setPendingOps] = useState<PendingOperation[]>([])
 
@@ -158,8 +164,26 @@ export function useServerActions() {
   )
 
   const createServer = useMutation({
-    mutationFn: (data: CreateServerData) => api.post<Server>('/servers/', data),
-    onSuccess: () => {
+    mutationFn: (data: CreateServerData) =>
+      api.post<Server | QueuedServerAcceptance>('/servers/', data),
+    onMutate: () => ({ ownerId: useAuthStore.getState().user?.id }),
+    onSuccess: (result, _submitted, context) => {
+      if (useAuthStore.getState().user?.id !== context.ownerId) return
+      queryClient.invalidateQueries({ queryKey: queueKeys.owner(context.ownerId) })
+      if (isQueuedServer(result)) {
+        useToastStore.getState().addToast({
+          type: 'info',
+          title: 'Request queued',
+          message: `${result.request.name}: ${result.message}`,
+          duration: 10_000,
+          action: {
+            label: 'View request',
+            onClick: () => {
+              void navigate({ to: '/servers', search: { tab: 'queue', request: result.queue_id } })
+            },
+          },
+        })
+      }
       queryClient.invalidateQueries({ queryKey: ['servers'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
     },

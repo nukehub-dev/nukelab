@@ -9,6 +9,8 @@ Selects the ContainerDriver implementation from settings.container_runtime
 Podman; "kubernetes" is reserved for the future k3s driver.
 """
 
+import contextlib
+
 from app.config import settings
 from app.container.driver import ContainerDriver, ContainerDriverError
 
@@ -40,5 +42,11 @@ async def get_driver() -> ContainerDriver:
 async def get_fresh_driver() -> ContainerDriver:
     """Get a fresh, connected driver instance (for Celery workers)."""
     driver = _create_driver()
-    await driver.connect()
+    try:
+        await driver.connect()
+    except BaseException:
+        # connect() may have initialized a loop-bound client before failing.
+        with contextlib.suppress(Exception):
+            await driver.close()
+        raise
     return driver

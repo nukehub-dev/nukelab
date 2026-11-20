@@ -60,46 +60,59 @@ OAuth configuration supports OIDC Discovery via `OAUTH_DISCOVERY_URL`, or manual
 Access tokens are signed with **EdDSA (Ed25519)**. Key pairs are stored in a Docker named volume mounted at `/run/user-secrets`.
 
 - `JWT_EXPIRE_MINUTES` controls access token lifetime (default 15 minutes).
-- Refresh tokens are encrypted with `JWT_SECRET` and stored in Redis.
-- Token denylist checks are enforced against Redis; `USER_AUTH_DENYLIST_FAIL_CLOSED=true` causes requests to fail if Redis is unavailable.
+- Platform refresh tokens are hashed and stored in the PostgreSQL
+  `refresh_tokens` table; OAuth provider refresh tokens are encrypted with a key
+  derived from `JWT_SECRET` and stored in the user's `security` data.
+- Redis holds the access-token denylist and revocation cutoffs, not the refresh
+  tokens. `USER_AUTH_DENYLIST_FAIL_CLOSED=true` causes requests to fail if Redis
+  is unavailable.
 
 ## RBAC overview
 
-Roles are predefined and map to a permission matrix. Super admins can customize permissions per role, and individual users can have permission overrides.
+Roles are predefined and map to a permission matrix. Super admins can customize
+role permissions through the persisted `role_permissions` override; individual
+users do not have permission override fields.
 
 | Role | Typical access |
 |---|---|
-| `super_admin` | Full system access, can modify roles and platform config |
-| `admin` | Full user/server management, can access any user server (audited) |
-| `moderator` | Can CRUD users, view all resources, cannot access user servers |
-| `support` | Can view users and servers, can access user servers for debugging (audited) |
-| `user` | Can manage own servers and resources, limited by quotas |
-| `guest` | Temporary access with severe limits and auto-expiry |
+| `super_admin` | Full system access (`*`), including cross-user server access |
+| `admin` | Full user, server, environment, plan, volume, workspace and credit management; cross-user NukeIDE access still requires `servers:access_others` |
+| `moderator` | User read/create/update, full server/catalog/quota management, audit read; cannot delete users, impersonate, or mint cross-user NukeIDE tokens |
+| `support` | User read, server read-all and own-server writes, credit grants, volume/workspace read-all and own writes; no cross-user server access by default |
+| `user` | Own servers, volumes and workspaces; read public environments/plans; own credits/analytics |
+| `guest` | Own server/volume read only; no automatic expiry job |
 
 ## Permission examples
 
 ```
-users:read            - View user list and profiles
-users:create          - Create users
-users:delete          - Permanently delete users
-users:disable         - Disable/enable accounts
-servers:read_own      - View own servers
-servers:read_all      - View all servers
-servers:start         - Start a server
-servers:stop          - Stop a server
-servers:access_own    - Access own NukeIDE session
-servers:access_all    - Access any user's NukeIDE session
-environments:create   - Create environment templates
-audit:read            - View audit logs
-system:config         - Modify platform configuration
+users:read              - View user list and profiles
+users:create            - Create users
+users:update            - Update users, including enable/disable
+users:delete            - Permanently delete users
+servers:read_own        - View own servers
+servers:write_own       - Start/stop/edit/delete own servers
+servers:read_all        - View all servers
+servers:write_all       - Manage all server records
+servers:access_others   - Mint a NukeIDE access token for another user's server
+environment:create      - Create environment templates
+plan:update             - Edit plans, subject to the last-usable-plan guard
+audit:read              - View audit logs
+admin:access            - Open the administration area
 ```
+
+API-token scopes are a separate vocabulary (`servers:read`, `servers:start`,
+`servers:stop`, `servers:delete`, `servers:manage`, `volumes:read`,
+`volumes:manage`, etc.) defined in `app/api/tokens.py`. A token request must
+satisfy both its scopes and the owner's RBAC permissions.
 
 ## NukeIDE container access
 
-Each user container runs an nginx proxy that validates a short-lived, server-scoped token before forwarding to the Theia IDE.
+Each user container runs nginx on port 8080; its `auth_request` subrequest is
+handled by the local Go auth sidecar on port 8081, which validates the
+short-lived server token before forwarding to the Theia IDE.
 
 ```
-User Request ---> Traefik ---> NukeIDE Container :80
+User Request ---> Traefik ---> NukeIDE Container :8080
                                      |
                                      v
                              +---------------+
@@ -110,21 +123,31 @@ User Request ---> Traefik ---> NukeIDE Container :80
                                      |
                                      v
                              +---------------+
-                             |    NukeIDE    |
-                             |   port 3000   |
+                             |  auth sidecar |
+                             |    :8081      |
+                             +-------+-------+
+                                     |
+                                     v
+                             +---------------+
+                             |    Theia      |
                              +---------------+
 ```
 
-The nginx `auth_request` subrequest calls `/api/auth/verify` on the FastAPI backend. The backend validates the server token and confirms that the requesting user is authorized to access that specific container.
-
-Server tokens use asymmetric **RS256** keys stored in the `nukelab-server-secrets` volume. Token lifetime defaults to 5 minutes (`SERVER_AUTH_TOKEN_TTL`) and keys auto-rotate every 30 days (`SERVER_AUTH_KEY_ROTATION_DAYS`).
+The backend issues and audits server tokens, but does not validate every
+container request. The sidecar validates the RS256 signature locally with the
+mounted public key. Keys live in the `nukelab-server-secrets` volume and token
+lifetime defaults to 5 minutes (`SERVER_AUTH_TOKEN_TTL`). Key rotation is
+operator-driven; `SERVER_AUTH_KEY_ROTATION_DAYS` is a configuration value, not
+an automatic scheduler.
 
 ## CSRF protection
 
 For requests authenticated via cookies (not Bearer tokens), the backend enforces a double-submit CSRF token:
 
-- A `csrf_token` cookie is set on login.
-- State-changing requests must include the same value in the `X-CSRF-Token` header.
+- The client obtains a token from `GET /api/auth/csrf-token`; login itself sets
+  only the session cookie.
+- State-changing requests must include the same value in the `X-CSRF-Token`
+  header.
 - Safe methods (GET, HEAD, OPTIONS) and requests using Bearer auth are exempt.
 
 ## Authorization checks in code

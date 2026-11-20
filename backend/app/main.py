@@ -34,10 +34,13 @@ from app.api import (
     quotas,
     schedules,
     search,
+    server_provenance,
+    server_queue,
     servers,
     system,
     tokens,
     users,
+    volume_backups,
     volumes,
     workspaces,
 )
@@ -281,7 +284,9 @@ app.add_middleware(TracingEnrichmentMiddleware)
 # Include routers
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(users.router, prefix="/users", tags=["users"])
+app.include_router(server_provenance.router, prefix="/servers", tags=["server-provenance"])
 app.include_router(servers.router, prefix="/servers", tags=["servers"])
+app.include_router(server_queue.router, prefix="/server-queue", tags=["server-queue"])
 app.include_router(tokens.router, prefix="/tokens", tags=["tokens"])
 app.include_router(credits.router, prefix="/credits", tags=["credits"])
 app.include_router(credit_requests.router, prefix="/credit-requests", tags=["credit-requests"])
@@ -298,6 +303,7 @@ app.include_router(bulk.router, prefix="/bulk", tags=["bulk"])
 app.include_router(health.router, prefix="/health", tags=["health"])
 app.include_router(system.router, prefix="/system", tags=["system"])
 app.include_router(schedules.router, prefix="/schedules", tags=["schedules"])
+app.include_router(volume_backups.router, tags=["volume-backups"])
 app.include_router(volumes.router, prefix="/volumes", tags=["volumes"])
 app.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
 app.include_router(workspaces.router, prefix="/workspaces", tags=["workspaces"])

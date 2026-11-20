@@ -138,6 +138,7 @@ class TestContainerHardening:
         settings.container_no_new_privileges = True
         settings.container_readonly_tmpfs_paths = [
             "/tmp",
+            "/home",
             "/var/tmp",
             "/var/run",
             "/var/log/nginx",

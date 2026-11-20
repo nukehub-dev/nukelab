@@ -35,7 +35,8 @@ All files under `docs/plan/`. The `docs/AGENTS.md` owns the top-level docs index
 ## Verification
 
 - Manual review for accuracy and stale content.
-- CI runs markdown lint and link checks on pull requests.
+- Run `./nukelabctl lint markdown` after planning-document edits; CI runs the
+  same Markdown lint and link checks on pull requests.
 
 ## Child NAD Index
 

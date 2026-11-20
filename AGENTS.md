@@ -94,7 +94,7 @@ Install once before making changes:
 
 - **podman** or **docker** + matching compose (podman-compose / docker-compose).
   `CONTAINER_ENGINE=docker` overrides auto-detection if you have both.
-- **Node.js** + npm (frontend only).
+- **Node.js 24+** + npm (frontend only).
 - **shellcheck** — shell static analysis (`./nukelabctl lint shell`).
 - **shfmt** — shell formatter (`./nukelabctl lint shell --fix`).
 
@@ -109,24 +109,25 @@ Run these from the repo root. They are the canonical "did I break anything"
 checks:
 
 ```bash
-./nukelabctl lint all       # ruff (backend) + eslint/prettier (frontend) + shellcheck/shfmt (shell)
+./nukelabctl lint all       # ruff + eslint/prettier + shellcheck/shfmt + markdownlint/lychee
 ./nukelabctl test all       # frontend unit tests + backend pytest suite in a one-off container
 ./nukelabctl selftest       # nukelabctl sanity check + shellcheck + shfmt strict
 ```
 
 Notes:
 
-- `lint all` is the default target. Use `lint <backend|frontend|shell>` to
-  scope.
+- `lint all` is the default target. Use `lint <backend|frontend|shell|markdown>`
+  to scope. `test all` does not run Playwright; browser gates run in CI and can
+  be reproduced against a disposable stack (see `frontend/AGENTS.md`).
 - `lint <target> --fix` auto-fixes where possible. For shell that means
   `shfmt -w` (shellcheck findings are reported but never auto-applied).
 - `selftest` enables shfmt strict mode by default. Set
   `NUKELAB_STRICT_FMT=0` to downgrade to a warning when prototyping.
 - `test backend <paths/flags…>` forwards the rest of argv to pytest, e.g.
   `./nukelabctl test backend tests/services/test_volume_service.py -x -v`.
-- Frontend has no per-file passthrough — run `cd frontend && npm run test --
-  path/to/file.test.ts` directly. See `frontend/AGENTS.md` for frontend
-  conventions.
+- Frontend has no per-file passthrough — run unit tests with `cd frontend &&
+  npm run test:unit -- path/to/file.test.ts`, and Playwright with `npm run test
+  -- path/to/file.spec.ts`. See `frontend/AGENTS.md` for frontend conventions.
 
 ## Releases
 
@@ -138,21 +139,22 @@ Notes:
   `NUKELAB_VERSION` (VERSION file / git describe) and `compose.yml` passes it
   as the `APP_VERSION` build arg.
 - Production hosts can deploy by pinning `NUKELAB_VERSION` or
-  `NUKELAB_IMAGE_TAG` so `nukelabctl up` / `update` pull tagged images from
+  `NUKELAB_IMAGE_TAG` so `nukelabctl start` / `update` pull tagged images from
   `ghcr.io/nukehub-dev/nukelab-backend` and `-frontend` instead of rebuilding
   from source. Unpinned deploys keep the source-build path.
 - Rollback safety: `./nukelabctl db-migrate` takes an automatic pre-migration
   snapshot, and the backend startup guard refuses to boot an old image on a
   newer schema. To roll back, pin the previous release, run `./nukelabctl
-  update`, restore the `backups/pre-migrate-*` snapshot, and restart.
+  update`, restore the `backups/pre-migrate-*` snapshot with `./nukelabctl
+  restore --stamp <previous-revision> <snapshot>`, and restart.
 - Cut a release with `scripts/bump-version.sh X.Y.Z` — it syncs `VERSION`,
   `frontend/package.json`, `frontend/package-lock.json`, and `CHANGELOG.md`
   (the backend version is dynamic via `APP_VERSION`;
   `backend/app/version.py` stays `0.0.0-dev`), then prints the commit/tag/push
   commands (it never runs them).
 - Pushing a `v*.*.*` tag triggers two workflows: `CI/CD` builds and pushes the
-  release images (backend, frontend, auth-sidecar, base, conda-base, workspace,
-  dev), and `Release` creates a **draft** GitHub Release. The release body is
+  release images (backend, frontend, auth-sidecar, volume-helper, base,
+  conda-base, workspace, dev), and `Release` creates a **draft** GitHub Release. The release body is
   extracted from the matching `## [X.Y.Z]` section in `CHANGELOG.md`, so keep
   it curated.
 - Record notable changes in the root `CHANGELOG.md` (Keep a Changelog format,
@@ -182,6 +184,16 @@ High-level layout; see the Child NAD Index below for domain-specific details.
   config used by background tasks (e.g. `SMTP_*`) must be passed to
   `celery-worker` in `compose.yml`, not only to `backend` — otherwise it fails
   silently in prod while request-path features (like the SMTP test) still work.
+- **Queue, schedule and health tasks also spawn servers from `celery-worker`.**
+  Pass runtime/security settings there too, not just to `backend`:
+  `CONTAINER_HARDENING_ENABLED`, `CONTAINER_RUNTIME`, `SERVER_AUTH_*`,
+  `APP_URL`/`PUBLIC_URL`, `DEV_MODE`/`APP_ENV`, GPU and resource-pool settings.
+  A missing value changes behavior only on background-admitted launches.
+- **Frontend CI is a required gate.** `CI/CD` runs Vitest unit tests, Vite-only
+  mocked browser tests, the external disposable browser stack, the workspace/IDE
+  stack and the trusted volume-helper unit/runtime tests before publishing
+  images. Use `scripts/ci/e2e-stack.sh` for the same local stack
+  build/start/stop flow; browser or helper failures block image publication.
 - **`.env` and `.env.development` drift out of date** as `.env.example` evolves.
   Run `./nukelabctl check-env` to detect missing or stale keys, and
   `./nukelabctl sync-env` to non-destructively append missing keys from
@@ -219,7 +231,7 @@ iteration is not blocked. To verify hardening against a local dev stack:
 
 1. Ensure `.env.development` contains `CONTAINER_HARDENING_ENABLED=true` (it
    should already).
-2. Start the dev stack: `./nukelabctl up dev`.
+2. Start the dev stack: `./nukelabctl dev`.
 3. Create a server through the API/UI.
 4. Verify the running container:
 
@@ -271,5 +283,7 @@ These checks are off by default because they require process/registry changes
 - `monitoring/AGENTS.md` — Prometheus, Grafana, Alertmanager, Jaeger, OTEL.
 - `resources/AGENTS.md` — Native/shared resources (`libnukelab_cpu`).
 - `scripts/AGENTS.md` — `nukelabctl`, shared library, build/security helpers.
+  - `scripts/ci/AGENTS.md` — Reproducible CI helpers for the disposable browser-e2e stack.
 - `services/AGENTS.md` — Auxiliary services.
   - `services/auth-sidecar/AGENTS.md` — Go authentication sidecar.
+  - `services/volume-helper/AGENTS.md` — Bounded offline private-volume archive capture and restore.

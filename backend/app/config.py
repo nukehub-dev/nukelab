@@ -5,7 +5,7 @@ import os
 from typing import Any
 from urllib.parse import urlparse, urlunparse
 
-from pydantic import field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings
 
 from app.version import __version__
@@ -161,6 +161,17 @@ class Settings(BaseSettings):
     docker_pull_policy: str = "if-not-present"
     volume_storage_path: str = ""
 
+    volume_backup_storage_path: str = ""
+    volume_backup_host_path: str = ""
+    volume_backup_helper_image: str = "nukelab-volume-helper:latest"
+    volume_backup_retention_days: int = Field(default=30, gt=0)
+    volume_backup_max_per_volume: int = Field(default=20, gt=0)
+    volume_backup_max_owner_bytes: int = Field(default=100 * 1024**3, gt=0)
+    volume_backup_max_total_bytes: int = Field(default=1024**4, gt=0)
+    volume_backup_max_logical_bytes: int = Field(default=64 * 1024**3, gt=0)
+    volume_backup_max_members: int = Field(default=100000, gt=0)
+    volume_backup_timeout_seconds: int = Field(default=1800, gt=0)
+
     # Container runtime driver ("docker" covers Docker and Podman via the
     # Docker-compatible API; "kubernetes" is reserved for a future k3s driver).
     container_runtime: str = "docker"
@@ -174,6 +185,17 @@ class Settings(BaseSettings):
     # plan's gpu_limit exclusively reserves one device per server. When empty,
     # gpu_cdi_device is used as-is for every GPU server (shared legacy mode).
     gpu_devices: str = ""
+
+    # Allocatable budgets, independent of instantaneous host telemetry.
+    resource_pool_cpu: float = Field(default=34.0, gt=0, allow_inf_nan=False)
+    resource_pool_memory_mib: int = Field(default=68 * 1024, gt=0)
+    resource_pool_disk_mib: int = Field(default=2000 * 1024, gt=0)
+    server_launch_timeout_seconds: int = Field(default=1800, gt=0)
+    queue_dispatch_batch_size: int = Field(default=20, ge=1, le=100)
+    queue_tick_seconds: int = Field(default=30, gt=0)
+    queue_timeout_seconds: int = Field(default=3600, gt=0)
+    queue_max_pending_per_owner: int = Field(default=5, gt=0)
+    queue_max_pending_total: int = Field(default=500, gt=0)
 
     @property
     def gpu_device_list(self) -> list[str]:
@@ -195,6 +217,7 @@ class Settings(BaseSettings):
     container_no_new_privileges: bool = True
     container_readonly_tmpfs_paths: list[str] = [
         "/tmp",  # nosec: B108  # intentional container tmpfs mount, not host temp
+        "/home",  # writable home for explicit non-home volume layouts
         "/var/tmp",  # nosec: B108
         "/var/run",  # nosec: B108
         "/var/log/nginx",  # nosec: B108

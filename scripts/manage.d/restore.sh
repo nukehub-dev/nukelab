@@ -4,6 +4,7 @@
 
 # Default values for restore options.
 RESTORE_YES=false
+RESTORE_STAMP="head"
 
 cmd_restore() {
     local backup_file="${TARGET:-}"
@@ -51,8 +52,8 @@ cmd_restore() {
     log "Restoring data..."
     _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" exec -T postgres psql -U "$db_user" -v ON_ERROR_STOP=1 -d "$db_name" < "$backup_file"
 
-    log "Stamping alembic version..."
-    _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" exec -T backend python -m alembic stamp head
+    log "Stamping alembic version ${RESTORE_STAMP}..."
+    _run_quiet_unless_verbose $COMPOSE "${COMPOSE_ARGS[@]}" exec -T backend python -m alembic stamp "$RESTORE_STAMP"
 
     ok "Restore complete"
 }
@@ -63,6 +64,13 @@ parse_restore_args() {
             --yes | -y)
                 RESTORE_YES=true
                 EXTRA_ARGS=("${EXTRA_ARGS[@]:1}")
+                ;;
+            --stamp)
+                if [[ ${#EXTRA_ARGS[@]} -lt 2 ]]; then
+                    die "Option --stamp requires an Alembic revision"
+                fi
+                RESTORE_STAMP="${EXTRA_ARGS[1]}"
+                EXTRA_ARGS=("${EXTRA_ARGS[@]:2}")
                 ;;
             --help | -h)
                 help_restore
@@ -91,10 +99,14 @@ Restore the database from a backup file. This drops and recreates the
 database, so it requires typing 'yes' to confirm unless --yes is given.
 
 ${BOLD}Options:${RESET}
-  --yes, -y    Skip the confirmation prompt (for scripts)
+  --yes, -y         Skip the confirmation prompt (for scripts)
+  --stamp <rev>     Alembic revision to stamp after restore (default: head).
+                    Use the pre-migration revision from a snapshot filename
+                    when rolling back to an older release.
 
 ${BOLD}Examples:${RESET}
   ./nukelabctl restore backups/nukelab_backup_20250607_120000.sql
   ./nukelabctl restore --yes backups/nukelab_backup_20250607_120000.sql
+  ./nukelabctl restore --yes --stamp a1b2c3d4 backups/pre-migrate-v2.1.0-a1b2c3d4-20261119.dump
 EOF
 }

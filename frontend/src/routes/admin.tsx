@@ -10,16 +10,22 @@ export const Route = createFileRoute('/admin')({
 })
 
 function AdminLayout() {
+  const user = useAuthStore((state) => state.user)
   const canAccessAdmin = useAuthStore((state) => state.canAccessAdmin)
   const navigate = useNavigate()
+  const hasToken = typeof window !== 'undefined' && Boolean(localStorage.getItem('nukelab-token'))
+  // Wait for the first /users/me/profile fetch on a deep link/refresh instead
+  // of bouncing an authenticated admin to the dashboard while the store is
+  // still empty.
+  const authPending = hasToken && !user
 
   useEffect(() => {
-    if (!canAccessAdmin()) {
+    if (!authPending && !canAccessAdmin()) {
       navigate({ to: '/' })
     }
-  }, [canAccessAdmin, navigate])
+  }, [authPending, canAccessAdmin, navigate])
 
-  if (!canAccessAdmin()) {
+  if (authPending || !canAccessAdmin()) {
     return null
   }
 

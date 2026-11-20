@@ -57,12 +57,16 @@ class GpuAllocatorService:
         allocated = await self.allocated_devices()
         return [device for device in self.pool() if device not in allocated]
 
-    async def allocate(self, server_id: str, count: int) -> list[str] | None:
+    async def allocate(
+        self, server_id: str, count: int, *, commit: bool = True
+    ) -> list[str] | None:
         """Reserve the first ``count`` available devices for a server.
 
         Returns the allocated device list, [] for count <= 0 or when the
         allocator is disabled, or None when the pool is exhausted or a
-        concurrent allocation won the race for the same device.
+        concurrent allocation won the race for the same device. commit=False
+        retains the caller's transaction; a unique race rolls back a savepoint
+        only, including when using the compatibility commit=True default.
         """
         if count <= 0 or not self.enabled():
             return []
@@ -77,15 +81,21 @@ class GpuAllocatorService:
             )
             return None
 
-        for device in devices:
-            self.db.add(GpuAllocation(server_id=uuid.UUID(server_id), device=device))
+        # Flush caller reservations outside the savepoint error handler so a
+        # caller's unrelated integrity failure is never mistaken for a GPU race.
+        await self.db.flush()
         try:
-            await self.db.commit()
+            async with self.db.begin_nested():
+                for device in devices:
+                    self.db.add(GpuAllocation(server_id=uuid.UUID(server_id), device=device))
+                await self.db.flush()
         except IntegrityError:
-            # Lost a concurrent race for the same device (UNIQUE guard).
-            await self.db.rollback()
+            # Only the allocation savepoint rolls back. Admission's transaction
+            # and advisory lock remain intact for a capacity-wait response.
             logger.warning("GPU allocation race lost for server %s", server_id)
             return None
+        if commit:
+            await self.db.commit()
 
         logger.info("Allocated GPU devices %s to server %s", devices, server_id)
         return devices
@@ -97,24 +107,30 @@ class GpuAllocatorService:
         )
         return list(result.scalars().all())
 
-    async def release(self, server_id: str) -> None:
-        """Release all devices reserved for a server. Idempotent."""
+    async def release(self, server_id: str, *, commit: bool = True) -> None:
+        """Release devices idempotently; commit=False only flushes caller work."""
         result = await self.db.execute(
             delete(GpuAllocation).where(GpuAllocation.server_id == uuid.UUID(server_id))
         )
-        await self.db.commit()
+        if commit:
+            await self.db.commit()
+        else:
+            await self.db.flush()
         if result.rowcount:
             logger.info("Released %d GPU device(s) from server %s", result.rowcount, server_id)
 
-    async def reconcile(self) -> None:
+    async def reconcile(self, *, commit: bool = True) -> None:
         """Drop allocation rows whose server no longer needs them.
 
         Safety net for crashed releases: removes rows older than
-        _RECONCILE_GRACE whose server is gone, is not running/starting, or
+        _RECONCILE_GRACE whose server is gone, is not running/starting/stopping, or
         has allocated_gpu == 0. Fresh rows are kept so in-flight spawns are
-        not reaped mid-create.
+        not reaped mid-create. commit=False flushes cleanup without committing
+        the caller's transaction; ordinary admission does not invoke cleanup.
         """
-        result = await self.db.execute(select(GpuAllocation))
+        result = await self.db.execute(
+            select(GpuAllocation).execution_options(populate_existing=True)
+        )
         rows = result.scalars().all()
         if not rows:
             return
@@ -134,10 +150,13 @@ class GpuAllocatorService:
             row.id
             for row in candidates
             if row.server_id not in servers
-            or servers[row.server_id].status not in ("running", "starting")
+            or servers[row.server_id].status not in ("running", "starting", "stopping")
             or not servers[row.server_id].allocated_gpu
         ]
         if stale_ids:
             await self.db.execute(delete(GpuAllocation).where(GpuAllocation.id.in_(stale_ids)))
-            await self.db.commit()
+            if commit:
+                await self.db.commit()
+            else:
+                await self.db.flush()
             logger.info("Reconciled %d stale GPU allocation(s)", len(stale_ids))

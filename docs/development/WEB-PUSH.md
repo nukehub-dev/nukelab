@@ -19,7 +19,7 @@ Push API. This guide covers local setup, key generation, and known limitations.
    VAPID_SUBJECT=mailto:admin@example.com
    ```
 
-   In development use `.env.development`; in production use `.env.production`.
+   In development use `.env.development`; in production use `.env`.
 
 3. Pass the same variables to the `celery-worker` container in `compose.yml`.
    Background tasks run in the worker, not the API container, so missing
@@ -28,8 +28,8 @@ Push API. This guide covers local setup, key generation, and known limitations.
 4. Restart the stack:
 
    ```bash
-   ./nukelabctl down
-   ./nukelabctl up dev
+   ./nukelabctl stop
+   ./nukelabctl dev
    ```
 
 5. In the browser, opt in from **Settings → Notifications**.
@@ -47,7 +47,7 @@ Vite HMR. Set `VITE_ENABLE_PUSH_IN_DEV=true` to register it locally for push
 testing:
 
 ```bash
-VITE_ENABLE_PUSH_IN_DEV=true ./nukelabctl up dev
+VITE_ENABLE_PUSH_IN_DEV=true ./nukelabctl dev
 ```
 
 ## Payload limits

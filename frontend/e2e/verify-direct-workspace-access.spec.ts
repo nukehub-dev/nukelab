@@ -1,113 +1,124 @@
 import { test, expect } from '@playwright/test'
+import {
+  adminLogin,
+  createServer,
+  createTestEnvironment,
+  createVolume,
+  deactivateEnvironment,
+  deleteServer,
+  deleteVolumeWhenDetached,
+  getPlanBySlug,
+  startServer,
+  waitForServerStatus,
+} from './helpers/api'
+import {
+  ADMIN_USERNAME,
+  BASE_URL,
+  E2E_WORKSPACE_IMAGE,
+  EXTERNAL_SERVER,
+  uniqueName,
+} from './helpers/runtime'
 
-const BASE_URL = 'http://localhost:8080'
-const WORKSPACE_IMAGE = 'nukelab-environment-workspace:latest'
-
-async function getAuthToken(): Promise<string> {
-  const res = await fetch(`${BASE_URL}/api/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: 'username=admin&password=admin123',
-  })
-  const data = await res.json()
-  return data.access_token
+function trimTrailingSlash(path: string): string {
+  return path.replace(/\/+$/, '')
 }
 
-async function findWorkspaceEnvironmentId(token: string): Promise<string> {
-  const res = await fetch(`${BASE_URL}/api/environments/`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-  const list = await res.json()
-  const env = list.data.items.find(
-    (e: { image?: string; id?: string }) => e.image === WORKSPACE_IMAGE
+test.describe('Direct workspace access', () => {
+  test.describe.configure({ timeout: 240_000 })
+
+  test.skip(
+    !EXTERNAL_SERVER,
+    'Gateway access needs a single-origin stack; set E2E_EXTERNAL_SERVER=1 (and BASE_URL).'
   )
-  if (!env) {
-    throw new Error(`Workspace environment (${WORKSPACE_IMAGE}) not found`)
-  }
-  return env.id
-}
 
-async function findSmallPlanId(token: string): Promise<string> {
-  const res = await fetch(`${BASE_URL}/api/plans/`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-  const list = await res.json()
-  const plan = list.data.items.find((p: { slug?: string; id?: string }) => p.slug === 'small')
-  if (!plan) {
-    throw new Error('Small plan not found')
-  }
-  return plan.id
-}
+  let token: string | undefined
+  let environmentId: string | undefined
+  let volumeId: string | undefined
+  let serverId: string | undefined
+  let serverUrl: string | undefined
 
-async function createWorkspaceServer(token: string): Promise<{ id: string; url: string }> {
-  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
-  const environmentId = await findWorkspaceEnvironmentId(token)
-  const planId = await findSmallPlanId(token)
-  const name = `e2e-ws-${crypto.randomUUID().slice(0, 8)}`
+  test.beforeAll(async ({ request }) => {
+    if (!EXTERNAL_SERVER) return
 
-  const createRes = await fetch(`${BASE_URL}/api/servers/`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      name,
-      environment_id: environmentId,
-      plan_id: planId,
+    token = (await adminLogin(request)).access_token
+    const environment = await createTestEnvironment(request, token, {
+      prefix: 'e2e-workspace-env',
+      image: E2E_WORKSPACE_IMAGE,
+      category: 'workspace',
+    })
+    environmentId = environment.id
+    const volume = await createVolume(request, token, {
+      display_name: uniqueName('e2e workspace home'),
+      max_size_bytes: 2 * 1024 ** 3,
+    })
+    volumeId = volume.id
+    const plan = await getPlanBySlug(request, token, 'small')
+    const serverName = uniqueName('e2e-ws')
+    const created = await createServer(request, token, {
+      name: serverName,
+      plan_id: plan.id,
+      environment_id: environment.id,
+      volume_id: volume.id,
       volume_mode: 'read_write',
-    }),
-  })
-  const created = await createRes.json()
-  const serverId = created.id ?? created.server?.id
-  if (!serverId) {
-    throw new Error(`Failed to create workspace server: ${JSON.stringify(created)}`)
-  }
-
-  const startRes = await fetch(`${BASE_URL}/api/servers/${serverId}/start`, {
-    method: 'POST',
-    headers,
-  })
-  if (!startRes.ok) {
-    throw new Error(`Failed to start workspace server ${serverId}: ${startRes.status}`)
-  }
-
-  // Wait for the server to reach running state.
-  for (let i = 0; i < 30; i++) {
-    const statusRes = await fetch(`${BASE_URL}/api/servers/${serverId}`, { headers })
-    const status = await statusRes.json()
-    const currentStatus = status.status ?? status.server?.status
-    if (currentStatus === 'running') {
-      break
+    })
+    serverId = created.id
+    if (created.status === 'stopped') {
+      await startServer(request, token, created.id)
     }
-    await new Promise((resolve) => setTimeout(resolve, 2000))
-  }
+    const running = await waitForServerStatus(request, token, created.id, ['running'], {
+      timeoutMs: 180_000,
+    })
+    serverUrl = running.external_url || `${BASE_URL}/user/${ADMIN_USERNAME}/${serverName}`
+  })
 
-  return { id: serverId, url: `${BASE_URL}/user/admin/${name}` }
-}
+  test.afterAll(async ({ request }) => {
+    if (!token) return
+    try {
+      if (serverId) await deleteServer(request, token, serverId)
+    } finally {
+      try {
+        if (volumeId) await deleteVolumeWhenDetached(request, token, volumeId)
+      } finally {
+        if (environmentId) await deactivateEnvironment(request, token, environmentId)
+      }
+    }
+  })
 
-test('direct workspace URL access loads the IDE and assets', async ({ page }) => {
-  const token = await getAuthToken()
-  const { url: serverUrl } = await createWorkspaceServer(token)
+  test('direct workspace URL access loads the IDE and assets @workspace', async ({ page }) => {
+    if (!serverUrl) throw new Error('workspace server was not created')
+    const accessToken = token
+    if (!accessToken) throw new Error('admin token was not acquired')
 
-  await page.addInitScript((authToken: string) => {
-    localStorage.setItem('nukelab-token', authToken)
-  }, token)
+    await page.addInitScript((authToken: string) => {
+      localStorage.setItem('nukelab-token', authToken)
+    }, accessToken)
 
-  page.on('console', (msg) => console.log('PAGE CONSOLE:', msg.text()))
-  page.on('pageerror', (err) => console.error('PAGE ERROR:', err.message))
+    page.on('console', (msg) => console.log('PAGE CONSOLE:', msg.text()))
+    page.on('pageerror', (err) => console.error('PAGE ERROR:', err.message))
 
-  // Direct access without a server token should redirect to the SPA gateway
-  // flow, which obtains a server token and loads the workspace IDE.
-  await page.goto(serverUrl)
+    // Direct access without a server token goes through the SPA gateway flow,
+    // which obtains a server token and loads the workspace IDE.
+    await page.goto(serverUrl)
 
-  // The Traefik middleware redirects the bare prefix to a trailing slash so
-  // relative IDE assets resolve under the strip prefix.
-  await page.waitForURL(`${serverUrl}/`, { timeout: 60_000 })
+    // Traefik redirects the bare prefix to a trailing slash so relative IDE
+    // assets resolve under the strip prefix.
+    const expected = new URL(serverUrl)
+    await expect(page).toHaveURL(
+      (url) =>
+        url.origin === expected.origin &&
+        trimTrailingSlash(url.pathname) === trimTrailingSlash(expected.pathname) &&
+        url.pathname.endsWith('/'),
+      { timeout: 60_000 }
+    )
 
-  // The workspace IDE should render the NukeIDE shell.
-  await expect(page.locator('body')).toContainText('NukeIDE', { timeout: 30_000 })
+    // The workspace IDE should render the NukeIDE shell.
+    await expect(page.locator('body')).toContainText('NukeIDE', { timeout: 30_000 })
 
-  // Core IDE assets should have loaded (no 404s for bundle / logo).
-  const bundleRequest = page.request.get(`${serverUrl}/bundle.js`)
-  const logoRequest = page.request.get(`${serverUrl}/logo.svg`)
-  await expect((await bundleRequest).status()).toBe(200)
-  await expect((await logoRequest).status()).toBe(200)
+    // The IDE bundle should be served from the workspace root. The workspace
+    // image does not ship a logo.svg; the shell and bundle assertions cover
+    // the direct-access path.
+    const base = page.url().endsWith('/') ? page.url() : `${page.url()}/`
+    const bundleRequest = await page.request.get(new URL('bundle.js', base).toString())
+    expect(bundleRequest.status()).toBe(200)
+  })
 })

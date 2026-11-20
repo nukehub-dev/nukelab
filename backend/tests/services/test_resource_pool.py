@@ -5,6 +5,8 @@
 
 import pytest
 
+from app.config import settings
+
 
 class TestResourcePoolService:
     """Resource pool calculation tests."""
@@ -21,7 +23,7 @@ class TestResourcePoolService:
         assert "memory_mb" in resources
         assert "disk_mb" in resources
 
-        assert resources["cpu"]["total"] == 34.0
+        assert resources["cpu"]["total"] == settings.resource_pool_cpu
         assert resources["cpu"]["available"] >= 0
 
     def test_parse_memory(self):

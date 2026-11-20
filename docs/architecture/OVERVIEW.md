@@ -27,7 +27,7 @@ NukeLab is a multi-user scientific computing platform. It exposes a web manageme
                           v                  v                  v
                     +----------+      +----------+      +----------+
                     |PostgreSQL|      |  Redis   |      |  Celery  |
-                    |    18    |      |          |      | Workers  |
+                    |    17    |      |          |      | Workers  |
                     +----------+      +----------+      +----------+
 ```
 
@@ -45,19 +45,21 @@ NukeLab is a multi-user scientific computing platform. It exposes a web manageme
 
 - **Traefik** handles TLS termination, routing, rate limiting, and WebSocket upgrades.
 - **Frontend** is a static Vite + React 19 SPA. It calls `/api/*` and subscribes to `/ws` for real-time events.
-- **NukeIDE containers** are spawned on demand. Each container runs an nginx proxy that validates short-lived server tokens before forwarding to the Theia IDE backend.
+- **NukeIDE containers** are spawned on demand. Each container's nginx proxy delegates token validation to a local Go auth sidecar before forwarding to the Theia IDE backend.
 
 ### API and orchestration layer
 
 - **FastAPI backend** (`backend/app/main.py`) owns auth, user/server/environment/plan management, audit logging, metrics, and Docker orchestration.
-- **ContainerClient** (`backend/app/container/client.py`) wraps the Docker SDK for low-level container operations.
+- **ContainerDriver** (`backend/app/container/driver.py`) and `DockerDriver` (`aiodocker`) provide the low-level runtime abstraction selected by `CONTAINER_RUNTIME`; `ContainerClient` is a compatibility shim.
 - **ServerSpawner** (`backend/app/container/spawner.py`) coordinates higher-level server lifecycle actions (volume creation, image pulling, Traefik labels, readiness checks).
-- **Celery workers** run background tasks: NUKE billing, server cleanup, scheduled start/stop, notifications, and maintenance windows.
+- **Queue, launch, lifecycle, provenance and recovery services** persist owner intent before runtime I/O, enforce admission and authorization, and reconcile uncertain outcomes.
+- **Celery workers** run background tasks: NUKE billing, server cleanup, queue dispatch, scheduled start/stop, notifications, maintenance windows, and recovery retention.
 
 ### Data and state layer
 
-- **PostgreSQL 17** stores users, roles, permissions, servers, environments, plans, credit transactions, audit logs, and metrics history. Time-series tables are partitioned by month.
-- **Redis** handles sessions, pub/sub, Celery broker duties, response caching, and real-time message distribution.
+- **PostgreSQL 17** stores users, roles, permissions, servers, environments, plans, credit transactions, audit logs, launch provenance, recovery records and metrics history. Time-series tables are partitioned by month.
+- **Redis** handles token denylist/revocation state, pub/sub, Celery broker duties, response caching, rate limits, and real-time message distribution.
+- **Private volume backups** live under an operator-configured host path that the API/workers and the trusted recovery helper reach through the same bind mount.
 
 ## Key design decisions
 
@@ -65,6 +67,7 @@ NukeLab is a multi-user scientific computing platform. It exposes a web manageme
 - **FastAPI instead of Django.** Native async/await, WebSocket support, and Pydantic validation fit an I/O-bound platform that calls the Docker API frequently.
 - **Traefik instead of Nginx.** Native Docker auto-discovery is required for dynamic user container routing.
 - **PostgreSQL instead of a separate time-series database.** The workload fits relational queries with monthly partitioning for audit and metrics tables.
+- **Durable intent instead of best-effort provisioning.** Queue requests, lifecycle reservations and launch provenance are persisted before runtime I/O so uncertain outcomes can be fenced and reconciled instead of silently duplicated.
 
 ## Scaling notes
 

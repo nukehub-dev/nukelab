@@ -6,6 +6,7 @@
 import uuid as uuid_mod
 
 import pytest
+from fastapi import HTTPException
 from sqlalchemy import and_, select
 
 from app.models.plan_access import UserPlanAccess, WorkspacePlanAccess
@@ -239,9 +240,12 @@ class TestPlanServiceCRUD:
 
     @pytest.mark.asyncio
     async def test_deactivate_plan(self, db_session):
-        """deactivate_plan should set is_active=False."""
+        """deactivate_plan should set is_active=False when another active plan remains."""
         plan = ServerPlan(name="Active", slug="active-plan", is_active=True, cpu_limit=1)
-        db_session.add(plan)
+        fallback = ServerPlan(
+            name="Fallback", slug="active-fallback", is_active=True, is_public=True, cpu_limit=1
+        )
+        db_session.add_all([plan, fallback])
         await db_session.commit()
 
         service = PlanService(db_session)
@@ -261,9 +265,12 @@ class TestPlanServiceCRUD:
 
     @pytest.mark.asyncio
     async def test_delete_plan_success(self, db_session):
-        """delete_plan should remove plan."""
+        """delete_plan should remove plan when another active plan remains."""
         plan = ServerPlan(name="To Delete", slug="delete-plan", cpu_limit=1)
-        db_session.add(plan)
+        fallback = ServerPlan(
+            name="Fallback", slug="delete-fallback", is_active=True, is_public=True, cpu_limit=1
+        )
+        db_session.add_all([plan, fallback])
         await db_session.commit()
 
         service = PlanService(db_session)
@@ -279,6 +286,239 @@ class TestPlanServiceCRUD:
         with pytest.raises(Exception) as exc_info:
             await service.delete_plan(str(uuid_mod.uuid4()))
         assert "not found" in str(exc_info.value)
+
+
+class TestPlanServiceAvailabilityGuard:
+    """Tests for the safeguard against leaving the platform without a plan."""
+
+    @pytest.mark.asyncio
+    async def test_cannot_deactivate_last_active_plan(self, db_session):
+        """Deactivating the only active plan should be rejected."""
+        plan = ServerPlan(
+            name="Only Plan", slug="only-plan", is_public=True, is_active=True, cpu_limit=1
+        )
+        db_session.add(plan)
+        await db_session.commit()
+
+        service = PlanService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.deactivate_plan(str(plan.id))
+
+        assert exc_info.value.status_code == 409
+        assert "last active plan" in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_cannot_delete_last_active_plan(self, db_session):
+        """Deleting the only active plan should be rejected."""
+        plan = ServerPlan(
+            name="Only Plan Delete",
+            slug="only-plan-delete",
+            is_public=True,
+            is_active=True,
+            cpu_limit=1,
+        )
+        db_session.add(plan)
+        await db_session.commit()
+
+        service = PlanService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.delete_plan(str(plan.id))
+
+        assert exc_info.value.status_code == 409
+        assert "last active plan" in exc_info.value.detail
+        result = await db_session.execute(select(ServerPlan).where(ServerPlan.id == plan.id))
+        assert result.scalar_one_or_none() is not None
+
+    @pytest.mark.asyncio
+    async def test_cannot_make_last_user_usable_plan_private(self, db_session):
+        """Hiding the only user-usable plan should be rejected."""
+        plan = ServerPlan(
+            name="User Plan", slug="user-visible-plan", is_public=True, is_active=True, cpu_limit=1
+        )
+        private_plan = ServerPlan(
+            name="Admin Plan",
+            slug="admin-private-plan",
+            is_public=False,
+            visible_to_roles=[],
+            is_active=True,
+            cpu_limit=1,
+        )
+        db_session.add_all([plan, private_plan])
+        await db_session.commit()
+
+        service = PlanService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.update_plan(str(plan.id), is_public=False)
+
+        assert exc_info.value.status_code == 409
+        assert "last plan available to users" in exc_info.value.detail
+        result = await db_session.execute(select(ServerPlan).where(ServerPlan.id == plan.id))
+        assert result.scalar_one().is_public is True
+
+    @pytest.mark.asyncio
+    async def test_cannot_remove_user_role_from_last_user_usable_plan(self, db_session):
+        """Removing the user role from the only user-visible plan should be rejected."""
+        plan = ServerPlan(
+            name="Role Plan",
+            slug="role-visible-plan",
+            is_public=False,
+            visible_to_roles=["user"],
+            is_active=True,
+            cpu_limit=1,
+        )
+        private_plan = ServerPlan(
+            name="Admin Plan",
+            slug="admin-private-role-plan",
+            is_public=False,
+            visible_to_roles=[],
+            is_active=True,
+            cpu_limit=1,
+        )
+        db_session.add_all([plan, private_plan])
+        await db_session.commit()
+
+        service = PlanService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.update_plan(str(plan.id), visible_to_roles=[])
+
+        assert exc_info.value.status_code == 409
+        assert "last plan available to users" in exc_info.value.detail
+        result = await db_session.execute(select(ServerPlan).where(ServerPlan.id == plan.id))
+        assert "user" in result.scalar_one().visible_to_roles
+
+    @pytest.mark.asyncio
+    async def test_cannot_delete_last_user_usable_plan(self, db_session):
+        """Deleting the only user-usable plan should be rejected."""
+        plan = ServerPlan(
+            name="User Plan Delete",
+            slug="user-visible-delete",
+            is_public=True,
+            is_active=True,
+            cpu_limit=1,
+        )
+        private_plan = ServerPlan(
+            name="Admin Plan",
+            slug="admin-private-delete",
+            is_public=False,
+            visible_to_roles=[],
+            is_active=True,
+            cpu_limit=1,
+        )
+        db_session.add_all([plan, private_plan])
+        await db_session.commit()
+
+        service = PlanService(db_session)
+        with pytest.raises(HTTPException) as exc_info:
+            await service.delete_plan(str(plan.id))
+
+        assert exc_info.value.status_code == 409
+        assert "last plan available to users" in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    async def test_can_deactivate_when_another_active_plan_remains(self, db_session):
+        """Deactivation is allowed when another active plan remains."""
+        plan = ServerPlan(
+            name="Active Plan", slug="deactivate-allowed", is_active=True, cpu_limit=1
+        )
+        fallback = ServerPlan(
+            name="Fallback", slug="deactivate-fallback", is_active=True, is_public=True, cpu_limit=1
+        )
+        db_session.add_all([plan, fallback])
+        await db_session.commit()
+
+        service = PlanService(db_session)
+        updated = await service.deactivate_plan(str(plan.id))
+        assert updated.is_active is False
+
+    @pytest.mark.asyncio
+    async def test_can_delete_when_another_user_usable_plan_remains(self, db_session):
+        """Deletion is allowed when another active user-usable plan remains."""
+        plan = ServerPlan(
+            name="User Plan", slug="delete-allowed", is_public=True, is_active=True, cpu_limit=1
+        )
+        fallback = ServerPlan(
+            name="Fallback",
+            slug="delete-allowed-fallback",
+            is_public=True,
+            is_active=True,
+            cpu_limit=1,
+        )
+        db_session.add_all([plan, fallback])
+        await db_session.commit()
+
+        service = PlanService(db_session)
+        await service.delete_plan(str(plan.id))
+
+        result = await db_session.execute(select(ServerPlan).where(ServerPlan.id == plan.id))
+        assert result.scalar_one_or_none() is None
+
+    @pytest.mark.asyncio
+    async def test_can_hide_plan_when_another_user_usable_plan_remains(self, db_session):
+        """Making a plan private is allowed when another user-usable plan remains."""
+        plan = ServerPlan(
+            name="User Plan", slug="hide-allowed", is_public=True, is_active=True, cpu_limit=1
+        )
+        fallback = ServerPlan(
+            name="Fallback",
+            slug="hide-allowed-fallback",
+            is_public=True,
+            is_active=True,
+            cpu_limit=1,
+        )
+        db_session.add_all([plan, fallback])
+        await db_session.commit()
+
+        service = PlanService(db_session)
+        updated = await service.update_plan(str(plan.id), is_public=False)
+        assert updated.is_public is False
+
+    @pytest.mark.asyncio
+    async def test_can_activate_and_publish_inactive_private_plan(self, db_session):
+        """Activating or publishing a plan is always allowed."""
+        plan = ServerPlan(
+            name="Dormant Plan",
+            slug="dormant-plan",
+            is_active=False,
+            is_public=False,
+            visible_to_roles=[],
+            cpu_limit=1,
+        )
+        db_session.add(plan)
+        await db_session.commit()
+
+        service = PlanService(db_session)
+        activated = await service.activate_plan(str(plan.id))
+        assert activated.is_active is True
+
+        published = await service.update_plan(str(plan.id), is_public=True)
+        assert published.is_public is True
+
+    @pytest.mark.asyncio
+    async def test_can_delete_inactive_private_plan(self, db_session):
+        """A plan that is already inactive/private does not trip the guard."""
+        active_plan = ServerPlan(
+            name="Active Plan",
+            slug="inactive-delete-active",
+            is_public=True,
+            is_active=True,
+            cpu_limit=1,
+        )
+        stale_plan = ServerPlan(
+            name="Stale Plan",
+            slug="inactive-delete-stale",
+            is_active=False,
+            is_public=False,
+            visible_to_roles=[],
+            cpu_limit=1,
+        )
+        db_session.add_all([active_plan, stale_plan])
+        await db_session.commit()
+
+        service = PlanService(db_session)
+        await service.delete_plan(str(stale_plan.id))
+
+        result = await db_session.execute(select(ServerPlan).where(ServerPlan.id == stale_plan.id))
+        assert result.scalar_one_or_none() is None
 
 
 class TestPlanServiceCanUse:

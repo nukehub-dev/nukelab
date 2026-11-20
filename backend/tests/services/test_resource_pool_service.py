@@ -7,6 +7,7 @@ import uuid as uuid_mod
 
 import pytest
 
+from app.config import settings
 from app.models.server import Server
 from app.models.server_plan import ServerPlan
 from app.models.server_queue import ServerQueue
@@ -49,9 +50,9 @@ class TestResourcePoolServiceGetAvailable:
         """Should return full resources when no servers running."""
         service = ResourcePoolService(db_session)
         result = await service.get_available_resources()
-        assert result["cpu"]["total"] == 34.0
+        assert result["cpu"]["total"] == settings.resource_pool_cpu
         assert result["cpu"]["allocated"] == 0
-        assert result["cpu"]["available"] == 34.0
+        assert result["cpu"]["available"] == settings.resource_pool_cpu
 
     @pytest.mark.asyncio
     async def test_get_available_with_servers(self, db_session, test_user):
@@ -70,7 +71,7 @@ class TestResourcePoolServiceGetAvailable:
         service = ResourcePoolService(db_session)
         result = await service.get_available_resources()
         assert result["cpu"]["allocated"] == 4
-        assert result["cpu"]["available"] == 30.0
+        assert result["cpu"]["available"] == settings.resource_pool_cpu - 4
         assert result["memory_mb"]["allocated"] == 8192
 
     @pytest.mark.asyncio
@@ -162,9 +163,9 @@ class TestResourcePoolServiceQueue:
         await db_session.commit()
 
         service = ResourcePoolService(db_session)
-        # Position of q1 among pending items excluding itself
+        # Pending positions include the request itself.
         pos = await service.get_queue_position(str(q1.id))
-        assert pos == 0
+        assert pos == 1
 
     @pytest.mark.asyncio
     async def test_get_next_in_queue_empty(self, db_session):

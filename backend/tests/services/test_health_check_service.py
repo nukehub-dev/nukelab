@@ -195,7 +195,7 @@ class TestCheckAllContainers:
         }
 
         with mock.patch(
-            "app.services.health_check_service.get_fresh_container_client", return_value=mock_client
+            "app.services.health_check_service.get_fresh_driver", return_value=mock_client
         ):
             await service._check_container(server)
 
@@ -230,7 +230,7 @@ class TestCheckAllContainers:
         }
 
         with mock.patch(
-            "app.services.health_check_service.get_fresh_container_client", return_value=mock_client
+            "app.services.health_check_service.get_fresh_driver", return_value=mock_client
         ):
             await service._check_container(server)
 
@@ -254,7 +254,7 @@ class TestCheckAllContainers:
         service = HealthCheckService(db_session)
 
         with mock.patch(
-            "app.services.health_check_service.get_fresh_container_client",
+            "app.services.health_check_service.get_fresh_driver",
             side_effect=Exception("Docker down"),
         ):
             await service._check_container(server)
@@ -281,7 +281,7 @@ class TestCheckAllContainers:
         mock_client.get_container_info.return_value = {"State": {"Running": True}}
 
         with mock.patch(
-            "app.services.health_check_service.get_fresh_container_client", return_value=mock_client
+            "app.services.health_check_service.get_fresh_driver", return_value=mock_client
         ):
             await service._check_container(server)
 
@@ -357,15 +357,17 @@ class TestAutoRestart:
 
     @pytest.mark.asyncio
     async def test_auto_restart_success(self, db_session, test_user):
-        """Successful auto-restart should log and notify."""
+        """Shared lifecycle success logs a restart and closes its local driver."""
+        from types import SimpleNamespace
+
         server = Server(
             name="restart-ok", user_id=test_user.id, status="running", container_id="c3"
         )
         db_session.add(server)
         await db_session.commit()
-        await db_session.refresh(server)
-
-        service = HealthCheckService(db_session)
+        server_id, owner_id, version = server.id, server.user_id, server.updated_at
+        runtime = SimpleNamespace(close=mock.AsyncMock())
+        lifecycle = mock.Mock(restart=mock.AsyncMock(return_value=server))
         with (
             mock.patch(
                 "app.services.health_check_service.settings.server_auto_restart_enabled", True
@@ -374,26 +376,44 @@ class TestAutoRestart:
                 "app.services.health_check_service.settings.server_auto_restart_max_attempts", 10
             ),
             mock.patch(
-                "app.services.health_check_service.settings.server_auto_restart_window", 3600
+                "app.services.health_check_service.get_fresh_driver",
+                mock.AsyncMock(return_value=runtime),
             ),
-            mock.patch("app.container.spawner.spawner.stop", mock.AsyncMock()) as mock_stop,
-            mock.patch("app.container.spawner.spawner.start", mock.AsyncMock()) as mock_start,
+            mock.patch(
+                "app.services.health_check_service.ServerLifecycleService", return_value=lifecycle
+            ),
+            mock.patch(
+                "app.services.notification_service.NotificationService.server_restarted",
+                mock.AsyncMock(),
+            ),
         ):
-            await service._auto_restart(server)
-            mock_stop.assert_called_once_with("c3")
-            mock_start.assert_called_once_with("c3")
+            await HealthCheckService(db_session)._auto_restart(server)
+        lifecycle.restart.assert_awaited_once_with(
+            server_id, owner_id=owner_id, expected_version=version
+        )
+        runtime.close.assert_awaited_once()
+        result = await db_session.execute(
+            select(HealthCheck).where(HealthCheck.server_id == server_id)
+        )
+        assert result.scalar_one().status == "restarting"
 
     @pytest.mark.asyncio
     async def test_auto_restart_failure(self, db_session, test_user):
-        """Failed auto-restart should log failure."""
+        """Admission refusal logs a sanitized failure and closes the local driver."""
+        from types import SimpleNamespace
+
+        from app.services.server_launch_service import LaunchError
+
         server = Server(
             name="restart-fail", user_id=test_user.id, status="running", container_id="c4"
         )
         db_session.add(server)
         await db_session.commit()
-        await db_session.refresh(server)
-
-        service = HealthCheckService(db_session)
+        server_id = server.id
+        runtime = SimpleNamespace(close=mock.AsyncMock())
+        lifecycle = mock.Mock(
+            restart=mock.AsyncMock(side_effect=LaunchError("recovery_required", 503))
+        )
         with (
             mock.patch(
                 "app.services.health_check_service.settings.server_auto_restart_enabled", True
@@ -402,19 +422,73 @@ class TestAutoRestart:
                 "app.services.health_check_service.settings.server_auto_restart_max_attempts", 10
             ),
             mock.patch(
-                "app.services.health_check_service.settings.server_auto_restart_window", 3600
+                "app.services.health_check_service.get_fresh_driver",
+                mock.AsyncMock(return_value=runtime),
             ),
-            mock.patch("app.container.spawner.spawner.stop", side_effect=Exception("Stop failed")),
+            mock.patch(
+                "app.services.health_check_service.ServerLifecycleService", return_value=lifecycle
+            ),
         ):
-            await service._auto_restart(server)
-
+            await HealthCheckService(db_session)._auto_restart(server)
+        runtime.close.assert_awaited_once()
         result = await db_session.execute(
             select(HealthCheck).where(
-                HealthCheck.server_id == server.id, HealthCheck.status == "restart_failed"
+                HealthCheck.server_id == server_id, HealthCheck.status == "restart_failed"
             )
         )
-        hc = result.scalar_one()
-        assert "Stop failed" in hc.output
+        assert result.scalar_one().output == "Auto-restart failed: recovery_required"
+
+    @pytest.mark.asyncio
+    async def test_restart_policy_rollback_does_not_access_expired_server(
+        self, db_session, test_user
+    ):
+        from types import SimpleNamespace
+
+        server = Server(
+            name="expired-restart", user_id=test_user.id, status="running", container_id="old"
+        )
+        db_session.add(server)
+        await db_session.commit()
+        server_id, owner_id, version = server.id, server.user_id, server.updated_at
+        runtime = SimpleNamespace(close=mock.AsyncMock())
+
+        async def restart(server_id, owner_id=None, expected_version=None):
+            assert expected_version == version
+            await db_session.rollback()
+            current = await db_session.get(Server, server_id, populate_existing=True)
+            current.container_id = "new"
+            await db_session.commit()
+            return current
+
+        lifecycle = mock.Mock(restart=mock.AsyncMock(side_effect=restart))
+        with (
+            mock.patch(
+                "app.services.health_check_service.settings.server_auto_restart_enabled", True
+            ),
+            mock.patch(
+                "app.services.health_check_service.settings.server_auto_restart_max_attempts", 10
+            ),
+            mock.patch(
+                "app.services.health_check_service.get_fresh_driver",
+                mock.AsyncMock(return_value=runtime),
+            ),
+            mock.patch(
+                "app.services.health_check_service.ServerLifecycleService", return_value=lifecycle
+            ),
+            mock.patch(
+                "app.services.notification_service.NotificationService.server_restarted",
+                mock.AsyncMock(),
+            ),
+        ):
+            await HealthCheckService(db_session)._auto_restart(server)
+        lifecycle.restart.assert_awaited_once_with(
+            server_id, owner_id=owner_id, expected_version=version
+        )
+        logs = (
+            await db_session.scalars(select(HealthCheck).where(HealthCheck.server_id == server_id))
+        ).all()
+        assert len(logs) == 1 and logs[0].container_id == "new"
+        runtime.close.assert_awaited_once()
 
 
 class TestBroadcastHealthUpdateExtended:
@@ -425,3 +499,59 @@ class TestBroadcastHealthUpdateExtended:
         """Redis error should be silently caught."""
         with mock.patch("redis.asyncio.from_url", side_effect=Exception("Redis down")):
             await _broadcast_health_update()
+
+
+@pytest.mark.asyncio
+async def test_health_scan_refreshes_later_servers_after_restart_expires_session(
+    db_session, test_user
+):
+    first = Server(name="scan-first", user_id=test_user.id, status="running", container_id="first")
+    second = Server(
+        name="scan-second", user_id=test_user.id, status="running", container_id="second"
+    )
+    db_session.add_all([first, second])
+    await db_session.commit()
+    expected_ids = {first.id, second.id}
+    seen = []
+    service = HealthCheckService(db_session)
+
+    async def check(current):
+        seen.append(current.id)
+        await db_session.rollback()
+
+    with (
+        mock.patch.object(service, "_check_container", mock.AsyncMock(side_effect=check)),
+        mock.patch("app.services.health_check_service._broadcast_health_update", mock.AsyncMock()),
+    ):
+        await service.check_all_containers()
+    assert set(seen) == expected_ids
+
+
+@pytest.mark.asyncio
+async def test_auto_restart_cancellation_closes_local_driver(db_session, test_user):
+    import asyncio
+    from types import SimpleNamespace
+
+    server = Server(
+        name="cancel-restart", user_id=test_user.id, status="running", container_id="before"
+    )
+    db_session.add(server)
+    await db_session.commit()
+    runtime = SimpleNamespace(close=mock.AsyncMock())
+    lifecycle = mock.Mock(restart=mock.AsyncMock(side_effect=asyncio.CancelledError()))
+    with (
+        mock.patch("app.services.health_check_service.settings.server_auto_restart_enabled", True),
+        mock.patch(
+            "app.services.health_check_service.settings.server_auto_restart_max_attempts", 10
+        ),
+        mock.patch(
+            "app.services.health_check_service.get_fresh_driver",
+            mock.AsyncMock(return_value=runtime),
+        ),
+        mock.patch(
+            "app.services.health_check_service.ServerLifecycleService", return_value=lifecycle
+        ),
+    ):
+        with pytest.raises(asyncio.CancelledError):
+            await HealthCheckService(db_session)._auto_restart(server)
+    runtime.close.assert_awaited_once()

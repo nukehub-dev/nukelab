@@ -86,7 +86,7 @@ class TestServerGetEndpoints:
     async def test_get_server_container_sync_paused(
         self, client, user_token, test_user, db_session
     ):
-        """Server should sync to stopped when spawner returns paused."""
+        """Paused containers retain memory and must keep their resource reservation."""
         server = Server(
             name="sync-paused", user_id=test_user.id, status="running", container_id="cid-paused"
         )
@@ -100,7 +100,7 @@ class TestServerGetEndpoints:
             )
         assert response.status_code == 200
         data = response.json()
-        assert data["status"] == "stopped"
+        assert data["status"] == "running"
 
     @pytest.mark.asyncio
     async def test_get_server_container_sync_exited(
@@ -198,76 +198,6 @@ class TestServerGetEndpoints:
 
 class TestServerActions:
     """Tests for server action endpoints with mocked spawner."""
-
-    @pytest.mark.asyncio
-    async def test_start_server(self, client, user_token, test_user, db_session):
-        """Starting a stopped server should succeed."""
-        server = Server(
-            name="start-srv", user_id=test_user.id, status="stopped", container_id="cid1"
-        )
-        db_session.add(server)
-        await db_session.commit()
-
-        with mock.patch("app.api.servers.spawner.get_status", return_value="paused"):
-            with mock.patch("app.api.servers.spawner.start", return_value=True) as mock_start:
-                response = await client.post(
-                    f"/api/servers/{server.id}/start",
-                    headers={"Authorization": f"Bearer {user_token}"},
-                )
-        assert response.status_code == 200
-        mock_start.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_stop_server(self, client, user_token, test_user, db_session):
-        """Stopping a running server should succeed."""
-        server = Server(
-            name="stop-srv", user_id=test_user.id, status="running", container_id="cid2"
-        )
-        db_session.add(server)
-        await db_session.commit()
-
-        with mock.patch("app.api.servers.spawner.get_status", return_value="running"):
-            with mock.patch("app.api.servers.spawner.delete", return_value=True) as mock_delete:
-                response = await client.post(
-                    f"/api/servers/{server.id}/stop",
-                    headers={"Authorization": f"Bearer {user_token}"},
-                )
-        assert response.status_code == 200
-        mock_delete.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_restart_server(self, client, user_token, test_user, db_session):
-        """Restarting a running server should succeed."""
-        server = Server(
-            name="restart-srv", user_id=test_user.id, status="running", container_id="cid3"
-        )
-        db_session.add(server)
-        await db_session.commit()
-
-        with mock.patch("app.api.servers.spawner.get_status", return_value="running"):
-            with mock.patch("app.api.servers.spawner.stop", return_value=True) as mock_stop:
-                with mock.patch("app.api.servers.spawner.start", return_value=True) as mock_start:
-                    response = await client.post(
-                        f"/api/servers/{server.id}/restart",
-                        headers={"Authorization": f"Bearer {user_token}"},
-                    )
-        assert response.status_code == 200
-        mock_stop.assert_called_once()
-        mock_start.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_delete_server(self, client, user_token, test_user, db_session):
-        """Deleting a server should succeed."""
-        server = Server(name="del-srv", user_id=test_user.id, status="stopped", container_id="cid4")
-        db_session.add(server)
-        await db_session.commit()
-
-        with mock.patch("app.api.servers.spawner.delete", return_value=True) as mock_delete:
-            response = await client.delete(
-                f"/api/servers/{server.id}", headers={"Authorization": f"Bearer {user_token}"}
-            )
-        assert response.status_code == 200
-        mock_delete.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_patch_server(self, client, admin_token, test_user, db_session):

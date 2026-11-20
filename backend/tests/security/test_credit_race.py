@@ -13,6 +13,7 @@ import pytest
 from httpx import AsyncClient
 
 from app.models.credit_transaction import CreditTransaction
+from tests.api.servers.conftest import server_api_runtime as server_api_runtime
 
 
 class TestCreditLogic:
@@ -20,12 +21,20 @@ class TestCreditLogic:
 
     @pytest.mark.asyncio
     async def test_cannot_start_server_with_insufficient_credits(
-        self, client: AsyncClient, test_user, user_token, db_session
+        self,
+        client: AsyncClient,
+        test_user,
+        user_token,
+        db_session,
+        monkeypatch,
+        server_api_runtime,
     ):
         """User with 0 credits should not be able to start a billable server."""
+        from app.config import settings
         from app.models.environment_template import EnvironmentTemplate
         from app.models.server_plan import ServerPlan
 
+        monkeypatch.setattr(settings, "credits_enabled", True)
         test_user.nuke_balance = 0
         await db_session.commit()
 
@@ -65,9 +74,17 @@ class TestCreditLogic:
             },
             headers={"Authorization": f"Bearer {user_token}"},
         )
-        assert response.status_code in (402, 422, 403), (
-            f"Expected 402/422/403, got {response.status_code}: {response.text}"
-        )
+        assert response.status_code == 402, response.text
+        assert response.json()["detail"]["code"] == "insufficient_credits"
+        from sqlalchemy import func, select
+
+        from app.models.server import Server
+        from app.models.server_queue import ServerQueue
+        from app.models.volume import Volume
+
+        for model in (Server, ServerQueue, Volume, CreditTransaction):
+            assert await db_session.scalar(select(func.count()).select_from(model)) == 0
+        server_api_runtime.create_container.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_cannot_grant_negative_credits(self, client: AsyncClient, test_user, admin_token):

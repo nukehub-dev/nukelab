@@ -347,7 +347,7 @@ class UserService:
         return user
 
     async def delete_user(self, user_id: str) -> None:
-        """Hard delete user. DB-level CASCADE/SET NULL handles related records."""
+        """Delete a user only after owned runtime resources and artifacts are cleaned up."""
         import os
 
         from app.config import settings
@@ -355,6 +355,8 @@ class UserService:
         user = await self.get_by_id(user_id)
         if not user:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+        await self.prepare_user_deletion(user)
 
         # Clean up local avatar files if any exist
         avatars_dir = os.path.join(settings.upload_dir, "avatars")
@@ -365,6 +367,50 @@ class UserService:
 
         await self.db.delete(user)
         await self.db.commit()
+
+    async def prepare_user_deletion(self, user: User) -> None:
+        """Reserve deletion under admission after checking physical resource cleanup."""
+        from sqlalchemy import delete
+
+        from app.models.server import Server
+        from app.models.volume import Volume
+        from app.models.volume_backup import VolumeBackup
+        from app.models.volume_operation import VolumeOperation
+        from app.models.volume_restore import VolumeRestore
+        from app.services.admission_service import acquire_admission_lock
+        from app.services.volume_operation_service import ACTIVE_STATES
+
+        await acquire_admission_lock(self.db)
+        if (
+            await self.db.scalar(select(Volume.id).where(Volume.owner_id == user.id).limit(1))
+            or await self.db.scalar(select(Server.id).where(Server.user_id == user.id).limit(1))
+            or await self.db.scalar(
+                select(VolumeBackup.id)
+                .where(VolumeBackup.user_id == user.id, VolumeBackup.status != "deleted")
+                .limit(1)
+            )
+            or await self.db.scalar(
+                select(VolumeRestore.id)
+                .where(
+                    VolumeRestore.user_id == user.id,
+                    VolumeRestore.status.in_(["pending", "in_progress", "recovery_required"]),
+                )
+                .limit(1)
+            )
+            or await self.db.scalar(
+                select(VolumeOperation.operation_id)
+                .where(
+                    VolumeOperation.owner_id == user.id, VolumeOperation.state.in_(ACTIVE_STATES)
+                )
+                .limit(1)
+            )
+        ):
+            raise HTTPException(409, detail={"code": "user_resources_require_cleanup"})
+        await self.db.execute(
+            delete(VolumeOperation).where(
+                VolumeOperation.owner_id == user.id, VolumeOperation.state.not_in(ACTIVE_STATES)
+            )
+        )
 
     async def disable_user(
         self, user_id: str, disabled: bool = True, reason: str | None = None

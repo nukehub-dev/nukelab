@@ -1,56 +1,138 @@
 import { test, expect } from '@playwright/test'
+import {
+  adminLogin,
+  apiFetch,
+  createServer,
+  createTestEnvironment,
+  createVolume,
+  deactivateEnvironment,
+  deleteServer,
+  deleteVolumeWhenDetached,
+  getPlanBySlug,
+  startServer,
+  waitForServerStatus,
+} from './helpers/api'
+import {
+  ADMIN_USERNAME,
+  BASE_URL,
+  E2E_RUNTIME_IMAGE,
+  EXTERNAL_SERVER,
+  uniqueName,
+} from './helpers/runtime'
 
-const SERVER_URL = 'http://localhost:8080/user/admin/test'
-
-async function getAuthToken(): Promise<string> {
-  const res = await fetch('http://localhost:8080/api/auth/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: 'username=admin&password=admin123',
-  })
-  const data = await res.json()
-  return data.access_token
+function trimTrailingSlash(path: string): string {
+  return path.replace(/\/+$/, '')
 }
 
-async function ensureServerRunning(token: string): Promise<void> {
-  const headers = { Authorization: `Bearer ${token}` }
-  const listRes = await fetch('http://localhost:8080/api/servers', { headers })
-  const list = await listRes.json()
-  const server = list.servers.find(
-    (s: { username?: string; name?: string }) => s.username === 'admin' && s.name === 'test'
+test.describe('Direct server access', () => {
+  test.describe.configure({ timeout: 240_000 })
+
+  test.skip(
+    !EXTERNAL_SERVER,
+    'Gateway access needs a single-origin stack; set E2E_EXTERNAL_SERVER=1 (and BASE_URL).'
   )
-  if (!server) {
-    throw new Error('Server admin/test not found')
-  }
-  if (server.status !== 'running') {
-    await fetch(`http://localhost:8080/api/servers/${server.id}/start`, {
-      method: 'POST',
-      headers,
+
+  let token: string | undefined
+  let environmentId: string | undefined
+  let volumeId: string | undefined
+  let serverId: string | undefined
+  let serverPath: string | undefined
+
+  test.beforeAll(async ({ request }) => {
+    if (!EXTERNAL_SERVER) return
+
+    token = (await adminLogin(request)).access_token
+    const environment = await createTestEnvironment(request, token, {
+      prefix: 'e2e-direct-server-env',
+      image: E2E_RUNTIME_IMAGE,
     })
-    // Give the container a moment to reach a ready state.
-    await new Promise((resolve) => setTimeout(resolve, 3000))
-  }
-}
+    environmentId = environment.id
+    const volume = await createVolume(request, token, {
+      display_name: uniqueName('e2e direct server data'),
+      max_size_bytes: 1024 ** 3,
+    })
+    volumeId = volume.id
+    const plan = await getPlanBySlug(request, token, 'small')
+    const serverName = uniqueName('e2e-direct-srv')
+    const created = await createServer(request, token, {
+      name: serverName,
+      plan_id: plan.id,
+      environment_id: environment.id,
+      volume_id: volume.id,
+      volume_mode: 'read_write',
+    })
+    serverId = created.id
+    if (created.status === 'stopped') {
+      await startServer(request, token, created.id)
+    }
+    const running = await waitForServerStatus(request, token, created.id, ['running'], {
+      timeoutMs: 180_000,
+    })
+    serverPath = running.external_url || `${BASE_URL}/user/${ADMIN_USERNAME}/${serverName}`
+  })
 
-test('direct /user/admin/test access redirects through gateway to server', async ({ page }) => {
-  const token = await getAuthToken()
-  await ensureServerRunning(token)
+  test.afterAll(async ({ request }) => {
+    if (!token) return
+    try {
+      if (serverId) await deleteServer(request, token, serverId)
+    } finally {
+      try {
+        if (volumeId) await deleteVolumeWhenDetached(request, token, volumeId)
+      } finally {
+        if (environmentId) await deactivateEnvironment(request, token, environmentId)
+      }
+    }
+  })
 
-  // Inject the auth token so the SPA is logged in when it loads.
-  await page.addInitScript((authToken: string) => {
-    localStorage.setItem('nukelab-token', authToken)
-  }, token)
+  test('protected fixture page loads after the SPA token flow', async ({ page }) => {
+    if (!serverPath) throw new Error('server fixture was not created')
+    const accessToken = token
+    if (!accessToken) throw new Error('admin token was not acquired')
 
-  // Capture navigation events for debugging.
-  page.on('console', (msg) => console.log('PAGE CONSOLE:', msg.text()))
+    // Without the server access-token cookie, an HTML request must be redirected
+    // back through the SPA gateway instead of exposing protected content.
+    // Use the trailing-slash form: Traefik's bare-prefix redirect runs first.
+    const protectedUrl = `${trimTrailingSlash(serverPath)}/`
+    const unauthenticated = await apiFetch(protectedUrl, {
+      redirect: 'manual',
+      headers: { Accept: 'text/html' },
+    })
+    expect(unauthenticated.status).toBe(302)
+    expect(unauthenticated.headers.get('location') ?? '').toContain('next=')
 
-  // Direct access without a server token should redirect to the SPA,
-  // which then navigates to the gateway, acquires a token, and loads
-  // the server environment.
-  await page.goto(SERVER_URL)
+    // Inject the SPA token so main.tsx runs the gateway flow, requests a
+    // short-lived server token, and navigates back to the protected page.
+    await page.addInitScript((authToken: string) => {
+      localStorage.setItem('nukelab-token', authToken)
+    }, accessToken)
 
-  // The browser is initially redirected to /?next=/user/admin/test by the
-  // server container, then the SPA navigates to the gateway, gets a token,
-  // and finally loads the real server. Allow up to 60s for container ready.
-  await expect(page).toHaveTitle(/ttyd/, { timeout: 60_000 })
+    const expected = new URL(serverPath)
+    await page.goto(serverPath)
+
+    await expect(
+      page,
+      'the SPA should return to the protected server URL after acquiring a token'
+    ).toHaveURL(
+      (url) =>
+        url.origin === expected.origin &&
+        trimTrailingSlash(url.pathname) === trimTrailingSlash(expected.pathname),
+      { timeout: 60_000 }
+    )
+
+    // The SPA shell and its gateway screen must be gone; the server container
+    // now serves the protected fixture page (or the configured dev runtime).
+    await expect(page.locator('#root')).toHaveCount(0)
+    await expect(page.locator('body')).toBeVisible()
+    await expect(page.locator('body')).not.toBeEmpty()
+
+    // When the disposable fixture image is selected, assert its identity marker
+    // instead of relying on a runtime-specific page title.
+    if (E2E_RUNTIME_IMAGE.includes('e2e-runtime')) {
+      await expect(page.locator('[data-nukelab-fixture="runtime"]')).toBeVisible()
+    }
+
+    const protectedResponse = await page.request.get(page.url())
+    expect(protectedResponse.status()).toBe(200)
+    expect(protectedResponse.headers()['content-type'] ?? '').toContain('text/html')
+  })
 })

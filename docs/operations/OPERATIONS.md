@@ -225,8 +225,9 @@ Only implement when query profiling proves reads are the bottleneck. For most wo
 | `OBSERVABILITY_SLOW_QUERY_THRESHOLD_MS` | 100 | Log queries slower than this |
 | `OBSERVABILITY_PG_STAT_STATEMENTS_ENABLED` | true | Track query performance in Postgres |
 | `COMPOSE_OVERLAYS` | (empty) | Additional compose files (e.g., `compose.pgbouncer.yml`) |
-| `PGBOUNCER_MAX_CLIENT_CONN` | 1000 | Max app connections PgBouncer accepts |
-| `PGBOUNCER_DEFAULT_POOL_SIZE` | 20 | Real Postgres connections PgBouncer maintains |
+| `PGBOUNCER_MAX_CLIENT_CONN` | 20000 | Max app connections PgBouncer accepts |
+| `PGBOUNCER_DEFAULT_POOL_SIZE` | 100 | Real Postgres connections PgBouncer maintains |
+| `PGBOUNCER_MIN_POOL_SIZE` | 25 | Warm Postgres connections PgBouncer maintains |
 
 ### 6.2 Postgres Settings
 
@@ -292,3 +293,88 @@ VITE_SENTRY_DSN=https://xxx@yyy.ingest.sentry.io/zzz
 ### 8.3 Disable Error Tracking
 
 Leave both DSNs empty (default). The SDKs initialize as no-ops with zero runtime cost.
+
+## 9. First-run catalog setup
+
+Fresh installs seed the Small/Medium/Large plans as visible to the `user` role;
+XLarge remains admin-only and can be published later if desired. Environments
+are intentionally not seeded, so an administrator must publish at least one
+active public environment before users can deploy.
+
+Use **Administration → Setup** (`/admin/setup`) for the first-run checklist:
+
+1. Publish or activate a public deployment environment.
+2. Make at least one active plan available to the `user` role.
+3. Create or invite users.
+4. Test the launch flow.
+
+The setup page remains available for later catalog reviews. Plan administration
+protects the last active plan and the last active plan available to users:
+deactivation, deletion or visibility changes that would leave zero usable plans
+are rejected with HTTP 409. Other plan fields remain editable at any time.
+
+## 10. Capacity and queue operations
+
+NukeLab admits new servers against configured allocatable budgets, not live
+host telemetry. Set `RESOURCE_POOL_CPU`, `RESOURCE_POOL_MEMORY_MIB` and
+`RESOURCE_POOL_DISK_MIB` to the capacity actually reserved for user servers.
+`GPU_DEVICES` defines the exclusive GPU pool when used.
+
+- Waiting requests consume no CPU, memory, disk or credits.
+- Requests expire after `QUEUE_TIMEOUT_SECONDS`.
+- `QUEUE_MAX_PENDING_PER_OWNER` and `QUEUE_MAX_PENDING_TOTAL` return 429 when
+  reached.
+- `celery-worker` dispatches bounded batches (`QUEUE_DISPATCH_BATCH_SIZE`) on
+  the Celery Beat interval (`QUEUE_TICK_SECONDS`). Keep Beat and the worker
+  running together; queue position is ordering, not a promised start time.
+- `SERVER_LAUNCH_TIMEOUT_SECONDS` is the deadline for reserved launches and
+  long-running lifecycle/recovery work.
+
+Monitor queue depth, expired requests and worker/Beat health. See
+[SERVER-LIFECYCLE.md](../architecture/SERVER-LIFECYCLE.md) for admission and
+fencing behavior.
+
+## Lifecycle journal upgrades and uncertain operations
+
+Drain API requests and stop old Celery workers/Beat before deploying the journal
+migration. Mixed old/new runtime writers are unsupported: old workers do not
+honor new claims, mount guards or cancellation. Take the normal pre-migration
+snapshot, reconcile in-flight legacy launches, then run the migration and start
+the matching API/worker images together.
+
+Migration preflight refuses duplicate owner/server names, conflicting active queue
+names and unidentified legacy in-flight queue entries. Resolve those records with
+runtime evidence before retrying; the migration does not silently delete user
+servers. Pending legacy requests without a normalized payload are cancelled with
+a resubmit reason. Incomplete historic launches become protected uncertain
+operations; only matching owner/server/revision/generation evidence permits a
+completed journal backfill.
+
+For `recovery_required` or an uncertain journal, first establish that the original
+executor has terminated. Inspect the UUID-based runtime name, managed owner/server
+labels, actual image identity, mount attachments and GPU assignments. A database
+row with no container ID does not prove no container exists. Keep reservations
+until the runtime outcome is established. Automated adoption and an operator
+reconciliation command are not yet available; do not manually expire reservations
+on a timer or blindly retry runtime mutations. Record the evidence and use a
+reviewed repair procedure or restore the verified pre-migration snapshot with its
+matching image version.
+
+## Retaining captured environment artifacts
+
+Environment exports describe approved artifacts and logical data mounts; they do
+not contain image bytes, variable values or user-volume data. Current local-only
+recreation requires the exact images to remain on the original engine and a
+matching approved revision on this installation. Pruning those images can make a
+recorded launch unavailable for recreation even though its history/export remains
+readable. Retain required images and immutable toolchain caches; inspect overall
+storage usage before cleanup. Automatic cache garbage collection and verified
+registry portability are not implemented.
+
+Recreation fails explicitly for unavailable artifacts rather than substituting a
+newer tag. Revoking a revision or disabling its approved environment prevents new
+recreation while preserving recorded history. An earlier preview is advisory;
+current approval, access, quota, credits, capacity and explicit volume selections
+are checked again when work is submitted. A manifest does not restore data: use
+only supported verified recovery procedures, and never treat an export as a data
+backup.

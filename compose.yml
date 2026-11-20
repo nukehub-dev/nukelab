@@ -1,7 +1,7 @@
 services:
     # Reverse Proxy
     traefik:
-        image: docker.io/library/traefik:v3.1
+        image: docker.io/library/traefik:v3.6.16
         container_name: nukelab-traefik
         command:
             - --configFile=/etc/traefik/traefik.yml
@@ -78,6 +78,16 @@ services:
         image: ghcr.io/nukehub-dev/nukelab-backend:${NUKELAB_IMAGE_TAG:-latest}
         container_name: nukelab-backend
         environment:
+            - VOLUME_BACKUP_HOST_PATH=${VOLUME_BACKUP_HOST_PATH:-}
+            - VOLUME_BACKUP_STORAGE_PATH=${VOLUME_BACKUP_STORAGE_PATH:-}
+            - VOLUME_BACKUP_HELPER_IMAGE=${VOLUME_BACKUP_HELPER_IMAGE:-nukelab-volume-helper:latest}
+            - VOLUME_BACKUP_RETENTION_DAYS=${VOLUME_BACKUP_RETENTION_DAYS:-30}
+            - VOLUME_BACKUP_MAX_PER_VOLUME=${VOLUME_BACKUP_MAX_PER_VOLUME:-20}
+            - VOLUME_BACKUP_MAX_OWNER_BYTES=${VOLUME_BACKUP_MAX_OWNER_BYTES:-107374182400}
+            - VOLUME_BACKUP_MAX_TOTAL_BYTES=${VOLUME_BACKUP_MAX_TOTAL_BYTES:-1099511627776}
+            - VOLUME_BACKUP_MAX_LOGICAL_BYTES=${VOLUME_BACKUP_MAX_LOGICAL_BYTES:-68719476736}
+            - VOLUME_BACKUP_MAX_MEMBERS=${VOLUME_BACKUP_MAX_MEMBERS:-100000}
+            - VOLUME_BACKUP_TIMEOUT_SECONDS=${VOLUME_BACKUP_TIMEOUT_SECONDS:-1800}
             - APP_NAME=${APP_NAME:-NukeLab}
             - APP_ENV=${APP_ENV:-development}
             - APP_DEBUG=${APP_DEBUG:-true}
@@ -155,6 +165,7 @@ services:
             - DATABASE_QUERY_TIMEOUT_SECONDS=${DATABASE_QUERY_TIMEOUT_SECONDS:-30}
             - DATABASE_ECHO=${DATABASE_ECHO:-false}
             - AUTO_CREATE_TABLES=${AUTO_CREATE_TABLES:-true}
+            - DB_SCHEMA_GUARD=${DB_SCHEMA_GUARD:-auto}
             - OBSERVABILITY_SLOW_QUERY_THRESHOLD_MS=${OBSERVABILITY_SLOW_QUERY_THRESHOLD_MS:-100}
             - OBSERVABILITY_PG_STAT_STATEMENTS_ENABLED=${OBSERVABILITY_PG_STAT_STATEMENTS_ENABLED:-true}
             - PROMETHEUS_ENABLED=${PROMETHEUS_ENABLED:-true}
@@ -181,6 +192,15 @@ services:
             - GPU_ENABLED=${GPU_ENABLED:-false}
             - GPU_CDI_DEVICE=${GPU_CDI_DEVICE:-nvidia.com/gpu=all}
             - GPU_DEVICES=${GPU_DEVICES:-}
+            - RESOURCE_POOL_CPU=${RESOURCE_POOL_CPU:-34}
+            - RESOURCE_POOL_MEMORY_MIB=${RESOURCE_POOL_MEMORY_MIB:-69632}
+            - RESOURCE_POOL_DISK_MIB=${RESOURCE_POOL_DISK_MIB:-2048000}
+            - SERVER_LAUNCH_TIMEOUT_SECONDS=${SERVER_LAUNCH_TIMEOUT_SECONDS:-1800}
+            - QUEUE_DISPATCH_BATCH_SIZE=${QUEUE_DISPATCH_BATCH_SIZE:-20}
+            - QUEUE_TICK_SECONDS=${QUEUE_TICK_SECONDS:-30}
+            - QUEUE_TIMEOUT_SECONDS=${QUEUE_TIMEOUT_SECONDS:-3600}
+            - QUEUE_MAX_PENDING_PER_OWNER=${QUEUE_MAX_PENDING_PER_OWNER:-5}
+            - QUEUE_MAX_PENDING_TOTAL=${QUEUE_MAX_PENDING_TOTAL:-500}
             # Container runtime driver (docker covers Podman; kubernetes reserved)
             - CONTAINER_RUNTIME=${CONTAINER_RUNTIME:-docker}
             # Email / SMTP configuration
@@ -212,6 +232,7 @@ services:
             - XFS_PROJECT_ID_START=${XFS_PROJECT_ID_START:-10000}
             - XFS_PROJECTS_FILE=${XFS_PROJECTS_FILE:-/data/xfs/projects.nukelab}
         volumes:
+            - ${VOLUME_BACKUP_HOST_PATH:-./backups/user-volumes}:${VOLUME_BACKUP_STORAGE_PATH:-/var/lib/nukelab/volume-backups}:rw
             - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:Z
             - /var/lib/lxcfs:/var/lib/lxcfs:ro
             - ${VOLUME_STORAGE_PATH:?VOLUME_STORAGE_PATH must be set in .env}:${VOLUME_STORAGE_PATH}:rw
@@ -354,6 +375,16 @@ services:
         container_name: nukelab-celery-worker
         command: celery -A app.worker worker --loglevel=info -P threads -c 4
         environment:
+            - VOLUME_BACKUP_HOST_PATH=${VOLUME_BACKUP_HOST_PATH:-}
+            - VOLUME_BACKUP_STORAGE_PATH=${VOLUME_BACKUP_STORAGE_PATH:-}
+            - VOLUME_BACKUP_HELPER_IMAGE=${VOLUME_BACKUP_HELPER_IMAGE:-nukelab-volume-helper:latest}
+            - VOLUME_BACKUP_RETENTION_DAYS=${VOLUME_BACKUP_RETENTION_DAYS:-30}
+            - VOLUME_BACKUP_MAX_PER_VOLUME=${VOLUME_BACKUP_MAX_PER_VOLUME:-20}
+            - VOLUME_BACKUP_MAX_OWNER_BYTES=${VOLUME_BACKUP_MAX_OWNER_BYTES:-107374182400}
+            - VOLUME_BACKUP_MAX_TOTAL_BYTES=${VOLUME_BACKUP_MAX_TOTAL_BYTES:-1099511627776}
+            - VOLUME_BACKUP_MAX_LOGICAL_BYTES=${VOLUME_BACKUP_MAX_LOGICAL_BYTES:-68719476736}
+            - VOLUME_BACKUP_MAX_MEMBERS=${VOLUME_BACKUP_MAX_MEMBERS:-100000}
+            - VOLUME_BACKUP_TIMEOUT_SECONDS=${VOLUME_BACKUP_TIMEOUT_SECONDS:-1800}
             - DATABASE_USER=${DATABASE_USER:-nukelab}
             - DATABASE_PASSWORD=${DATABASE_PASSWORD:-nukelab123}
             - DATABASE_NAME=${DATABASE_NAME:-nukelab}
@@ -363,6 +394,23 @@ services:
             - PGBOUNCER_ENABLED=${PGBOUNCER_ENABLED:-false}
             - DATABASE_PGBOUNCER_URL=${DATABASE_PGBOUNCER_URL:-}
             - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+            - APP_ENV=${APP_ENV:-development}
+            - DEV_MODE=${DEV_MODE:-true}
+            - APP_URL=${APP_URL:-http://localhost:8080}
+            - PUBLIC_URL=${APP_URL:-http://localhost:8080}
+            - DOCKER_NETWORK=${DOCKER_NETWORK:-nukelab-network}
+            - TRAEFIK_INTERNAL_URL=${TRAEFIK_INTERNAL_URL:-http://traefik:80}
+            # Container runtime hardening must match the API container:
+            # queue, schedule, health and bulk tasks create servers here.
+            - CONTAINER_HARDENING_ENABLED=${CONTAINER_HARDENING_ENABLED:-true}
+            # Server auth configuration used when spawning scheduled/queued runtimes.
+            - SERVER_AUTH_ENABLED=${SERVER_AUTH_ENABLED:-true}
+            - SERVER_AUTH_SECRETS_DIR=${SERVER_AUTH_SECRETS_DIR:-/run/server-secrets}
+            - SERVER_AUTH_TOKEN_TTL=${SERVER_AUTH_TOKEN_TTL:-300}
+            - SERVER_AUTH_KEY_ALGORITHM=${SERVER_AUTH_KEY_ALGORITHM:-RS256}
+            - SERVER_AUTH_KEY_ROTATION_DAYS=${SERVER_AUTH_KEY_ROTATION_DAYS:-30}
+            - SERVER_AUTH_MAX_TOKENS_PER_MINUTE=${SERVER_AUTH_MAX_TOKENS_PER_MINUTE:-10}
+            - SERVER_AUTH_AUDIT_LOG=${SERVER_AUTH_AUDIT_LOG:-true}
             - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret}
             # User auth - asymmetric EdDSA (Ed25519) signing for access tokens
             - USER_AUTH_KEY_ALGORITHM=${USER_AUTH_KEY_ALGORITHM:-EdDSA}
@@ -386,6 +434,15 @@ services:
             - GPU_ENABLED=${GPU_ENABLED:-false}
             - GPU_CDI_DEVICE=${GPU_CDI_DEVICE:-nvidia.com/gpu=all}
             - GPU_DEVICES=${GPU_DEVICES:-}
+            - RESOURCE_POOL_CPU=${RESOURCE_POOL_CPU:-34}
+            - RESOURCE_POOL_MEMORY_MIB=${RESOURCE_POOL_MEMORY_MIB:-69632}
+            - RESOURCE_POOL_DISK_MIB=${RESOURCE_POOL_DISK_MIB:-2048000}
+            - SERVER_LAUNCH_TIMEOUT_SECONDS=${SERVER_LAUNCH_TIMEOUT_SECONDS:-1800}
+            - QUEUE_DISPATCH_BATCH_SIZE=${QUEUE_DISPATCH_BATCH_SIZE:-20}
+            - QUEUE_TICK_SECONDS=${QUEUE_TICK_SECONDS:-30}
+            - QUEUE_TIMEOUT_SECONDS=${QUEUE_TIMEOUT_SECONDS:-3600}
+            - QUEUE_MAX_PENDING_PER_OWNER=${QUEUE_MAX_PENDING_PER_OWNER:-5}
+            - QUEUE_MAX_PENDING_TOTAL=${QUEUE_MAX_PENDING_TOTAL:-500}
             - CONTAINER_RUNTIME=${CONTAINER_RUNTIME:-docker}
             # Email / SMTP configuration — required: notification emails are
             # sent by Celery tasks running in this worker, not by the API.
@@ -403,6 +460,7 @@ services:
             - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY:-}
             - VAPID_SUBJECT=${VAPID_SUBJECT:-}
         volumes:
+            - ${VOLUME_BACKUP_HOST_PATH:-./backups/user-volumes}:${VOLUME_BACKUP_STORAGE_PATH:-/var/lib/nukelab/volume-backups}:rw
             - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
             - ${VOLUME_STORAGE_PATH:-/var/lib/docker/volumes}:${VOLUME_STORAGE_PATH:-/var/lib/docker/volumes}:rw
             - user-secrets:${USER_AUTH_SECRETS_DIR:-/run/user-secrets}
@@ -431,6 +489,17 @@ services:
         container_name: nukelab-celery-beat
         command: celery -A app.worker beat --loglevel=info --schedule /tmp/celerybeat-schedule
         environment:
+            - VOLUME_BACKUP_HOST_PATH=${VOLUME_BACKUP_HOST_PATH:-}
+            - VOLUME_BACKUP_STORAGE_PATH=${VOLUME_BACKUP_STORAGE_PATH:-}
+            - VOLUME_BACKUP_HELPER_IMAGE=${VOLUME_BACKUP_HELPER_IMAGE:-nukelab-volume-helper:latest}
+            - VOLUME_BACKUP_RETENTION_DAYS=${VOLUME_BACKUP_RETENTION_DAYS:-30}
+            - VOLUME_BACKUP_MAX_PER_VOLUME=${VOLUME_BACKUP_MAX_PER_VOLUME:-20}
+            - VOLUME_BACKUP_MAX_OWNER_BYTES=${VOLUME_BACKUP_MAX_OWNER_BYTES:-107374182400}
+            - VOLUME_BACKUP_MAX_TOTAL_BYTES=${VOLUME_BACKUP_MAX_TOTAL_BYTES:-1099511627776}
+            - VOLUME_BACKUP_MAX_LOGICAL_BYTES=${VOLUME_BACKUP_MAX_LOGICAL_BYTES:-68719476736}
+            - VOLUME_BACKUP_MAX_MEMBERS=${VOLUME_BACKUP_MAX_MEMBERS:-100000}
+            - VOLUME_BACKUP_TIMEOUT_SECONDS=${VOLUME_BACKUP_TIMEOUT_SECONDS:-1800}
+            - QUEUE_TICK_SECONDS=${QUEUE_TICK_SECONDS:-30}
             - DATABASE_USER=${DATABASE_USER:-nukelab}
             - DATABASE_PASSWORD=${DATABASE_PASSWORD:-nukelab123}
             - DATABASE_NAME=${DATABASE_NAME:-nukelab}
@@ -454,6 +523,7 @@ services:
             - XFS_PROJECT_ID_START=${XFS_PROJECT_ID_START:-10000}
             - XFS_PROJECTS_FILE=${XFS_PROJECTS_FILE:-/data/xfs/projects.nukelab}
         volumes:
+            - ${VOLUME_BACKUP_HOST_PATH:-./backups/user-volumes}:${VOLUME_BACKUP_STORAGE_PATH:-/var/lib/nukelab/volume-backups}:rw
             - user-secrets:${USER_AUTH_SECRETS_DIR:-/run/user-secrets}
             - server-secrets:${SERVER_AUTH_SECRETS_DIR:-/run/server-secrets}
         networks:
@@ -463,6 +533,14 @@ services:
             - postgres
         restart: unless-stopped
         stop_grace_period: 20s
+
+    volume-helper:
+        profiles: [recovery-build]
+        image: ${VOLUME_BACKUP_HELPER_IMAGE:-nukelab-volume-helper:latest}
+        build:
+            context: .
+            dockerfile: services/volume-helper/Dockerfile
+        network_mode: none
 
 volumes:
     postgres-data:

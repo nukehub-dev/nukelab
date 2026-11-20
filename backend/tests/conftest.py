@@ -50,6 +50,16 @@ from app.main import app
 from app.models import *
 from app.models.user import User
 
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--run-container-integration",
+        action="store_true",
+        default=False,
+        help="Run isolated real container/image integration fixtures on the configured test daemon",
+    )
+
+
 # Create test engine with NullPool to avoid connection issues
 # Each test gets a fresh connection that is closed immediately after
 test_engine = create_async_engine(

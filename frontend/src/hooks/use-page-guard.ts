@@ -27,9 +27,15 @@ export function usePageGuard(options: PageGuardOptions): boolean {
   const navigate = useNavigate()
   const { permission, permissions, requireAll = false, redirectTo = '/' } = options
 
+  const user = useAuthStore((state) => state.user)
   const hasPermission = useAuthStore((state) => state.hasPermission)
   const hasAnyPermission = useAuthStore((state) => state.hasAnyPermission)
   const hasAllPermissions = useAuthStore((state) => state.hasAllPermissions)
+  const hasToken = typeof window !== 'undefined' && Boolean(localStorage.getItem('nukelab-token'))
+  // A deep link/refresh can render before useCurrentUser has populated the
+  // persisted store. Do not redirect an authenticated request before that
+  // first profile fetch has a chance to settle.
+  const authPending = hasToken && !user
 
   let allowed = true
 
@@ -40,10 +46,10 @@ export function usePageGuard(options: PageGuardOptions): boolean {
   }
 
   useEffect(() => {
-    if (!allowed) {
+    if (!authPending && !allowed) {
       navigate({ to: redirectTo })
     }
-  }, [allowed, navigate, redirectTo])
+  }, [allowed, authPending, navigate, redirectTo])
 
-  return allowed
+  return authPending ? false : allowed
 }

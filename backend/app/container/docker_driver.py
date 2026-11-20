@@ -16,6 +16,7 @@ import io
 import json
 import logging
 import os
+import re
 import shlex
 import tarfile
 import time
@@ -26,7 +27,12 @@ import aiodocker
 import aiohttp
 
 from app.config import settings
-from app.container.driver import ContainerDriver, ContainerDriverError
+from app.container.driver import (
+    ContainerDriver,
+    ContainerDriverError,
+    ImageResolutionError,
+    ImmutableToolchainCacheError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +72,57 @@ class DockerDriver(ContainerDriver):
             await self.client.images.pull(image)
         except aiodocker.DockerError as e:
             raise _map_error(e) from e
+
+    async def resolve_image(self, image: str) -> dict:
+        """Resolve local metadata only; RepoDigests are unverified descriptors."""
+        if (
+            not isinstance(image, str)
+            or len(image) > 500
+            or "://" in image
+            or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:/-]*(?:@sha256:[a-f0-9]{64})?", image)
+        ):
+            raise ImageResolutionError("invalid_image_reference")
+        try:
+            info = await self.client.images.get(image)
+        except Exception as exc:
+            status = getattr(exc, "status", None)
+            raise ImageResolutionError(
+                "artifact_missing" if status == 404 else "artifact_unavailable", status=status
+            ) from None
+        if not isinstance(info, dict):
+            raise ImageResolutionError("image_identity_invalid")
+        image_id = info.get("Id", "")
+        if isinstance(image_id, str) and re.fullmatch(r"[a-f0-9]{64}", image_id):
+            image_id = "sha256:" + image_id
+        digests = info.get("RepoDigests") or []
+        if (
+            not isinstance(image_id, str)
+            or not re.fullmatch(r"sha256:[a-f0-9]{64}", image_id)
+            or not isinstance(digests, list)
+            or len(digests) > 32
+            or any(
+                not isinstance(value, str)
+                or len(value) > 500
+                or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:/-]*@sha256:[a-f0-9]{64}", value)
+                or "://" in value
+                for value in digests
+            )
+            or any(
+                not isinstance(info.get(key), str)
+                or not re.fullmatch(r"[a-zA-Z0-9_-]{1,32}", info[key])
+                for key in ("Os", "Architecture")
+            )
+            or (image.startswith("sha256:") and image != image_id)
+        ):
+            raise ImageResolutionError("image_identity_invalid")
+        return {
+            "requested_reference": image,
+            "local_id": image_id,
+            "repository_digests": list(digests),
+            "os": info["Os"],
+            "architecture": info["Architecture"],
+            "registry_verified": False,
+        }
 
     async def is_podman(self) -> bool:
         """Whether the connected runtime is Podman."""
@@ -613,13 +670,121 @@ class DockerDriver(ContainerDriver):
         except aiodocker.DockerError as e:
             raise _map_error(e) from e
 
-    async def list_containers(self, filters: dict | None = None) -> list[dict]:
+    async def list_containers(
+        self, filters: dict | None = None, *, all: bool = False
+    ) -> list[dict]:
         """List containers as inspect-shaped dicts."""
         try:
-            containers = await self.client.containers.list(filters=filters)
+            containers = (
+                await self.client.containers.list(filters=filters, all=True)
+                if all
+                else await self.client.containers.list(filters=filters)
+            )
             return [await container.show() for container in containers]
         except aiodocker.DockerError as e:
             raise _map_error(e) from e
+
+    async def create_recovery_helper(self, *, name, image, command, mounts, labels, limits):
+        import uuid
+        from pathlib import PurePosixPath
+
+        try:
+            operation_id = str(uuid.UUID(labels["nukelab.recovery.operation"]))
+            uuid.UUID(labels["nukelab.recovery.fence"])
+        except (KeyError, ValueError, TypeError, AttributeError):
+            raise ContainerDriverError("Invalid recovery identity") from None
+        if name != "nukelab-recovery-" + operation_id or not re.fullmatch(
+            r"sha256:[a-f0-9]{64}", image
+        ):
+            raise ContainerDriverError("Invalid recovery identity")
+        if (
+            not isinstance(command, list)
+            or not command
+            or any(not isinstance(arg, str) or "\x00" in arg for arg in command)
+        ):
+            raise ContainerDriverError("Invalid recovery command")
+        allowed = {"/source": True, "/archive": True, "/target": False, "/artifact": False}
+        targets = set()
+        for mount in mounts:
+            if (
+                set(mount) != {"Type", "Source", "Target", "ReadOnly"}
+                or mount["Target"] not in allowed
+                or mount["ReadOnly"] is not allowed[mount["Target"]]
+                or mount["Target"] in targets
+            ):
+                raise ContainerDriverError("Invalid recovery mount")
+            targets.add(mount["Target"])
+            source = mount["Source"]
+            if mount["Type"] == "volume":
+                if not isinstance(source, str) or not re.fullmatch(
+                    r"[A-Za-z0-9][A-Za-z0-9_.-]*", source
+                ):
+                    raise ContainerDriverError("Invalid recovery mount")
+            elif mount["Type"] == "bind":
+                if (
+                    mount["Target"] not in ("/archive", "/artifact")
+                    or not isinstance(source, str)
+                    or not source.startswith("/")
+                    or ".." in PurePosixPath(source).parts
+                    or "\x00" in source
+                ):
+                    raise ContainerDriverError("Invalid recovery mount")
+            else:
+                raise ContainerDriverError("Invalid recovery mount")
+        if "/artifact" not in targets or ("/source" in targets) == ("/target" in targets):
+            raise ContainerDriverError("Invalid recovery mounts")
+        memory = limits.get("memory_bytes", 1024**3)
+        if type(memory) is not int or not 64 * 1024**2 <= memory <= 4 * 1024**3:
+            raise ContainerDriverError("Invalid recovery limits")
+        mounts = [
+            {
+                **mount,
+                **(
+                    {"VolumeOptions": {"NoCopy": mount["Target"] == "/source"}}
+                    if mount["Type"] == "volume"
+                    else {}
+                ),
+            }
+            for mount in mounts
+        ]
+        config = {
+            "Image": image,
+            "Cmd": command,
+            "User": "65532:65532",
+            "Labels": labels,
+            "Env": ["PYTHONDONTWRITEBYTECODE=1", "PYTHONUNBUFFERED=1"],
+            "Healthcheck": {"Test": ["NONE"]},
+            "HostConfig": {
+                "Mounts": mounts,
+                "ReadonlyRootfs": True,
+                "CapDrop": ["ALL"],
+                "SecurityOpt": ["no-new-privileges:true"],
+                "NetworkMode": "none",
+                "Memory": memory,
+                "NanoCpus": 1000000000,
+                "PidsLimit": 64,
+                "Tmpfs": {"/tmp": "rw,nosuid,nodev,noexec,size=67108864,mode=1777"},
+                "RestartPolicy": {"Name": "no"},
+            },
+        }
+        try:
+            helper = await self.client.containers.create(config=config, name=name)
+            return helper.id
+        except aiodocker.DockerError as error:
+            raise _map_error(error) from error
+
+    async def wait_recovery_helper(self, container_id, timeout):
+        import asyncio
+
+        try:
+            helper = await self.client.containers.get(container_id)
+            result = await asyncio.wait_for(helper.wait(), timeout=timeout)
+            code = result.get("StatusCode")
+            if type(code) is not int:
+                raise ContainerDriverError("Unknown recovery helper result")
+            return code
+        except aiodocker.DockerError as error:
+            raise _map_error(error) from error
 
     async def get_container_stats(self, container_id: str) -> dict:
         """Return one raw Docker-stats-shaped dict for a container."""
@@ -756,16 +921,23 @@ class DockerDriver(ContainerDriver):
         try:
             volume = await self.client.volumes.get(name)
             return await volume.show()
-        except Exception:
-            return None
+        except aiodocker.DockerError as error:
+            if error.status == 404:
+                return None
+            raise _map_error(error) from error
+        except Exception as error:
+            raise ContainerDriverError("Volume inspection failed") from error
 
     async def delete_volume(self, name: str):
-        """Delete a volume (best-effort; errors are swallowed)."""
+        """Delete a volume; only verified absence is an idempotent success."""
         try:
             volume = await self.client.volumes.get(name)
             await volume.delete()
-        except Exception:
-            pass
+        except aiodocker.DockerError as error:
+            if error.status != 404:
+                raise _map_error(error) from error
+        except Exception as error:
+            raise ContainerDriverError("Volume deletion failed") from error
 
     async def _read_toolchain_manifest(
         self, image: str, volume_name: str
@@ -781,6 +953,7 @@ class DockerDriver(ContainerDriver):
         try:
             manifest_config = {
                 "Image": image,
+                "Entrypoint": [],
                 "Cmd": [
                     "sh",
                     "-c",
@@ -801,6 +974,7 @@ class DockerDriver(ContainerDriver):
                     "CapDrop": ["ALL"],
                     "SecurityOpt": ["no-new-privileges:true"],
                     "ReadonlyRootfs": True,
+                    "NetworkMode": "none",
                 },
             }
             manifest_name = f"nukelab-toolchain-manifest-{uuid.uuid4().hex[:8]}"
@@ -976,6 +1150,182 @@ class DockerDriver(ContainerDriver):
                     await populate_container.delete(force=True)
                 except Exception:
                     pass
+
+    @staticmethod
+    def _immutable_cache_manifest(cached, identity: dict, mount_paths: list[str]) -> dict:
+        if not isinstance(cached, tuple) or len(cached) != 2:
+            raise ImmutableToolchainCacheError("toolchain_cache_incomplete")
+        manifest, stamp = cached
+        if (
+            not isinstance(stamp, dict)
+            or stamp.get("cache_version") != 1
+            or stamp.get("image_id") != identity["local_id"]
+            or stamp.get("os") != identity["os"]
+            or stamp.get("architecture") != identity["architecture"]
+            or stamp.get("mount_paths") != mount_paths
+            or not isinstance(manifest, dict)
+            or manifest.get("mounts") != mount_paths
+            or any(
+                not isinstance(manifest.get(key, {}), dict)
+                or any(
+                    not isinstance(name, str) or not isinstance(value, str)
+                    for name, value in manifest.get(key, {}).items()
+                )
+                for key in ("env", "env_prepend")
+            )
+        ):
+            raise ImmutableToolchainCacheError("toolchain_cache_mismatch")
+        return manifest
+
+    async def _populate_immutable_toolchain_volume(
+        self, image: str, cache_name: str, mount_paths: list[str], identity: dict
+    ):
+        """Only a newly created volume may reach this helper; never wipe its tree."""
+        stamp = json.dumps(
+            {
+                "cache_version": 1,
+                "image_id": identity["local_id"],
+                "os": identity["os"],
+                "architecture": identity["architecture"],
+                "mount_paths": mount_paths,
+            },
+            sort_keys=True,
+        )
+        source = shlex.quote(mount_paths[0] + "/.")
+        stamp_path = f"{self.TOOLCHAIN_TARGET}/{self.TOOLCHAIN_STAMP_FILE}"
+        script = (
+            f"set -eu; cp -a -- {source} {self.TOOLCHAIN_TARGET}/; "
+            f"test -f {self.TOOLCHAIN_TARGET}/{self.TOOLCHAIN_MANIFEST_FILE}; "
+            f"printf '%s' {shlex.quote(stamp)} > {stamp_path}.partial; "
+            f"mv -- {stamp_path}.partial {stamp_path}"
+        )
+        config = {
+            "Image": image,
+            "Entrypoint": [],
+            "Cmd": ["sh", "-c", script],
+            "Labels": {"nukelab.managed": "true", "nukelab.toolchain.populate": cache_name},
+            "HostConfig": {
+                "Mounts": [
+                    {"Type": "volume", "Source": cache_name, "Target": self.TOOLCHAIN_TARGET}
+                ],
+                "AutoRemove": False,
+                "NetworkMode": "none",
+                "CapDrop": ["ALL"],
+                "CapAdd": ["CHOWN", "FOWNER", "DAC_OVERRIDE", "SETUID", "SETGID"],
+                "SecurityOpt": ["no-new-privileges:true"],
+                "ReadonlyRootfs": True,
+                "Tmpfs": {"/tmp": "rw,nosuid,nodev,size=64m"},
+            },
+        }
+        helper = None
+        stopped = False
+        try:
+            helper = await self.client.containers.create(
+                config, name="nukelab-toolchain-populate-" + uuid.uuid4().hex
+            )
+            await helper.start()
+            result = await helper.wait()
+            stopped = True
+            exit_code = result.get("StatusCode") if isinstance(result, dict) else result
+            if exit_code not in (0, "0"):
+                raise ImmutableToolchainCacheError("toolchain_population_failed")
+        except ImmutableToolchainCacheError:
+            raise
+        except Exception:
+            raise ImmutableToolchainCacheError("toolchain_population_failed") from None
+        finally:
+            if helper is not None:
+                try:
+                    await helper.delete(force=True)
+                except BaseException:
+                    if not stopped:
+                        # Database fencing cannot terminate a runtime writer.
+                        raise ImmutableToolchainCacheError(
+                            "toolchain_population_unknown", outcome_unknown=True
+                        ) from None
+
+    async def prepare_immutable_toolchain_volume(
+        self, image: str, cache_name: str, mount_paths: list[str]
+    ) -> dict:
+        """Use only exact artifacts and never repair or rewrite an existing cache."""
+        if not isinstance(image, str) or not (
+            re.fullmatch(r"sha256:[a-f0-9]{64}", image)
+            or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:/-]*@sha256:[a-f0-9]{64}", image)
+        ):
+            raise ImageResolutionError("immutable_image_required")
+        identity = await self.resolve_image(image)
+        if cache_name != self.immutable_toolchain_cache_name(identity, mount_paths):
+            raise ImmutableToolchainCacheError("toolchain_cache_name_mismatch")
+        # A competing or crashed owner retains this atomic name indefinitely.
+        # Only confirmed owner/helper reconciliation may remove an old lock.
+        try:
+            lock = await self.client.containers.create(
+                {
+                    "Image": identity["local_id"],
+                    "Entrypoint": [],
+                    "Cmd": ["true"],
+                    "Labels": {
+                        "nukelab.managed": "true",
+                        "nukelab.toolchain.lock": cache_name,
+                        "nukelab.toolchain.immutable": "true",
+                    },
+                    "HostConfig": {
+                        "AutoRemove": False,
+                        "NetworkMode": "none",
+                        "CapDrop": ["ALL"],
+                        "ReadonlyRootfs": True,
+                        "SecurityOpt": ["no-new-privileges:true"],
+                    },
+                },
+                name=self._toolchain_lock_name(cache_name),
+            )
+        except Exception as exc:
+            raise ImmutableToolchainCacheError(
+                "toolchain_cache_busy"
+                if getattr(exc, "status", None) == 409
+                else "toolchain_cache_unavailable"
+            ) from None
+        release_lock = True
+        try:
+            try:
+                # Unlike get_volume(), inspection failure must not mean absent.
+                await self.client.volumes.get(cache_name)
+                exists = True
+            except Exception as exc:
+                if getattr(exc, "status", None) != 404:
+                    raise ImmutableToolchainCacheError("toolchain_cache_unavailable") from None
+                exists = False
+            if exists:
+                cached = await self._read_toolchain_manifest(identity["local_id"], cache_name)
+                return self._immutable_cache_manifest(cached, identity, mount_paths)
+            try:
+                await self.client.volumes.create(
+                    {
+                        "Name": cache_name,
+                        "Labels": {
+                            "nukelab.managed": "true",
+                            "nukelab.toolchain.immutable": "true",
+                            "nukelab.toolchain.image": identity["local_id"],
+                        },
+                    }
+                )
+            except Exception:
+                raise ImmutableToolchainCacheError("toolchain_cache_unavailable") from None
+            await self._populate_immutable_toolchain_volume(
+                identity["local_id"], cache_name, mount_paths, identity
+            )
+            cached = await self._read_toolchain_manifest(identity["local_id"], cache_name)
+            return self._immutable_cache_manifest(cached, identity, mount_paths)
+        except BaseException as exc:
+            release_lock = not getattr(exc, "outcome_unknown", False)
+            raise
+        finally:
+            if release_lock:
+                try:
+                    await lock.delete(force=True)
+                except Exception:
+                    # Leave a blocked cache for reconciliation; never delete another lock.
+                    logger.warning("Immutable toolchain lock cleanup requires reconciliation")
 
     async def prepare_toolchain_volume(
         self, image: str, volume_name: str, mount_paths: list[str]

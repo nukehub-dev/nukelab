@@ -22,7 +22,6 @@ from app.api.servers import (
     _audit_cross_user_access,
     _ensure_gpu_devices,
     _release_gpu_devices,
-    _respawn_server_container,
     _server_gpu_count,
     _set_server_expiry,
     spawner,
@@ -229,82 +228,6 @@ class TestRespawnServerContainer:
         server.allocated_gpu = 0
         return server
 
-    @pytest.mark.asyncio
-    async def test_respawn_deletes_stale_container_and_spawns(self):
-        server = self._make_server()
-        owner = mock.Mock(username="owneruser")
-        db = mock.AsyncMock()
-        db.execute.return_value.scalar_one_or_none = mock.Mock(return_value=owner)
-
-        env = mock.Mock(slug="dev", image="img:latest")
-        plan = mock.Mock(cpu_limit=2.0, memory_limit="2g", disk_limit="20g", gpu_limit=0)
-        new_server = mock.Mock()
-
-        with (
-            mock.patch("app.services.environment_service.EnvironmentService") as mock_env_cls,
-            mock.patch("app.services.plan_service.PlanService") as mock_plan_cls,
-            mock.patch(
-                "app.api.servers._load_server_volume_mounts",
-                new=mock.AsyncMock(return_value=[]),
-            ),
-            mock.patch(
-                "app.api.servers._ensure_gpu_devices",
-                new=mock.AsyncMock(return_value=None),
-            ),
-            mock.patch(
-                "app.api.servers.spawner.delete",
-                new=mock.AsyncMock(side_effect=Exception("delete failed")),
-            ) as mock_delete,
-            mock.patch(
-                "app.api.servers.spawner.spawn",
-                new=mock.AsyncMock(return_value=new_server),
-            ) as mock_spawn,
-        ):
-            mock_env_cls.return_value.get_by_id = mock.AsyncMock(return_value=env)
-            mock_plan_cls.return_value.get_by_id = mock.AsyncMock(return_value=plan)
-            result = await _respawn_server_container(server, db, "fallback")
-
-        # Stale container deletion failed but was swallowed; spawn still ran.
-        mock_delete.assert_called_once_with("stale-cid")
-        mock_spawn.assert_called_once()
-        assert mock_spawn.call_args.kwargs["username"] == "owneruser"
-        assert result is new_server
-
-    @pytest.mark.asyncio
-    async def test_respawn_without_container_uses_fallback_username(self):
-        server = self._make_server(container_id=None)
-        db = mock.AsyncMock()
-        db.execute.return_value.scalar_one_or_none = mock.Mock(return_value=None)
-
-        new_server = mock.Mock()
-
-        with (
-            mock.patch("app.services.environment_service.EnvironmentService") as mock_env_cls,
-            mock.patch("app.services.plan_service.PlanService") as mock_plan_cls,
-            mock.patch(
-                "app.api.servers._load_server_volume_mounts",
-                new=mock.AsyncMock(return_value=[]),
-            ),
-            mock.patch(
-                "app.api.servers._ensure_gpu_devices",
-                new=mock.AsyncMock(return_value=None),
-            ),
-            mock.patch("app.api.servers.spawner.delete", new=mock.AsyncMock()) as mock_delete,
-            mock.patch(
-                "app.api.servers.spawner.spawn",
-                new=mock.AsyncMock(return_value=new_server),
-            ) as mock_spawn,
-        ):
-            mock_env_cls.return_value.get_by_id = mock.AsyncMock(return_value=None)
-            mock_plan_cls.return_value.get_by_id = mock.AsyncMock(return_value=None)
-            result = await _respawn_server_container(server, db, "fallback-user")
-
-        mock_delete.assert_not_called()
-        assert mock_spawn.call_args.kwargs["username"] == "fallback-user"
-        # No environment -> legacy "dev" slug fallback.
-        assert mock_spawn.call_args.kwargs["environment"] == "dev"
-        assert result is new_server
-
 
 # ── Helper: _audit_cross_user_access ─────────────────────────────────────────
 
@@ -457,7 +380,7 @@ class TestGetServerStatusSync:
         db_session.add(server)
         await db_session.commit()
 
-        with mock.patch("app.api.servers.spawner.get_status", return_value="paused"):
+        with mock.patch("app.api.servers.spawner.get_status", return_value="exited"):
             response = await client.get(
                 f"/api/servers/{server.id}", headers={"Authorization": f"Bearer {user_token}"}
             )
@@ -556,577 +479,180 @@ class TestGetServerByPath:
 # ── POST /api/servers/ create variants ───────────────────────────────────────
 
 
-def _create_stack_mocks(db_session, *, spawn_return=None, spawn_side_effect=None):
-    """Context-manager stack mocking the services used by create_server."""
-    import contextlib
-
-    @contextlib.contextmanager
-    def _stack():
-        with (
-            mock.patch("app.services.quota_service.QuotaService") as mock_quota_cls,
-            mock.patch("app.services.resource_pool_service.ResourcePoolService") as mock_pool_cls,
-            mock.patch("app.services.credit_service.CreditService") as mock_credit_cls,
-            mock.patch("app.services.volume_service.VolumeService") as mock_vol_cls,
-            mock.patch("app.services.volume_access_service.VolumeAccessService") as mock_access_cls,
-        ):
-            mock_quota = mock_quota_cls.return_value
-            mock_quota.check_spawn_allowed = mock.AsyncMock(return_value={"allowed": True})
-            mock_quota.check_volume_creation_allowed = mock.AsyncMock(
-                return_value={"allowed": True}
-            )
-            mock_quota.increment_usage = mock.AsyncMock()
-            mock_pool_cls.return_value.can_fit = mock.AsyncMock(return_value=True)
-            mock_credit_cls.return_value.check_sufficient_credits = mock.AsyncMock(
-                return_value=True
-            )
-            mock_vol = mock_vol_cls.return_value
-            mock_vol.record_mount = mock.AsyncMock()
-            mock_vol.mark_home_volume = mock.AsyncMock()
-            mock_vol.check_volumes_quota = mock.AsyncMock(return_value={"allowed": True})
-            mock_vol._parse_memory = mock.Mock(return_value=10737418240)
-            mock_access = mock_access_cls.return_value
-            mock_access.can_access_volume = mock.AsyncMock(return_value=True)
-
-            spawn_patch = mock.patch(
-                "app.api.servers.spawner.spawn",
-                new=mock.AsyncMock(return_value=spawn_return, side_effect=spawn_side_effect),
-            )
-            with spawn_patch as mock_spawn:
-                yield {
-                    "quota": mock_quota,
-                    "pool": mock_pool_cls.return_value,
-                    "credit": mock_credit_cls.return_value,
-                    "volume": mock_vol,
-                    "access": mock_access,
-                    "spawn": mock_spawn,
-                }
-
-    return _stack()
-
-
 class TestCreateServerCoverage:
     @pytest.mark.asyncio
     async def test_create_with_legacy_volume_id(
-        self, client, user_token, test_user, db_session, cov_plan_env
+        self, client, user_token, test_user, db_session, cov_plan_env, server_api_runtime
     ):
-        """Deprecated volume_id/volume_mode fields build a home-dir mount."""
+        """Legacy selection preserves the existing private home volume and privacy label."""
         plan, env = cov_plan_env
+        owner_id, username = test_user.id, test_user.username
+        plan_id, env_id = plan.id, env.id
         volume = Volume(
             name=_unique("legacy-vol"),
             display_name="Legacy Vol",
-            owner_id=test_user.id,
+            owner_id=owner_id,
             size_bytes=1000,
+            max_size_bytes=1024**3,
+            visibility="private",
+            status="active",
         )
         db_session.add(volume)
         await db_session.commit()
-        await db_session.refresh(volume)
-
-        mock_server = Server(
-            id=uuid_mod.uuid4(),
-            name="legacy-srv",
-            user_id=test_user.id,
-            environment_id=env.id,
-            container_id="cid-legacy",
-            image=env.image,
-            volume_id=volume.id,
-            status="running",
-            allocated_cpu=plan.cpu_limit,
-            allocated_memory=plan.memory_limit,
-            allocated_disk=plan.disk_limit,
+        volume_id, volume_name = volume.id, volume.name
+        response = await client.post(
+            "/api/servers/",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={
+                "name": "legacy-srv",
+                "plan_id": str(plan_id),
+                "environment_id": str(env_id),
+                "volume_id": str(volume_id),
+                "volume_mode": "read_write",
+            },
         )
-
-        with _create_stack_mocks(db_session, spawn_return=mock_server) as mocks:
-            response = await client.post(
-                "/api/servers/",
-                headers={"Authorization": f"Bearer {user_token}"},
-                json={
-                    "name": "legacy-srv",
-                    "plan_id": str(plan.id),
-                    "environment_id": str(env.id),
-                    "volume_id": str(volume.id),
-                    "volume_mode": "read_write",
-                },
-            )
-
-        assert response.status_code == 200, f"Response: {response.text}"
-        spawn_kwargs = mocks["spawn"].call_args.kwargs
-        assert spawn_kwargs["volume_mounts"] == [
-            {
-                "volume_id": str(volume.id),
-                "mount_path": f"/home/{test_user.username}",
-                "mode": "read_write",
-                "is_primary": True,
-            }
-        ]
-        # Home-directory mount is flagged for privacy warnings.
-        mocks["volume"].mark_home_volume.assert_called_once_with(str(volume.id))
+        assert response.status_code == 200, response.text
+        mounts = response.json()["volume_mounts"]
+        assert len(mounts) == 1 and mounts[0]["volume_id"] == str(volume_id)
+        assert mounts[0]["mount_path"] == f"/home/{username}"
+        assert mounts[0]["mode"] == "read_write" and mounts[0]["is_primary"]
+        runtime_mount = server_api_runtime.create_container.call_args.kwargs["volumes"][volume_name]
+        assert runtime_mount == {"bind": f"/home/{username}", "mode": "rw"}
+        current = await db_session.get(Volume, volume_id, populate_existing=True)
+        assert current.labels["was_home_volume"] is True
+        assert current.size_bytes == 1000
 
     @pytest.mark.asyncio
     async def test_create_with_multiple_auto_created_volumes(
-        self, client, user_token, test_user, db_session, cov_plan_env
+        self, client, user_token, test_user, db_session, cov_plan_env, server_api_runtime
     ):
-        """Multiple empty volume_id mounts auto-create data/data-N volumes."""
+        """Distinct bounded auto-create intents retain their paths, modes and size ceilings."""
+        from sqlalchemy import select
+
         plan, env = cov_plan_env
-
-        mock_server = Server(
-            id=uuid_mod.uuid4(),
-            name="multi-vol-srv",
-            user_id=test_user.id,
-            environment_id=env.id,
-            container_id="cid-multi",
-            image=env.image,
-            volume_id=None,
-            status="running",
-            allocated_cpu=plan.cpu_limit,
-            allocated_memory=plan.memory_limit,
-            allocated_disk=plan.disk_limit,
+        owner_id, plan_id, env_id = test_user.id, plan.id, env.id
+        requested = [
+            {
+                "volume_id": "",
+                "mount_path": "/data",
+                "mode": "read_write",
+                "max_size_bytes": 1024**3,
+            },
+            {
+                "volume_id": "",
+                "mount_path": "/extra",
+                "mode": "read_only",
+                "max_size_bytes": 2 * 1024**3,
+            },
+        ]
+        response = await client.post(
+            "/api/servers/",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={
+                "name": "multi-vol-srv",
+                "plan_id": str(plan_id),
+                "environment_id": str(env_id),
+                "volume_mounts": requested,
+            },
         )
-
-        with _create_stack_mocks(db_session, spawn_return=mock_server) as mocks:
-            created_names = []
-
-            async def create_vol_side_effect(*, name, display_name, owner_id, max_size_bytes):
-                created_names.append(name)
-                vol = Volume(
-                    name=name,
-                    display_name=display_name,
-                    owner_id=owner_id,
-                    size_bytes=max_size_bytes or 1000,
-                )
-                db_session.add(vol)
-                await db_session.commit()
-                await db_session.refresh(vol)
-                return vol
-
-            mocks["volume"].create_volume = mock.AsyncMock(side_effect=create_vol_side_effect)
-
-            response = await client.post(
-                "/api/servers/",
-                headers={"Authorization": f"Bearer {user_token}"},
-                json={
-                    "name": "multi-vol-srv",
-                    "plan_id": str(plan.id),
-                    "environment_id": str(env.id),
-                    "volume_mounts": [
-                        {"volume_id": "", "mount_path": "/data", "mode": "read_write"},
-                        {"volume_id": "", "mount_path": "/extra", "mode": "read_only"},
-                    ],
-                },
+        assert response.status_code == 200, response.text
+        returned = response.json()["volume_mounts"]
+        assert len(returned) == 2 and len({mount["volume_id"] for mount in returned}) == 2
+        by_path = {mount["mount_path"]: mount for mount in returned}
+        assert by_path["/data"]["is_primary"] and not by_path["/extra"]["is_primary"]
+        volumes = list(await db_session.scalars(select(Volume).where(Volume.owner_id == owner_id)))
+        assert len(volumes) == 2 and len({volume.name for volume in volumes}) == 2
+        by_id = {str(volume.id): volume for volume in volumes}
+        runtime_mounts = server_api_runtime.create_container.call_args.kwargs["volumes"]
+        for intent in requested:
+            mounted = by_path[intent["mount_path"]]
+            volume = by_id[mounted["volume_id"]]
+            assert (
+                volume.visibility == "private" and volume.max_size_bytes == intent["max_size_bytes"]
             )
-
-        assert response.status_code == 200, f"Response: {response.text}"
-        assert len(created_names) == 2
-        assert created_names[0].endswith("-data")
-        assert created_names[1].endswith("-data-1")
-        data = response.json()
-        assert len(data["volume_mounts"]) == 2
-        # First mount is marked primary when none is specified.
-        assert data["volume_mounts"][0]["is_primary"] is True
+            assert mounted["mode"] == intent["mode"]
+            assert runtime_mounts[volume.name] == {
+                "bind": intent["mount_path"],
+                "mode": "ro" if intent["mode"] == "read_only" else "rw",
+            }
 
     @pytest.mark.asyncio
     async def test_create_volume_access_denied_read_only_label(
-        self, client, user_token, test_user, db_session, cov_plan_env
+        self, client, user_token, admin_user, db_session, cov_plan_env, server_api_runtime
     ):
+        """Read-only selection grants no access to another owner's private volume."""
         plan, env = cov_plan_env
+        plan_id, env_id = plan.id, env.id
         volume = Volume(
             name=_unique("denied-vol"),
-            display_name="Denied Vol",
-            owner_id=test_user.id,
+            display_name="Private data",
+            owner_id=admin_user.id,
             size_bytes=1000,
+            max_size_bytes=1024**3,
+            visibility="private",
+            status="active",
         )
         db_session.add(volume)
         await db_session.commit()
-        await db_session.refresh(volume)
-
-        with _create_stack_mocks(db_session, spawn_return=mock.Mock()) as mocks:
-            mocks["access"].can_access_volume = mock.AsyncMock(return_value=False)
-            mocks["volume"].get_volume = mock.AsyncMock(return_value=volume)
-
-            response = await client.post(
-                "/api/servers/",
-                headers={"Authorization": f"Bearer {user_token}"},
-                json={
-                    "name": "denied-srv",
-                    "plan_id": str(plan.id),
-                    "environment_id": str(env.id),
-                    "volume_mounts": [
-                        {
-                            "volume_id": str(volume.id),
-                            "mount_path": "/data",
-                            "mode": "read_only",
-                        }
-                    ],
-                },
-            )
-
+        volume_id = volume.id
+        response = await client.post(
+            "/api/servers/",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={
+                "name": "denied-srv",
+                "plan_id": str(plan_id),
+                "environment_id": str(env_id),
+                "volume_mounts": [
+                    {"volume_id": str(volume_id), "mount_path": "/data", "mode": "read_only"}
+                ],
+            },
+        )
         assert response.status_code == 403
-        assert "read-only" in response.json()["detail"]
+        assert response.json()["detail"]["code"] == "volume_unavailable"
+        server_api_runtime.create_container.assert_not_awaited()
+        assert (await db_session.get(Volume, volume_id, populate_existing=True)).size_bytes == 1000
 
     @pytest.mark.asyncio
     async def test_create_volume_quota_exceeded(
-        self, client, user_token, test_user, db_session, cov_plan_env
+        self, client, user_token, test_user, db_session, cov_plan_env, server_api_runtime
     ):
+        """Mount capacity is bounded by the plan across the complete selection."""
         plan, env = cov_plan_env
-        volume = Volume(
-            name=_unique("quota-vol"),
-            display_name="Quota Vol",
-            owner_id=test_user.id,
-            size_bytes=1000,
-        )
-        db_session.add(volume)
+        plan_id, env_id, owner_id = plan.id, env.id, test_user.id
+        volumes = [
+            Volume(
+                name=_unique("quota-vol"),
+                display_name="Selected data",
+                owner_id=owner_id,
+                size_bytes=1000,
+                max_size_bytes=6 * 1024**3,
+                visibility="private",
+                status="active",
+            )
+            for _ in range(2)
+        ]
+        db_session.add_all(volumes)
         await db_session.commit()
-        await db_session.refresh(volume)
-
-        with _create_stack_mocks(db_session, spawn_return=mock.Mock()) as mocks:
-            mocks["volume"].check_volumes_quota = mock.AsyncMock(
-                return_value={"allowed": False, "reason": "aggregate quota exceeded"}
-            )
-
-            response = await client.post(
-                "/api/servers/",
-                headers={"Authorization": f"Bearer {user_token}"},
-                json={
-                    "name": "quota-srv",
-                    "plan_id": str(plan.id),
-                    "environment_id": str(env.id),
-                    "volume_mounts": [
-                        {
-                            "volume_id": str(volume.id),
-                            "mount_path": "/data",
-                            "mode": "read_write",
-                        }
-                    ],
-                },
-            )
-
+        identifiers = [str(volume.id) for volume in volumes]
+        response = await client.post(
+            "/api/servers/",
+            headers={"Authorization": f"Bearer {user_token}"},
+            json={
+                "name": "quota-srv",
+                "plan_id": str(plan_id),
+                "environment_id": str(env_id),
+                "volume_mounts": [
+                    {"volume_id": identifier, "mount_path": f"/data{index}", "mode": "read_write"}
+                    for index, identifier in enumerate(identifiers)
+                ],
+            },
+        )
         assert response.status_code == 400
-        assert "aggregate quota exceeded" in response.json()["detail"]
-
-    @pytest.mark.asyncio
-    async def test_create_gpu_pool_exhausted_returns_429(
-        self, client, user_token, test_user, db_session, cov_plan_env
-    ):
-        plan, env = cov_plan_env
-        plan.gpu_limit = 1
-        await db_session.commit()
-
-        volume = Volume(
-            name=_unique("gpu-vol"),
-            display_name="Gpu Vol",
-            owner_id=test_user.id,
-            size_bytes=1000,
-        )
-        db_session.add(volume)
-        await db_session.commit()
-        await db_session.refresh(volume)
-
-        with _create_stack_mocks(db_session, spawn_return=mock.Mock()):
-            with mock.patch("app.services.gpu_allocator.GpuAllocatorService") as mock_alloc_cls:
-                alloc = mock_alloc_cls.return_value
-                alloc.enabled = mock.Mock(return_value=True)
-                alloc.devices_for = mock.AsyncMock(return_value=[])
-                alloc.allocate = mock.AsyncMock(return_value=None)
-
-                response = await client.post(
-                    "/api/servers/",
-                    headers={"Authorization": f"Bearer {user_token}"},
-                    json={
-                        "name": "gpu-srv",
-                        "plan_id": str(plan.id),
-                        "environment_id": str(env.id),
-                        "volume_mounts": [
-                            {
-                                "volume_id": str(volume.id),
-                                "mount_path": "/data",
-                                "mode": "read_write",
-                            }
-                        ],
-                    },
-                )
-
-        assert response.status_code == 429
-        assert "No GPUs available" in response.json()["detail"]
-
-    @pytest.mark.asyncio
-    async def test_create_spawn_failure_releases_gpu_devices(
-        self, client, user_token, test_user, db_session, cov_plan_env
-    ):
-        plan, env = cov_plan_env
-        plan.gpu_limit = 1
-        await db_session.commit()
-
-        volume = Volume(
-            name=_unique("gpu-vol2"),
-            display_name="Gpu Vol 2",
-            owner_id=test_user.id,
-            size_bytes=1000,
-        )
-        db_session.add(volume)
-        await db_session.commit()
-        await db_session.refresh(volume)
-
-        with _create_stack_mocks(db_session, spawn_side_effect=Exception("boom")):
-            with (
-                mock.patch("app.services.gpu_allocator.GpuAllocatorService") as mock_alloc_cls,
-                mock.patch(
-                    "app.container.client.get_container_client",
-                    new=mock.AsyncMock(return_value=mock.AsyncMock()),
-                ),
-            ):
-                alloc = mock_alloc_cls.return_value
-                alloc.enabled = mock.Mock(return_value=True)
-                alloc.devices_for = mock.AsyncMock(return_value=[])
-                alloc.allocate = mock.AsyncMock(return_value=["nvidia.com/gpu=0"])
-                alloc.release = mock.AsyncMock()
-
-                response = await client.post(
-                    "/api/servers/",
-                    headers={"Authorization": f"Bearer {user_token}"},
-                    json={
-                        "name": "gpu-fail-srv",
-                        "plan_id": str(plan.id),
-                        "environment_id": str(env.id),
-                        "volume_mounts": [
-                            {
-                                "volume_id": str(volume.id),
-                                "mount_path": "/data",
-                                "mode": "read_write",
-                            }
-                        ],
-                    },
-                )
-
-        assert response.status_code == 500
-        # The reserved device must be freed when the spawn fails.
-        alloc.release.assert_called_once()
+        assert response.json()["detail"]["code"] == "volume_capacity_exceeded"
+        server_api_runtime.create_container.assert_not_awaited()
 
 
 # ── POST /{id}/start branches ────────────────────────────────────────────────
-
-
-class TestStartServerCoverage:
-    @pytest.mark.asyncio
-    async def test_start_plain_start_failure_returns_500(
-        self, client, user_token, cov_server, db_session
-    ):
-        cov_server.container_id = "cid-plain"
-        await db_session.commit()
-
-        with (
-            mock.patch("app.api.servers.settings.credits_enabled", False),
-            mock.patch("app.api.servers.spawner.get_status", return_value="paused"),
-            mock.patch("app.api.servers.spawner.start", return_value=False),
-        ):
-            response = await client.post(
-                f"/api/servers/{cov_server.id}/start",
-                headers={"Authorization": f"Bearer {user_token}"},
-            )
-
-        assert response.status_code == 500
-        assert "Failed to start server" in response.json()["detail"]
-
-    @pytest.mark.asyncio
-    async def test_start_plan_access_lost_returns_403(self, client, user_token, cov_server):
-        with (
-            mock.patch("app.api.servers.settings.credits_enabled", False),
-            mock.patch("app.services.plan_service.PlanService") as mock_plan_cls,
-        ):
-            mock_plan_cls.return_value.can_user_use_plan = mock.AsyncMock(return_value=False)
-            response = await client.post(
-                f"/api/servers/{cov_server.id}/start",
-                headers={"Authorization": f"Bearer {user_token}"},
-            )
-
-        assert response.status_code == 403
-        assert "no longer available" in response.json()["detail"]
-
-    @pytest.mark.asyncio
-    async def test_start_insufficient_credits_returns_402(
-        self, client, user_token, cov_server, cov_plan_env, db_session
-    ):
-        plan, _ = cov_plan_env
-        plan.cost_per_hour = 10
-        await db_session.commit()
-
-        with (
-            mock.patch("app.api.servers.settings.credits_enabled", True),
-            mock.patch("app.services.credit_service.CreditService") as mock_credit_cls,
-        ):
-            mock_credit_cls.return_value.check_sufficient_credits = mock.AsyncMock(
-                return_value=False
-            )
-            response = await client.post(
-                f"/api/servers/{cov_server.id}/start",
-                headers={"Authorization": f"Bearer {user_token}"},
-            )
-
-        assert response.status_code == 402
-
-    @pytest.mark.asyncio
-    async def test_start_volume_quota_exceeded_returns_400(
-        self, client, user_token, test_user, cov_server, db_session
-    ):
-        volume = Volume(
-            name=_unique("start-vol"),
-            display_name="Start Vol",
-            owner_id=test_user.id,
-            size_bytes=1000,
-        )
-        db_session.add(volume)
-        await db_session.commit()
-        await db_session.refresh(volume)
-        db_session.add(
-            ServerVolume(
-                server_id=cov_server.id,
-                volume_id=volume.id,
-                mount_path="/data",
-                mode="read_write",
-                is_primary=True,
-            )
-        )
-        await db_session.commit()
-
-        with (
-            mock.patch("app.api.servers.settings.credits_enabled", False),
-            mock.patch("app.services.volume_service.VolumeService") as mock_vol_cls,
-        ):
-            mock_vol_cls.return_value.check_volumes_quota = mock.AsyncMock(
-                return_value={"allowed": False, "reason": "volume too big"}
-            )
-            response = await client.post(
-                f"/api/servers/{cov_server.id}/start",
-                headers={"Authorization": f"Bearer {user_token}"},
-            )
-
-        assert response.status_code == 400
-        assert "volume too big" in response.json()["detail"]
-
-    @pytest.mark.asyncio
-    async def test_start_plain_start_records_legacy_volume_mount(
-        self, client, user_token, test_user, cov_server, db_session
-    ):
-        """Plain-start path records a mount for the legacy server.volume_id."""
-        volume = Volume(
-            name=_unique("legacy-mount-vol"),
-            display_name="Legacy Mount Vol",
-            owner_id=test_user.id,
-            size_bytes=1000,
-        )
-        db_session.add(volume)
-        await db_session.commit()
-        await db_session.refresh(volume)
-
-        cov_server.container_id = "cid-legacy-start"
-        cov_server.volume_id = volume.id
-        await db_session.commit()
-
-        with (
-            mock.patch("app.api.servers.settings.credits_enabled", False),
-            mock.patch("app.api.servers.spawner.get_status", return_value="paused"),
-            mock.patch("app.api.servers.spawner.start", return_value=True),
-            mock.patch("app.services.volume_service.VolumeService") as mock_vol_cls,
-        ):
-            mock_vol_cls.return_value.record_mount = mock.AsyncMock()
-            response = await client.post(
-                f"/api/servers/{cov_server.id}/start",
-                headers={"Authorization": f"Bearer {user_token}"},
-            )
-
-        assert response.status_code == 200, f"Response: {response.text}"
-        mock_vol_cls.return_value.record_mount.assert_called_once_with(str(volume.id))
-
-    @pytest.mark.asyncio
-    async def test_start_stopped_container_delete_failure_is_swallowed(
-        self, client, user_token, cov_server, db_session
-    ):
-        """A stopped container is deleted+recreated; delete errors are tolerated."""
-        cov_server.container_id = "cid-stale"
-        await db_session.commit()
-
-        with (
-            mock.patch("app.api.servers.settings.credits_enabled", False),
-            mock.patch("app.api.servers.spawner.get_status", return_value="stopped"),
-            mock.patch(
-                "app.api.servers.spawner.delete",
-                new=mock.AsyncMock(side_effect=Exception("delete failed")),
-            ),
-            mock.patch(
-                "app.api.servers.spawner.spawn",
-                new=mock.AsyncMock(return_value=_mock_spawn_result("recreated-cid")),
-            ),
-        ):
-            response = await client.post(
-                f"/api/servers/{cov_server.id}/start",
-                headers={"Authorization": f"Bearer {user_token}"},
-            )
-
-        assert response.status_code == 200, f"Response: {response.text}"
-        assert response.json()["status"] == "running"
-        assert "recreated" in response.json()["message"].lower()
-
-    @pytest.mark.asyncio
-    async def test_start_no_container_spawn_failure_returns_500(
-        self, client, user_token, cov_server
-    ):
-        with (
-            mock.patch("app.api.servers.settings.credits_enabled", False),
-            mock.patch(
-                "app.api.servers.spawner.spawn",
-                new=mock.AsyncMock(side_effect=Exception("spawn boom")),
-            ),
-        ):
-            response = await client.post(
-                f"/api/servers/{cov_server.id}/start",
-                headers={"Authorization": f"Bearer {user_token}"},
-            )
-
-        assert response.status_code == 500
-        assert "Failed to restart server" in response.json()["detail"]
-
-    @pytest.mark.asyncio
-    async def test_start_no_container_records_volume_mounts(
-        self, client, user_token, test_user, cov_server, db_session
-    ):
-        """Fresh-spawn start records mounts for each attached volume."""
-        volume = Volume(
-            name=_unique("spawn-mount-vol"),
-            display_name="Spawn Mount Vol",
-            owner_id=test_user.id,
-            size_bytes=1000,
-        )
-        db_session.add(volume)
-        await db_session.commit()
-        await db_session.refresh(volume)
-        db_session.add(
-            ServerVolume(
-                server_id=cov_server.id,
-                volume_id=volume.id,
-                mount_path="/data",
-                mode="read_write",
-                is_primary=True,
-            )
-        )
-        await db_session.commit()
-
-        with (
-            mock.patch("app.api.servers.settings.credits_enabled", False),
-            mock.patch(
-                "app.api.servers.spawner.spawn",
-                new=mock.AsyncMock(return_value=_mock_spawn_result()),
-            ),
-            mock.patch("app.services.volume_service.VolumeService") as mock_vol_cls,
-        ):
-            mock_vol_cls.return_value.check_volumes_quota = mock.AsyncMock(
-                return_value={"allowed": True}
-            )
-            mock_vol_cls.return_value.record_mount = mock.AsyncMock()
-            response = await client.post(
-                f"/api/servers/{cov_server.id}/start",
-                headers={"Authorization": f"Bearer {user_token}"},
-            )
-
-        assert response.status_code == 200, f"Response: {response.text}"
-        mock_vol_cls.return_value.record_mount.assert_called_once_with(str(volume.id))
 
 
 # ── POST /{id}/stop branches ─────────────────────────────────────────────────
@@ -1134,407 +660,33 @@ class TestStartServerCoverage:
 
 class TestStopServerCoverage:
     @pytest.mark.asyncio
-    async def test_stop_delete_failure_returns_500(
-        self, client, user_token, cov_server, db_session
-    ):
-        cov_server.container_id = "cid-stop-fail"
-        cov_server.status = "running"
-        await db_session.commit()
-
-        with (
-            mock.patch("app.api.servers.spawner.get_status", return_value="running"),
-            mock.patch(
-                "app.api.servers.spawner.delete",
-                new=mock.AsyncMock(side_effect=Exception("delete boom")),
-            ),
-        ):
-            response = await client.post(
-                f"/api/servers/{cov_server.id}/stop",
-                headers={"Authorization": f"Bearer {user_token}"},
-            )
-
-        assert response.status_code == 500
-        assert "Failed to stop server" in response.json()["detail"]
-
-    @pytest.mark.asyncio
-    async def test_stop_reconciles_billing_and_quota(
-        self, client, user_token, cov_server, db_session
-    ):
-        cov_server.container_id = "cid-stop-bill"
-        cov_server.status = "running"
-        await db_session.commit()
-
-        with (
-            mock.patch("app.api.servers.spawner.get_status", return_value="running"),
-            mock.patch("app.api.servers.spawner.delete", new=mock.AsyncMock()),
-            mock.patch("app.services.credit_service.CreditService") as mock_credit_cls,
-            mock.patch("app.services.quota_service.QuotaService") as mock_quota_cls,
-        ):
-            mock_credit_cls.return_value.reconcile_server_billing = mock.AsyncMock()
-            mock_quota_cls.return_value.decrement_usage = mock.AsyncMock()
-            response = await client.post(
-                f"/api/servers/{cov_server.id}/stop",
-                headers={"Authorization": f"Bearer {user_token}"},
-            )
-
-        assert response.status_code == 200, f"Response: {response.text}"
-        mock_credit_cls.return_value.reconcile_server_billing.assert_called_once()
-        mock_quota_cls.return_value.decrement_usage.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_stop_without_container_marks_stopped(
+    async def test_stop_without_container_preserves_unverified_allocation(
         self, client, user_token, cov_server, db_session
     ):
         cov_server.status = "running"
         cov_server.container_id = None
         await db_session.commit()
+        identifier = cov_server.id
+        cpu = cov_server.allocated_cpu
 
         response = await client.post(
-            f"/api/servers/{cov_server.id}/stop",
+            f"/api/servers/{identifier}/stop",
             headers={"Authorization": f"Bearer {user_token}"},
         )
 
-        assert response.status_code == 200
-        assert response.json()["status"] == "stopped"
+        assert response.status_code == 503
+        assert response.json()["detail"]["code"] == "recovery_required"
+        current = await db_session.get(Server, identifier, populate_existing=True)
+        assert current.status == "stopping" and current.allocated_cpu == cpu
 
 
 # ── POST /{id}/restart branches ──────────────────────────────────────────────
 
 
-class TestRestartServerCoverage:
-    @pytest.mark.asyncio
-    async def test_restart_without_container_returns_400(self, client, user_token, cov_server):
-        with mock.patch("app.api.servers.settings.credits_enabled", False):
-            response = await client.post(
-                f"/api/servers/{cov_server.id}/restart",
-                headers={"Authorization": f"Bearer {user_token}"},
-            )
-
-        assert response.status_code == 400
-        assert "No container" in response.json()["detail"]
-
-    @pytest.mark.asyncio
-    async def test_restart_stop_failure_returns_500(
-        self, client, user_token, cov_server, db_session
-    ):
-        cov_server.container_id = "cid-restart-fail"
-        cov_server.status = "running"
-        await db_session.commit()
-
-        with (
-            mock.patch("app.api.servers.settings.credits_enabled", False),
-            mock.patch("app.api.servers.spawner.get_status", return_value="running"),
-            mock.patch(
-                "app.api.servers.spawner.stop",
-                new=mock.AsyncMock(side_effect=Exception("stop boom")),
-            ),
-        ):
-            response = await client.post(
-                f"/api/servers/{cov_server.id}/restart",
-                headers={"Authorization": f"Bearer {user_token}"},
-            )
-
-        assert response.status_code == 500
-        assert "Failed to restart server" in response.json()["detail"]
-
-    @pytest.mark.asyncio
-    async def test_restart_plan_access_lost_returns_403(
-        self, client, user_token, cov_server, db_session
-    ):
-        cov_server.container_id = "cid-restart-403"
-        cov_server.status = "running"
-        await db_session.commit()
-
-        with (
-            mock.patch("app.api.servers.settings.credits_enabled", False),
-            mock.patch("app.services.plan_service.PlanService") as mock_plan_cls,
-        ):
-            mock_plan_cls.return_value.can_user_use_plan = mock.AsyncMock(return_value=False)
-            response = await client.post(
-                f"/api/servers/{cov_server.id}/restart",
-                headers={"Authorization": f"Bearer {user_token}"},
-            )
-
-        assert response.status_code == 403
-
-    @pytest.mark.asyncio
-    async def test_restart_insufficient_credits_returns_402(
-        self, client, user_token, cov_server, cov_plan_env, db_session
-    ):
-        plan, _ = cov_plan_env
-        plan.cost_per_hour = 10
-        cov_server.container_id = "cid-restart-402"
-        cov_server.status = "running"
-        await db_session.commit()
-
-        with (
-            mock.patch("app.api.servers.settings.credits_enabled", True),
-            mock.patch("app.services.credit_service.CreditService") as mock_credit_cls,
-        ):
-            mock_credit_cls.return_value.check_sufficient_credits = mock.AsyncMock(
-                return_value=False
-            )
-            response = await client.post(
-                f"/api/servers/{cov_server.id}/restart",
-                headers={"Authorization": f"Bearer {user_token}"},
-            )
-
-        assert response.status_code == 402
-
-    @pytest.mark.asyncio
-    async def test_restart_volume_quota_exceeded_returns_400(
-        self, client, user_token, test_user, cov_server, db_session
-    ):
-        volume = Volume(
-            name=_unique("restart-vol"),
-            display_name="Restart Vol",
-            owner_id=test_user.id,
-            size_bytes=1000,
-        )
-        db_session.add(volume)
-        await db_session.commit()
-        await db_session.refresh(volume)
-        db_session.add(
-            ServerVolume(
-                server_id=cov_server.id,
-                volume_id=volume.id,
-                mount_path="/data",
-                mode="read_write",
-                is_primary=True,
-            )
-        )
-        cov_server.container_id = "cid-restart-quota"
-        cov_server.status = "running"
-        await db_session.commit()
-
-        with (
-            mock.patch("app.api.servers.settings.credits_enabled", False),
-            mock.patch("app.services.volume_service.VolumeService") as mock_vol_cls,
-        ):
-            mock_vol_cls.return_value.check_volumes_quota = mock.AsyncMock(
-                return_value={"allowed": False, "reason": "restart quota"}
-            )
-            response = await client.post(
-                f"/api/servers/{cov_server.id}/restart",
-                headers={"Authorization": f"Bearer {user_token}"},
-            )
-
-        assert response.status_code == 400
-        assert "restart quota" in response.json()["detail"]
-
-
 # ── DELETE /{id} branches ────────────────────────────────────────────────────
 
 
-class TestDeleteServerCoverage:
-    @pytest.mark.asyncio
-    async def test_delete_container_failure_aborts_delete(
-        self, client, user_token, cov_server, db_session
-    ):
-        """A failed container delete must abort the server delete — otherwise
-        the container is orphaned while the DB row disappears."""
-        cov_server.container_id = "cid-del-fail"
-        await db_session.commit()
-
-        with mock.patch(
-            "app.api.servers.spawner.delete",
-            new=mock.AsyncMock(return_value=False),
-        ):
-            response = await client.delete(
-                f"/api/servers/{cov_server.id}",
-                headers={"Authorization": f"Bearer {user_token}"},
-            )
-
-        assert response.status_code == 503
-        await db_session.refresh(cov_server)
-        assert cov_server.container_id == "cid-del-fail"
-
-
 # ── PATCH /{id} GPU re-reservation + misc ────────────────────────────────────
-
-
-class TestPatchServerCoverage:
-    @pytest.mark.asyncio
-    async def test_patch_gpu_pool_exhausted_restores_old_reservation(
-        self, client, admin_token, cov_server, db_session
-    ):
-        """429 on GPU plan change must restore the old device reservation."""
-        new_plan = _make_plan(gpu_limit=2)
-        db_session.add(new_plan)
-        await db_session.commit()
-        await db_session.refresh(new_plan)
-
-        cov_server.status = "running"
-        cov_server.container_id = "cid-gpu-patch"
-        cov_server.allocated_gpu = 1
-        await db_session.commit()
-
-        with (
-            mock.patch("app.services.plan_service.PlanService") as mock_plan_cls,
-            mock.patch("app.services.quota_service.QuotaService") as mock_quota_cls,
-            mock.patch("app.services.gpu_allocator.GpuAllocatorService") as mock_alloc_cls,
-        ):
-            mock_plan = mock_plan_cls.return_value
-            mock_plan.get_by_id = mock.AsyncMock(return_value=new_plan)
-            mock_plan.can_user_use_plan = mock.AsyncMock(return_value=True)
-            mock_quota_cls.return_value.check_spawn_allowed = mock.AsyncMock(
-                return_value={"allowed": True}
-            )
-            alloc = mock_alloc_cls.return_value
-            alloc.enabled = mock.Mock(return_value=True)
-            alloc.release = mock.AsyncMock()
-            # First allocate (new plan) fails; second (restore old) succeeds.
-            alloc.allocate = mock.AsyncMock(side_effect=[None, ["nvidia.com/gpu=0"]])
-
-            response = await client.patch(
-                f"/api/servers/{cov_server.id}",
-                headers={"Authorization": f"Bearer {admin_token}"},
-                json={"plan_id": str(new_plan.id), "reason": "gpu test"},
-            )
-
-        assert response.status_code == 429
-        assert "No GPUs available" in response.json()["detail"]
-        assert alloc.allocate.call_count == 2
-        # Restore call re-reserves the old GPU count.
-        assert alloc.allocate.call_args_list[1].args[1] == 1
-
-    @pytest.mark.asyncio
-    async def test_patch_gpu_reallocation_success(
-        self, client, admin_token, cov_server, cov_plan_env, db_session
-    ):
-        new_plan = _make_plan(gpu_limit=2)
-        db_session.add(new_plan)
-        await db_session.commit()
-        await db_session.refresh(new_plan)
-
-        cov_server.status = "running"
-        cov_server.container_id = "cid-gpu-ok"
-        cov_server.allocated_gpu = 1
-        await db_session.commit()
-
-        with (
-            mock.patch("app.services.plan_service.PlanService") as mock_plan_cls,
-            mock.patch("app.services.quota_service.QuotaService") as mock_quota_cls,
-            mock.patch("app.services.gpu_allocator.GpuAllocatorService") as mock_alloc_cls,
-            mock.patch("app.api.servers.spawner.get_status", return_value="running"),
-            mock.patch("app.api.servers.spawner.stop", new=mock.AsyncMock()),
-            mock.patch("app.api.servers.spawner.delete", new=mock.AsyncMock()),
-            mock.patch(
-                "app.api.servers.spawner.spawn",
-                new=mock.AsyncMock(return_value=_mock_spawn_result()),
-            ),
-        ):
-            mock_plan = mock_plan_cls.return_value
-            mock_plan.get_by_id = mock.AsyncMock(return_value=new_plan)
-            mock_plan.can_user_use_plan = mock.AsyncMock(return_value=True)
-            mock_quota_cls.return_value.check_spawn_allowed = mock.AsyncMock(
-                return_value={"allowed": True}
-            )
-            alloc = mock_alloc_cls.return_value
-            alloc.enabled = mock.Mock(return_value=True)
-            alloc.release = mock.AsyncMock()
-            alloc.allocate = mock.AsyncMock(return_value=["nvidia.com/gpu=0", "nvidia.com/gpu=1"])
-            alloc.devices_for = mock.AsyncMock(
-                return_value=["nvidia.com/gpu=0", "nvidia.com/gpu=1"]
-            )
-
-            response = await client.patch(
-                f"/api/servers/{cov_server.id}",
-                headers={"Authorization": f"Bearer {admin_token}"},
-                json={"plan_id": str(new_plan.id), "reason": "gpu test"},
-            )
-
-        assert response.status_code == 200, f"Response: {response.text}"
-        assert response.json()["allocated_gpu"] == 2
-
-    @pytest.mark.asyncio
-    async def test_patch_volume_mount_marks_home_volume(
-        self, client, admin_token, test_user, cov_server, db_session
-    ):
-        volume = Volume(
-            name=_unique("home-vol"),
-            display_name="Home Vol",
-            owner_id=test_user.id,
-            size_bytes=1000,
-        )
-        db_session.add(volume)
-        await db_session.commit()
-        await db_session.refresh(volume)
-
-        with (
-            mock.patch("app.services.volume_service.VolumeService") as mock_vol_cls,
-            mock.patch("app.services.volume_access_service.VolumeAccessService") as mock_access_cls,
-            mock.patch(
-                "app.api.servers.spawner.spawn",
-                new=mock.AsyncMock(return_value=_mock_spawn_result()),
-            ),
-        ):
-            mock_vol = mock_vol_cls.return_value
-            mock_vol.check_volumes_quota = mock.AsyncMock(return_value={"allowed": True})
-            mock_vol.mark_home_volume = mock.AsyncMock()
-            mock_access_cls.return_value.can_access_volume = mock.AsyncMock(return_value=True)
-
-            response = await client.patch(
-                f"/api/servers/{cov_server.id}",
-                headers={"Authorization": f"Bearer {admin_token}"},
-                json={
-                    "reason": "home mount test",
-                    "volume_mounts": [
-                        {
-                            "volume_id": str(volume.id),
-                            "mount_path": f"/home/{test_user.username}",
-                            "mode": "read_write",
-                        }
-                    ],
-                },
-            )
-
-        assert response.status_code == 200, f"Response: {response.text}"
-        mock_vol.mark_home_volume.assert_called_once_with(str(volume.id))
-
-    @pytest.mark.asyncio
-    async def test_patch_recreate_without_environment_uses_dev_fallback(
-        self, client, admin_token, cov_server, cov_plan_env, db_session
-    ):
-        """Respawn with no environment falls back to the 'dev' slug."""
-        plan, _ = cov_plan_env
-        new_plan = _make_plan()
-        db_session.add(new_plan)
-        await db_session.commit()
-        await db_session.refresh(new_plan)
-
-        cov_server.environment_id = None
-        cov_server.container_id = "cid-noenv"
-        cov_server.status = "running"
-        await db_session.commit()
-
-        with (
-            mock.patch("app.services.plan_service.PlanService") as mock_plan_cls,
-            mock.patch("app.services.quota_service.QuotaService") as mock_quota_cls,
-            mock.patch("app.api.servers.spawner.get_status", return_value="running"),
-            mock.patch("app.api.servers.spawner.stop", new=mock.AsyncMock()),
-            mock.patch("app.api.servers.spawner.delete", new=mock.AsyncMock()),
-            mock.patch(
-                "app.api.servers.spawner.spawn",
-                new=mock.AsyncMock(return_value=_mock_spawn_result()),
-            ) as mock_spawn,
-        ):
-            mock_plan = mock_plan_cls.return_value
-            mock_plan.get_by_id = mock.AsyncMock(return_value=new_plan)
-            mock_plan.can_user_use_plan = mock.AsyncMock(return_value=True)
-            mock_quota_cls.return_value.check_spawn_allowed = mock.AsyncMock(
-                return_value={"allowed": True}
-            )
-            response = await client.patch(
-                f"/api/servers/{cov_server.id}",
-                headers={"Authorization": f"Bearer {admin_token}"},
-                json={"plan_id": str(new_plan.id), "reason": "no env"},
-            )
-
-        assert response.status_code == 200, f"Response: {response.text}"
-        assert mock_spawn.call_args.kwargs["environment"] == "dev"
-        assert mock_spawn.call_args.kwargs["image"] is None
-        assert plan.id != new_plan.id
 
 
 # ── POST /{id}/test-metric failure ───────────────────────────────────────────
@@ -1763,245 +915,31 @@ class TestListServersVolumeMountSerialization:
         assert entry["volume_mounts"][0]["volume"]["name"] == volume.name
 
 
-class TestCreateCleanupPaths:
-    @pytest.mark.asyncio
-    async def test_spawn_failure_full_cleanup_swallows_errors(
-        self, client, user_token, test_user, db_session, cov_plan_env
-    ):
-        """Failure cleanup tolerates docker/DB cleanup errors (lines 732-735,
-        748-752, 768-769)."""
-        import contextlib
-
-        plan, env = cov_plan_env
-
-        with _create_stack_mocks(db_session, spawn_side_effect=Exception("boom")) as mocks:
-            created_names = []
-
-            async def create_vol_side_effect(*, name, display_name, owner_id, max_size_bytes):
-                created_names.append(name)
-                vol = Volume(
-                    name=name,
-                    display_name=display_name,
-                    owner_id=owner_id,
-                    size_bytes=max_size_bytes or 1000,
-                )
-                db_session.add(vol)
-                await db_session.commit()
-                await db_session.refresh(vol)
-                return vol
-
-            mocks["volume"].create_volume = mock.AsyncMock(side_effect=create_vol_side_effect)
-
-            @contextlib.asynccontextmanager
-            async def _cleanup_session():
-                yield db_session
-
-            client_b = mock.AsyncMock()
-            client_b.delete_volume = mock.AsyncMock(side_effect=Exception("vol gone"))
-            client_c = mock.AsyncMock()
-            client_c.delete_container = mock.AsyncMock(side_effect=Exception("gone"))
-
-            with (
-                mock.patch(
-                    "app.container.client.get_container_client",
-                    new=mock.AsyncMock(side_effect=[Exception("no client"), client_b, client_c]),
-                ),
-                mock.patch(
-                    "app.db.session.async_session",
-                    new=mock.Mock(side_effect=[_cleanup_session(), Exception("session boom")]),
-                ),
-            ):
-                response = await client.post(
-                    "/api/servers/",
-                    headers={"Authorization": f"Bearer {user_token}"},
-                    json={
-                        "name": "cleanup-full-srv",
-                        "plan_id": str(plan.id),
-                        "environment_id": str(env.id),
-                        "volume_mounts": [
-                            {"volume_id": "", "mount_path": "/data", "mode": "read_write"},
-                            {"volume_id": "", "mount_path": "/extra", "mode": "read_only"},
-                        ],
-                    },
-                )
-
-        assert response.status_code == 500
-        assert len(created_names) == 2
-
-
 class TestStartStopRestartMopUp:
     @pytest.mark.asyncio
-    async def test_start_recreate_gpu_ensure_failure_propagates(
-        self, client, user_token, cov_server, db_session
-    ):
-        """HTTPException inside the start try-block re-raises (line 1180)."""
-        cov_server.container_id = "cid-ensure-fail"
-        await db_session.commit()
-
-        with (
-            mock.patch("app.api.servers.settings.credits_enabled", False),
-            mock.patch("app.api.servers.spawner.get_status", return_value="stopped"),
-            mock.patch("app.api.servers.spawner.delete", new=mock.AsyncMock()),
-            mock.patch(
-                "app.api.servers._ensure_gpu_devices",
-                new=mock.AsyncMock(side_effect=HTTPException(status_code=429, detail="no gpu")),
-            ),
-        ):
-            response = await client.post(
-                f"/api/servers/{cov_server.id}/start",
-                headers={"Authorization": f"Bearer {user_token}"},
-            )
-
-        assert response.status_code == 429
-
-    @pytest.mark.asyncio
-    async def test_start_no_container_legacy_volume_record_mount(
-        self, client, user_token, test_user, cov_server, db_session
-    ):
-        """Fresh-spawn start records the legacy volume mount (lines 1243-1244)."""
-        volume = Volume(
-            name=_unique("spawn-legacy-vol"),
-            display_name="Spawn Legacy Vol",
-            owner_id=test_user.id,
-            size_bytes=1000,
-        )
-        db_session.add(volume)
-        await db_session.commit()
-        await db_session.refresh(volume)
-
-        cov_server.volume_id = volume.id
-        await db_session.commit()
-
-        spawn_result = _mock_spawn_result()
-        spawn_result.volume_id = volume.id
-
-        with (
-            mock.patch("app.api.servers.settings.credits_enabled", False),
-            mock.patch(
-                "app.api.servers.spawner.spawn",
-                new=mock.AsyncMock(return_value=spawn_result),
-            ),
-            mock.patch("app.services.volume_service.VolumeService") as mock_vol_cls,
-        ):
-            mock_vol_cls.return_value.record_mount = mock.AsyncMock()
-            response = await client.post(
-                f"/api/servers/{cov_server.id}/start",
-                headers={"Authorization": f"Bearer {user_token}"},
-            )
-
-        assert response.status_code == 200, f"Response: {response.text}"
-        mock_vol_cls.return_value.record_mount.assert_called_once_with(str(volume.id))
-
-    @pytest.mark.asyncio
-    async def test_start_no_container_gpu_ensure_failure_propagates(
-        self, client, user_token, cov_server
-    ):
-        """HTTPException in the no-container spawn path re-raises (line 1254)."""
-        with (
-            mock.patch("app.api.servers.settings.credits_enabled", False),
-            mock.patch(
-                "app.api.servers._ensure_gpu_devices",
-                new=mock.AsyncMock(side_effect=HTTPException(status_code=429, detail="no gpu")),
-            ),
-        ):
-            response = await client.post(
-                f"/api/servers/{cov_server.id}/start",
-                headers={"Authorization": f"Bearer {user_token}"},
-            )
-
-        assert response.status_code == 429
-
-    @pytest.mark.asyncio
-    async def test_stop_already_stopped_delete_failure_swallowed(
-        self, client, user_token, cov_server, db_session
-    ):
-        """Stale-container removal failure on already-stopped is tolerated
-        (lines 1282-1283)."""
-        cov_server.container_id = "cid-stale-stop"
-        cov_server.status = "running"
-        await db_session.commit()
-
-        with (
-            mock.patch("app.api.servers.spawner.get_status", return_value="stopped"),
-            mock.patch(
-                "app.api.servers.spawner.delete",
-                new=mock.AsyncMock(side_effect=Exception("delete boom")),
-            ),
-        ):
-            response = await client.post(
-                f"/api/servers/{cov_server.id}/stop",
-                headers={"Authorization": f"Bearer {user_token}"},
-            )
-
-        assert response.status_code == 200
-        assert "already stopped" in response.json()["message"].lower()
-
-    @pytest.mark.asyncio
-    async def test_restart_gpu_delete_failure_swallowed(
+    async def test_restart_launch_error_propagates(
         self, client, user_token, cov_server, cov_plan_env, db_session
     ):
-        """GPU restart recreate tolerates stale-container delete failure
-        (lines 1425-1426)."""
-        plan, _ = cov_plan_env
-        plan.gpu_limit = 1
-        cov_server.container_id = "cid-gpu-restart"
+        """LaunchError from the lifecycle service maps to its HTTP status."""
+        from app.services.server_launch_service import LaunchError
+
+        cov_server.container_id = "cid-restart-launch-error"
         cov_server.status = "running"
         cov_server.allocated_gpu = 1
         await db_session.commit()
 
         with (
-            mock.patch("app.api.servers.settings.credits_enabled", False),
-            mock.patch("app.services.gpu_allocator.GpuAllocatorService") as mock_alloc_cls,
-            mock.patch("app.api.servers.spawner.get_status", return_value="paused"),
-            mock.patch(
-                "app.api.servers.spawner.delete",
-                new=mock.AsyncMock(side_effect=Exception("delete boom")),
-            ),
-            mock.patch(
-                "app.api.servers.spawner.spawn",
-                new=mock.AsyncMock(return_value=_mock_spawn_result()),
-            ),
+            mock.patch("app.api.servers.spawner.get_status", return_value="running"),
+            mock.patch("app.api.servers.get_driver", new=mock.AsyncMock()),
+            mock.patch("app.api.servers.ServerLifecycleService") as service_cls,
         ):
-            alloc = mock_alloc_cls.return_value
-            alloc.enabled = mock.Mock(return_value=True)
-            alloc.devices_for = mock.AsyncMock(return_value=["nvidia.com/gpu=0"])
-
+            service_cls.return_value.restart = mock.AsyncMock(
+                side_effect=LaunchError("gpu_wait", 409)
+            )
             response = await client.post(
                 f"/api/servers/{cov_server.id}/restart",
                 headers={"Authorization": f"Bearer {user_token}"},
             )
 
-        assert response.status_code == 200, f"Response: {response.text}"
-        assert response.json()["status"] == "running"
-
-    @pytest.mark.asyncio
-    async def test_restart_gpu_ensure_failure_propagates(
-        self, client, user_token, cov_server, cov_plan_env, db_session
-    ):
-        """HTTPException inside the restart try-block re-raises (line 1507)."""
-        plan, _ = cov_plan_env
-        plan.gpu_limit = 1
-        cov_server.container_id = "cid-gpu-restart-429"
-        cov_server.status = "running"
-        cov_server.allocated_gpu = 1
-        await db_session.commit()
-
-        with (
-            mock.patch("app.api.servers.settings.credits_enabled", False),
-            mock.patch("app.services.gpu_allocator.GpuAllocatorService") as mock_alloc_cls,
-            mock.patch("app.api.servers.spawner.get_status", return_value="paused"),
-            mock.patch("app.api.servers.spawner.delete", new=mock.AsyncMock()),
-            mock.patch(
-                "app.api.servers._ensure_gpu_devices",
-                new=mock.AsyncMock(side_effect=HTTPException(status_code=429, detail="no gpu")),
-            ),
-        ):
-            alloc = mock_alloc_cls.return_value
-            alloc.enabled = mock.Mock(return_value=True)
-
-            response = await client.post(
-                f"/api/servers/{cov_server.id}/restart",
-                headers={"Authorization": f"Bearer {user_token}"},
-            )
-
-        assert response.status_code == 429
+        assert response.status_code == 409
+        assert response.json()["detail"]["code"] == "gpu_wait"

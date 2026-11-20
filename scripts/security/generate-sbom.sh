@@ -122,6 +122,7 @@ if $SBOM_IMAGES; then
             "nukelab-auth-sidecar:latest"
             "nukelab-environment-base:latest"
             "nukelab-environment-workspace:latest"
+            "nukelab-volume-helper:latest"
         )
         for image in "${images[@]}"; do
             image_exists=false

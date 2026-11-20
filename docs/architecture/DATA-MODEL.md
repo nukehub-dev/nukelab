@@ -1,8 +1,36 @@
 # NukeLab Data Model
 
-This document describes the core entities and schema conventions. For the full SQL schema, see `backend/database/schema.sql`. The API exposes these entities through Pydantic models under `backend/app/schemas/`.
+This document describes the core entities and schema conventions. For exact
+fields and constraints, see the SQLAlchemy models under `backend/app/models/`
+and the Alembic migrations under `backend/alembic/versions/`.
 
 ## Entity overview
+
+Workflow schema additions are additive. `server_launch_intents` persists the selected
+revision, complete request, named mounts, original username and claim metadata in
+the reservation transaction so a fresh session can reconstruct exact launch intent.
+It is private orchestration data, distinct from successful launch provenance. `environment_revisions` stores approved
+configuration fingerprints and separate runtime/toolchain identities;
+`server_launch_records` stores append-only launch generations. Revision services
+recheck current authorization and revocation. A legacy server without a captured
+record remains unrecorded; today's template is not historical evidence.
+
+`server_queue` can retain versioned launch intent, a plan snapshot, expiry, claim
+token and resulting server identity. Null payload/version identifies legacy intent
+that the new claim primitive refuses to launch. `volume_operations` persists
+writer/mount intents and exclusive backup/restore protection, including uncertain
+executor outcomes. Owner APIs and task orchestration use these records for
+queueing, approved recreation and offline private-volume recovery. Runtime
+uncertainty preserves protection until explicit verified reconciliation.
+
+`volume_backups` records source metadata, archive format/checksum and bounded
+completion counts, operation fence, storage reservation and expiry. Its nullable
+source foreign key uses `SET NULL` so completed copies survive source deletion.
+Legacy backup rows without a verified format/checksum are never restore points.
+`volume_restores` pins a backup and stores the stable new destination identity,
+quota/storage reservation, fence and terminal outcome. Active or uncertain restore
+rows prevent artifact deletion and retention. Restoring/failed destinations stay
+inaccessible; only verified success activates the new volume.
 
 ```
 +---------+     +---------+     +-------------+       +---------+
@@ -25,192 +53,96 @@ This document describes the core entities and schema conventions. For the full S
 
 ## User
 
-Represents a platform account.
+A platform account. Roles are code-defined; quota limits live in
+`resource_quotas`, not on the user row.
 
-```python
-class User:
-    id: UUID
-    username: str              # Unique, URL-safe
-    email: str
-    full_name: str
-    role: str                  # References Role.name
-    permissions: list[str]     # Override permissions
-    groups: list[UUID]         # Organization groups
-    max_cpu: int
-    max_memory: str
-    max_disk: str
-    max_gpu: int
-    max_servers: int
-    nuke_balance: int
-    daily_allowance: int
-    credit_requests_blocked: bool      # Admin block on submitting credit requests
-    credit_requests_blocked_until: datetime | None  # Expiry for automatic unblock; NULL = indefinite
-    last_nuke_reset: datetime
-    profile: dict              # Avatar, timezone, department, etc.
-    preferences: dict          # Theme, language, defaults
-    security: dict             # MFA, last IP, failed attempts, locked_until
-    is_active: bool
-    is_verified: bool
-    created_at: datetime
-    updated_at: datetime
-```
+Key fields: `id`, `username`, `email`, `first_name`, `last_name`,
+`password_hash`, `role`, `oauth_provider`/`oauth_id`, `nuke_balance`,
+`daily_allowance` (+ time-boxed override), `last_nuke_reset`, `avatar_url`,
+`profile_visibility`, `profile`, `preferences`, `security`, `is_active`,
+`is_verified`, `email_verified_at`, `credit_requests_blocked`/`_until`,
+`last_login`, `login_count`, `created_at`, `updated_at`.
+
+`profile`, `preferences` and `security` are flexible JSON fields. There is no
+per-user permission override and no group membership column.
 
 ## Role
 
-A named collection of permissions. Roles are seeded at install and can be customized by super admins.
+Roles are predefined in `backend/app/core/roles.py` and expanded through the
+permission implications map. Super admins can persist role permission overrides
+in `system_settings.role_permissions`; there is no `roles` table.
 
-```python
-class Role:
-    name: str                  # e.g., "admin", "user"
-    permissions: list[str]
-    is_system: bool            # True for built-in roles
-    level: int                 # Higher level = more privilege
-```
+`ResourceQuota` rows can apply limits by `user_id`, `role`, or `plan_id` and
+track current usage totals.
 
 ## Server
 
-Represents a user container.
+A user runtime. `environment_id` and `plan_id` are nullable for legacy rows.
 
-```python
-class Server:
-    id: UUID
-    name: str
-    user_id: UUID
-    environment_id: UUID
-    plan_id: UUID
-    container_id: str
-    image: str
-    status: ServerStatus       # pending, starting, running, stopping, stopped, error
-    allocated_cpu: float
-    allocated_memory: str
-    allocated_disk: str
-    allocated_gpu: int
-    max_runtime: str
-    idle_timeout: str
-    internal_port: int         # Theia port, typically 3000
-    external_url: str          # /user/{username}/{server_id}
-    health_status: str
-    health_check_config: dict
-    last_health_check: datetime
-    status_reason: str
-    stopped_by: UUID
-    stop_reason: str
-    started_at: datetime
-    stopped_at: datetime
-    last_activity: datetime
-    expires_at: datetime
-    created_at: datetime
-    updated_at: datetime
-```
+Key fields: `id`, `name`, `user_id`, `environment_id`, `plan_id`, `container_id`,
+`image`, `volume_id`, `volume_mode`, `status`, `allocated_cpu`,
+`allocated_memory`, `allocated_disk`, `allocated_gpu`, `internal_port`,
+`external_url`, `health_status`, `health_check_config`, `last_health_check`,
+`status_reason`, `stopped_by`, `stop_reason`, `total_cost`, `last_billed_at`,
+`expires_at`, `started_at`, `stopped_at`, `last_activity`, `created_at`,
+`updated_at`.
 
-## Environment
+Public URLs use `/user/{username}/{server_name}`. Runtime and idle limits come
+from platform settings, not server columns.
 
-Admin-created template that defines the container image, packages, and settings for a server.
+## EnvironmentTemplate
 
-```python
-class Environment:
-    id: UUID
-    name: str
-    slug: str
-    description: str
-    image: str
-    dockerfile: str            # Optional custom Dockerfile
-    packages: list[str]
-    env_vars: dict[str, str]
-    volumes: list[str]
-    ports: list[int]
-    icon: str
-    color: str
-    category: str
-    is_active: bool
-    is_public: bool
-    created_by: UUID
-    created_at: datetime
-    updated_at: datetime
-```
+Admin-created template for a runtime image and optional scientific toolchain.
 
-## Plan
+Key fields: `id`, `name`, `slug`, `description`, `image`, `tool_image`,
+`tool_mounts`, `dockerfile`, `packages`, `environment_variables`, `volumes`,
+`ports`, `icon`, `color`, `category`, `is_active`, `is_public`, `created_by`,
+`created_at`, `updated_at`.
+
+The table is `environment_templates`; the API exposes it as an environment.
+
+## ServerPlan
 
 Resource tier independent of environment.
 
-```python
-class Plan:
-    id: UUID
-    name: str                  # e.g., "small", "medium", "large"
-    description: str
-    cpu: float
-    memory: str
-    disk: str
-    gpu: int
-    max_runtime: str
-    idle_timeout: str
-    allow_scheduling: bool
-    allow_snapshots: bool
-    priority: str              # low, normal, high
-    min_role: str
-    max_per_user: int
-    requires_approval: bool
-    is_active: bool
-    is_default: bool
-    display_order: int
-    nukes_per_hour: int
-    created_at: datetime
-    updated_at: datetime
-```
+Key fields: `id`, `name`, `slug`, `description`, `category`, `cpu_limit`,
+`memory_limit`, `disk_limit`, `gpu_limit`, `max_servers_per_user`,
+`cost_per_hour`, `cooldown_seconds`, `allow_scheduling`, `allow_snapshots`,
+`is_public`, `visible_to_roles`, `is_active`, `priority`, `created_at`,
+`updated_at`.
+
+`is_public` or a matching `visible_to_roles` entry makes a plan available to a
+role. `PlanService` refuses changes that would leave no active plan or no active
+plan available to the `user` role.
 
 ## Volume
 
 Persistent storage attached to servers or shared by workspaces.
 
-```python
-class Volume:
-    id: UUID
-    name: str
-    user_id: UUID               # Owner
-    max_size_bytes: int
-    used_bytes: int
-    mount_path: str
-    is_active: bool
-    is_archived: bool
-    created_at: datetime
-    updated_at: datetime
-```
+Key fields: `id`, `name`, `display_name`, `owner_id`, `visibility`, `size_bytes`,
+`max_size_bytes`, `status`, `last_mounted_at`, `description`, `labels`,
+`created_at`, `updated_at`.
 
-## Shared Workspace
+`visibility` is `private`, `workspace`, or `public`; `labels` is JSONB and keeps
+the home-volume marker after a server is deleted.
 
-A group-owned volume with member and invitation management.
+## SharedWorkspace
 
-```python
-class SharedWorkspace:
-    id: UUID
-    name: str
-    owner_id: UUID
-    volume_id: UUID
-    members: list[WorkspaceMember]
-    invitations: list[WorkspaceInvitation]
-    is_active: bool
-    created_at: datetime
-    updated_at: datetime
-```
+A group-owned workspace with members, invitations, and one or more volumes.
+`SharedWorkspace` has `id`, `name`, `description`, `owner_id`, `is_active`,
+timestamps, and relationships to `WorkspaceMember`, `WorkspaceInvitation`,
+`WorkspaceVolume`, and plan access. `WorkspaceVolume` associates a workspace and
+volume with a `read_only`/`read_write` role.
 
-## Credit Transaction
+## CreditTransaction
 
-Immutable NUKE ledger entry.
+Immutable NUKE ledger entry, range-partitioned by `created_at`.
 
-```python
-class CreditTransaction:
-    id: UUID
-    timestamp: datetime
-    user_id: UUID
-    amount: int                 # Positive = credit, negative = debit
-    balance_after: int
-    type: str                   # daily_allowance, server_usage, admin_grant, admin_deduct, purchase, refund
-    description: str
-    server_id: UUID
-    plan_id: UUID
-    actor_id: UUID
-    metadata: dict
-```
+Key fields: `id`, `user_id`, `amount`, `balance_after`, `type`, `description`,
+`server_id`, `plan_id`, `actor_id`, `meta`, `created_at`.
+
+`meta` is the JSONB metadata field; there is no `timestamp` or `metadata`
+column.
 
 ## Credit Request
 
@@ -222,71 +154,96 @@ an `allowance` request sets the user's base `daily_allowance` instead (no
 ledger entry). Open requests past 24h trigger hourly reviewer reminders
 (throttled to one per request per 24h).
 
-```python
-class CreditRequest:
-    id: UUID
-    user_id: UUID
-    amount: int
-    reason: str
-    request_type: str          # top_up, allowance
-    status: str                # pending, needs_info, approved, rejected, cancelled
-    reviewed_by: UUID
-    review_note: str
-    granted_amount: int
-    transaction_id: UUID       # Plain column, no FK (ledger is range-partitioned)
-    created_at: datetime
-    reviewed_at: datetime
-```
+Key fields: `id`, `user_id`, `amount`, `reason`, `request_type`, `status`,
+`reviewed_by`, `review_note`, `granted_amount`, `transaction_id`, `created_at`,
+`reviewed_at`. `transaction_id` is a plain column because the ledger is
+partitioned and cannot be referenced by a foreign key.
 
-Discussion between requester and reviewers lives in a message thread;
-internal notes are hidden from the requester:
+Discussion between requester and reviewers lives in
+`credit_request_messages` (`request_id`, nullable `author_id`, `body`,
+`is_internal`, `created_at`). Internal notes are hidden from the requester.
 
-```python
-class CreditRequestMessage:
-    id: UUID
-    request_id: UUID
-    author_id: UUID            # Nullable (SET NULL) so threads survive account deletion
-    body: str
-    is_internal: bool          # Reviewer-only note; no requester notification
-    created_at: datetime
-```
+## ActivityLog
 
-## Audit Log
+Immutable audit record, range-partitioned by `created_at`.
 
-Immutable record of admin/support actions.
+Key fields: `id`, `actor_id`, `action`, `target_type`, `target_id`, `details`,
+`before_state`, `after_state`, `request_id`, `ip_address`, `user_agent`,
+`created_at`. There is no separate `AuditLog` table or actor username/role
+column; projections join the actor when needed.
 
-```python
-class AuditLog:
-    id: UUID
-    timestamp: datetime
-    actor_id: UUID
-    actor_username: str
-    actor_role: str
-    action: str
-    target_type: str
-    target_id: UUID
-    target_name: str
-    before_state: dict
-    after_state: dict
-    ip_address: str
-    user_agent: str
-    success: bool
-    error_message: str
-    request_id: UUID
-```
+## Durable launch workflow
+
+### ServerLaunchOperation
+
+Immutable action intent plus a fenced executor state for a stable server.
+Fields include `server_id`, `owner_id`, `action`, `state`, `fencing_token`,
+`revision_id`, `request_payload`, `mounts`, `previous_mounts`, `gpu_devices`,
+`username`, `environment_slug`, `resources`, `generation`, previous runtime
+identity, reason code, and timestamps. A partial unique index allows only one
+`prepared`/`executing`/`uncertain` operation per server. Only `state`,
+`reason_code`, `updated_at`, and `finished_at` are mutable.
+
+### ServerQueue
+
+Owner-scoped waiting request. Status values are `pending`, `scheduled`,
+`starting`, `started`, `failed`, and `cancelled`; a partial unique index keeps
+one active request per owner/name. Durable fields include `request_payload`,
+`request_version`, `plan_snapshot`, `revision_id`, `requested_gpu`, `expires_at`,
+`claimed_at`, `claim_token`, `server_id`, `reason_code`, and timestamps.
+
+### EnvironmentRevision
+
+Approved immutable environment fingerprint. Fields: `template_id`,
+`fingerprint`, `template_fingerprint`, `configuration`, `runtime_identity`,
+`toolchain_identity`, `revoked`, `created_at`. Only `revoked` may change after
+creation.
+
+### ServerLaunchIntent
+
+Immutable provisioning intent committed before external launch work. Primary
+key `server_id`; fields include `owner_id`, `revision_id`, `request_payload`,
+`mounts`, `gpu_devices`, `environment_slug`, `username`, `queue_id`,
+`claim_token`, `created_at`.
+
+### ServerLaunchRecord
+
+Append-only verified launch generation. Fields: `id`, `server_id`, `user_id`,
+`revision_id`, `generation`, `manifest`, `actual_runtime_identity`,
+`actual_toolchain_identity`, `created_at`. `(server_id, generation)` is unique.
+
+### VolumeOperation
+
+Durable writer/mount/backup/restore exclusion. Composite key
+`(operation_id, volume_id)`; fields include `owner_id`, `kind`, `state`,
+`fencing_token`, `helper_identity`, `reason_code`, and timestamps. A partial
+unique index permits one exclusive backup/restore operation per volume while it
+is `reserved`, `running`, or `recovery_required`.
+
+### VolumeBackup and VolumeRestore
+
+`volume_backups` stores source metadata, archive format/checksum, logical and
+reserved bytes, operation fence, helper identity, artifact path, expiry, status,
+and completion time. `volume_restores` pins a backup and stores the new
+destination identity, quota/storage reservation, fence, status, and completion
+time. Restore rows prevent artifact deletion and retention until terminal.
 
 ## Schema conventions
 
-- Primary keys are UUIDs generated by `gen_random_uuid()`.
-- Time-series tables (`activity_logs`, `server_metrics`, `request_metrics`) are range-partitioned by month.
-- Each partitioned table has a `DEFAULT` partition as a safety net.
-- JSONB columns store flexible or extensible data (`profile`, `preferences`, `security`, `metadata`).
-- Audit and credit tables are append-only; application code does not update or delete rows.
-- Foreign keys enforce referential integrity; deletion of referenced rows is typically restricted or set to soft-delete.
+- Primary keys are UUIDs generated by the application with `uuid.uuid4()` unless
+  a migration explicitly adds a server default.
+- Range-partitioned tables by month: `activity_logs`, `server_metrics`,
+  `request_metrics`, and `credit_transactions`. Each has a `DEFAULT` partition.
+- JSON/JSONB columns store flexible data (`profile`, `preferences`, `security`,
+  `meta`, workflow payloads and manifests).
+- Audit and credit tables are append-only; application code does not update or
+  delete rows.
+- Foreign keys enforce referential integrity; deletion is generally restricted,
+  cascaded for owned child rows, or set to null for optional references.
 
 ## Related documents
 
 - [SERVER-LIFECYCLE.md](SERVER-LIFECYCLE.md) for how entities transition through states
 - [AUTH.md](AUTH.md) for user and role authorization details
 - [operations/OPERATIONS.md](../operations/OPERATIONS.md) for database profiling and partition management
-- `backend/database/schema.sql` for the complete schema
+- `backend/app/models/` and `backend/alembic/versions/` for the complete schema

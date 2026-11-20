@@ -92,7 +92,7 @@ backend/.venv-security/
 backend/.venv-dev/
 
 # Docker volumes / runtime state
-volumes/
+/volumes/
 .nukelab-dev-compose.yml
 .nukelab-state.sh
 .nukelab-state-dev.sh

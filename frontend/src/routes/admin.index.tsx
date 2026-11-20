@@ -24,6 +24,7 @@ import {
   Bell,
   ExternalLink,
   Activity,
+  ListChecks,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store'
@@ -65,6 +66,14 @@ interface AdminCategory {
 }
 
 const categories: AdminCategory[] = [
+  {
+    label: 'Setup',
+    description: 'Publish environments and plans so users can deploy',
+    icon: ListChecks,
+    href: '/admin/setup',
+    requiredPermission: PERMISSIONS.ADMIN_ACCESS,
+    color: 'bg-primary/10 text-primary',
+  },
   {
     label: 'Users',
     description: 'Manage user accounts, roles, and access',

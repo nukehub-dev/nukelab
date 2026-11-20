@@ -1,8 +1,12 @@
 # NukeLab Penetration Test Findings
 
-> **Status:** Template — populate during engagement  
+> **Status:** Active — internal findings  
 > **Plan:** `PENETRATION-TEST-PLAN.md`  
 > **Remediation tracker:** `PENETRATION-TEST-REMEDIATION.md`
+>
+> Findings PENT-NKL-014 through PENT-NKL-019 record interim CVSS 3.1 vectors.
+> The final engagement report will recalculate them against the CVSS 4.0
+> standard required by the test plan.
 
 ---
 
@@ -35,8 +39,14 @@
 | PENT-NKL-009 | Auth sidecar mounts wrong server-auth public key volume | High | Container Security / Authentication | Closed | Security Eng | Backend Eng | 2026-06-28 | 2026-06-28 |
 | PENT-NKL-010 | Server gateway page reloads instead of opening terminal | Medium | Frontend Security / Cache Handling | Closed | Security Eng | Frontend Eng | 2026-06-28 | 2026-06-28 |
 | PENT-NKL-011 | Backend reports server running before container is ready | Medium | Backend / Container Orchestration | Closed | Security Eng | Backend Eng | 2026-06-28 | 2026-06-28 |
-| PENT-NKL-012 | Shared read-only volumes leak host storage size and usage | Low | Container Security / Information Disclosure | Open | Security Eng | Platform Eng | 2026-07-15 | |
+| PENT-NKL-012 | Shared read-only volumes leak host storage size and usage | Low | Container Security / Information Disclosure | Closed | Security Eng | Platform Eng | 2026-07-15 | 2026-08-22 |
 | PENT-NKL-013 | User resource stats endpoint missing authorization check | Medium | API1:2023 BOLA / Information Disclosure | Closed | Security Eng | Backend Eng | 2026-07-29 | 2026-07-29 |
+| PENT-NKL-014 | Delayed status observations could invalidate lifecycle reservations | Medium | Backend / Lifecycle Fencing | Retest Ready | Security Eng | Backend Eng | 2026-11-16 | |
+| PENT-NKL-015 | Logout runtime mutations bypassed lifecycle fencing | Medium | Backend / Lifecycle Fencing | Retest Ready | Security Eng | Backend Eng | 2026-11-16 | |
+| PENT-NKL-016 | Recreation preview omitted metadata read authorization | Medium | API1:2023 BOLA / Provenance | Closed | Security Eng | Backend Eng | 2026-11-17 | 2026-11-17 |
+| PENT-NKL-017 | Volume deletion mistook runtime failure for absence | Medium | Backend / Volume Recovery | Retest Ready | Security Eng | Backend Eng | 2026-11-18 | |
+| PENT-NKL-018 | Queue-admitted containers bypassed runtime hardening settings | Medium | Container Security / Configuration | Retest Ready | Security Eng | Backend Eng | 2026-11-18 | |
+| PENT-NKL-019 | Admin bulk lifecycle bypassed cross-user grant and audit | High | Broken Access Control / Audit | Retest Ready | Security Eng | Backend Eng | 2026-11-18 | |
 
 ---
 
@@ -98,9 +108,9 @@ Specific code-level or config fix.
 | Severity | Open | In Progress | Retest Ready | Retested | Closed | Risk Accepted |
 |----------|------|-------------|--------------|----------|--------|---------------|
 | Critical | 0 | 0 | 0 | 0 | 0 | 0 |
-| High | 0 | 0 | 0 | 0 | 2 | 0 |
-| Medium | 1 | 0 | 0 | 0 | 7 | 0 |
-| Low | 1 | 0 | 0 | 0 | 0 | 0 |
+| High | 0 | 0 | 1 | 0 | 3 | 0 |
+| Medium | 1 | 0 | 4 | 0 | 9 | 0 |
+| Low | 0 | 0 | 0 | 0 | 1 | 0 |
 | Informational | 0 | 0 | 0 | 0 | 0 | 0 |
 
 ---
@@ -317,23 +327,20 @@ Upgraded `python-socketio` to `>=5.16.2` in `backend/requirements.txt` and rebui
 **Severity:** Medium  
 **CVSS 4.0 Score:** 5.5  
 **OWASP Category:** A06:2021 Vulnerable and Outdated Components / Supply Chain  
-**Status:** Open  
+**Status:** Closed  
 **Opened:** 2026-06-28  
+**Closed:** 2026-06-29  
 **Reporter:** Security Eng  
 **Owner:** Platform Eng  
-**Component:** `backend/Dockerfile`, `frontend/Dockerfile`, `environments/base/Dockerfile`, `services/auth-sidecar/Dockerfile`
+**Component:** `backend/Dockerfile`, `frontend/Dockerfile`, `environments/base/Dockerfile`, `services/auth-sidecar/Dockerfile`, `services/volume-helper/Dockerfile`
 
 **Description:**
 External base images are referenced by floating tags instead of by digest. A malicious or compromised registry can serve a different image than the one originally tested, introducing vulnerabilities or backdoors into the build pipeline.
 
 **Evidence:**
 
-- `./scripts/security/check-base-image-pinning.sh --strict` reports 5 unpinned external base images:
-  - `python:3.13-slim`
-  - `debian:13`
-  - `node:24-alpine`
-  - `docker.io/library/nginx:alpine`
-  - `golang:1.25-alpine`
+- `./scripts/security/check-base-image-pinning.sh --strict` reports zero unpinned external base images.
+- External Dockerfiles use `@sha256:` digests, including the volume-helper image.
 - Internal multi-stage aliases (`base`) and internal `nukelab-*` images are correctly skipped.
 
 **Impact:**
@@ -619,12 +626,6 @@ Eliminated the `nukelab-cpu-lib` shared volume by baking `libnukelab_cpu.so` int
 
 ---
 
-**Last Updated:** 2026-07-29
-
-**Note:** Container hardening controls (PENT-NKL-001 through PENT-NKL-004) are implemented, covered by regression tests, and verified through a live container spawn/inspection. They are marked **Closed**.
-
----
-
 ### PENT-NKL-013: User resource stats endpoint missing authorization check
 
 **Severity:** Medium  
@@ -660,3 +661,183 @@ Endpoint now mirrors `GET /users/{user_id}`: self-view allowed; other users requ
 
 - OWASP API1:2023 Broken Object Level Authorization
 - `backend/app/core/permissions.py`
+
+### PENT-NKL-014: Delayed status observations could invalidate lifecycle reservations
+
+**Severity:** Medium
+
+**CVSS 3.1:** 4.3 (`AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:L/A:N`)
+
+**Status:** Retest Ready
+
+**Opened:** 2026-11-16
+
+**Owner:** Backend Eng
+
+**Component:** `backend/app/api/servers.py`
+
+Combined runtime retest remains pending.
+
+A read-side runtime probe could finish after another lifecycle action reserved or
+replaced a server. Applying that stale result could mark protected work stopped
+and undermine resource accounting. The probe now skips reserved starting/stopping
+states and checks container identity, row version and active journal under
+admission before applying an observation. Runtime probe failure preserves loaded
+state; database failures are not swallowed as a successful status refresh. Paused
+runtimes retain accounting because they still hold host memory.
+
+Health probes also compare sampled container/version under admission before
+persisting results and hand that version to restart admission; failure streaks
+are scoped to each runtime container.
+
+Retest `backend/tests/security/test_server_status_fencing.py` and
+`backend/tests/security/test_health_observation_fencing.py`, including delayed
+observations during generation, container and journal changes. Also rehearse
+concurrent browser reads and lifecycle actions against an isolated runtime.
+
+### PENT-NKL-015: Logout runtime mutations bypassed lifecycle fencing
+
+**Severity:** Medium
+
+**CVSS 3.1:** 4.3 (`AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:L/A:N`)
+
+**Status:** Retest Ready
+
+**Opened:** 2026-11-16
+
+**Owner:** Backend Eng
+
+Combined runtime retest remains pending.
+
+Logout's optional server shutdown used direct runtime calls and independent GPU
+release. A concurrent replacement could finish before logout wrote its stale
+result, losing the newer server state and reservation. Logout now delegates to
+verified termination and preserves active/uncertain claims. Token revocation
+commits before lifecycle transaction ownership; one failed server does not block
+logout or subsequent items.
+
+Retest `backend/tests/security/test_logout_lifecycle_fencing.py` and auth API
+transport regressions, then race logout against replacement on an isolated daemon.
+
+### PENT-NKL-016: Recreation preview omitted metadata read authorization
+
+**Severity:** Medium
+
+**CVSS 3.1:** 4.3 (`AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:N/A:N`)
+
+**Status:** Closed
+
+**Opened:** 2026-11-17
+
+**Closed:** 2026-11-17
+
+**Owner:** Backend Eng
+
+**Component:** `backend/app/api/server_provenance.py`
+
+The new preview initially required management permission/scope while returning a
+saved source manifest. A management-only token with an owned launch ID could read
+metadata that history/export correctly denied without read scope. Preview now
+requires separate read and write permission checks and both read/manage scopes.
+Final recreation still accepts manage scope without returning source metadata.
+History marks read-only tokens ineligible to recreate; private metadata responses
+use no-store caching. This was found and corrected before the feature was released.
+
+Retest `backend/tests/security/test_provenance_recreation.py`: management-only and
+read-only tokens cannot preview; combined scopes can; a dynamic write-only role
+cannot preview; authorized final creation retains its normal management boundary.
+
+### PENT-NKL-017: Volume deletion mistook runtime failure for absence
+
+**Severity:** Medium
+
+**CVSS 3.1:** 4.9 (`AV:N/AC:L/PR:H/UI:N/S:U/C:N/I:H/A:N`)
+
+**Status:** Retest Ready
+
+**Opened:** 2026-11-18
+
+**Owner:** Backend Eng
+
+**Component:** `backend/app/container/docker_driver.py`, `backend/app/services/volume_service.py`
+
+Isolated failure retest remains required.
+
+The runtime adapter swallowed deletion errors and returned no volume for every
+inspection failure. Database cleanup could consequently discard ownership and
+quota records while sensitive physical storage remained. Deletion now commits a
+durable exclusive operation first, rejects every observed container attachment,
+and removes metadata only after verified runtime absence. Only a daemon `404`
+means absence; other errors retain a protected operation and require recovery.
+Account deletion also requires explicit resource cleanup.
+
+Retest `backend/tests/security/test_volume_mutation_exclusion.py` and the driver
+regressions, including daemon failure and ambiguous post-delete inspection.
+An isolated daemon failure drill must confirm physical data, ownership records
+and reservations remain protected until absence is established.
+
+### PENT-NKL-018: Queue-admitted containers bypassed runtime hardening settings
+
+**Severity:** Medium
+
+**CVSS 3.1:** 6.5 (`AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N`)
+
+**Status:** Retest Ready
+
+**Opened:** 2026-11-18
+
+**Owner:** Backend Eng
+
+**Component:** `compose.yml`, `backend/app/container/docker_driver.py`
+
+`celery-worker` runs queue dispatch, scheduled starts and health restarts, but
+Compose did not pass `CONTAINER_HARDENING_ENABLED`, `DEV_MODE`, server-auth
+settings or the public URL to that container. The worker therefore defaulted
+hardening off and created queue-admitted servers as root with no capability
+drop, writable rootfs and no no-new-privileges policy, while API-created
+servers remained hardened. Environment parity, queue admission and the
+read-only-rootfs `/home` tmpfs are now supplied to the worker; the combined
+real-stack acceptance scenario inspects the admitted container image and
+verifies the runtime identity and volume data.
+
+Retest the combined browser/worker/runtime scenario and inspect a
+queue-admitted container with `./nukelabctl verify-hardening` on an isolated
+stack. Also verify scheduled and health-restart spawns use the same settings.
+
+### PENT-NKL-019: Admin bulk lifecycle bypassed cross-user grant and audit
+
+**Severity:** High
+
+**CVSS 3.1:** 7.2 (`AV:N/AC:L/PR:H/UI:N/S:U/C:N/I:H/A:H`)
+
+**Status:** Retest Ready
+
+**Opened:** 2026-11-18
+
+**Owner:** Backend Eng
+
+**Component:** `backend/app/api/admin.py`
+
+The admin bulk start/stop/delete endpoint required only `ADMIN_ACCESS`. It
+called the shared lifecycle helpers for arbitrary owners without requiring
+`SERVERS_WRITE_ALL`/`SERVERS_ACCESS_OTHERS`, without a cross-user reason, and
+without the audit/notification applied by the owner bulk endpoint. A role
+granted admin dashboard access but not server-write authority could therefore
+mutate other users' runtimes silently.
+
+The endpoint now requires `SERVERS_WRITE_ALL`, accepts a cross-user reason, and
+runs the shared cross-user audit/notification before the action. Regression
+coverage includes the missing-reason/audit path and a limited admin with only
+`ADMIN_ACCESS`, which is rejected with 403 before any lifecycle action:
+`backend/tests/security/test_admin_bulk_authorization.py`.
+
+Retest with a role holding `ADMIN_ACCESS` but not server-write permission, and
+with a foreign server without/with a reason, on an isolated stack.
+
+---
+
+**Last Updated:** 2026-11-19
+
+**Note:** Container hardening controls (PENT-NKL-001 through PENT-NKL-004) are
+implemented, covered by regression tests, and verified through a live container
+spawn/inspection. They are marked **Closed**.

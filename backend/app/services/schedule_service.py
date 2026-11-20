@@ -5,17 +5,24 @@
 Server schedule service for cron-based server scheduling.
 """
 
+import contextlib
 import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.container.factory import get_fresh_driver
+from app.core.logging import get_logger
 from app.models.notification import Notification
 from app.models.server import Server
 from app.models.server_schedule import ServerSchedule
 from app.services.notification_service import broadcast_server_status_change
+from app.services.server_lifecycle_service import ServerLifecycleService
+from app.services.server_termination_service import ServerTerminationService
+
+logger = get_logger(__name__)
 
 
 def _validate_cron(cron_expression: str) -> None:
@@ -172,157 +179,91 @@ class ScheduleService:
         return result.scalars().all()
 
     async def execute_schedule(self, schedule: ServerSchedule) -> dict[str, Any]:
-        """Execute a schedule action on a server"""
-        from app.api.servers import _gpu_requires_recreate, _respawn_server_container
-        from app.container.spawner import spawner
-        from app.services.quota_service import QuotaService
-
-        # Get server
-        result = await self.db.execute(select(Server).where(Server.id == schedule.server_id))
+        """Execute through shared admission using one loop-owned runtime driver."""
+        # Earlier actions may have rolled back read transactions, expiring every
+        # ORM row in a scanner's list. ORM identity remains available without I/O.
+        identity = inspect(schedule).identity
+        schedule_id = identity[0] if identity else schedule.id
+        schedule = await self.db.get(ServerSchedule, schedule_id, populate_existing=True)
+        if schedule is None:
+            return {"success": False, "error": "Schedule not found"}
+        server_id, action = schedule.server_id, schedule.action
+        cron, timezone = schedule.cron_expression, schedule.timezone
+        result = await self.db.execute(
+            select(Server).where(Server.id == server_id).execution_options(populate_existing=True)
+        )
         server = result.scalar_one_or_none()
-
-        if not server:
+        if server is None:
             schedule.is_active = False
             schedule.error_message = "Server not found"
             await self.db.commit()
             return {"success": False, "error": "Server not found"}
-
-        success = False
-        message = ""
-
+        owner_id, server_name, plan_id = server.user_id, server.name, server.plan_id
+        original_status = server.status
+        success, message = False, ""
+        runtime = None
         try:
-            if schedule.action == "start":
-                if server.container_id:
-                    actual = await spawner.get_status(server.container_id)
-                    if actual == "stopped":
-                        if await _gpu_requires_recreate(self.db, server):
-                            # GPU server: never plain-start a container with
-                            # stale baked-in DeviceRequests — its exclusive
-                            # device rows may have been released and the device
-                            # reassigned. Recreate with the devices it owns.
-                            new_server = await _respawn_server_container(
-                                server, self.db, server.name
-                            )
-                            server.container_id = new_server.container_id
-                            server.image = new_server.image
-                            server.volume_id = new_server.volume_id
-                            server.external_url = new_server.external_url
-                        else:
-                            if not await spawner.start(server.container_id):
-                                # Runtime start failed (logged by spawner). Do
-                                # not mark the server running.
-                                message = f"Server '{server.name}' failed to start (runtime error)"
-                                await self.db.commit()
-                                return {"success": False, "error": message}
-                        server.status = "running"
-                        server.started_at = datetime.now(UTC).replace(tzinfo=None)
-                        server.last_activity = datetime.now(UTC).replace(tzinfo=None)
-                        success = True
-                        message = f"Server '{server.name}' started by schedule"
-                        await broadcast_server_status_change(
-                            server.user_id, str(server.id), "running"
-                        )
-                else:
-                    # Need to respawn - this is complex, skip for now
-                    message = "Server container missing, cannot auto-start"
-
-            elif schedule.action == "stop":
-                if server.container_id and server.status == "running":
-                    if not await spawner.delete(server.container_id):
-                        # Runtime delete failed (logged by spawner). Do not
-                        # mark the server stopped: the container may still be
-                        # running. Retry on the next schedule evaluation.
-                        message = f"Server '{server.name}' failed to stop (runtime error)"
-                        await self.db.commit()
-                        return {"success": False, "error": message}
-                    server.container_id = None
-                    server.status = "stopped"
-                    server.stopped_at = datetime.now(UTC).replace(tzinfo=None)
-                    server.stop_reason = "scheduled_stop"
-
-                    from app.services.gpu_allocator import GpuAllocatorService
-
-                    await GpuAllocatorService(self.db).release(str(server.id))
-                    await broadcast_server_status_change(
-                        server.user_id, str(server.id), "stopped", {"stop_reason": "scheduled_stop"}
+            needs_action = (
+                (action == "start" and original_status != "running")
+                or (action == "stop" and original_status != "stopped")
+                or (action == "restart" and original_status == "running")
+            )
+            if needs_action:
+                runtime = await get_fresh_driver()
+                if action == "stop":
+                    server = await ServerTerminationService(self.db, runtime).stop(
+                        server_id, owner_id
                     )
-
-                    # Reconcile exact billing for final partial interval
-                    if server.plan_id:
+                    server.stop_reason = "scheduled_stop"
+                    # Billing intentionally happens outside admission/runtime locks.
+                    if plan_id:
                         from app.models.server_plan import ServerPlan
                         from app.services.credit_service import CreditService
 
-                        credit_service = CreditService(self.db)
-                        plan_result = await self.db.execute(
-                            select(ServerPlan).where(ServerPlan.id == server.plan_id)
-                        )
-                        plan = plan_result.scalar_one_or_none()
+                        plan = await self.db.get(ServerPlan, plan_id)
                         if plan:
-                            await credit_service.reconcile_server_billing(server, plan)
-
-                    # Decrement quota
-                    if server.plan_id:
-                        quota_service = QuotaService(self.db)
-                        await quota_service.decrement_usage(
-                            user_id=str(server.user_id), plan_id=str(server.plan_id)
-                        )
-
-                    success = True
-                    message = f"Server '{server.name}' stopped by schedule"
-
-            elif schedule.action == "restart":
-                if server.container_id and server.status == "running":
-                    if await _gpu_requires_recreate(self.db, server):
-                        # GPU server: recreate instead of stop+start (stale
-                        # baked-in DeviceRequests). Its device rows are still
-                        # reserved — no release on restart — so the respawn
-                        # reuses the same devices.
-                        new_server = await _respawn_server_container(server, self.db, server.name)
-                        server.container_id = new_server.container_id
-                        server.image = new_server.image
-                        server.volume_id = new_server.volume_id
-                        server.external_url = new_server.external_url
+                            await CreditService(self.db).reconcile_server_billing(server, plan)
+                    status, verb = "stopped", "stopped"
+                else:
+                    lifecycle = ServerLifecycleService(self.db, runtime)
+                    if action == "start":
+                        server = await lifecycle.start(server_id, owner_id=owner_id)
+                        verb = "started"
                     else:
-                        if not await spawner.stop(server.container_id):
-                            message = (
-                                f"Server '{server.name}' failed to stop for restart (runtime error)"
-                            )
-                            await self.db.commit()
-                            return {"success": False, "error": message}
-                        if not await spawner.start(server.container_id):
-                            message = (
-                                f"Server '{server.name}' failed to start for restart "
-                                "(runtime error)"
-                            )
-                            await self.db.commit()
-                            return {"success": False, "error": message}
-                    server.started_at = datetime.now(UTC).replace(tzinfo=None)
-                    server.last_activity = datetime.now(UTC).replace(tzinfo=None)
-                    success = True
-                    message = f"Server '{server.name}' restarted by schedule"
-                    await broadcast_server_status_change(server.user_id, str(server.id), "running")
-
-            if success:
-                # Create notification
-                notification = Notification(
-                    user_id=server.user_id,
-                    title="Schedule Executed",
-                    message=message,
-                    type="server",
-                    severity="info",
+                        server = await lifecycle.restart(server_id, owner_id=owner_id)
+                        verb = "restarted"
+                    status = "running"
+                success = True
+                message = f"Server '{server_name}' {verb} by schedule"
+                self.db.add(
+                    Notification(
+                        user_id=owner_id,
+                        title="Schedule Executed",
+                        message=message,
+                        type="server",
+                        severity="info",
+                    )
                 )
-                self.db.add(notification)
-
-            await self.db.commit()
-
-        except Exception as e:
+                await self.db.commit()
+                await broadcast_server_status_change(
+                    owner_id,
+                    str(server_id),
+                    status,
+                    *([{"stop_reason": "scheduled_stop"}] if action == "stop" else []),
+                )
+            # Refresh after the lifecycle boundary expired the scanner's ORM rows.
+            current = await self.db.get(ServerSchedule, schedule_id, populate_existing=True)
+            if current is not None:
+                current.last_run_at = datetime.now(UTC).replace(tzinfo=None)
+                current.run_count = (current.run_count or 0) + 1
+                current.next_run_at = _get_next_run(cron, timezone)
+                await self.db.commit()
+            return {"success": success, "message": message}
+        except Exception as exc:
             await self.db.rollback()
-            return {"success": False, "error": str(e)}
-
-        # Update schedule
-        schedule.last_run_at = datetime.now(UTC).replace(tzinfo=None)
-        schedule.run_count += 1
-        schedule.next_run_at = _get_next_run(schedule.cron_expression, schedule.timezone)
-        await self.db.commit()
-
-        return {"success": success, "message": message}
+            logger.exception("Scheduled action failed", extra={"server_id": str(server_id)})
+            return {"success": False, "error": getattr(exc, "code", "Scheduled action failed")}
+        finally:
+            if runtime is not None:
+                with contextlib.suppress(Exception):
+                    await runtime.close()

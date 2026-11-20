@@ -24,6 +24,13 @@ class QuotaService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    async def _persist(self, quota: ResourceQuota, *, commit: bool) -> None:
+        if commit:
+            await self.db.commit()
+            await self.db.refresh(quota)
+        else:
+            await self.db.flush()
+
     async def get_default_limits(self) -> dict[str, float | int | str]:
         """Return system-wide default quota limits."""
         from app.services.setting_service import SettingService
@@ -34,12 +41,14 @@ class QuotaService:
     async def get_user_quota(self, user_id: str) -> ResourceQuota | None:
         """Get quota for a user"""
         result = await self.db.execute(
-            select(ResourceQuota).where(ResourceQuota.user_id == uuid.UUID(user_id))
+            select(ResourceQuota)
+            .where(ResourceQuota.user_id == uuid.UUID(user_id))
+            .execution_options(populate_existing=True)
         )
         return result.scalar_one_or_none()
 
-    async def get_or_create_user_quota(self, user_id: str) -> ResourceQuota:
-        """Get or create quota for a user"""
+    async def get_or_create_user_quota(self, user_id: str, *, commit: bool = True) -> ResourceQuota:
+        """Get/create quota; commit=False leaves its flushed row caller-owned."""
         quota = await self.get_user_quota(user_id)
         if not quota:
             defaults = await self.get_default_limits()
@@ -52,8 +61,7 @@ class QuotaService:
                 max_servers_total=defaults["max_servers_total"],
             )
             self.db.add(quota)
-            await self.db.commit()
-            await self.db.refresh(quota)
+            await self._persist(quota, commit=commit)
         return quota
 
     async def get_role_quota(self, role: str) -> ResourceQuota | None:
@@ -160,36 +168,48 @@ class QuotaService:
         return quota
 
     async def recalculate_usage(
-        self, user_id: str, exclude_server_id: str | None = None
+        self, user_id: str, exclude_server_id: str | None = None, *, commit: bool = True
     ) -> ResourceQuota:
-        """Recalculate current usage from active servers and volumes"""
+        """Recalculate usage from persisted active servers and volume reservations.
+
+        commit=False flushes without committing and skips GPU orphan cleanup.
+        Admission callers hold the shared lock until their reservations commit.
+        """
 
         # Keep exclusive GPU allocations truthful on quota reads: drop rows
         # whose server stopped, vanished, or no longer needs a GPU.
         from app.services.gpu_allocator import GpuAllocatorService
 
         allocator = GpuAllocatorService(self.db)
-        if allocator.enabled():
+        # Admission must not reap GPU reservations or commit its caller's lock.
+        # Leave reconciliation to ordinary reads/background maintenance.
+        if commit and allocator.enabled():
             await allocator.reconcile()
 
-        quota = await self.get_or_create_user_quota(user_id)
+        quota = await self.get_or_create_user_quota(user_id, commit=commit)
 
         # Get all active servers for user
         conditions = [
             Server.user_id == uuid.UUID(user_id),
-            Server.status.in_(["running", "starting"]),
+            Server.status.in_(["running", "starting", "stopping"]),
         ]
         if exclude_server_id:
             conditions.append(Server.id != uuid.UUID(exclude_server_id))
 
-        result = await self.db.execute(select(Server).where(and_(*conditions)))
+        result = await self.db.execute(
+            select(Server).where(and_(*conditions)).execution_options(populate_existing=True)
+        )
         servers = result.scalars().all()
 
         # Disk usage is a persistent reservation: the sum of the user's volume
         # size limits, independent of server state. Plan disk allocations are
         # per-server capacity (enforced via volume mount checks), not user
         # quota, so they are deliberately not counted here.
-        result = await self.db.execute(select(Volume).where(Volume.owner_id == uuid.UUID(user_id)))
+        result = await self.db.execute(
+            select(Volume)
+            .where(Volume.owner_id == uuid.UUID(user_id))
+            .execution_options(populate_existing=True)
+        )
         volumes = result.scalars().all()
         total_disk_mb = sum((v.max_size_bytes or 0) // (1024 * 1024) for v in volumes)
 
@@ -206,8 +226,7 @@ class QuotaService:
         quota.usage_servers = total_servers
         quota.updated_at = datetime.now(UTC).replace(tzinfo=None)
 
-        await self.db.commit()
-        await self.db.refresh(quota)
+        await self._persist(quota, commit=commit)
 
         return quota
 
@@ -243,15 +262,29 @@ class QuotaService:
             return f"{mem_mb} MB"
 
     async def check_spawn_allowed(
-        self, user_id: str, plan_id: str, exclude_server_id: str | None = None
+        self,
+        user_id: str,
+        plan_id: str,
+        exclude_server_id: str | None = None,
+        *,
+        commit: bool = True,
+        include_gpu_pool: bool = True,
     ) -> dict[str, Any]:
-        """Check if user can spawn a server with given plan"""
+        """Check fresh reservation accounting, leaving commit=False caller-owned.
 
-        quota = await self.recalculate_usage(user_id, exclude_server_id)
+        Exclude an already-persisted server reservation when checking its own
+        start/recreation, so it is not counted again as an additional request.
+        include_gpu_pool=False leaves physical device capacity to launch queueing;
+        the owner's GPU quota is always enforced.
+        """
+
+        quota = await self.recalculate_usage(user_id, exclude_server_id, commit=commit)
 
         # Get plan details
         result = await self.db.execute(
-            select(ServerPlan).where(ServerPlan.id == uuid.UUID(plan_id))
+            select(ServerPlan)
+            .where(ServerPlan.id == uuid.UUID(plan_id))
+            .execution_options(populate_existing=True)
         )
         plan = result.scalar_one_or_none()
 
@@ -265,15 +298,16 @@ class QuotaService:
                 "reason": f"Maximum server limit reached ({quota.max_servers_total})",
             }
 
-        # Check plan-specific server limit
+        # Count the same reservations as total usage, including restart exclusions.
+        plan_conditions = [
+            Server.user_id == uuid.UUID(user_id),
+            Server.plan_id == uuid.UUID(plan_id),
+            Server.status.in_(["running", "starting", "stopping"]),
+        ]
+        if exclude_server_id:
+            plan_conditions.append(Server.id != uuid.UUID(exclude_server_id))
         result = await self.db.execute(
-            select(func.count()).where(
-                and_(
-                    Server.user_id == uuid.UUID(user_id),
-                    Server.plan_id == uuid.UUID(plan_id),
-                    Server.status.in_(["running", "starting"]),
-                )
-            )
+            select(func.count()).select_from(Server).where(*plan_conditions)
         )
         plan_server_count = result.scalar()
 
@@ -317,7 +351,7 @@ class QuotaService:
         # Check the exclusive GPU device pool (only when one is configured).
         # Devices the excluded server already holds count as available: a plan
         # change releases and re-reserves them.
-        if plan.gpu_limit > 0:
+        if include_gpu_pool and plan.gpu_limit > 0:
             from app.services.gpu_allocator import GpuAllocatorService
 
             allocator = GpuAllocatorService(self.db)
@@ -339,20 +373,25 @@ class QuotaService:
         user_id: str,
         requested_size_bytes: int | None = None,
         exclude_volume_id: str | None = None,
+        *,
+        commit: bool = True,
     ) -> dict[str, Any]:
         """Check if user can create a volume with given size.
 
         Pass exclude_volume_id when resizing an existing volume so its current
-        limit is not counted twice.
+        limit is not counted twice. commit=False flushes new quota metadata
+        without committing the caller's volume/admission transaction.
         """
 
-        quota = await self.get_or_create_user_quota(user_id)
+        quota = await self.get_or_create_user_quota(user_id, commit=commit)
 
         # Count current volume usage separately from server disk
         conditions = [Volume.owner_id == uuid.UUID(user_id)]
         if exclude_volume_id:
             conditions.append(Volume.id != uuid.UUID(exclude_volume_id))
-        result = await self.db.execute(select(Volume).where(and_(*conditions)))
+        result = await self.db.execute(
+            select(Volume).where(and_(*conditions)).execution_options(populate_existing=True)
+        )
         volumes = result.scalars().all()
         volume_usage_mb = sum((v.max_size_bytes or 0) // (1024 * 1024) for v in volumes)
 
@@ -370,13 +409,23 @@ class QuotaService:
 
         return {"allowed": True, "reason": None}
 
-    async def increment_usage(self, user_id: str, plan_id: str) -> ResourceQuota:
-        """Increment usage when server starts"""
+    async def increment_usage(
+        self, user_id: str, plan_id: str, *, commit: bool = True
+    ) -> ResourceQuota:
+        """Update usage after start; transaction-owned calls recount persisted reservations.
+
+        With commit=False, persist the starting Server first. Recounting makes
+        delivery retries idempotent and avoids counting that reservation twice.
+        """
+        if not commit:
+            return await self.recalculate_usage(user_id, commit=False)
 
         quota = await self.get_or_create_user_quota(user_id)
 
         result = await self.db.execute(
-            select(ServerPlan).where(ServerPlan.id == uuid.UUID(plan_id))
+            select(ServerPlan)
+            .where(ServerPlan.id == uuid.UUID(plan_id))
+            .execution_options(populate_existing=True)
         )
         plan = result.scalar_one_or_none()
 
@@ -400,7 +449,9 @@ class QuotaService:
         quota = await self.get_or_create_user_quota(user_id)
 
         result = await self.db.execute(
-            select(ServerPlan).where(ServerPlan.id == uuid.UUID(plan_id))
+            select(ServerPlan)
+            .where(ServerPlan.id == uuid.UUID(plan_id))
+            .execution_options(populate_existing=True)
         )
         plan = result.scalar_one_or_none()
 
