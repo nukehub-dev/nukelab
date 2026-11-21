@@ -14,6 +14,20 @@ section.
 
 ## [Unreleased]
 
+### Added
+
+- Crash-safe recovery foundation: per-process worker heartbeats with container
+  incarnation identity, fenced operation heartbeats, and active approval reuse.
+  Heartbeat age is an inspection trigger only; it never releases reservations
+  or proves termination by itself.
+- Registry-verified environment identity: bounded OCI/Docker registry
+  resolution with Bearer/Basic authentication, exact platform manifest digest
+  proof, optional registry-verified pulls, and a portable environment
+  fingerprint for cross-install matching. Tag movement never creates a new
+  approval automatically.
+- A range-scoped signed-commit check for pull requests, pushes and release
+  tags, so legacy unsigned history does not block new work.
+
 ### Changed
 
 - The root README architecture map is now a generated light/dark SVG pair

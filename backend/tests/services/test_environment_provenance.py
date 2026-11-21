@@ -127,6 +127,48 @@ def test_configuration_fingerprint_is_order_independent_and_sensitive():
     assert fingerprint({"a": 1}) != fingerprint({"a": 2})
 
 
+def test_local_revision_fingerprint_vector_is_stable_for_amd64():
+    configuration = {
+        "image": "workspace:latest",
+        "tool_image": None,
+        "tool_mounts": ["/opt/nuke"],
+        "environment_variables": {"TOKEN": "private-value"},
+        "packages": ["numpy==2.1.0"],
+        "volumes": ["/data:/data"],
+        "ports": [8080],
+    }
+    runtime = ImageIdentity(
+        requested_reference="workspace:latest",
+        local_id="sha256:" + "a" * 64,
+        repository_digests=["registry/workspace@sha256:" + "b" * 64],
+        os="linux",
+        architecture="amd64",
+    )
+    identities = {
+        "configuration": configuration,
+        "runtime": runtime.model_dump(mode="json"),
+        "toolchain": None,
+    }
+    assert "variant" not in identities["runtime"]
+    assert identities["runtime"]["verified_reference"] is None
+    assert (
+        fingerprint(identities)
+        == "d0799988195cedf2ef12cc19b600679af5e5aec0f545573551e751e8a21eee63"
+    )
+
+    variant_identity = ImageIdentity(
+        requested_reference="workspace:latest",
+        local_id="sha256:" + "a" * 64,
+        repository_digests=["registry/workspace@sha256:" + "b" * 64],
+        os="linux",
+        architecture="amd64",
+        variant="v8",
+    )
+    variant_identities = identities | {"runtime": variant_identity.model_dump(mode="json")}
+    assert variant_identities["runtime"]["variant"] == "v8"
+    assert fingerprint(variant_identities) != fingerprint(identities)
+
+
 @pytest.mark.asyncio
 async def test_recreation_only_returns_existing_approval_and_checks_identity():
     rev = revision()

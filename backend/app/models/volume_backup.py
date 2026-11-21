@@ -28,6 +28,8 @@ class VolumeBackup(Base):
     max_logical_bytes = Column(BigInteger, nullable=True)
     reserved_bytes = Column(BigInteger, nullable=False, default=0)
     fencing_token = Column(UUID(as_uuid=True), nullable=True)
+    executor_id = Column(UUID(as_uuid=True), nullable=True, index=True)
+    heartbeat_at = Column(DateTime, nullable=True)
     helper_identity = Column(String(255), nullable=True)
     reason_code = Column(String(50), nullable=True)
     expires_at = Column(DateTime, nullable=True)

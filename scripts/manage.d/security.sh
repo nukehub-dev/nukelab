@@ -40,8 +40,36 @@ TRIVY_IMAGE="ghcr.io/aquasecurity/trivy:latest"
 # working while these checks can be enabled in release pipelines).
 RUN_CHECK_BASE_IMAGES=false
 RUN_SIGNED_COMMITS=false
+SIGNED_COMMITS_RANGE=""
 RUN_SBOM=false
 SBOM_DIR="${SECURITY_REPORT_DIR}/sbom"
+
+# A signed-commit range must be a single non-empty <base>..<head> pair. The
+# checker validates again and resolves the endpoints before scanning.
+_is_valid_signed_commits_range() {
+    local range="$1"
+    local base head remainder
+
+    if [[ -z "$range" || "$range" == -* || "$range" == *[[:space:]]* ]]; then
+        return 1
+    fi
+    if [[ "$range" != *..* || "$range" == *...* ]]; then
+        return 1
+    fi
+
+    remainder="${range#*..}"
+    if [[ "$remainder" == *..* ]]; then
+        return 1
+    fi
+
+    base="${range%%..*}"
+    head="$remainder"
+    if [[ -z "$base" || -z "$head" ]]; then
+        return 1
+    fi
+
+    return 0
+}
 
 parse_security_args() {
     for arg in "${EXTRA_ARGS[@]}"; do
@@ -69,6 +97,17 @@ parse_security_args() {
                 ;;
             --signed-commits)
                 RUN_SIGNED_COMMITS=true
+                ;;
+            --signed-commits-range=*)
+                SIGNED_COMMITS_RANGE="${arg#*=}"
+                if ! _is_valid_signed_commits_range "$SIGNED_COMMITS_RANGE"; then
+                    die "Invalid value for --signed-commits-range: '${SIGNED_COMMITS_RANGE}' (expected <base>..<head>)"
+                fi
+                # A range is only meaningful for the signed-commit check.
+                RUN_SIGNED_COMMITS=true
+                ;;
+            --signed-commits-range)
+                die "--signed-commits-range requires a value: --signed-commits-range=<base>..<head>"
                 ;;
             --sbom)
                 RUN_SBOM=true
@@ -380,12 +419,19 @@ _run_check_base_images() {
 }
 
 _run_signed_commits() {
-    log_warn "Checking commit signatures..."
-    if "${DIR}/scripts/security/check-signed-commits.sh" --strict; then
+    local -a args=(--strict)
+    if [[ -n "$SIGNED_COMMITS_RANGE" ]]; then
+        args+=(--range "$SIGNED_COMMITS_RANGE")
+        log_warn "Checking commit signatures in range ${SIGNED_COMMITS_RANGE}..."
+    else
+        log_warn "Checking commit signatures..."
+    fi
+
+    if "${DIR}/scripts/security/check-signed-commits.sh" "${args[@]}"; then
         log_ok "All commits are signed"
         return 0
     else
-        log_warn "Unsigned commits found. See output above."
+        log_warn "Signed-commit check failed. See output above."
         return 1
     fi
 }
@@ -540,6 +586,8 @@ ${BOLD}Scans:${RESET}
 ${BOLD}Supply-chain checks (off by default):${RESET}
   --check-base-images     Verify external Dockerfile base images are pinned by digest
   --signed-commits        Verify all commits on the current branch are signed
+  --signed-commits-range=<base>..<head>
+                          Check only commits in the range (implies --signed-commits)
   --sbom                  Generate CycloneDX SBOM artifacts for the repo and images
 
 ${BOLD}Options:${RESET}
@@ -562,5 +610,6 @@ ${BOLD}Examples:${RESET}
   ./nukelabctl security --no-npm-audit --bandit-severity=high
   ./nukelabctl security --no-trivy
   ./nukelabctl security --check-base-images --signed-commits --sbom
+  ./nukelabctl security --signed-commits-range=origin/main..HEAD
 EOF
 }

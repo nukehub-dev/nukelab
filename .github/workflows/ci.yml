@@ -4,31 +4,8 @@ on:
   push:
     branches: [main, develop]
     tags: ['v*.*.*']
-    paths:
-      - 'backend/**'
-      - 'frontend/**'
-      - 'services/**'
-      - 'environments/**'
-      - 'resources/**'
-      - 'compose*.yml'
-      - 'scripts/**'
-      - 'infrastructure/**'
-      - '.github/workflows/ci.yml'
-      - '.dockerignore'
-      - 'VERSION'
   pull_request:
     branches: [main, develop]
-    paths:
-      - 'backend/**'
-      - 'frontend/**'
-      - 'services/**'
-      - 'environments/**'
-      - 'resources/**'
-      - 'compose*.yml'
-      - 'scripts/**'
-      - 'infrastructure/**'
-      - '.github/workflows/ci.yml'
-      - '.dockerignore'
   workflow_dispatch:
 
 concurrency:
@@ -44,6 +21,9 @@ jobs:
   changes:
     name: Detect changed paths
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
@@ -775,3 +755,59 @@ jobs:
           build-args: BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/nukelab-environment-conda-base:${{ steps.meta.outputs.version }}
           cache-scope: dev
           push: ${{ github.event_name == 'push' }}
+
+  ci-gate:
+    name: CI Gate
+    runs-on: ubuntu-latest
+    # Always run so branch protection can require a stable, non-matrix check
+    # even when path-scoped jobs are skipped or an upstream job fails.
+    # Keep this list in sync with every job in this workflow.
+    if: always()
+    needs:
+      - changes
+      - lint-backend
+      - lint-frontend
+      - test-frontend-unit
+      - test-frontend-mocked-browser
+      - test-volume-helper
+      - test-backend
+      - test-browser
+      - test-browser-workspace
+      - build-images
+      - build-environments
+    permissions:
+      contents: read
+    steps:
+      - name: Verify required job results
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+
+          needs = json.loads(os.environ["NEEDS_JSON"])
+          accepted = {"success", "skipped"}
+          rejected = {
+              name: job.get("result")
+              for name, job in needs.items()
+              if job.get("result") not in accepted
+          }
+
+          for name in sorted(needs):
+              print(f"{name}: {needs[name].get('result')}")
+
+          if rejected:
+              details = ", ".join(
+                  f"{name}={result}" for name, result in sorted(rejected.items())
+              )
+              print(
+                  "Required CI jobs failed, were cancelled, or returned an "
+                  f"unexpected result: {details}",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+
+          print("All required CI job results are success or skipped.")
+          PY

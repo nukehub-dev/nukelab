@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 import os
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlparse, urlunparse
 
 from pydantic import Field, field_validator, model_validator
@@ -161,6 +161,21 @@ class Settings(BaseSettings):
     docker_pull_policy: str = "if-not-present"
     volume_storage_path: str = ""
 
+    # Registry verification (digest trust). The code default is "off" so an
+    # existing deployment without the key keeps pre-registry launch behavior;
+    # .env.example selects "prefer" for new installations. "require" fails
+    # closed when an approved reference cannot be verified.
+    registry_verification_policy: Literal["off", "prefer", "require"] = "off"
+    registry_pull_policy: Literal["on_demand", "preload_only"] = "on_demand"
+    # Optional comma-separated registry host allowlist. Empty permits public
+    # HTTPS registries that pass the SSRF checks; private/loopback hosts need
+    # an explicit entry, including a separate token-service host when present.
+    registry_allowed_hosts: str = ""
+    # Optional Docker config.json-compatible credentials file for verification.
+    # Empty means anonymous resolution. Runtime image pulls use the container
+    # runtime's own credentials, not this file.
+    registry_credentials_file: str = ""
+
     volume_backup_storage_path: str = ""
     volume_backup_host_path: str = ""
     volume_backup_helper_image: str = "nukelab-volume-helper:latest"
@@ -196,6 +211,26 @@ class Settings(BaseSettings):
     queue_timeout_seconds: int = Field(default=3600, gt=0)
     queue_max_pending_per_owner: int = Field(default=5, gt=0)
     queue_max_pending_total: int = Field(default=500, gt=0)
+
+    # Worker/executor liveness. A heartbeat older than the stale threshold is
+    # only an observation; it never proves termination or authorizes takeover.
+    worker_heartbeat_interval_seconds: int = Field(default=5, gt=0)
+    worker_heartbeat_stale_seconds: int = Field(default=20, gt=0)
+
+    # Operation heartbeat refreshes only while the fenced operation row stays
+    # active. A stale operation heartbeat is an inspection trigger and never
+    # proves termination or authorizes a reservation release.
+    operation_heartbeat_interval_seconds: int = Field(default=10, gt=0)
+    operation_heartbeat_stale_seconds: int = Field(default=90, gt=0)
+
+    # Crash-recovery scan cadence and bounds. The scanner inspects; it does not
+    # release reservations from age or heartbeat absence alone.
+    recovery_scan_interval_seconds: int = Field(default=30, gt=0)
+    recovery_initial_delay_seconds: int = Field(default=60, gt=0)
+    recovery_prepared_grace_seconds: int = Field(default=60, gt=0)
+    recovery_scan_batch_size: int = Field(default=200, gt=0)
+    recovery_stall_warning_seconds: int = Field(default=300, gt=0)
+    recovery_legacy_drain_confirmed: bool = False
 
     @property
     def gpu_device_list(self) -> list[str]:
@@ -392,6 +427,26 @@ class Settings(BaseSettings):
         """Default key rotation grace period to 2× access-token lifetime."""
         if self.user_auth_key_rotation_grace_seconds is None:
             self.user_auth_key_rotation_grace_seconds = self.jwt_expire_minutes * 2 * 60
+        return self
+
+    @model_validator(mode="after")
+    def validate_worker_heartbeat_thresholds(self) -> "Settings":
+        """Require a stale threshold strictly greater than the heartbeat interval."""
+        if self.worker_heartbeat_stale_seconds <= self.worker_heartbeat_interval_seconds:
+            raise ValueError(
+                "WORKER_HEARTBEAT_STALE_SECONDS must be greater than "
+                "WORKER_HEARTBEAT_INTERVAL_SECONDS."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_operation_heartbeat_thresholds(self) -> "Settings":
+        """Require a stale threshold strictly greater than the heartbeat interval."""
+        if self.operation_heartbeat_stale_seconds <= self.operation_heartbeat_interval_seconds:
+            raise ValueError(
+                "OPERATION_HEARTBEAT_STALE_SECONDS must be greater than "
+                "OPERATION_HEARTBEAT_INTERVAL_SECONDS."
+            )
         return self
 
     @model_validator(mode="after")

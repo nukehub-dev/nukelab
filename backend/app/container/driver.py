@@ -76,6 +76,14 @@ class ContainerDriver(ABC):
     async def pull_image(self, image: str):
         """Pull a container image."""
 
+    async def pull_image_by_digest(self, reference: str) -> None:
+        """Pull exactly one ``repo@sha256:<digest>`` reference.
+
+        Drivers that cannot guarantee digest-only pulls must fail closed rather
+        than silently accepting a tag or another artifact.
+        """
+        raise ContainerDriverError("Image pulls by digest are unsupported")
+
     @abstractmethod
     async def resolve_image(self, image: str) -> dict:
         """Inspect an existing local artifact, returning a plain immutable identity.

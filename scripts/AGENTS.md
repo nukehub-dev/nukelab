@@ -26,7 +26,7 @@ All files under `scripts/`, plus the top-level `nukelabctl` dispatcher.
 - `check-env` and `sync-env` compare local env files against `.env.example`.
   `check-env` is read-only; `sync-env` appends missing keys without overwriting
   existing values and never removes stale keys without operator consent.
-- Security scanning helpers live in `scripts/security/`; container image scans and SBOMs include the volume helper when it is built locally.
+- Security scanning helpers live in `scripts/security/`; container image scans and SBOMs include the volume helper when it is built locally. `check-signed-commits.sh` supports `--strict` alone (branch history) or `--strict --range <base>..<head>` (exact bounded range; empty ranges pass). `nukelabctl security --signed-commits-range=<base>..<head>` supplies the range; CI computes it per event and keeps the check advisory until signing is enforced.
 - `lint` aggregates failures across selected targets and exits nonzero if any tool fails, including failures inside backend/frontend subshells. A later successful formatter or target must not erase an earlier failure; `--fix` follows the same exit-status contract.
 
 ## Work Guidance

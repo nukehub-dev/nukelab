@@ -10,6 +10,7 @@ outcomes retain starting reservations and mount intents for explicit reconciliat
 
 import logging
 import uuid
+from contextlib import nullcontext
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import timedelta
@@ -50,8 +51,12 @@ from app.services.environment_revision_service import (
 )
 from app.services.environment_service import EnvironmentService
 from app.services.gpu_allocator import GpuAllocatorService
+from app.services.operation_heartbeat import SessionFactory, operation_heartbeat
 from app.services.plan_service import PlanService
 from app.services.quota_service import QuotaService
+from app.services.registry_artifact_service import RegistryArtifactService
+from app.services.registry_client import RegistryError, VerifiedImage
+from app.services.registry_image_service import RegistryImageService
 from app.services.resource_pool_service import ResourcePoolService
 from app.services.server_launch_validation import validate_launch_volumes
 from app.services.server_operation_service import (
@@ -71,6 +76,7 @@ from app.services.volume_operation_service import (
     acquire_volume_operations,
     transition_volume_operation,
 )
+from app.services.worker_heartbeat import current_executor_id
 
 logger = logging.getLogger(__name__)
 
@@ -109,10 +115,179 @@ def plan_snapshot(plan: ServerPlan) -> dict:
     }
 
 
+@dataclass(frozen=True)
+class LaunchSuccessOutcome:
+    """The exact, already-observed result of one successful launch attempt."""
+
+    server_id: uuid.UUID
+    owner_id: uuid.UUID
+    operation_id: uuid.UUID | None
+    revision_id: uuid.UUID
+    generation: int
+    request: NormalizedLaunchRequest
+    mounts: list[dict]
+    environment_slug: str
+    actual_runtime: ImageIdentity
+    actual_toolchain: ImageIdentity | None
+    container_id: str
+    image: str
+    external_url: str | None
+    health_status: str
+    resources: dict
+    queue_id: uuid.UUID | None = None
+    claim_token: uuid.UUID | None = None
+    fencing_token: uuid.UUID | None = None
+
+
+async def finalize_launch_success(
+    db: AsyncSession,
+    outcome: LaunchSuccessOutcome,
+    *,
+    revisions: EnvironmentRevisionService,
+) -> Server:
+    """Apply one verified launch result under admission and row locks.
+
+    Both the live provisioner and crash reconciliation call this function. A
+    repeated call for the same terminal operation returns the existing server
+    without creating a second provenance row or touching the runtime.
+    """
+    await acquire_admission_lock(db)
+    server = await db.scalar(
+        select(Server)
+        .where(Server.id == outcome.server_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if server is None:
+        raise LaunchError("launch_in_progress")
+
+    operation = None
+    if outcome.operation_id is not None:
+        operation = await db.get(
+            ServerLaunchOperation,
+            outcome.operation_id,
+            with_for_update=True,
+            populate_existing=True,
+        )
+        if operation is None or operation.fencing_token != outcome.fencing_token:
+            raise LaunchError("launch_in_progress")
+        if operation.state == "succeeded":
+            record = await db.get(ServerLaunchRecord, operation.id, populate_existing=True)
+            if (
+                server.status == "running"
+                and record is not None
+                and record.server_id == server.id
+                and record.user_id == outcome.owner_id
+                and record.revision_id == outcome.revision_id
+                and record.generation == outcome.generation
+            ):
+                return server
+            raise LaunchError("launch_in_progress")
+        if operation.state != "executing":
+            raise LaunchError("launch_in_progress")
+
+    if server.status != "starting":
+        raise LaunchError("launch_in_progress")
+
+    for key in ("container_id", "image", "external_url", "health_status"):
+        setattr(server, key, getattr(outcome, key))
+    for key in ("cpu", "memory", "disk", "gpu"):
+        setattr(server, "allocated_" + key, outcome.resources[key])
+    server.plan_id = outcome.request.plan_id
+    server.environment_id = outcome.request.environment_id
+    # A metadata-only volume is initialized once, by its owning launch.
+    for mount in outcome.mounts:
+        volume = await db.get(Volume, uuid.UUID(mount["volume_id"]))
+        if volume is not None and (volume.labels or {}).get("initialize_for_server") == str(
+            server.id
+        ):
+            volume.labels = {
+                key: value for key, value in volume.labels.items() if key != "initialize_for_server"
+            }
+    server.status = "running"
+    server.status_reason = None
+    server.started_at = server.last_activity = server.last_billed_at = utc_now()
+    owner = await db.get(User, outcome.owner_id)
+    prefs = (owner.preferences or {}) if owner is not None else {}
+    if prefs.get("max_server_runtime_enabled", True):
+        try:
+            duration = (
+                int(prefs["max_server_runtime"]) * 60
+                if prefs.get("max_server_runtime") is not None
+                else settings.server_max_runtime
+            )
+        except (ValueError, TypeError):
+            duration = settings.server_max_runtime
+        server.expires_at = utc_now() + timedelta(seconds=duration) if duration > 0 else None
+
+    revision = await revisions.require_available(outcome.revision_id)
+    manifest = build_manifest(
+        revision,
+        template_label=outcome.environment_slug,
+        resources=ManifestResources(
+            cpu=server.allocated_cpu,
+            memory_mib=ResourcePoolService._parse_memory(server.allocated_memory),
+            disk_mib=ResourcePoolService._parse_memory(server.allocated_disk),
+            gpu_count=server.allocated_gpu,
+        ),
+        volumes=[
+            VolumeRequirement(
+                purpose="home" if mount["is_primary"] else "data",
+                mount_path=mount["mount_path"],
+                mode=mount["mode"],
+            )
+            for mount in outcome.mounts
+        ],
+    )
+    await ServerProvenanceService(db, revisions).record_launch(
+        operation_id=outcome.operation_id or outcome.server_id,
+        server_id=server.id,
+        owner_id=outcome.owner_id,
+        generation=outcome.generation,
+        manifest=manifest,
+        actual_runtime=outcome.actual_runtime,
+        actual_toolchain=outcome.actual_toolchain,
+    )
+    if outcome.queue_id:
+        queue = await db.get(
+            ServerQueue,
+            outcome.queue_id,
+            populate_existing=True,
+            with_for_update=True,
+        )
+        if queue.status != "starting" or queue.claim_token != outcome.claim_token:
+            raise LaunchError("launch_in_progress")
+        queue.status = "started"
+        queue.started_at = server.started_at
+        queue.reason_code = None
+    if outcome.operation_id is not None:
+        finished = await finish_operation(
+            db,
+            outcome.operation_id,
+            outcome.fencing_token,
+            "succeeded",
+            runtime_verified=True,
+        )
+        if finished is None:
+            raise LaunchError("launch_in_progress")
+    return server
+
+
 class ServerLaunchService:
-    def __init__(self, db: AsyncSession, driver: ContainerDriver):
+    def __init__(
+        self,
+        db: AsyncSession,
+        driver: ContainerDriver,
+        *,
+        registry: RegistryImageService | None = None,
+        artifacts: RegistryArtifactService | None = None,
+        heartbeat_session_factory: SessionFactory | None = None,
+    ):
         self.db = db
         self.driver = driver
+        self.registry = registry or RegistryImageService.from_settings()
+        self.artifacts = artifacts or RegistryArtifactService.from_settings(driver)
+        self.heartbeat_session_factory = heartbeat_session_factory
         self.spawner = ServerSpawner(driver=driver)
 
     async def _clear_read_transaction(self):
@@ -170,24 +345,137 @@ class ServerLaunchService:
 
         return EnvironmentRevisionService(self.db, authorize)
 
+    @staticmethod
+    def _verified_from_identity(identity: ImageIdentity) -> VerifiedImage | None:
+        """Rebuild the registry identity stored on an approved revision."""
+        if not identity.registry_verified:
+            return None
+        if (
+            identity.verified_reference is None
+            or identity.manifest_digest is None
+            or identity.descriptor_media_type is None
+        ):
+            raise LaunchError("revision_unavailable")
+        return VerifiedImage(
+            requested_reference=identity.requested_reference,
+            verified_reference=identity.verified_reference,
+            manifest_digest=identity.manifest_digest,
+            index_digest=identity.index_digest,
+            descriptor_media_type=identity.descriptor_media_type,
+            os=identity.os,
+            architecture=identity.architecture,
+            variant=identity.variant,
+        )
+
+    @staticmethod
+    def _raise_registry_error(error: RegistryError):
+        status = 503 if error.code in {"registry_unreachable", "registry_auth_failed"} else 409
+        raise LaunchError(error.code, status) from None
+
+    async def _resolve_reference_identity(self, reference: str) -> ImageIdentity:
+        """Resolve one approved reference under the registry verification policy."""
+        if reference.startswith("sha256:"):
+            if not await self.driver.image_exists(reference):
+                raise LaunchError("artifact_missing")
+            return ImageIdentity.model_validate(await self.driver.resolve_image(reference))
+
+        try:
+            resolution = await self.registry.resolve(reference)
+        except RegistryError as error:
+            self._raise_registry_error(error)
+
+        if resolution.state == "verified":
+            if resolution.verified is None:
+                raise LaunchError("artifact_mismatch")
+            try:
+                return await self.artifacts.ensure_local(resolution.verified)
+            except RegistryError as error:
+                self._raise_registry_error(error)
+
+        if resolution.state == "fallback":
+            logger.warning(
+                "Registry verification unavailable; recording a local-only artifact",
+                extra={"code": resolution.fallback_reason},
+            )
+
+        # Policy off, or a truthful prefer fallback with no verified revision yet.
+        if not await self.driver.image_exists(reference):
+            if reference.startswith("sha256:"):
+                raise LaunchError("artifact_missing")
+            await self.driver.pull_image(reference)
+        return ImageIdentity.model_validate(await self.driver.resolve_image(reference))
+
+    async def _verify_approved_identity(self, approved: ImageIdentity) -> None:
+        """Prove an approved identity is locally usable without a tag fallback."""
+        verified = self._verified_from_identity(approved)
+        if verified is not None:
+            try:
+                local = await self.artifacts.ensure_local(verified)
+            except RegistryError as error:
+                self._raise_registry_error(error)
+            if (local.local_id, local.os, local.architecture) != (
+                approved.local_id,
+                approved.os,
+                approved.architecture,
+            ):
+                raise LaunchError("artifact_mismatch")
+            return
+
+        if not await self.driver.image_exists(approved.local_id):
+            raise LaunchError("artifact_missing")
+        actual = ImageIdentity.model_validate(await self.driver.resolve_image(approved.local_id))
+        if (actual.local_id, actual.os, actual.architecture) != (
+            approved.local_id,
+            approved.os,
+            approved.architecture,
+        ):
+            raise LaunchError("revision_unavailable")
+
     async def resolve_revision(self, owner_id: uuid.UUID, request: NormalizedLaunchRequest):
         """Resolve approved references without holding admission/database locks."""
         await self._clear_read_transaction()
+        existing_revision_id = None
         async with self.db.begin():
             _, _, environment = await self._policy(owner_id, request)
             configuration = template_configuration(environment)
+            existing = await self._revisions(owner_id).find_active_revision(
+                request.environment_id, fingerprint(configuration)
+            )
+            if existing is not None:
+                existing_revision_id = existing.id
+
+        if existing_revision_id is not None:
+            # Recheck the template, permission, and approval after the read
+            # transaction. A concurrent configuration edit must not reuse a stale
+            # approved revision.
+            async with self.db.begin():
+                _, _, environment = await self._policy(owner_id, request)
+                current_fingerprint = fingerprint(template_configuration(environment))
+                revision = await self._revisions(owner_id).require_available(existing_revision_id)
+                if (
+                    revision.template_id != request.environment_id
+                    or revision.template_fingerprint != current_fingerprint
+                ):
+                    raise LaunchError("configuration_changed")
+                try:
+                    runtime_identity = ImageIdentity.model_validate(revision.runtime_identity)
+                    toolchain_identity = (
+                        ImageIdentity.model_validate(revision.toolchain_identity)
+                        if revision.toolchain_identity
+                        else None
+                    )
+                except ValueError:
+                    raise LaunchError("revision_unavailable") from None
+            for identity in (runtime_identity, toolchain_identity):
+                if identity is not None:
+                    await self._verify_approved_identity(identity)
+            return existing_revision_id
+
         # Only approved references escape the transaction. Never import image choices.
         identities = []
         for reference in (configuration["image"], configuration["tool_image"]):
-            if not reference:
-                identities.append(None)
-                continue
-            if not await self.driver.image_exists(reference):
-                if reference.startswith("sha256:"):
-                    raise LaunchError("artifact_missing", 409)
-                await self.driver.pull_image(reference)
             identities.append(
-                ImageIdentity.model_validate(await self.driver.resolve_image(reference))
+                await self._resolve_reference_identity(reference) if reference else None
             )
         if identities[1] is not None:
             self.driver.immutable_toolchain_cache_name(
@@ -668,6 +956,69 @@ class ServerLaunchService:
             server.container_id = None
             await self.db.flush()
 
+    async def _provision_runtime_io(
+        self,
+        reservation: LaunchReservation,
+        fencing_token: uuid.UUID | None,
+        runtime: ImageIdentity,
+        toolchain: ImageIdentity | None,
+        configuration: dict,
+        resources: dict,
+    ):
+        """Perform the slow runtime/helper window under the operation heartbeat."""
+        await self._remove_previous_runtime(reservation)
+        await self._checkpoint_previous_runtime_gone(reservation, fencing_token)
+        from app.services.xfs_quota_service import xfs_quota_service
+
+        for mount in reservation.mounts:
+            if mount.get("auto_created"):
+                await self.driver.ensure_volume(
+                    mount["volume_name"],
+                    labels={
+                        "nukelab.managed": "true",
+                        "nukelab.user.id": str(reservation.owner_id),
+                    },
+                )
+                if mount.get("max_size_bytes"):
+                    quota_set = xfs_quota_service.set_quota(
+                        mount["volume_name"], mount["max_size_bytes"]
+                    )
+                    if settings.xfs_quota_enabled and not quota_set:
+                        raise LaunchError("volume_quota_unavailable", 503)
+        # Spawner receives only service-resolved volume names; no new DB/client loop.
+        spawned = await self.spawner.spawn(
+            user_id=str(reservation.owner_id),
+            username=reservation.username,
+            server_name=reservation.request.name,
+            environment=reservation.environment_slug,
+            environment_id=str(reservation.request.environment_id),
+            image=runtime.spawn_reference,
+            tool_image=toolchain.spawn_reference if toolchain else None,
+            tool_mounts=configuration["tool_mounts"],
+            env_vars=configuration["environment_variables"],
+            volume_mounts=reservation.mounts,
+            server_id=str(reservation.server_id),
+            gpu_devices=reservation.gpu_devices,
+            resolved_images={
+                "runtime": runtime.model_dump(mode="json"),
+                "toolchain": toolchain.model_dump(mode="json") if toolchain else None,
+            },
+            launch_operation_id=str(reservation.operation_id),
+            **resources,
+        )
+        actual = await self.driver.get_container_info(spawned.container_id)
+        actual_runtime = ImageIdentity.model_validate(
+            await self.driver.resolve_image(actual["Image"])
+        )
+        actual_toolchain = (
+            ImageIdentity.model_validate(spawned._observed_toolchain_identity)
+            if toolchain
+            else None
+        )
+        if actual_runtime.local_id != runtime.local_id or spawned.health_status != "healthy":
+            raise LaunchError("runtime_verification_failed", 503)
+        return spawned, actual_runtime, actual_toolchain
+
     async def load_reservation(
         self, server_id: uuid.UUID, owner_id: uuid.UUID
     ) -> LaunchReservation:
@@ -766,171 +1117,64 @@ class ServerLaunchService:
                 )
                 if operation is not None:
                     fencing_token = operation.fencing_token
-                    if await claim_operation(self.db, operation.id, fencing_token) is None:
-                        raise LaunchError("launch_in_progress")
-            claimed = True
-            await self._remove_previous_runtime(reservation)
-            await self._checkpoint_previous_runtime_gone(reservation, fencing_token)
-            from app.services.xfs_quota_service import xfs_quota_service
-
-            for mount in reservation.mounts:
-                if mount.get("auto_created"):
-                    await self.driver.ensure_volume(
-                        mount["volume_name"],
-                        labels={
-                            "nukelab.managed": "true",
-                            "nukelab.user.id": str(reservation.owner_id),
-                        },
-                    )
-                    if mount.get("max_size_bytes"):
-                        quota_set = xfs_quota_service.set_quota(
-                            mount["volume_name"], mount["max_size_bytes"]
-                        )
-                        if settings.xfs_quota_enabled and not quota_set:
-                            raise LaunchError("volume_quota_unavailable", 503)
-            # Spawner receives only service-resolved volume names; no new DB/client loop.
-            spawned = await self.spawner.spawn(
-                user_id=str(reservation.owner_id),
-                username=reservation.username,
-                server_name=reservation.request.name,
-                environment=reservation.environment_slug,
-                environment_id=str(reservation.request.environment_id),
-                image=runtime.spawn_reference,
-                tool_image=toolchain.spawn_reference if toolchain else None,
-                tool_mounts=configuration["tool_mounts"],
-                env_vars=configuration["environment_variables"],
-                volume_mounts=reservation.mounts,
-                server_id=str(reservation.server_id),
-                gpu_devices=reservation.gpu_devices,
-                resolved_images={
-                    "runtime": runtime.model_dump(mode="json"),
-                    "toolchain": toolchain.model_dump(mode="json") if toolchain else None,
-                },
-                launch_operation_id=str(reservation.operation_id),
-                **resources,
-            )
-            actual = await self.driver.get_container_info(spawned.container_id)
-            actual_runtime = ImageIdentity.model_validate(
-                await self.driver.resolve_image(actual["Image"])
-            )
-            actual_toolchain = (
-                ImageIdentity.model_validate(spawned._observed_toolchain_identity)
-                if toolchain
-                else None
-            )
-            if actual_runtime.local_id != runtime.local_id or spawned.health_status != "healthy":
-                raise LaunchError("runtime_verification_failed", 503)
-            async with self.db.begin():
-                await acquire_admission_lock(self.db)
-                server = await self.db.scalar(
-                    select(Server)
-                    .where(Server.id == reservation.server_id)
-                    .with_for_update()
-                    .execution_options(populate_existing=True)
-                )
-                if server is None or server.status != "starting":
-                    raise LaunchError("launch_in_progress")
-                if reservation.operation_id is not None:
-                    operation = await self.db.get(
-                        ServerLaunchOperation,
-                        reservation.operation_id,
-                        populate_existing=True,
-                    )
                     if (
-                        operation is None
-                        or operation.fencing_token != fencing_token
-                        or operation.state != "executing"
+                        await claim_operation(
+                            self.db,
+                            operation.id,
+                            fencing_token,
+                            executor_id=current_executor_id(),
+                        )
+                        is None
                     ):
                         raise LaunchError("launch_in_progress")
-                for key in ("container_id", "image", "external_url", "health_status"):
-                    setattr(server, key, getattr(spawned, key))
-                for key in ("cpu", "memory", "disk", "gpu"):
-                    setattr(server, "allocated_" + key, resources[key])
-                server.plan_id = reservation.request.plan_id
-                server.environment_id = reservation.request.environment_id
-                # A metadata-only volume is initialized once, by its owning launch.
-                for mount in reservation.mounts:
-                    volume = await self.db.get(Volume, uuid.UUID(mount["volume_id"]))
-                    if volume is not None and (volume.labels or {}).get(
-                        "initialize_for_server"
-                    ) == str(server.id):
-                        volume.labels = {
-                            key: value
-                            for key, value in volume.labels.items()
-                            if key != "initialize_for_server"
-                        }
-                server.status = "running"
-                server.status_reason = None
-                server.started_at = server.last_activity = server.last_billed_at = utc_now()
-                owner = await self.db.get(User, reservation.owner_id)
-                prefs = owner.preferences or {}
-                if prefs.get("max_server_runtime_enabled", True):
-                    try:
-                        duration = (
-                            int(prefs["max_server_runtime"]) * 60
-                            if prefs.get("max_server_runtime") is not None
-                            else settings.server_max_runtime
-                        )
-                    except (ValueError, TypeError):
-                        duration = settings.server_max_runtime
-                    server.expires_at = (
-                        utc_now() + timedelta(seconds=duration) if duration > 0 else None
-                    )
-                revision = await self._revisions(reservation.owner_id).require_available(
-                    reservation.revision_id
+            claimed = True
+            heartbeat = (
+                operation_heartbeat(
+                    self.heartbeat_session_factory,
+                    kind="launch",
+                    operation_id=reservation.operation_id,
+                    fencing_token=fencing_token,
+                    executor_id=current_executor_id(),
                 )
-                manifest = build_manifest(
-                    revision,
-                    template_label=reservation.environment_slug,
-                    resources=ManifestResources(
-                        cpu=server.allocated_cpu,
-                        memory_mib=ResourcePoolService._parse_memory(server.allocated_memory),
-                        disk_mib=ResourcePoolService._parse_memory(server.allocated_disk),
-                        gpu_count=server.allocated_gpu,
-                    ),
-                    volumes=[
-                        VolumeRequirement(
-                            purpose="home" if m["is_primary"] else "data",
-                            mount_path=m["mount_path"],
-                            mode=m["mode"],
-                        )
-                        for m in reservation.mounts
-                    ],
+                if reservation.operation_id is not None and fencing_token is not None
+                else nullcontext()
+            )
+            async with heartbeat:
+                spawned, actual_runtime, actual_toolchain = await self._provision_runtime_io(
+                    reservation,
+                    fencing_token,
+                    runtime,
+                    toolchain,
+                    configuration,
+                    resources,
                 )
-                await ServerProvenanceService(
-                    self.db, self._revisions(reservation.owner_id)
-                ).record_launch(
-                    operation_id=reservation.operation_id or reservation.server_id,
-                    server_id=server.id,
+            async with self.db.begin():
+                await acquire_admission_lock(self.db)
+                outcome = LaunchSuccessOutcome(
+                    server_id=reservation.server_id,
                     owner_id=reservation.owner_id,
+                    operation_id=reservation.operation_id,
+                    revision_id=reservation.revision_id,
                     generation=reservation.generation,
-                    manifest=manifest,
+                    request=reservation.request,
+                    mounts=reservation.mounts,
+                    environment_slug=reservation.environment_slug,
                     actual_runtime=actual_runtime,
                     actual_toolchain=actual_toolchain,
+                    container_id=spawned.container_id,
+                    image=spawned.image,
+                    external_url=spawned.external_url,
+                    health_status=spawned.health_status,
+                    resources=resources,
+                    queue_id=reservation.queue_id,
+                    claim_token=reservation.claim_token,
+                    fencing_token=fencing_token,
                 )
-                if reservation.queue_id:
-                    queue = await self.db.get(
-                        ServerQueue,
-                        reservation.queue_id,
-                        populate_existing=True,
-                        with_for_update=True,
-                    )
-                    if queue.status != "starting" or queue.claim_token != reservation.claim_token:
-                        raise LaunchError("launch_in_progress")
-                    queue.status = "started"
-                    queue.started_at = server.started_at
-                    queue.reason_code = None
-                if reservation.operation_id is not None:
-                    finished = await finish_operation(
-                        self.db,
-                        reservation.operation_id,
-                        fencing_token,
-                        "succeeded",
-                        runtime_verified=True,
-                    )
-                    if finished is None:
-                        raise LaunchError("launch_in_progress")
-                return server
+                return await finalize_launch_success(
+                    self.db,
+                    outcome,
+                    revisions=self._revisions(reservation.owner_id),
+                )
         except BaseException as exc:
             await self.db.rollback()
             if not claimed:
@@ -1004,21 +1248,10 @@ class ServerLaunchService:
             await validate_launch_volumes(
                 self.db, owner, request, plan, protected_mount_paths=roots
             )
-        # Immutable local identity is the only lookup key; never pull the original tag.
+        # Immutable identity is the only lookup key; never pull the original tag.
         for approved in (runtime, toolchain):
-            if approved is None:
-                continue
-            if not await self.driver.image_exists(approved.local_id):
-                raise LaunchError("artifact_missing", 409)
-            actual = ImageIdentity.model_validate(
-                await self.driver.resolve_image(approved.local_id)
-            )
-            if (actual.local_id, actual.os, actual.architecture) != (
-                approved.local_id,
-                approved.os,
-                approved.architecture,
-            ):
-                raise LaunchError("revision_unavailable")
+            if approved is not None:
+                await self._verify_approved_identity(approved)
         if toolchain:
             self.driver.immutable_toolchain_cache_name(toolchain.model_dump(mode="json"), roots)
         reservation = await self.reserve(owner_id, request, revision_id)

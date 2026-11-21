@@ -3,26 +3,8 @@ name: Security
 on:
   push:
     branches: [main, master]
-    paths:
-      - 'backend/**'
-      - 'frontend/**'
-      - 'services/**'
-      - 'environments/**'
-      - 'compose*.yml'
-      - 'scripts/**'
-      - 'infrastructure/**'
-      - '.github/workflows/security.yml'
   pull_request:
     branches: [main, master]
-    paths:
-      - 'backend/**'
-      - 'frontend/**'
-      - 'services/**'
-      - 'environments/**'
-      - 'compose*.yml'
-      - 'scripts/**'
-      - 'infrastructure/**'
-      - '.github/workflows/security.yml'
   schedule:
     # Run weekly on Sundays at 06:00 UTC.
     - cron: '0 6 * * 0'
@@ -35,9 +17,47 @@ env:
   CONTAINER_ENGINE: docker
 
 jobs:
+  changes:
+    name: Detect security changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Detect security-relevant changes
+        id: filter
+        uses: dorny/paths-filter@v4
+        with:
+          filters: |
+            # Expensive scans run only for changes that can affect the
+            # application images or the security tooling itself.
+            code:
+              - 'backend/**'
+              - 'frontend/**'
+              - 'services/**'
+              - 'environments/**'
+              - 'resources/**'
+              - 'compose*.yml'
+              - 'scripts/**'
+              - 'infrastructure/**'
+              - '.dockerignore'
+              - 'VERSION'
+              - 'nukelabctl'
+              - '.github/workflows/security.yml'
+
   dependency-and-sast-scans:
     name: Dependency / SAST / SBOM
     runs-on: ubuntu-latest
+    needs: changes
+    if: |
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch' ||
+      needs.changes.outputs.code == 'true'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -74,7 +94,11 @@ jobs:
   container-image-scan:
     name: Container Image Scan
     runs-on: ubuntu-latest
-    needs: dependency-and-sast-scans
+    needs: [changes, dependency-and-sast-scans]
+    if: |
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch' ||
+      needs.changes.outputs.code == 'true'
     permissions:
       contents: read
       security-events: write
@@ -220,3 +244,58 @@ jobs:
         run: |
           echo "::warning::Branch contains unsigned commits. Enable branch protection"
           echo "::warning::requiring signed commits and configure team GPG/SSH signing."
+
+  security-gate:
+    name: Security Gate
+    runs-on: ubuntu-latest
+    # Always run so branch protection can require a stable, non-matrix check
+    # even when path-scoped scans are skipped or an upstream job fails.
+    # Keep this list in sync with every job in this workflow.
+    if: always()
+    needs:
+      - changes
+      - dependency-and-sast-scans
+      - container-image-scan
+      - secret-scan
+      - signed-commits-check
+    permissions:
+      contents: read
+    steps:
+      - name: Verify required job results
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+
+          needs = json.loads(os.environ["NEEDS_JSON"])
+          accepted = {"success", "skipped"}
+          rejected = {
+              name: job.get("result")
+              for name, job in needs.items()
+              if job.get("result") not in accepted
+          }
+
+          for name in sorted(needs):
+              print(f"{name}: {needs[name].get('result')}")
+
+          if rejected:
+              details = ", ".join(
+                  f"{name}={result}" for name, result in sorted(rejected.items())
+              )
+              print(
+                  "Required security jobs failed, were cancelled, or returned "
+                  f"an unexpected result: {details}",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+
+          print("All required security job results are success or skipped.")
+          print(
+              "Note: the scan steps in Dependency/SAST, Container Image Scan, "
+              "and Signed Commits Check remain advisory while "
+              "continue-on-error is set."
+          )
+          PY

@@ -48,6 +48,10 @@ from app.core.shutdown import get_shutdown_coordinator
 from app.db.base import Base
 from app.db.session import AsyncSessionLocal, engine
 from app.middleware.request_metrics import _metrics_buffer
+from app.services.worker_heartbeat import (
+    start_api_worker_heartbeat,
+    stop_api_worker_heartbeat,
+)
 from app.websocket.metrics_socket import manager
 
 
@@ -147,17 +151,24 @@ async def startup():
 async def lifespan(app: FastAPI):
     """Application lifespan events (startup / shutdown)."""
     await startup()
-    yield
-    # Graceful shutdown
-    from app.core.redis_client import get_redis_client
+    await start_api_worker_heartbeat()
+    try:
+        yield
+    finally:
+        # The heartbeat is stopped after request drain and before the shutdown
+        # coordinator disposes shared resources, so a graceful marker means no
+        # operation I/O is still in flight.
+        stop_api_worker_heartbeat()
 
-    coordinator = get_shutdown_coordinator()
-    await coordinator.shutdown(
-        websocket_manager=manager,
-        metrics_buffer=_metrics_buffer,
-        db_engine=engine,
-        redis_client=get_redis_client(),
-    )
+        from app.core.redis_client import get_redis_client
+
+        coordinator = get_shutdown_coordinator()
+        await coordinator.shutdown(
+            websocket_manager=manager,
+            metrics_buffer=_metrics_buffer,
+            db_engine=engine,
+            redis_client=get_redis_client(),
+        )
 
 
 _app_kwargs = {

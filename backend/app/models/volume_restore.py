@@ -34,6 +34,8 @@ class VolumeRestore(Base):
     reserved_bytes = Column(BigInteger, nullable=False, default=0)
     status = Column(String(30), nullable=False, default="pending")
     fencing_token = Column(UUID(as_uuid=True), nullable=False, default=uuid.uuid4)
+    executor_id = Column(UUID(as_uuid=True), nullable=True, index=True)
+    heartbeat_at = Column(DateTime, nullable=True)
     helper_identity = Column(String(255), nullable=True)
     reason_code = Column(String(50), nullable=True)
     created_at = Column(DateTime, nullable=False, default=utc_now)
