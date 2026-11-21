@@ -27,6 +27,7 @@ All files under `scripts/`, plus the top-level `nukelabctl` dispatcher.
   `check-env` is read-only; `sync-env` appends missing keys without overwriting
   existing values and never removes stale keys without operator consent.
 - Security scanning helpers live in `scripts/security/`; container image scans and SBOMs include the volume helper when it is built locally. `check-signed-commits.sh` supports `--strict` alone (branch history) or `--strict --range <base>..<head>` (exact bounded range; empty ranges pass). `nukelabctl security --signed-commits-range=<base>..<head>` supplies the range; CI computes it per event and keeps the check advisory until signing is enforced.
+- Doctor recovery/registry preflight helpers live in `scripts/doctor/preflight.sh` and are sourced by `scripts/manage.d/doctor.sh`. They are read-only: SELECT-only `psql` queries, local image inspection, and container path checks; they never pull images, start/stop containers, migrate, print executor IDs, or print credential contents. A stopped or unreachable database is reported as unavailable (a warning at most), not as a doctor failure.
 - `lint` aggregates failures across selected targets and exits nonzero if any tool fails, including failures inside backend/frontend subshells. A later successful formatter or target must not erase an earlier failure; `--fix` follows the same exit-status contract.
 
 ## Work Guidance

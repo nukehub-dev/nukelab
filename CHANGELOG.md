@@ -27,6 +27,12 @@ section.
   approval automatically.
 - A range-scoped signed-commit check for pull requests, pushes and release
   tags, so legacy unsigned history does not block new work.
+- Cross-install environment manifests now match destination approvals by the
+  portable fingerprint only; local-only manifests keep strict local revision
+  matching. Admin operations visibility adds sanitized list/detail views and a
+  proof-only reconcile action with no force path.
+- `doctor` now reports recovery-journal, heartbeat, registry-verification,
+  credential, and legacy-row state without mutating the stack.
 
 ### Changed
 

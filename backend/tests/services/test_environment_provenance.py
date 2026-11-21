@@ -33,11 +33,23 @@ def image(**changes):
     )
 
 
-def revision():
+def verified_image(**changes):
+    return image(
+        registry_verified=True,
+        verified_reference="registry/workspace@sha256:" + "b" * 64,
+        manifest_digest="sha256:" + "b" * 64,
+        index_digest="sha256:" + "d" * 64,
+        descriptor_media_type="application/vnd.oci.image.manifest.v1+json",
+        **changes,
+    )
+
+
+def revision(*, portable_fingerprint=None, runtime=None):
     return SimpleNamespace(
         id=uuid4(),
         fingerprint="c" * 64,
-        runtime_identity=image().model_dump(mode="json"),
+        portable_fingerprint=portable_fingerprint,
+        runtime_identity=(runtime or image()).model_dump(mode="json"),
         toolchain_identity=None,
         configuration={"tool_mounts": [], "environment_variables": {"TOKEN": "secret-value"}},
     )
@@ -73,6 +85,35 @@ def test_local_repository_metadata_is_not_portability_proof():
 def test_manifest_round_trip_and_names_only():
     exported = manifest()
     assert EnvironmentManifest.parse_import(exported.model_dump_json()) == exported
+
+
+def test_verified_export_includes_portable_fingerprint_and_round_trips():
+    exported = manifest(revision(portable_fingerprint="e" * 64, runtime=verified_image()))
+    assert exported.portability == "registry_verified"
+    assert exported.portable_fingerprint == "e" * 64
+    assert exported.runtime.registry_verified is True
+
+    parsed = EnvironmentManifest.parse_import(exported.model_dump_json())
+    assert parsed == exported
+    assert parsed.portable_fingerprint == "e" * 64
+
+
+def test_local_only_export_omits_portable_fingerprint_and_old_manifests_parse():
+    exported = manifest()
+    payload = exported.model_dump(mode="json")
+    assert exported.portability == "local_only"
+    assert "portable_fingerprint" not in payload
+    assert "Local image artifacts must remain available" in exported.limitations[-1]
+
+    parsed = EnvironmentManifest.parse_import(json.dumps(payload))
+    assert parsed.portability == "local_only"
+    assert parsed.portable_fingerprint is None
+
+
+def test_local_only_manifest_rejects_an_advertised_portable_fingerprint():
+    payload = manifest().model_dump(mode="json") | {"portable_fingerprint": "e" * 64}
+    with pytest.raises(ValidationError):
+        EnvironmentManifest.parse_import(json.dumps(payload))
 
 
 @pytest.mark.parametrize(

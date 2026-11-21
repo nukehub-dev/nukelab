@@ -380,7 +380,7 @@ def _launch_http_error(error):
     if isinstance(error, ConfigurationChanged):
         code = "configuration_changed"
     if isinstance(error, RevisionUnavailable):
-        code = "revision_unavailable"
+        code = error.code
     detail = {"code": code}
     if isinstance(error, QueueError) and error.queue_id is not None:
         detail["queue_id"] = str(error.queue_id)

@@ -25,8 +25,17 @@ class RevisionUnavailable(ValueError):
     code = "revision_unavailable"
 
 
+class RevisionAmbiguous(RevisionUnavailable):
+    """More than one current approval matches a portable environment identity."""
+
+    code = "revision_ambiguous"
+
+
 class ConfigurationChanged(ValueError):
     code = "configuration_changed"
+
+
+PORTABLE_CANDIDATE_LIMIT = 64
 
 
 def template_configuration(template: EnvironmentTemplate) -> dict:
@@ -83,6 +92,35 @@ class EnvironmentRevisionService:
                 .execution_options(populate_existing=True)
             )
         ).scalar_one_or_none()
+
+    async def find_active_portable_candidates(
+        self,
+        portable_fingerprint: str,
+        *,
+        limit: int = PORTABLE_CANDIDATE_LIMIT,
+    ) -> list[EnvironmentRevision]:
+        """Active revisions sharing a portable fingerprint, newest first.
+
+        Revoked revisions are history and never satisfy cross-install matching.
+        The bounded ``created_at``/``id`` ordering keeps the choice deterministic
+        when a template has several matching approved revisions.
+        """
+        if limit < 1:
+            raise ValueError("Portable candidate limit must be positive")
+        result = await self.db.execute(
+            select(EnvironmentRevision)
+            .where(
+                EnvironmentRevision.portable_fingerprint == portable_fingerprint,
+                EnvironmentRevision.revoked.is_(False),
+            )
+            .order_by(
+                EnvironmentRevision.created_at.desc(),
+                EnvironmentRevision.id.desc(),
+            )
+            .limit(limit)
+            .execution_options(populate_existing=True)
+        )
+        return list(result.scalars().all())
 
     async def _active_revision_by_fingerprint(
         self, template_id: UUID, revision_fingerprint: str

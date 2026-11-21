@@ -17,6 +17,7 @@ from app.core.tracing import init_tracing, is_tracing_enabled
 logger = get_logger(__name__)
 from app.api import (
     admin,
+    admin_operations,
     analytics,
     auth,
     bulk,
@@ -302,6 +303,7 @@ app.include_router(tokens.router, prefix="/tokens", tags=["tokens"])
 app.include_router(credits.router, prefix="/credits", tags=["credits"])
 app.include_router(credit_requests.router, prefix="/credit-requests", tags=["credit-requests"])
 app.include_router(admin.router, prefix="/admin", tags=["admin"])
+app.include_router(admin_operations.router, prefix="/admin", tags=["admin-operations"])
 app.include_router(preferences.router, prefix="/preferences", tags=["preferences"])
 app.include_router(environments.router, prefix="/environments", tags=["environments"])
 app.include_router(plans.router, prefix="/plans", tags=["plans"])
