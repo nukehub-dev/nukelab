@@ -2,7 +2,17 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 import { createFileRoute } from '@tanstack/react-router'
-import { Boxes, Layers, GitBranch, CheckCircle2, XCircle, Copy, Pencil, Trash2 } from 'lucide-react'
+import {
+  Boxes,
+  Layers,
+  GitBranch,
+  CheckCircle2,
+  XCircle,
+  Copy,
+  Pencil,
+  Trash2,
+  History,
+} from 'lucide-react'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { ResourcePageLayout } from '../components/layout/resource-page-layout'
 import { DataTable } from '../components/data/data-table'
@@ -37,6 +47,7 @@ import { Textarea } from '../components/ui/textarea'
 import { motion } from 'framer-motion'
 import { Tooltip } from '../components/ui/tooltip'
 import { useConfirmDialog } from '../components/ui/confirm-dialog'
+import { EnvironmentRevisionsPanel } from '../components/admin/environment-revisions-panel'
 
 export const Route = createFileRoute('/admin/environments')({
   component: EnvironmentsPage,
@@ -53,6 +64,10 @@ function EnvironmentsPage() {
   const density = useThemeStore((state) => state.density)
   const { confirm, dialog } = useConfirmDialog()
   const canManageEnvironments = useAuthStore((state) => state.canManageEnvironments())
+  const canReadRevisions = useAuthStore((state) =>
+    state.hasAllPermissions([PERMISSIONS.ENVIRONMENT_READ, PERMISSIONS.ADMIN_ACCESS])
+  )
+  const [revisionsEnvironment, setRevisionsEnvironment] = useState<EnvironmentType | null>(null)
 
   const {
     state: tableState,
@@ -310,7 +325,7 @@ function EnvironmentsPage() {
       header: 'Created',
       cell: ({ row }) => formatDate(row.getValue('created_at') as string),
     },
-    ...(canManageEnvironments
+    ...(canManageEnvironments || canReadRevisions
       ? [
           {
             id: 'actions' as const,
@@ -319,68 +334,82 @@ function EnvironmentsPage() {
               const env = row.original
               return (
                 <div className="flex items-center gap-1">
-                  <Tooltip content="Edit">
-                    <motion.button
-                      onClick={() => openEditDialog(env)}
-                      className="inline-flex p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </motion.button>
-                  </Tooltip>
-                  {env.is_active ? (
-                    <Tooltip content="Deactivate">
+                  {canReadRevisions && (
+                    <Tooltip content="Revisions">
                       <motion.button
-                        onClick={() => deactivateEnvironment.mutate(env.id)}
-                        disabled={deactivateEnvironment.isPending}
-                        className="inline-flex p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-colors"
+                        onClick={() => setRevisionsEnvironment(env)}
+                        className="inline-flex p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
                       >
-                        <XCircle className="w-4 h-4" />
-                      </motion.button>
-                    </Tooltip>
-                  ) : (
-                    <Tooltip content="Activate">
-                      <motion.button
-                        onClick={() => activateEnvironment.mutate(env.id)}
-                        disabled={activateEnvironment.isPending}
-                        className="inline-flex p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-colors"
-                      >
-                        <CheckCircle2 className="w-4 h-4" />
+                        <History className="w-4 h-4" />
                       </motion.button>
                     </Tooltip>
                   )}
-                  <Tooltip content="Clone">
-                    <motion.button
-                      onClick={() => {
-                        const name = prompt('New name:', env.name + ' Copy')
-                        const slug = prompt('New slug:', env.slug + '-copy')
-                        if (name && slug) {
-                          cloneEnvironment.mutate({ envId: env.id, name, slug })
-                        }
-                      }}
-                      disabled={cloneEnvironment.isPending}
-                      className="inline-flex p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
-                    >
-                      <Copy className="w-4 h-4" />
-                    </motion.button>
-                  </Tooltip>
-                  <Tooltip content="Delete">
-                    <motion.button
-                      onClick={async () => {
-                        const confirmed = await confirm({
-                          title: 'Delete Environment',
-                          description: `Are you sure you want to delete ${env.name}?`,
-                          confirmLabel: 'Delete',
-                          cancelLabel: 'Cancel',
-                          variant: 'danger',
-                        })
-                        if (confirmed) deleteEnvironment.mutate(env.id)
-                      }}
-                      disabled={deleteEnvironment.isPending}
-                      className="inline-flex p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </motion.button>
-                  </Tooltip>
+                  {canManageEnvironments && (
+                    <>
+                      <Tooltip content="Edit">
+                        <motion.button
+                          onClick={() => openEditDialog(env)}
+                          className="inline-flex p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </motion.button>
+                      </Tooltip>
+                      {env.is_active ? (
+                        <Tooltip content="Deactivate">
+                          <motion.button
+                            onClick={() => deactivateEnvironment.mutate(env.id)}
+                            disabled={deactivateEnvironment.isPending}
+                            className="inline-flex p-1.5 rounded-lg hover:bg-amber-500/10 text-amber-400 transition-colors"
+                          >
+                            <XCircle className="w-4 h-4" />
+                          </motion.button>
+                        </Tooltip>
+                      ) : (
+                        <Tooltip content="Activate">
+                          <motion.button
+                            onClick={() => activateEnvironment.mutate(env.id)}
+                            disabled={activateEnvironment.isPending}
+                            className="inline-flex p-1.5 rounded-lg hover:bg-emerald-500/10 text-emerald-400 transition-colors"
+                          >
+                            <CheckCircle2 className="w-4 h-4" />
+                          </motion.button>
+                        </Tooltip>
+                      )}
+                      <Tooltip content="Clone">
+                        <motion.button
+                          onClick={() => {
+                            const name = prompt('New name:', env.name + ' Copy')
+                            const slug = prompt('New slug:', env.slug + '-copy')
+                            if (name && slug) {
+                              cloneEnvironment.mutate({ envId: env.id, name, slug })
+                            }
+                          }}
+                          disabled={cloneEnvironment.isPending}
+                          className="inline-flex p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
+                        >
+                          <Copy className="w-4 h-4" />
+                        </motion.button>
+                      </Tooltip>
+                      <Tooltip content="Delete">
+                        <motion.button
+                          onClick={async () => {
+                            const confirmed = await confirm({
+                              title: 'Delete Environment',
+                              description: `Are you sure you want to delete ${env.name}?`,
+                              confirmLabel: 'Delete',
+                              cancelLabel: 'Cancel',
+                              variant: 'danger',
+                            })
+                            if (confirmed) deleteEnvironment.mutate(env.id)
+                          }}
+                          disabled={deleteEnvironment.isPending}
+                          className="inline-flex p-1.5 rounded-lg hover:bg-destructive/10 text-destructive transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </motion.button>
+                      </Tooltip>
+                    </>
+                  )}
                 </div>
               )
             },
@@ -491,6 +520,16 @@ function EnvironmentsPage() {
       <div className="flex items-center justify-between pt-1">
         <span className="text-xs text-muted-foreground">Created: {formatDate(env.created_at)}</span>
         <div className="flex items-center gap-1">
+          {canReadRevisions && (
+            <Tooltip content="Revisions">
+              <button
+                onClick={() => setRevisionsEnvironment(env)}
+                className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex"
+              >
+                <History className="w-4 h-4" />
+              </button>
+            </Tooltip>
+          )}
           {canManageEnvironments && (
             <>
               <Tooltip content="Edit">
@@ -740,6 +779,12 @@ function EnvironmentsPage() {
             <DialogClose onClick={() => setDialogOpen(false)} />
           </DialogContent>
         </Dialog>
+      )}
+      {revisionsEnvironment && (
+        <EnvironmentRevisionsPanel
+          environment={revisionsEnvironment}
+          onClose={() => setRevisionsEnvironment(null)}
+        />
       )}
       {dialog}
     </>
