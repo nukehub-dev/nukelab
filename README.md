@@ -49,7 +49,11 @@ For hot-reload development:
 
 ## Architecture at a Glance
 
-![NukeLab architecture](docs/assets/architecture.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/architecture-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/architecture-light.svg">
+  <img src="docs/assets/architecture-light.svg" alt="NukeLab architecture: browser traffic reaches Traefik, which routes to the React SPA, FastAPI backend, and NukeIDE containers. The backend and Celery workers use PostgreSQL, Redis, and the container driver, while an optional observability stack covers the platform.">
+</picture>
 
 See [docs/architecture/OVERVIEW.md](docs/architecture/OVERVIEW.md) for the full
 system overview and [docs/architecture/COMPONENTS.md](docs/architecture/COMPONENTS.md)

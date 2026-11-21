@@ -25,11 +25,12 @@ All files under `docs/`. The `docs/AGENTS.md` owns the docs structure; each subf
 | `development/` | Contributors | Local development setup, contributing workflow |
 | `plan/` | Product owners, leads, contributors | Roadmap, implementation status, decision log |
 | `reference/` | Everyone | Environment variable and CLI command quick reference |
-| `assets/` | Everyone | Shared documentation assets: diagrams, logos, and generated images |
+| `assets/` | Everyone | Theme-aware README architecture SVGs, local brand icons, and the SVG generator source |
 
 ## Work guidance
 
 - Keep `architecture/` in sync with code changes. A PR that modifies a documented flow, component boundary, auth mechanism, or data model must update the corresponding architecture document or explain why it is not necessary.
+- The root `README.md` architecture overview uses `docs/assets/architecture-light.svg` and `architecture-dark.svg` through a `<picture>` wrapper. Generate both from `docs/assets/build-architecture-svg.py`; do not hand-edit the generated SVGs. Keep them free of remote CDNs, remote icons, and external requests; the brand icons are embedded as data URIs.
 - Keep `PENETRATION-TEST-PLAN.md` in sync with implemented security controls and current scope.
 - Record confirmed findings in `PENETRATION-TEST-FINDINGS.md` with CVSS ratings and retest criteria.
 - Track remediation ownership in `PENETRATION-TEST-REMEDIATION.md`.
@@ -40,6 +41,8 @@ All files under `docs/`. The `docs/AGENTS.md` owns the docs structure; each subf
 ## Verification
 
 - Manual review for accuracy and stale content.
+- When changing the README architecture block, run `python3 docs/assets/build-architecture-svg.py`, preview both SVGs in light and dark, and check mobile width.
+- Run `python3 docs/assets/build-architecture-svg.py --check` before committing generated assets.
 - Run `./nukelabctl lint markdown` after documentation edits; it runs the same
   Markdown lint and link checks as CI.
 - Run `./nukelabctl lint shell` if any shell scripts (not fenced examples) are

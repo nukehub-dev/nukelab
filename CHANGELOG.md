@@ -14,6 +14,13 @@ section.
 
 ## [Unreleased]
 
+### Changed
+
+- The root README architecture map is now a generated light/dark SVG pair
+  selected by `<picture>`, with local brand icons embedded as data URIs and no
+  CDN or runtime network dependency. The old HTML/PNG source was removed and
+  docs CI verifies the generated SVGs against their checked-in generator.
+
 ## [2.2.0] - 2026-11-20
 
 ### Added
