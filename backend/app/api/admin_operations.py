@@ -51,6 +51,7 @@ from app.services.operation_reconciliation import (
     RuntimeState,
     TerminalState,
 )
+from app.services.recovery_notifications import RecoveryNotifier
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/operations")
@@ -336,6 +337,32 @@ async def _record_audit(
         ) from None
 
 
+async def _notify_owner(
+    db: AsyncSession,
+    *,
+    kind: OperationKind,
+    operation_id: UUID,
+    decision: ReconcileDecision,
+    applied_state: str,
+) -> None:
+    """Tell the operation owner about an applied transition, best effort.
+
+    The actor and reason stay in the audit entry; this notification belongs to
+    the owner and never changes the response or the already-committed state.
+    """
+    try:
+        await RecoveryNotifier(db).notify_applied(decision, applied_state=applied_state)
+    except Exception as exc:
+        logger.warning(
+            "Operation recovery notification failed",
+            extra={
+                "kind": kind.value,
+                "operation_id": str(operation_id),
+                "error_class": type(exc).__name__,
+            },
+        )
+
+
 @router.get("", response_model=AdminOperationPage)
 async def list_operations(
     response: Response,
@@ -534,12 +561,13 @@ async def reconcile_operation(
             },
         )
 
-    applied = False
+    finalized = False
     if decision.terminal_state in (TerminalState.SUCCEEDED, TerminalState.FAILED):
-        applied = await OperationFinalizer(db, driver).finalize(
+        finalized = await OperationFinalizer(db, driver).finalize(
             decision, expected_fence=expected_fence
         )
 
+    applied = finalized
     current = await _load(db, kind, operation_id)
     if current is not None:
         current_state = _row_state(kind, current)
@@ -570,6 +598,14 @@ async def reconcile_operation(
         current_state=current_state,
         applied=applied,
     )
+    if finalized:
+        await _notify_owner(
+            db,
+            kind=kind,
+            operation_id=operation_id,
+            decision=decision,
+            applied_state=current_state,
+        )
     return AdminOperationReconcileResult(
         **result.model_dump(),
         previous_state=previous_state,

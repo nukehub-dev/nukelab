@@ -34,7 +34,15 @@ section.
 - `doctor` now reports recovery-journal, heartbeat, registry-verification,
   credential, and legacy-row state without mutating the stack.
 - External Dockerfile base images are now checked by a strict `Base Image
-  Pinning` security job included in `Security Gate`.
+  Pinning` security job included in `Security Gate`; a weekly review reports
+  upstream tag drift in one tracked issue.
+- Tagged release CI publishes deterministic CycloneDX SBOMs plus build
+  provenance and SBOM attestations for every image, then verifies them with
+  `gh attestation verify`. Normal branch CI does not run the release-only
+  scans.
+- Operators get a read-only cross-owner queue view, and owners get deduplicated
+  recovery attention/completion notifications plus a bounded daily reminder
+  for unresolved recovery-required work.
 - Volume backup/restore execution now heartbeats under its fenced operation,
   and proof-backed completion is applied by the reconciler only after artifact
   and helper-termination checks. The admin UI adds environment-revision and

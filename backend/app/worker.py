@@ -416,6 +416,10 @@ celery_app.conf.update(
             "task": "app.tasks.remind_stale_credit_requests",
             "schedule": 3600.0,  # Hourly
         },
+        "remind-recovery-required-operations": {
+            "task": "app.tasks.remind_recovery_required_operations",
+            "schedule": crontab(hour=8, minute=0),  # Daily at 08:00 UTC
+        },
         "rollup-server-metrics": {
             "task": "app.tasks.rollup_server_metrics",
             "schedule": crontab(hour=3, minute=0),  # Daily at 3 AM

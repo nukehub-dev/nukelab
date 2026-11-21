@@ -183,7 +183,7 @@ async def finalize_launch_success(
             ):
                 return server
             raise LaunchError("launch_in_progress")
-        if operation.state != "executing":
+        if operation.state not in ("executing", "uncertain"):
             raise LaunchError("launch_in_progress")
 
     if server.status != "starting":

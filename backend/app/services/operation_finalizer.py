@@ -617,7 +617,7 @@ class OperationFinalizer:
             )
             if (
                 operation is None
-                or operation.state != "executing"
+                or operation.state not in ("executing", "uncertain")
                 or operation.fencing_token != snapshot.fencing_token
             ):
                 return False

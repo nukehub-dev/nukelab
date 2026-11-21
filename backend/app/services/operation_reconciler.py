@@ -46,6 +46,7 @@ from app.services.operation_reconciliation import (
     TerminalState,
 )
 from app.services.recovery_metrics import persist_recovery_scan, record_recovery_scan
+from app.services.recovery_notifications import RecoveryNotifier
 
 logger = logging.getLogger(__name__)
 
@@ -307,10 +308,12 @@ class OperationReconciler:
         if decision.terminal_state is TerminalState.RECOVERY_REQUIRED:
             if applied:
                 self._log_transition(candidate, decision, row_started)
+                await self._notify(candidate, decision)
             return _RECOVERY_REQUIRED
 
         if applied:
             self._log_transition(candidate, decision, row_started)
+            await self._notify(candidate, decision)
             return _FINALIZED
         return _DEFERRED
 
@@ -336,6 +339,28 @@ class OperationReconciler:
                 volume_hooks=self._volume_hooks,
             )
             return await finalizer.finalize(decision, expected_fence=expected_fence)
+
+    async def _notify(self, candidate: _Candidate, decision: ReconcileDecision) -> None:
+        """Deliver the owner notification in its own session, after the commit.
+
+        No admission/runtime lock spans delivery, and a notification problem is
+        logged by class without changing the scan counters or journal state.
+        """
+        state = _applied_state(candidate, decision)
+        if state is None:
+            return
+        try:
+            async with self._session_factory() as db:
+                await RecoveryNotifier(db).notify_applied(decision, applied_state=state)
+        except Exception as exc:
+            logger.warning(
+                "Operation recovery notification failed",
+                extra={
+                    "kind": candidate.kind.value,
+                    "operation_id": str(candidate.operation_id),
+                    "error_class": type(exc).__name__,
+                },
+            )
 
     def _prepared_grace_elapsed(self, candidate: _Candidate, now: datetime) -> bool:
         if candidate.created_at is None:

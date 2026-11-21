@@ -758,6 +758,39 @@ async def test_recovery_maps_queue_by_server_link_when_intent_is_missing(db_sess
 
 
 @pytest.mark.asyncio
+async def test_uncertain_launch_can_be_adopted_with_complete_proof(db_session, test_user):
+    fixture = await add_launch(db_session, test_user)
+    operation = await db_session.get(
+        ServerLaunchOperation, fixture.operation_id, populate_existing=True
+    )
+    operation.state = "uncertain"
+    operation.reason_code = "recovery_required"
+    await db_session.commit()
+
+    container_id = f"container-{uuid.uuid4().hex}"
+    driver = FakeDriver()
+    driver.images[LOCAL_ID] = local_identity()
+    driver.containers[container_id] = container_info(
+        container_id,
+        server_id=fixture.server_id,
+        launch_id=fixture.operation_id,
+    )
+    decision = await inspect(db_session, driver, "launch", fixture.operation_id)
+    assert decision.terminal_state is TerminalState.SUCCEEDED
+
+    assert await OperationFinalizer(db_session, driver).finalize(decision) is True
+
+    await db_session.refresh(operation)
+    server = await db_session.get(Server, fixture.server_id, populate_existing=True)
+    queue = await db_session.get(ServerQueue, fixture.queue_id, populate_existing=True)
+    assert operation.state == "succeeded"
+    assert operation.reason_code is None
+    assert server.status == "running"
+    assert server.container_id == container_id
+    assert queue.status == "started"
+
+
+@pytest.mark.asyncio
 async def test_success_requires_container_and_public_readiness(db_session, test_user):
     fixture = await add_launch(db_session, test_user)
     container_id = f"container-{uuid.uuid4().hex}"

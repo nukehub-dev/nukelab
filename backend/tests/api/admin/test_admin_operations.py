@@ -14,6 +14,7 @@ from app.api import admin_operations
 from app.core.time_utils import utc_now
 from app.models.activity_log import ActivityLog
 from app.models.gpu_allocation import GpuAllocation
+from app.models.notification import Notification
 from app.models.server import Server
 from app.models.server_launch_operation import ServerLaunchOperation
 from app.models.server_launch_record import ServerLaunchRecord
@@ -75,6 +76,13 @@ async def _activity(db, operation_id):
             .order_by(ActivityLog.created_at, ActivityLog.id)
         )
     ).all()
+
+
+async def _notifications(db, user_id=None):
+    statement = select(Notification).order_by(Notification.created_at, Notification.id)
+    if user_id is not None:
+        statement = statement.where(Notification.user_id == user_id)
+    return list((await db.scalars(statement)).all())
 
 
 async def test_list_filters_pagination_and_sanitization(client, admin_token, db_session, test_user):
@@ -572,3 +580,69 @@ async def test_terminal_volume_rows_are_not_reopened(
     logs = await _activity(db_session, backup.id)
     assert len(logs) == 1
     assert logs[0].action == "operations.reconcile"
+
+
+async def test_applied_reconciliation_notifies_the_owner_once(
+    client, admin_token, admin_user, db_session, test_user
+):
+    fixture = await add_launch(db_session, test_user, executor_state="stopped")
+    admin_id = admin_user.id
+
+    response = await client.post(
+        f"/api/admin/operations/launch/{fixture.operation_id}/reconcile",
+        headers=auth(admin_token),
+        json={"reason": "executor recorded a graceful shutdown"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["applied"] is True
+    notifications = await _notifications(db_session)
+    assert len(notifications) == 1
+    notification = notifications[0]
+    assert notification.user_id == test_user.id
+    assert notification.user_id != admin_id
+    assert notification.type == "server"
+    assert notification.extra_data["operation_kind"] == "launch"
+    assert notification.extra_data["operation_id"] == str(fixture.operation_id)
+    assert notification.extra_data["terminal_state"] == "failed"
+    assert notification.extra_data["server_id"] == str(fixture.server_id)
+
+    repeated = await client.post(
+        f"/api/admin/operations/launch/{fixture.operation_id}/reconcile",
+        headers=auth(admin_token),
+        json={"reason": "confirm the terminal row stays closed"},
+    )
+
+    assert repeated.status_code == 200
+    assert repeated.json()["applied"] is False
+    assert len(await _notifications(db_session)) == 1
+
+
+async def test_notification_failure_does_not_fail_applied_reconciliation(
+    client, admin_token, db_session, test_user, monkeypatch
+):
+    fixture = await add_launch(db_session, test_user, executor_state="stopped")
+
+    class BrokenNotifier:
+        def __init__(self, db):
+            self.db = db
+
+        async def notify_applied(self, decision, *, applied_state=None):
+            raise RuntimeError("notification channel unavailable")
+
+    monkeypatch.setattr(admin_operations, "RecoveryNotifier", BrokenNotifier)
+
+    response = await client.post(
+        f"/api/admin/operations/launch/{fixture.operation_id}/reconcile",
+        headers=auth(admin_token),
+        json={"reason": "executor recorded a graceful shutdown"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["applied"] is True
+    assert response.json()["state"] == "failed"
+    operation = await db_session.get(
+        ServerLaunchOperation, fixture.operation_id, populate_existing=True
+    )
+    assert operation.state == "failed"
+    assert await _notifications(db_session) == []

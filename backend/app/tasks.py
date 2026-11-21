@@ -15,6 +15,10 @@ from app.config import settings
 from app.core.logging import get_logger
 from app.core.time_utils import utc_now
 from app.services.operation_reconciler import OperationReconciler
+from app.services.recovery_notifications import (
+    RECOVERY_REMINDER_BATCH_LIMIT,
+    send_recovery_reminders,
+)
 from app.services.volume_finalization import VolumeFinalizationHooks
 from app.worker import celery_app, ensure_journal_schema
 
@@ -271,6 +275,36 @@ def remind_stale_credit_requests(self):
         return _run_async(_remind())
     except Exception as e:
         return f"Error reminding stale credit requests: {e}"
+
+
+@celery_app.task(bind=True)
+def remind_recovery_required_operations(self):
+    """Remind owners about recovery rows that are still unresolved.
+
+    At most one reminder is sent per operation per 24 hours, and each sweep
+    inspects a bounded batch. A broker or database failure leaves the durable
+    journal rows untouched for the next scheduled run.
+    """
+
+    async def _remind():
+        async with AsyncSessionLocal() as db:
+            report = await send_recovery_reminders(
+                db,
+                limit=RECOVERY_REMINDER_BATCH_LIMIT,
+            )
+            return (
+                f"Recovery reminders: scanned={report.scanned}, sent={report.sent}, "
+                f"skipped={report.skipped}"
+            )
+
+    try:
+        return _run_async(_remind())
+    except Exception as exc:
+        logger.warning(
+            "Recovery reminder sweep deferred",
+            extra={"error_class": type(exc).__name__},
+        )
+        return "Recovery reminder sweep deferred"
 
 
 @celery_app.task(bind=True)
