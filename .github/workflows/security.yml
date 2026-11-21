@@ -260,12 +260,169 @@ jobs:
           cp .env.example .env.development
           ./nukelabctl security --check-base-images --no-bandit --no-pip-audit --no-npm-audit --no-trivy
 
+  base-image-digest-review:
+    name: Base Image Digest Review
+    runs-on: ubuntu-latest
+    # Weekly and manual review only. This is intentionally not a PR gate: the
+    # strict Base Image Pinning job above remains the blocking check.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+      issues: write
+    concurrency:
+      group: base-image-digest-review
+      cancel-in-progress: false
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      # Optional read-only Docker Hub credentials avoid anonymous manifest
+      # rate limits. Set repository variable DOCKERHUB_USERNAME and secret
+      # DOCKERHUB_TOKEN to enable; the token is never echoed.
+      - name: Authenticate to Docker Hub (optional)
+        shell: bash
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "$DOCKERHUB_USERNAME" ] || [ -z "$DOCKERHUB_TOKEN" ]; then
+            echo "No Docker Hub credentials configured; resolving anonymously."
+            exit 0
+          fi
+          printf '%s' "$DOCKERHUB_TOKEN" | docker login docker.io --username "$DOCKERHUB_USERNAME" --password-stdin
+
+      - name: Verify Docker Buildx availability
+        run: docker buildx version
+
+      - name: Resolve pinned base-image tags
+        id: drift
+        shell: bash
+        run: |
+          set +e
+          ./scripts/security/check-base-image-drift.sh --platform linux/amd64 > base-image-drift.txt 2>&1
+          status=$?
+          set -e
+          cat base-image-drift.txt
+          case "$status" in
+            0|1|2) ;;
+            *)
+              echo "Unexpected checker exit code: $status" >&2
+              exit 2
+              ;;
+          esac
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update drift tracking issue
+        id: issue
+        if: steps.drift.outputs.status == '1'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title='[supply-chain] Base image digest drift'
+          body_file="${RUNNER_TEMP}/base-image-digest-drift-issue.md"
+          {
+            echo "## Base image digest drift detected"
+            echo
+            echo "- Detected: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo "- Workflow run: ${RUN_URL}"
+            echo "- Platform reviewed: \`linux/amd64\`"
+            echo "- Scope: tracked Dockerfile \`FROM\` references only (tool images and GitHub Actions refs are out of scope)."
+            echo
+            echo '```text'
+            head -c 50000 base-image-drift.txt
+            if [ "$(wc -c < base-image-drift.txt)" -gt 50000 ]; then
+              echo
+              echo "... output truncated at 50000 bytes ..."
+            fi
+            echo '```'
+            echo
+            echo "### Remediation"
+            echo
+            echo "1. Confirm the current digest is the intended upstream artifact (review the registry and tag release notes)."
+            echo "2. Update each \`FROM image:tag@sha256:...\` listed above to the current digest."
+            echo "3. Run \`./nukelabctl security --check-base-images\` and rebuild the affected images."
+            echo "4. Open a normal pull request for review. This workflow never opens or updates a PR."
+            echo
+            echo "_This issue is maintained automatically by the scheduled Base Image Digest Review workflow._"
+          } > "$body_file"
+
+          existing="$(gh issue list --state open --search 'Base image digest drift in:title' --limit 100 --json number,title,url)"
+          number="$(jq -r --arg title "$title" '.[] | select(.title == $title) | .number' <<< "$existing" | head -n 1)"
+          if [ -n "$number" ]; then
+            gh issue edit "$number" --body-file "$body_file" > /dev/null
+            url="$(jq -r --arg title "$title" '.[] | select(.title == $title) | .url' <<< "$existing" | head -n 1)"
+            echo "Updated existing drift issue #${number}"
+          else
+            label_args=()
+            if gh label create supply-chain --color BFD4F2 --description 'Scheduled supply-chain review' > /dev/null 2>&1 \
+              || gh label list --limit 100 --json name --jq '.[] | select(.name == "supply-chain") | .name' | grep -qx supply-chain; then
+              label_args=(--label supply-chain)
+            fi
+            url="$(gh issue create --title "$title" --body-file "$body_file" "${label_args[@]}")"
+            number="${url##*/}"
+            echo "Created drift issue #${number}"
+          fi
+          echo "number=${number}" >> "$GITHUB_OUTPUT"
+          echo "url=${url}" >> "$GITHUB_OUTPUT"
+
+      - name: Close resolved drift issue
+        if: steps.drift.outputs.status == '0'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title='[supply-chain] Base image digest drift'
+          existing="$(gh issue list --state open --search 'Base image digest drift in:title' --limit 100 --json number,title,url)"
+          number="$(jq -r --arg title "$title" '.[] | select(.title == $title) | .number' <<< "$existing" | head -n 1)"
+          if [ -z "$number" ]; then
+            echo "No open drift issue to close."
+            exit 0
+          fi
+          gh issue close "$number" --reason completed \
+            --comment "No base-image digest drift was detected on $(date -u +'%Y-%m-%dT%H:%M:%SZ'). Run: ${RUN_URL}"
+          echo "Closed resolved drift issue #${number}"
+
+      - name: Fail on resolution error
+        if: steps.drift.outputs.status == '2'
+        run: |
+          echo "::error::Base-image digest resolution failed; see the checker output above. No issue was opened, updated, or closed."
+          exit 1
+
+      - name: Fail on drift
+        if: steps.drift.outputs.status == '1'
+        run: |
+          echo "::error::Base image digest drift detected; tracking issue: ${{ steps.issue.outputs.url }}"
+          exit 1
+
+      - name: Publish checker output to job summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f base-image-drift.txt ]; then
+            {
+              echo '### Base image digest review'
+              echo '```text'
+              cat base-image-drift.txt
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   security-gate:
     name: Security Gate
     runs-on: ubuntu-latest
     # Always run so branch protection can require a stable, non-matrix check
     # even when path-scoped scans are skipped or an upstream job fails.
-    # Keep this list in sync with every job in this workflow.
+    # Keep this list in sync with every pull-request-enforced job; the
+    # scheduled-only Base Image Digest Review is intentionally excluded.
     if: always()
     needs:
       - changes
