@@ -35,6 +35,10 @@ section.
   credential, and legacy-row state without mutating the stack.
 - External Dockerfile base images are now checked by a strict `Base Image
   Pinning` security job included in `Security Gate`.
+- Volume backup/restore execution now heartbeats under its fenced operation,
+  and proof-backed completion is applied by the reconciler only after artifact
+  and helper-termination checks. The admin UI adds environment-revision and
+  recovery-operation consoles; the console has no force or override path.
 
 ### Changed
 
