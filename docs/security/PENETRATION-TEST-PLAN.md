@@ -256,7 +256,7 @@ Phase 10: Remediation Support & Retest
 | CICD-04b | Container image signing with Cosign | `.github/workflows/security.yml` | Target state: built backend/frontend/auth-sidecar/volume-helper images are signed with Cosign keyless signing using GitHub OIDC; signatures published to GHCR. Not yet implemented |
 | CICD-04c | Cosign signature verification | `.github/workflows/security.yml` / downstream consumers | Future requirement once Cosign signing exists: verify with `cosign verify --certificate-identity-regexp` and enforce policy in deployment workflows |
 | CICD-05 | Workflow permissions | `.github/workflows/*.yml` | Minimal `permissions`, no `pull_request_target` abuse |
-| CICD-06 | Base image pinning | Dockerfiles | All external base images pinned by digest; verified by `./nukelabctl security --check-base-images` |
+| CICD-06 | Base image pinning | Dockerfiles | All external base images pinned by digest; verified strictly by the `Base Image Pinning` job in `.github/workflows/security.yml` and included in `Security Gate` |
 | CICD-07 | SBOM generation | CI artifacts | CycloneDX/SPDX SBOM produced per release |
 
 ### 5.9 Phase 9 — WebSocket & Real-Time Channel Testing

@@ -24,6 +24,7 @@ from app.api import (
     credit_requests,
     credits,
     dashboard,
+    environment_revisions,
     environments,
     health,
     ip_restriction,
@@ -305,6 +306,16 @@ app.include_router(credit_requests.router, prefix="/credit-requests", tags=["cre
 app.include_router(admin.router, prefix="/admin", tags=["admin"])
 app.include_router(admin_operations.router, prefix="/admin", tags=["admin-operations"])
 app.include_router(preferences.router, prefix="/preferences", tags=["preferences"])
+app.include_router(
+    environment_revisions.router,
+    prefix="/environments",
+    tags=["environment-revisions"],
+)
+app.include_router(
+    environment_revisions.admin_router,
+    prefix="/admin/environment-revisions",
+    tags=["environment-revisions"],
+)
 app.include_router(environments.router, prefix="/environments", tags=["environments"])
 app.include_router(plans.router, prefix="/plans", tags=["plans"])
 app.include_router(push.router, prefix="/push", tags=["push"])

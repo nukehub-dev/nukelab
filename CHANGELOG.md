@@ -33,6 +33,8 @@ section.
   proof-only reconcile action with no force path.
 - `doctor` now reports recovery-journal, heartbeat, registry-verification,
   credential, and legacy-row state without mutating the stack.
+- External Dockerfile base images are now checked by a strict `Base Image
+  Pinning` security job included in `Security Gate`.
 
 ### Changed
 

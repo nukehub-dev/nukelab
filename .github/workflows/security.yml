@@ -245,6 +245,21 @@ jobs:
           echo "::warning::Branch contains unsigned commits. Enable branch protection"
           echo "::warning::requiring signed commits and configure team GPG/SSH signing."
 
+  base-image-pinning:
+    name: Base Image Pinning
+    runs-on: ubuntu-latest
+    # Enforced: every external Dockerfile base image must be digest-pinned.
+    # Deliberately not path-filtered and not continue-on-error, so Security
+    # Gate blocks an unpinned FROM instead of only reporting it.
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Verify base images are pinned by digest
+        run: |
+          cp .env.example .env.development
+          ./nukelabctl security --check-base-images --no-bandit --no-pip-audit --no-npm-audit --no-trivy
+
   security-gate:
     name: Security Gate
     runs-on: ubuntu-latest
@@ -258,6 +273,7 @@ jobs:
       - container-image-scan
       - secret-scan
       - signed-commits-check
+      - base-image-pinning
     permissions:
       contents: read
     steps:
@@ -294,8 +310,8 @@ jobs:
 
           print("All required security job results are success or skipped.")
           print(
-              "Note: the scan steps in Dependency/SAST, Container Image Scan, "
-              "and Signed Commits Check remain advisory while "
-              "continue-on-error is set."
+              "Note: Base Image Pinning is enforcing. The scan steps in "
+              "Dependency/SAST, Container Image Scan, and Signed Commits "
+              "Check remain advisory while continue-on-error is set."
           )
           PY
