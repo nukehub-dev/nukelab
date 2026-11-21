@@ -179,6 +179,7 @@ export function CommandPalette() {
   const navigate = useNavigate()
   const hasPermission = useAuthStore((state) => state.hasPermission)
   const hasAnyPermission = useAuthStore((state) => state.hasAnyPermission)
+  const hasAllPermissions = useAuthStore((state) => state.hasAllPermissions)
   const canAccessAdmin = useAuthStore((state) => state.canAccessAdmin)
 
   // Open on the global `show-search` event (same pattern as ShortcutsModal)
@@ -298,6 +299,13 @@ export function CommandPalette() {
         hasPermission(PERMISSIONS.ADMIN_ACCESS)
       ),
       ...adminPage(
+        'Recovery Operations',
+        '/admin/operations',
+        Wrench,
+        ['operations', 'recovery', 'reconcile', 'backup', 'restore'],
+        hasAllPermissions([PERMISSIONS.OPERATIONS_READ_ALL, PERMISSIONS.ADMIN_ACCESS])
+      ),
+      ...adminPage(
         'Analytics',
         '/admin/analytics',
         BarChart3,
@@ -392,7 +400,7 @@ export function CommandPalette() {
       ...(canAccessAdmin() ? [grafana] : []),
       page('Help & FAQ', '/support', LifeBuoy, ['help', 'questions', 'support', 'faq']),
     ]
-  }, [hasPermission, hasAnyPermission, canAccessAdmin])
+  }, [hasPermission, hasAnyPermission, hasAllPermissions, canAccessAdmin])
 
   const sections = useMemo<Section[]>(() => {
     if (isSlashMode) {

@@ -26,6 +26,7 @@ import {
   Clock,
   LifeBuoy,
   Search,
+  Wrench,
 } from 'lucide-react'
 import { NukeLabLogo } from '../logo'
 import { useSidebarStore } from '../../stores/sidebar-store'
@@ -41,6 +42,7 @@ interface NavItem {
   icon: React.ElementType
   href: string
   requiredPermission?: string
+  requiredPermissions?: string[]
 }
 
 interface NavGroup {
@@ -82,6 +84,12 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'Settings', icon: Settings, href: '/settings' },
       { label: 'Administration', icon: Shield, href: '/admin' },
+      {
+        label: 'Operations',
+        icon: Wrench,
+        href: '/admin/operations',
+        requiredPermissions: [PERMISSIONS.OPERATIONS_READ_ALL, PERMISSIONS.ADMIN_ACCESS],
+      },
       { label: 'Support', icon: LifeBuoy, href: '/support' },
     ],
   },
@@ -97,6 +105,9 @@ function canAccessItem(
   hasPermission: (p: string) => boolean,
   canAccessAdminPanel: () => boolean
 ): boolean {
+  if (item.requiredPermissions) {
+    return item.requiredPermissions.every((permission) => hasPermission(permission))
+  }
   if (!item.requiredPermission) {
     // Administration link is special - check any admin permission
     if (item.href === '/admin') return canAccessAdminPanel()
@@ -129,6 +140,9 @@ export function Sidebar() {
 
   const isActive = (href: string) => {
     if (href === '/') return location.pathname === '/'
+    // The administration hub is exact so nested admin routes can highlight
+    // their own sidebar entry.
+    if (href === '/admin') return location.pathname === '/admin'
     return location.pathname.startsWith(href)
   }
 

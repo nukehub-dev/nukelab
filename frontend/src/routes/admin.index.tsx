@@ -61,6 +61,7 @@ interface AdminCategory {
   icon: React.ElementType
   href: string
   requiredPermission?: string
+  requiredPermissions?: string[]
   color: string
   external?: boolean
 }
@@ -97,6 +98,14 @@ const categories: AdminCategory[] = [
     href: '/admin/health',
     requiredPermission: PERMISSIONS.ADMIN_ACCESS,
     color: 'bg-rose-500/10 text-rose-400',
+  },
+  {
+    label: 'Recovery Operations',
+    description: 'Review launch, backup, and restore evidence and reconcile proof-backed outcomes',
+    icon: Activity,
+    href: '/admin/operations',
+    requiredPermissions: [PERMISSIONS.OPERATIONS_READ_ALL, PERMISSIONS.ADMIN_ACCESS],
+    color: 'bg-amber-500/10 text-amber-400',
   },
   {
     label: 'Analytics',
@@ -240,7 +249,9 @@ function AdminIndexPage() {
   const hasPermission = useAuthStore((state) => state.hasPermission)
 
   const visibleCategories = categories.filter(
-    (c) => !c.requiredPermission || hasPermission(c.requiredPermission)
+    (c) =>
+      (c.requiredPermissions?.every((permission) => hasPermission(permission)) ?? true) &&
+      (!c.requiredPermission || hasPermission(c.requiredPermission))
   )
 
   return (

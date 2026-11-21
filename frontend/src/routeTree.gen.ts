@@ -49,6 +49,7 @@ import { Route as AdminServersRouteImport } from './routes/admin.servers'
 import { Route as AdminQuotasRouteImport } from './routes/admin.quotas'
 import { Route as AdminPlansRouteImport } from './routes/admin.plans'
 import { Route as AdminPermissionsRouteImport } from './routes/admin.permissions'
+import { Route as AdminOperationsRouteImport } from './routes/admin.operations'
 import { Route as AdminMaintenanceWindowsRouteImport } from './routes/admin.maintenance-windows'
 import { Route as AdminIpRestrictionsRouteImport } from './routes/admin.ip-restrictions'
 import { Route as AdminHealthRouteImport } from './routes/admin.health'
@@ -261,6 +262,11 @@ const AdminPermissionsRoute = AdminPermissionsRouteImport.update({
   path: '/permissions',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminOperationsRoute = AdminOperationsRouteImport.update({
+  id: '/operations',
+  path: '/operations',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminMaintenanceWindowsRoute = AdminMaintenanceWindowsRouteImport.update({
   id: '/maintenance-windows',
   path: '/maintenance-windows',
@@ -344,6 +350,7 @@ export interface FileRoutesByFullPath {
   '/admin/health': typeof AdminHealthRoute
   '/admin/ip-restrictions': typeof AdminIpRestrictionsRoute
   '/admin/maintenance-windows': typeof AdminMaintenanceWindowsRoute
+  '/admin/operations': typeof AdminOperationsRoute
   '/admin/permissions': typeof AdminPermissionsRoute
   '/admin/plans': typeof AdminPlansRoute
   '/admin/quotas': typeof AdminQuotasRoute
@@ -393,6 +400,7 @@ export interface FileRoutesByTo {
   '/admin/health': typeof AdminHealthRoute
   '/admin/ip-restrictions': typeof AdminIpRestrictionsRoute
   '/admin/maintenance-windows': typeof AdminMaintenanceWindowsRoute
+  '/admin/operations': typeof AdminOperationsRoute
   '/admin/permissions': typeof AdminPermissionsRoute
   '/admin/plans': typeof AdminPlansRoute
   '/admin/quotas': typeof AdminQuotasRoute
@@ -446,6 +454,7 @@ export interface FileRoutesById {
   '/admin/health': typeof AdminHealthRoute
   '/admin/ip-restrictions': typeof AdminIpRestrictionsRoute
   '/admin/maintenance-windows': typeof AdminMaintenanceWindowsRoute
+  '/admin/operations': typeof AdminOperationsRoute
   '/admin/permissions': typeof AdminPermissionsRoute
   '/admin/plans': typeof AdminPlansRoute
   '/admin/quotas': typeof AdminQuotasRoute
@@ -501,6 +510,7 @@ export interface FileRouteTypes {
     | '/admin/health'
     | '/admin/ip-restrictions'
     | '/admin/maintenance-windows'
+    | '/admin/operations'
     | '/admin/permissions'
     | '/admin/plans'
     | '/admin/quotas'
@@ -550,6 +560,7 @@ export interface FileRouteTypes {
     | '/admin/health'
     | '/admin/ip-restrictions'
     | '/admin/maintenance-windows'
+    | '/admin/operations'
     | '/admin/permissions'
     | '/admin/plans'
     | '/admin/quotas'
@@ -602,6 +613,7 @@ export interface FileRouteTypes {
     | '/admin/health'
     | '/admin/ip-restrictions'
     | '/admin/maintenance-windows'
+    | '/admin/operations'
     | '/admin/permissions'
     | '/admin/plans'
     | '/admin/quotas'
@@ -934,6 +946,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminPermissionsRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/operations': {
+      id: '/admin/operations'
+      path: '/operations'
+      fullPath: '/admin/operations'
+      preLoaderRoute: typeof AdminOperationsRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/maintenance-windows': {
       id: '/admin/maintenance-windows'
       path: '/maintenance-windows'
@@ -1036,6 +1055,7 @@ interface AdminRouteChildren {
   AdminHealthRoute: typeof AdminHealthRoute
   AdminIpRestrictionsRoute: typeof AdminIpRestrictionsRoute
   AdminMaintenanceWindowsRoute: typeof AdminMaintenanceWindowsRoute
+  AdminOperationsRoute: typeof AdminOperationsRoute
   AdminPermissionsRoute: typeof AdminPermissionsRoute
   AdminPlansRoute: typeof AdminPlansRoute
   AdminQuotasRoute: typeof AdminQuotasRoute
@@ -1056,6 +1076,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminHealthRoute: AdminHealthRoute,
   AdminIpRestrictionsRoute: AdminIpRestrictionsRoute,
   AdminMaintenanceWindowsRoute: AdminMaintenanceWindowsRoute,
+  AdminOperationsRoute: AdminOperationsRoute,
   AdminPermissionsRoute: AdminPermissionsRoute,
   AdminPlansRoute: AdminPlansRoute,
   AdminQuotasRoute: AdminQuotasRoute,
