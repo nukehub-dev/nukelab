@@ -14,9 +14,9 @@ import logging
 import re
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.container.driver import ContainerDriver, ContainerDriverError
@@ -25,6 +25,7 @@ from app.models.server import Server
 from app.models.server_launch_intent import ServerLaunchIntent
 from app.models.server_launch_operation import ServerLaunchOperation
 from app.models.server_queue import ServerQueue
+from app.schemas.admin_queue import AdminQueueEntry, AdminQueuePage, AdminQueuePagination
 from app.schemas.server_queue import (
     QueueEntryResponse,
     QueuePageResponse,
@@ -37,6 +38,7 @@ logger = logging.getLogger(__name__)
 
 _ACTIVE_LAUNCH_STATES = ("prepared", "executing", "uncertain")
 _SAFE_REASON_RE = re.compile(r"[a-z][a-z0-9_]{0,63}\Z")
+_ADMIN_MAX_OFFSET = 1000
 
 
 @dataclass
@@ -77,6 +79,25 @@ def _safe_reason(value: str | None) -> str:
     return "configuration_changed"
 
 
+def _safe_reason_code(value: str | None) -> str | None:
+    """Return only bounded machine-readable reason codes; never raw text."""
+    if isinstance(value, str) and _SAFE_REASON_RE.fullmatch(value):
+        return value
+    return None
+
+
+def _requested_cutoff(age_days: int | None, older_than: datetime | None) -> datetime | None:
+    cutoffs: list[datetime] = []
+    if age_days is not None:
+        cutoffs.append(utc_now() - timedelta(days=age_days))
+    if older_than is not None:
+        value = older_than
+        if value.tzinfo is not None:
+            value = value.astimezone(UTC).replace(tzinfo=None)
+        cutoffs.append(value)
+    return min(cutoffs) if cutoffs else None
+
+
 _MESSAGES = {
     "capacity_wait": "Waiting for available capacity.",
     "gpu_wait": "Waiting for an available GPU.",
@@ -85,7 +106,10 @@ _MESSAGES = {
     "configuration_changed": "Configuration changed. Submit a new request.",
     "permission_revoked": "This request is no longer permitted.",
     "revision_unavailable": "The selected environment revision is unavailable.",
-    "recovery_required": "Launch outcome requires operator verification.",
+    "recovery_required": (
+        "Launch outcome requires operator verification. Contact support; "
+        "resubmit only after support confirms this request cannot be recovered."
+    ),
 }
 
 
@@ -113,6 +137,7 @@ class ServerQueueService:
         position = None
         if entry.status == "pending":
             position = await ResourcePoolService(self.db).get_queue_position(str(entry.id))
+        reason_code = _safe_reason_code(entry.reason_code)
         return QueueEntryResponse(
             id=entry.id,
             request=QueueRequestSummary(
@@ -128,9 +153,9 @@ class ServerQueueService:
             ),
             status=entry.status,
             position=position,
-            reason_code=entry.reason_code,
+            reason_code=reason_code,
             message=_MESSAGES.get(
-                entry.reason_code,
+                reason_code,
                 {
                     "pending": "Waiting for available capacity.",
                     "starting": "Launch in progress.",
@@ -176,6 +201,108 @@ class ServerQueueService:
             total=total or 0,
             page=page,
             page_size=page_size,
+        )
+
+    async def _pending_positions(self, entries: list[ServerQueue]) -> dict[uuid.UUID, int]:
+        """Map page rows to their global pending position without per-row queries."""
+        if not any(entry.status == "pending" for entry in entries):
+            return {}
+        ordered = (
+            await self.db.scalars(
+                select(ServerQueue.id)
+                .where(ServerQueue.status == "pending")
+                .order_by(
+                    ServerQueue.priority.desc(),
+                    ServerQueue.requested_at.asc(),
+                    ServerQueue.id.asc(),
+                )
+            )
+        ).all()
+        return {entry_id: position for position, entry_id in enumerate(ordered, start=1)}
+
+    async def list_for_admin(
+        self,
+        *,
+        statuses: list[str] | None = None,
+        owner_id: uuid.UUID | None = None,
+        age_days: int | None = None,
+        older_than: datetime | None = None,
+        recovery_required: bool | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> AdminQueuePage:
+        """Read-only cross-owner listing in stable oldest-first order.
+
+        ``age_days`` keeps requests made at least that many days ago;
+        ``older_than`` accepts an explicit UTC cutoff. ``recovery_required``
+        matches rows whose reason marks an unresolved launch. A ``starting``
+        row is returned even when no operation is linked; this view never
+        claims, cancels, or requeues work.
+        """
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise ValueError("Invalid admin queue limit")
+        if type(offset) is not int or not 0 <= offset <= _ADMIN_MAX_OFFSET:
+            raise ValueError("Invalid admin queue offset")
+        if age_days is not None and (type(age_days) is not int or not 0 <= age_days <= 3650):
+            raise ValueError("Invalid admin queue age")
+        conditions = []
+        if statuses:
+            conditions.append(ServerQueue.status.in_(statuses))
+        if owner_id is not None:
+            conditions.append(ServerQueue.user_id == owner_id)
+        requested_before = _requested_cutoff(age_days, older_than)
+        if requested_before is not None:
+            conditions.append(ServerQueue.requested_at <= requested_before)
+        if recovery_required is True:
+            conditions.append(ServerQueue.reason_code == "recovery_required")
+        elif recovery_required is False:
+            conditions.append(
+                or_(
+                    ServerQueue.reason_code.is_(None),
+                    ServerQueue.reason_code != "recovery_required",
+                )
+            )
+        total = int(
+            await self.db.scalar(select(func.count()).select_from(ServerQueue).where(*conditions))
+            or 0
+        )
+        entries = (
+            await self.db.scalars(
+                select(ServerQueue)
+                .where(*conditions)
+                .order_by(ServerQueue.requested_at.asc().nulls_last(), ServerQueue.id.asc())
+                .offset(offset)
+                .limit(limit)
+            )
+        ).all()
+        positions = await self._pending_positions(entries)
+        items = [
+            AdminQueueEntry(
+                id=entry.id,
+                owner_id=entry.user_id,
+                server_id=entry.server_id,
+                server_name=entry.server_name,
+                environment_id=entry.environment_id,
+                plan_id=entry.plan_id,
+                status=entry.status,
+                reason_code=_safe_reason_code(entry.reason_code),
+                position=positions.get(entry.id) if entry.status == "pending" else None,
+                priority=entry.priority or 0,
+                requested_at=entry.requested_at,
+                started_at=entry.started_at,
+                failed_at=entry.failed_at,
+                expires_at=entry.expires_at,
+            )
+            for entry in entries
+        ]
+        return AdminQueuePage(
+            items=items,
+            pagination=AdminQueuePagination(
+                limit=limit,
+                offset=offset,
+                total=total,
+                has_more=offset + len(items) < total,
+            ),
         )
 
     async def cancel(self, queue_id: uuid.UUID, owner_id: uuid.UUID) -> ServerQueue:

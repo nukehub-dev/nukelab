@@ -18,6 +18,7 @@ logger = get_logger(__name__)
 from app.api import (
     admin,
     admin_operations,
+    admin_queue,
     analytics,
     auth,
     bulk,
@@ -305,6 +306,7 @@ app.include_router(credits.router, prefix="/credits", tags=["credits"])
 app.include_router(credit_requests.router, prefix="/credit-requests", tags=["credit-requests"])
 app.include_router(admin.router, prefix="/admin", tags=["admin"])
 app.include_router(admin_operations.router, prefix="/admin", tags=["admin-operations"])
+app.include_router(admin_queue.router, prefix="/admin", tags=["admin-queue"])
 app.include_router(preferences.router, prefix="/preferences", tags=["preferences"])
 app.include_router(
     environment_revisions.router,

@@ -16,6 +16,7 @@ All files under `monitoring/`.
 - `NODE_EXPORTER_ROOTFS_PATH` (default `/host`) must stay in sync between `.env`, `compose.monitoring.yml`, and `prometheus/rules/nukelab.yml.tpl`. The Grafana dashboard uses a `node_exporter_rootfs_path` constant variable for the same purpose.
 - OTEL collector config lives in `otel/otel-collector.yml`.
 - Jaeger config lives in `jaeger/jaeger.yml`.
+- The `nukelab-recovery` rule group alerts on worker-heartbeat freshness, recovery-scan staleness, recovery-required/stalled operations, and registry-verification gaps. The backend `/api/metrics` scrape republishes recovery gauges from durable rows plus the `recovery_scan_state` system setting; the Celery reconciler persists scan freshness so the alert works across processes.
 
 ## Work Guidance
 
