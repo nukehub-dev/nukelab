@@ -45,6 +45,7 @@ from app.services.operation_reconciliation import (
     RuntimeState,
     TerminalState,
 )
+from app.services.recovery_metrics import persist_recovery_scan, record_recovery_scan
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +134,9 @@ class OperationReconciler:
         started = time.perf_counter()
         bound = self._bound(limit)
         if bound < 1:
-            return ReconcileReport(duration_seconds=round(time.perf_counter() - started, 3))
+            report = ReconcileReport(duration_seconds=round(time.perf_counter() - started, 3))
+            await self._record(report)
+            return report
 
         try:
             candidates = await self._select(bound)
@@ -142,9 +145,11 @@ class OperationReconciler:
                 "Operation reconciliation selection failed",
                 extra={"error_class": type(exc).__name__},
             )
-            return ReconcileReport(
+            report = ReconcileReport(
                 errors=1, duration_seconds=round(time.perf_counter() - started, 3)
             )
+            await self._record(report)
+            return report
 
         now = self._clock()
         counters = {_FINALIZED: 0, _DEFERRED: 0, _RECOVERY_REQUIRED: 0, "errors": 0}
@@ -173,7 +178,28 @@ class OperationReconciler:
             duration_seconds=round(time.perf_counter() - started, 3),
         )
         logger.info("Operation reconciliation scan complete", extra=report.as_dict())
+        await self._record(report)
         return report
+
+    async def _record(self, report: ReconcileReport) -> None:
+        """Publish bounded scan metrics without making the scan depend on them."""
+        try:
+            record_recovery_scan(report)
+        except Exception as exc:
+            logger.warning(
+                "Recovery scan metrics update failed",
+                extra={"error_class": type(exc).__name__},
+            )
+        if not settings.prometheus_enabled:
+            return
+        try:
+            async with self._session_factory() as db:
+                await persist_recovery_scan(db, report)
+        except Exception as exc:
+            logger.warning(
+                "Recovery scan state persistence failed",
+                extra={"error_class": type(exc).__name__},
+            )
 
     @staticmethod
     def _bound(limit: int | None) -> int:

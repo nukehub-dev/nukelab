@@ -1080,12 +1080,15 @@ def check_autovacuum_health(self):
 
 @celery_app.task(bind=True)
 def update_prometheus_business_metrics(self):
-    """Update Prometheus gauges for business-level metrics.
+    """Update Prometheus gauges for business and recovery-level metrics.
 
     Runs every 60s via Celery Beat. Updates:
     - nukelab_users_total
     - nukelab_servers_total (by status)
     - nukelab_nuke_balance_total
+    - nukelab_workers_registered / nukelab_worker_heartbeats
+    - nukelab_operations_active / recovery_required / stalled
+    - nukelab_registry_verification_policy and local-only revision counts
     """
     if not settings.prometheus_enabled:
         return "Prometheus disabled; skipping business metrics update"
@@ -1109,6 +1112,17 @@ def update_prometheus_business_metrics(self):
             result = await db.execute(select(Server.status, func.count()).group_by(Server.status))
             server_counts = dict(result.all())
 
+            recovery_snapshot = None
+            try:
+                from app.services.recovery_metrics import collect_recovery_metrics
+
+                recovery_snapshot = await collect_recovery_metrics(db)
+            except Exception as exc:
+                logger.warning(
+                    "Recovery metrics collection failed",
+                    extra={"error_class": type(exc).__name__},
+                )
+
         from app.core.prometheus_metrics import (
             set_nuke_balance_total,
             set_servers_total,
@@ -1123,6 +1137,17 @@ def update_prometheus_business_metrics(self):
         for status in known_statuses:
             set_servers_total(status, server_counts.get(status, 0))
 
+        if recovery_snapshot is not None:
+            try:
+                from app.services.recovery_metrics import publish_recovery_metrics
+
+                publish_recovery_metrics(recovery_snapshot)
+            except Exception as exc:
+                logger.warning(
+                    "Recovery metrics publication failed",
+                    extra={"error_class": type(exc).__name__},
+                )
+
         return (
             f"Business metrics updated: users={users_total}, "
             f"nuke={nuke_total}, servers={dict(server_counts)}"
@@ -1130,8 +1155,12 @@ def update_prometheus_business_metrics(self):
 
     try:
         return _run_async(_update())
-    except Exception as e:
-        return f"Error updating business metrics: {e}"
+    except Exception as exc:
+        logger.warning(
+            "Business metrics update failed",
+            extra={"error_class": type(exc).__name__},
+        )
+        return f"Error updating business metrics: {type(exc).__name__}"
 
 
 @celery_app.task(bind=True)

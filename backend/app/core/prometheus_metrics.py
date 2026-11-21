@@ -23,6 +23,9 @@ from prometheus_client import (
 from sqlalchemy import func, select
 
 from app.config import settings
+from app.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 REGISTRY = CollectorRegistry(auto_describe=True)
 # Expose per-process resource metrics (memory, CPU seconds, etc.) on the
@@ -174,6 +177,8 @@ async def refresh_business_metrics() -> None:
     from app.models.server import Server
     from app.models.user import User
 
+    recovery_snapshot = None
+    scan_state = None
     async with AsyncSessionLocal() as db:
         user_count = (await db.execute(select(func.count(User.id)))).scalar() or 0
 
@@ -184,11 +189,39 @@ async def refresh_business_metrics() -> None:
         server_rows = (
             await db.execute(select(Server.status, func.count()).group_by(Server.status))
         ).all()
+        try:
+            from app.services.recovery_metrics import (
+                collect_recovery_metrics,
+                load_recovery_scan_state,
+            )
+
+            recovery_snapshot = await collect_recovery_metrics(db)
+            scan_state = await load_recovery_scan_state(db)
+        except Exception as exc:
+            logger.warning(
+                "Recovery metrics collection failed",
+                extra={"error_class": type(exc).__name__},
+            )
 
     set_users_total(user_count)
     set_nuke_balance_total(nuke_sum)
     for status, count in server_rows:
         set_servers_total(status, count)
+
+    if recovery_snapshot is not None:
+        try:
+            from app.services.recovery_metrics import (
+                publish_recovery_metrics,
+                publish_recovery_scan_state,
+            )
+
+            publish_recovery_metrics(recovery_snapshot)
+            publish_recovery_scan_state(scan_state)
+        except Exception as exc:
+            logger.warning(
+                "Recovery metrics publication failed",
+                extra={"error_class": type(exc).__name__},
+            )
 
 
 async def get_metrics_output() -> tuple[bytes, str]:

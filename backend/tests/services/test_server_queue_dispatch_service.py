@@ -13,6 +13,7 @@ from app.schemas.server_launch import NormalizedLaunchRequest
 from app.services.environment_revision_service import ConfigurationChanged, RevisionUnavailable
 from app.services.server_launch_service import LaunchError
 from app.services.server_queue_dispatch_service import ServerQueueDispatchService
+from app.services.server_queue_service import QueueReconcileResult
 from app.services.volume_operation_service import VolumeOperationError
 
 
@@ -64,12 +65,17 @@ def setup_dispatcher():
     )
     launch = MagicMock(reserve=AsyncMock(), provision=AsyncMock(), resolve_revision=AsyncMock())
     expire = AsyncMock(return_value=0)
+    reconcile = AsyncMock(return_value=QueueReconcileResult())
     with (
         patch(
             "app.services.server_queue_dispatch_service.ServerLaunchService", return_value=launch
         ),
         patch(
             "app.services.server_queue_dispatch_service.ServerQueueService.expire_pending", expire
+        ),
+        patch(
+            "app.services.server_queue_dispatch_service.ServerQueueService.reconcile_starting",
+            reconcile,
         ),
         patch("app.services.server_queue_dispatch_service.acquire_admission_lock", AsyncMock()),
     ):
@@ -79,6 +85,7 @@ def setup_dispatcher():
             launch=launch,
             rows=rows,
             expire=expire,
+            reconcile=reconcile,
         )
 
 
@@ -95,6 +102,30 @@ async def test_empty_scan_expires_pending_only_and_bounds_order(setup_dispatcher
     assert 20 in statement.compile().params.values()
     assert statement.get_execution_options()["populate_existing"]
     setup.launch.reserve.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_starting_request_recovery_runs_before_pending_scan(setup_dispatcher):
+    setup = setup_dispatcher
+    setup.reconcile.return_value = QueueReconcileResult(scanned=2, started=1, recovery_required=1)
+    result = await setup.service.dispatch(batch_size=7)
+    setup.reconcile.assert_awaited_once()
+    assert setup.reconcile.await_args.kwargs == {"limit": 7}
+    assert result.reconciled == 2
+    assert result.started == 1
+    assert result.recovery_required == 1
+    assert result.scanned == 0
+
+
+@pytest.mark.asyncio
+async def test_starting_request_recovery_failure_does_not_block_pending_dispatch(setup_dispatcher):
+    setup = setup_dispatcher
+    setup.reconcile.side_effect = RuntimeError("runtime inspection unavailable")
+    result = await setup.service.dispatch()
+    assert result.reconciled == 0
+    assert result.scanned == 0
+    setup.db.rollback.assert_awaited()
+    setup.expire.assert_awaited_once()
 
 
 @pytest.mark.asyncio

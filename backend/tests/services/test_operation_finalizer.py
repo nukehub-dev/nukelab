@@ -289,6 +289,7 @@ async def add_launch(
     server_status="starting",
     with_gpu=True,
     with_queue=True,
+    with_intent=True,
     commit=True,
 ):
     marker = uuid.uuid4().hex
@@ -437,20 +438,21 @@ async def add_launch(
         )
         db.add(queue)
         await db.flush()
-        db.add(
-            ServerLaunchIntent(
-                server_id=server.id,
-                owner_id=owner.id,
-                revision_id=revision.id,
-                request_payload=request.model_dump(mode="json"),
-                mounts=[mount],
-                gpu_devices=[],
-                environment_slug=template.slug,
-                username=owner.username,
-                queue_id=queue.id,
-                claim_token=claim_token,
+        if with_intent:
+            db.add(
+                ServerLaunchIntent(
+                    server_id=server.id,
+                    owner_id=owner.id,
+                    revision_id=revision.id,
+                    request_payload=request.model_dump(mode="json"),
+                    mounts=[mount],
+                    gpu_devices=[],
+                    environment_slug=template.slug,
+                    username=owner.username,
+                    queue_id=queue.id,
+                    claim_token=claim_token,
+                )
             )
-        )
     await add_worker(
         db,
         executor_id,
@@ -662,6 +664,7 @@ async def test_success_applies_once_and_terminal_row_is_immutable(db_session, te
     assert record.revision_id == fixture.revision_id
     assert record.actual_runtime_identity["local_id"] == LOCAL_ID
     assert await db_session.scalar(select(func.count()).select_from(ServerLaunchRecord)) == 1
+    queue_updated_at = queue.updated_at
 
     before = {
         "operation": (
@@ -685,8 +688,73 @@ async def test_success_applies_once_and_terminal_row_is_immutable(db_session, te
         "server": (server.status, server.container_id, server.started_at),
         "queue": (queue.status, queue.started_at, queue.reason_code),
     }
+    assert queue.updated_at == queue_updated_at
     assert await db_session.scalar(select(func.count()).select_from(ServerLaunchRecord)) == 1
     assert driver.mutations == []
+
+
+@pytest.mark.asyncio
+async def test_success_maps_queue_by_server_link_when_intent_is_missing(db_session, test_user):
+    fixture = await add_launch(db_session, test_user, with_intent=False)
+    container_id = f"container-{uuid.uuid4().hex}"
+    driver = FakeDriver()
+    driver.images[LOCAL_ID] = local_identity()
+    driver.containers[container_id] = container_info(
+        container_id,
+        server_id=fixture.server_id,
+        launch_id=fixture.operation_id,
+    )
+    decision = await inspect(db_session, driver, "launch", fixture.operation_id)
+    assert decision.terminal_state is TerminalState.SUCCEEDED
+
+    assert await OperationFinalizer(db_session, driver).finalize(decision) is True
+
+    queue = await db_session.get(ServerQueue, fixture.queue_id, populate_existing=True)
+    server = await db_session.get(Server, fixture.server_id, populate_existing=True)
+    assert queue.status == "started"
+    assert queue.started_at == server.started_at
+    assert queue.reason_code is None
+
+
+@pytest.mark.asyncio
+async def test_failure_maps_queue_by_server_link_when_intent_is_missing(db_session, test_user):
+    fixture = await add_launch(db_session, test_user, executor_state="stopped", with_intent=False)
+    driver = FakeDriver()
+    decision = await inspect(db_session, driver, "launch", fixture.operation_id)
+    assert decision.terminal_state is TerminalState.FAILED
+
+    assert await OperationFinalizer(db_session, driver).finalize(decision) is True
+
+    queue = await db_session.get(ServerQueue, fixture.queue_id, populate_existing=True)
+    operation = await db_session.get(
+        ServerLaunchOperation, fixture.operation_id, populate_existing=True
+    )
+    assert queue.status == "failed"
+    assert queue.reason_code == "runtime_absent"
+    assert queue.failed_at is not None
+    assert operation.state == "failed"
+
+
+@pytest.mark.asyncio
+async def test_recovery_maps_queue_by_server_link_when_intent_is_missing(db_session, test_user):
+    fixture = await add_launch(db_session, test_user, executor_state="stopped", with_intent=False)
+    driver = FakeDriver()
+    driver.images[LOCAL_ID] = local_identity()
+    for _ in range(2):
+        container_id = f"container-{uuid.uuid4().hex}"
+        driver.containers[container_id] = container_info(
+            container_id,
+            server_id=fixture.server_id,
+            launch_id=fixture.operation_id,
+        )
+    decision = await inspect(db_session, driver, "launch", fixture.operation_id)
+    assert decision.terminal_state is TerminalState.RECOVERY_REQUIRED
+
+    assert await OperationFinalizer(db_session, driver).finalize(decision) is True
+
+    queue = await db_session.get(ServerQueue, fixture.queue_id, populate_existing=True)
+    assert queue.status == "starting"
+    assert queue.reason_code == "recovery_required"
 
 
 @pytest.mark.asyncio
@@ -870,12 +938,17 @@ async def test_launch_failure_releases_only_proof_safe_reservations(db_session, 
     assert queue.status == "failed"
     assert queue.reason_code == "runtime_absent"
     assert queue.failed_at is not None
+    queue_updated_at = queue.updated_at
     assert guard.state == "succeeded"
     assert await db_session.scalar(select(func.count()).select_from(GpuAllocation)) == 0
     assert await db_session.scalar(select(func.count()).select_from(Volume)) == 1
     assert await db_session.scalar(select(func.count()).select_from(ServerLaunchRecord)) == 0
     assert driver.mutations == []
     assert await finalizer.finalize(decision) is False
+    await db_session.refresh(queue)
+    assert queue.status == "failed"
+    assert queue.reason_code == "runtime_absent"
+    assert queue.updated_at == queue_updated_at
 
 
 @pytest.mark.asyncio
@@ -913,11 +986,16 @@ async def test_ambiguous_launch_marks_recovery_required_without_release(db_sessi
     assert server.status_reason == "recovery_required"
     assert queue.status == "starting"
     assert queue.reason_code == "recovery_required"
+    queue_updated_at = queue.updated_at
     assert guard.state == "reserved"
     assert await db_session.scalar(select(func.count()).select_from(GpuAllocation)) == 1
     assert await db_session.scalar(select(func.count()).select_from(ServerLaunchRecord)) == 0
     assert driver.mutations == []
     assert await finalizer.finalize(decision) is False
+    await db_session.refresh(queue)
+    assert queue.status == "starting"
+    assert queue.reason_code == "recovery_required"
+    assert queue.updated_at == queue_updated_at
 
 
 @pytest.mark.asyncio
@@ -1203,6 +1281,7 @@ async def test_concurrent_finalize_produces_exactly_one_transition():
                 ServerLaunchOperation, fixture.operation_id, populate_existing=True
             )
             server = await verify.get(Server, fixture.server_id, populate_existing=True)
+            queue = await verify.get(ServerQueue, fixture.queue_id, populate_existing=True)
             records = await verify.scalar(
                 select(func.count())
                 .select_from(ServerLaunchRecord)
@@ -1210,6 +1289,8 @@ async def test_concurrent_finalize_produces_exactly_one_transition():
             )
             assert operation.state == "succeeded"
             assert server.status == "running"
+            assert queue.status == "started"
+            assert queue.reason_code is None
             assert records == 1
     finally:
         await _cleanup_committed_launch(fixture, owner_id)

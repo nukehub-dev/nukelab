@@ -45,6 +45,7 @@ class QueueDispatchResult:
     expired: int = 0
     skipped: int = 0
     recovery_required: int = 0
+    reconciled: int = 0
 
 
 @dataclass(frozen=True)
@@ -104,6 +105,7 @@ _FAILURE_CODES = {
 class ServerQueueDispatchService:
     def __init__(self, db: AsyncSession, driver: ContainerDriver):
         self.db = db
+        self.driver = driver
         self.launch = ServerLaunchService(db, driver)
 
     async def _scan_batch(self, batch_size):
@@ -212,6 +214,22 @@ class ServerQueueDispatchService:
             raise ValueError("Queue scan size must be between 1 and 100")
         await self._clean_session()
         result = QueueDispatchResult()
+        try:
+            recovered = await ServerQueueService(self.db).reconcile_starting(
+                self.driver, limit=batch_size
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            await self.db.rollback()
+            # Durable starting rows stay untouched; a later pass retries them.
+            logger.exception("Queue starting-request recovery deferred")
+        else:
+            result.reconciled = recovered.scanned
+            result.started += recovered.started
+            result.failed += recovered.failed
+            result.cancelled += recovered.cancelled
+            result.recovery_required += recovered.recovery_required
         async with self.db.begin():
             await acquire_admission_lock(self.db)
             result.expired = await ServerQueueService(self.db).expire_pending()

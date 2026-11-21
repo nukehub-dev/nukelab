@@ -310,8 +310,10 @@ class OperationFinalizer:
             )
             if operation is None:
                 return None
-            intent = await self.db.get(
-                ServerLaunchIntent, operation.server_id, populate_existing=True
+            queue = (
+                await self._read_linked_create_queue(operation)
+                if operation.action == "create"
+                else None
             )
             return _LaunchSnapshot(
                 id=operation.id,
@@ -329,9 +331,71 @@ class OperationFinalizer:
                 username=operation.username,
                 previous_container_id=operation.previous_container_id,
                 previous_status=operation.previous_status,
-                queue_id=intent.queue_id if intent is not None else None,
-                claim_token=intent.claim_token if intent is not None else None,
+                queue_id=queue.id if queue is not None else None,
+                claim_token=queue.claim_token if queue is not None else None,
             )
+
+    @staticmethod
+    def _queue_link_matches(
+        queue: ServerQueue | None,
+        operation: ServerLaunchOperation,
+        claim_token: uuid.UUID | None,
+    ) -> bool:
+        if queue is None:
+            return False
+        if queue.server_id is not None and queue.server_id != operation.server_id:
+            return False
+        return claim_token is None or queue.claim_token in (None, claim_token)
+
+    async def _read_linked_create_queue(
+        self, operation: ServerLaunchOperation
+    ) -> ServerQueue | None:
+        """Resolve the queue request owned by a create operation.
+
+        The immutable intent is the primary link. If it is missing (legacy or
+        partial recovery data), exactly one ``starting`` row for the same server
+        is the only acceptable fallback; anything else stays operator-visible.
+        """
+        intent = await self.db.get(ServerLaunchIntent, operation.server_id, populate_existing=True)
+        if intent is not None and intent.queue_id is not None:
+            queue = await self.db.get(ServerQueue, intent.queue_id, populate_existing=True)
+            return queue if self._queue_link_matches(queue, operation, intent.claim_token) else None
+        rows = (
+            await self.db.scalars(
+                select(ServerQueue)
+                .where(
+                    ServerQueue.server_id == operation.server_id,
+                    ServerQueue.status == "starting",
+                )
+                .execution_options(populate_existing=True)
+            )
+        ).all()
+        return rows[0] if len(rows) == 1 else None
+
+    async def _lock_linked_create_queue(
+        self, operation: ServerLaunchOperation
+    ) -> ServerQueue | None:
+        intent = await self.db.get(ServerLaunchIntent, operation.server_id, populate_existing=True)
+        if intent is not None and intent.queue_id is not None:
+            queue = await self.db.get(
+                ServerQueue,
+                intent.queue_id,
+                with_for_update=True,
+                populate_existing=True,
+            )
+            return queue if self._queue_link_matches(queue, operation, intent.claim_token) else None
+        rows = (
+            await self.db.scalars(
+                select(ServerQueue)
+                .where(
+                    ServerQueue.server_id == operation.server_id,
+                    ServerQueue.status == "starting",
+                )
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        ).all()
+        return rows[0] if len(rows) == 1 else None
 
     async def _load_volume(
         self, kind: OperationKind, operation_id: uuid.UUID
@@ -666,18 +730,13 @@ class OperationFinalizer:
             if server is not None and server.status in ("starting", "stopping"):
                 server.status_reason = "recovery_required"
             if snapshot.action == "create" and snapshot.queue_id is not None:
-                queue = await self.db.get(
-                    ServerQueue,
-                    snapshot.queue_id,
-                    with_for_update=True,
-                    populate_existing=True,
-                )
-                if (
-                    queue is not None
-                    and queue.status == "starting"
-                    and queue.claim_token == snapshot.claim_token
-                ):
-                    queue.reason_code = "recovery_required"
+                queue = await self._lock_linked_create_queue(operation)
+                if queue is not None and queue.status == "starting":
+                    if queue.server_id is None:
+                        queue.server_id = operation.server_id
+                    if queue.reason_code != "recovery_required":
+                        queue.reason_code = "recovery_required"
+                        queue.updated_at = utc_now()
             finished = await finish_operation(
                 self.db,
                 operation.id,
@@ -787,20 +846,10 @@ class OperationFinalizer:
     async def _fail_create_queue(self, operation: ServerLaunchOperation, reason: str) -> None:
         if operation.action != "create":
             return
-        intent = await self.db.get(ServerLaunchIntent, operation.server_id, populate_existing=True)
-        if intent is None or intent.queue_id is None:
-            return
-        queue = await self.db.get(
-            ServerQueue,
-            intent.queue_id,
-            with_for_update=True,
-            populate_existing=True,
-        )
-        if (
-            queue is not None
-            and queue.status == "starting"
-            and queue.claim_token == intent.claim_token
-        ):
+        queue = await self._lock_linked_create_queue(operation)
+        if queue is not None and queue.status == "starting":
+            if queue.server_id is None:
+                queue.server_id = operation.server_id
             queue.status = "failed"
             queue.reason_code = reason
             queue.failed_at = utc_now()
