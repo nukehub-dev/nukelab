@@ -228,9 +228,14 @@ class TestRateLimitMiddleware:
             assert response.status_code in (200, 404)
 
     @pytest.mark.asyncio
-    async def test_strict_multiplier_on_admin_endpoints(self, client, user_token, mock_redis):
+    async def test_strict_multiplier_on_admin_endpoints(
+        self, client, user_token, mock_redis, monkeypatch
+    ):
         """Admin endpoints should use the strict multiplier (0.5x)."""
         settings.rate_limit_enabled = True
+        # Keep this burst inside one fixed window; under a loaded full suite
+        # 60+ requests can otherwise straddle the 60-second boundary.
+        monkeypatch.setattr(settings, "rate_limit_window_seconds", 3600)
         strict_limit = int(ROLE_LIMITS["user"] * settings.rate_limit_strict_multiplier)
 
         with patch.object(RateLimitMiddleware, "_get_redis", return_value=mock_redis):

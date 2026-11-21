@@ -15,6 +15,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 from prometheus_client import generate_latest
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -231,6 +232,8 @@ def _operations(snapshot, kind: str):
 @pytest.mark.asyncio
 async def test_collect_reports_bounded_recovery_state(db_session, test_user, monkeypatch):
     monkeypatch.setattr(settings, "registry_verification_policy", "require")
+    await db_session.execute(delete(WorkerHeartbeat))
+    await db_session.flush()
     now = utc_now()
     fresh_executor = uuid.uuid4()
     stale_executor = uuid.uuid4()
@@ -391,6 +394,8 @@ async def test_recovery_required_rows_are_not_counted_as_stalled(db_session, tes
 
 @pytest.mark.asyncio
 async def test_collect_with_no_rows_reports_zeroes(db_session):
+    await db_session.execute(delete(WorkerHeartbeat))
+    await db_session.flush()
     snapshot = await collect_recovery_metrics(db_session, now=utc_now())
 
     assert snapshot.workers.total == 0
