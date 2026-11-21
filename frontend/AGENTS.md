@@ -24,6 +24,8 @@ All files under `frontend/` except generated artifacts (`node_modules/`, `dist/`
 
 - `src/hooks/use-volume-backups.ts` owns actor-scoped recovery capability, eligibility, backup and restore history. Unsupported deployments hide recovery controls; supported but disabled storage/helper configuration keeps owner history readable while disabling mutations. Active records poll with hidden-tab and failure backoff, and account changes clear their cache and suppress late mutation feedback.
 - Volume backup/history uses backend private/offline eligibility and action flags rather than server counts. Restores require a deliberate new name/capacity, retain retry request identities, never overwrite source data, and show destinations for use only after completion. Deleted-source backups remain reachable through global history; no archive upload/download or automatic workload stopping is exposed.
+- `src/hooks/use-environment-revisions.ts` and the admin environments revision panel are gated by `ENVIRONMENT_READ`/`ENVIRONMENT_UPDATE` + `ADMIN_ACCESS`. The panel lists sanitized revision metadata, verifies current artifacts with a bounded reason, and revokes with history preserved. Last-selectable revocation requires an explicitly checked confirmation that is unchecked by default; there is no un-revoke control.
+- `src/hooks/use-admin-operations.ts` and `/admin/operations` are gated by `OPERATIONS_READ_ALL`/`OPERATIONS_MANAGE_ALL` + `ADMIN_ACCESS`. The console renders only sanitized operation evidence, never request payloads, mounts, environment values, tokens, or raw runtime payloads. Reconcile requires a bounded reason and has no force/override control; ambiguous evidence must state that no mutation or reservation release occurred.
 
 ## Work Guidance
 

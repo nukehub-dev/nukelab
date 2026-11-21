@@ -32,6 +32,7 @@ from app.schemas.volume_backup import (
     VolumeRestoreResponse,
 )
 from app.services.admission_service import acquire_admission_lock
+from app.services.operation_heartbeat import SessionFactory, operation_heartbeat
 from app.services.quota_service import QuotaService
 from app.services.volume_access_service import VolumeAccessService
 from app.services.volume_operation_service import (
@@ -40,6 +41,7 @@ from app.services.volume_operation_service import (
     acquire_volume_operations,
     transition_volume_operation,
 )
+from app.services.worker_heartbeat import current_executor_id
 from app.services.xfs_quota_service import xfs_quota_service
 
 FORMAT = "nukelab.volume/v1"
@@ -107,9 +109,17 @@ class RecoveryPolicy:
 
 
 class VolumeBackupService:
-    def __init__(self, db: AsyncSession, runtime=None, policy: RecoveryPolicy | None = None):
+    def __init__(
+        self,
+        db: AsyncSession,
+        runtime=None,
+        policy: RecoveryPolicy | None = None,
+        *,
+        heartbeat_session_factory: SessionFactory | None = None,
+    ):
         self.db, self.runtime = db, runtime
         self.policy = policy or RecoveryPolicy.configured()
+        self.heartbeat_session_factory = heartbeat_session_factory
 
     async def _clean(self):
         if self.db.new or self.db.dirty or self.db.deleted:
@@ -653,10 +663,17 @@ class VolumeBackupService:
                 backup_id, token, error=error, terminated=True, cleaned=True
             )
         try:
-            await self.runtime.assert_detached(name)
-            metadata = await self.runtime.capture(
-                backup_id, token, name, backup_id, max_logical_bytes=maximum
-            )
+            async with operation_heartbeat(
+                self.heartbeat_session_factory,
+                kind="backup",
+                operation_id=backup_id,
+                fencing_token=token,
+                executor_id=current_executor_id(),
+            ):
+                await self.runtime.assert_detached(name)
+                metadata = await self.runtime.capture(
+                    backup_id, token, name, backup_id, max_logical_bytes=maximum
+                )
             return await self._finish_backup(backup_id, token, metadata=metadata)
         except BaseException as error:
             result = await self._finish_backup(
@@ -712,25 +729,35 @@ class VolumeBackupService:
                 restore_id, token, error=error, terminated=True, cleaned=True
             )
         try:
-            metadata = await self.runtime.restore(
-                restore_id, token, name, backup_id, digest, max_logical_bytes=maximum
-            )
-            self._check_metadata(metadata, maximum)
-            if metadata["sha256"] != digest or metadata.get("executor_terminated") is not True:
-                raise BackupError("artifact_corrupt")
-            if settings.xfs_quota_enabled:
-                try:
-                    quota_set = xfs_quota_service.set_quota(name, destination_size)
-                except Exception:
-                    quota_set = False
-                if not quota_set:
-                    return await self._finish_restore(
-                        restore_id,
-                        token,
-                        error=BackupError("quota_enforcement_failed", 503),
-                        terminated=True,
-                        cleaned=metadata.get("artifacts_removed") is True,
-                    )
+            quota_error = None
+            async with operation_heartbeat(
+                self.heartbeat_session_factory,
+                kind="restore",
+                operation_id=restore_id,
+                fencing_token=token,
+                executor_id=current_executor_id(),
+            ):
+                metadata = await self.runtime.restore(
+                    restore_id, token, name, backup_id, digest, max_logical_bytes=maximum
+                )
+                self._check_metadata(metadata, maximum)
+                if metadata["sha256"] != digest or metadata.get("executor_terminated") is not True:
+                    raise BackupError("artifact_corrupt")
+                if settings.xfs_quota_enabled:
+                    try:
+                        quota_set = xfs_quota_service.set_quota(name, destination_size)
+                    except Exception:
+                        quota_set = False
+                    if not quota_set:
+                        quota_error = BackupError("quota_enforcement_failed", 503)
+            if quota_error is not None:
+                return await self._finish_restore(
+                    restore_id,
+                    token,
+                    error=quota_error,
+                    terminated=True,
+                    cleaned=metadata.get("artifacts_removed") is True,
+                )
             return await self._finish_restore(restore_id, token, metadata=metadata)
         except BaseException as error:
             result = await self._finish_restore(
@@ -758,10 +785,19 @@ class VolumeBackupService:
             volume = await self.db.get(
                 Volume, row.destination_volume_id, populate_existing=True, with_for_update=True
             )
+            # A verified completion may arrive after the destination was already
+            # activated by the live executor. Completing such a row is
+            # idempotent; an active destination is never changed or downgraded.
+            already_active = bool(
+                volume is not None
+                and metadata is not None
+                and volume.status == "active"
+                and volume.size_bytes == metadata.get("logical_bytes")
+            )
             if (
                 volume is None
                 or volume.name != row.destination_name
-                or volume.status != "restoring"
+                or (volume.status != "restoring" and not already_active)
             ):
                 raise BackupError("operation_conflict")
             if metadata is not None:
@@ -771,7 +807,8 @@ class VolumeBackupService:
                     0,
                     utc_now(),
                 )
-                volume.status, volume.size_bytes = "active", metadata["logical_bytes"]
+                if not already_active:
+                    volume.status, volume.size_bytes = "active", metadata["logical_bytes"]
                 terminated = True
             else:
                 row.status = "failed" if terminated else "recovery_required"

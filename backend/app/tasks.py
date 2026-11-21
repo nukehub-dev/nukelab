@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 import asyncio
+import os
 import random
 import threading
 import time
@@ -14,6 +15,7 @@ from app.config import settings
 from app.core.logging import get_logger
 from app.core.time_utils import utc_now
 from app.services.operation_reconciler import OperationReconciler
+from app.services.volume_finalization import VolumeFinalizationHooks
 from app.worker import celery_app, ensure_journal_schema
 
 logger = get_logger(__name__)
@@ -32,6 +34,27 @@ from app.services.system_metrics_collector import SystemMetricsCollector
 # each delivery waits a bounded random delay so simultaneous workers do not
 # inspect the same rows in lockstep.
 RECOVERY_SCAN_JITTER_SECONDS = 5.0
+
+
+def _volume_finalization_hooks(session_factory, driver):
+    """Build volume completion hooks without blocking launch/queue recovery.
+
+    Volume success still requires the recovery service's completion primitive.
+    When recovery storage is disabled or the hooks cannot be built, the
+    reconciler runs without them and volume rows stay protected.
+    """
+    if not settings.volume_backup_storage_path:
+        return None
+    if not os.path.isdir(settings.volume_backup_storage_path):
+        return None
+    try:
+        return VolumeFinalizationHooks(session_factory, driver)
+    except Exception as exc:
+        logger.warning(
+            "Volume finalization hooks unavailable",
+            extra={"error_class": type(exc).__name__},
+        )
+        return None
 
 
 def _run_async(coro):
@@ -1411,7 +1434,13 @@ def reconcile_operations(self, jitter: bool = True):
     async def reconcile():
         async with operation_resources() as resources:
             session_factory = async_sessionmaker(resources.db.bind, expire_on_commit=False)
-            reconciler = OperationReconciler(session_factory, resources.driver)
+            hooks = _volume_finalization_hooks(session_factory, resources.driver)
+            if hooks is None:
+                reconciler = OperationReconciler(session_factory, resources.driver)
+            else:
+                reconciler = OperationReconciler(
+                    session_factory, resources.driver, volume_hooks=hooks
+                )
             return await reconciler.scan(limit=settings.recovery_scan_batch_size)
 
     # A pass is bounded by row count. Give runtime inspection a small multiple
