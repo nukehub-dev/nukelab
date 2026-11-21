@@ -269,9 +269,10 @@ The security command supports optional supply-chain checks:
 - `./nukelabctl security --signed-commits` — fail if the current branch contains
   unsigned commits. CI uses a range-scoped check and keeps it advisory until
   maintainers can sign.
-- `./nukelabctl security --sbom` — generate CycloneDX SBOMs under
-  `backend/reports/security/sbom/`; release attestation wiring remains rollout
-  work.
+- `./nukelabctl security --sbom` — generate ad-hoc CycloneDX SBOMs under
+  `backend/reports/security/sbom/`. Tagged release CI uses the deterministic
+  `scripts/security/generate-release-sbom.sh`, then publishes and verifies
+  build-provenance and SBOM attestations for every release image.
 
 The local command keeps these checks off by default because they require
 process or registry changes.

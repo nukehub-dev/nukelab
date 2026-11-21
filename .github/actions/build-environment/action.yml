@@ -25,11 +25,24 @@ inputs:
     description: Whether to push the image
     required: false
     default: 'true'
+  attest:
+    description: >-
+      Publish build-provenance and CycloneDX SBOM attestations for the pushed
+      image. Requires the caller job to grant contents: read, packages: write,
+      id-token: write, and attestations: write.
+    required: false
+    default: 'false'
+
+outputs:
+  digest:
+    description: Published image manifest digest (sha256:...), empty when push is false.
+    value: ${{ steps.build.outputs.digest }}
 
 runs:
   using: composite
   steps:
     - name: Build and push ${{ inputs.image }}
+      id: build
       uses: docker/build-push-action@v7
       with:
         context: ${{ inputs.context }}
@@ -41,3 +54,31 @@ runs:
         build-args: ${{ inputs.build-args }}
         cache-from: type=gha,scope=${{ inputs.cache-scope }}
         cache-to: type=gha,mode=max,scope=${{ inputs.cache-scope }}
+
+    - name: Generate CycloneDX SBOM
+      if: inputs.attest == 'true' && steps.build.outputs.digest != ''
+      shell: bash
+      run: |
+        "${{ github.workspace }}/scripts/security/generate-release-sbom.sh" \
+          --image-ref "${{ inputs.image }}@${{ steps.build.outputs.digest }}" \
+          --output "sbom-${{ inputs.cache-scope }}.cdx.json"
+
+    - name: Attest build provenance
+      if: inputs.attest == 'true' && steps.build.outputs.digest != ''
+      uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+      with:
+        subject-name: ${{ inputs.image }}
+        subject-digest: ${{ steps.build.outputs.digest }}
+        push-to-registry: true
+        # Avoid the extra artifact-metadata: write permission.
+        create-storage-record: false
+
+    - name: Attest SBOM
+      if: inputs.attest == 'true' && steps.build.outputs.digest != ''
+      uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+      with:
+        subject-name: ${{ inputs.image }}
+        subject-digest: ${{ steps.build.outputs.digest }}
+        sbom-path: sbom-${{ inputs.cache-scope }}.cdx.json
+        push-to-registry: true
+        create-storage-record: false

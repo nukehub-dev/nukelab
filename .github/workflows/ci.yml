@@ -590,6 +590,12 @@ jobs:
   build-images:
     name: Build & push images
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      actions: read
+      id-token: write
+      attestations: write
     needs: [changes, lint-backend, lint-frontend, test-frontend-unit, test-frontend-mocked-browser, test-volume-helper, test-backend, test-browser, test-browser-workspace]
     if: |
       !cancelled() &&
@@ -650,6 +656,7 @@ jobs:
           IMAGE_NAME: ${{ matrix.image }}
 
       - name: Build and push
+        id: build
         if: |
           (matrix.name == 'backend' && needs.changes.outputs.backend == 'true') ||
           (matrix.name == 'frontend' && needs.changes.outputs.frontend == 'true') ||
@@ -674,9 +681,42 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
 
+      - name: Generate CycloneDX SBOM
+        if: startsWith(github.ref, 'refs/tags/v') && steps.build.outputs.digest != ''
+        run: |
+          ./scripts/security/generate-release-sbom.sh \
+            --image-ref "${{ matrix.image }}@${{ steps.build.outputs.digest }}" \
+            --output "sbom-${{ matrix.name }}.cdx.json"
+
+      - name: Attest build provenance
+        if: startsWith(github.ref, 'refs/tags/v') && steps.build.outputs.digest != ''
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ matrix.image }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+          # Avoid the extra artifact-metadata: write permission.
+          create-storage-record: false
+
+      - name: Attest SBOM
+        if: startsWith(github.ref, 'refs/tags/v') && steps.build.outputs.digest != ''
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ matrix.image }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          sbom-path: sbom-${{ matrix.name }}.cdx.json
+          push-to-registry: true
+          create-storage-record: false
+
   build-environments:
     name: Build & push environment images
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      actions: read
+      id-token: write
+      attestations: write
     needs: [build-images, changes]
     if: |
       !cancelled() &&
@@ -687,6 +727,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      # The release SBOM step scans published images, including the multi-GB
+      # workspace image. Reclaim the preinstalled toolchains first so the
+      # registry scan has room to stage layers on the runner.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -709,6 +756,7 @@ jobs:
           IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/nukelab-environment-base
 
       - name: Build and push base
+        id: env_base
         if: needs.changes.outputs.env-base == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
         uses: ./.github/actions/build-environment
         with:
@@ -719,8 +767,10 @@ jobs:
           build-args: AUTH_SIDECAR_IMAGE=ghcr.io/${{ github.repository_owner }}/nukelab-auth-sidecar:${{ steps.meta.outputs.version }}
           cache-scope: base
           push: ${{ github.event_name == 'push' }}
+          attest: ${{ startsWith(github.ref, 'refs/tags/v') }}
 
       - name: Build and push conda-base
+        id: env_conda_base
         if: needs.changes.outputs.env-conda-base == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
         uses: ./.github/actions/build-environment
         with:
@@ -731,8 +781,10 @@ jobs:
           build-args: BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/nukelab-environment-base:${{ steps.meta.outputs.version }}
           cache-scope: conda-base
           push: ${{ github.event_name == 'push' }}
+          attest: ${{ startsWith(github.ref, 'refs/tags/v') }}
 
       - name: Build and push workspace
+        id: env_workspace
         if: needs.changes.outputs.env-workspace == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
         uses: ./.github/actions/build-environment
         with:
@@ -743,8 +795,10 @@ jobs:
           build-args: BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/nukelab-environment-conda-base:${{ steps.meta.outputs.version }}
           cache-scope: workspace
           push: ${{ github.event_name == 'push' }}
+          attest: ${{ startsWith(github.ref, 'refs/tags/v') }}
 
       - name: Build and push dev
+        id: env_dev
         if: needs.changes.outputs.env-dev == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
         uses: ./.github/actions/build-environment
         with:
@@ -755,6 +809,27 @@ jobs:
           build-args: BASE_IMAGE=ghcr.io/${{ github.repository_owner }}/nukelab-environment-conda-base:${{ steps.meta.outputs.version }}
           cache-scope: dev
           push: ${{ github.event_name == 'push' }}
+          attest: ${{ startsWith(github.ref, 'refs/tags/v') }}
+
+      - name: Record published environment image digests
+        if: github.event_name == 'push'
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          BASE_DIGEST: ${{ steps.env_base.outputs.digest }}
+          CONDA_BASE_DIGEST: ${{ steps.env_conda_base.outputs.digest }}
+          WORKSPACE_DIGEST: ${{ steps.env_workspace.outputs.digest }}
+          DEV_DIGEST: ${{ steps.env_dev.outputs.digest }}
+        run: |
+          {
+            echo "### Environment image digests (${VERSION})"
+            echo ""
+            echo "| Image | Digest |"
+            echo "| --- | --- |"
+            echo "| nukelab-environment-base | \`${BASE_DIGEST:-not built}\` |"
+            echo "| nukelab-environment-conda-base | \`${CONDA_BASE_DIGEST:-not built}\` |"
+            echo "| nukelab-environment-workspace | \`${WORKSPACE_DIGEST:-not built}\` |"
+            echo "| nukelab-environment-dev | \`${DEV_DIGEST:-not built}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   ci-gate:
     name: CI Gate
