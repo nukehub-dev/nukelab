@@ -19,6 +19,7 @@ import {
   KeyRound,
   LayoutDashboard,
   LifeBuoy,
+  ListOrdered,
   Loader2,
   Palette,
   Search,
@@ -290,6 +291,13 @@ export function CommandPalette() {
         Server,
         ['servers', 'containers'],
         hasPermission(PERMISSIONS.SERVERS_READ_ALL)
+      ),
+      ...adminPage(
+        'Queue',
+        '/admin/queue',
+        ListOrdered,
+        ['queue', 'requests', 'waiting', 'starting'],
+        hasAllPermissions([PERMISSIONS.SERVERS_READ_ALL, PERMISSIONS.ADMIN_ACCESS])
       ),
       ...adminPage(
         'Health',

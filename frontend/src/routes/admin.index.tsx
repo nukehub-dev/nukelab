@@ -25,6 +25,7 @@ import {
   ExternalLink,
   Activity,
   ListChecks,
+  ListOrdered,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useAuthStore, PERMISSIONS } from '../stores/auth-store'
@@ -90,6 +91,14 @@ const categories: AdminCategory[] = [
     href: '/admin/servers',
     requiredPermission: PERMISSIONS.SERVERS_READ_ALL,
     color: 'bg-emerald-500/10 text-emerald-400',
+  },
+  {
+    label: 'Queue',
+    description: 'Read-only view of waiting, starting, and completed server requests',
+    icon: ListOrdered,
+    href: '/admin/queue',
+    requiredPermissions: [PERMISSIONS.SERVERS_READ_ALL, PERMISSIONS.ADMIN_ACCESS],
+    color: 'bg-sky-500/10 text-sky-400',
   },
   {
     label: 'Health',

@@ -25,6 +25,7 @@ import {
   UserCircle,
   Clock,
   LifeBuoy,
+  ListOrdered,
   Search,
   Wrench,
 } from 'lucide-react'
@@ -84,6 +85,12 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'Settings', icon: Settings, href: '/settings' },
       { label: 'Administration', icon: Shield, href: '/admin' },
+      {
+        label: 'Queue',
+        icon: ListOrdered,
+        href: '/admin/queue',
+        requiredPermissions: [PERMISSIONS.SERVERS_READ_ALL, PERMISSIONS.ADMIN_ACCESS],
+      },
       {
         label: 'Operations',
         icon: Wrench,

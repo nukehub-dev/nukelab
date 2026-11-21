@@ -229,7 +229,37 @@ function ViewServerLink({
   )
 }
 
-function QueueRequestCard({
+export function QueueRecoveryNotice({
+  reasonCode,
+  className,
+}: {
+  reasonCode: string | null | undefined
+  className?: string
+}) {
+  if (reasonCode !== 'recovery_required') return null
+  return (
+    <div
+      role="status"
+      data-testid="queue-recovery-notice"
+      className={cn(
+        'flex items-start gap-2.5 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2.5',
+        className
+      )}
+    >
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" aria-hidden="true" />
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-amber-400">Operator verification required</p>
+        <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+          The launch outcome could not be verified automatically. Contact support before
+          resubmitting; resubmit only after support confirms this request cannot be recovered. No
+          admin retry is available for this request.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+export function QueueRequestCard({
   entry,
   index,
   planName,
@@ -347,17 +377,21 @@ function QueueRequestCard({
             )}
           </div>
 
-          {entry.message && (
-            <p
-              className={cn(
-                'mt-3 rounded-lg border px-3 py-2 text-xs',
-                active
-                  ? 'border-primary/15 bg-primary/5 text-foreground/80'
-                  : 'border-border/50 bg-surface/50 text-muted-foreground'
-              )}
-            >
-              {entry.message}
-            </p>
+          {entry.reason_code === 'recovery_required' ? (
+            <QueueRecoveryNotice reasonCode={entry.reason_code} className="mt-3" />
+          ) : (
+            entry.message && (
+              <p
+                className={cn(
+                  'mt-3 rounded-lg border px-3 py-2 text-xs',
+                  active
+                    ? 'border-primary/15 bg-primary/5 text-foreground/80'
+                    : 'border-border/50 bg-surface/50 text-muted-foreground'
+                )}
+              >
+                {entry.message}
+              </p>
+            )
           )}
 
           <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
@@ -436,7 +470,9 @@ function QueueTimeline({ entry }: { entry: ServerQueueEntry }) {
         ? formatDate(entry.started_at)
         : 'Time unavailable'
       : entry.status === 'starting'
-        ? 'In progress'
+        ? entry.reason_code === 'recovery_required'
+          ? 'Operator verification required'
+          : 'In progress'
         : entry.status === 'failed'
           ? 'Did not complete'
           : entry.status === 'cancelled'
@@ -485,7 +521,7 @@ function QueueTimeline({ entry }: { entry: ServerQueueEntry }) {
   )
 }
 
-function QueueRequestDetail({
+export function QueueRequestDetail({
   entry,
   planName,
   environmentName,
@@ -585,17 +621,21 @@ function QueueRequestDetail({
         </div>
       </div>
 
-      <div className="flex items-start gap-2.5 rounded-xl border border-primary/15 bg-primary/5 p-3">
-        <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-        <div className="min-w-0">
-          <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            Request message
-          </p>
-          <p className="mt-0.5 text-sm text-foreground/90">
-            {entry.message || 'No message provided.'}
-          </p>
+      {entry.reason_code === 'recovery_required' ? (
+        <QueueRecoveryNotice reasonCode={entry.reason_code} />
+      ) : (
+        <div className="flex items-start gap-2.5 rounded-xl border border-primary/15 bg-primary/5 p-3">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+          <div className="min-w-0">
+            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+              Request message
+            </p>
+            <p className="mt-0.5 text-sm text-foreground/90">
+              {entry.message || 'No message provided.'}
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
       <DialogFooter>
         <Button variant="outline" onClick={onClose}>

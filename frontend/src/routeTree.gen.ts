@@ -47,6 +47,7 @@ import { Route as AdminSetupRouteImport } from './routes/admin.setup'
 import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
 import { Route as AdminServersRouteImport } from './routes/admin.servers'
 import { Route as AdminQuotasRouteImport } from './routes/admin.quotas'
+import { Route as AdminQueueRouteImport } from './routes/admin.queue'
 import { Route as AdminPlansRouteImport } from './routes/admin.plans'
 import { Route as AdminPermissionsRouteImport } from './routes/admin.permissions'
 import { Route as AdminOperationsRouteImport } from './routes/admin.operations'
@@ -252,6 +253,11 @@ const AdminQuotasRoute = AdminQuotasRouteImport.update({
   path: '/quotas',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminQueueRoute = AdminQueueRouteImport.update({
+  id: '/queue',
+  path: '/queue',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminPlansRoute = AdminPlansRouteImport.update({
   id: '/plans',
   path: '/plans',
@@ -353,6 +359,7 @@ export interface FileRoutesByFullPath {
   '/admin/operations': typeof AdminOperationsRoute
   '/admin/permissions': typeof AdminPermissionsRoute
   '/admin/plans': typeof AdminPlansRoute
+  '/admin/queue': typeof AdminQueueRoute
   '/admin/quotas': typeof AdminQuotasRoute
   '/admin/servers': typeof AdminServersRoute
   '/admin/settings': typeof AdminSettingsRoute
@@ -403,6 +410,7 @@ export interface FileRoutesByTo {
   '/admin/operations': typeof AdminOperationsRoute
   '/admin/permissions': typeof AdminPermissionsRoute
   '/admin/plans': typeof AdminPlansRoute
+  '/admin/queue': typeof AdminQueueRoute
   '/admin/quotas': typeof AdminQuotasRoute
   '/admin/servers': typeof AdminServersRoute
   '/admin/settings': typeof AdminSettingsRoute
@@ -457,6 +465,7 @@ export interface FileRoutesById {
   '/admin/operations': typeof AdminOperationsRoute
   '/admin/permissions': typeof AdminPermissionsRoute
   '/admin/plans': typeof AdminPlansRoute
+  '/admin/queue': typeof AdminQueueRoute
   '/admin/quotas': typeof AdminQuotasRoute
   '/admin/servers': typeof AdminServersRoute
   '/admin/settings': typeof AdminSettingsRoute
@@ -513,6 +522,7 @@ export interface FileRouteTypes {
     | '/admin/operations'
     | '/admin/permissions'
     | '/admin/plans'
+    | '/admin/queue'
     | '/admin/quotas'
     | '/admin/servers'
     | '/admin/settings'
@@ -563,6 +573,7 @@ export interface FileRouteTypes {
     | '/admin/operations'
     | '/admin/permissions'
     | '/admin/plans'
+    | '/admin/queue'
     | '/admin/quotas'
     | '/admin/servers'
     | '/admin/settings'
@@ -616,6 +627,7 @@ export interface FileRouteTypes {
     | '/admin/operations'
     | '/admin/permissions'
     | '/admin/plans'
+    | '/admin/queue'
     | '/admin/quotas'
     | '/admin/servers'
     | '/admin/settings'
@@ -932,6 +944,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminQuotasRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/queue': {
+      id: '/admin/queue'
+      path: '/queue'
+      fullPath: '/admin/queue'
+      preLoaderRoute: typeof AdminQueueRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/plans': {
       id: '/admin/plans'
       path: '/plans'
@@ -1058,6 +1077,7 @@ interface AdminRouteChildren {
   AdminOperationsRoute: typeof AdminOperationsRoute
   AdminPermissionsRoute: typeof AdminPermissionsRoute
   AdminPlansRoute: typeof AdminPlansRoute
+  AdminQueueRoute: typeof AdminQueueRoute
   AdminQuotasRoute: typeof AdminQuotasRoute
   AdminServersRoute: typeof AdminServersRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
@@ -1079,6 +1099,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminOperationsRoute: AdminOperationsRoute,
   AdminPermissionsRoute: AdminPermissionsRoute,
   AdminPlansRoute: AdminPlansRoute,
+  AdminQueueRoute: AdminQueueRoute,
   AdminQuotasRoute: AdminQuotasRoute,
   AdminServersRoute: AdminServersRoute,
   AdminSettingsRoute: AdminSettingsRoute,
