@@ -179,7 +179,7 @@ describe('AdminQueuePage owner filter', () => {
   it('queries the user directory and renders a searchable owner picker', () => {
     const html = renderToStaticMarkup(<AdminQueuePageContent />)
 
-    expect(harness.ownerCalls).toEqual([{ limit: 100 }])
+    expect(harness.ownerCalls).toEqual([{ limit: 50 }])
     expect(html).toContain('mock-owner-combobox')
     expect(html).toContain('Any owner')
     expect(html).toContain('Alice Admin (@alice)')

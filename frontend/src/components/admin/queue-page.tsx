@@ -60,18 +60,23 @@ function QueueOwnerPicker({
   value: string
   onChange: (value: string) => void
 }) {
-  const { data, isLoading, isError } = useUsers({ limit: 100 })
+  const [search, setSearch] = useState('')
+  const { data, isLoading, isError } = useUsers(search ? { limit: 50, search } : { limit: 50 })
   const options = useMemo(() => queueOwnerOptions(data?.data ?? []), [data])
 
   return (
     <div className="space-y-1" data-testid="queue-owner-picker">
       <Combobox
         value={value}
-        onChange={onChange}
+        onChange={(next) => {
+          setSearch('')
+          onChange(next)
+        }}
         options={options}
         placeholder={ADMIN_QUEUE_ANY_OWNER_LABEL}
         searchPlaceholder="Search owners..."
         disabled={isLoading}
+        onSearchChange={setSearch}
       />
       {isLoading && <p className="text-[11px] text-muted-foreground">Loading owners…</p>}
       {isError && (
