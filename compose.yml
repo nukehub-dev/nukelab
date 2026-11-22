@@ -269,6 +269,20 @@ services:
         depends_on:
             - postgres
             - redis
+        # Celery worker/Beat wait for this check, so it must pass only after
+        # the API has finished startup (schema creation and seeding).
+        healthcheck:
+            test:
+                [
+                    "CMD",
+                    "python",
+                    "-c",
+                    "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)",
+                ]
+            interval: 10s
+            timeout: 5s
+            retries: 18
+            start_period: 60s
         labels:
             - "traefik.enable=true"
             - "traefik.http.routers.backend.rule=PathPrefix(`/api`)"
@@ -514,8 +528,12 @@ services:
         networks:
             - nukelab-network
         depends_on:
-            - redis
-            - postgres
+            postgres:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+            backend:
+                condition: service_healthy
         restart: unless-stopped
         stop_grace_period: 20s
 
@@ -570,8 +588,12 @@ services:
         networks:
             - nukelab-network
         depends_on:
-            - redis
-            - postgres
+            postgres:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+            backend:
+                condition: service_healthy
         restart: unless-stopped
         stop_grace_period: 20s
 

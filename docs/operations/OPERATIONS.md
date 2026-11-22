@@ -379,12 +379,21 @@ a background task that cannot run leaves its durable row for the next tick.
 migration fails, the command prints the exact restore command. Do not use
 `--no-backup` unless you have already taken an equivalent snapshot.
 
-On a first start against an empty database, `celery-worker` can log a
-`Worker journal schema is incompatible` critical while the backend is still
-creating the schema. The worker retries the handshake and the reconciliation
-task refuses journal work until the schema is ready. If the message persists
-after backend health and `alembic heads` shows one current head, stop the worker
-and investigate before admitting launch, backup, or restore work.
+On a first start against an empty database, Compose starts `celery-worker` and
+`celery-beat` only after the backend health check (`GET /api/health`) passes.
+The backend has then finished its startup table creation, seeding and
+schema-compatibility check, so the worker no longer races schema creation and
+does not log a transient `Worker journal schema is incompatible` critical. If
+the backend never becomes healthy, worker and Beat do not start at all; diagnose
+the backend or database startup instead of restarting the workers.
+
+This gate covers backend startup only. In the upgrade procedure above,
+`db-migrate` runs after the stack is started, so the worker can still see the
+pre-migration schema until that migration finishes and the stack is restarted.
+A worker that reports `Worker journal schema is incompatible` after the backend
+is healthy is reading a schema that does not match its image: check that
+`alembic heads` shows one current head and that the deployed image matches the
+database revision before admitting launch, backup, or restore work.
 
 Check the revision graph before deploying:
 
@@ -503,6 +512,8 @@ it in the API process. The row contains timestamps, duration and counters only.
 
 Labels are fixed to worker state, operation kind, registry policy and scan result.
 User, server, operation, image and executor identifiers are never metric labels.
+The reconciler removes worker heartbeat rows whose last beat is older than 24
+hours as bounded maintenance; the gauges count retained rows.
 
 The `nukelab-recovery` alert group covers the operational failures:
 
