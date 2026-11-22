@@ -25,6 +25,7 @@ from app.models.volume_backup import VolumeBackup
 from app.models.volume_restore import VolumeRestore
 from app.models.worker_heartbeat import WorkerHeartbeat
 from app.services.operation_reconciliation import (
+    PROOF_RECOVERY_ARTIFACT,
     Liveness,
     OperationKind,
     ReconciliationService,
@@ -868,7 +869,7 @@ async def test_invalid_backup_artifact_is_not_success(db_session, test_user):
 
 
 @pytest.mark.asyncio
-async def test_restore_destination_must_be_complete_before_success(db_session, test_user):
+async def test_restore_destination_state_gates_success(db_session, test_user):
     backup_executor = uuid.uuid4()
     restore_executor = uuid.uuid4()
     backup_rows = await add_backup(db_session, test_user, executor_id=backup_executor)
@@ -886,8 +887,19 @@ async def test_restore_destination_must_be_complete_before_success(db_session, t
         db_session, driver, artifact_inspector=artifacts
     ).inspect("restore", restore.id)
 
-    assert restoring.terminal_state is TerminalState.RECOVERY_REQUIRED
-    assert restoring.reason_code == "destination_not_complete"
+    # A helper can finish immediately before its executor dies. Verified
+    # completion metadata lets the completion hook activate this destination.
+    assert restoring.terminal_state is TerminalState.SUCCEEDED
+    assert restoring.proof_source == PROOF_RECOVERY_ARTIFACT
+
+    volume.status = "restore_failed"
+    await db_session.flush()
+    failed = await ReconciliationService(db_session, driver, artifact_inspector=artifacts).inspect(
+        "restore", restore.id
+    )
+
+    assert failed.terminal_state is TerminalState.RECOVERY_REQUIRED
+    assert failed.reason_code == "destination_not_complete"
 
     volume.status = "active"
     volume.size_bytes = 4
