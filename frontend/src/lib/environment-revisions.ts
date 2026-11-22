@@ -15,6 +15,21 @@ import type {
 
 export const REVISION_REASON_MAX_LENGTH = 255
 
+/**
+ * Writes the full value to the clipboard. Unavailable or rejected clipboard
+ * access is a quiet no-op so read-only contexts never throw at the caller.
+ */
+export async function copyTextToClipboard(value: string): Promise<boolean> {
+  const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard
+  if (!clipboard || typeof clipboard.writeText !== 'function') return false
+  try {
+    await clipboard.writeText(value)
+    return true
+  } catch {
+    return false
+  }
+}
+
 export const ENVIRONMENT_REVISION_READ_PERMISSIONS = [
   PERMISSIONS.ENVIRONMENT_READ,
   PERMISSIONS.ADMIN_ACCESS,
@@ -103,6 +118,88 @@ export function revisionVolumeModeLabel(mode: EnvironmentRevisionVolumeMode): st
 
 export function shortRevisionId(id: string): string {
   return id.slice(0, 8)
+}
+
+export type EnvironmentRevisionFilter = 'all' | 'registry_verified' | 'local_only' | 'revoked'
+
+export const REVISION_FILTER_OPTIONS: ReadonlyArray<{
+  value: EnvironmentRevisionFilter
+  label: string
+}> = [
+  { value: 'all', label: 'All' },
+  { value: 'registry_verified', label: 'Registry verified' },
+  { value: 'local_only', label: 'Local only' },
+  { value: 'revoked', label: 'Revoked' },
+]
+
+export interface EnvironmentRevisionFilterCounts {
+  verified: number
+  localOnly: number
+  revoked: number
+}
+
+/** Counts for the loaded page; revoked rows are not counted as verified or local only. */
+export function environmentRevisionFilterCounts(
+  revisions: EnvironmentRevisionSummary[]
+): EnvironmentRevisionFilterCounts {
+  return revisions.reduce<EnvironmentRevisionFilterCounts>(
+    (counts, revision) => {
+      if (revision.revoked) {
+        counts.revoked += 1
+      } else if (revision.portability === 'registry_verified') {
+        counts.verified += 1
+      } else {
+        counts.localOnly += 1
+      }
+      return counts
+    },
+    { verified: 0, localOnly: 0, revoked: 0 }
+  )
+}
+
+/** Revoked rows are history regardless of their original portability. */
+export function revisionMatchesFilter(
+  revision: EnvironmentRevisionSummary,
+  filter: EnvironmentRevisionFilter
+): boolean {
+  if (filter === 'all') return true
+  if (filter === 'revoked') return revision.revoked
+  if (revision.revoked) return false
+  if (filter === 'registry_verified') return revision.portability === 'registry_verified'
+  if (filter === 'local_only') return revision.portability === 'local_only'
+  return true
+}
+
+function revisionSearchFields(revision: EnvironmentRevisionSummary): Array<string | null> {
+  return [
+    revision.id,
+    revision.fingerprint,
+    revision.portable_fingerprint,
+    revision.configuration.image,
+    revision.configuration.tool_image,
+    revision.runtime.verified_reference,
+    revision.toolchain?.verified_reference ?? null,
+  ]
+}
+
+/** Case-insensitive match over the loaded revision's identifiers and images. */
+export function revisionMatchesSearch(
+  revision: EnvironmentRevisionSummary,
+  query: string
+): boolean {
+  const needle = query.trim().toLowerCase()
+  if (!needle) return true
+  return revisionSearchFields(revision).some((field) => field?.toLowerCase().includes(needle))
+}
+
+/** Client-side filter over one loaded server page; never changes pagination. */
+export function filterEnvironmentRevisions(
+  revisions: EnvironmentRevisionSummary[],
+  { filter = 'all', query = '' }: { filter?: EnvironmentRevisionFilter; query?: string } = {}
+): EnvironmentRevisionSummary[] {
+  return revisions.filter(
+    (revision) => revisionMatchesFilter(revision, filter) && revisionMatchesSearch(revision, query)
+  )
 }
 
 export function revisionLimitationLabel(limitation: string): string {

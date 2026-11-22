@@ -110,6 +110,38 @@ describe('EnvironmentRevisionCard', () => {
     expect(revoked).not.toContain('Restore')
   })
 
+  it('offers full-value copy controls for the revision, fingerprint, and verified digests', () => {
+    const digest = `sha256:${'a'.repeat(64)}`
+    const toolDigest = `sha256:${'b'.repeat(64)}`
+    const html = renderToStaticMarkup(
+      <EnvironmentRevisionCard
+        revision={revision({
+          portability: 'registry_verified',
+          portable_fingerprint: 'a'.repeat(64),
+          runtime: {
+            ...revision().runtime,
+            registry_verified: true,
+            manifest_digest: digest,
+            verified_reference: `ghcr.io/nukehub-dev/runtime@${digest}`,
+          },
+          toolchain: {
+            ...revision().runtime,
+            registry_verified: true,
+            manifest_digest: toolDigest,
+            verified_reference: `ghcr.io/nukehub-dev/toolchain@${toolDigest}`,
+          },
+          limitations: [],
+        })}
+        canManage={false}
+      />
+    )
+
+    expect(html).toContain('aria-label="Copy revision ID"')
+    expect(html).toContain('aria-label="Copy revision fingerprint"')
+    expect(html).toContain('aria-label="Copy runtime manifest digest"')
+    expect(html).toContain('aria-label="Copy toolchain manifest digest"')
+  })
+
   it('renders bounded limitation labels instead of raw codes', () => {
     const html = renderToStaticMarkup(
       <EnvironmentRevisionCard

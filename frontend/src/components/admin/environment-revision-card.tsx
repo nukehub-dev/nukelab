@@ -35,6 +35,7 @@ import type {
 } from '../../types/environment-revisions'
 import { Button } from '../ui/button'
 import { Card, CardContent } from '../ui/card'
+import { CopyButton } from '../ui/copy-button'
 import { Tooltip } from '../ui/tooltip'
 
 function PortabilityPill({ revision }: { revision: EnvironmentRevisionSummary }) {
@@ -104,6 +105,7 @@ function ImageSummary({ label, image }: { label: string; image: EnvironmentRevis
               {digest}
             </code>
           </Tooltip>
+          <CopyButton value={digest} label={`Copy ${label.toLowerCase()} manifest digest`} />
         </div>
       ) : (
         <p className="mt-2 text-[11px] text-muted-foreground">
@@ -302,9 +304,14 @@ export function EnvironmentRevisionCard({
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0 space-y-1">
             <div className="flex flex-wrap items-center gap-1.5">
-              <code className="rounded-md bg-muted/50 px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
-                rev {shortRevisionId(revision.id)}
-              </code>
+              <span className="inline-flex items-center gap-0.5">
+                <Tooltip content={revision.id}>
+                  <code className="rounded-md bg-muted/50 px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
+                    rev {shortRevisionId(revision.id)}
+                  </code>
+                </Tooltip>
+                <CopyButton value={revision.id} label="Copy revision ID" />
+              </span>
               <PortabilityPill revision={revision} />
               {revision.revoked && <RevokedPill />}
             </div>
@@ -313,14 +320,17 @@ export function EnvironmentRevisionCard({
                 <Clock className="h-3 w-3 shrink-0" />
                 {revision.created_at ? formatDate(revision.created_at) : 'Capture time unavailable'}
               </span>
-              <Tooltip content={revision.fingerprint} wrapperClassName="min-w-0">
-                <span className="inline-flex min-w-0 items-center gap-1">
-                  <Fingerprint className="h-3 w-3 shrink-0" />
-                  <code className="truncate font-mono text-[10px]">
-                    {shortRevisionId(revision.fingerprint)}
-                  </code>
-                </span>
-              </Tooltip>
+              <span className="inline-flex min-w-0 items-center gap-0.5">
+                <Tooltip content={revision.fingerprint} wrapperClassName="min-w-0">
+                  <span className="inline-flex min-w-0 items-center gap-1">
+                    <Fingerprint className="h-3 w-3 shrink-0" />
+                    <code className="truncate font-mono text-[10px]">
+                      {shortRevisionId(revision.fingerprint)}
+                    </code>
+                  </span>
+                </Tooltip>
+                <CopyButton value={revision.fingerprint} label="Copy revision fingerprint" />
+              </span>
             </div>
           </div>
           {canManage && !revision.revoked && onRevoke && (

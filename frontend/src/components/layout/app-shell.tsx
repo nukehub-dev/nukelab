@@ -127,7 +127,7 @@ export function AppShell() {
         <motion.main
           className={cn(
             'flex-1 min-h-screen transition-all duration-300 ease-out overflow-x-hidden',
-            'pl-0 lg:pl-[5.5rem] pb-24 lg:pb-0',
+            'pl-0 lg:pl-[5.5rem] pt-[env(safe-area-inset-top,0px)] pb-[calc(6rem+env(safe-area-inset-bottom,0px))] lg:pt-0 lg:pb-0',
             isOpen && 'lg:pl-[17rem]'
           )}
         >

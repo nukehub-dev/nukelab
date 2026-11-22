@@ -2,15 +2,21 @@
 // SPDX-License-Identifier: BSD-2-Clause
 
 import { useState } from 'react'
-import { AlertTriangle, Inbox, RefreshCw, ShieldCheck } from 'lucide-react'
+import { AlertTriangle, Inbox, RefreshCw, Search, ShieldCheck } from 'lucide-react'
 import {
   environmentRevisionAccess,
   environmentRevisionErrorInfo,
+  environmentRevisionFilterCounts,
+  filterEnvironmentRevisions,
   hasNoSelectableRevision,
+  REVISION_FILTER_OPTIONS,
   revisionPortabilityLabel,
   shortRevisionId,
 } from '../../lib/environment-revisions'
-import type { EnvironmentRevisionErrorInfo } from '../../lib/environment-revisions'
+import type {
+  EnvironmentRevisionErrorInfo,
+  EnvironmentRevisionFilter,
+} from '../../lib/environment-revisions'
 import { cn } from '../../lib/utils'
 import { useAuthStore } from '../../stores/auth-store'
 import { useToast } from '../../stores/toast-store'
@@ -30,6 +36,7 @@ import {
   DialogTitle,
 } from '../ui/dialog'
 import { Skeleton } from '../feedback/skeleton'
+import { Input } from '../ui/input'
 import { EnvironmentRevisionCard } from './environment-revision-card'
 import {
   EnvironmentRevisionActionDialog,
@@ -104,6 +111,21 @@ function RevisionActionOutcome({
   )
 }
 
+export function RevisionFilterEmptyState({ onClear }: { onClear: () => void }) {
+  return (
+    <div className="rounded-xl border border-dashed border-border/60 p-6 text-center">
+      <Search className="mx-auto h-6 w-6 text-muted-foreground" />
+      <p className="mt-2 text-sm font-medium">No revisions match these filters</p>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Filters and search apply only to the revisions loaded on this page.
+      </p>
+      <Button type="button" size="sm" variant="outline" className="mt-3" onClick={onClear}>
+        Clear filters
+      </Button>
+    </div>
+  )
+}
+
 function RevisionErrorState({
   error,
   onRetry,
@@ -145,6 +167,8 @@ export function EnvironmentRevisionsPanel({
   const hasAllPermissions = useAuthStore((state) => state.hasAllPermissions)
   const { canRead, canManage } = environmentRevisionAccess(hasAllPermissions)
   const [offset, setOffset] = useState(0)
+  const [filter, setFilter] = useState<EnvironmentRevisionFilter>('all')
+  const [search, setSearch] = useState('')
   const [dialogMode, setDialogMode] = useState<'verify' | 'revoke' | null>(null)
   const [selectedRevision, setSelectedRevision] = useState<EnvironmentRevisionSummary | null>(null)
   const [actionError, setActionError] = useState<EnvironmentRevisionErrorInfo | null>(null)
@@ -160,13 +184,13 @@ export function EnvironmentRevisionsPanel({
   const { verifyArtifacts, revokeRevision } = useEnvironmentRevisionActions(environment.id)
 
   const revisions = revisionsQuery.data?.items ?? []
-  const verifiedCount = revisions.filter(
-    (revision) => revision.portability === 'registry_verified' && !revision.revoked
-  ).length
-  const localOnlyCount = revisions.filter(
-    (revision) => revision.portability === 'local_only' && !revision.revoked
-  ).length
-  const revokedCount = revisions.filter((revision) => revision.revoked).length
+  const counts = environmentRevisionFilterCounts(revisions)
+  const filteredRevisions = filterEnvironmentRevisions(revisions, { filter, query: search })
+  const filtersActive = filter !== 'all' || search.trim() !== ''
+  const clearFilters = () => {
+    setFilter('all')
+    setSearch('')
+  }
   const pagination = revisionsQuery.data?.pagination
   const listError = revisionsQuery.isError
     ? environmentRevisionErrorInfo(revisionsQuery.error)
@@ -283,13 +307,13 @@ export function EnvironmentRevisionsPanel({
             <>
               <div className="flex flex-wrap items-center gap-2 text-[11px]">
                 <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-emerald-400">
-                  Verified {verifiedCount}
+                  Verified {counts.verified}
                 </span>
                 <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-amber-400">
-                  Local only {localOnlyCount}
+                  Local only {counts.localOnly}
                 </span>
                 <span className="rounded-full border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-red-400">
-                  Revoked {revokedCount}
+                  Revoked {counts.revoked}
                 </span>
                 <span className="text-muted-foreground">On this page</span>
               </div>
@@ -318,6 +342,53 @@ export function EnvironmentRevisionsPanel({
                   )}
                 </div>
               </div>
+
+              {revisions.length > 0 && (
+                <div className="space-y-2 rounded-xl border border-border/50 bg-muted/20 p-2.5">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <div
+                      role="group"
+                      aria-label="Filter revisions on this page"
+                      className="flex flex-wrap items-center gap-1.5"
+                    >
+                      {REVISION_FILTER_OPTIONS.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          data-testid={`revision-filter-${option.value}`}
+                          aria-pressed={filter === option.value}
+                          onClick={() => setFilter(option.value)}
+                          className={cn(
+                            'rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors',
+                            filter === option.value
+                              ? 'border-primary/40 bg-primary/10 text-primary'
+                              : 'border-border/60 bg-background/40 text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+                          )}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="relative min-w-0 sm:ml-auto sm:w-64">
+                      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        type="text"
+                        value={search}
+                        aria-label="Search revisions on this page"
+                        placeholder="Search ID, fingerprint, image, or reference"
+                        onChange={(event) => setSearch(event.target.value)}
+                        className="h-8 pl-8 text-xs"
+                      />
+                    </div>
+                  </div>
+                  {filtersActive && (
+                    <p className="text-[11px] text-muted-foreground">
+                      Showing {filteredRevisions.length} of {revisions.length} loaded revision
+                      {revisions.length === 1 ? '' : 's'}. Server pagination is unchanged.
+                    </p>
+                  )}
+                </div>
+              )}
 
               {outcome && <RevisionActionOutcome outcome={outcome} onVerify={openVerifyDialog} />}
 
@@ -360,9 +431,11 @@ export function EnvironmentRevisionsPanel({
                     </Button>
                   )}
                 </div>
+              ) : filteredRevisions.length === 0 ? (
+                <RevisionFilterEmptyState onClear={clearFilters} />
               ) : (
                 <div className="space-y-3">
-                  {revisions.map((revision) => (
+                  {filteredRevisions.map((revision) => (
                     <EnvironmentRevisionCard
                       key={revision.id}
                       revision={revision}

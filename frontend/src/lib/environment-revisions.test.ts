@@ -9,12 +9,16 @@ import {
   ENVIRONMENT_REVISION_READ_PERMISSIONS,
   environmentRevisionAccess,
   environmentRevisionErrorInfo,
+  environmentRevisionFilterCounts,
   fetchEnvironmentRevisions,
+  filterEnvironmentRevisions,
   hasNoSelectableRevision,
   normalizeRevisionReason,
   REVISION_REASON_MAX_LENGTH,
   revisionLimitationLabel,
   revisionManifestDigest,
+  revisionMatchesFilter,
+  revisionMatchesSearch,
   revisionPlatform,
   revisionPortabilityLabel,
   revisionReasonValidationError,
@@ -178,6 +182,101 @@ describe('revision presentation helpers', () => {
     expect(hasNoSelectableRevision([revision({ revoked: true })], false)).toBe(false)
     expect(hasNoSelectableRevision([revision()], true)).toBe(false)
     expect(hasNoSelectableRevision([], true)).toBe(false)
+  })
+})
+
+describe('environment revision page filtering', () => {
+  const verified = revision({
+    id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    fingerprint: 'a'.repeat(64),
+    portable_fingerprint: 'b'.repeat(64),
+    portability: 'registry_verified',
+    runtime: {
+      ...revision().runtime,
+      registry_verified: true,
+      manifest_digest: 'sha256:runtime-verified',
+      verified_reference: 'ghcr.io/nukehub-dev/runtime@sha256:runtime-verified',
+    },
+    toolchain: {
+      ...revision().runtime,
+      registry_verified: true,
+      manifest_digest: 'sha256:toolchain-verified',
+      verified_reference: 'ghcr.io/nukehub-dev/toolchain@sha256:toolchain-verified',
+    },
+    configuration: {
+      ...revision().configuration,
+      image: 'ghcr.io/nukehub-dev/runtime:stable',
+      tool_image: 'ghcr.io/nukehub-dev/toolchain:stable',
+    },
+  })
+  const local = revision({
+    id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+    fingerprint: 'c'.repeat(64),
+    portability: 'local_only',
+    configuration: {
+      ...revision().configuration,
+      image: 'local/runtime:dev',
+      tool_image: null,
+    },
+  })
+  const revokedVerified = revision({
+    id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+    fingerprint: 'd'.repeat(64),
+    portability: 'registry_verified',
+    revoked: true,
+    runtime: {
+      ...revision().runtime,
+      registry_verified: true,
+      verified_reference: 'ghcr.io/nukehub-dev/runtime@sha256:revoked-runtime',
+    },
+  })
+  const revokedLocal = revision({
+    id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+    fingerprint: 'e'.repeat(64),
+    portability: 'local_only',
+    revoked: true,
+    configuration: {
+      ...revision().configuration,
+      image: 'local/runtime:revoked',
+      tool_image: null,
+    },
+  })
+  const all = [verified, local, revokedVerified, revokedLocal]
+
+  it('counts the loaded page without promoting revoked history', () => {
+    expect(environmentRevisionFilterCounts(all)).toEqual({
+      verified: 1,
+      localOnly: 1,
+      revoked: 2,
+    })
+  })
+
+  it('keeps revoked rows exclusive from verified and local-only filters', () => {
+    expect(filterEnvironmentRevisions(all, { filter: 'all' })).toHaveLength(4)
+    expect(filterEnvironmentRevisions(all, { filter: 'registry_verified' })).toEqual([verified])
+    expect(filterEnvironmentRevisions(all, { filter: 'local_only' })).toEqual([local])
+    expect(filterEnvironmentRevisions(all, { filter: 'revoked' })).toEqual([
+      revokedVerified,
+      revokedLocal,
+    ])
+    expect(revisionMatchesFilter(revokedVerified, 'revoked')).toBe(true)
+    expect(revisionMatchesFilter(revokedVerified, 'registry_verified')).toBe(false)
+  })
+
+  it('searches identifiers, fingerprints, images and verified references case-insensitively', () => {
+    expect(revisionMatchesSearch(verified, '  AAAAAAAA-AAAA  ')).toBe(true)
+    expect(revisionMatchesSearch(verified, verified.fingerprint.toUpperCase())).toBe(true)
+    expect(revisionMatchesSearch(verified, 'GHCR.IO/NUKEHUB-DEV/TOOLCHAIN:STABLE')).toBe(true)
+    expect(revisionMatchesSearch(verified, 'SHA256:TOOLCHAIN-VERIFIED')).toBe(true)
+    expect(revisionMatchesSearch(local, 'LOCAL/RUNTIME:DEV')).toBe(true)
+    expect(revisionMatchesSearch(local, 'registry-verified')).toBe(false)
+    expect(filterEnvironmentRevisions(all, { query: 'revoked-runtime' })).toEqual([revokedVerified])
+    expect(filterEnvironmentRevisions(all, { query: 'does-not-exist' })).toEqual([])
+    expect(filterEnvironmentRevisions(all, { filter: 'local_only', query: 'dev' })).toEqual([local])
+  })
+
+  it('returns every loaded revision for an empty filter and query', () => {
+    expect(filterEnvironmentRevisions(all, { filter: 'all', query: '   ' })).toEqual(all)
   })
 })
 

@@ -520,7 +520,10 @@ export function Sidebar() {
       </aside>
 
       {/* Mobile Bottom Dock */}
-      <nav className="fixed bottom-4 left-4 right-4 z-40 lg:hidden flex justify-center pointer-events-none">
+      <nav
+        className="fixed bottom-4 left-4 right-4 z-40 lg:hidden flex justify-center pointer-events-none"
+        style={{ bottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
+      >
         <div className="pointer-events-auto flex items-center w-full max-w-md bg-background/80 backdrop-blur-xl border border-border/50 rounded-full shadow-lg shadow-black/20 px-2 h-14 overflow-visible">
           {/* Left items — each item gets an equal slot so spacing stays
               symmetric around the center button regardless of label length. */}
