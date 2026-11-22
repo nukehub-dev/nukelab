@@ -14,6 +14,8 @@ section.
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-11-22
+
 ### Added
 
 - Crash-safe recovery foundation: per-process worker heartbeats with container
