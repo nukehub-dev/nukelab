@@ -43,10 +43,20 @@ section.
 - Operators get a read-only cross-owner queue view, and owners get deduplicated
   recovery attention/completion notifications plus a bounded daily reminder
   for unresolved recovery-required work.
+- Recovery metrics and alerts cover worker-heartbeat freshness, recovery-scan
+  health, stalled or recovery-required operations, and registry-verification
+  gaps. Scan freshness is persisted so the backend scrape reports work that ran
+  in the Celery process.
+- Queue `starting` requests are mapped to their launch operation. An orphaned
+  request stays operator-visible until runtime absence is proved, and work is
+  never blindly requeued or cancelled.
 - Volume backup/restore execution now heartbeats under its fenced operation,
   and proof-backed completion is applied by the reconciler only after artifact
   and helper-termination checks. The admin UI adds environment-revision and
   recovery-operation consoles; the console has no force or override path.
+- A launch left `uncertain` by a crash may be adopted as success only when
+  complete runtime and public-readiness proof is available; otherwise it stays
+  protected for operator reconciliation.
 
 ### Changed
 
