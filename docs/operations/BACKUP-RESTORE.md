@@ -344,9 +344,14 @@ volume deletion. Account deletion requires cleanup of volumes, servers, backups
 and outstanding recovery operations first.
 
 Pending work survives broker delivery failure and is scanned for redelivery.
-Backup and restore execution refreshes the fenced operation heartbeat. Proof-backed
-completion is applied by the recovery reconciler only after completion metadata,
-archive checksum and helper termination are verified. A `restoring` destination is
+Backup and restore execution refreshes the fenced operation heartbeat. A worker
+that dies after claiming a `delete:<uuid>` artifact cleanup leaves the row in
+`deleting`; the durable dispatcher does not blindly retry it. A bounded
+maintenance pass clears the claim only after the claimant is proven stopped, then
+rechecks workload mounts and either removes the artifact or records
+`delete_failed`. Proof-backed completion is applied by the recovery reconciler
+only after completion metadata, archive checksum and helper termination are
+verified. A `restoring` destination is
 activated from the verified metadata; an already-active destination must match the
 recorded size. The volume service still owns the completion primitive.
 

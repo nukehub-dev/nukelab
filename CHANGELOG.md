@@ -52,6 +52,9 @@ section.
 - Queue `starting` requests are mapped to their launch operation. An orphaned
   request stays operator-visible until runtime absence is proved, and work is
   never blindly requeued or cancelled.
+- A backup artifact cleanup interrupted after its durable `delete:<uuid>` claim
+  is recovered only after the claimant is proven stopped; the retry rechecks
+  mounts and either removes the artifact or records `delete_failed`.
 - Volume backup/restore execution now heartbeats under its fenced operation,
   and proof-backed completion is applied by the reconciler only after artifact
   and helper-termination checks. The admin UI adds environment-revision and
@@ -62,6 +65,10 @@ section.
 
 ### Changed
 
+- Recovery scans now use partial indexes matching the active launch, backup and
+  restore selection order. On a 100k/50k/50k seeded journal the three-query
+  p95 dropped from 16.9 ms to 2.4 ms, so the 30-second scan no longer reads
+  completed history.
 - The root README architecture map is now a generated light/dark SVG pair
   selected by `<picture>`, with local brand icons embedded as data URIs and no
   CDN or runtime network dependency. The old HTML/PNG source was removed and

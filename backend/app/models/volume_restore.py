@@ -5,7 +5,7 @@
 
 import uuid
 
-from sqlalchemy import BigInteger, Column, DateTime, ForeignKey, String
+from sqlalchemy import BigInteger, Column, DateTime, ForeignKey, Index, String, text
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.time_utils import utc_now
@@ -14,6 +14,14 @@ from app.db.base import Base
 
 class VolumeRestore(Base):
     __tablename__ = "volume_restores"
+    __table_args__ = (
+        Index(
+            "ix_volume_restores_recovery_scan",
+            text("COALESCE(heartbeat_at, created_at)"),
+            "id",
+            postgresql_where=text("status IN ('pending', 'in_progress', 'recovery_required')"),
+        ),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     backup_id = Column(

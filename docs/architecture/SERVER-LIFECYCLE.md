@@ -180,7 +180,9 @@ proves termination, or authorizes takeover. API executors remain ambiguous unles
 the container stopped/restarted or a graceful marker was written after draining.
 A single-process worker container can also be resolved by a fresh replacement
 executor for the same container incarnation. `docker restart` keeps the container
-ID, so exact container start time is the incarnation token.
+ID, so exact container start time is the incarnation token. The reconciler
+removes heartbeat rows whose last beat is older than 24 hours; retention cleanup
+is maintenance and never changes a recovery decision.
 
 `operation_reconciliation.py` is read-only evidence classification. It combines
 liveness (alive, stopped, ambiguous) with runtime/artifact evidence (present,
@@ -207,6 +209,11 @@ immutable; an unexpected finalization failure attempts to degrade the row to
 `recovery_required` instead of partially releasing it. Launch uncertainty is
 stored as `uncertain`; volume uncertainty is stored as `recovery_required`. Both
 retain mount guards, GPU allocations, storage reservations and artifacts.
+
+A backup cleanup crash after the durable `delete:<uuid>` claim is handled by
+bounded maintenance rather than blind redelivery: a live or ambiguous claimant is
+left alone, and a proven-stopped claimant lets the normal deletion path recheck
+mounts and finish or fail safely.
 
 `operation_reconciler.py` schedules a first scan after
 `RECOVERY_INITIAL_DELAY_SECONDS`; Celery Beat then runs it every

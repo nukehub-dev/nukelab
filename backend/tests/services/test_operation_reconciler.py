@@ -285,6 +285,60 @@ async def add_restore_row(
     return restore
 
 
+def terminal_launch_rows(user, server_id, *, count: int, newest):
+    return [
+        ServerLaunchOperation(
+            server_id=server_id,
+            owner_id=user.id,
+            action="create",
+            state=("succeeded", "failed", "cancelled")[offset % 3],
+            fencing_token=uuid.uuid4(),
+            mounts=[],
+            previous_mounts=[],
+            gpu_devices=[],
+            username=user.username,
+            resources={},
+            created_at=newest - timedelta(seconds=offset),
+            updated_at=newest - timedelta(seconds=offset),
+            finished_at=newest - timedelta(seconds=offset),
+        )
+        for offset in range(count)
+    ]
+
+
+def terminal_backup_rows(user, *, count: int, newest):
+    return [
+        VolumeBackup(
+            volume_name=f"terminal-volume-{uuid.uuid4().hex}",
+            user_id=user.id,
+            status=("completed", "failed")[offset % 2],
+            fencing_token=uuid.uuid4(),
+            reserved_bytes=0,
+            created_at=newest - timedelta(seconds=offset),
+            completed_at=newest - timedelta(seconds=offset),
+        )
+        for offset in range(count)
+    ]
+
+
+def terminal_restore_rows(user, backup_id, *, count: int, newest):
+    return [
+        VolumeRestore(
+            backup_id=backup_id,
+            user_id=user.id,
+            destination_name=f"terminal-restore-{uuid.uuid4().hex}",
+            display_name="Terminal restore",
+            max_size_bytes=1024,
+            reserved_bytes=0,
+            status=("completed", "failed")[offset % 2],
+            fencing_token=uuid.uuid4(),
+            created_at=newest - timedelta(seconds=offset),
+            completed_at=newest - timedelta(seconds=offset),
+        )
+        for offset in range(count)
+    ]
+
+
 def deferred_decision(kind: OperationKind, operation_id: uuid.UUID) -> ReconcileDecision:
     return ReconcileDecision(
         kind=kind,
@@ -328,6 +382,136 @@ async def _gpu_count(db: AsyncSession, server_id: uuid.UUID) -> int:
 async def _refresh(db: AsyncSession, *rows) -> None:
     for row in rows:
         await db.refresh(row)
+
+
+@pytest.mark.asyncio
+async def test_scan_removes_worker_rows_older_than_retention(db_session, test_user):
+    now = utc_now()
+    old_executor = uuid.uuid4()
+    recent_stopped = uuid.uuid4()
+    live_executor = uuid.uuid4()
+    add_worker_row(
+        db_session,
+        old_executor,
+        state="stopped",
+        heartbeat_at=now - timedelta(hours=25),
+    )
+    add_worker_row(
+        db_session,
+        recent_stopped,
+        state="stopped",
+        heartbeat_at=now - timedelta(hours=2),
+    )
+    add_worker_row(db_session, live_executor, heartbeat_at=now)
+    await db_session.flush()
+
+    report = await OperationReconciler(session_factory(db_session), FakeDriver()).scan(limit=1)
+
+    assert report.errors == 0
+    remaining = set((await db_session.scalars(select(WorkerHeartbeat.executor_id))).all())
+    assert old_executor not in remaining
+    assert {recent_stopped, live_executor} <= remaining
+
+
+@pytest.mark.asyncio
+async def test_bounded_scan_selects_only_active_rows_among_terminal_backlog(
+    db_session, test_user, monkeypatch
+):
+    now = utc_now()
+    launch_a = await add_minimal_launch(
+        db_session,
+        test_user,
+        state="executing",
+        created_at=now - timedelta(seconds=500),
+    )
+    launch_b = await add_minimal_launch(
+        db_session,
+        test_user,
+        state="executing",
+        created_at=now - timedelta(seconds=300),
+        heartbeat_at=now - timedelta(seconds=700),
+    )
+    launch_c = await add_minimal_launch(
+        db_session,
+        test_user,
+        state="executing",
+        created_at=now - timedelta(seconds=400),
+    )
+    backup_a = await add_backup_row(
+        db_session,
+        test_user,
+        status="in_progress",
+        created_at=now - timedelta(seconds=450),
+    )
+    backup_b = await add_backup_row(
+        db_session,
+        test_user,
+        status="in_progress",
+        created_at=now - timedelta(seconds=350),
+    )
+    backup_b.heartbeat_at = now - timedelta(seconds=650)
+    backup_c = await add_backup_row(
+        db_session,
+        test_user,
+        status="in_progress",
+        created_at=now - timedelta(seconds=250),
+    )
+    restore_a = await add_restore_row(
+        db_session,
+        test_user,
+        backup_a,
+        status="in_progress",
+        created_at=now - timedelta(seconds=425),
+    )
+    restore_b = await add_restore_row(
+        db_session,
+        test_user,
+        backup_a,
+        status="in_progress",
+        created_at=now - timedelta(seconds=325),
+    )
+    restore_b.heartbeat_at = now - timedelta(seconds=625)
+    restore_c = await add_restore_row(
+        db_session,
+        test_user,
+        backup_a,
+        status="in_progress",
+        created_at=now - timedelta(seconds=225),
+    )
+    db_session.add_all(
+        terminal_launch_rows(
+            test_user,
+            launch_a.server.id,
+            count=90,
+            newest=now - timedelta(seconds=900),
+        )
+    )
+    db_session.add_all(
+        terminal_backup_rows(test_user, count=90, newest=now - timedelta(seconds=900))
+    )
+    db_session.add_all(
+        terminal_restore_rows(test_user, backup_a.id, count=90, newest=now - timedelta(seconds=900))
+    )
+    await db_session.flush()
+
+    inspection = RecordingInspection()
+    monkeypatch.setattr(reconciler_module, "ReconciliationService", inspection)
+    report = await OperationReconciler(session_factory(db_session), FakeDriver()).scan(limit=6)
+
+    assert report.scanned == 6
+    assert report.deferred == 6
+    assert report.errors == 0
+    assert inspection.calls == [
+        (OperationKind.LAUNCH, launch_b.operation.id),
+        (OperationKind.BACKUP, backup_b.id),
+        (OperationKind.RESTORE, restore_b.id),
+        (OperationKind.LAUNCH, launch_a.operation.id),
+        (OperationKind.BACKUP, backup_a.id),
+        (OperationKind.RESTORE, restore_a.id),
+    ]
+    assert {operation_id for _, operation_id in inspection.calls}.isdisjoint(
+        {launch_c.operation.id, backup_c.id, restore_c.id}
+    )
 
 
 @pytest.mark.asyncio

@@ -21,6 +21,12 @@ class ServerLaunchOperation(Base):
             unique=True,
             postgresql_where=text("state IN ('prepared', 'executing', 'uncertain')"),
         ),
+        Index(
+            "ix_server_launch_operations_recovery_scan",
+            text("COALESCE(heartbeat_at, created_at)"),
+            "id",
+            postgresql_where=text("state IN ('prepared', 'executing', 'uncertain')"),
+        ),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

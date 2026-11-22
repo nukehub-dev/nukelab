@@ -25,7 +25,7 @@ from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -34,6 +34,7 @@ from app.core.time_utils import utc_now
 from app.models.server_launch_operation import ServerLaunchOperation
 from app.models.volume_backup import VolumeBackup
 from app.models.volume_restore import VolumeRestore
+from app.models.worker_heartbeat import WorkerHeartbeat
 from app.services.operation_finalizer import OperationFinalizer, VolumeFinalizationHooks
 from app.services.operation_reconciliation import (
     PROOF_RUNTIME_INSPECTION,
@@ -75,6 +76,8 @@ _PENDING_VOLUME_DEFER_REASONS = frozenset(
 _DEFERRED = "deferred"
 _FINALIZED = "finalized"
 _RECOVERY_REQUIRED = "recovery_required"
+_WORKER_RETENTION_HOURS = 24
+_WORKER_CLEANUP_LIMIT = 1000
 
 
 @dataclass(frozen=True, slots=True)
@@ -170,6 +173,7 @@ class OperationReconciler:
                 continue
             counters[outcome] += 1
 
+        await self._cleanup_workers(now)
         report = ReconcileReport(
             scanned=len(candidates),
             finalized=counters[_FINALIZED],
@@ -181,6 +185,33 @@ class OperationReconciler:
         logger.info("Operation reconciliation scan complete", extra=report.as_dict())
         await self._record(report)
         return report
+
+    async def _cleanup_workers(self, now: datetime) -> None:
+        """Remove executor rows that have been stale for a full retention day.
+
+        This is maintenance, not liveness authority: a row is deleted only after
+        its heartbeat has been older than the retention window, so a live worker
+        (refreshing every few seconds) is never affected. Cleanup failures are
+        logged by class and never change the scan report or recovery state.
+        """
+        cutoff = now - timedelta(hours=_WORKER_RETENTION_HOURS)
+        try:
+            async with self._session_factory() as db:
+                stale = (
+                    select(WorkerHeartbeat.executor_id)
+                    .where(WorkerHeartbeat.heartbeat_at < cutoff)
+                    .limit(_WORKER_CLEANUP_LIMIT)
+                    .scalar_subquery()
+                )
+                await db.execute(
+                    delete(WorkerHeartbeat).where(WorkerHeartbeat.executor_id.in_(stale))
+                )
+                await db.commit()
+        except Exception as exc:
+            logger.warning(
+                "Worker heartbeat retention cleanup failed",
+                extra={"error_class": type(exc).__name__},
+            )
 
     async def _record(self, report: ReconcileReport) -> None:
         """Publish bounded scan metrics without making the scan depend on them."""

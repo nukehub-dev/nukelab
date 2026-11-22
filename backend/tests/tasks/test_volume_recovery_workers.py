@@ -63,6 +63,7 @@ def test_dispatch_retries_pending_work_and_continues_after_broker_failure(monkey
     db.execute.return_value = result(rows=[(backup, "pending"), (deletion, "deleting")])
     db.scalars = AsyncMock(return_value=[restore])
     service = SimpleNamespace(
+        recover_stale_deletions=AsyncMock(return_value=0),
         retention_candidates=AsyncMock(return_value=[expired]),
         expire_backup=AsyncMock(side_effect=RuntimeError("busy")),
     )
@@ -79,6 +80,7 @@ def test_dispatch_retries_pending_work_and_continues_after_broker_failure(monkey
         ("delete", str(deletion)),
         ("restore", str(restore)),
     ]
+    service.recover_stale_deletions.assert_awaited_once_with(limit=20)
     db.rollback.assert_awaited_once()
     # Unknown/in-progress executors and claimed deletions are excluded before the page limit.
     query = str(db.execute.call_args.args[0])

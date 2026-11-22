@@ -16,7 +16,8 @@ from tests.db.test_launch_workflow_migration import connect
 from tests.db.test_launch_workflow_migration import migration_database as migration_database
 
 PREVIOUS_REVISION = "b1e7c4a9d2f6"
-HEAD_REVISION = "c5f8a2d91e47"
+PORTABLE_REVISION = "c5f8a2d91e47"
+HEAD_REVISION = "a4c9e2f7b1d3"
 PORTABLE_COLUMN = "portable_fingerprint"
 PORTABLE_INDEX = "ix_environment_revisions_portable_fingerprint"
 ACTIVE_FINGERPRINT_INDEX = "uq_environment_revisions_active_fingerprint"
@@ -119,7 +120,8 @@ def test_fresh_upgrade_downgrade_and_reupgrade(migration_database):
     config, database = migration_database
     script = ScriptDirectory.from_config(config)
     assert script.get_heads() == [HEAD_REVISION]
-    assert script.get_revision(HEAD_REVISION).down_revision == PREVIOUS_REVISION
+    assert script.get_revision(PORTABLE_REVISION).down_revision == PREVIOUS_REVISION
+    assert script.get_revision(HEAD_REVISION).down_revision == PORTABLE_REVISION
 
     command.upgrade(config, "head")
     command.upgrade(config, "head")
@@ -138,7 +140,7 @@ def test_fresh_upgrade_downgrade_and_reupgrade(migration_database):
         for definition in upgraded["constraints"].values()
     )
 
-    command.downgrade(config, "-1")
+    command.downgrade(config, PREVIOUS_REVISION)
     downgraded = asyncio.run(schema_state(database))
     assert downgraded["revision"] == PREVIOUS_REVISION
     assert PORTABLE_COLUMN not in downgraded["columns"]
@@ -230,7 +232,7 @@ def test_downgrade_preflight_rejects_duplicates_without_changing_the_schema(
     before = asyncio.run(schema_state(database))
 
     with pytest.raises(RuntimeError, match="duplicate rows"):
-        command.downgrade(config, "-1")
+        command.downgrade(config, PREVIOUS_REVISION)
 
     after = asyncio.run(schema_state(database))
     assert after["revision"] == HEAD_REVISION

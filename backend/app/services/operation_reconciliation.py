@@ -301,6 +301,22 @@ class ReconciliationService:
             detail=detail,
         )
 
+    async def observe_liveness(
+        self, kind: str | OperationKind, operation_id: uuid.UUID | str
+    ) -> Liveness:
+        """Return executor liveness without classifying the operation itself.
+
+        Used by bounded maintenance paths, such as retrying an artifact delete
+        whose claimant died. A stale heartbeat alone stays ambiguous.
+        """
+        operation_kind = _operation_kind(kind)
+        operation_uuid = _operation_uuid(operation_id)
+        with self.db.no_autoflush:
+            row = await self._load(operation_kind, operation_uuid)
+            if row is None:
+                return Liveness.AMBIGUOUS
+            return (await self._observe_liveness(row)).liveness
+
     async def _load(
         self, kind: OperationKind, operation_id: uuid.UUID
     ) -> ServerLaunchOperation | VolumeBackup | VolumeRestore | None:

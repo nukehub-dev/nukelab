@@ -185,8 +185,11 @@ Fields include `server_id`, `owner_id`, `action`, `state`, `fencing_token`,
 `username`, `environment_slug`, `resources`, `generation`, previous runtime
 identity, `executor_id`, `heartbeat_at`, reason code, and timestamps. A partial
 unique index allows only one `prepared`/`executing`/`uncertain` operation per
-server. Only `state`, `reason_code`, `updated_at`, `finished_at`, `executor_id`
-and `heartbeat_at` are mutable.
+server. A partial recovery-scan index on
+`(COALESCE(heartbeat_at, created_at), id)` for the active states keeps the
+bounded oldest-first reconciliation query index-backed. Only `state`,
+`reason_code`, `updated_at`, `finished_at`, `executor_id` and `heartbeat_at` are
+mutable.
 
 ### ServerQueue
 
@@ -259,7 +262,10 @@ reserved bytes, operation fence, helper identity, artifact path, expiry, status,
 `executor_id`, `heartbeat_at`, and completion time. `volume_restores` pins a
 backup and stores the new destination identity, quota/storage reservation,
 fence, status, `executor_id`, `heartbeat_at`, and completion time. Restore rows
-prevent artifact deletion and retention until terminal.
+prevent artifact deletion and retention until terminal. Both tables use the same
+partial recovery-scan index shape for `pending`/`in_progress`/
+`recovery_required`, keeping the bounded oldest-first scan from reading terminal
+history.
 
 ## Schema conventions
 

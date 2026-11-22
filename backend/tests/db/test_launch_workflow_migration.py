@@ -19,7 +19,7 @@ from app.config import settings
 from app.db.base import Base
 
 PREVIOUS_REVISION = "34ce1a62ffe8"
-HEAD_REVISION = "c5f8a2d91e47"
+HEAD_REVISION = "a4c9e2f7b1d3"
 NEW_TABLES = {
     "environment_revisions",
     "server_launch_records",
@@ -90,6 +90,7 @@ def test_fresh_upgrade_downgrade_and_reupgrade(migration_database):
     assert ScriptDirectory.from_config(config).get_heads() == [HEAD_REVISION]
     command.upgrade(config, "head")
     assert NEW_TABLES <= asyncio.run(tables(name))
+    command.downgrade(config, "-1")
     command.downgrade(config, "-1")
     command.downgrade(config, "-1")
     command.downgrade(config, "-1")

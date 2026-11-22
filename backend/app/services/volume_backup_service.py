@@ -3,6 +3,7 @@
 
 """Durable owner-private recovery with proof-gated exclusion and storage accounting."""
 
+import logging
 import re
 import uuid
 from dataclasses import dataclass
@@ -33,6 +34,7 @@ from app.schemas.volume_backup import (
 )
 from app.services.admission_service import acquire_admission_lock
 from app.services.operation_heartbeat import SessionFactory, operation_heartbeat
+from app.services.operation_reconciliation import Liveness, ReconciliationService
 from app.services.quota_service import QuotaService
 from app.services.volume_access_service import VolumeAccessService
 from app.services.volume_operation_service import (
@@ -46,6 +48,7 @@ from app.services.xfs_quota_service import xfs_quota_service
 
 FORMAT = "nukelab.volume/v1"
 ACTIVE = ("pending", "in_progress", "recovery_required")
+logger = logging.getLogger(__name__)
 MESSAGES = {
     "pending": "Waiting for the recovery worker.",
     "in_progress": "Recovery work is in progress.",
@@ -870,6 +873,8 @@ class VolumeBackupService:
                 return self.describe_backup(row)
             claim = "delete:" + str(uuid.uuid4())
             row.helper_identity = claim
+            row.executor_id = current_executor_id()
+            row.heartbeat_at = utc_now()
             # Retain this claim through I/O: duplicate delivery cannot race cleanup.
         try:
             await self.runtime.delete_artifact(backup_id)
@@ -885,6 +890,8 @@ class VolumeBackupService:
                         "storage_unavailable",
                         None,
                     )
+                    row.executor_id = None
+                    row.heartbeat_at = None
             return self.describe_backup(row)
         async with self.db.begin():
             await acquire_admission_lock(self.db)
@@ -894,11 +901,78 @@ class VolumeBackupService:
             if row.status != "deleting" or row.helper_identity != claim:
                 raise BackupError("operation_conflict")
             row.status, row.reason_code, row.reserved_bytes = "deleted", None, 0
+            row.helper_identity = None
+            row.executor_id = None
+            row.heartbeat_at = None
             for restore in await self.db.scalars(
                 select(VolumeRestore).where(VolumeRestore.backup_id == backup_id)
             ):
                 restore.reserved_bytes = 0
         return self.describe_backup(row)
+
+    async def recover_stale_deletions(self, *, limit: int = 20) -> int:
+        """Resume artifact deletion only after the claimant is proven stopped.
+
+        A crash between the durable ``delete:<uuid>`` claim and the artifact
+        removal leaves the backup in ``deleting``. The dispatcher deliberately
+        does not blindly retry it. This bounded maintenance path uses the
+        executor registry: a live or ambiguous claimant is left alone, while a
+        stopped claimant releases the claim and lets the normal deletion path
+        re-inspect mounts and finish or fail safely.
+        """
+        if self.runtime is None or limit < 1:
+            return 0
+        await self._clean()
+        rows = list(
+            await self.db.scalars(
+                select(VolumeBackup)
+                .where(
+                    VolumeBackup.status == "deleting",
+                    VolumeBackup.helper_identity.like("delete:%"),
+                )
+                .order_by(VolumeBackup.created_at, VolumeBackup.id)
+                .limit(limit)
+            )
+        )
+        targets = [(row.id, row.helper_identity, row.executor_id) for row in rows]
+        # The read above autobegins a transaction; each row uses its own.
+        await self.db.rollback()
+        recovered = 0
+        for backup_id, claim, executor_id in targets:
+            if executor_id is None:
+                continue
+            liveness = await ReconciliationService(self.db, self.runtime.driver).observe_liveness(
+                "backup", backup_id
+            )
+            await self.db.rollback()
+            if liveness is not Liveness.STOPPED:
+                continue
+            async with self.db.begin():
+                await acquire_admission_lock(self.db)
+                current = await self.db.get(
+                    VolumeBackup, backup_id, populate_existing=True, with_for_update=True
+                )
+                if (
+                    current is None
+                    or current.status != "deleting"
+                    or current.helper_identity != claim
+                ):
+                    continue
+                current.helper_identity = None
+                current.executor_id = None
+                current.heartbeat_at = None
+            try:
+                result = await self.execute_delete(backup_id)
+                if result.status == "deleted":
+                    recovered += 1
+            except Exception:
+                if self.db.in_transaction():
+                    await self.db.rollback()
+                logger.warning(
+                    "Stale backup deletion recovery deferred",
+                    extra={"backup_id": str(backup_id)},
+                )
+        return recovered
 
     async def retention_candidates(self, *, limit=100):
         return list(

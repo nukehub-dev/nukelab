@@ -1429,6 +1429,9 @@ def dispatch_volume_recovery(self):
         async with operation_resources() as resources:
             db = resources.db
             service = VolumeBackupService(db, VolumeRecoveryRuntime(resources.driver))
+            recovered = await service.recover_stale_deletions(limit=20)
+            if recovered:
+                logger.info("Recovered stale backup deletions", extra={"count": recovered})
             expired = await service.retention_candidates(limit=20)
             for identifier in expired:
                 try:
