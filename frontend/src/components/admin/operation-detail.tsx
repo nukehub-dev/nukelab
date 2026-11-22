@@ -204,7 +204,7 @@ export function OperationDetailContent({
       {outcome && <OperationReconcileOutcome result={outcome} />}
       {error && <OperationErrorNotice error={error} />}
 
-      <section className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <section className="grid grid-cols-2 gap-2">
         <DetailCard
           icon={ShieldCheck}
           label="Liveness"

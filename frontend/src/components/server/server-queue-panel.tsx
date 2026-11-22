@@ -1051,8 +1051,15 @@ export function ServerQueuePanel({ requestId, plans, environments, onSelect }: Q
           )}
           <p className="mt-auto flex items-start gap-2 border-t border-border/40 pt-4 text-[11px] leading-relaxed text-muted-foreground">
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            Waiting is not billed. You can cancel while the request is waiting; once launch starts,
-            the request can no longer be cancelled.
+            {detail.data?.can_cancel
+              ? 'Waiting is not billed. You can cancel while the request is pending; once launch starts, it can no longer be cancelled.'
+              : detail.data?.status === 'starting'
+                ? 'Waiting is not billed. Launch is starting; this request can no longer be cancelled.'
+                : detail.data?.status === 'failed'
+                  ? 'Waiting is not billed. This request failed; submit a new request to try again.'
+                  : detail.data?.status === 'cancelled'
+                    ? 'Waiting is not billed. This request was cancelled.'
+                    : 'Waiting is not billed.'}
           </p>
           <DialogClose onClick={() => onSelect()} />
         </DialogContent>

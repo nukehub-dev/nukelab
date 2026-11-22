@@ -338,6 +338,7 @@ function EnvironmentsPage() {
                     <Tooltip content="Revisions">
                       <motion.button
                         onClick={() => setRevisionsEnvironment(env)}
+                        aria-label="Revisions"
                         className="inline-flex p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
                       >
                         <History className="w-4 h-4" />
@@ -524,6 +525,7 @@ function EnvironmentsPage() {
             <Tooltip content="Revisions">
               <button
                 onClick={() => setRevisionsEnvironment(env)}
+                aria-label="Revisions"
                 className="p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors inline-flex"
               >
                 <History className="w-4 h-4" />
