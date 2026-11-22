@@ -3,7 +3,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Search, X, Filter, Eye, List, LayoutGrid, ChevronDown, Check } from 'lucide-react'
+import { Search, X, Filter, Columns3, List, LayoutGrid, ChevronDown, Check } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import type { Table } from '@tanstack/react-table'
 
@@ -51,6 +51,10 @@ export function DataTableToolbar<TData>({
   const [showColumnMenu, setShowColumnMenu] = useState(false)
   const [openFilterKey, setOpenFilterKey] = useState<string | null>(null)
   const filterRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const toggleableColumns = table.getAllLeafColumns().filter((column) => {
+    const header = column.columnDef.header
+    return column.getCanHide() && typeof header === 'string' && header.trim() !== ''
+  })
 
   // Close filter dropdowns on outside click
   useEffect(() => {
@@ -65,6 +69,16 @@ export function DataTableToolbar<TData>({
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [openFilterKey])
+
+  // The column menu has a full-screen backdrop; Escape must dismiss it too.
+  useEffect(() => {
+    if (!showColumnMenu) return
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setShowColumnMenu(false)
+    }
+    document.addEventListener('keydown', handleKey)
+    return () => document.removeEventListener('keydown', handleKey)
+  }, [showColumnMenu])
 
   return (
     <div className="space-y-3">
@@ -116,8 +130,8 @@ export function DataTableToolbar<TData>({
             </button>
           )}
 
-          {/* Column Visibility - hidden in card view */}
-          {!isMobileView && (
+          {/* Column Visibility - hidden in card view or when no column is toggleable */}
+          {!isMobileView && toggleableColumns.length > 0 && (
             <div className="relative">
               <button
                 onClick={() => setShowColumnMenu(!showColumnMenu)}
@@ -127,8 +141,8 @@ export function DataTableToolbar<TData>({
                   showColumnMenu && 'bg-primary/10 border-primary/30 text-primary'
                 )}
               >
-                <Eye className="w-4 h-4" />
-                View
+                <Columns3 className="w-4 h-4" />
+                Columns
               </button>
 
               <AnimatePresence>
@@ -144,30 +158,24 @@ export function DataTableToolbar<TData>({
                       <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                         Toggle columns
                       </div>
-                      {table
-                        .getAllLeafColumns()
-                        .filter((column) => {
-                          const header = column.columnDef.header
-                          return typeof header === 'string' && header.trim() !== ''
-                        })
-                        .map((column) => (
-                          <button
-                            key={column.id}
-                            onClick={() => column.toggleVisibility()}
+                      {toggleableColumns.map((column) => (
+                        <button
+                          key={column.id}
+                          onClick={() => column.toggleVisibility()}
+                          className={cn(
+                            'w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors',
+                            column.getIsVisible() ? 'text-foreground' : 'text-muted-foreground'
+                          )}
+                        >
+                          <Check
                             className={cn(
-                              'w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm transition-colors',
-                              column.getIsVisible() ? 'text-foreground' : 'text-muted-foreground'
+                              'w-4 h-4',
+                              column.getIsVisible() ? 'opacity-100' : 'opacity-0'
                             )}
-                          >
-                            <Check
-                              className={cn(
-                                'w-4 h-4',
-                                column.getIsVisible() ? 'opacity-100' : 'opacity-0'
-                              )}
-                            />
-                            <span>{column.columnDef.header as string}</span>
-                          </button>
-                        ))}
+                          />
+                          <span>{column.columnDef.header as string}</span>
+                        </button>
+                      ))}
                     </motion.div>
                   </>
                 )}

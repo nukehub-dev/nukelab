@@ -382,7 +382,7 @@ function AdminOperationsContent() {
             <Filter className="h-3.5 w-3.5" />
             Filters
           </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <div className="space-y-1">
               <span className="text-xs text-muted-foreground">Kind</span>
               <Select value={kindFilter} onChange={changeKind} data-testid="operation-kind-filter">
@@ -425,18 +425,17 @@ function AdminOperationsContent() {
                 <SelectItem value="not_required">No recovery required</SelectItem>
               </Select>
             </div>
-            <div className="flex items-end">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="w-full"
-                onClick={clearFilters}
-                disabled={!hasFilters}
-              >
-                Clear filters
-              </Button>
-            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={clearFilters}
+              disabled={!hasFilters}
+            >
+              Clear filters
+            </Button>
           </div>
         </div>
 

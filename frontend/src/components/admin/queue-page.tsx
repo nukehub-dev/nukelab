@@ -1,10 +1,20 @@
 // SPDX-FileCopyrightText: 2023-2026 NukeHub Developers
 // SPDX-License-Identifier: BSD-2-Clause
 
-import { useMemo, useState } from 'react'
-import { Activity, AlertTriangle, Clock, Filter, ListOrdered, ShieldCheck } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
+import {
+  Activity,
+  AlertTriangle,
+  CalendarDays,
+  Clock,
+  Filter,
+  ListOrdered,
+  ShieldCheck,
+  X,
+} from 'lucide-react'
 import { ResourcePageLayout } from '../layout/resource-page-layout'
 import { Button } from '../ui/button'
+import { Calendar } from '../ui/calendar'
 import { Combobox } from '../ui/combobox'
 import { Input } from '../ui/input'
 import { Select, SelectItem } from '../ui/select'
@@ -24,7 +34,7 @@ import {
   queueStatusLabel,
   sanitizeQueueSummary,
 } from '../../lib/admin-queue'
-import { cn } from '../../lib/utils'
+import { cn, formatDateOnly, parseLocalDate } from '../../lib/utils'
 import { useAuthStore } from '../../stores/auth-store'
 import { useThemeStore } from '../../stores/theme-store'
 import type {
@@ -96,6 +106,8 @@ export function AdminQueuePageContent() {
   const [recoveryFilter, setRecoveryFilter] = useState<AdminQueueRecoveryFilter>('all')
   const [ageFilter, setAgeFilter] = useState<AgeFilter>('all')
   const [olderThanDate, setOlderThanDate] = useState('')
+  const [dateOpen, setDateOpen] = useState(false)
+  const dateTriggerRef = useRef<HTMLButtonElement>(null)
   const [ownerFilter, setOwnerFilter] = useState('')
 
   const ownerId = ownerFilter.trim()
@@ -280,17 +292,57 @@ export function AdminQueuePageContent() {
           </div>
           <div className="space-y-1">
             <span className="text-xs text-muted-foreground">Older than (UTC date)</span>
-            <Input
-              type="date"
-              value={olderThanDate}
-              data-testid="queue-older-than-filter"
-              aria-label="Older than UTC date"
-              onChange={(event) => {
-                setOlderThanDate(event.target.value)
-                setAgeFilter('all')
-                setPage(1)
-              }}
-            />
+            <div className="flex items-center gap-1.5">
+              <div className="relative min-w-0 flex-1">
+                <button
+                  ref={dateTriggerRef}
+                  type="button"
+                  data-testid="queue-older-than-filter"
+                  aria-label="Older than UTC date"
+                  aria-haspopup="dialog"
+                  aria-expanded={dateOpen}
+                  onClick={() => setDateOpen((open) => !open)}
+                  className={cn(
+                    'flex h-9 w-full items-center gap-2 rounded-lg border border-input bg-input/80 px-3 text-left text-sm shadow-sm backdrop-blur-sm transition-colors',
+                    'hover:bg-accent focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50',
+                    dateOpen && 'border-primary ring-2 ring-primary/30'
+                  )}
+                >
+                  <CalendarDays className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className={cn('truncate', !olderThanDate && 'text-muted-foreground')}>
+                    {olderThanDate ? formatDateOnly(parseLocalDate(olderThanDate)) : 'Any date'}
+                  </span>
+                </button>
+                <Calendar
+                  value={olderThanDate}
+                  onSelect={(date) => {
+                    setOlderThanDate(date)
+                    setAgeFilter('all')
+                    setPage(1)
+                    setDateOpen(false)
+                  }}
+                  maxDate={new Date().toISOString().slice(0, 10)}
+                  open={dateOpen}
+                  onClose={() => setDateOpen(false)}
+                  anchorRef={dateTriggerRef}
+                />
+              </div>
+              {olderThanDate && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  aria-label="Clear older-than date"
+                  className="h-9 w-9 shrink-0 p-0"
+                  onClick={() => {
+                    setOlderThanDate('')
+                    setPage(1)
+                  }}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
           </div>
           <div className="space-y-1">
             <span className="text-xs text-muted-foreground">

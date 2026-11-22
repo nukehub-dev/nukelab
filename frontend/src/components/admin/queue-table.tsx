@@ -179,10 +179,6 @@ function QueueEmptyState({
   )
 }
 
-function columnHeader(label: string) {
-  return <span>{label}</span>
-}
-
 /**
  * Bounded, read-only queue table. It intentionally has no row actions:
  * admin cancellation and retry do not exist for this view.
@@ -233,7 +229,7 @@ export function AdminQueueTable({
   const columns: ColumnDef<AdminQueueEntry>[] = [
     {
       id: 'request',
-      header: () => columnHeader('Request'),
+      header: 'Request',
       enableSorting: false,
       cell: ({ row }) => (
         <div className="max-w-64 space-y-0.5">
@@ -252,25 +248,25 @@ export function AdminQueueTable({
     },
     {
       id: 'status',
-      header: () => columnHeader('Status'),
+      header: 'Status',
       enableSorting: false,
       cell: ({ row }) => <QueueStatusPills entry={row.original} />,
     },
     {
       id: 'resources',
-      header: () => columnHeader('Resources'),
+      header: 'Resources',
       enableSorting: false,
       cell: ({ row }) => <QueueResourceChips resources={row.original.resources} compact />,
     },
     {
       id: 'queue',
-      header: () => columnHeader('Position'),
+      header: 'Position',
       enableSorting: false,
       cell: ({ row }) => <QueuePositionLine entry={row.original} />,
     },
     {
       id: 'scope',
-      header: () => columnHeader('Owner / scope'),
+      header: 'Owner / scope',
       enableSorting: false,
       cell: ({ row }) => <QueueScopeCell entry={row.original} />,
     },
