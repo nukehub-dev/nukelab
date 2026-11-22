@@ -20,7 +20,14 @@ retains the normal server response.
 The owner-scoped `/server-queue` router exposes capability discovery, list/detail
 and pending cancellation. Claims serialize under admission; cancellation is an
 atomic pending-only transition that loses to a claim and returns conflict once
-launch has started.
+launch has started. A `starting` request is reconciled against its linked create
+operation: a verified success becomes `started`, a safe failure becomes `failed`,
+and an uncertain outcome stays `starting` with `recovery_required`. An orphaned
+`starting` row without an operation is cancelled only after runtime absence is
+proved from its recorded container ID, managed server label, or deterministic
+launch name; missing identity or an unavailable runtime inspection keeps it
+operator-visible with `recovery_required`. The admin queue view is read-only and
+cross-owner; there is no admin cancellation or retry action.
 `server_queue_dispatch_service.py` scans bounded batches in priority/time/ID order
 and persists a rotating cursor so non-fitting early requests cannot hide later
 candidates indefinitely. Positions describe ordering, not a guaranteed start time.
@@ -101,9 +108,27 @@ identities, capture time and recorded limitations. A newer starting or uncertain
 replacement does not make an older record proof of the current runtime. Legacy
 servers without records remain explicitly unrecorded. Exports select the displayed
 immutable launch and return its saved sanitized manifest, never today's template
-or a raw runtime inspection. Revocation blocks recreation while retaining history;
-it is currently an operator/database procedure because no admin endpoint sets the
-revision's `revoked` flag.
+or a raw runtime inspection. Revocation blocks recreation while retaining history.
+Admins verify and revoke revisions from **Administration → Environments** →
+**Revisions**; verify resolves current references to exact platform digests, and
+revoke is idempotent with no un-revoke path. Revoking the last selectable revision
+requires explicit confirmation.
+
+Registry verification is a separate decision from approval. `off` performs no
+registry I/O, `prefer` records a truthful local-only fallback when resolution is
+unavailable, and `require` fails closed. A verified revision stores the canonical
+repository, exact platform manifest digest, OS/architecture/variant and index
+digest; a tag-pulled index digest is not proof of the platform artifact. Moving a
+tag never changes an existing approval. Re-verifying a moved tag creates a new
+captured revision only through the explicit admin action, using the `require`
+policy and exact-digest local proof.
+
+Registry-verified, portable configurations also receive a portable fingerprint
+over normalized configuration and verified platform identities. Cross-install
+manifest import matches active revisions by that fingerprint only; multiple
+matching templates are reported as ambiguous. Local-only manifests keep strict
+local revision matching. Portable matching never creates approval or runs
+verification implicitly.
 
 `server_recreation_service.py` validates either an owned source launch or a bounded
 strict manifest against an existing approved revision. Imports do not create
@@ -126,10 +151,14 @@ read-only toolchain roots, including parent and child paths.
 
 `submit_pinned()` verifies exact local artifact identity/platform before reservation
 and invokes the same direct/queued admission boundary. It does not resolve or pull
-the original mutable tag. Missing artifacts fail explicitly. The current driver
-records local-only identities; repository digests alone are not registry
-verification, and matching approval on a different installation is not automated.
-A manifest neither backs up user files nor freezes host drivers/external services.
+the original mutable tag. A registry-verified revision may ensure the exact
+approved platform digest locally; with `on_demand`, only that digest is pulled,
+under a per-digest PostgreSQL advisory lock and re-proved afterward. With
+`preload_only`, a missing or platform-mismatched artifact fails closed. Local-only
+revisions require the recorded local image identity. Missing artifacts fail
+explicitly rather than falling back to a newer tag. Repository digest metadata
+alone does not prove registry portability, and a manifest neither backs up user
+files nor freezes host drivers/external services.
 
 ## Worker ownership and recovery
 
@@ -140,10 +169,69 @@ auto-stop and volume quota enforcement call the shared lifecycle services.
 Enforcement stops carry the observed server version into termination admission;
 health probes discard stale results and pass sampled authority into restart.
 
-Uncertain operations remain protected and block conflicting mutations. Automated
-crash adoption and operator-facing reconciliation are not complete. Never clear
-an uncertain journal, mount guard or GPU reservation solely because a worker or
-HTTP deadline expired. See [operations guidance](../operations/OPERATIONS.md)
+Recovery starts from durable liveness evidence, not elapsed time. Every API
+uvicorn worker and the single Celery worker process register a process-lifetime
+`worker_heartbeats` row with container identity, exact container start time, PID
+and single-process-container status; Celery Beat does not register. Long launch,
+backup and restore I/O refreshes the active row's `executor_id` and `heartbeat_at`
+only while its fence stays active. A stale worker or operation heartbeat is an
+inspection trigger or a stall observation. It never releases a reservation,
+proves termination, or authorizes takeover. API executors remain ambiguous unless
+the container stopped/restarted or a graceful marker was written after draining.
+A single-process worker container can also be resolved by a fresh replacement
+executor for the same container incarnation. `docker restart` keeps the container
+ID, so exact container start time is the incarnation token.
+
+`operation_reconciliation.py` is read-only evidence classification. It combines
+liveness (alive, stopped, ambiguous) with runtime/artifact evidence (present,
+absent, ambiguous) and returns a bounded terminal outcome only when the evidence
+supports one, otherwise `recovery_required` or a deferred/no-terminal result.
+Launch success requires a running, healthy container carrying
+the matching launch/server labels, the approved runtime identity and platform
+(including the verified digest when applicable), the expected generation and
+readiness through the container and, when configured, internal Traefik. A
+proof-backed success may adopt an `uncertain` launch. Failure requires stopped
+liveness and proven runtime absence; a live executor is never failed from runtime
+health alone. A termination succeeds only when the runtime is absent and the
+predecessor is verified gone.
+Backup success requires helper termination plus completion metadata and an archive
+checksum; restore success also requires an active destination of the recorded
+size. Proof-backed volume success still goes through the recovery service's
+completion hook.
+
+`operation_finalizer.py` is the only mutation boundary. It re-reads the journal
+row under admission and a row lock, verifies fence, identity and active state, and
+applies the decision once without retrying external I/O. Terminal rows are
+immutable; an unexpected finalization failure attempts to degrade the row to
+`recovery_required` instead of partially releasing it. Launch uncertainty is
+stored as `uncertain`; volume uncertainty is stored as `recovery_required`. Both
+retain mount guards, GPU allocations, storage reservations and artifacts.
+
+`operation_reconciler.py` schedules a first scan after
+`RECOVERY_INITIAL_DELAY_SECONDS`; Celery Beat then runs it every
+`RECOVERY_SCAN_INTERVAL_SECONDS`. It selects a bounded, oldest-first batch,
+round-robins launch/backup/restore work so one kind cannot starve another, and
+defers live executors or rows without a proof-backed outcome. An unclaimed
+`prepared` successor younger than `RECOVERY_PREPARED_GRACE_SECONDS` is left
+claimable; an older one may fail without runtime side effects. The scanner never
+retries `uncertain` or `recovery_required` rows without new proof. Queue recovery
+resolves `starting` requests through their linked create operation and runtime
+proof, and never blindly requeues or cancels work.
+
+Applied transitions notify the operation owner after commit. One attention
+notification is stored per operation and terminal state, a recovery completion is
+sent only after an attention event, and one bounded reminder per operation is
+allowed every 24 hours while work remains unresolved. Reminder delivery runs daily
+at 08:00 UTC in bounded batches. Delivery is best effort and never changes recovery
+state or releases protection.
+
+Admins inspect sanitized operation and queue views and may request reconciliation
+from the operations console. Reconcile reruns the same read-only inspector and
+asks the fenced finalizer to apply only a proof-backed outcome. It requires a
+bounded reason and audit entry, returns conflict with diagnostics when proof is
+ambiguous, and has no force path, TTL takeover, or admin cancel/retry. Never clear
+an uncertain journal row, mount guard or GPU reservation solely because a worker
+or HTTP deadline expired. See [operations guidance](../operations/OPERATIONS.md#11-recovery-operations-and-upgrades)
 for upgrade and investigation requirements.
 
 ## Code ownership
@@ -156,6 +244,9 @@ for upgrade and investigation requirements.
 | Launch validation, recreation and provenance | `services/server_launch_validation.py`, `services/server_recreation_service.py`, `services/server_provenance_service.py` |
 | Existing-server operations | `services/server_lifecycle_service.py`, `services/server_termination_service.py` |
 | Action journal and fencing | `services/server_operation_service.py` |
+| Recovery inspection and finalization | `services/operation_reconciliation.py`, `services/operation_finalizer.py`, `services/operation_reconciler.py` |
+| Recovery observability and notifications | `services/recovery_metrics.py`, `services/recovery_notifications.py` |
+| Admin operations and queue visibility | `api/admin_operations.py`, `api/admin_queue.py` |
 | Volume operation guard and recovery | `services/volume_operation_service.py`, `services/volume_backup_service.py`, `services/volume_recovery_runtime.py` |
 | Runtime composition and driver | `container/spawner.py`, `container/docker_driver.py` |
 | Scheduling and health | `services/schedule_service.py`, `services/health_check_service.py` |
@@ -167,6 +258,8 @@ private volumes and restores into a new protected destination. Recovery
 orchestration runs in `celery-worker` and is configured with the
 `VOLUME_BACKUP_*` settings; see the environment reference for values. See
 [recovery operations](../operations/BACKUP-RESTORE.md#private-user-volume-recovery).
-Verified registry portability, automatic crash adoption and remote CI validation
-remain separate delivery gates; the combined real-stack acceptance suite runs
-locally.
+Local-only revisions still require their exact local image IDs. Registry-verified
+revisions can use the approved platform digest, and `preload_only` intentionally
+refuses to pull a missing artifact. The combined real-stack acceptance suite runs
+locally; production rollback remains an operator procedure using a pinned image
+and snapshot restore.

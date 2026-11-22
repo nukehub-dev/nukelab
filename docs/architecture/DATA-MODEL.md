@@ -10,10 +10,13 @@ Workflow schema additions are additive. `server_launch_intents` persists the sel
 revision, complete request, named mounts, original username and claim metadata in
 the reservation transaction so a fresh session can reconstruct exact launch intent.
 It is private orchestration data, distinct from successful launch provenance. `environment_revisions` stores approved
-configuration fingerprints and separate runtime/toolchain identities;
-`server_launch_records` stores append-only launch generations. Revision services
-recheck current authorization and revocation. A legacy server without a captured
-record remains unrecorded; today's template is not historical evidence.
+configuration fingerprints, an optional portable fingerprint, and separate
+runtime/toolchain identities; `server_launch_records` stores append-only launch
+generations. `worker_heartbeats` records process-lifetime executors used to judge
+operation liveness; heartbeat age is an inspection trigger, never termination
+proof. Revision services recheck current authorization and revocation. A legacy
+server without a captured record remains unrecorded; today's template is not
+historical evidence.
 
 `server_queue` can retain versioned launch intent, a plan snapshot, expiry, claim
 token and resulting server identity. Null payload/version identifies legacy intent
@@ -180,9 +183,10 @@ Immutable action intent plus a fenced executor state for a stable server.
 Fields include `server_id`, `owner_id`, `action`, `state`, `fencing_token`,
 `revision_id`, `request_payload`, `mounts`, `previous_mounts`, `gpu_devices`,
 `username`, `environment_slug`, `resources`, `generation`, previous runtime
-identity, reason code, and timestamps. A partial unique index allows only one
-`prepared`/`executing`/`uncertain` operation per server. Only `state`,
-`reason_code`, `updated_at`, and `finished_at` are mutable.
+identity, `executor_id`, `heartbeat_at`, reason code, and timestamps. A partial
+unique index allows only one `prepared`/`executing`/`uncertain` operation per
+server. Only `state`, `reason_code`, `updated_at`, `finished_at`, `executor_id`
+and `heartbeat_at` are mutable.
 
 ### ServerQueue
 
@@ -190,14 +194,30 @@ Owner-scoped waiting request. Status values are `pending`, `scheduled`,
 `starting`, `started`, `failed`, and `cancelled`; a partial unique index keeps
 one active request per owner/name. Durable fields include `request_payload`,
 `request_version`, `plan_snapshot`, `revision_id`, `requested_gpu`, `expires_at`,
-`claimed_at`, `claim_token`, `server_id`, `reason_code`, and timestamps.
+`claimed_at`, `claim_token`, `server_id`, `reason_code`, and timestamps. A
+`starting` row is resolved against its linked create operation; an orphan is
+cancelled only after runtime absence is proved from the recorded container ID,
+server label, or deterministic launch name. Ambiguous cases stay `starting` with
+`recovery_required`.
 
 ### EnvironmentRevision
 
 Approved immutable environment fingerprint. Fields: `template_id`,
-`fingerprint`, `template_fingerprint`, `configuration`, `runtime_identity`,
-`toolchain_identity`, `revoked`, `created_at`. Only `revoked` may change after
-creation.
+`fingerprint`, `template_fingerprint`, `portable_fingerprint`,
+`configuration`, `runtime_identity`, `toolchain_identity`, `revoked`,
+`created_at`. Only `revoked` may change after creation.
+
+Active approval uniqueness is `(template_id, fingerprint) WHERE revoked = false`
+(`uq_environment_revisions_active_fingerprint`), so revoking a revision and
+verifying the same configuration again creates a new active row while revoked
+history remains. `portable_fingerprint` has its own index
+(`ix_environment_revisions_portable_fingerprint`) and is populated only for
+registry-verified, portable configurations; local-only revisions keep it `NULL`.
+It hashes normalized template configuration plus the verified platform manifest
+digests and OS/architecture/variant, excluding tags, references, local image IDs,
+environment values, host paths, database IDs and timestamps. Cross-install
+manifest import matches active revisions by this fingerprint; local-only
+manifests keep strict local revision matching.
 
 ### ServerLaunchIntent
 
@@ -212,6 +232,18 @@ Append-only verified launch generation. Fields: `id`, `server_id`, `user_id`,
 `revision_id`, `generation`, `manifest`, `actual_runtime_identity`,
 `actual_toolchain_identity`, `created_at`. `(server_id, generation)` is unique.
 
+### WorkerHeartbeat
+
+Process-lifetime executor registry used by recovery inspection. The primary key
+is `executor_id`; fields include `hostname`, `container_id`,
+`container_started_at`, `pid`, `process_start_time`, `single_process_container`,
+`schema_version`, `state`, `heartbeat_at`, and timestamps. API uvicorn workers and
+the Celery worker register; Celery Beat does not. A heartbeat row records a
+process incarnation and its last observed liveness, not authority to take over its
+work. A graceful marker is written only after in-flight work drains. Because
+`docker restart` keeps the container ID, `container_started_at` distinguishes a
+restarted incarnation.
+
 ### VolumeOperation
 
 Durable writer/mount/backup/restore exclusion. Composite key
@@ -224,9 +256,10 @@ is `reserved`, `running`, or `recovery_required`.
 
 `volume_backups` stores source metadata, archive format/checksum, logical and
 reserved bytes, operation fence, helper identity, artifact path, expiry, status,
-and completion time. `volume_restores` pins a backup and stores the new
-destination identity, quota/storage reservation, fence, status, and completion
-time. Restore rows prevent artifact deletion and retention until terminal.
+`executor_id`, `heartbeat_at`, and completion time. `volume_restores` pins a
+backup and stores the new destination identity, quota/storage reservation,
+fence, status, `executor_id`, `heartbeat_at`, and completion time. Restore rows
+prevent artifact deletion and retention until terminal.
 
 ## Schema conventions
 
@@ -240,6 +273,8 @@ time. Restore rows prevent artifact deletion and retention until terminal.
   delete rows.
 - Foreign keys enforce referential integrity; deletion is generally restricted,
   cascaded for owned child rows, or set to null for optional references.
+- Alembic revisions form exactly one head. Migration tests assert the single
+  head, and mixed or branched heads are unsupported for deployment.
 
 ## Related documents
 

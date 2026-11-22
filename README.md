@@ -9,8 +9,11 @@ monitoring, credit-based resource management, and dynamic container orchestratio
 - **Dynamic user environments** via admin-defined Docker image templates
 - **Resource plans** that enforce CPU, memory, and disk limits per server
 - **NUKE credit system** for fair resource allocation and auto-billing
+- **Crash-safe recovery** with worker/operation heartbeats, proof-backed reconciliation, admin visibility, and no time-based takeover
+- **Registry-verified environments** with exact platform-digest identity, optional digest pulls, and portable fingerprints
 - **Real-time metrics** through WebSockets with optional Prometheus + Grafana + Jaeger
 - **Security-first defaults**: hardened containers, CSRF protection, strict CORS, security headers, and audit logging
+- **Supply-chain checks**: strict base-image pinning, weekly digest-drift review, and release SBOM/provenance attestations
 - **Container flexibility**: runs on Docker or Podman, with Traefik v3 as the reverse proxy
 
 ## Quick Start
@@ -66,11 +69,11 @@ for component responsibilities.
 | System overview and request flows | [docs/architecture/OVERVIEW.md](docs/architecture/OVERVIEW.md) |
 | Component responsibilities | [docs/architecture/COMPONENTS.md](docs/architecture/COMPONENTS.md) |
 | Authentication and authorization | [docs/architecture/AUTH.md](docs/architecture/AUTH.md) |
-| Queue, lifecycle, provenance and recreation | [docs/architecture/SERVER-LIFECYCLE.md](docs/architecture/SERVER-LIFECYCLE.md) |
+| Queue, lifecycle, provenance, recovery and recreation | [docs/architecture/SERVER-LIFECYCLE.md](docs/architecture/SERVER-LIFECYCLE.md) |
 | Core data model | [docs/architecture/DATA-MODEL.md](docs/architecture/DATA-MODEL.md) |
 | Local development | [docs/development/LOCAL-DEV.md](docs/development/LOCAL-DEV.md) |
 | Contributing guidelines | [docs/development/CONTRIBUTING.md](docs/development/CONTRIBUTING.md) |
-| Operations (first-run setup, DB, backups, scaling) | [docs/operations/OPERATIONS.md](docs/operations/OPERATIONS.md) |
+| Operations (first-run setup, recovery, upgrades, DB, backups, supply chain) | [docs/operations/OPERATIONS.md](docs/operations/OPERATIONS.md) |
 | Production deployment | [docs/operations/PRODUCTION-DEPLOYMENT.md](docs/operations/PRODUCTION-DEPLOYMENT.md) |
 | Database and private-volume backup/restore | [docs/operations/BACKUP-RESTORE.md](docs/operations/BACKUP-RESTORE.md) |
 | Monitoring and observability | [docs/architecture/MONITORING.md](docs/architecture/MONITORING.md) |

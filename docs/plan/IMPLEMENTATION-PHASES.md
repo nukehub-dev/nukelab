@@ -2,7 +2,7 @@
 
 This document records the original v2.0 implementation plan and current delivery status. Phases 1–5 and 7–10 are complete. Phase 6 (Kubernetes/production hardening) remains partially deferred.
 
-**Last code review:** November 19, 2026. This review checked the capabilities below against the 2.2 branch; it did not rerun benchmarks or a production deployment. See [ROADMAP.md](ROADMAP.md) for the current capability gaps.
+**Last code review:** November 22, 2026. This review checked the capabilities below against the 2.3 release line; it did not rerun benchmarks or a production deployment. See [ROADMAP.md](ROADMAP.md) for the current capability gaps.
 
 ## Phase 1: Foundation & Scaffolding
 
@@ -64,7 +64,7 @@ This document records the original v2.0 implementation plan and current delivery
 
 ## Phase 6: Production Hardening & Kubernetes
 
-**Status**: Partial — Docker/Podman hardening implemented; deployment automation, remote CI runner validation, external assessment, and Kubernetes remain open
+**Status**: Partial — Docker/Podman hardening and the 2.3.0 recovery/registry/supply-chain scope are implemented; automated deployment verification, remote-runner acceptance of the combined suite, external assessment, and Kubernetes remain open
 
 ### Completed
 
@@ -79,6 +79,9 @@ This document records the original v2.0 implementation plan and current delivery
 - Playwright browser specs, dual-mode configuration and disposable CI stack (`frontend/e2e/`, `frontend/playwright.config.ts`, `scripts/ci/e2e-stack.sh`); required unit/mocked/external/workspace CI jobs are wired into publishing
 - Versioned core/environment image builds and GHCR publishing (`.github/workflows/ci.yml`)
 - Pull-based deployment preparation, pre-migration database backups, and schema-compatibility guard (`scripts/manage.d/update.sh`, `db-migrate.sh`, `backend/app/db/schema_guard.py`)
+- Crash-safe recovery: process/operation heartbeats, read-only evidence inspection, proof-backed finalization, bounded reconciliation, queue `starting` recovery, admin operations/queue consoles and owner recovery notifications (`operation_reconciliation.py`, `operation_finalizer.py`, `operation_reconciler.py`, `recovery_notifications.py`)
+- Registry-verified environment revisions with exact platform-digest proof, optional digest pulls, portable fingerprint matching, and admin verify/revoke (`registry_artifact_service.py`, `environment_revision_admin_service.py`)
+- Supply-chain gates: strict base-image pinning, weekly digest-drift review, and release-only deterministic CycloneDX SBOM plus build-provenance/SBOM attestations (`scripts/security/`, `.github/workflows/security.yml`, `.github/workflows/release.yml`)
 
 ### Deferred
 
@@ -89,9 +92,10 @@ This document records the original v2.0 implementation plan and current delivery
 
 ### Remaining delivery gaps
 
-- Remote GitHub runner validation of the new frontend unit/mocked/external/workspace jobs: pending; local disposable-stack execution is complete
-- Automated deployment health verification and rollback: Future; `update` prepares images and instructs the operator to restart
-- Scheduled base-image digest refresh: Future; image build/publish and security scanning already exist
+- Remote-runner execution of the combined acceptance suite: release verification; the individual required frontend browser jobs are wired into CI
+- Real-stack worker-crash and helper-interruption exercises: release verification; unit/service recovery coverage exists
+- Automated deployment health verification and traffic cutover: Future; `update` prepares images and instructs the operator to restart, and rollback is an operator procedure using a pinned image plus snapshot restore
+- Scheduled base-image digest refresh: the weekly review opens or updates a tracked issue, but updating digests remains a reviewed pull request
 
 ## Phase 7: Production Hardening — Quick Wins
 
@@ -146,14 +150,17 @@ This document records the original v2.0 implementation plan and current delivery
 
 ## Known tech debt
 
-- Remote GitHub Actions validation of the new frontend unit, mocked-browser,
-  disposable real-stack and workspace/IDE jobs is still pending.
-- Worker-crash reconciliation and verified adoption/rejection of
-  `recovery_required` lifecycle records remain release gates.
-- Registry portability and cross-installation approval matching for saved
-  provenance remain open; local runtime acceptance is complete.
-- Automated deployment health verification and traffic cutover/rollback remain
-  future work; tagged images, migration snapshots and the schema guard are in
-  place.
+- The combined frontend acceptance suite runs locally; remote-runner execution
+  and flake observation remain release-verification work.
+- Recovery inspection/finalization has unit and service coverage, but a
+  real-stack worker-crash and helper-interruption exercise remains a release
+  gate. Proof-backed reconciliation, admin reconcile and bounded reminders are
+  implemented; there is no force path or time-based takeover.
+- Registry verification and portable-fingerprint matching are implemented.
+  Operator registry credentials/allowlists and retention of local-only artifacts
+  remain deployment responsibilities.
+- Automated deployment health verification and traffic cutover remain future
+  work; rollback is operator-run with a pinned image plus snapshot restore, and
+  tagged images, migration snapshots and the schema guard are in place.
 
 Security findings live in [PENETRATION-TEST-FINDINGS.md](../security/PENETRATION-TEST-FINDINGS.md) and [PENETRATION-TEST-REMEDIATION.md](../security/PENETRATION-TEST-REMEDIATION.md).

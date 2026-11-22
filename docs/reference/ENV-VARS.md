@@ -45,7 +45,7 @@ Both `.env` and `.env.development` are gitignored. `.env.example` is the only en
 | `CSRF_PROTECTION_ENABLED` | Enable double-submit CSRF protection |
 | `CORS_ORIGINS` | Comma-separated allowed origins |
 | `CORS_ALLOW_CREDENTIALS` | Allow cookies across origins |
-| `CONTAINER_HARDENING_ENABLED` | Harden spawned server containers (non-root, no capabilities, read-only rootfs, no-new-privileges); defaults on outside dev mode |
+| `CONTAINER_HARDENING_ENABLED` | Harden spawned server containers (non-root, no capabilities, read-only rootfs, no-new-privileges); defaults on outside dev mode. Pass the same value to `backend` and `celery-worker`, because background-admitted launches use the worker's configuration |
 
 ### Rate Limiting
 
@@ -167,6 +167,11 @@ local-only.
 Waiting queue requests do not reserve compute from the resource pools. The
 values must reflect the actual host capacity available to NukeLab.
 
+Recovery reminders are not configurable through environment variables. While an
+`uncertain` launch or `recovery_required` volume row remains unresolved, Celery
+Beat runs one bounded reminder sweep daily at 08:00 UTC and deduplicates to at
+most one reminder per operation per 24 hours.
+
 ### Registry verification
 
 | Variable | Description |
@@ -175,12 +180,12 @@ values must reflect the actual host capacity available to NukeLab.
 | `REGISTRY_PULL_POLICY` | `on_demand` allows an exact platform-digest pull when the approved artifact is missing; `preload_only` never pulls during launch or verification |
 | `REGISTRY_ALLOWED_HOSTS` | Optional comma-separated registry host allowlist. Empty permits public HTTPS registries that pass SSRF checks; private/loopback hosts and separate token-service hosts must be listed |
 | `REGISTRY_CREDENTIALS_FILE` | Docker `config.json`-compatible credentials file used only for verification. Empty means anonymous; compose sets the container path automatically |
-| `REGISTRY_CREDENTIALS_FILE_HOST` | Host path mounted read-only into `backend` and `celery-worker` at the credentials path; defaults to `/dev/null`. The file must be readable by uid 65532 |
+| `REGISTRY_CREDENTIALS_FILE_HOST` | Host path mounted read-only into `backend` and `celery-worker` at the credentials path; defaults to `/dev/null`. The file must be readable by uid 65532 and is re-read within 60 seconds, so replace it atomically to rotate credentials |
 
-`credsStore` and `credHelpers` are not supported in 2.3.0. Runtime image pulls
+`credsStore` and `credHelpers` are not supported. Runtime image pulls
 use the container engine's own registry login; the verification credentials do
-not authenticate a runtime pull. Registry verification does not create
-approval, and a moved tag never becomes a new approval automatically.
+not authenticate a runtime pull. Resolution alone does not create approval, and
+a moved tag never becomes a new approval automatically.
 
 ### Volume recovery
 
