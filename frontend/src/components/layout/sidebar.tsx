@@ -25,9 +25,7 @@ import {
   UserCircle,
   Clock,
   LifeBuoy,
-  ListOrdered,
   Search,
-  Wrench,
 } from 'lucide-react'
 import { NukeLabLogo } from '../logo'
 import { useSidebarStore } from '../../stores/sidebar-store'
@@ -85,18 +83,6 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'Settings', icon: Settings, href: '/settings' },
       { label: 'Administration', icon: Shield, href: '/admin' },
-      {
-        label: 'Queue',
-        icon: ListOrdered,
-        href: '/admin/queue',
-        requiredPermissions: [PERMISSIONS.SERVERS_READ_ALL, PERMISSIONS.ADMIN_ACCESS],
-      },
-      {
-        label: 'Operations',
-        icon: Wrench,
-        href: '/admin/operations',
-        requiredPermissions: [PERMISSIONS.OPERATIONS_READ_ALL, PERMISSIONS.ADMIN_ACCESS],
-      },
       { label: 'Support', icon: LifeBuoy, href: '/support' },
     ],
   },
