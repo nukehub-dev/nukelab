@@ -97,6 +97,31 @@ Business gauges (`users_total`, `servers_total`, `nuke_balance_total`) are
 refreshed every 60 seconds by the Celery Beat task
 `update-prometheus-business-metrics`.
 
+### Recovery and operations metrics
+
+The same scrape publishes bounded recovery gauges. Label sets are fixed to
+worker state, operation kind, registry policy, and scan result; user, server,
+operation, image, and executor identifiers are never labels.
+
+| Metric group | Examples | Meaning |
+|---|---|---|
+| Worker freshness | `nukelab_workers_registered`, `nukelab_worker_heartbeats{state}`, `nukelab_worker_heartbeat_age_seconds` | Process-lifetime heartbeat rows and the age of the most recent heartbeat |
+| Operation health | `nukelab_operations_active{kind}`, `nukelab_operations_recovery_required{kind}`, `nukelab_operations_stalled{kind}` | Active launch/backup/restore work, proof-blocked work, and stale operation heartbeats |
+| Recovery scan | `nukelab_recovery_scan_last_success_timestamp_seconds`, `nukelab_recovery_scan_duration_seconds`, `nukelab_recovery_scan_last_report{result}` | Last error-free scan, its duration, and scanned/finalized/deferred/errors counters |
+| Registry verification | `nukelab_registry_verification_policy{policy}`, `nukelab_registry_local_only_revisions`, `nukelab_registry_templates_without_verified_revision` | Active policy and coverage gaps in verified revisions |
+
+The reconciler runs in the Celery process, but `/api/metrics` is served by the
+backend. Scan freshness and counters are therefore persisted in the bounded
+`recovery_scan_state` system setting, and the backend scrape republishes them so
+the gauges are visible across processes.
+
+The `nukelab-recovery` alert group covers missing fresh workers, stale worker
+heartbeats, stale recovery scans, long-standing recovery-required or stalled
+operations, and registry-verification gaps. These alerts are inspection triggers,
+not automatic cleanup: follow the recovery investigation flow in
+[OPERATIONS.md](../operations/OPERATIONS.md#113-investigating-uncertain-work)
+and never release a reservation from an alert alone.
+
 ---
 
 ## Grafana Dashboards
